@@ -16,12 +16,10 @@ namespace RayBork.Internal;
 /// <para>
 /// The loop waits on the frame-ring ready signal and the GPU asset bridge signal together, so an
 /// upload queued during <c>Setup</c> completes without waiting for the first tick and no loop turn
-/// busy-spins. The bridge is serviced before each wait and after every wake. When
-/// <see cref="RenderStats.RecoveryCount"/> increases, the loop asks the bridge to recreate the live
-/// resources before the next frame is submitted. The M2 backend counts presentation and device
-/// recoveries in the same field and exposes no per-reason signal, so the worker's restore path must
-/// be safe on a healthy device as well as after a device loss; a later task can add a device
-/// generation to the backend seam and narrow this trigger.
+/// busy-spins. The bridge is serviced before each wait and after every wake. When the backend's
+/// <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the bridge to recreate the
+/// live resources before the next frame is submitted; presentation-only recoveries leave the
+/// generation unchanged and do not re-upload assets.
 /// </para>
 /// <para>
 /// <see cref="IsReady"/> becomes <see langword="true"/> after the backend initialized, its
@@ -154,7 +152,7 @@ internal sealed class RenderLoop {
             _status.SetInfo(publishedInfo);
             _isReady = true;
 
-            int appliedRecoveryCount = backend.Stats.RecoveryCount;
+            int appliedDeviceGeneration = backend.DeviceGeneration;
             while (true) {
                 ProcessPendingAssets();
 
@@ -162,10 +160,10 @@ internal sealed class RenderLoop {
                     try {
                         backend.Submit(new RenderFramePacket(lease.FrameIndex));
                         backend.Present();
-                        RenderStats stats = backend.Stats;
-                        _status.SetStats(stats);
-                        if (stats.RecoveryCount != appliedRecoveryCount) {
-                            appliedRecoveryCount = stats.RecoveryCount;
+                        _status.SetStats(backend.Stats);
+                        int deviceGeneration = backend.DeviceGeneration;
+                        if (deviceGeneration != appliedDeviceGeneration) {
+                            appliedDeviceGeneration = deviceGeneration;
                             RestoreAssets();
                         }
 

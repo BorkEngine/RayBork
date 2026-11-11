@@ -28,18 +28,13 @@ internal interface IAssetGpuWorker {
     /// Recreates the GPU objects of a live resource from its retained upload after a device recovery.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// The implementation may update <paramref name="previous"/>'s handles and return it, or create a
     /// distinct resource whose handles <paramref name="previous"/> adopts. The bridge keeps
     /// <paramref name="previous"/> as the live entry, so a worker that carries more than the primary
     /// handle must either update <paramref name="previous"/> or override
-    /// <see cref="GpuAssetResource.AdoptRestored"/>.
-    /// </para>
-    /// <para>
-    /// The M3 render loop restores when the backend's recovery counter advances, which also happens
-    /// for presentation-only recovery. The implementation must therefore replace the previous GPU
-    /// objects without leaking them whether or not the device was recreated.
-    /// </para>
+    /// <see cref="GpuAssetResource.AdoptRestored"/>. The bridge calls this only after the backend
+    /// reports a new logical-device generation, so the previous GPU objects belong to a destroyed
+    /// device.
     /// </remarks>
     /// <param name="upload">The retained upload description.</param>
     /// <param name="previous">The live resource whose handles are replaced.</param>

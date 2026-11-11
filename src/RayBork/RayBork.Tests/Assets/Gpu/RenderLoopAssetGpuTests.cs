@@ -8,70 +8,58 @@ public sealed class RenderLoopAssetGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task RenderLoopServicesUploadsRestoresAfterRecoveryAndClosesTheBridge() {
-        RendererBackendOptions options = CreateOptions();
-        FakeRendererBackend backend = new();
-        FakeAssetGpuWorker worker = new();
-        backend.AssetGpuWorker = worker;
-        GpuAssetBridge bridge = new();
-        FrameRing ring = new();
-        RenderStatus status = new();
-        RenderLoop loop = new(ring, () => backend, options, status, bridge);
-        ManualResetEventSlim frameSubmitted = new(false);
-        int recoveryCount = 0;
-        backend.PublishFrameStats = false;
-        backend.OnSubmit = _ => {
-            backend.Stats = new RenderStats(
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                4,
-                false,
-                0,
-                0,
-                0,
-                Volatile.Read(ref recoveryCount));
-            frameSubmitted.Set();
-        };
+    public async Task RenderLoopRestoresAssetsWhenTheDeviceGenerationChanges() {
+        using Harness harness = new();
+        harness.PublishFrame();
+        harness.WaitForFrameSubmit();
 
-        loop.Start();
-        GpuAssetResource? resource = null;
-        try {
-            Assert.True(ring.TryAcquireWritable(out FrameLease first));
-            ring.Publish(first);
-            Assert.True(frameSubmitted.Wait(_timeout, TestContext.Current.CancellationToken));
+        Task<GpuAssetResource> upload = harness.Bridge.UploadAsync(
+            CreateTextureUpload("/textures/test"),
+            CancellationToken.None);
+        GpuAssetResource resource = await upload.WaitAsync(_timeout, TestContext.Current.CancellationToken);
+        Assert.Equal(1, harness.Worker.UploadCallCount);
+        Assert.Equal(1, harness.Bridge.LiveResourceCount);
+        long uploadedHandle = resource.Handle;
 
-            Task<GpuAssetResource> upload = bridge.UploadAsync(CreateTextureUpload("/textures/test"), CancellationToken.None);
-            resource = await upload.WaitAsync(_timeout, TestContext.Current.CancellationToken);
-            Assert.Equal(1, worker.UploadCallCount);
-            Assert.Equal(1, bridge.LiveResourceCount);
-            long uploadedHandle = resource.Handle;
+        harness.SimulateDeviceRecreation();
+        harness.PublishFrame();
+        Assert.True(harness.Worker.Restored.Wait(_timeout, TestContext.Current.CancellationToken));
 
-            Volatile.Write(ref recoveryCount, 1);
-            Assert.True(ring.TryAcquireWritable(out FrameLease second));
-            ring.Publish(second);
-            Assert.True(worker.Restored.Wait(_timeout, TestContext.Current.CancellationToken));
+        Assert.Null(harness.Loop.Failure);
+        Assert.Equal(1, harness.Worker.RestoreCallCount);
+        Assert.NotEqual(uploadedHandle, resource.Handle);
+        Assert.Equal(1, harness.Bridge.LiveResourceCount);
 
-            Assert.Null(loop.Failure);
-            Assert.Equal(1, worker.RestoreCallCount);
-            Assert.NotEqual(uploadedHandle, resource.Handle);
-            Assert.Equal(1, bridge.LiveResourceCount);
-        } finally {
-            ring.Complete();
-            Assert.True(loop.Thread.Join(_timeout));
-        }
+        harness.Stop();
 
-        Assert.Null(loop.Failure);
-        Assert.Equal(1, backend.DisposeCallCount);
-        GpuAssetResource destroyed = Assert.Single(worker.DestroyCalls);
+        Assert.Equal(1, harness.Backend.DisposeCallCount);
+        GpuAssetResource destroyed = Assert.Single(harness.Worker.DestroyCalls);
         Assert.Same(resource, destroyed);
         Assert.True(destroyed.IsDestroyed);
-        Assert.True(bridge.IsClosed);
-        Assert.Equal(0, bridge.LiveResourceCount);
+        Assert.True(harness.Bridge.IsClosed);
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task PresentationOnlyRecoveryDoesNotRestoreAssets() {
+        using Harness harness = new();
+        harness.PublishFrame();
+        harness.WaitForFrameSubmit();
+
+        Task<GpuAssetResource> upload = harness.Bridge.UploadAsync(
+            CreateTextureUpload("/textures/test"),
+            CancellationToken.None);
+        await upload.WaitAsync(_timeout, TestContext.Current.CancellationToken);
+
+        harness.SetStatsRecoveryCount(1);
+        harness.PublishFrame();
+        harness.WaitForSecondPresent();
+
+        Assert.Null(harness.Loop.Failure);
+        Assert.Equal(0, harness.Worker.RestoreCallCount);
+        Assert.Equal(1, harness.Worker.UploadCallCount);
+        Assert.Equal(1, harness.Bridge.LiveResourceCount);
     }
 
     private static RendererBackendOptions CreateOptions() => new() {
@@ -104,6 +92,92 @@ public sealed class RenderLoopAssetGpuTests {
             MaxAnisotropy = 1f,
         },
         new byte[] { 1, 2, 3, 4 });
+
+    /// <summary>
+    /// One render loop, fake backend, and bridge wired the same way the app wires them, with events
+    /// for deterministic frame synchronization.
+    /// </summary>
+    private sealed class Harness : IDisposable {
+        private readonly ManualResetEventSlim _frameSubmitted = new(false);
+        private readonly ManualResetEventSlim _secondFramePresented = new(false);
+
+        private int _presentCount;
+        private int _statsRecoveryCount;
+        private int _stopped;
+
+        internal Harness() {
+            Backend = new FakeRendererBackend {
+                AssetGpuWorker = Worker,
+                PublishFrameStats = false,
+            };
+            Backend.OnSubmit = _ => {
+                Backend.Stats = new RenderStats(
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    4,
+                    false,
+                    0,
+                    0,
+                    0,
+                    Volatile.Read(ref _statsRecoveryCount));
+                _frameSubmitted.Set();
+            };
+            Backend.OnPresent = () => {
+                if (Interlocked.Increment(ref _presentCount) >= 2) {
+                    _secondFramePresented.Set();
+                }
+            };
+
+            Loop = new RenderLoop(Ring, () => Backend, CreateOptions(), new RenderStatus(), Bridge);
+            Loop.Start();
+        }
+
+        internal FakeRendererBackend Backend { get; }
+
+        internal FakeAssetGpuWorker Worker { get; } = new();
+
+        internal GpuAssetBridge Bridge { get; } = new();
+
+        internal FrameRing Ring { get; } = new();
+
+        internal RenderLoop Loop { get; }
+
+        internal void PublishFrame() {
+            Assert.True(Ring.TryAcquireWritable(out FrameLease lease));
+            Ring.Publish(lease);
+        }
+
+        internal void WaitForFrameSubmit() => Assert.True(
+            _frameSubmitted.Wait(_timeout, TestContext.Current.CancellationToken));
+
+        internal void WaitForSecondPresent() => Assert.True(
+            _secondFramePresented.Wait(_timeout, TestContext.Current.CancellationToken));
+
+        internal void SetStatsRecoveryCount(int value) => Volatile.Write(ref _statsRecoveryCount, value);
+
+        internal void SimulateDeviceRecreation() => Backend.SimulateDeviceRecreationForTests();
+
+        internal void Stop() {
+            if (Interlocked.Exchange(ref _stopped, 1) != 0) {
+                return;
+            }
+
+            Ring.Complete();
+            Assert.True(Loop.Thread.Join(_timeout));
+            Assert.Null(Loop.Failure);
+        }
+
+        public void Dispose() {
+            Stop();
+            _frameSubmitted.Dispose();
+            _secondFramePresented.Dispose();
+        }
+    }
 
     private sealed class StaticSurfaceProvider : IRendererSurfaceProvider {
         public IntPtr CreateSurface(IntPtr instance) => new(0x5EED);

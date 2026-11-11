@@ -27,6 +27,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     private int _presentCount;
     private int _recoverCalls;
     private int _disposeCallCount;
+    private int _deviceGeneration;
     private WindowSurfaceState _lastWindowState;
 
     /// <inheritdoc />
@@ -44,6 +45,15 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
     /// <inheritdoc />
     public RenderStats Stats { get; set; }
+
+    /// <inheritdoc />
+    public int DeviceGeneration => Volatile.Read(ref _deviceGeneration);
+
+    /// <summary>
+    /// Simulates a logical-device recreation for the render loop's asset-restoration tests. The fake
+    /// backend has no device, so the test drives the generation the backend would publish.
+    /// </summary>
+    internal void SimulateDeviceRecreationForTests() => Interlocked.Increment(ref _deviceGeneration);
 
     /// <summary>
     /// Gets or sets the exception that <see cref="Initialize"/> throws after it created the surface.
@@ -206,6 +216,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             _initializeCallCount++;
         }
 
+        Volatile.Write(ref _deviceGeneration, 1);
         UpdateWindowState();
         IntPtr surface = options.SurfaceProvider.CreateSurface(_instanceHandle);
         lock (_gate) {
