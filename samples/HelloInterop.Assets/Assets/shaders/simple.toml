@@ -1,0 +1,3 @@
+[shader]
+vertex = "simple.vert"
+fragment = "simple.frag"

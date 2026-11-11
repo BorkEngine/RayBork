@@ -1,0 +1,6 @@
+# Circle marker for the HelloInterop.Assets sample.
+#
+# CircleProcessor owns the .circle extension. It ignores this text and generates a deterministic
+# 64x64 straight-alpha RGBA circle, then emits the Texture descriptor and its KTX2 payload through
+# TextureBaker.AddTo. The marker exists only so the bake has a source file to process.
+radius-fraction = 0.8
