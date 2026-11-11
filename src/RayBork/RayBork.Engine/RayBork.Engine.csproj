@@ -1,9 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net11.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
+        <RootNamespace>RayBork</RootNamespace>
+        <IsAotCompatible>true</IsAotCompatible>
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
     </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Silk.NET.Vulkan" />
+        <PackageReference Include="SDL3-CS" />
+        <PackageReference Include="SDL3-CS.Native" />
+        <PackageReference Include="PolyType" />
+        <PackageReference Include="Nerdbank.MessagePack" />
+        <PackageReference Include="Microsoft.Extensions.Logging" />
+        <PackageReference Include="ZLogger" />
+        <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
+    </ItemGroup>
 
 </Project>

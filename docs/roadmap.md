@@ -88,21 +88,27 @@ the AOT publish, the style policy, or the dependency rules.
 
 **Scope.**
 
-- Keep the `RayBork.Engine`, `RayBork.Bake`, `RayBork.Tests`, and `samples/` layout. Add the test
-  and sample projects to the solution.
+- Keep the `RayBork.Engine`, `RayBork.Bake`, `RayBork.Tests`, and `samples/` layout. Add
+  `RayBork.Tests` and `samples/HelloInterop` to the solution.
 - `Directory.Build.props`: `net11.0`, nullable, implicit usings, warnings-as-errors,
   deterministic builds, AOT/trim analyzers for runtime projects.
-- Pin `Silk.NET.Vulkan`, `SDL3-CS`, `SDL3-CS.Native`, the compression package, `PolyType`,
-  `Nerdbank.MessagePack`, `Microsoft.Extensions.Logging`, and `ZLogger`. Record the AOT result for
-  every runtime dependency.
-- Add `Microsoft.CodeAnalysis.PublicApiAnalyzers` with `PublicAPI.Shipped.txt` and
-  `PublicAPI.Unshipped.txt`.
+- Pin `Silk.NET.Vulkan`, `SDL3-CS`, `SDL3-CS.Native`, `PolyType`, `Nerdbank.MessagePack`,
+  `Microsoft.Extensions.Logging`, and `ZLogger` centrally in `Directory.Packages.props`; record the
+  AOT result for every runtime dependency.
+- Use the in-box `System.IO.Compression.Zstandard*` APIs from `net11.0` for pack payloads. There is
+  no compression package; Zstandard ships with the runtime.
+- Add `Microsoft.CodeAnalysis.PublicApiAnalyzers` to `RayBork.Engine` with
+  `PublicAPI.Shipped.txt` and `PublicAPI.Unshipped.txt`.
+- Add the minimal public API `RayBork.EngineVersion` with `public static Version Current { get; }`.
+  `Current` reports `0.1.0.0`, the loaded engine assembly version; the build and package version is
+  `0.1.0`. It is immutable for the app lifetime, is safe to read from any thread, and throws no
+  RayBork exception. It is the only public member added in M0.
 - Add `RayBork.Tests` with xUnit v3 and Moq. Define category traits for unit, GPU integration,
   AOT, and performance tests. No golden-image category.
 - Add architecture tests: dependency matrix, no native/backend types in public API, no bake
   references from runtime projects, no `Material` type.
-- Add the build-only check that a `net11.0` console host with the runtime dependencies publishes
-  with `PublishAot` on Windows and Linux.
+- Add `samples/HelloInterop`, a `net11.0` console host that loads SDL3, opens no window, and exits;
+  publish it with `PublishAot` on Windows and Linux.
 - Add `.github/workflows/ci.yml`: `build-test` on `windows-latest` and `ubuntu-latest`
   (restore, Debug and Release builds, test, `dotnet format`) and a `docs` job running
   `scripts/check-docs.ps1`.
@@ -110,25 +116,28 @@ the AOT publish, the style policy, or the dependency rules.
 - Add `.github/pull_request_template.md` and the PR rules in `AGENTS.md`.
 - Add `.editorconfig` K&R braces, `SCREAMING_SNAKE_CASE` constants, and `AGENTS.md`; add the MIT
   `LICENSE`.
-- Add `docs/` and the initial API/architecture/roadmap set. There is no decision log.
-- Design the internal `IRendererBackend` seam before M2; it is not a public type.
+- Add `docs/` and the initial API/architecture/roadmap set, plus `THIRD-PARTY-NOTICES.md`. There is
+  no decision log.
+- Design the internal `IRendererBackend` seam and its lifecycle in [architecture.md](architecture.md);
+  it is not a public type, and M0 adds no renderer code.
 
 **Exit criteria.**
 
 - `dotnet build` and `dotnet test` are green on a clean checkout.
-- A Native AOT "hello interop" host loads SDL3, opens no window, and exits; the same host publishes
-  for `win-x64` and `linux-x64`.
-- The public API analyzer is active and the architecture tests fail on a deliberate violation.
-- The dependency matrix documents every runtime package and its AOT status.
+- `samples/HelloInterop` loads SDL3, opens no window, and exits; the same host publishes for
+  `win-x64` and `linux-x64` with zero AOT/trim warnings.
+- The public API analyzer is active, `EngineVersion.Current` is the only public member added in M0,
+  and the architecture tests fail on a deliberate violation.
+- The dependency matrix documents every runtime, test, and tooling package and its AOT status.
 - `dotnet format --verify-no-changes` passes with K&R braces and `SCREAMING_SNAKE_CASE` constants.
 - GitHub Actions passes on a PR to `develop`: `build-test` on Windows and Ubuntu, `docs`, and
   `pr-title`.
 - The API reference, architecture, and roadmap are linked from the repository README.
-- The MIT `LICENSE` and third-party notice policy are present.
+- The MIT `LICENSE` and [third-party notices](../THIRD-PARTY-NOTICES.md) are present.
 
-**Risks.** SDL3-CS packaging may not have a clean per-RID story yet. If it does not, M1 starts with
-a thin hand-written SDL3 P/Invoke layer for the functions the engine uses, and the binding decision
-is revisited.
+**Risks.** SDL3-CS per-RID packaging is covered by the `samples/HelloInterop` publish gate. If a
+later RID or SDL upgrade breaks it, the fallback is a thin hand-written SDL3 P/Invoke layer for the
+functions the engine uses, and the binding decision is revisited.
 
 ### M1 — Host, threads, window, input, time
 
@@ -179,7 +188,7 @@ AgX presentation, MSAA, reverse-Z depth, and recovery from recoverable failures.
 **Scope.**
 
 - Internal `IRendererBackend` contract: initialize, resize, submit frame packet, present, recover,
-  destroy, report `EngineInfo`.
+  report `EngineInfo`, dispose.
 - `Vulkan12Backend`: instance 1.2, validation/debug-utils in debug, device selection, queue
   families, surface, swapchain, present modes.
 - Swapchain selection: prefer an HDR format (`R16G16B16A16_SFLOAT` or `A2B10G10R10_UNORM_PACK32`
@@ -228,7 +237,7 @@ engine assets and custom data, and rely on correct lifetime and GPU residency.
 
 **Scope.**
 
-- Pack v1 writer/reader: magic, version, binary index, sorted canonical paths, Zstd payloads,
+- Pack v1 writer/reader: magic, version, binary index, sorted canonical paths, Zstandard payloads,
   alignment, XXH3/XXH32 integrity, memory-mapped reads, clear corruption diagnostics.
 - Canonical paths: optional leading `/`, forward slashes, case-insensitive input, lowercase
   canonical storage, extensionless, Bork2d-compatible segment grammar.
@@ -591,7 +600,7 @@ The matrix is the scope contract.
 | Logging | Covered | M1 | `Microsoft.Extensions.Logging` + ZLogger; custom providers supported. |
 | Memory allocators | Not public | — | Engine-internal pools; no `MemAlloc` API. |
 | File system | Partial | M3 | Pack reads; user-data file API post-1.0. |
-| Compression/encoding | Not public | — | Pack-internal Zstd; no public codec API. |
+| Compression/encoding | Not public | — | Pack-internal Zstandard; no public codec API. |
 | Automation events | Out | — | No input replay/automation in v1. |
 | Keyboard | Covered | M1 | Physical scancodes + text input. |
 | Mouse | Covered | M1 | Buttons, position, delta, wheel. |
@@ -628,7 +637,8 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
 - Generic engine asset loading is a closed type switch. Custom data is registered with
   `WithAssetType<T>()` and loaded through the same `Load<T>` using PolyType `[GenerateShape]` and
   Nerdbank.MessagePack; `LoadData` covers bytes.
-- `Microsoft.Extensions.Logging` and ZLogger are AOT-tested runtime dependencies.
+- `Microsoft.Extensions.Logging` and ZLogger are AOT-gated runtime dependencies; M1 is their first
+  feature-level gate.
 - Native dependencies (SDL3, Vulkan loader) are deployed per RID and validated on a clean machine.
 - The bake is JIT and may use reflection; it must never appear in a runtime publish graph.
 
