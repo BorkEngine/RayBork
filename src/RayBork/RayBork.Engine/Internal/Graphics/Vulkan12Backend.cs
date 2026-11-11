@@ -71,6 +71,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     private bool _suboptimalRecoveryPending;
     private int _recoveryCount;
     private int _consecutiveRecoveries;
+    private int _deviceGeneration;
     private RenderRecoveryReason? _simulatedFailure;
     private bool _unrecoverableFailureForTests;
     private bool _initialized;
@@ -83,6 +84,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
 
     /// <inheritdoc />
     public RenderStats Stats => _stats;
+
+    /// <inheritdoc />
+    public int DeviceGeneration => _deviceGeneration;
 
     /// <summary>
     /// Gets the logical device, for GPU-test readback probes.
@@ -486,6 +490,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
 
         _surface = new SurfaceKHR { Handle = unchecked((ulong)_surfaceHandle.ToInt64()) };
         _device = VulkanDevice.Create(_instance, _surfaceHandle, logger);
+        _deviceGeneration = 1;
         VulkanDeviceCapabilities capabilities = _device.Capabilities;
         WindowSurfaceState state = options.WindowStateProvider();
         _requestedWidth = state.RenderWidth;
@@ -675,6 +680,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         lostDevice?.Dispose();
 
         _device = VulkanDevice.Create(instance, _surfaceHandle, options.Logger);
+        _deviceGeneration++;
         _sampleCount = VulkanSampleCountSelection.Select(
             options.Settings.SampleCount,
             _device.Capabilities.SupportedSampleCounts);

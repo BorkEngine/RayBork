@@ -243,7 +243,8 @@ public sealed class RayBorkApp : IDisposable {
                 teardownQueue);
 
             frameRing = new FrameRing();
-            renderLoop = new RenderLoop(frameRing, _rendererBackendFactory, backendOptions, _renderStatus);
+            GpuAssetBridge gpuAssetBridge = new();
+            renderLoop = new RenderLoop(frameRing, _rendererBackendFactory, backendOptions, _renderStatus, gpuAssetBridge);
             _renderLoop = renderLoop;
             renderLoop.Start();
             renderStarted = true;
