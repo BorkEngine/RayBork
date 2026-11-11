@@ -324,22 +324,30 @@ public sealed class RayBorkAppBuilder {
     /// No game was supplied, or the builder already built an app.
     /// </exception>
     public RayBorkApp Build() {
-        return Build(loggerFactory => new SdlPlatform(loggerFactory), TimeProvider.System);
+        return Build(
+            loggerFactory => new SdlPlatform(loggerFactory),
+            static () => new Vulkan12Backend(),
+            TimeProvider.System);
     }
 
     /// <summary>
-    /// Validates the configuration and creates the app with a substituted platform factory and time
-    /// provider. Used by tests to avoid SDL and the wall clock.
+    /// Validates the configuration and creates the app with substituted platform and renderer
+    /// factories and time provider. Used by tests to avoid SDL, the GPU device, and the wall clock.
     /// </summary>
     /// <param name="platformFactory">The platform factory.</param>
+    /// <param name="rendererBackendFactory">The renderer backend factory.</param>
     /// <param name="timeProvider">The time provider for the engine clock.</param>
     /// <returns>An app that has not run yet.</returns>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">
     /// No game was supplied, or the builder already built an app.
     /// </exception>
-    internal RayBorkApp Build(PlatformFactory platformFactory, TimeProvider timeProvider) {
+    internal RayBorkApp Build(
+        PlatformFactory platformFactory,
+        RendererBackendFactory rendererBackendFactory,
+        TimeProvider timeProvider) {
         ArgumentNullException.ThrowIfNull(platformFactory);
+        ArgumentNullException.ThrowIfNull(rendererBackendFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ThrowIfBuilt();
         if (_game is null) {
@@ -368,7 +376,7 @@ public sealed class RayBorkAppBuilder {
         };
 
         _built = true;
-        return new RayBorkApp(configuration, platformFactory, timeProvider);
+        return new RayBorkApp(configuration, platformFactory, rendererBackendFactory, timeProvider);
     }
 
     private void ThrowIfBuilt() {

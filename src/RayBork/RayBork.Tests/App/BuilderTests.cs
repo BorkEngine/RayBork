@@ -312,8 +312,9 @@ public sealed class BuilderTests {
     public void InternalBuildRejectsNullDependencies() {
         RayBorkAppBuilder builder = new RayBorkAppBuilder().WithGame(new ScriptedGame());
 
-        Assert.Throws<ArgumentNullException>(() => builder.Build(null!, TimeProvider.System));
-        Assert.Throws<ArgumentNullException>(() => builder.Build(_ => new FakeEnginePlatform(), null!));
+        Assert.Throws<ArgumentNullException>(() => builder.Build(null!, static () => new FakeRendererBackend(), TimeProvider.System));
+        Assert.Throws<ArgumentNullException>(() => builder.Build(_ => new FakeEnginePlatform(), null!, TimeProvider.System));
+        Assert.Throws<ArgumentNullException>(() => builder.Build(_ => new FakeEnginePlatform(), static () => new FakeRendererBackend(), null!));
     }
 
     [Fact]
@@ -330,6 +331,7 @@ public sealed class BuilderTests {
                 platformRequested = true;
                 return new FakeEnginePlatform();
             },
+            static () => new FakeRendererBackend(),
             TimeProvider.System);
 
         Assert.False(platformRequested);
@@ -357,6 +359,6 @@ public sealed class BuilderTests {
     private static RayBorkApp BuildWithFakePlatform(RayBorkAppBuilder builder, out FakeEnginePlatform platform) {
         platform = new FakeEnginePlatform();
         FakeEnginePlatform captured = platform;
-        return builder.Build(_ => captured, TimeProvider.System);
+        return builder.Build(_ => captured, static () => new FakeRendererBackend(), TimeProvider.System);
     }
 }
