@@ -69,6 +69,10 @@ public sealed class RenderStatusTests {
         int tickCount = 0;
 
         using AppTestHost host = new(new ScriptedGame());
+        // The render loop owns Stats once frames complete; hold the value under test steady so the
+        // tick thread observes the same snapshot the test wrote to the app status holder.
+        host.FakeRenderer.Stats = expectedStats;
+        host.FakeRenderer.PublishFrameStats = false;
         host.Game.TickHandler = context => {
             tickCount++;
             if (tickCount == 1) {

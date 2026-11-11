@@ -143,7 +143,7 @@ public sealed class AppLifecycleTests {
             .WithWindowState(WindowState.Hidden)
             .WithLoggerFactory(NullLoggerFactory.Instance)
             .WithTargetFps(AppTestHost.FAST_TARGET_FPS)
-            .Build(_ => platform, TimeProvider.System);
+            .Build(_ => platform, static () => new FakeRendererBackend(), TimeProvider.System);
 
         try {
             app.Run();

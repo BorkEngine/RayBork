@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 using RayBork.Internal;
@@ -22,14 +23,20 @@ namespace RayBork;
 /// </remarks>
 public sealed class RayBorkApp : IDisposable {
     private const string APP_LOGGER_CATEGORY = "RayBork.App";
+    private const string GRAPHICS_LOGGER_CATEGORY = "RayBork.Graphics";
     private const string MAIN_THREAD_NAME = "RayBork.Main";
     private const int PUMP_INTERVAL_MILLISECONDS = 4;
     private const int SHUTDOWN_WAIT_SLICE_MILLISECONDS = 1;
+    private const int RENDERER_READY_TIMEOUT_SECONDS = 30;
+    private const int RENDERER_SHUTDOWN_TIMEOUT_SECONDS = 30;
 
     private static readonly TimeSpan _pumpInterval = TimeSpan.FromMilliseconds(PUMP_INTERVAL_MILLISECONDS);
+    private static readonly TimeSpan _rendererReadyTimeout = TimeSpan.FromSeconds(RENDERER_READY_TIMEOUT_SECONDS);
+    private static readonly TimeSpan _rendererShutdownTimeout = TimeSpan.FromSeconds(RENDERER_SHUTDOWN_TIMEOUT_SECONDS);
 
     private readonly AppConfiguration _configuration;
     private readonly PlatformFactory _platformFactory;
+    private readonly RendererBackendFactory _rendererBackendFactory;
     private readonly TimeProvider _timeProvider;
     private readonly ExitControl _exitControl;
     private readonly Lock _gate = new();
@@ -49,15 +56,22 @@ public sealed class RayBorkApp : IDisposable {
     /// </summary>
     /// <param name="configuration">The validated configuration.</param>
     /// <param name="platformFactory">The platform factory used by <see cref="Run"/>.</param>
+    /// <param name="rendererBackendFactory">The renderer backend factory used by <see cref="Run"/>.</param>
     /// <param name="timeProvider">The time provider for the engine clock.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal RayBorkApp(AppConfiguration configuration, PlatformFactory platformFactory, TimeProvider timeProvider) {
+    internal RayBorkApp(
+        AppConfiguration configuration,
+        PlatformFactory platformFactory,
+        RendererBackendFactory rendererBackendFactory,
+        TimeProvider timeProvider) {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(platformFactory);
+        ArgumentNullException.ThrowIfNull(rendererBackendFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         _configuration = configuration;
         _platformFactory = platformFactory;
+        _rendererBackendFactory = rendererBackendFactory;
         _timeProvider = timeProvider;
         _exitControl = new ExitControl(this);
     }
@@ -80,8 +94,7 @@ public sealed class RayBorkApp : IDisposable {
 
     /// <summary>
     /// Gets the status holder that <see cref="EngineContext.Info"/> and
-    /// <see cref="EngineContext.Stats"/> read. Later M2 renderer tasks write it from the render
-    /// thread.
+    /// <see cref="EngineContext.Stats"/> read. The render thread writes it.
     /// </summary>
     internal RenderStatus RenderStatus => _renderStatus;
 
@@ -119,6 +132,7 @@ public sealed class RayBorkApp : IDisposable {
     /// <exception cref="GameException">A game callback threw.</exception>
     /// <exception cref="PlatformException">The platform failed to start or the event pump failed.</exception>
     /// <exception cref="WindowException">The platform window failed.</exception>
+    /// <exception cref="GraphicsException">The renderer failed to initialize or stopped the app.</exception>
     /// <exception cref="RayBorkException">A render-thread or other engine failure stopped the app.</exception>
     public void Run() {
         lock (_gate) {
@@ -201,6 +215,7 @@ public sealed class RayBorkApp : IDisposable {
         clock.Start();
 
         IEnginePlatform? platform = null;
+        MainThreadSurfaceChannel? surfaceChannel = null;
         FrameRing? frameRing = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
@@ -213,6 +228,25 @@ public sealed class RayBorkApp : IDisposable {
             platform = CreatePlatform(loggerFactory);
             platform.Initialize(CreatePlatformOptions(configuration), RequestExit);
 
+            // The platform owns the window, so the instance extensions and the native surface must be
+            // obtained and created on this thread. The render thread owns the instance and is waiting
+            // for the surface before it can initialize the device.
+            IReadOnlyList<string> instanceExtensions = platform.GetVulkanInstanceExtensions();
+            surfaceChannel = new MainThreadSurfaceChannel();
+            RendererBackendOptions backendOptions = CreateRendererBackendOptions(
+                configuration,
+                platform,
+                loggerFactory,
+                instanceExtensions,
+                surfaceChannel);
+
+            frameRing = new FrameRing();
+            renderLoop = new RenderLoop(frameRing, _rendererBackendFactory, backendOptions, _renderStatus);
+            _renderLoop = renderLoop;
+            renderLoop.Start();
+            renderStarted = true;
+            WaitForRenderer(platform, surfaceChannel, renderLoop);
+
             EngineContext context = new(
                 platform,
                 loggerFactory,
@@ -222,8 +256,6 @@ public sealed class RayBorkApp : IDisposable {
                 () => clock.Time,
                 _renderStatus);
 
-            frameRing = new FrameRing();
-            renderLoop = new RenderLoop(frameRing);
             tickRunner = new TickRunner(
                 platform,
                 context,
@@ -233,16 +265,13 @@ public sealed class RayBorkApp : IDisposable {
                 new TickPacer(configuration.TargetFps),
                 frameRing);
 
-            _renderLoop = renderLoop;
             _tickRunner = tickRunner;
-
-            renderLoop.Start();
-            renderStarted = true;
             tickRunner.Start();
             tickStarted = true;
 
             while (true) {
                 try {
+                    surfaceChannel.TryService(platform);
                     platform.Pump(_pumpInterval);
                 } catch (Exception exception) {
                     failure = exception is RayBorkException
@@ -274,7 +303,16 @@ public sealed class RayBorkApp : IDisposable {
             exitReason = "startup failed";
         }
 
-        failure = Cleanup(logger, platform, frameRing, tickRunner, renderLoop, tickStarted, renderStarted, failure);
+        failure = Cleanup(
+            logger,
+            platform,
+            surfaceChannel,
+            frameRing,
+            tickRunner,
+            renderLoop,
+            tickStarted,
+            renderStarted,
+            failure);
 
         if (failure is not null) {
             logger.LogError(failure, "RayBork stopped with an error.");
@@ -309,7 +347,62 @@ public sealed class RayBorkApp : IDisposable {
             Height = configuration.Height,
             Resizable = configuration.Resizable,
             WindowState = configuration.WindowState,
+            EnableVulkan = true,
         };
+    }
+
+    private static RendererBackendOptions CreateRendererBackendOptions(
+        AppConfiguration configuration,
+        IEnginePlatform platform,
+        ILoggerFactory loggerFactory,
+        IReadOnlyList<string> instanceExtensions,
+        IRendererSurfaceProvider surfaceProvider) {
+        IPlatformWindow window = platform.Window;
+        return new RendererBackendOptions {
+            Settings = configuration.RenderSettings,
+            InstanceExtensions = instanceExtensions,
+            SurfaceProvider = surfaceProvider,
+            WindowStateProvider = () => new WindowSurfaceState(
+                window.RenderWidth,
+                window.RenderHeight,
+                window.IsMinimized,
+                window.IsFocused,
+                platform.WindowHdrState),
+            Logger = loggerFactory.CreateLogger(GRAPHICS_LOGGER_CATEGORY),
+        };
+    }
+
+    private static void WaitForRenderer(
+        IEnginePlatform platform,
+        MainThreadSurfaceChannel surfaceChannel,
+        RenderLoop renderLoop) {
+        long startedAt = Stopwatch.GetTimestamp();
+        while (!renderLoop.IsReady) {
+            if (renderLoop.IsCompleted) {
+                throw CreateRendererStartupFailure(renderLoop.Failure);
+            }
+
+            if (Stopwatch.GetElapsedTime(startedAt) > _rendererReadyTimeout) {
+                throw new GraphicsException(
+                    $"The renderer did not become ready within {RENDERER_READY_TIMEOUT_SECONDS} seconds.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null);
+            }
+
+            surfaceChannel.TryService(platform);
+            platform.Pump(_pumpInterval);
+        }
+    }
+
+    private static RayBorkException CreateRendererStartupFailure(Exception? failure) {
+        if (failure is RayBorkException rayBorkFailure) {
+            return rayBorkFailure;
+        }
+
+        return new GraphicsException(
+            "The renderer backend failed to initialize.",
+            DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+            failure);
     }
 
     private static IInput CaptureInput(IEnginePlatform platform) {
@@ -320,6 +413,7 @@ public sealed class RayBorkApp : IDisposable {
     private static Exception? Cleanup(
         ILogger logger,
         IEnginePlatform? platform,
+        MainThreadSurfaceChannel? surfaceChannel,
         FrameRing? frameRing,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
@@ -363,7 +457,7 @@ public sealed class RayBorkApp : IDisposable {
         }
 
         if (renderLoop is not null && renderStarted) {
-            failure = RunCleanupStep(logger, "joining the render thread", failure, renderLoop.Join);
+            failure = JoinRenderLoop(logger, platform, surfaceChannel, renderLoop, failure);
 
             if (renderLoop.Failure is not null) {
                 Exception renderFailure = renderLoop.Failure is RayBorkException
@@ -371,14 +465,64 @@ public sealed class RayBorkApp : IDisposable {
                     : new RayBorkException("The render loop failed.", renderLoop.Failure);
                 if (failure is null) {
                     failure = renderFailure;
-                } else {
+                } else if (!ReferenceEquals(renderLoop.Failure, failure)) {
                     logger.LogError(renderLoop.Failure, "The render loop also failed while the app was stopping.");
                 }
             }
         }
 
+        if (surfaceChannel is not null) {
+            failure = RunCleanupStep(logger, "closing the surface channel", failure, surfaceChannel.Close);
+        }
+
         if (platform is not null) {
             failure = RunCleanupStep(logger, "disposing the platform", failure, platform.Dispose);
+        }
+
+        return failure;
+    }
+
+    private static Exception? JoinRenderLoop(
+        ILogger logger,
+        IEnginePlatform? platform,
+        MainThreadSurfaceChannel? surfaceChannel,
+        RenderLoop renderLoop,
+        Exception? failure) {
+        long startedAt = Stopwatch.GetTimestamp();
+        bool pumpSuspended = false;
+        while (!renderLoop.Thread.Join(SHUTDOWN_WAIT_SLICE_MILLISECONDS)) {
+            // The backend destroys its native surface from the render thread during disposal, so the
+            // main thread must keep servicing surface requests until the thread exits.
+            if (platform is not null) {
+                if (surfaceChannel is not null) {
+                    surfaceChannel.TryService(platform);
+                }
+
+                if (!pumpSuspended) {
+                    try {
+                        platform.Pump(_pumpInterval);
+                    } catch (Exception exception) {
+                        pumpSuspended = true;
+                        failure = RecordCleanupFailure(
+                            logger,
+                            "pumping the platform while the render thread stopped",
+                            exception,
+                            failure);
+                    }
+                }
+            }
+
+            if (Stopwatch.GetElapsedTime(startedAt) > _rendererShutdownTimeout) {
+                failure = RecordCleanupFailure(
+                    logger,
+                    "waiting for the render thread to stop",
+                    new GraphicsException(
+                        $"The render thread did not stop within {RENDERER_SHUTDOWN_TIMEOUT_SECONDS} seconds.",
+                        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                        null),
+                    failure);
+                break;
+            }
         }
 
         return failure;
