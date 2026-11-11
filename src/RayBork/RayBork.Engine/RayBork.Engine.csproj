@@ -11,6 +11,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Committed SPIR-V blobs are build inputs; the runtime never runs glslc. -->
+        <EmbeddedResource Include="Shaders\*.spv" LogicalName="RayBork.Shaders.%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Silk.NET.Vulkan" />
         <PackageReference Include="SDL3-CS" />
         <PackageReference Include="SDL3-CS.Native" />
