@@ -1,0 +1,38 @@
+<Project>
+
+    <!--
+        RayBork.Shaderc.targets - deploy the pinned libshaderc binary next to a JIT build tool or test
+        host.
+
+        Silk.NET.Shaderc.Native ships the native library under runtimes/<rid>/native, but its NuGet
+        copy props target .NET Framework only, so a net11.0 output has no library on the native
+        loader's search path. The bake, the built-in pack generator, and the shader tests copy the
+        x64 binary for the build host into the output directory, which makes the tool self-contained
+        on Windows and Linux CI without a Vulkan SDK or a system libshaderc.
+
+        The package root is resolved from NuGetPackageRoot rather than the generated
+        PkgSilk_NET_Shaderc_Native property because the property is not always imported into the
+        out-of-process tool build. Bump the version here with Directory.Packages.props.
+    -->
+
+    <PropertyGroup>
+        <_RayBorkShadercPackageRoot Condition="'$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(NuGetPackageRoot)' == '' and '$(HOME)' != ''">$(HOME)/.nuget/packages/silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercNativeDirectory Condition="'$(OS)' == 'Windows_NT'">$(_RayBorkShadercPackageRoot)\runtimes\win-x64\native</_RayBorkShadercNativeDirectory>
+        <_RayBorkShadercNativeDirectory Condition="'$(OS)' != 'Windows_NT'">$(_RayBorkShadercPackageRoot)/runtimes/linux-x64/native</_RayBorkShadercNativeDirectory>
+        <_RayBorkShadercNativeFile Condition="'$(OS)' == 'Windows_NT'">shaderc_shared.dll</_RayBorkShadercNativeFile>
+        <_RayBorkShadercNativeFile Condition="'$(OS)' != 'Windows_NT'">libshaderc_shared.so</_RayBorkShadercNativeFile>
+    </PropertyGroup>
+
+    <Target Name="RayBorkCopyShadercNative"
+            AfterTargets="Build"
+            Condition="Exists('$(_RayBorkShadercNativeDirectory)/$(_RayBorkShadercNativeFile)')">
+        <Copy SourceFiles="$(_RayBorkShadercNativeDirectory)/$(_RayBorkShadercNativeFile)"
+              DestinationFolder="$(OutDir)"
+              SkipUnchangedFiles="true" />
+        <ItemGroup>
+            <FileWrites Include="$(OutDir)$(_RayBorkShadercNativeFile)" />
+        </ItemGroup>
+    </Target>
+
+</Project>

@@ -31,6 +31,14 @@ namespace RayBork.Bake.Shaders;
 internal static unsafe class GlslCompiler {
     private const string GLSL_ENTRY_POINT = "main";
 
+    /// <summary>
+    /// The process-wide shaderc API. The native library stays loaded until the bake process exits;
+    /// disposing the Silk.NET API object unloads it and can crash on Linux when a later compile loads
+    /// it again. The bake and the shader tests are short-lived, so a process-lifetime handle is the
+    /// simplest safe ownership model.
+    /// </summary>
+    private static readonly Lazy<Shaderc> _shadercApi = new(static () => Shaderc.GetApi());
+
     /// <summary>Compiles one GLSL source into a SPIR-V module.</summary>
     /// <param name="source">The complete GLSL source text.</param>
     /// <param name="fileName">The file name shaderc uses in diagnostics.</param>
@@ -84,7 +92,7 @@ internal static unsafe class GlslCompiler {
         CompileOptions* options = null;
         CompilationResult* result = null;
         try {
-            shaderc = Shaderc.GetApi();
+            shaderc = _shadercApi.Value;
             compiler = shaderc.CompilerInitialize();
             options = shaderc.CompileOptionsInitialize();
             if (compiler is null || options is null) {
@@ -170,8 +178,6 @@ internal static unsafe class GlslCompiler {
                 if (compiler is not null) {
                     shaderc.CompilerRelease(compiler);
                 }
-
-                shaderc.Dispose();
             }
         }
     }

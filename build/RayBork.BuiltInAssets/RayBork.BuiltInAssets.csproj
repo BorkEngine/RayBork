@@ -18,6 +18,9 @@
              compiler, so the built-in pack is produced exactly like game content. -->
         <ProjectReference Include="..\..\src\RayBork\RayBork.Bake\RayBork.Bake.csproj" />
         <ProjectReference Include="..\..\src\RayBork\RayBork.Engine\RayBork.Engine.csproj" />
+        <PackageReference Include="Silk.NET.Shaderc.Native" GeneratePathProperty="true" />
     </ItemGroup>
+
+    <Import Project="$(MSBuildThisFileDirectory)..\RayBork.Shaderc.targets" />
 
 </Project>

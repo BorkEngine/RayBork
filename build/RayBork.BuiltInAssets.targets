@@ -39,7 +39,7 @@
           RayBorkEngineShadersDirectory          engine present GLSL sources;
                                                  default src/RayBork/RayBork.Engine/Shaders
           RayBorkBuiltInAssetsTargetFramework    tool target framework; default net11.0
-          RayBorkDotNetHost                      dotnet host; default dotnet
+          RayBorkDotNetHost                      dotnet host; default $(DOTNET_HOST_PATH), else dotnet
 
         RemoveProperties keeps the consuming project's RID/publish settings off the tool restore and
         build.
@@ -51,6 +51,9 @@
         <RayBorkBuiltInAssetsSourceDirectory Condition="'$(RayBorkBuiltInAssetsSourceDirectory)' == ''">$(MSBuildThisFileDirectory)..\src\RayBork\RayBork.Engine\BuiltInAssets</RayBorkBuiltInAssetsSourceDirectory>
         <RayBorkEngineShadersDirectory Condition="'$(RayBorkEngineShadersDirectory)' == ''">$(MSBuildThisFileDirectory)..\src\RayBork\RayBork.Engine\Shaders</RayBorkEngineShadersDirectory>
         <RayBorkBuiltInAssetsTargetFramework Condition="'$(RayBorkBuiltInAssetsTargetFramework)' == ''">net11.0</RayBorkBuiltInAssetsTargetFramework>
+        <!-- Use the SDK host that is running this build instead of whatever `dotnet` happens to be
+             first on PATH. On WSL the default host can be an older runtime without net11.0. -->
+        <RayBorkDotNetHost Condition="'$(RayBorkDotNetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</RayBorkDotNetHost>
         <RayBorkDotNetHost Condition="'$(RayBorkDotNetHost)' == ''">dotnet</RayBorkDotNetHost>
         <RayBorkBuiltInAssetsAssembly Condition="'$(RayBorkBuiltInAssetsAssembly)' == ''">$(MSBuildThisFileDirectory)RayBork.BuiltInAssets\bin\$(Configuration)\$(RayBorkBuiltInAssetsTargetFramework)\RayBork.BuiltInAssets.dll</RayBorkBuiltInAssetsAssembly>
     </PropertyGroup>
@@ -63,7 +66,7 @@
         <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
                  Targets="Restore"
                  Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath" />
+                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
     </Target>
 
     <!--
@@ -82,7 +85,14 @@
         <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
                  Targets="Build"
                  Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath" />
+                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <!-- The AfterTargets hook that normally copies libshaderc is not reliable when Build is
+             invoked through the MSBuild task during another project's build, so invoke the copy
+             target explicitly before the generator runs. -->
+        <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
+                 Targets="RayBorkCopyShadercNative"
+                 Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
         <Error Condition="!Exists('$(RayBorkBuiltInAssetsAssembly)')"
                Text="RayBork built-in assets: the tool was not produced at '$(RayBorkBuiltInAssetsAssembly)'." />
     </Target>

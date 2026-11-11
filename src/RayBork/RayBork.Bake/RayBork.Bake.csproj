@@ -17,9 +17,11 @@
         <PackageReference Include="PolyType" />
         <PackageReference Include="SharpGLTF.Core" />
         <PackageReference Include="Silk.NET.Shaderc" />
-        <PackageReference Include="Silk.NET.Shaderc.Native" />
+        <PackageReference Include="Silk.NET.Shaderc.Native" GeneratePathProperty="true" />
         <PackageReference Include="StbImageSharp" />
         <PackageReference Include="Tomlyn" />
     </ItemGroup>
+
+    <Import Project="$(MSBuildThisFileDirectory)..\..\..\build\RayBork.Shaderc.targets" />
 
 </Project>
