@@ -31,8 +31,14 @@ namespace RayBork.Internal;
 /// them after the render thread has stopped. The split keeps Vulkan driver thread-local state valid
 /// until the thread that used it has exited.
 /// </para>
+/// <para>
+/// M3 also implements <see cref="IAssetGpuWorkerProvider"/>. The render loop creates one asset GPU
+/// worker after initialization and keeps it for the backend's lifetime. The worker reads <see
+/// cref="Device"/> and <see cref="DeviceGeneration"/> on every call, so a device recreation is handled
+/// by <see cref="IAssetGpuWorker.Restore"/> without replacing the worker.
+/// </para>
 /// </remarks>
-internal sealed unsafe class Vulkan12Backend : IRendererBackend {
+internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorkerProvider {
     /// <summary>
     /// The number of consecutive recovery attempts without a completed frame after which recovery is
     /// fatal. The bound stops a recovery loop that can never make progress.
@@ -47,6 +53,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     private RendererBackendOptions? _options;
     private VulkanInstance? _instance;
     private VulkanDevice? _device;
+    private VulkanAssetWorker? _assetGpuWorker;
     private IntPtr _surfaceHandle;
     private SurfaceKHR _surface;
     private VulkanSwapchain? _swapchain;
@@ -114,6 +121,25 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanInstance Instance => _instance ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
+
+    /// <summary>
+    /// Creates the GPU asset worker for the backend's current device.
+    /// </summary>
+    /// <remarks>
+    /// Render-thread only. The render loop calls this once after <see cref="Initialize"/> and attaches
+    /// the worker to the GPU asset bridge. The worker resolves <see cref="Device"/> and <see
+    /// cref="DeviceGeneration"/> on every upload, restore, and destroy, so it stays valid across a
+    /// device recreation and the render loop never replaces it. The worker must not be used after the
+    /// backend is disposed.
+    /// </remarks>
+    /// <returns>The worker for the current device.</returns>
+    /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
+    public IAssetGpuWorker CreateAssetGpuWorker() {
+        EnsureInitialized();
+        VulkanAssetWorker worker = new(() => Device, () => DeviceGeneration, _options!.Logger);
+        _assetGpuWorker = worker;
+        return worker;
+    }
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">
@@ -443,6 +469,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         DestroyFrameResources();
         _swapchain?.Dispose();
         _swapchain = null;
+        DestroyAssetGpuResources();
         _device?.Dispose();
         _device = null;
         if (_instance is not null && _surfaceHandle != IntPtr.Zero) {
@@ -675,6 +702,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         DropPendingPresent();
         DestroyPresentationResources();
         DestroyFrameResources();
+        DestroyAssetGpuResources();
         VulkanDevice? lostDevice = _device;
         _device = null;
         lostDevice?.Dispose();
@@ -758,6 +786,32 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
 
         _simulatedFailure = null;
         RecoverOrThrow(reason);
+    }
+
+    /// <summary>
+    /// Destroys the live GPU asset resources before their logical device is destroyed.
+    /// </summary>
+    /// <remarks>
+    /// Vulkan requires every child object to be destroyed before its device, and the validation layer
+    /// reports a live asset object as a leak. The asset GPU worker tracks its live resources and
+    /// destroys them here. The GPU asset bridge retains every upload description, so the render loop
+    /// recreates the resources after a device recovery and the public asset stays valid. Render-thread
+    /// only, with the device idle. Destruction is best effort: a failure is logged and the device
+    /// teardown continues.
+    /// </remarks>
+    private void DestroyAssetGpuResources() {
+        VulkanAssetWorker? worker = _assetGpuWorker;
+        if (worker is null) {
+            return;
+        }
+
+        try {
+            worker.DestroyAllResources();
+        } catch (Exception exception) {
+            _options?.Logger.LogError(
+                exception,
+                "The GPU asset resources could not be destroyed before the Vulkan device was destroyed.");
+        }
     }
 
     private void CreateFrameResources(int imageCount) {
