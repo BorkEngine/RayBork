@@ -9,7 +9,9 @@ namespace RayBork.Internal;
 /// The value is built on the main thread from the app configuration and the platform snapshots, then
 /// consumed once on the render thread. The instance extension list must be obtained from the
 /// platform on the main thread before the renderer starts; the surface provider marshals surface
-/// creation and destruction to the main thread.
+/// creation and destruction to the main thread. The render thread enqueues teardown work that needs
+/// the main thread on <see cref="TeardownQueue"/>; the main thread drains it after the render thread
+/// has stopped.
 /// </remarks>
 internal sealed class RendererBackendOptions {
     /// <summary>
@@ -39,4 +41,10 @@ internal sealed class RendererBackendOptions {
     /// Gets the logger for the renderer category.
     /// </summary>
     public required ILogger Logger { get; init; }
+
+    /// <summary>
+    /// Gets the queue for teardown work that must run on the main thread after the render thread has
+    /// stopped, such as destroying the Vulkan instance and its loader.
+    /// </summary>
+    public required MainThreadTeardownQueue TeardownQueue { get; init; }
 }

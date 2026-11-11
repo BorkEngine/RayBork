@@ -24,6 +24,13 @@ namespace RayBork.Internal;
 /// destroys the native surface through <see cref="RendererBackendOptions.SurfaceProvider"/>, and
 /// publishes immutable snapshots through <see cref="Info"/> and <see cref="Stats"/>.
 /// </para>
+/// <para>
+/// The render thread creates the instance and device and destroys every GPU object, the surface, and
+/// the device. The instance and its loader outlive the render thread: <see cref="Dispose"/> enqueues
+/// their teardown on <see cref="RendererBackendOptions.TeardownQueue"/>, and the main thread destroys
+/// them after the render thread has stopped. The split keeps Vulkan driver thread-local state valid
+/// until the thread that used it has exited.
+/// </para>
 /// </remarks>
 internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     /// <summary>
@@ -116,6 +123,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         ArgumentNullException.ThrowIfNull(options.SurfaceProvider);
         ArgumentNullException.ThrowIfNull(options.WindowStateProvider);
         ArgumentNullException.ThrowIfNull(options.Logger);
+        ArgumentNullException.ThrowIfNull(options.TeardownQueue);
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (_initialized) {
             throw new InvalidOperationException("The renderer backend has already been initialized.");
@@ -412,8 +420,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     }
 
     /// <summary>
-    /// Waits for the device to idle and destroys the GPU objects, the swapchain, the device, the
-    /// surface, and the instance, in that order. The call is idempotent.
+    /// Waits for the device to idle and destroys the GPU objects, the swapchain, the device, and the
+    /// surface on the render thread, then queues the instance and loader for main-thread teardown.
+    /// The call is idempotent.
     /// </summary>
     public void Dispose() {
         if (_disposed) {
@@ -445,8 +454,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
             }
         }
 
-        _instance?.Dispose();
+        VulkanInstance? instance = _instance;
         _instance = null;
+        if (instance is not null) {
+            instance.Dispose();
+            if (_options is not null) {
+                _options.TeardownQueue.Enqueue(instance.DisposeFromMainThread);
+            }
+        }
+
         _initialized = false;
         _options?.Logger.LogDebug("Vulkan 1.2 renderer backend disposed.");
     }

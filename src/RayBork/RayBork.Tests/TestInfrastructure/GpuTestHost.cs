@@ -144,6 +144,7 @@ internal sealed class GpuTestHost : IDisposable {
             }
 
             instance?.Dispose();
+            instance?.DisposeFromMainThread();
             cleanupHost?.Dispose();
         }
     }
@@ -171,6 +172,7 @@ internal sealed class GpuTestHost : IDisposable {
         _device.Dispose();
         _sdlHost.Platform.DestroyVulkanSurface(_instance.Handle.Handle, _surface);
         _instance.Dispose();
+        _instance.DisposeFromMainThread();
         _sdlHost.Dispose();
     }
 

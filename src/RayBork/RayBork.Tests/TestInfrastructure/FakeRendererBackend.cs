@@ -9,8 +9,9 @@ namespace RayBork.Tests;
 /// <remarks>
 /// <see cref="Initialize"/> creates the native surface through the configured provider exactly like
 /// the Vulkan backend, so app tests drive <c>MainThreadSurfaceChannel</c>. <see cref="Dispose"/>
-/// destroys that surface first and is idempotent. Every recorded value except the configured
-/// properties is guarded by a lock, so a test may read it after <see cref="RayBorkApp.Run"/> returns.
+/// destroys that surface first, then enqueues <see cref="TeardownAction"/> on the options' main-thread
+/// teardown queue, and is idempotent. Every recorded value except the configured properties is
+/// guarded by a lock, so a test may read it after <see cref="RayBorkApp.Run"/> returns.
 /// </remarks>
 internal sealed class FakeRendererBackend : IRendererBackend {
     private static readonly IntPtr _instanceHandle = new(0x5EED);
@@ -81,6 +82,12 @@ internal sealed class FakeRendererBackend : IRendererBackend {
     /// Gets or sets an optional hook invoked at the end of <see cref="Present"/>.
     /// </summary>
     internal Action? OnPresent { get; set; }
+
+    /// <summary>
+    /// Gets or sets the action <see cref="Dispose"/> enqueues on the options' main-thread teardown
+    /// queue. The action runs on whichever thread drains the queue, not on the render thread.
+    /// </summary>
+    internal Action? TeardownAction { get; set; }
 
     /// <summary>
     /// Gets the options passed to <see cref="Initialize"/>, or <see langword="null"/> before it ran.
@@ -186,6 +193,7 @@ internal sealed class FakeRendererBackend : IRendererBackend {
     /// <exception cref="GraphicsException">The surface handshake failed.</exception>
     public void Initialize(RendererBackendOptions options) {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(options.TeardownQueue);
         lock (_gate) {
             _options = options;
             _initializeCallCount++;
@@ -263,6 +271,7 @@ internal sealed class FakeRendererBackend : IRendererBackend {
     public void Dispose() {
         RendererBackendOptions? options;
         IntPtr surface;
+        Action? teardownAction = TeardownAction;
         lock (_gate) {
             if (_disposeCallCount > 0) {
                 return;
@@ -273,10 +282,16 @@ internal sealed class FakeRendererBackend : IRendererBackend {
             surface = _surfaceHandle;
         }
 
-        if (options is not null && surface != IntPtr.Zero) {
-            options.SurfaceProvider.DestroySurface(_instanceHandle, surface);
-            lock (_gate) {
-                _surfaceDestroyed = true;
+        if (options is not null) {
+            if (surface != IntPtr.Zero) {
+                options.SurfaceProvider.DestroySurface(_instanceHandle, surface);
+                lock (_gate) {
+                    _surfaceDestroyed = true;
+                }
+            }
+
+            if (teardownAction is not null) {
+                options.TeardownQueue.Enqueue(teardownAction);
             }
         }
     }
