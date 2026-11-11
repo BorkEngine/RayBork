@@ -1,5 +1,4 @@
-﻿namespace RayBork.Engine;
+namespace RayBork.Engine;
 
-public class Class1
-{
+public class Class1 {
 }

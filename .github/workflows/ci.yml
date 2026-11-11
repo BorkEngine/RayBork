@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build-test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-quality: preview
+
+      - name: Restore
+        run: dotnet restore src/RayBork/RayBork.slnx
+
+      - name: Build Debug
+        run: dotnet build src/RayBork/RayBork.slnx -c Debug --no-restore
+
+      - name: Build Release
+        run: dotnet build src/RayBork/RayBork.slnx -c Release --no-restore
+
+      - name: Test
+        run: dotnet test src/RayBork/RayBork.slnx -c Debug --no-build --no-restore
+
+      - name: Format
+        run: dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Markdown links and fences
+        shell: pwsh
+        run: ./scripts/check-docs.ps1

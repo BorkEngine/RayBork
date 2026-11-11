@@ -1,5 +1,4 @@
-﻿namespace RayBork.Bake;
+namespace RayBork.Bake;
 
-public class Class1
-{
+public class Class1 {
 }
