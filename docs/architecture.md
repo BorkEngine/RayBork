@@ -1,6 +1,7 @@
 # RayBork Architecture
 
-Status: design draft, 2026-11-11. This document describes the runtime shape the
+Status: design draft for M1 onward, 2026-11-11. M0 establishes the build, dependency, and AOT
+guardrails and adds no renderer code. This document describes the runtime shape the
 [API reference](api.md) and [roadmap](roadmap.md) assume. It is not an as-built document yet.
 
 ## Goals
@@ -26,10 +27,12 @@ Those can be built on top of the draw API or added in later milestones.
 ```text
 RayBork.Tests ──────> RayBork.Engine, RayBork.Bake
 
-RayBork.Engine ─────> Silk.NET.Vulkan, SDL3-CS, Zstd, PolyType, Nerdbank.MessagePack,
+RayBork.Engine ─────> Silk.NET.Vulkan, SDL3-CS, PolyType, Nerdbank.MessagePack,
                       Microsoft.Extensions.Logging, ZLogger
+                      System.IO.Compression.Zstandard* (in-box, net11.0)
 RayBork.Bake  ──────> RayBork.Engine (pack writer/types), shaderc, image/font/model tooling (JIT)
-Samples       ──────> RayBork.Engine
+samples/HelloInterop -> RayBork.Engine (M0: loads SDL3, opens no window, exits)
+Samples (M11) ──────> RayBork.Engine
 ```
 
 | Project | Role |
@@ -37,14 +40,16 @@ Samples       ──────> RayBork.Engine
 | `RayBork.Engine` | Public API and all runtime internals: app host, SDL3 platform, renderer seam and Vulkan backend, asset catalog, pack reader, font/MSDF, input, logging. Native AOT compatible. |
 | `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, pack writer, incremental manifest. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/` | Castle, Pong, Text, Instancing, RenderTarget. Each has assets, a bake step, and a Native AOT publish target. |
+| `samples/HelloInterop` | M0 Native AOT interop host: loads SDL3, opens no window, and exits. It exercises the AOT publish path on `win-x64` and `linux-x64` before the renderer exists. |
+| `samples/` | Castle, Pong, Text, Instancing, RenderTarget (M11). Each has assets, a bake step, and a Native AOT publish target. |
 
 Rules:
 
 - No runtime project references `RayBork.Bake`.
 - No public type exposes a Silk.NET, SDL3, Vulkan, or other backend-native handle.
-- The engine may reference only pinned, AOT-tested packages. Every package added to
-  `RayBork.Engine` must pass a trim/AOT publish before it is accepted.
+- The engine may reference only pinned, license-reviewed packages. Every package added to
+  `RayBork.Engine` must stay in a trim/AOT publish graph without AOT/trim warnings; the milestone
+  that first uses its features owns feature-level AOT validation.
 - `RayBork.Bake` may use reflection-heavy libraries because it is never published as AOT.
 - Tests may reference everything.
 - The renderer backend is selected internally. The public API does not expose Vulkan types or
@@ -52,23 +57,110 @@ Rules:
 
 These rules are enforced by an architecture test and by the AOT publish gate, not only by review.
 
+### Dependency matrix
+
+Versions are pinned centrally in `Directory.Packages.props`; no project uses a floating range. The
+[third-party notices](../THIRD-PARTY-NOTICES.md) mirror this matrix with licenses and the notice
+policy.
+
+**Runtime dependencies** (in the `RayBork.Engine` publish graph):
+
+| Package | Version | Purpose | AOT status |
+| --- | --- | --- | --- |
+| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, and events | Exercised end to end by the M0 `samples/HelloInterop` AOT host on `win-x64` and `linux-x64`. |
+| `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same M0 host on both RIDs. |
+| `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the M2 backend | Pinned and in the AOT publish graph; feature-level AOT validation lands with the M2 backend. |
+| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
+| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack entries | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
+| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Pinned and in the AOT publish graph; feature-level AOT validation lands in M1. |
+| `ZLogger` | 2.6.1 | Default console logging provider | Pinned and in the AOT publish graph; feature-level AOT validation lands in M1. |
+| `System.IO.Compression.Zstandard*` | in-box `net11.0` | Zstandard pack payload compression | Part of the .NET 11 shared framework; no package and no separate AOT gate. |
+
+**Test and tooling dependencies** (JIT only; outside the runtime publish graph):
+
+| Package | Version | Class | Purpose | AOT status |
+| --- | --- | --- | --- | --- |
+| `Microsoft.CodeAnalysis.PublicApiAnalyzers` | 5.6.0 | Tooling | Public API tracking for `RayBork.Engine` | Compile-time analyzer; no runtime or publish-graph impact. |
+| `xunit.v3` | 3.2.2 | Test | Test framework | JIT only; not in the runtime publish graph. |
+| `xunit.runner.visualstudio` | 3.1.5 | Test | VSTest adapter for xUnit v3 | JIT only; not in the runtime publish graph. |
+| `Microsoft.NET.Test.Sdk` | 18.11.1 | Test | Test host and MSBuild integration | JIT only; not in the runtime publish graph. |
+| `Moq` | 4.21.0 | Test | Mocking for unit tests | JIT only; not in the runtime publish graph. |
+
+Only SDL3 is exercised end to end in M0. The other runtime packages are pinned and remain in the
+AOT publish graph without AOT/trim warnings, but the features that use them are first validated by
+the milestone that calls them: logging in M1, Vulkan in M2, and PolyType/MessagePack in M3. M0 adds
+no renderer code, no Vulkan initialization, and no asset pipeline. The bake's source-format tooling
+(shaderc and the image/font/model libraries) is added in M3; it is JIT only and never enters the
+runtime publish graph, so this matrix gains its pinned versions when M3 selects them.
+
 ## Renderer backend seam
 
-The public API is renderer-agnostic. Internally, the render thread talks to an `IRendererBackend`
-contract that owns:
+M0 adds no renderer code. The seam below is the design M2 implements; `IRendererBackend` is internal
+and does not exist in the M0 assembly.
+
+The public API is renderer-agnostic. Internally, the render thread talks to the `IRendererBackend`
+contract, which owns:
 
 - instance/device/surface/swapchain lifetime and recovery;
 - pipelines, descriptor sets, buffers, and texture tables;
 - command recording, submission, presentation, and GPU timing;
-- capability reporting (`EngineInfo`: backend name, HDR output, sample count, swapchain format).
+- capability projection into the public, immutable `EngineInfo` value.
 
-`Vulkan12Backend` is the first implementation. A future WebGPU or mobile backend implements the
-same seam without changing `Camera`, `Shader`, `Mesh`, or `Model`. The seam is internal; games never
-implement a backend in v1.
+### Lifecycle
 
-Recoverable backend failures (swapchain out-of-date, resize, focus changes, device loss) are
-handled by the backend. It pauses, recreates the affected resources, and resumes. If recreation
-fails, the app stops with `GraphicsDeviceLostException` or the underlying `GraphicsException`.
+`IRendererBackend` has one operation per frame or resource decision, never one per draw:
+
+| Operation | Thread | Contract |
+| --- | --- | --- |
+| Initialize | Render | Creates the instance, device, queues, swapchain, and fixed GPU state after the main thread has created the window and native surface. Failure is fatal. |
+| Resize | Render | Recreates the swapchain and dependent images after a window resize; retired images are released after their fences signal. |
+| Submit | Render | Consumes one sealed frame packet, plans passes, builds batches, records and submits command buffers, and tracks frame fences. This is the only per-frame submission entry point. |
+| Present | Render | Presents the newest submitted frame. Idles without presenting while the window is minimized or the swapchain has no extent. |
+| Recover | Render | Handles one recoverable failure and returns recovered or fatal. |
+| Dispose | Render | Destroys GPU objects, swapchain, device, and instance after the tick thread has stopped and in-flight frames have retired. |
+
+`Submit` takes a **sealed frame packet**, not a live game object or a draw command. The tick thread
+seals the packet before publishing it; the backend never sees `Camera`, `Shader`, `Mesh`, or any
+other game-facing type. `Resize` and resource create/destroy requests are the other inputs. There is
+no `Draw`, `SetUniform`, or per-object method on the seam, so a backend cannot add a virtual call
+per draw. Batching, pipeline lookup, descriptor updates, and draw recording stay inside the backend
+behind the frame boundary.
+
+### Ownership and threading
+
+- The render thread owns the backend object, device, queues, command buffers, pipelines,
+  descriptors, buffers, images, and GPU uploads. Backend calls are render-thread only.
+- The main thread owns the SDL3 window and creates the native surface. The backend does not pump
+  window events, create windows, or read input.
+- The tick thread records into the frame ring and never calls the backend. The render thread never
+  calls user code: there are no callbacks or virtual methods from the backend into the game.
+- `EngineInfo` is projected from backend capabilities at startup and after recovery. It is an
+  immutable public value; no backend type, native handle, or live capability query crosses the
+  seam.
+- The backend is selected internally. `Vulkan12Backend` is the first implementation; a future
+  WebGPU or mobile backend implements the same seam without changing `Camera`, `Shader`, `Mesh`, or
+  `Model`. Games never implement a backend in v1.
+
+### Failure handling
+
+Recoverable failures are handled on the render thread without calling user code:
+
+| Reason | Trigger | Response |
+| --- | --- | --- |
+| Swapchain out of date | Resize, restore, or display change | Recreate the swapchain and dependent images at a frame boundary. |
+| Swapchain suboptimal | Driver hint | Recreate at the next frame boundary; presentation continues meanwhile. |
+| Surface lost | Window or display topology change | Signal the main thread to recreate the native surface; recreate the swapchain at a frame boundary. |
+| Recoverable device loss | Driver reset or timeout where a new device succeeds | Recreate the device and rebuild pipelines and GPU resources from retained descriptions. |
+| Minimized / zero extent | Window state | Do not acquire or present; idle the renderer and keep the 30 FPS tick cap. |
+
+Recovery pauses submission, recreates the affected resources, increments
+`RenderStats.RecoveryCount`, logs at Warning, and resumes with the newest completed tick. An
+in-flight frame that cannot complete is dropped, never partially presented.
+
+Recovery is bounded. A failed recovery, an unavailable required device or feature, an out-of-memory
+condition, or a repeated recovery loop is fatal: the tick loop stops, `Shutdown` runs, and `Run`
+rethrows `GraphicsDeviceLostException` or the underlying `GraphicsException`. No partial frame is
+presented.
 
 ## Threads
 
@@ -242,7 +334,7 @@ RayBork.Bake assets executable (JIT)
   texture/model/shader/font processors, TOML data binding, validation, hashing
         |
         v
-assets.pck (RAYBORKP v1, Zstd payloads, binary index, aligned GPU blobs)
+assets.pck (RAYBORKP v1, Zstandard payloads, binary index, aligned GPU blobs)
         |
         v
 RayBork.Engine asset loader (I/O, decompress, deserialize, GPU upload)
@@ -284,7 +376,11 @@ specified in the API reference's tooling section.
 - No runtime shader compilation. Shader reflection is bake-generated metadata.
 - `Load<T>` maps built-in engine asset types with a closed type switch; custom data uses a
   builder-registered compiled shape delegate. `LoadData` covers opaque bytes.
-- `Microsoft.Extensions.Logging` and ZLogger are AOT-tested runtime dependencies.
+- `Microsoft.Extensions.Logging` and ZLogger are AOT-gated runtime dependencies; M1 is their first
+  feature-level gate.
+- M0 validates SDL3 end to end with the `samples/HelloInterop` AOT host. The other runtime
+  packages are in the M0 publish graph and are feature-validated in M1 (logging), M2 (Vulkan), and
+  M3 (PolyType/MessagePack).
 - P/Invoke is direct; native SDL3 and Vulkan libraries are deployed per RID.
 - The generic asset loader maps a closed set of built-in types; custom data goes through the
   `WithAssetType<T>()` registry or `LoadData`.

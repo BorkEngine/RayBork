@@ -12,6 +12,7 @@ ask.
 | [docs/api.md](docs/api.md) | Public API, lifecycle, assets, rendering, shader ABI, input, threading, AOT. |
 | [docs/architecture.md](docs/architecture.md) | Projects, threads, frame handoff, renderer seam, asset pipeline, invariants. |
 | [docs/roadmap.md](docs/roadmap.md) | Milestones, gates, parity matrix, risks, post-1.0 work. |
+| [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | Dependency inventory, licenses, and the runtime/test/tooling notice policy. |
 | [.editorconfig](.editorconfig) | Formatting, naming, and style. |
 | [Directory.Build.props](Directory.Build.props) | Target framework, analyzers, warnings-as-errors. |
 | [global.json](global.json) | Pinned .NET SDK. |

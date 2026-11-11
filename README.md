@@ -7,9 +7,10 @@ It aims for the ergonomics of raylib with a modern bindless, instanced renderer:
 frame-scoped draw API, assets from a baked pack, text, and enough 3D/2D primitives to ship a small
 game without adopting a scene graph or an ECS.
 
-**Status: design phase.** There is no engine implementation yet. The repository contains the
-project scaffold and the design documents below. The API reference is a contract sketch, not a
-description of shipped behavior.
+**Status: M0 foundations.** The repository carries the build, test, AOT, docs, and public-API
+guardrails. The engine implementation starts with M1. M0 adds only `EngineVersion` to the public
+API; the API reference below remains a contract for the milestones ahead, not a description of
+shipped behavior.
 
 ## Documents
 
@@ -18,6 +19,7 @@ description of shipped behavior.
 | [API reference](docs/api.md) | Public types, lifecycle, assets, rendering, shader ABI, input, threading, AOT, tooling. |
 | [Roadmap](docs/roadmap.md) | Milestones M0-M12, raylib parity matrix, cross-cutting gates, risks, post-1.0 work. |
 | [Architecture](docs/architecture.md) | Threads, frame handoff, renderer seam, HDR/AgX, shader state, asset pipeline, invariants. |
+| [Third-party notices](THIRD-PARTY-NOTICES.md) | Dependency inventory, licenses, and the runtime/test/tooling notice policy. |
 | [AGENTS.md](AGENTS.md) | Agent workflow, code style, gates, PR rules, and review checklist. |
 
 ## Targets
@@ -53,15 +55,18 @@ description of shipped behavior.
 ```text
 src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
 src/RayBork/RayBork.Bake/     JIT asset tooling
-src/RayBork/RayBork.Tests/    unit, GPU, AOT, and architecture tests (to be added)
-samples/                      Castle, Pong, Text, Instancing, RenderTarget (to be added)
+src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
+samples/HelloInterop/         Native AOT SDL3 interop host (M0)
+samples/                      Castle, Pong, Text, Instancing, RenderTarget (M11)
 docs/                         API, roadmap, architecture
 .github/                      GitHub Actions CI and PR template
 scripts/                      repository checks (docs links/fences)
 AGENTS.md                     agent workflow and code style
+THIRD-PARTY-NOTICES.md        dependency licenses and runtime/test/tooling policy
 LICENSE                       MIT
 ```
 
 ## Next step
 
-The design set is complete; M0 can start with the build, test, AOT, CI, and public-API guardrails.
+M0 establishes the build, test, AOT, docs, and public-API guardrails. M1 begins the engine
+implementation: the app host, tick thread, window, input, time, and logging.
