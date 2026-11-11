@@ -6,17 +6,18 @@
 // This source is compiled to Present.frag.spv by scripts/compile-shaders.ps1 and the committed
 // blob is embedded in RayBork.Engine. The runtime never compiles shaders.
 //
-// The present pass writes display-referred [0,1] in M2. HDR10/PQ presentation is deliberately
-// deferred: when it lands, PQ output becomes another value of `pc.encoding` instead of a change to
-// the tone-mapping path below, and it is not implemented here.
+// The SDR paths write display-referred [0,1]. The scRGB HDR path writes linear extended-sRGB
+// values where 1.0 is the SDR white point scaled by the window's SDL SDR white level, so values
+// above that use the display headroom. HDR10/PQ presentation is deliberately deferred: it would be
+// another value of `pc.encoding` instead of a change to the tone-mapping path below.
 
 layout(set = 0, binding = 0) uniform sampler2D uSceneColor;
 
 layout(push_constant) uniform PresentConstants {
     float exposureMultiplier; // pow(2.0, exposureEv), computed on the CPU
+    float hdrWhiteScale;      // SDL SDR white level for scRGB; 1.0 on the SDR paths
     int tonemapping;          // 0 = AgX, 1 = none
-    int encoding;             // 0 = linear display value, 1 = manual sRGB encode
-    int reserved;             // must be 0
+    int encoding;             // 0 = linear [0,1], 1 = manual sRGB encode, 2 = scRGB HDR linear
 } pc;
 
 layout(location = 0) in vec2 vUv;
@@ -71,10 +72,16 @@ void main() {
 
     // Encoding 0 leaves the display value linear so the sRGB swapchain transfer function, the
     // scRGB float surface, or a linear offscreen target can handle it. Encoding 1 writes sRGB
-    // bytes, which is required by an UNORM swapchain format.
-    if (pc.encoding == 1) {
-        color = SrgbEncode(color);
-    }
+    // bytes, which is required by an UNORM swapchain format. Encoding 2 is the scRGB HDR path: the
+    // display-linear value is scaled into extended-sRGB units using the window's SDR white level and
+    // is deliberately not clamped, so values above the SDR white point use the display headroom.
+    if (pc.encoding == 2) {
+        outColor = vec4(max(color, 0.0) * pc.hdrWhiteScale, 1.0);
+    } else {
+        if (pc.encoding == 1) {
+            color = SrgbEncode(color);
+        }
 
-    outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+        outColor = vec4(clamp(color, 0.0, 1.0), 1.0);
+    }
 }
