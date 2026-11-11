@@ -568,3 +568,21 @@ static readonly RayBork.Color.Yellow -> RayBork.Color
 ~override RayBork.Monitor.ToString() -> string
 ~override RayBork.Rect.Equals(object obj) -> bool
 ~override RayBork.Rect.ToString() -> string
+RayBork.RayBorkApp
+RayBork.RayBorkApp.Dispose() -> void
+RayBork.RayBorkApp.IsDisposed.get -> bool
+RayBork.RayBorkApp.IsRunning.get -> bool
+RayBork.RayBorkApp.RequestExit() -> void
+RayBork.RayBorkApp.Run() -> void
+RayBork.RayBorkAppBuilder
+RayBork.RayBorkAppBuilder.Build() -> RayBork.RayBorkApp!
+RayBork.RayBorkAppBuilder.RayBorkAppBuilder() -> void
+RayBork.RayBorkAppBuilder.WithGame(RayBork.IGame! game) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithLogLevel(Microsoft.Extensions.Logging.LogLevel level) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithMaxDeltaTime(double seconds) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithResizable(bool resizable = true) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithSize(int width, int height) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithTargetFps(int framesPerSecond) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithTitle(string! title) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithWindowState(RayBork.WindowState state) -> RayBork.RayBorkAppBuilder!
