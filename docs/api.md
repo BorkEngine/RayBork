@@ -1,7 +1,7 @@
 # RayBork API Reference
 
-Status: **v0.1 design draft**, 2026-11-11. RayBork has no implementation yet. This document is the
-contract the implementation and samples will be written against, not a description of shipped
+Status: **v0.1 design draft**, 2026-11-11. M0 implements only `EngineVersion`. This document is the
+contract the implementation and samples are written against, not a description of shipped
 behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
@@ -2081,7 +2081,33 @@ public async Task Setup(EngineContext ctx) {
 - `ZLogger` is the default provider, not a public abstraction. Games may use `ILoggerFactory`,
   `ILogger`, and any MEL-compatible provider.
 
-### 10.2 `EngineInfo`
+### 10.2 `EngineVersion`
+
+```csharp
+namespace RayBork;
+
+public static class EngineVersion {
+    public static Version Current { get; }
+}
+```
+
+| Member | Thread | Contract |
+| --- | --- | --- |
+| `Current` | **Any** | The version of the loaded `RayBork.Engine` assembly. Immutable for the app lifetime. Safe to read from any thread. Throws no `RayBorkException`. |
+
+`Current` is the loaded `RayBork.Engine` assembly's `Version`; it reports `0.1.0.0` in M0. The build
+and package version is `0.1.0`. It describes the engine assembly that is actually loaded, not the
+game assembly, the pack format, or the shader ABI. The value cannot change while the process runs,
+and no RayBork API mutates it. `EngineVersion` is the only public type added in M0; every other type
+in this reference remains a contract for later milestones.
+
+The getter has no dependency on a pack, window, GPU, renderer, or logger. It does not block, does not
+require synchronization, and throws no `RayBorkException`; the value is available to loggers,
+diagnostics, crash reports, and game-side compatibility checks. RayBork does not compare
+`EngineVersion.Current` with a game's own version or enforce compatibility; that policy belongs to
+the game.
+
+### 10.3 `EngineInfo`
 
 ```csharp
 public readonly record struct EngineInfo(
@@ -2105,7 +2131,7 @@ when it is an HDR-capable format, `SampleCount` is the effective MSAA count, `Pr
 effective present mode after fallback, and `ValidationEnabled` reports whether the validation
 layer is active.
 
-### 10.3 Exceptions
+### 10.4 Exceptions
 
 ```csharp
 public class RayBorkException : Exception {
@@ -2146,7 +2172,7 @@ Lifecycle and argument errors use the standard BCL exceptions, not `RayBorkExcep
 `ArgumentNullException`, `ArgumentException`, `InvalidOperationException`,
 `ObjectDisposedException`, `NotSupportedException`.
 
-### 10.4 Assertions and validation
+### 10.5 Assertions and validation
 
 - Debug builds enable Vulkan validation when available. Validation errors are fatal by default;
   warnings are logged. `WithValidation(false)` disables the layer explicitly.
@@ -2446,7 +2472,7 @@ The index is a sorted array of entries (ordinal path order):
 | Alignment | `u32` (16, 64, 256, or 1) |
 | Payload hash | XXH3-64 |
 
-Payloads are Zstd-compressed when the packed-entry flag says so. Debug packs may store payloads
+Payloads are Zstandard-compressed when the packed-entry flag says so. Debug packs may store payloads
 uncompressed for fast iteration; release packs compress by default. GPU payloads are aligned to
 the requested boundary so they can be uploaded without an intermediate copy when the driver
 supports it.
@@ -2606,5 +2632,8 @@ disposed first.
 | `RenderStats` | §7.12 |
 | `IWindow`, `WindowState`, `CursorMode`, `Monitor`, `PresentMode` | §8 |
 | `IInput`, `Key`, `MouseButton`, `IGamepad`, `GamepadButton`, `GamepadAxis`, `GamepadTrigger` | §9 |
-| `ILoggerFactory`, `EngineInfo`, exceptions | §10 |
+| `ILoggerFactory` | §10.1 |
+| `EngineVersion` | §10.2 |
+| `EngineInfo` | §10.3 |
+| `RayBorkException` and derived exceptions | §10.4 |
 | `BakeApplicationBuilder`, `IAssetProcessor`, `AssetProcessorContext`, `IAssetOutputSink`, `SidecarPolicy` | §13 |

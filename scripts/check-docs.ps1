@@ -4,9 +4,22 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $files = [System.Collections.Generic.List[string]]::new()
-$files.Add((Join-Path $repoRoot 'README.md'))
-$files.Add((Join-Path $repoRoot 'AGENTS.md'))
-Get-ChildItem (Join-Path $repoRoot 'docs') -Filter '*.md' -File | ForEach-Object { $files.Add($_.FullName) }
+
+# Every root Markdown file, including README, AGENTS, and THIRD-PARTY-NOTICES.
+Get-ChildItem -LiteralPath $repoRoot -Filter '*.md' -File | Sort-Object Name | ForEach-Object {
+    $files.Add($_.FullName)
+}
+
+# Owned documentation. Sorted so the check is deterministic on every file system.
+Get-ChildItem -LiteralPath (Join-Path $repoRoot 'docs') -Filter '*.md' -File |
+    Sort-Object FullName | ForEach-Object { $files.Add($_.FullName) }
+
+# Sample READMEs are included when the sample exists, starting with samples/HelloInterop in M0.
+$samplesRoot = Join-Path $repoRoot 'samples'
+if (Test-Path -LiteralPath $samplesRoot) {
+    Get-ChildItem -LiteralPath $samplesRoot -Filter 'README.md' -File -Recurse |
+        Sort-Object FullName | ForEach-Object { $files.Add($_.FullName) }
+}
 
 $errors = [System.Collections.Generic.List[string]]::new()
 
