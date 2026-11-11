@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RayBork.Bake/RayBork.Bake.csproj" />
+  <Project Path="RayBork.Engine/RayBork.Engine.csproj" />
+</Solution>
