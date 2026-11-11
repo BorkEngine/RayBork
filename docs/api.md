@@ -2631,7 +2631,9 @@ M3's public bake surface is `BakeApplicationBuilder`, `BakeApplication`, `IAsset
 `IAssetProcessorDiagnostics`, `IAssetValidator<T>`, `SidecarPolicy`, `TextureBaker`,
 `BakedTexture`, `TextureChannelType`, and `TextureCompression`. `TextureBaker.Bake` is the one
 KTX2 producer: a custom processor that generates pixels calls it instead of writing KTX2 headers or
-block data itself.
+block data itself. `TextureBaker.AddTo(context, pixels, width, height, ...)` emits the texture
+descriptor and payload directly through the processor's output sink for a custom processor that
+wants the built-in texture asset shape without touching internal descriptor types.
 
 Built-in assets are not special. The engine's built-in pack is produced by the same processors
 through `UseDefaultProcessors`; a game can override a built-in extension with `AddProcessor`.
