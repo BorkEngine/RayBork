@@ -19,12 +19,14 @@ internal static class Program {
     private const float DEFAULT_EXPOSURE = 0f;
 
     private const string USAGE_TEXT = """
-        HelloInterop - RayBork M2 renderer diagnostic and Native AOT gate host
+        HelloInterop - RayBork M3 asset pipeline diagnostic and Native AOT gate host
 
         Usage:
           HelloInterop [options]
 
         Options:
+          --assets PATH     Mount a baked asset pack and load the M3 sample assets. Relative paths
+                            resolve against the current directory; no pack is mounted by default.
           --frames N        Run N ticks, then exit; 0 runs until close (default: 0).
           --title TEXT      Window title (default: HelloInterop).
           --size WxH        Window client size; both values positive (default: 1280x720).
@@ -48,6 +50,11 @@ internal static class Program {
         an HDR-capable swapchain format and reports it through EngineContext.Info. There is no HDR
         override.
 
+        With --assets the host mounts the baked pack and loads a KTX2 texture, an OBJ mesh part, a
+        compiled shader, and the registered HelloSettings TOML data, then logs their metadata. It does
+        not draw; the M4 draw API is not part of this milestone. Without --assets the host keeps the M2
+        renderer-only behavior.
+
         Controls:
           Escape            Request exit.
           Space, Enter, Tab, F1, F11, F12
@@ -63,7 +70,8 @@ internal static class Program {
 
         Examples:
           HelloInterop --frames 120
-          HelloInterop --frames 120 --size 1920x1080 --msaa 8 --title "M2 HDR gate"
+          HelloInterop --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
+          HelloInterop --frames 120 --size 1920x1080 --msaa 8 --title "M3 AOT gate"
           HelloInterop --tonemapping None --exposure 1.5 --clear-color 0.05,0.1,0.2,1
           HelloInterop --msaa 8 --present-mode Fifo --validation off --log-level Debug
         """;
@@ -82,7 +90,12 @@ internal static class Program {
         }
 
         try {
-            HelloGame game = new(options.Frames, options.Tonemapping, options.Exposure, options.ClearColor);
+            HelloGame game = new(
+                options.Frames,
+                options.Tonemapping,
+                options.Exposure,
+                options.ClearColor,
+                options.Assets);
             RayBorkAppBuilder builder = new RayBorkAppBuilder()
                 .WithGame(game)
                 .WithTitle(options.Title)
@@ -101,6 +114,12 @@ internal static class Program {
                 builder.WithValidation(validationEnabled);
             }
 
+            if (options.Assets is { } assetsPackPath) {
+                builder
+                    .WithAssetsPack(assetsPackPath)
+                    .WithAssetType<HelloSettings>();
+            }
+
             using RayBorkApp app = builder.Build();
             app.Run();
             return EXIT_SUCCESS;
@@ -115,6 +134,7 @@ internal static class Program {
         out CommandLineOptions options,
         out string error) {
         int frames = DEFAULT_FRAMES;
+        string? assets = null;
         string title = DEFAULT_TITLE;
         int width = DEFAULT_WIDTH;
         int height = DEFAULT_HEIGHT;
@@ -133,6 +153,28 @@ internal static class Program {
             switch (argument) {
                 case "--help":
                     showHelp = true;
+                    break;
+                case "--assets":
+                    if (!TryTakeValue(args, ref i, argument, out string assetsValue, out error)) {
+                        options = default!;
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(assetsValue)) {
+                        error = "Invalid value for --assets: the pack path must not be empty or whitespace.";
+                        options = default!;
+                        return false;
+                    }
+
+                    try {
+                        assets = Path.GetFullPath(assetsValue);
+                    } catch (Exception exception) when (exception is ArgumentException
+                        or NotSupportedException or PathTooLongException) {
+                        error = $"Invalid value for --assets: '{assetsValue}' is not a valid path.";
+                        options = default!;
+                        return false;
+                    }
+
                     break;
                 case "--frames":
                     if (!TryTakeValue(args, ref i, argument, out string framesValue, out error)) {
@@ -277,6 +319,7 @@ internal static class Program {
 
         options = new CommandLineOptions(
             frames,
+            assets,
             title,
             width,
             height,
@@ -400,6 +443,7 @@ internal static class Program {
 
     private sealed record CommandLineOptions(
         int Frames,
+        string? Assets,
         string Title,
         int Width,
         int Height,

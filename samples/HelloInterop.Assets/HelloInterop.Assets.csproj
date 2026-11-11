@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- The builder uses WithProjectRoot("."), so `dotnet run` must start in this directory for
+             the checked-in Assets/ sources to resolve. The output root still defaults to
+             AppContext.BaseDirectory, which puts hello.pck next to the assets executable. -->
+        <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+        <!-- Build-time tooling: this executable is JIT and must never enter a runtime publish graph. -->
+        <PublishAot>false</PublishAot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="..\HelloInterop\HelloSettings.cs" Link="HelloSettings.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="PolyType" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\RayBork\RayBork.Bake\RayBork.Bake.csproj" />
+    </ItemGroup>
+
+</Project>

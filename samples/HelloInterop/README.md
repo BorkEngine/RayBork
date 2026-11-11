@@ -1,6 +1,6 @@
 # HelloInterop
 
-`HelloInterop` is the RayBork M2 diagnostic and Native AOT gate host. It opens an SDL3 window, runs
+`HelloInterop` is the RayBork M3 diagnostic and Native AOT gate host. It opens an SDL3 window, runs
 `Setup`, `Tick`, and `Shutdown` on the tick thread, and exercises the Vulkan 1.2 renderer end to end:
 the renderer clears the linear HDR scene target to the configured `--clear-color`, the present pass
 applies `--tonemapping` and `--exposure`, MSAA is resolved before presentation, and the swapchain
@@ -13,6 +13,25 @@ line and the elapsed runtime on shutdown, and the window, DPI, monitor, input, a
 the M1 host. It exits on the window close request, Escape, or a scripted frame limit. It also proves
 that the renderer initializes, presents, and shuts down through the Native AOT publish gate.
 
+## M3 asset loading
+
+When `--assets` is supplied, the host also mounts the pack and loads one shared instance of each M3
+engine asset type plus the registered custom data:
+
+| Asset | Path | Logged metadata |
+| --- | --- | --- |
+| `Texture` | `/textures/circle` | Size, mip count, format, sRGB, sampler filter/wrap, maximum anisotropy. |
+| `Mesh` | `/models/box/body` | Vertex count, index count, topology, bounds. The single-part OBJ group is `body`, so the part path is `/models/box/body`. |
+| `Shader` | `/shaders/simple` | Stages, uniform declarations, texture bindings, default render state. |
+| `HelloSettings` | `/data/hello` | `Name` and `Difficulty` from the registered TOML data type. |
+
+The host stores the three engine assets and disposes them in `Shutdown` on the tick thread. M3 has no
+draw API, so `Setup` only loads and logs metadata; the M2 renderer-only behavior is unchanged when
+`--assets` is absent. The custom data type is registered with
+`WithAssetType<HelloSettings>()`, which is backed by the compiled `[GenerateShape]` in
+`HelloSettings.cs`, so the load path stays reflection-free and Native AOT compatible. See
+[docs/api.md](../../docs/api.md) §6 and §12.
+
 The host uses `RayBorkAppBuilder` with a resizable window, a 60 FPS tick cap, a 0.25 second maximum
 delta, and the renderer options on the command line. It is an `Exe` with `PublishAot=true`, so console
 logging is visible and the AOT gate can run it on Windows and Linux. HDR presentation is automatic
@@ -23,6 +42,7 @@ from the OS/window state: there is no HDR override, and the selected state is re
 
 | Argument | Contract |
 | --- | --- |
+| `--assets PATH` | Mount a baked asset pack and load the M3 sample assets. A relative path resolves against the current directory. Default: no pack. |
 | `--frames N` | Run `N` ticks, then request exit. `0` runs until the window closes. Default `0`. |
 | `--title TEXT` | Window title. It must not be empty or whitespace. Default `HelloInterop`. |
 | `--size WxH` | Window client size in window units. Both values must be positive. Default `1280x720`. |
@@ -58,6 +78,17 @@ Elapsed runtime: 2.664s.
 HelloInterop stopped after 120 tick(s): time 2.664s, fps 60.9, last window 1280x720 (render 1280x720, DPI scale 1.5), exit frame limit (120).
 ```
 
+With `--assets`, the host adds the pack path and one metadata line per loaded asset before the first
+tick:
+
+```text
+Assets pack: /absolute/path/samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck.
+Texture /textures/circle: 64x64, 7 mip level(s), format Rgba8Srgb, sRGB True, sampler Linear/Repeat, max anisotropy 1.
+Mesh /models/box/body: 24 vertex/vertices, 36 index/indices, topology TriangleList, bounds <-0.5, -0.5, -0.5>..<0.5, 0.5, 0.5>.
+Shader /shaders/simple: stages Vertex, Fragment, 0 uniform(s), 0 texture binding(s), default state Opaque/Back/GreaterOrEqual, depth write True.
+Custom data /data/hello: name 'RayBork M3 Sample', difficulty 2.
+```
+
 - The device is the `Vulkan 1.2 renderer initialized` line; `EngineInfo.RendererName` reports the
   device API major and minor (for example `Vulkan 1.4`), and `EngineInfo.VulkanApiVersion` is
   formatted as `major.minor.patch`.
@@ -71,7 +102,7 @@ HelloInterop stopped after 120 tick(s): time 2.664s, fps 60.9, last window 1280x
   shutdown. The shutdown snapshot is the last frame the render thread completed; it can lag the final
   tick by one frame because the tick thread enters `Shutdown` before the frame ring is drained.
 
-## Windows build and run
+## Bare renderer run
 
 From the repository root:
 
@@ -90,16 +121,32 @@ Pass `--help` to print the full usage text. The sample uses `var` for monitor lo
 `RayBork.Monitor` collides with `System.Threading.Monitor` under implicit usings; callers that import
 `System.Threading` should qualify `RayBork.Monitor` or use `var`.
 
+## Bake the M3 sample pack
+
+From the repository root:
+
+```powershell
+dotnet run --project samples/HelloInterop.Assets/HelloInterop.Assets.csproj -c Release -- bake
+dotnet run --project samples/HelloInterop/HelloInterop.csproj -- --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 3
+```
+
+Require exit `0` from the bake, an existing
+`samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck`, exit `0` from the host, and the four
+asset metadata lines above. The pack is generated output under `bin/` and is gitignored; see
+[HelloInterop.Assets/README.md](../HelloInterop.Assets/README.md) for the source layout and the
+builder configuration.
+
 ## Windows Native AOT
 
 Publish and run the Windows host from the repository root:
 
 ```powershell
 dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r win-x64 -p:PublishAot=true
-samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --frames 60
+samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
 ```
 
-The publish must finish with zero AOT/trim warnings and the published host must exit `0`.
+The publish must finish with zero AOT/trim warnings and the published host must exit `0` after
+mounting the pack, loading the texture, mesh, shader, and custom data, and presenting 30 frames.
 
 ## WSL Linux Native AOT
 
@@ -108,11 +155,12 @@ Publish the Linux x64 host from the repository root inside WSL, then run it on t
 ```bash
 $HOME/.dotnet/dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r linux-x64 -p:PublishAot=true
 DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
-  samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --frames 60
+  samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
 ```
 
 WSLg provides the X display and the Wayland socket that SDL3 needs. Without a display the renderer
-cannot create its Vulkan surface and the host exits `1`.
+cannot create its Vulkan surface and the host exits `1`. The Linux AOT gate is reported as unavailable
+when this host has no WSL or no Vulkan 1.2 device; it is never faked.
 
 ## No dummy video driver
 

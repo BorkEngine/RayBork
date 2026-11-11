@@ -135,9 +135,10 @@ internal static class SpirvEntryPointRewriter {
             words,
             index + ENTRY_POINT_FIXED_WORD_COUNT,
             wordCount - ENTRY_POINT_FIXED_WORD_COUNT);
+        int interfaceWordCount = wordCount - ENTRY_POINT_FIXED_WORD_COUNT - oldNameWordCount;
         byte[] nameBytes = Encoding.UTF8.GetBytes(requestedName);
         int newNameWordCount = (nameBytes.Length + 1 + (sizeof(uint) - 1)) / sizeof(uint);
-        int newWordCount = ENTRY_POINT_FIXED_WORD_COUNT + newNameWordCount;
+        int newWordCount = ENTRY_POINT_FIXED_WORD_COUNT + newNameWordCount + interfaceWordCount;
 
         output.Add(((uint)newWordCount << 16) | (instruction & 0xFFFF));
         output.Add(words[index + 1]);
