@@ -262,8 +262,10 @@ single-sample image the present pass samples; multisampled depth is not resolved
 
 M3 adds the `GpuAssetBridge` as an internal companion to the backend, not a new seam operation. The
 render loop drains upload and destroy requests before frame waits and recreates live asset resources
-after a successful device recovery. The backend never sees a game-facing asset type: the bridge
-carries descriptor values and payload bytes only.
+after a device recovery. `IRendererBackend.DeviceGeneration` increments only when the logical device
+is recreated, so presentation-only recoveries (out-of-date or suboptimal swapchain, lost surface) do
+not re-upload assets. The backend never sees a game-facing asset type: the bridge carries descriptor
+values and payload bytes only.
 
 ## Threads
 
