@@ -76,6 +76,14 @@ internal sealed class BackendTestHost : IDisposable {
     internal VulkanSceneTarget SceneTarget => _backend.SceneTarget;
 
     /// <summary>
+    /// Gets the direct surface provider the backend creates and destroys the native surface through.
+    /// </summary>
+    /// <remarks>
+    /// Recovery tests use its create and destroy counters to prove that a lost surface was replaced.
+    /// </remarks>
+    internal DirectSurfaceProvider SurfaceProvider => _surfaceProvider;
+
+    /// <summary>
     /// Gets the render settings the host was created with.
     /// </summary>
     internal RenderSettings Settings => _settings;

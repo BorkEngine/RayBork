@@ -7,8 +7,8 @@ namespace RayBork.Internal;
 /// The status of a swapchain image acquisition or presentation.
 /// </summary>
 /// <remarks>
-/// Out-of-date and suboptimal results are normal presentation statuses, not failures. The caller
-/// recreates the presentation path instead of unwinding.
+/// Out-of-date, surface-lost, and suboptimal results are normal presentation statuses, not failures.
+/// The caller recreates the presentation path, the surface, or both instead of unwinding.
 /// </remarks>
 internal enum SwapchainResult {
     /// <summary>The operation completed and the image is usable.</summary>
@@ -19,6 +19,9 @@ internal enum SwapchainResult {
 
     /// <summary>The swapchain still works but the surface changed; recreate it soon.</summary>
     Suboptimal,
+
+    /// <summary>The surface is no longer usable and must be recreated through the platform.</summary>
+    SurfaceLost,
 }
 
 /// <summary>
@@ -182,7 +185,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         return result switch {
             Result.Success => SwapchainResult.Success,
             Result.SuboptimalKhr => SwapchainResult.Suboptimal,
-            Result.ErrorOutOfDateKhr or Result.ErrorSurfaceLostKhr => SwapchainResult.OutOfDate,
+            Result.ErrorOutOfDateKhr => SwapchainResult.OutOfDate,
+            Result.ErrorSurfaceLostKhr => SwapchainResult.SurfaceLost,
             _ => throw new GraphicsException(
                 $"The Vulkan command vkAcquireNextImageKHR failed with {result} while acquiring a swapchain image for frame slot {frameSlot}.",
                 DiagnosticCodes.GRAPHICS_UNRECOVERABLE,
@@ -216,7 +220,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         return result switch {
             Result.Success => SwapchainResult.Success,
             Result.SuboptimalKhr => SwapchainResult.Suboptimal,
-            Result.ErrorOutOfDateKhr or Result.ErrorSurfaceLostKhr => SwapchainResult.OutOfDate,
+            Result.ErrorOutOfDateKhr => SwapchainResult.OutOfDate,
+            Result.ErrorSurfaceLostKhr => SwapchainResult.SurfaceLost,
             _ => throw new GraphicsException(
                 $"The Vulkan command vkQueuePresentKHR failed with {result} while presenting an image.",
                 DiagnosticCodes.GRAPHICS_UNRECOVERABLE,
