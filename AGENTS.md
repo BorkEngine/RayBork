@@ -124,6 +124,7 @@ No implementation starts before the API and architecture documents agree. No new
 dotnet build src/RayBork/RayBork.slnx -c Debug
 dotnet build src/RayBork/RayBork.slnx -c Release
 dotnet test src/RayBork/RayBork.slnx -c Debug --no-build
+dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"
 dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
 pwsh scripts/check-docs.ps1
 dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r win-x64 -p:PublishAot=true
@@ -131,15 +132,21 @@ dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r win-x64 -p
 samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --frames 30
 # Run the same publish inside WSL from the repository root for linux-x64:
 # ~/.dotnet/dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r linux-x64 -p:PublishAot=true
-# Run the published Linux host; use the dummy video driver when the WSL display is unavailable:
-# SDL_VIDEODRIVER=dummy samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --frames 30
+# Run the published Linux host; it needs a Vulkan 1.2 device and a real window system.
+# On WSL use the WSLg display:
+# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --frames 30
 ```
 
 The AOT gate uses `samples/HelloInterop` until the M11 samples land. Both publishes must finish with
-zero AOT/trim warnings, and each published host must run with `--frames 30` and exit 0. On a
-headless WSL host, `SDL_VIDEODRIVER=dummy` is accepted. GPU tests render offscreen and do not
-require a visible window. A GPU test that cannot run on the host is reported as a skip with the
-reason, never silently dropped.
+zero AOT/trim warnings, and each published host must run with `--frames 30` and exit 0. The host
+needs a Vulkan 1.2 device and a real window system; `SDL_VIDEODRIVER=dummy` cannot create a Vulkan
+surface. On WSL, run it with the WSLg display: set `DISPLAY=:0` and
+`XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. GPU tests open a hidden window through the real video driver
+and are run with `dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"`. A GPU test
+that cannot run on the host is reported as a skip with the reason, never silently dropped. The `gpu`
+CI job runs the GPU-filtered suite under `xvfb-run` with the lavapipe ICD. Shader SPIR-V is
+regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; CI and normal builds consume
+the committed `.spv` blobs and never need `glslc`.
 
 ## 5. Testing
 
@@ -174,7 +181,7 @@ one pull request from its milestone branch.
   convention (`api: ...`, `build: ...`, `docs: ...`, `fix: ...`, `test: ...`). Do not create a merge
   commit, force-push, or rewrite published history.
 - If CI fails, fix the same branch and push again. Never disable or weaken a check to make it green.
-- AOT and GPU checks remain local until their CI jobs exist; report skipped gates with reasons.
+- AOT checks remain local; the `gpu` CI job runs the GPU tests. Report skipped gates with reasons.
 - After the user merges, delete the milestone branch locally and remotely.
 
 ```powershell
