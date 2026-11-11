@@ -38,13 +38,45 @@ internal sealed class SdlTestHost : IDisposable {
     /// hidden, and the test is skipped when the host has no video device or Vulkan loader.
     /// </summary>
     internal static SdlTestHost CreateVulkan(Action? onExitRequested = null) {
+        if (!TryCreateVulkan(out SdlTestHost? host, out string skipReason, onExitRequested)) {
+            Assert.Skip(skipReason);
+        }
+
+        return host!;
+    }
+
+    /// <summary>
+    /// Tries to create a platform on the real video driver with a Vulkan-capable window.
+    /// </summary>
+    /// <param name="host">The created host, or <see langword="null"/> when the host is unavailable.</param>
+    /// <param name="skipReason">A specific reason when <paramref name="host"/> is <see langword="null"/>.</param>
+    /// <param name="onExitRequested">Invoked when the platform requests a graceful exit.</param>
+    /// <returns><see langword="true"/> when the host was created.</returns>
+    internal static bool TryCreateVulkan(
+        out SdlTestHost? host,
+        out string skipReason,
+        Action? onExitRequested = null) {
         SDL.ResetHint(VIDEO_DRIVER_HINT);
-        return CreateHost(onExitRequested, WindowState.Hidden, enableVulkan: true);
+        return TryCreateHost(onExitRequested, WindowState.Hidden, enableVulkan: true, out host, out skipReason);
     }
 
     private static SdlTestHost CreateHost(Action? onExitRequested, WindowState windowState, bool enableVulkan) {
+        if (!TryCreateHost(onExitRequested, windowState, enableVulkan, out SdlTestHost? host, out string skipReason)) {
+            Assert.Skip(skipReason);
+        }
+
+        return host!;
+    }
+
+    private static bool TryCreateHost(
+        Action? onExitRequested,
+        WindowState windowState,
+        bool enableVulkan,
+        out SdlTestHost? host,
+        out string skipReason) {
+        host = null;
+        skipReason = string.Empty;
         SdlPlatform platform = new(NullLoggerFactory.Instance);
-        bool initialized = false;
         try {
             platform.Initialize(
                 new PlatformOptions {
@@ -56,21 +88,16 @@ internal sealed class SdlTestHost : IDisposable {
                     EnableVulkan = enableVulkan,
                 },
                 onExitRequested ?? (() => { }));
-            initialized = true;
         } catch (Exception ex) when (ex is PlatformException or WindowException) {
             platform.Dispose();
             SDL.ResetHint(VIDEO_DRIVER_HINT);
             string driver = enableVulkan ? "Vulkan video driver initialization" : "SDL dummy video driver initialization";
-            Assert.Skip($"{driver} failed: {ex.Message}");
+            skipReason = $"{driver} failed: {ex.Message}";
+            return false;
         }
 
-        if (!initialized) {
-            platform.Dispose();
-            SDL.ResetHint(VIDEO_DRIVER_HINT);
-            throw new InvalidOperationException("SDL initialization failed.");
-        }
-
-        return new SdlTestHost(platform);
+        host = new SdlTestHost(platform);
+        return true;
     }
 
     public void Dispose() {
