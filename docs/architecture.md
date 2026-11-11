@@ -597,10 +597,12 @@ specified in the API reference's tooling section.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
   physical device, or SDL cannot create a Vulkan window or surface. Programming errors and
   capability failures throw and fail the test; they are never silently skipped.
-- CI has a `gpu` job on `ubuntu-latest`. It installs `mesa-vulkan-drivers` and `xvfb`, resolves the
-  lavapipe ICD (`/usr/share/vulkan/icd.d/lvp_icd*.json`), and runs the GPU-filtered tests under
-  `xvfb-run` with `VK_ICD_FILENAMES` pointing at that ICD. The `build-test` jobs continue to run
-  the full suite; GPU tests skip there when the runner has no display or Vulkan device.
+- CI has a `gpu` job on `ubuntu-latest`. It installs `libvulkan1`, `mesa-vulkan-drivers`,
+  `vulkan-validationlayers`, and `xvfb`, resolves the lavapipe ICD
+  (`/usr/share/vulkan/icd.d/lvp_icd*.json`), and runs the GPU-filtered tests under `xvfb-run` with
+  `VK_ICD_FILENAMES` pointing at that ICD, so the validation layer is active in CI. The
+  `build-test` jobs continue to run the full suite; GPU tests skip there when the runner has no
+  display or Vulkan device.
 - CI consumes the committed shader blobs and never needs the Vulkan SDK, `glslc`, or a GPU to build.
 
 ## Invariants
