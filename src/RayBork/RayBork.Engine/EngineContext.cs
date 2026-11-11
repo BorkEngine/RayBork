@@ -4,7 +4,7 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// The M1 subset of the engine context: the window, input, logging, frame clock, and exit control.
+/// The engine context: the window, input, logging, renderer status, frame clock, and exit control.
 /// </summary>
 /// <remarks>
 /// The context is stable for the app lifetime, but its per-frame members are tick-thread snapshots.
@@ -15,6 +15,7 @@ public sealed class EngineContext {
     private readonly IAppControl _appControl;
     private readonly Func<double> _elapsedTime;
     private readonly IEnginePlatform _platform;
+    private readonly RenderStatus _renderStatus;
     private bool _hasFrame;
     private double _time;
 
@@ -24,16 +25,19 @@ public sealed class EngineContext {
         IAppControl appControl,
         IInput initialInput,
         double maxDeltaTime,
-        Func<double> elapsedTime) {
+        Func<double> elapsedTime,
+        RenderStatus renderStatus) {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(appControl);
         ArgumentNullException.ThrowIfNull(initialInput);
         ArgumentNullException.ThrowIfNull(elapsedTime);
+        ArgumentNullException.ThrowIfNull(renderStatus);
 
         _platform = platform;
         _appControl = appControl;
         _elapsedTime = elapsedTime;
+        _renderStatus = renderStatus;
         Input = initialInput;
         LoggerFactory = loggerFactory;
         MaxDeltaTime = maxDeltaTime;
@@ -55,6 +59,17 @@ public sealed class EngineContext {
     /// any thread.
     /// </summary>
     public ILoggerFactory LoggerFactory { get; }
+
+    /// <summary>
+    /// Gets the renderer, device, and presentation information. Valid from <see cref="IGame.Setup"/>
+    /// and safe to read from any thread.
+    /// </summary>
+    /// <remarks>
+    /// The render thread writes the value at startup and after a recovery that changes the device or
+    /// presentation state. A read can be stale by one tick and is not transactional with respect to
+    /// <see cref="Stats"/>.
+    /// </remarks>
+    public EngineInfo Info => _renderStatus.Info;
 
     /// <summary>
     /// Gets absolute monotonic seconds since the app started. During <see cref="IGame.Setup"/> this is
@@ -103,6 +118,17 @@ public sealed class EngineContext {
     /// Gets the configured clamp for <see cref="DeltaTime"/>, in seconds. Read it on the tick thread.
     /// </summary>
     public double MaxDeltaTime { get; }
+
+    /// <summary>
+    /// Gets the render statistics of the last completed frame. Valid from <see cref="IGame.Setup"/>
+    /// and safe to read from any thread.
+    /// </summary>
+    /// <remarks>
+    /// The render thread updates the snapshot after a frame completes, so a read can be stale by one
+    /// tick. Individual fields are not a consistent transactional snapshot; use it for diagnostics
+    /// and overlays, not for synchronization.
+    /// </remarks>
+    public RenderStats Stats => _renderStatus.Stats;
 
     /// <summary>
     /// Requests a graceful exit. The current tick completes and the final frame is presented. Call it
