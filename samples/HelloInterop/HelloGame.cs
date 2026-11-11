@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork;
@@ -7,6 +8,10 @@ namespace HelloInterop;
 
 internal sealed class HelloGame : IGame {
     private const int TICK_LOG_INTERVAL = 60;
+    private const int VULKAN_MAJOR_SHIFT = 22;
+    private const int VULKAN_MINOR_SHIFT = 12;
+    private const uint VULKAN_MINOR_MASK = 0x3FFu;
+    private const uint VULKAN_PATCH_MASK = 0xFFFu;
 
     private static readonly Key[] _loggedKeys = [
         Key.Space,
@@ -36,8 +41,12 @@ internal sealed class HelloGame : IGame {
     ];
 
     private readonly int _frameLimit;
+    private readonly TonemappingMode _tonemapping;
+    private readonly float _exposure;
+    private readonly Color _clearColor;
     private readonly Dictionary<int, string> _gamepads = [];
 
+    private EngineContext? _context;
     private ILogger _logger = NullLogger.Instance;
     private bool _lastFocused;
     private bool _lastMinimized;
@@ -52,15 +61,19 @@ internal sealed class HelloGame : IGame {
     private float _lastDpiScale;
     private string _exitReason = "no ticks were run";
 
-    internal HelloGame(int frameLimit) {
+    internal HelloGame(int frameLimit, TonemappingMode tonemapping, float exposure, Color clearColor) {
         _frameLimit = frameLimit;
+        _tonemapping = tonemapping;
+        _exposure = exposure;
+        _clearColor = clearColor;
     }
 
     public Task Setup(EngineContext context) {
+        _context = context;
         _logger = context.LoggerFactory.CreateLogger("HelloInterop");
         IWindow window = context.Window;
 
-        _logger.LogInformation("RayBork {EngineVersion} M1 diagnostic host starting.", EngineVersion.Current);
+        _logger.LogInformation("RayBork {EngineVersion} M2 renderer diagnostic host starting.", EngineVersion.Current);
 
         int sdlVersion = SDL.GetVersion();
         int major = sdlVersion / 1_000_000;
@@ -105,12 +118,33 @@ internal sealed class HelloGame : IGame {
             currentMonitor.Name,
             currentMonitor.DpiScale);
 
+        EngineInfo info = context.Info;
+        _logger.LogInformation(
+            "Engine {EngineName} {EngineVersion}: renderer {RendererName}, GPU '{GpuName}', Vulkan {VulkanApiVersion}, validation {ValidationEnabled}.",
+            info.Name,
+            info.Version,
+            info.RendererName,
+            info.GpuName,
+            FormatVulkanVersion(info.VulkanApiVersion),
+            info.ValidationEnabled);
+        _logger.LogInformation(
+            "Presentation: swapchain {SwapchainFormat}, HDR {HdrOutput}, {SampleCount}x MSAA, present mode {PresentMode}.",
+            info.SwapchainFormat,
+            info.HdrOutput,
+            info.SampleCount,
+            info.PresentMode);
+        _logger.LogInformation(
+            "Requested scene: clear color {ClearColor}, exposure {Exposure:0.###} EV, tone mapping {Tonemapping}.",
+            _clearColor.ToString("0.###", CultureInfo.InvariantCulture),
+            _exposure,
+            _tonemapping);
+
         _logger.LogInformation("Tick thread: {ThreadName}.", Thread.CurrentThread.Name ?? "unnamed");
         _logger.LogInformation(
             "Controls: Escape exits; Space, Enter, Tab, F1, F11, and F12 are logged; mouse buttons, the wheel, and gamepad buttons are logged.");
         _logger.LogInformation(
             "Frame limit: {FrameLimit}.",
-            _frameLimit == 0 ? "none (run until close)" : _frameLimit.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            _frameLimit == 0 ? "none (run until close)" : _frameLimit.ToString(CultureInfo.InvariantCulture));
 
         _lastFocused = window.IsFocused;
         _lastMinimized = window.IsMinimized;
@@ -203,6 +237,7 @@ internal sealed class HelloGame : IGame {
                 context.Time,
                 context.Fps,
                 context.DeltaTime);
+            LogRenderStats(logger, context.Stats, "Tick");
         }
 
         _lastFrameCount = context.FrameCount;
@@ -224,6 +259,14 @@ internal sealed class HelloGame : IGame {
     }
 
     public Task Shutdown() {
+        // Shutdown has no context argument. The context is stable for the app lifetime and Stats is
+        // safe to read from any thread; the snapshot describes the last frame the render thread
+        // completed, which can lag the final tick by one frame.
+        if (_context is not null) {
+            LogRenderStats(_logger, _context.Stats, "Final");
+        }
+
+        _logger.LogInformation("Elapsed runtime: {Elapsed:0.000}s.", _lastTime);
         _logger.LogInformation(
             "HelloInterop stopped after {FrameCount} tick(s): time {Time:0.000}s, fps {Fps:0.0}, last window {Width}x{Height} (render {RenderWidth}x{RenderHeight}, DPI scale {DpiScale:0.###}), exit {ExitReason}.",
             _lastFrameCount,
@@ -237,6 +280,31 @@ internal sealed class HelloGame : IGame {
             _exitReason);
 
         return Task.CompletedTask;
+    }
+
+    private static string FormatVulkanVersion(uint packedVersion) {
+        uint major = packedVersion >> VULKAN_MAJOR_SHIFT;
+        uint minor = (packedVersion >> VULKAN_MINOR_SHIFT) & VULKAN_MINOR_MASK;
+        uint patch = packedVersion & VULKAN_PATCH_MASK;
+        return string.Create(CultureInfo.InvariantCulture, $"{major}.{minor}.{patch}");
+    }
+
+    private static void LogRenderStats(ILogger logger, RenderStats stats, string label) {
+        logger.LogInformation(
+            "{Label} render stats: frame {FrameIndex}, {DrawCalls} draw call(s), {Instances} instance(s), {Triangles} triangle(s), {CulledInstances} culled instance(s), {PipelineCount} pipeline(s), {TextureCount} texture(s), {SampleCount}x MSAA, HDR {HdrOutput}, CPU {CpuFrameMilliseconds:0.###} ms, {FramesInFlight} frame(s) in flight, {RecoveryCount} recoveries.",
+            label,
+            stats.FrameIndex,
+            stats.DrawCalls,
+            stats.Instances,
+            stats.Triangles,
+            stats.CulledInstances,
+            stats.PipelineCount,
+            stats.TextureCount,
+            stats.SampleCount,
+            stats.HdrOutput,
+            stats.CpuFrameMilliseconds,
+            stats.FramesInFlight,
+            stats.RecoveryCount);
     }
 
     private void LogGamepads(IReadOnlyList<IGamepad> gamepads, ILogger logger) {
