@@ -1,7 +1,8 @@
 # RayBork Roadmap
 
-Status: **v0.1 design draft**, 2026-11-11. Milestones are ordered by dependency and exit criteria,
-not by calendar time. There are no dates or time estimates in this document.
+Status: **v0.1 M3 as-built**, 2026-11-11. M0-M3 are shipped. Milestones are ordered by
+dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
+document.
 
 The API these milestones implement is in [api.md](api.md). The runtime shape is in
 [architecture.md](architecture.md). No open design questions remain; resolved decisions are

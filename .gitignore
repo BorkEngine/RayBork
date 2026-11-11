@@ -81,6 +81,8 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
+# Sample OBJ sources are authored assets, not compiler intermediates.
+!samples/**/Assets/**/*.obj
 *.iobj
 *.pch
 *.pdb
