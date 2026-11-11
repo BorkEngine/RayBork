@@ -1,11 +1,10 @@
 # RayBork API Reference
 
-Status: **v0.1 M2**, 2026-11-11. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick
-thread, SDL3 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the
-renderer public contract: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer
-builder options, the graphics exceptions, and `EngineContext.Info`/`Stats`. The M2 sample and the
-Vulkan backend are still pending later M2 tasks. The rest of this document remains the 1.0 contract,
-not a description of shipped behavior.
+Status: **v0.1 M2**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
+foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
+options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
+backend. The rest of this document remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -92,16 +91,19 @@ Unless marked otherwise, a mutable object (`Shader`, `Camera`, `Font` preloading
   path, and rethrows a `RayBorkException` whose `InnerException` is the callback exception.
 - Recoverable renderer failures are retried without stopping the app: swapchain out-of-date, resize,
   focus changes, and device loss where the backend can recreate the device and swapchain. The
-  recovery is logged at Warning; the app stops and rethrows only when recovery fails.
-  `GraphicsDeviceLostException` means recovery failed.
+  recovery is logged at Warning, or at Information for a suboptimal-swapchain hint; the app stops
+  and rethrows only when recovery fails. Recovery is bounded to three consecutive recoveries
+  without a completed frame. `GraphicsDeviceLostException` means recovery failed or the bound was
+  reached.
 - Logging is structured through `Microsoft.Extensions.Logging`; the default provider is ZLogger.
 
 ### 1.6 Milestone availability
 
 M0 ships `EngineVersion`. M1 ships the host, thread, window, input, time, and logging surface. M2
-ships the renderer public contract, while the renderer backend and the M2 sample remain pending M2
-tasks. The remaining rows name the milestone that owns the deferred surface; the full code blocks
-below stay the 1.0 contract.
+ships the renderer foundation: the Vulkan 1.2 backend behind the internal seam, swapchain selection
+with HDR/SDR output, the scRGB HDR present path, AgX tone mapping, MSAA with color resolve,
+reverse-Z depth, bounded recovery, and the GPU tests. The remaining rows name the milestone that
+owns the deferred surface; the full code blocks below stay the 1.0 contract.
 
 | Surface | Milestone |
 | --- | --- |
@@ -129,9 +131,12 @@ In M1, `RayBorkAppBuilder` exposes **only** `WithGame`, `WithTitle`, `WithSize`,
 `Build`. The other builder methods in §3.2 are the later contract.
 
 **M2 subset.** `EngineContext` additionally exposes `Info` and `Stats`, both valid from `Setup`.
-`RayBorkAppBuilder` additionally exposes `WithPresentMode`, `WithMSAA`, `WithTonemapping`,
-`WithExposure`, `WithValidation`, and `WithClearColor`. `Assets`, cameras, render textures, and
-custom asset types remain later milestones.
+`Info` reports the selected GPU, the Vulkan API version, the swapchain format, the effective sample
+count and present mode, whether the scRGB HDR path is active, and whether validation is active;
+`Stats` describes the last completed frame. `RayBorkAppBuilder` additionally exposes
+`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, and
+`WithClearColor`. M2 has no camera or draw API: a frame clears the linear scene target and presents
+it. `Assets`, cameras, render textures, and custom asset types remain later milestones.
 
 ## 2. Quick start
 
@@ -440,25 +445,40 @@ writes to that target and can be sampled by a later camera.
 ```text
 1. Build validates configuration. No OS or GPU work.
 2. Run (main thread):
-   a. SDL3 init, window creation, event pump start.
-   b. Render thread starts: backend instance/device, swapchain, built-in assets.
-   c. Asset loader starts.
-   d. Tick thread starts with a SynchronizationContext.
+   a. SDL3 init, Vulkan-capable window creation, event pump start.
+   b. Query the Vulkan instance extensions on the main thread and create the surface channel.
+   c. Render thread starts: create the instance, request the native surface through the main-thread
+      channel, create the device and swapchain, and publish Info.
+   d. Tick thread starts with a SynchronizationContext. Setup therefore sees Info.
    e. IGame.Setup(ctx) is awaited on the tick thread.
    f. Loop: input snapshot, clock, IGame.Tick, frame publish; render consumes previous frame.
-   g. Exit: stop accepting ticks, drain in-flight frames, await IGame.Shutdown on the tick thread.
-   h. Release remaining engine references, assets, renderer, window, SDL3, loader.
+   g. Exit: stop accepting ticks. The tick thread publishes the final frame and runs
+      IGame.Shutdown, then exits.
+   h. Join the tick thread and complete the frame ring; the render thread drains and presents the
+      final frame, disposes the GPU objects, and destroys the native surface through the channel
+      while the main thread services it.
+   i. Close the surface channel, dispose the platform (window, SDL3, Vulkan loader), and release
+      the remaining engine state.
 3. Run returns; Dispose releases the app object.
 ```
+
+The surface handshake is bounded: a render-thread surface request and the main-thread wait for the
+renderer each time out after 30 seconds. The tick thread does not start before the renderer is
+ready, so `Setup` can read `Info`. M3 inserts the asset loader between (a) and (d).
 
 Failure behavior:
 
 - If startup fails before `Setup`, `Run` throws and nothing user-owned is called.
+- A platform failure to create the Vulkan surface is a `PlatformException` with `RB2003`; when it
+  arrives through the render-thread surface request it is rethrown from `Run` as a
+  `GraphicsException` with `RB3001` and the platform failure as its `InnerException`.
 - If `Setup` throws, `Shutdown` is **not** called; the engine releases what it owns and rethrows.
 - If `Tick` throws, the loop stops, `Shutdown` is called, the renderer drains, and `Run` rethrows.
-- If the renderer fails recoverably, it recreates the swapchain/device, logs, and continues.
-- If recovery fails, the tick loop is stopped, `Shutdown` is called, and `Run` rethrows the graphics
-  exception. The window may close before the exception surfaces.
+- If the renderer fails recoverably, it recreates the swapchain, surface, or device, logs, and
+  continues. Recovery is bounded to three consecutive recoveries without a completed frame.
+- If recovery fails or the bound is reached, the tick loop is stopped, `Shutdown` is called, and
+  `Run` rethrows `GraphicsDeviceLostException` (`RB3002`) or the underlying `GraphicsException`.
+  The window may close before the exception surfaces.
 - If `Shutdown` throws, the exception is aggregated with any earlier failure.
 
 ## 4. Time and frames
@@ -487,9 +507,10 @@ Semantics:
 - `FrameCount` increments once per `Tick`, after `Setup`.
 - `MaxDeltaTime` is fixed at build time; it prevents a debugger pause or a window drag from
   teleporting the simulation.
-- There is no interpolation between ticks in v1. In M1 the render thread consumes the previous
-  completed tick without drawing; M2 adds drawing. A game that needs smoother motion at low tick
-  rates must interpolate its own render transforms or wait for the fixed-timestep milestone.
+- There is no interpolation between ticks in v1. In M2 the render thread presents the newest
+  completed tick's frame, which currently clears the linear scene target and runs the present pass.
+  A game that needs smoother motion at low tick rates must interpolate its own render transforms or
+  wait for the fixed-timestep milestone.
 - `Tick` must not block. If it does, it delays the next input snapshot and the frame handoff.
 
 ### 4.1 Minimized and unfocused windows
@@ -1161,24 +1182,46 @@ public enum TonemappingMode {
 In M2, before `Camera` exists, `WithClearColor` is the scene clear color. Cameras add per-camera
 clear control in M4; a camera's own clear color then takes precedence.
 
-**HDR chain.** Cameras render into a linear `Rgba16Float` scene target. The present pass applies
-`TonemappingMode` and exposure, then encodes to the swapchain. The default is `AgX` at `0` EV.
-`TonemappingMode.None` is for custom presentation and still writes through the swapchain transfer
-function.
+**HDR chain.** The scene target is linear `R16G16B16A16_SFLOAT` color with a `D32_SFLOAT` depth
+attachment. The present pass applies exposure, `TonemappingMode`, and the output encoding. The
+default is `AgX` at `0` EV. `TonemappingMode.None` skips the tone curve and still writes through the
+selected output encoding. Exposure is applied as `2^EV` before tone mapping.
 
-**Swapchain selection.** The renderer prefers an HDR-capable surface format first, for example
-`R16G16B16A16_SFLOAT` (scRGB) or `A2B10G10R10_UNORM_PACK32` (HDR10), when the surface advertises
-it. If no HDR format is available, it falls back to `B8G8R8A8_SRGB` or `R8G8B8A8_SRGB`, whichever
-the surface supports. The selected format is reported by `EngineInfo.SwapchainFormat` and
-`EngineInfo.HdrOutput`.
+**Swapchain selection.** The cached SDL3 window HDR state drives the choice. When the window has HDR
+enabled, the renderer selects `R16G16B16A16_SFLOAT` with
+`VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT` (scRGB) when the surface advertises that pair. If the
+surface advertises the float format only with `VK_COLOR_SPACE_SRGB_NONLINEAR_KHR`, that pair is used
+with a warning. If the surface advertises no scRGB float pair, the renderer falls back to the SDR
+order and reports `HdrOutput = false`.
 
-**MSAA.** The swapchain sample count comes from `WithMSAA` (default 4). A `RenderTexture` uses its
-own `SampleCount`. HDR color and depth are resolved before the present pass. Unsupported sample
-counts fall back to the highest supported count and log a warning.
+The SDR order is `B8G8R8A8_SRGB`, `R8G8B8A8_SRGB`, `B8G8R8A8_UNORM`, `R8G8B8A8_UNORM` (manual sRGB
+encode in the present shader), then `R16G16B16A16_SFLOAT` (linear clamp). HDR10
+(`A2B10G10R10_UNORM_PACK32`, PQ) is deliberately deferred and is never selected in M2. The selected
+format token is reported by `EngineInfo.SwapchainFormat`; `HdrOutput` is true only when the window
+reports HDR and the selected pair presents through the scRGB HDR path.
+
+**HDR output.** The scRGB present path scales display-linear color by the window's SDL SDR white
+level and does not clamp, so values above the SDR white point use the display headroom. The cached
+HDR state also carries the headroom for diagnostics. A window HDR state change, or a change to the
+SDR white level while HDR is active, recreates the presentation path.
+
+**MSAA.** The requested sample count comes from `WithMSAA` (default 4). The effective count is the
+highest device-supported count that does not exceed the request, or `1` when none is supported, and
+a fallback logs a warning. The scene target color and depth attachments use the effective count;
+the swapchain images are single-sample. Scene color is resolved into a single-sample sampled image
+before the present pass. Depth is cleared to `0.0` and the reverse-Z state is defined; multisampled
+depth is not resolved in M2 because nothing samples depth before M4/M8. A `RenderTexture` uses its
+own `SampleCount` (M8).
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
-not support it. `Immediate` is available when explicitly selected. Mailbox is not a guarantee of
-tearing-free presentation on every driver; the selected mode is reported by `EngineInfo`.
+not advertise it; a requested `Fifo` falls back to `Mailbox` when FIFO is unavailable. `Immediate` is
+used only when explicitly selected, and an unavailable `Immediate` mode fails startup with `RB3001`
+instead of falling back. Mailbox is not a guarantee of tearing-free presentation on every driver;
+the selected mode is reported by `EngineInfo.PresentMode`.
+
+**Reverse-Z.** The scene target clears depth to `0.0`. Depth-tested pipelines use `GreaterOrEqual`,
+enable depth test and depth write, and use the `[0, 1]` depth range. The M2 present triangle is not
+depth-tested; M4's geometry pipelines consume the state.
 
 Reverse-Z is a whole-pipeline convention. Custom projection code must not mix in a
 `[-1,1]`-style OpenGL projection or the depth test will be wrong. The engine exposes no
@@ -1855,22 +1898,28 @@ public readonly record struct RenderStats(
 | Field | Meaning |
 | --- | --- |
 | `FrameIndex` | The tick frame this snapshot describes. |
-| `DrawCalls` | `vkCmdDrawIndexed`/`vkCmdDraw` calls submitted for the frame. |
-| `Instances` | Instances that survived culling and were submitted. |
-| `Triangles` | Submitted triangle count after instancing. |
-| `CulledInstances` | Instances rejected by frustum culling. |
-| `PipelineCount` | Distinct pipelines used by the frame. |
-| `TextureCount` | Bindless texture slots live after the frame. |
+| `DrawCalls` | `vkCmdDrawIndexed`/`vkCmdDraw` calls submitted for the frame. In M2 the present triangle is one draw call. |
+| `Instances` | Instances that survived culling and were submitted. M2 reports one instance for the present triangle. |
+| `Triangles` | Submitted triangle count after instancing. M2 reports one triangle. |
+| `CulledInstances` | Instances rejected by frustum culling. M2 has no culling and reports `0`. |
+| `PipelineCount` | Distinct pipelines used by the frame. M2 reports the present pipeline. |
+| `TextureCount` | Bindless texture slots live after the frame. M2 reports the resolved scene color. |
 | `SampleCount` | Effective MSAA sample count for the frame. |
-| `HdrOutput` | Whether the frame presented through an HDR-capable swapchain format. |
+| `HdrOutput` | Whether the frame presented through the scRGB HDR path. |
 | `CpuFrameMilliseconds` | Render-thread CPU time for planning and recording. |
-| `GpuFrameMilliseconds` | GPU timestamp delta, or `0` when timestamps are unavailable. |
-| `FramesInFlight` | Frames submitted but not yet retired at snapshot time. |
-| `RecoveryCount` | Device/swapchain recoveries completed since startup. |
+| `GpuFrameMilliseconds` | GPU timestamp delta, or `0` when timestamps are unavailable. M2 does not collect timestamps and always reports `0`. |
+| `FramesInFlight` | Frames submitted but not yet retired at snapshot time; `0` to `3` in M2. |
+| `RecoveryCount` | Device, surface, and swapchain recoveries completed since startup. |
 
 `ctx.Stats` is a snapshot of the last completed frame, not the frame currently being recorded. It
 is updated by the render thread and read by the tick thread; individual fields are not a
 consistent transactional snapshot. Use it for diagnostics and overlays, not for synchronization.
+A frame that idles on a minimized or zero-extent surface reports zero draw calls, instances,
+triangles, pipelines, and textures, with zero CPU and GPU time.
+
+`RecoveryCount` is incremented when a recovery completes; the public snapshot publishes the new
+value with the next completed frame. A device, surface, and swapchain recovery all count. A
+recovery that fails does not increment the count and is fatal.
 
 ## 8. Window
 
@@ -2167,11 +2216,13 @@ public static class EngineVersion {
 | `Current` | **Any** | The version of the loaded `RayBork.Engine` assembly. Immutable for the app lifetime. Safe to read from any thread. Throws no `RayBorkException`. |
 
 `Current` is the loaded `RayBork.Engine` assembly's `Version`; it reports `0.1.0.0` in the 0.1
-release, including M1. The build and package version is `0.1.0`. It describes the engine assembly
-that is actually loaded, not the game assembly, the pack format, or the shader ABI. The value
-cannot change while the process runs, and no RayBork API mutates it. `EngineVersion` is the only
-public type added in M0; M1 adds the host, window, input, time, and logging surface listed in
-§1.6, and every other type in this reference remains a contract for later milestones.
+release, including M1 and M2. The build and package version is `0.1.0`. It describes the engine
+assembly that is actually loaded, not the game assembly, the pack format, or the shader ABI. The
+value cannot change while the process runs, and no RayBork API mutates it. `EngineVersion` is the
+only public type added in M0. M1 adds the host, window, input, time, and logging surface listed in
+§1.6; M2 adds the renderer diagnostics (`EngineInfo`, `RenderStats`, `PresentMode`,
+`TonemappingMode`, `GraphicsException`, and `GraphicsDeviceLostException`). Every other type in this
+reference remains a contract for later milestones.
 
 The getter has no dependency on a pack, window, GPU, renderer, or logger. It does not block, does not
 require synchronization, and throws no `RayBorkException`; the value is available to loggers,
@@ -2195,13 +2246,16 @@ public readonly record struct EngineInfo(
     bool ValidationEnabled);
 ```
 
-`RendererName` identifies the active backend (for example `"Vulkan 1.2"`). The public API is
-renderer-agnostic; a future mobile/web backend changes this string, not game code. `GpuName` is the
-selected device. `VulkanApiVersion` is the packed Vulkan version (for example `1.2.0` encoded as
-`(1 << 22) | (2 << 12)`). `SwapchainFormat` is the selected surface format, `HdrOutput` is true
-when it is an HDR-capable format, `SampleCount` is the effective MSAA count, `PresentMode` is the
-effective present mode after fallback, and `ValidationEnabled` reports whether the validation
-layer is active.
+`RendererName` identifies the active backend together with the selected device's Vulkan API version,
+for example `"Vulkan 1.4"` on a 1.4 device; the backend itself requests and requires Vulkan 1.2.
+The public API is renderer-agnostic; a future mobile/web backend changes this string, not game
+code. `GpuName` is the selected device. `VulkanApiVersion` is the packed Vulkan version the device
+reports (for example `1.4.0` encoded as `(1 << 22) | (4 << 12)`). `SwapchainFormat` is the selected
+surface format token without the `VK_FORMAT_` prefix (for example `B8G8R8A8_SRGB` or
+`R16G16B16A16_SFLOAT`), `HdrOutput` is true only when the window reports HDR and the selected path
+presents through scRGB, `SampleCount` is the effective MSAA count, `PresentMode` is the effective
+present mode after fallback, and `ValidationEnabled` reports whether the validation layer is
+active.
 
 ### 10.4 Exceptions
 
@@ -2224,24 +2278,26 @@ public sealed class PlatformException : RayBorkException { }
 ```
 
 M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowException`. M2 ships
-`GraphicsException` and `GraphicsDeviceLostException`; the asset and shader exceptions in the block
-above are the later contract.
+`GraphicsException` and `GraphicsDeviceLostException`; `GraphicsException` is not sealed, and
+`GraphicsDeviceLostException` derives from it. The asset and shader exceptions in the block above
+are the later contract.
 
-M1 diagnostic codes:
+Game and platform diagnostic codes (M1, M2):
 
 | Code | Exception | Meaning |
 | --- | --- | --- |
 | `RB0001` | `GameException` | A `Setup`, `Tick`, or `Shutdown` callback failed. |
 | `RB2001` | `PlatformException` | SDL3/platform initialization failed. |
 | `RB2002` | `WindowException` | Window creation failed. |
+| `RB2003` | `PlatformException` | SDL3 Vulkan surface creation or loader failure. |
 
-M2 diagnostic codes:
+Graphics diagnostic codes (M2):
 
 | Code | Exception | Meaning |
 | --- | --- | --- |
-| `RB3001` | `GraphicsException` | Graphics initialization or device creation failed. |
-| `RB3002` | `GraphicsDeviceLostException` | Device loss after recovery failed. |
-| `RB3003` | `GraphicsException` | An unrecoverable graphics failure stopped the app. |
+| `RB3001` | `GraphicsException` | Graphics initialization or device creation failed, or the Vulkan validation layer reported an error. Fatal. |
+| `RB3002` | `GraphicsDeviceLostException` | A bounded recovery failed or the consecutive-recovery limit was reached. Fatal. |
+| `RB3003` | `GraphicsException` | An unrecoverable Vulkan acquire or present failure stopped the app. Fatal. |
 
 | Exception | Typical cause |
 | --- | --- |
@@ -2250,16 +2306,16 @@ M2 diagnostic codes:
 | `AssetTypeMismatchException` | Path exists, but was baked as a different type. |
 | `AssetPackException` | Pack missing, bad magic/version, invalid index, hash failure. |
 | `AssetLoadException` | Corrupt payload, decode failure, GPU upload failure, or custom-data shape failure. |
-| `GraphicsException` | Unrecoverable device/swapchain/pipeline/resource failure. |
-| `GraphicsDeviceLostException` | Device loss where recovery was attempted and failed. Fatal. |
+| `GraphicsException` | Unrecoverable device/swapchain/pipeline/resource failure, a validation error, or an unsupported required mode. |
+| `GraphicsDeviceLostException` | Device loss, a failed surface or swapchain recovery, or the recovery bound. Fatal. |
 | `ShaderException` | A runtime shader interface mismatch that escaped bake validation. |
 | `WindowException` | SDL3 window creation or platform window failure. |
-| `PlatformException` | SDL3 initialization, audio device (later), or native library failure. |
+| `PlatformException` | SDL3 initialization, Vulkan surface or loader failure (`RB2003`), audio device (later), or native library failure. |
 
-`DiagnosticCode` is a stable `RB`-prefixed code such as `RB1002` (unsupported pack version) or
-`RB3002` (device lost after failed recovery). Later milestones add the asset, shader, and bake
-codes. Codes are documented in the bake and runtime diagnostics tables; tests assert them. They are
-stable within a major version.
+`DiagnosticCode` is a stable `RB`-prefixed code such as `RB1002` (unsupported pack version),
+`RB2003` (SDL3 Vulkan surface or loader failure), or `RB3002` (bounded recovery failed). Later
+milestones add the asset, shader, and bake codes. Codes are documented in the bake and runtime
+diagnostics tables; tests assert them. They are stable within a major version.
 
 Lifecycle and argument errors use the standard BCL exceptions, not `RayBorkException`:
 `ArgumentNullException`, `ArgumentException`, `InvalidOperationException`,
@@ -2329,21 +2385,23 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 
 ```text
 1. Stop accepting new ticks; finish the current tick if one is running.
-2. Publish the final frame (if the tick produced one).
-3. Wait for in-flight GPU frames to retire.
-4. Run IGame.Shutdown on the tick thread.
-5. Release remaining engine references and destroy the renderer, window, SDL3, loader.
-6. Join every thread.
+2. The tick thread publishes the final frame and runs IGame.Shutdown on the tick thread, then exits.
+3. Join the tick thread and complete the frame ring.
+4. The render thread drains and presents the final frame, disposes the backend, and destroys the
+   native surface through the surface channel.
+5. Join the render thread while the main thread services the surface channel and pumps, then close
+   the channel.
+6. Dispose the platform: window, SDL3, Vulkan loader. Join every thread.
 ```
 
-The order is deliberate: `Shutdown` can still call `Assets.Load` if it must (not recommended), but
-it cannot draw. GPU resources are not destroyed until after `Shutdown` returns, so a final
-readback or save is possible.
+The order is deliberate: `Shutdown` runs while the renderer is still alive, but it cannot draw.
+GPU resources are not destroyed until after `Shutdown` returns, so a final readback or save is
+possible.
 
-In M1 there is no renderer and no asset loader. The render thread consumes and releases each
-published frame, including the final one, without GPU work; shutdown therefore has no GPU frames or
-loader references to drain. M2 owns frame retirement before renderer shutdown; the numbered order
-above remains the 1.0 contract.
+M2 has a real renderer: the main thread services surface requests until the render thread exits,
+then disposes the platform. The shutdown join is bounded to 30 seconds for the render thread; the
+tick thread is joined after it publishes the final frame. M3 inserts the asset loader drain before
+the renderer is destroyed; the numbered order above remains the 1.0 contract.
 
 ### 11.5 Multiple apps and restarts
 
@@ -2365,7 +2423,8 @@ RayBork's runtime is designed for Native AOT:
   registered at build time with `WithAssetType<T>()`, which stores a compiled `IShapeable<T>`
   loader delegate; `LoadData` covers opaque bytes without reflection.
 - Logging uses `Microsoft.Extensions.Logging`; ZLogger is the default provider and is AOT-tested.
-- P/Invoke is direct. SDL3 and Vulkan native libraries are deployed per RID.
+- P/Invoke is direct. SDL3 native libraries are deployed per RID; the Vulkan loader is resolved from
+  the system/GPU driver with `NativeLibrary` and a custom `INativeContext`.
 - The engine may use `unsafe` internally; game projects do not need `AllowUnsafeBlocks`.
 - The bake tool is JIT and may use reflection, `MetadataLoadContext`, and native executables. It is
   never referenced by a runtime project and never enters the publish graph.
