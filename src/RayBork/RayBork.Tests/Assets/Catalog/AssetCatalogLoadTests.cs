@@ -1,0 +1,300 @@
+using RayBork.Internal;
+using RayBork.Tests.Assets.Gpu;
+
+namespace RayBork.Tests.Assets.Catalog;
+
+public sealed class AssetCatalogLoadTests {
+    private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadsMeshMetadataAndCreatesOneUpload() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken);
+
+        try {
+            Assert.Equal("/meshes/quad", mesh.Path);
+            Assert.Equal(3, mesh.VertexCount);
+            Assert.Equal(3, mesh.IndexCount);
+            Assert.Equal(PrimitiveTopology.TriangleList, mesh.Topology);
+            Assert.Equal(new System.Numerics.Vector3(-1f, -2f, -3f), mesh.Bounds.Min);
+            Assert.Equal(new System.Numerics.Vector3(1f, 2f, 3f), mesh.Bounds.Max);
+            Assert.False(mesh.IsDisposed);
+            Assert.Equal(1, harness.Worker.UploadCallCount);
+            MeshGpuUpload upload = Assert.IsType<MeshGpuUpload>(harness.Worker.UploadCalls[0]);
+            Assert.Equal("meshes/quad", upload.Path);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadsTextureMetadata() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        Texture texture = await harness.Catalog.Load<Texture>("/textures/albedo", TestContext.Current.CancellationToken);
+
+        try {
+            Assert.Equal("/textures/albedo", texture.Path);
+            Assert.Equal(4, texture.Width);
+            Assert.Equal(2, texture.Height);
+            Assert.Equal(3, texture.MipLevels);
+            Assert.Equal(TextureFormat.Rgba8Srgb, texture.Format);
+            Assert.True(texture.IsSrgb);
+            Assert.Equal(new SamplerState(TextureFilter.Linear, TextureWrap.Repeat, 1f), texture.Sampler);
+            Assert.Equal(1, harness.Worker.UploadCallCount);
+            Assert.IsType<TextureGpuUpload>(harness.Worker.UploadCalls[0]);
+        } finally {
+            texture.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadsShaderMetadataFromTheDescriptor() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        Shader shader = await harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken);
+
+        try {
+            Assert.Equal("/shaders/basic", shader.Path);
+            Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, shader.Stages);
+            Assert.Equal(RenderState.AlphaBlend, shader.DefaultRenderState);
+            ShaderUniform uniform = Assert.Single(shader.Uniforms);
+            Assert.Equal(new ShaderUniform("uTint", ShaderUniformType.Vector4), uniform);
+            ShaderTextureBinding binding = Assert.Single(shader.Textures);
+            Assert.Equal(new ShaderTextureBinding("mainTexture", 0), binding);
+            Assert.Equal(1, harness.Worker.UploadCallCount);
+            Assert.IsType<ShaderGpuUpload>(harness.Worker.UploadCalls[0]);
+        } finally {
+            shader.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task SamePathAndTypeReturnsTheSameObjectAndOneUpload() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Mesh first = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
+        Mesh second = await harness.Catalog.Load<Mesh>("meshes/quad", cancellationToken);
+
+        Assert.Same(first, second);
+        Assert.Equal(1, harness.Worker.UploadCallCount);
+
+        first.Dispose();
+        Assert.False(second.IsDisposed);
+        second.Dispose();
+        Assert.True(first.IsDisposed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadDataReturnsDescriptorBytesForTypedAssets() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        byte[] descriptor = await harness.Catalog.LoadData(
+            "/meshes/quad",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor()), descriptor);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadDataReturnsMessagePackBytesForDataEntriesAndAFreshArrayPerCall() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        byte[] first = await harness.Catalog.LoadData("/data/settings", cancellationToken);
+        byte[] second = await harness.Catalog.LoadData("/data/settings", cancellationToken);
+
+        Assert.Equal(CatalogTestData.CreateDataPayload(), first);
+        Assert.Equal(first, second);
+        Assert.NotSame(first, second);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CustomDataReturnsAFreshInstanceAndCreatesNoUpload() {
+        using CatalogTestHarness harness = new(
+            builtInPack: null,
+            userPacks: [CatalogTestData.BuildStandardPack()],
+            assetTypes: [CatalogTestData.SettingsRegistration]);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        CatalogTestSettings first = await harness.Catalog.Load<CatalogTestSettings>("/data/settings", cancellationToken);
+        CatalogTestSettings second = await harness.Catalog.Load<CatalogTestSettings>("data/settings", cancellationToken);
+
+        Assert.NotSame(first, second);
+        Assert.Equal("catalog", first.Name);
+        Assert.Equal(7, first.Difficulty);
+        Assert.Equal(7, second.Difficulty);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void UnregisteredTypeThrowsNotSupportedNamingWithAssetType() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        NotSupportedException thrown = Assert.Throws<NotSupportedException>(
+            () => {
+                _ = harness.Catalog.Load<CatalogTestSettings>(
+                    "/data/settings",
+                    TestContext.Current.CancellationToken);
+            });
+
+        Assert.Contains("WithAssetType<T>()", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ExistsMatchesTheCanonicalPathAndRejectsInvalidInput() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        Assert.True(harness.Catalog.Exists("/MESHES/Quad"));
+        Assert.True(harness.Catalog.Exists("meshes/quad"));
+        Assert.False(harness.Catalog.Exists("/meshes/absent"));
+        Assert.Throws<ArgumentNullException>(() => harness.Catalog.Exists(null!));
+        Assert.Throws<ArgumentException>(() => harness.Catalog.Exists("meshes//quad"));
+        Assert.Throws<ArgumentException>(() => harness.Catalog.Exists("meshes\\quad"));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("/")]
+    [InlineData("meshes//quad")]
+    [InlineData("meshes/quad/")]
+    [InlineData("meshes/.")]
+    [InlineData("meshes/..")]
+    [InlineData("meshes\\quad")]
+    [InlineData("meshes/quad.glb")]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void LoadRejectsInvalidPaths(string path) {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        Assert.Throws<ArgumentException>(
+            () => {
+                _ = harness.Catalog.Load<Mesh>(path, TestContext.Current.CancellationToken);
+            });
+        Assert.Throws<ArgumentException>(
+            () => {
+                _ = harness.Catalog.LoadData(path, TestContext.Current.CancellationToken);
+            });
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task MissingPathThrowsAssetNotFound() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(
+            () => harness.Catalog.Load<Mesh>("/meshes/absent", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, thrown.DiagnosticCode);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task TypeMismatchThrowsAssetTypeMismatch() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        AssetTypeMismatchException thrown = await Assert.ThrowsAsync<AssetTypeMismatchException>(
+            () => harness.Catalog.Load<Texture>("/meshes/quad", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, thrown.DiagnosticCode);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ModelAndFontEntriesRequestedAsMeshThrowTypeMismatch() {
+        byte[] pack = CatalogTestData.BuildPack(
+            (CatalogTestData.MODEL_PATH, AssetEntryType.Model, [1, 2, 3]),
+            (CatalogTestData.FONT_PATH, AssetEntryType.Font, [4, 5, 6]));
+        using CatalogTestHarness harness = new(userPacks: [pack]);
+
+        AssetTypeMismatchException model = await Assert.ThrowsAsync<AssetTypeMismatchException>(
+            () => harness.Catalog.Load<Mesh>("/models/castle", TestContext.Current.CancellationToken));
+        AssetTypeMismatchException font = await Assert.ThrowsAsync<AssetTypeMismatchException>(
+            () => harness.Catalog.Load<Mesh>("/fonts/inter", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, model.DiagnosticCode);
+        Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, font.DiagnosticCode);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task BuiltInPackIsMountedBelowUserPacks() {
+        byte[] builtIn = CatalogTestData.BuildPack(
+            ("textures/shared", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(8))),
+            ("textures/shared-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
+            ("textures/builtin-only", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(16))),
+            ("textures/builtin-only-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));
+        byte[] user = CatalogTestData.BuildPack(
+            ("textures/shared", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(4))),
+            ("textures/shared-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));
+        using CatalogTestHarness harness = new(builtIn, [user]);
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Texture shadowed = await harness.Catalog.Load<Texture>("/textures/shared", cancellationToken);
+        Texture builtInOnly = await harness.Catalog.Load<Texture>("/textures/builtin-only", cancellationToken);
+
+        try {
+            Assert.Equal(4, shadowed.Width);
+            Assert.Equal(16, builtInOnly.Width);
+            Assert.True(harness.Catalog.Exists("/textures/builtin-only"));
+        } finally {
+            shadowed.Dispose();
+            builtInOnly.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RelativePackPathsResolveAgainstTheAppBaseDirectory() {
+        string fileName = "relative-catalog-" + Guid.NewGuid().ToString("N") + ".pck";
+        string fullPath = Path.Combine(AppContext.BaseDirectory, fileName);
+        File.WriteAllBytes(fullPath, CatalogTestData.BuildStandardPack());
+        GpuAssetBridge bridge = new();
+        bridge.AttachWorker(new FakeAssetGpuWorker());
+        AssetCatalog catalog = new(
+            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+            bridge,
+            ReadOnlyMemory<byte>.Empty,
+            [fileName],
+            []);
+
+        try {
+            catalog.Start();
+
+            Assert.True(catalog.Exists("/meshes/quad"));
+        } finally {
+            catalog.Stop();
+            bridge.Close(null);
+            File.Delete(fullPath);
+        }
+    }
+
+    private static TextureAssetDescriptor CreateTexture(uint width) => new() {
+        Payload = width == 16 ? "textures/builtin-only-ktx2" : "textures/shared-ktx2",
+        Width = width,
+        Height = 2,
+        MipLevels = 1,
+        Format = TextureFormat.Rgba8Srgb,
+        IsSrgb = true,
+        Filter = TextureFilter.Linear,
+        Wrap = TextureWrap.Repeat,
+        MaxAnisotropy = 1f,
+    };
+
+    internal static void WaitUntil(Func<bool> condition, string message) => Assert.True(
+        SpinWait.SpinUntil(condition, _timeout),
+        message);
+}
