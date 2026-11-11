@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using PolyType;
 using RayBork.Internal;
 
 namespace RayBork;
@@ -36,6 +37,8 @@ public sealed class RayBorkAppBuilder {
     private int _height = DEFAULT_HEIGHT;
     private bool _resizable;
     private double _maxDeltaTime = DEFAULT_MAX_DELTA_TIME;
+    private readonly List<string> _assetPackPaths = [];
+    private readonly Dictionary<Type, AssetTypeRegistration> _assetTypes = [];
     private PresentMode _presentMode = DEFAULT_PRESENT_MODE;
     private int _sampleCount = DEFAULT_SAMPLE_COUNT;
     private TonemappingMode _tonemapping = DEFAULT_TONEMAPPING;
@@ -139,6 +142,66 @@ public sealed class RayBorkAppBuilder {
         }
 
         _maxDeltaTime = seconds;
+        return this;
+    }
+
+    /// <summary>
+    /// Adds one user asset pack. Packs mount after the built-in pack in call order, and a later pack
+    /// shadows an earlier pack for the same canonical path.
+    /// </summary>
+    /// <param name="path">
+    /// The pack path. It must not be empty or whitespace. Relative paths resolve against
+    /// <see cref="AppContext.BaseDirectory"/> when the app starts; <see cref="Build()"/> does not open
+    /// the file.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    public RayBorkAppBuilder WithAssetsPack(string path) {
+        ThrowIfBuilt();
+        ValidatePackPath(path, nameof(path));
+        _assetPackPaths.Add(path);
+        return this;
+    }
+
+    /// <summary>
+    /// Adds user asset packs in order. Each pack mounts after the built-in pack and after the earlier
+    /// packs, so the last pack that contains a path wins.
+    /// </summary>
+    /// <param name="paths">The pack paths. Every path must be non-empty.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException">The array or one of its elements is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">An element is empty or whitespace.</exception>
+    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    public RayBorkAppBuilder WithAssetsPacks(params string[] paths) {
+        ThrowIfBuilt();
+        ArgumentNullException.ThrowIfNull(paths);
+        foreach (string path in paths) {
+            ValidatePackPath(path, nameof(paths));
+            _assetPackPaths.Add(path);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a custom data type for <see cref="IAssetCatalog.Load{T}"/>. The type must carry a
+    /// compiled <c>[GenerateShape]</c>; the runtime never scans assemblies or uses reflection. The
+    /// same type must be registered with the bake independently. Registering the same type again is a
+    /// no-op.
+    /// </summary>
+    /// <typeparam name="T">The custom data type to register.</typeparam>
+    /// <returns>This builder.</returns>
+    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    public RayBorkAppBuilder WithAssetType<T>()
+        where T : IShapeable<T> {
+        ThrowIfBuilt();
+        Type assetType = typeof(T);
+        if (!_assetTypes.ContainsKey(assetType)) {
+            _assetTypes.Add(assetType, AssetTypeRegistration.Create<T>());
+        }
+
         return this;
     }
 
@@ -373,10 +436,19 @@ public sealed class RayBorkAppBuilder {
             },
             LoggerFactory = _loggerFactory,
             LogLevel = _logLevel,
+            AssetPackPaths = [.. _assetPackPaths],
+            AssetTypes = [.. _assetTypes.Values],
         };
 
         _built = true;
         return new RayBorkApp(configuration, platformFactory, rendererBackendFactory, timeProvider);
+    }
+
+    private static void ValidatePackPath(string path, string parameterName) {
+        ArgumentNullException.ThrowIfNull(path, parameterName);
+        if (string.IsNullOrWhiteSpace(path)) {
+            throw new ArgumentException("An asset pack path must not be empty or whitespace.", parameterName);
+        }
     }
 
     private void ThrowIfBuilt() {

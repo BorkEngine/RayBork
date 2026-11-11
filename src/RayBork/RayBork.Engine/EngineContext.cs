@@ -4,7 +4,8 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// The engine context: the window, input, logging, renderer status, frame clock, and exit control.
+/// The engine context: the asset catalog, window, input, logging, renderer status, frame clock, and
+/// exit control.
 /// </summary>
 /// <remarks>
 /// The context is stable for the app lifetime, but its per-frame members are tick-thread snapshots.
@@ -22,6 +23,7 @@ public sealed class EngineContext {
     internal EngineContext(
         IEnginePlatform platform,
         ILoggerFactory loggerFactory,
+        IAssetCatalog assets,
         IAppControl appControl,
         IInput initialInput,
         double maxDeltaTime,
@@ -29,6 +31,7 @@ public sealed class EngineContext {
         RenderStatus renderStatus) {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
+        ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(appControl);
         ArgumentNullException.ThrowIfNull(initialInput);
         ArgumentNullException.ThrowIfNull(elapsedTime);
@@ -38,10 +41,23 @@ public sealed class EngineContext {
         _appControl = appControl;
         _elapsedTime = elapsedTime;
         _renderStatus = renderStatus;
+        Assets = assets;
         Input = initialInput;
         LoggerFactory = loggerFactory;
         MaxDeltaTime = maxDeltaTime;
     }
+
+    /// <summary>
+    /// Gets the app's asset catalog. It is valid from <see cref="IGame.Setup"/> and safe to call from
+    /// any thread.
+    /// </summary>
+    /// <remarks>
+    /// The catalog is mounted and its loader thread is running before <see cref="IGame.Setup"/> runs.
+    /// Engine assets are shared and reference-counted; custom data returns a fresh caller-owned
+    /// instance per call. After the app stops, every catalog member throws
+    /// <see cref="ObjectDisposedException"/>.
+    /// </remarks>
+    public IAssetCatalog Assets { get; }
 
     /// <summary>
     /// Gets the input snapshot for the current tick. Read it on the tick thread.

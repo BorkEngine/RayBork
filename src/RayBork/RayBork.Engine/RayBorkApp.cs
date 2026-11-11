@@ -218,6 +218,7 @@ public sealed class RayBorkApp : IDisposable {
         IEnginePlatform? platform = null;
         MainThreadSurfaceChannel? surfaceChannel = null;
         FrameRing? frameRing = null;
+        AssetCatalog? assetCatalog = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
         bool tickStarted = false;
@@ -250,9 +251,21 @@ public sealed class RayBorkApp : IDisposable {
             renderStarted = true;
             WaitForRenderer(platform, surfaceChannel, renderLoop);
 
+            // The renderer is ready and its GPU asset worker is attached, so asset loads can queue
+            // uploads and Setup can await them. A pack failure here is a startup failure before any
+            // game callback runs.
+            assetCatalog = new AssetCatalog(
+                loggerFactory,
+                gpuAssetBridge,
+                BuiltInAssetPack.Bytes,
+                configuration.AssetPackPaths,
+                configuration.AssetTypes);
+            assetCatalog.Start();
+
             EngineContext context = new(
                 platform,
                 loggerFactory,
+                assetCatalog,
                 _exitControl,
                 CaptureInput(platform),
                 configuration.MaxDeltaTime,
@@ -311,6 +324,7 @@ public sealed class RayBorkApp : IDisposable {
             platform,
             surfaceChannel,
             frameRing,
+            assetCatalog,
             tickRunner,
             renderLoop,
             tickStarted,
@@ -421,6 +435,7 @@ public sealed class RayBorkApp : IDisposable {
         IEnginePlatform? platform,
         MainThreadSurfaceChannel? surfaceChannel,
         FrameRing? frameRing,
+        AssetCatalog? assetCatalog,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
         bool tickStarted,
@@ -457,6 +472,13 @@ public sealed class RayBorkApp : IDisposable {
                     logger.LogError(tickRunner.Failure, "The tick runner also failed while the app was stopping.");
                 }
             }
+        }
+
+        // Shutdown already ran on the tick thread, so no game callback can still load an asset. Stop
+        // the loader before the frame ring completes: the render thread must stay alive to service the
+        // GPU destructions the catalog queues for its cached assets.
+        if (assetCatalog is not null) {
+            failure = RunCleanupStep(logger, "stopping the asset catalog", failure, assetCatalog.Stop);
         }
 
         if (frameRing is not null) {
