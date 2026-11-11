@@ -18,6 +18,17 @@ internal interface IEnginePlatform : IDisposable {
     IPlatformWindow Window { get; }
 
     /// <summary>
+    /// Gets a cached snapshot of the SDL3 window HDR state.
+    /// </summary>
+    /// <remarks>
+    /// Safe to read from any thread. The cache is refreshed on the main thread after
+    /// <see cref="Initialize"/> and when SDL reports a window HDR state change or a display change.
+    /// Returns <c>WindowHdrState.Sdr</c> before initialization, after disposal, and when SDL cannot
+    /// report a valid property set. Never throws.
+    /// </remarks>
+    WindowHdrState WindowHdrState { get; }
+
+    /// <summary>
     /// Initializes the platform and creates the window. Runs on the main thread.
     /// </summary>
     /// <param name="options">The startup options.</param>

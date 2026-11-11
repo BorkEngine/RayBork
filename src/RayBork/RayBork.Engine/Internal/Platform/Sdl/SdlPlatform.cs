@@ -54,10 +54,12 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     private readonly Dictionary<uint, IntPtr> _openGamepads = [];
     private readonly HashSet<IntPtr> _vulkanSurfaces = [];
     private readonly Lock _vibrationGate = new();
+    private readonly Lock _hdrGate = new();
     private readonly Queue<VibrationRequest> _vibrationRequests = new();
 
     private IntPtr _windowHandle;
     private SdlWindow? _window;
+    private WindowHdrState _windowHdrState = WindowHdrState.Sdr;
     private long _lastGamepadPollTimestamp;
     private bool _sdlInitialized;
     private bool _textInputStarted;
@@ -75,6 +77,15 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
 
     /// <inheritdoc />
     public IPlatformWindow Window => _window ?? throw new InvalidOperationException("The platform has not been initialized.");
+
+    /// <inheritdoc />
+    public WindowHdrState WindowHdrState {
+        get {
+            lock (_hdrGate) {
+                return _windowHdrState;
+            }
+        }
+    }
 
     /// <inheritdoc />
     public void Initialize(PlatformOptions options, Action onExitRequested) {
@@ -147,6 +158,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
             _window.CurrentMonitor.Index,
             _window.CurrentMonitor.Name);
         _inputLogger.LogInformation("Input initialized with {GamepadCount} gamepad(s).", _openGamepads.Count);
+        RefreshWindowHdrState();
     }
 
     /// <inheritdoc />
@@ -305,6 +317,10 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
                 _windowHandle = IntPtr.Zero;
             }
 
+            lock (_hdrGate) {
+                _windowHdrState = WindowHdrState.Sdr;
+            }
+
             _vulkanSurfaces.Clear();
         } finally {
             if (_sdlInitialized) {
@@ -337,7 +353,11 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
                 _window!.HandleResizeEvent();
                 if (type == SDL.EventType.WindowDisplayChanged) {
                     RefreshMonitors();
+                    RefreshWindowHdrState();
                 }
+                break;
+            case SDL.EventType.WindowHDRStateChanged:
+                RefreshWindowHdrState();
                 break;
             case SDL.EventType.WindowMinimized:
             case SDL.EventType.WindowMaximized:
@@ -366,6 +386,9 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
             case SDL.EventType.DisplayContentScaleChanged:
             case SDL.EventType.UsableBoundsChanged:
                 RefreshMonitors();
+                if (type is SDL.EventType.DisplayCurrentModeChanged or SDL.EventType.DisplayContentScaleChanged) {
+                    RefreshWindowHdrState();
+                }
                 break;
             case SDL.EventType.GamepadAdded:
             case SDL.EventType.GamepadRemoved:
@@ -374,6 +397,41 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
             default:
                 _input.HandleEvent(sdlEvent);
                 break;
+        }
+    }
+
+    private void RefreshWindowHdrState() {
+        uint properties = SDL.GetWindowProperties(_windowHandle);
+        if (properties == 0) {
+            StoreWindowHdrState(WindowHdrState.Sdr);
+            _windowLogger.LogDebug("SDL returned no window property set; the window HDR state is SDR.");
+            return;
+        }
+
+        WindowHdrState state = WindowHdrState.Normalize(
+            SDL.GetBooleanProperty(properties, SDL.Props.WindowHDREnabledBoolean, false),
+            SDL.GetFloatProperty(properties, SDL.Props.WindowSDRWhiteLevelFloat, 1f),
+            SDL.GetFloatProperty(properties, SDL.Props.WindowHDRHeadroomFloat, 1f));
+        if (StoreWindowHdrState(state)) {
+            _windowLogger.LogInformation(
+                "Window HDR state changed: enabled {HdrEnabled}, SDR white level {SdrWhiteLevel}, HDR headroom {HdrHeadroom}.",
+                state.HdrEnabled,
+                state.SdrWhiteLevel,
+                state.HdrHeadroom);
+        }
+
+        _windowLogger.LogDebug(
+            "Window HDR state refreshed: enabled {HdrEnabled}, SDR white level {SdrWhiteLevel}, HDR headroom {HdrHeadroom}.",
+            state.HdrEnabled,
+            state.SdrWhiteLevel,
+            state.HdrHeadroom);
+    }
+
+    private bool StoreWindowHdrState(WindowHdrState state) {
+        lock (_hdrGate) {
+            bool changed = _windowHdrState != state;
+            _windowHdrState = state;
+            return changed;
         }
     }
 

@@ -6,6 +6,12 @@ namespace RayBork.Tests;
 
 [Collection("SDL")]
 public sealed class SdlPlatformTests {
+    private readonly ITestOutputHelper _output;
+
+    public SdlPlatformTests(ITestOutputHelper output) {
+        _output = output;
+    }
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void InitializeCreatesWindowMonitorsAndInput() {
@@ -347,6 +353,56 @@ public sealed class SdlPlatformTests {
         Assert.Equal(360, window.Width);
         Assert.Equal(240, window.Height);
         Assert.True(window.WasResized);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WindowHdrStateOnAHiddenVulkanWindowSatisfiesTheInvariants() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+
+        WindowHdrState state = host.Platform.WindowHdrState;
+
+        _output.WriteLine(
+            "Observed window HDR state: enabled {0}, SDR white level {1}, HDR headroom {2}.",
+            state.HdrEnabled,
+            state.SdrWhiteLevel,
+            state.HdrHeadroom);
+        Assert.True(float.IsFinite(state.SdrWhiteLevel));
+        Assert.True(state.SdrWhiteLevel > 0f);
+        Assert.True(float.IsFinite(state.HdrHeadroom));
+        Assert.True(state.HdrHeadroom >= 1f);
+        if (!state.HdrEnabled) {
+            Assert.Equal(1f, state.SdrWhiteLevel);
+            Assert.Equal(1f, state.HdrHeadroom);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WindowHdrStateIsReadableFromAnotherThread() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+
+        WindowHdrState expected = host.Platform.WindowHdrState;
+        WindowHdrState observed = default;
+        Thread thread = new(() => observed = host.Platform.WindowHdrState);
+        thread.Start();
+        thread.Join();
+
+        Assert.Equal(expected, observed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WindowHdrStateIsSdrBeforeInitializeAndAfterDispose() {
+        SdlPlatform uninitialized = new(NullLoggerFactory.Instance);
+        Assert.Equal(WindowHdrState.Sdr, uninitialized.WindowHdrState);
+        uninitialized.Dispose();
+
+        SdlTestHost host = SdlTestHost.Create();
+        SdlPlatform platform = host.Platform;
+        platform.Dispose();
+        Assert.Equal(WindowHdrState.Sdr, platform.WindowHdrState);
+        host.Dispose();
     }
 
     [Fact]
