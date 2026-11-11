@@ -30,7 +30,7 @@ public sealed class Vulkan12BackendTests {
         Assert.Equal(expectedFormat.IsHdr, info.HdrOutput);
         Assert.Equal(expectedSampleCount, info.SampleCount);
         Assert.Equal(expectedPresentMode.Public, info.PresentMode);
-        Assert.True(info.ValidationEnabled);
+        Assert.Equal(host.Instance.ValidationLayersEnabled, info.ValidationEnabled);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
