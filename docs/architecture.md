@@ -171,7 +171,7 @@ The backend owns:
 | `Submit` | Render | Consumes one sealed `RenderFramePacket`, waits for a frame slot, acquires a swapchain image, clears the multisampled scene target (with color resolve), records the present pass, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
-| `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, scene target, frame resources, swapchain, device, native surface (through the provider), and instance, in that order. It is idempotent and safe after a failed recovery. |
+| `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
 
 `Submit` takes a **sealed frame packet**, not a live game object or a draw command. The packet is a
 value type that carries only the frame index in M2; the backend never sees `Camera`, `Shader`,
@@ -182,8 +182,10 @@ behind the frame boundary.
 
 ### Ownership and threading
 
-- The render thread owns the backend object, instance, device, queues, command buffers, swapchain,
-  scene target, present pipeline, descriptors, and images. Backend calls are render-thread only.
+- The render thread owns the backend object, device, queues, command buffers, swapchain, scene
+  target, present pipeline, descriptors, and images. It creates the instance, but the final instance
+  and loader teardown is handed to the app's main-thread teardown queue and runs after the render
+  thread has joined. Backend calls are render-thread only.
 - The main thread owns the SDL3 window and the native surface. The backend does not pump window
   events, create windows, or read input; it reads a `WindowSurfaceState` snapshot and creates or
   destroys the surface through `IRendererSurfaceProvider`.
