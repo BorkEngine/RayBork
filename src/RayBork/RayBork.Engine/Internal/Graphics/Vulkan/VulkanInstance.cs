@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
-using Silk.NET.Core.Loader;
 using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
@@ -22,11 +21,6 @@ namespace RayBork.Internal;
 /// </remarks>
 internal sealed class VulkanInstance : IDisposable {
     /// <summary>
-    /// The prefix of the message thrown when the Vulkan loader cannot be loaded.
-    /// </summary>
-    internal const string LOADER_FAILURE_MESSAGE_PREFIX = "Failed to load";
-
-    /// <summary>
     /// The Vulkan API version the renderer requests from the loader.
     /// </summary>
     internal static readonly uint RequestedApiVersion = VulkanVersion.Pack(1, 2, 0);
@@ -34,11 +28,11 @@ internal sealed class VulkanInstance : IDisposable {
     private const string ENGINE_NAME = "RayBork";
     private const string DEBUG_UTILS_EXTENSION_NAME = "VK_EXT_debug_utils";
     private const string SWAPCHAIN_COLORSPACE_EXTENSION_NAME = "VK_EXT_swapchain_colorspace";
-    private const string LOADER_NAME = "the Vulkan loader (vulkan-1.dll on Windows, libvulkan.so.1 on Linux)";
 
     private readonly ILogger _logger;
 
     private Vk? _vulkan;
+    private VulkanLoader? _loader;
     private Instance _handle;
     private VulkanValidation? _validation;
     private DebugUtilsMessengerEXT _debugMessenger;
@@ -46,6 +40,7 @@ internal sealed class VulkanInstance : IDisposable {
 
     private VulkanInstance(
         Vk vulkan,
+        VulkanLoader loader,
         Instance handle,
         VulkanValidation? validation,
         DebugUtilsMessengerEXT debugMessenger,
@@ -53,6 +48,7 @@ internal sealed class VulkanInstance : IDisposable {
         bool swapchainColorSpaceExtensionEnabled,
         ILogger logger) {
         _vulkan = vulkan;
+        _loader = loader;
         _handle = handle;
         _validation = validation;
         _debugMessenger = debugMessenger;
@@ -116,7 +112,15 @@ internal sealed class VulkanInstance : IDisposable {
         ArgumentNullException.ThrowIfNull(options.SurfaceExtensions);
         ArgumentNullException.ThrowIfNull(options.Logger);
 
-        Vk vulkan = LoadApi();
+        VulkanLoader loader = VulkanLoader.Load(options.Logger);
+        Vk vulkan;
+        try {
+            vulkan = new(loader);
+        } catch {
+            loader.Dispose();
+            throw;
+        }
+
         Instance handle = default;
         VulkanValidation? validation = null;
         DebugUtilsMessengerEXT debugMessenger = default;
@@ -172,6 +176,7 @@ internal sealed class VulkanInstance : IDisposable {
 
             VulkanInstance instance = new(
                 vulkan,
+                loader,
                 handle,
                 validation,
                 debugMessenger,
@@ -187,11 +192,15 @@ internal sealed class VulkanInstance : IDisposable {
                 instance.SwapchainColorSpaceExtensionEnabled ? "enabled" : "disabled");
             return instance;
         } catch {
-            DestroyMessengerBestEffort(vulkan, handle, debugMessenger);
-            validation?.Dispose();
-            if (handle.Handle != 0) {
-                vulkan.DestroyInstance(handle, null);
-                vulkan.CurrentInstance = null;
+            try {
+                DestroyMessengerBestEffort(vulkan, handle, debugMessenger);
+                validation?.Dispose();
+                if (handle.Handle != 0) {
+                    vulkan.DestroyInstance(handle, null);
+                    vulkan.CurrentInstance = null;
+                }
+            } finally {
+                loader.Dispose();
             }
 
             throw;
@@ -219,8 +228,8 @@ internal sealed class VulkanInstance : IDisposable {
     }
 
     /// <summary>
-    /// Destroys the debug messenger and the instance. The call is idempotent and never throws for an
-    /// absent messenger.
+    /// Destroys the debug messenger, the instance, the Silk.NET API, and the native loader. The call
+    /// is idempotent and never throws for an absent messenger.
     /// </summary>
     public unsafe void Dispose() {
         if (_disposed) {
@@ -241,29 +250,15 @@ internal sealed class VulkanInstance : IDisposable {
         }
 
         Vulkan.CurrentInstance = null;
+        Vk? vulkan = _vulkan;
         _vulkan = null;
+        if (vulkan is IDisposable disposable) {
+            disposable.Dispose();
+        }
+
+        _loader?.Dispose();
+        _loader = null;
         _logger.LogDebug("Vulkan instance disposed.");
-    }
-
-    private static Vk LoadApi() {
-        Vk? vulkan = null;
-        try {
-            vulkan = Vk.GetApi();
-        } catch (Exception exception) when (exception is DllNotFoundException or SymbolLoadingException or TypeInitializationException) {
-            throw new GraphicsException(
-                $"{LOADER_FAILURE_MESSAGE_PREFIX} {LOADER_NAME} on {RuntimeInformation.OSDescription}. Install a Vulkan 1.2 driver.",
-                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                exception);
-        }
-
-        if (vulkan is null) {
-            throw new GraphicsException(
-                $"{LOADER_FAILURE_MESSAGE_PREFIX} {LOADER_NAME} on {RuntimeInformation.OSDescription}. Install a Vulkan 1.2 driver.",
-                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
-        }
-
-        return vulkan;
     }
 
     private static unsafe IReadOnlyList<string> EnumerateInstanceExtensions(Vk vulkan) {
