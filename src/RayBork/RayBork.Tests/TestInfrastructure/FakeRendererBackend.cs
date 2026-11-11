@@ -1,4 +1,5 @@
 using RayBork.Internal;
+using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests;
 
@@ -13,7 +14,7 @@ namespace RayBork.Tests;
 /// teardown queue, and is idempotent. Every recorded value except the configured properties is
 /// guarded by a lock, so a test may read it after <see cref="RayBorkApp.Run"/> returns.
 /// </remarks>
-internal sealed class FakeRendererBackend : IRendererBackend {
+internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerProvider {
     private static readonly IntPtr _instanceHandle = new(0x5EED);
 
     private readonly Lock _gate = new();
@@ -88,6 +89,12 @@ internal sealed class FakeRendererBackend : IRendererBackend {
     /// queue. The action runs on whichever thread drains the queue, not on the render thread.
     /// </summary>
     internal Action? TeardownAction { get; set; }
+
+    /// <summary>
+    /// Gets or sets the GPU asset worker the fake backend hands to the render loop. A test replaces it
+    /// with a recording fake when it drives uploads through the bridge.
+    /// </summary>
+    internal IAssetGpuWorker AssetGpuWorker { get; set; } = new FakeAssetGpuWorker();
 
     /// <summary>
     /// Gets the options passed to <see cref="Initialize"/>, or <see langword="null"/> before it ran.
@@ -266,6 +273,9 @@ internal sealed class FakeRendererBackend : IRendererBackend {
 
         return RecoverResult;
     }
+
+    /// <inheritdoc />
+    public IAssetGpuWorker CreateAssetGpuWorker() => AssetGpuWorker;
 
     /// <inheritdoc />
     public void Dispose() {
