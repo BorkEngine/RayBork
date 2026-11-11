@@ -1,6 +1,23 @@
 #nullable enable
+override RayBork.Color.Equals(object? obj) -> bool
+override RayBork.Color.GetHashCode() -> int
+override RayBork.Color.ToString() -> string!
 override RayBork.Monitor.GetHashCode() -> int
 override RayBork.Rect.GetHashCode() -> int
+RayBork.Color
+RayBork.Color.A.get -> float
+RayBork.Color.B.get -> float
+RayBork.Color.Color() -> void
+RayBork.Color.Color(float r, float g, float b) -> void
+RayBork.Color.Color(float r, float g, float b, float a) -> void
+RayBork.Color.Equals(RayBork.Color other) -> bool
+RayBork.Color.G.get -> float
+RayBork.Color.Grayscale.get -> float
+RayBork.Color.MaxColorComponent.get -> float
+RayBork.Color.R.get -> float
+RayBork.Color.this[int index].get -> float
+RayBork.Color.ToOkLab(out float l, out float a, out float b) -> void
+RayBork.Color.ToString(string? format, System.IFormatProvider? formatProvider) -> string!
 RayBork.CursorMode
 RayBork.CursorMode.Disabled = 2 -> RayBork.CursorMode
 RayBork.CursorMode.Hidden = 1 -> RayBork.CursorMode
@@ -391,6 +408,14 @@ RayBork.PlatformException
 RayBork.PlatformException.PlatformException() -> void
 RayBork.PlatformException.PlatformException(string! message) -> void
 RayBork.PlatformException.PlatformException(string! message, System.Exception? innerException) -> void
+RayBork.QuaternionExtensions
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion)
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Angle(System.Numerics.Quaternion other) -> float
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).EulerAngles.get -> System.Numerics.Vector3
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Normalized.get -> System.Numerics.Quaternion
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).RotateTowards(System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Slerp(System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).ToAngleAxis(out float angle, out System.Numerics.Vector3 axis) -> void
 RayBork.RayBorkException
 RayBork.RayBorkException.DiagnosticCode.get -> string?
 RayBork.RayBorkException.RayBorkException() -> void
@@ -414,6 +439,43 @@ RayBork.Rect.X.get -> float
 RayBork.Rect.X.init -> void
 RayBork.Rect.Y.get -> float
 RayBork.Rect.Y.init -> void
+RayBork.Transform
+RayBork.Transform.Forward.get -> System.Numerics.Vector3
+RayBork.Transform.Inverse() -> RayBork.Transform
+RayBork.Transform.Position.get -> System.Numerics.Vector3
+RayBork.Transform.Position.set -> void
+RayBork.Transform.Right.get -> System.Numerics.Vector3
+RayBork.Transform.Rotation.get -> System.Numerics.Quaternion
+RayBork.Transform.Rotation.set -> void
+RayBork.Transform.Scale.get -> System.Numerics.Vector3
+RayBork.Transform.Scale.set -> void
+RayBork.Transform.ToMatrix() -> System.Numerics.Matrix4x4
+RayBork.Transform.Transform() -> void
+RayBork.Transform.Transform(System.Numerics.Vector3 position) -> void
+RayBork.Transform.Transform(System.Numerics.Vector3 position, System.Numerics.Quaternion rotation, System.Numerics.Vector3 scale) -> void
+RayBork.Transform.TransformDirection(System.Numerics.Vector3 direction) -> System.Numerics.Vector3
+RayBork.Transform.TransformPoint(System.Numerics.Vector3 point) -> System.Numerics.Vector3
+RayBork.Transform.Up.get -> System.Numerics.Vector3
+RayBork.Transform.WithParent(RayBork.Transform parent) -> RayBork.Transform
+RayBork.Transform.WithPosition(System.Numerics.Vector3 position) -> RayBork.Transform
+RayBork.Transform.WithRotation(System.Numerics.Quaternion rotation) -> RayBork.Transform
+RayBork.Transform.WithScale(System.Numerics.Vector3 scale) -> RayBork.Transform
+RayBork.Vector3Extensions
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3)
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Angle(System.Numerics.Vector3 other) -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).ClampMagnitude(float maxLength) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Magnitude.get -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Normalized.get -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Project(System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).ProjectOnPlane(System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Reflect(System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Rotated(System.Numerics.Quaternion rotation) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).SignedAngle(System.Numerics.Vector3 other, System.Numerics.Vector3 axis) -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).SqrMagnitude.get -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithX(float x) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithY(float y) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithZ(float z) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Xz.get -> System.Numerics.Vector3
 RayBork.WindowException
 RayBork.WindowException.WindowException() -> void
 RayBork.WindowException.WindowException(string! message) -> void
@@ -425,12 +487,83 @@ RayBork.WindowState.Hidden = 5 -> RayBork.WindowState
 RayBork.WindowState.Maximized = 2 -> RayBork.WindowState
 RayBork.WindowState.Minimized = 1 -> RayBork.WindowState
 RayBork.WindowState.Normal = 0 -> RayBork.WindowState
+static RayBork.Color.FromOkLab(float l, float a, float b, float alpha = 1) -> RayBork.Color
+static RayBork.Color.HSVToRGB(float h, float s, float v) -> RayBork.Color
+static RayBork.Color.HSVToRGB(float h, float s, float v, bool hdr) -> RayBork.Color
+static RayBork.Color.implicit operator RayBork.Color(System.Numerics.Vector4 value) -> RayBork.Color
+static RayBork.Color.implicit operator System.Numerics.Vector4(RayBork.Color color) -> System.Numerics.Vector4
+static RayBork.Color.Lerp(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.LerpOkLab(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.LerpOkLabUnclamped(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.LerpUnclamped(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.operator *(float a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator *(RayBork.Color a, float b) -> RayBork.Color
+static RayBork.Color.operator *(RayBork.Color a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator +(RayBork.Color a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator -(RayBork.Color a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator /(RayBork.Color a, float b) -> RayBork.Color
+static RayBork.Color.RGBToHSV(RayBork.Color rgb, out float h, out float s, out float v) -> void
 static RayBork.EngineVersion.Current.get -> System.Version!
 static RayBork.Monitor.operator !=(RayBork.Monitor left, RayBork.Monitor right) -> bool
 static RayBork.Monitor.operator ==(RayBork.Monitor left, RayBork.Monitor right) -> bool
+static RayBork.QuaternionExtensions.Angle(this System.Numerics.Quaternion value, System.Numerics.Quaternion other) -> float
+static RayBork.QuaternionExtensions.AngleAxis(float degrees, System.Numerics.Vector3 axis) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.Euler(float x, float y, float z) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).AngleAxis(float degrees, System.Numerics.Vector3 axis) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Euler(float x, float y, float z) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).FromToRotation(System.Numerics.Vector3 from, System.Numerics.Vector3 to) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).LookRotation(System.Numerics.Vector3 forward, System.Numerics.Vector3 upwards) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.FromToRotation(System.Numerics.Vector3 from, System.Numerics.Vector3 to) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.get_EulerAngles(System.Numerics.Quaternion value) -> System.Numerics.Vector3
+static RayBork.QuaternionExtensions.get_Normalized(System.Numerics.Quaternion value) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.LookRotation(System.Numerics.Vector3 forward, System.Numerics.Vector3 upwards) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.RotateTowards(this System.Numerics.Quaternion value, System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.Slerp(this System.Numerics.Quaternion value, System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.ToAngleAxis(this System.Numerics.Quaternion value, out float angle, out System.Numerics.Vector3 axis) -> void
 static RayBork.Rect.FromSize(float width, float height) -> RayBork.Rect
 static RayBork.Rect.operator !=(RayBork.Rect left, RayBork.Rect right) -> bool
 static RayBork.Rect.operator ==(RayBork.Rect left, RayBork.Rect right) -> bool
+static RayBork.Transform.Identity.get -> RayBork.Transform
+static RayBork.Transform.Lerp(RayBork.Transform a, RayBork.Transform b, float t) -> RayBork.Transform
+static RayBork.Vector3Extensions.Angle(this System.Numerics.Vector3 value, System.Numerics.Vector3 other) -> float
+static RayBork.Vector3Extensions.ClampMagnitude(this System.Numerics.Vector3 value, float maxLength) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Back.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Down.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Forward.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Left.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Right.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Up.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Back() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Down() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Forward() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Left() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Magnitude(System.Numerics.Vector3 value) -> float
+static RayBork.Vector3Extensions.get_Normalized(System.Numerics.Vector3 value) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Right() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_SqrMagnitude(System.Numerics.Vector3 value) -> float
+static RayBork.Vector3Extensions.get_Up() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Xz(System.Numerics.Vector3 value) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.Project(this System.Numerics.Vector3 value, System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.ProjectOnPlane(this System.Numerics.Vector3 value, System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.Reflect(this System.Numerics.Vector3 value, System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.Rotated(this System.Numerics.Vector3 value, System.Numerics.Quaternion rotation) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.SignedAngle(this System.Numerics.Vector3 value, System.Numerics.Vector3 other, System.Numerics.Vector3 axis) -> float
+static RayBork.Vector3Extensions.WithX(this System.Numerics.Vector3 value, float x) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.WithY(this System.Numerics.Vector3 value, float y) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.WithZ(this System.Numerics.Vector3 value, float z) -> System.Numerics.Vector3
+static readonly RayBork.Color.Black -> RayBork.Color
+static readonly RayBork.Color.Blue -> RayBork.Color
+static readonly RayBork.Color.Clear -> RayBork.Color
+static readonly RayBork.Color.Cyan -> RayBork.Color
+static readonly RayBork.Color.DarkCyan -> RayBork.Color
+static readonly RayBork.Color.Gray -> RayBork.Color
+static readonly RayBork.Color.Green -> RayBork.Color
+static readonly RayBork.Color.Grey -> RayBork.Color
+static readonly RayBork.Color.Magenta -> RayBork.Color
+static readonly RayBork.Color.Red -> RayBork.Color
+static readonly RayBork.Color.Transparent -> RayBork.Color
+static readonly RayBork.Color.White -> RayBork.Color
+static readonly RayBork.Color.Yellow -> RayBork.Color
 ~override RayBork.Monitor.Equals(object obj) -> bool
 ~override RayBork.Monitor.ToString() -> string
 ~override RayBork.Rect.Equals(object obj) -> bool
