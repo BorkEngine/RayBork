@@ -1,29 +1,219 @@
+using System.Globalization;
+using Microsoft.Extensions.Logging;
 using RayBork;
-using SDL3;
 
 namespace HelloInterop;
 
 internal static class Program {
-    private static int Main() {
-        Console.WriteLine($"RayBork {EngineVersion.Current}");
+    private const int EXIT_SUCCESS = 0;
+    private const int EXIT_FAILURE = 1;
+    private const int EXIT_INVALID_ARGUMENTS = 2;
+    private const int DEFAULT_FRAMES = 0;
+    private const int DEFAULT_WIDTH = 1280;
+    private const int DEFAULT_HEIGHT = 720;
+    private const string DEFAULT_TITLE = "HelloInterop";
+    private const LogLevel DEFAULT_LOG_LEVEL = LogLevel.Information;
 
-        if (!SDL.Init((SDL.InitFlags)0)) {
-            Console.Error.WriteLine($"SDL initialization failed: {SDL.GetError()}");
-            return 1;
+    private const string USAGE_TEXT = """
+        HelloInterop - RayBork M1 diagnostic host
+
+        Usage:
+          HelloInterop [options]
+
+        Options:
+          --frames N        Run N ticks, then exit; 0 runs until close (default: 0).
+          --title TEXT      Window title (default: HelloInterop).
+          --size WxH        Window client size; both values positive (default: 1280x720).
+          --log-level NAME  Minimum log level: Trace, Debug, Information, Warning, Error,
+                            Critical, or None (default: Information).
+          --help            Show this help and exit.
+
+        Controls:
+          Escape            Request exit.
+          Space, Enter, Tab, F1, F11, F12
+                            Logged as key presses.
+          Mouse             Button edges and the vertical wheel are logged.
+          Gamepad           Connect/disconnect and South/East/West/North/shoulder/Start
+                            button edges are logged.
+
+        Exit codes:
+          0  Success.
+          1  The app failed to run.
+          2  Invalid command line.
+
+        Examples:
+          HelloInterop --frames 30
+          HelloInterop --size 960x540 --title "M1 host" --log-level Debug
+          SDL_VIDEODRIVER=dummy HelloInterop --frames 30
+        """;
+
+    internal static int Main(string[] args) {
+        if (!TryParseCommandLine(args, out CommandLineOptions options, out string error)) {
+            Console.Error.WriteLine(error);
+            Console.Error.WriteLine();
+            Console.Error.WriteLine(USAGE_TEXT);
+            return EXIT_INVALID_ARGUMENTS;
+        }
+
+        if (options.ShowHelp) {
+            Console.Out.WriteLine(USAGE_TEXT);
+            return EXIT_SUCCESS;
         }
 
         try {
-            int version = SDL.GetVersion();
-            int major = version / 1_000_000;
-            int minor = version / 1_000 % 1_000;
-            int patch = version % 1_000;
+            HelloGame game = new(options.Frames);
+            using var app = new RayBorkAppBuilder()
+                .WithGame(game)
+                .WithTitle(options.Title)
+                .WithSize(options.Width, options.Height)
+                .WithResizable(true)
+                .WithTargetFps(60)
+                .WithMaxDeltaTime(0.25)
+                .WithLogLevel(options.LogLevel)
+                .Build();
 
-            Console.WriteLine($"SDL {major}.{minor}.{patch}");
-            Console.WriteLine($"SDL revision {SDL.GetRevision()}");
-        } finally {
-            SDL.Quit();
+            app.Run();
+            return EXIT_SUCCESS;
+        } catch (Exception exception) {
+            Console.Error.WriteLine($"HelloInterop failed: {exception}");
+            return EXIT_FAILURE;
+        }
+    }
+
+    private static bool TryParseCommandLine(
+        string[] args,
+        out CommandLineOptions options,
+        out string error) {
+        int frames = DEFAULT_FRAMES;
+        string title = DEFAULT_TITLE;
+        int width = DEFAULT_WIDTH;
+        int height = DEFAULT_HEIGHT;
+        LogLevel logLevel = DEFAULT_LOG_LEVEL;
+        bool showHelp = false;
+        error = string.Empty;
+
+        for (int i = 0; i < args.Length; i++) {
+            string argument = args[i];
+            switch (argument) {
+                case "--help":
+                    showHelp = true;
+                    break;
+                case "--frames":
+                    if (!TryTakeValue(args, ref i, argument, out string framesValue, out error)) {
+                        options = default!;
+                        return false;
+                    }
+
+                    if (!int.TryParse(framesValue, NumberStyles.None, CultureInfo.InvariantCulture, out frames)) {
+                        error = $"Invalid value for --frames: '{framesValue}'. Expected a non-negative integer.";
+                        options = default!;
+                        return false;
+                    }
+
+                    break;
+                case "--title":
+                    if (!TryTakeValue(args, ref i, argument, out string titleValue, out error)) {
+                        options = default!;
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(titleValue)) {
+                        error = "Invalid value for --title: the title must not be empty or whitespace.";
+                        options = default!;
+                        return false;
+                    }
+
+                    title = titleValue;
+                    break;
+                case "--size":
+                    if (!TryTakeValue(args, ref i, argument, out string sizeValue, out error)) {
+                        options = default!;
+                        return false;
+                    }
+
+                    if (!TryParseSize(sizeValue, out width, out height)) {
+                        error = $"Invalid value for --size: '{sizeValue}'. Expected WxH with both values positive.";
+                        options = default!;
+                        return false;
+                    }
+
+                    break;
+                case "--log-level":
+                    if (!TryTakeValue(args, ref i, argument, out string levelValue, out error)) {
+                        options = default!;
+                        return false;
+                    }
+
+                    if (!TryParseLogLevel(levelValue, out logLevel)) {
+                        error = $"Invalid value for --log-level: '{levelValue}'. Expected a defined LogLevel name.";
+                        options = default!;
+                        return false;
+                    }
+
+                    break;
+                default:
+                    error = $"Unknown argument: '{argument}'.";
+                    options = default!;
+                    return false;
+            }
         }
 
-        return 0;
+        options = new CommandLineOptions(frames, title, width, height, logLevel, showHelp);
+        return true;
     }
+
+    private static bool TryTakeValue(
+        string[] args,
+        ref int index,
+        string option,
+        out string value,
+        out string error) {
+        if (index + 1 >= args.Length) {
+            value = string.Empty;
+            error = $"Missing value for {option}.";
+            return false;
+        }
+
+        index++;
+        value = args[index];
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool TryParseSize(string value, out int width, out int height) {
+        width = 0;
+        height = 0;
+
+        int separator = value.IndexOfAny(['x', 'X']);
+        if (separator <= 0
+            || separator != value.LastIndexOfAny(['x', 'X'])
+            || separator == value.Length - 1) {
+            return false;
+        }
+
+        return int.TryParse(value.AsSpan(0, separator), NumberStyles.None, CultureInfo.InvariantCulture, out width)
+            && int.TryParse(value.AsSpan(separator + 1), NumberStyles.None, CultureInfo.InvariantCulture, out height)
+            && width > 0
+            && height > 0;
+    }
+
+    private static bool TryParseLogLevel(string value, out LogLevel level) {
+        foreach (string name in Enum.GetNames<LogLevel>()) {
+            if (string.Equals(name, value, StringComparison.OrdinalIgnoreCase)) {
+                level = Enum.Parse<LogLevel>(name);
+                return true;
+            }
+        }
+
+        level = default;
+        return false;
+    }
+
+    private sealed record CommandLineOptions(
+        int Frames,
+        string Title,
+        int Width,
+        int Height,
+        LogLevel LogLevel,
+        bool ShowHelp);
 }

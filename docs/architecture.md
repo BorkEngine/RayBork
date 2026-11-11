@@ -1,8 +1,9 @@
 # RayBork Architecture
 
-Status: design draft for M1 onward, 2026-11-11. M0 establishes the build, dependency, and AOT
-guardrails and adds no renderer code. This document describes the runtime shape the
-[API reference](api.md) and [roadmap](roadmap.md) assume. It is not an as-built document yet.
+Status: M1 as-built for the host, platform, threads, frame handoff, and time, 2026-11-11. M0
+established the build, dependency, and AOT guardrails. M1 ships the app host, dedicated tick
+thread, SDL3 window/input/platform seam, a no-GPU render-thread frame consumer, time/pacing, and
+logging. The renderer-backend sections remain the M2 design and are not shipped yet.
 
 ## Goals
 
@@ -31,7 +32,7 @@ RayBork.Engine ─────> Silk.NET.Vulkan, SDL3-CS, PolyType, Nerdbank.Mes
                       Microsoft.Extensions.Logging, ZLogger
                       System.IO.Compression.Zstandard* (in-box, net11.0)
 RayBork.Bake  ──────> RayBork.Engine (pack writer/types), shaderc, image/font/model tooling (JIT)
-samples/HelloInterop -> RayBork.Engine (M0: loads SDL3, opens no window, exits)
+samples/HelloInterop -> RayBork.Engine (M1: window/input/logging diagnostic host, Native AOT)
 Samples (M11) ──────> RayBork.Engine
 ```
 
@@ -40,7 +41,7 @@ Samples (M11) ──────> RayBork.Engine
 | `RayBork.Engine` | Public API and all runtime internals: app host, SDL3 platform, renderer seam and Vulkan backend, asset catalog, pack reader, font/MSDF, input, logging. Native AOT compatible. |
 | `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, pack writer, incremental manifest. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/HelloInterop` | M0 Native AOT interop host: loads SDL3, opens no window, and exits. It exercises the AOT publish path on `win-x64` and `linux-x64` before the renderer exists. |
+| `samples/HelloInterop` | M1 diagnostic host: opens an SDL3 window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It exercises the AOT publish path on `win-x64` and `linux-x64` before the renderer exists. |
 | `samples/` | Castle, Pong, Text, Instancing, RenderTarget (M11). Each has assets, a bake step, and a Native AOT publish target. |
 
 Rules:
@@ -67,13 +68,13 @@ policy.
 
 | Package | Version | Purpose | AOT status |
 | --- | --- | --- | --- |
-| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, and events | Exercised end to end by the M0 `samples/HelloInterop` AOT host on `win-x64` and `linux-x64`. |
-| `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same M0 host on both RIDs. |
+| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, and events | Exercised end to end by the M1 `samples/HelloInterop` AOT host on `win-x64` and `linux-x64`. |
+| `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same M1 host on both RIDs. |
 | `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the M2 backend | Pinned and in the AOT publish graph; feature-level AOT validation lands with the M2 backend. |
 | `PolyType` | 1.4.1 | Compiled shapes for custom TOML data | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
 | `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack entries | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
-| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Pinned and in the AOT publish graph; feature-level AOT validation lands in M1. |
-| `ZLogger` | 2.6.1 | Default console logging provider | Pinned and in the AOT publish graph; feature-level AOT validation lands in M1. |
+| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M1 AOT host on both RIDs. |
+| `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M1 AOT host on both RIDs. |
 | `System.IO.Compression.Zstandard*` | in-box `net11.0` | Zstandard pack payload compression | Part of the .NET 11 shared framework; no package and no separate AOT gate. |
 
 **Test and tooling dependencies** (JIT only; outside the runtime publish graph):
@@ -86,17 +87,52 @@ policy.
 | `Microsoft.NET.Test.Sdk` | 18.11.1 | Test | Test host and MSBuild integration | JIT only; not in the runtime publish graph. |
 | `Moq` | 4.21.0 | Test | Mocking for unit tests | JIT only; not in the runtime publish graph. |
 
-Only SDL3 is exercised end to end in M0. The other runtime packages are pinned and remain in the
-AOT publish graph without AOT/trim warnings, but the features that use them are first validated by
-the milestone that calls them: logging in M1, Vulkan in M2, and PolyType/MessagePack in M3. M0 adds
-no renderer code, no Vulkan initialization, and no asset pipeline. The bake's source-format tooling
-(shaderc and the image/font/model libraries) is added in M3; it is JIT only and never enters the
-runtime publish graph, so this matrix gains its pinned versions when M3 selects them.
+SDL3 and logging are exercised end to end by the M1 `samples/HelloInterop` AOT host. The other
+runtime packages are pinned and remain in the AOT publish graph without AOT/trim warnings, but the
+features that use them are first validated by the milestone that calls them: Vulkan in M2 and
+PolyType/MessagePack in M3. M1 adds no renderer code, no Vulkan initialization, and no asset
+pipeline. The bake's source-format tooling (shaderc and the image/font/model libraries) is added in
+M3; it is JIT only and never enters the runtime publish graph, so this matrix gains its pinned
+versions when M3 selects them.
+
+## Platform seam (M1)
+
+The host talks to SDL3 only through two internal interfaces:
+
+| Interface | Thread | Contract |
+| --- | --- | --- |
+| `IEnginePlatform` | Main for `Initialize`, `Pump`, and `Dispose`; Tick for `CaptureInput` and the vibration queue | Owns SDL initialization, the window, the event pump, monitor snapshots, gamepad reconciliation, and queued rumble. Exposes `IWindow` and returns a new `IInput` snapshot per capture. |
+| `IPlatformWindow` | Main for commands and snapshots; Tick for `BeginTick` | Extends `IWindow` with `ApplyPendingCommands` and `BeginTick` so the host can promote pending resize state at a tick boundary. |
+
+The M1 implementation:
+
+- `SdlPlatform` initializes SDL with the video, events, and gamepad subsystems, creates the window,
+  starts text input, refreshes monitors, applies the startup window state, and opens connected
+  gamepads. It runs those operations on the process main thread.
+- `Pump` applies queued window commands and rumble requests, waits at most one short pump interval
+  for an event, drains the rest, and reconciles gamepads. Window, display, close, focus, and
+  gamepad device events are handled by the platform; input events go to `SdlInput`.
+- `SdlWindow` keeps getter snapshots under a `Lock`. Every setter queues a command instead of
+  calling SDL. `WindowCommandQueue` coalesces setter commands of the same kind in place, keeps
+  action commands in order, and validates arguments on the caller. `BeginTick` promotes a pending
+  resize to `WasResized` for exactly one tick. Clipboard reads return the cached value and queue a
+  main-thread refresh.
+- `SdlInput` writes keyboard, mouse, text, and gamepad events into `InputState` under a `Lock`.
+  `CaptureInput` runs on the tick thread, clones the level and edge arrays, and clears the per-tick
+  text, mouse delta, wheel, and edge sets in the same critical section. A gamepad handle is stable
+  per SDL instance id; `Input.Gamepads` contains the pads connected for the current tick.
+- Gamepad hotplug is reconciled on SDL gamepad-added/removed events and polled every 0.25 seconds.
+  Buttons, sticks, and triggers are seeded from the initial device poll; vibration requests are
+  queued to the main thread, so the tick thread never calls SDL directly.
+- The test project substitutes `FakeEnginePlatform`, `FakePlatformWindow`, and `FakeInput` (see
+  `src/RayBork/RayBork.Tests/TestInfrastructure`) to run lifecycle, timer, and logging tests without
+  a display or a wall-clock wait.
+- No SDL type or native handle appears in the public API.
 
 ## Renderer backend seam
 
-M0 adds no renderer code. The seam below is the design M2 implements; `IRendererBackend` is internal
-and does not exist in the M0 assembly.
+M1 adds no renderer backend. The seam below is the design M2 implements; `IRendererBackend` is
+internal and does not exist in the M1 assembly.
 
 The public API is renderer-agnostic. Internally, the render thread talks to the `IRendererBackend`
 contract, which owns:
@@ -166,27 +202,28 @@ presented.
 
 | Thread | Owns | Notes |
 | --- | --- | --- |
-| Main / window thread | SDL3 initialization, window, event pump, monitor and clipboard state, native surface creation | Runs `RayBorkApp.Run`. The process main thread. No game callbacks. |
-| Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; cameras; shader state; per-frame input snapshot | Dedicated thread. The game-facing engine state is tick-thread affine. |
-| Render thread | Backend device/swapchain, pipelines, descriptor sets, buffers, command buffers, GPU uploads, present, recovery | Consumes sealed frame packets. Never calls user code. |
-| Asset loader | Pack I/O, decompression, deserialization, CPU decode | Completes loads; hands GPU upload requests to the render thread. |
+| Main / window thread | SDL3 initialization, window, event pump, monitor and clipboard snapshots, queued window commands, gamepad reconciliation | Runs `RayBorkApp.Run`. The process main thread. No game callbacks. |
+| Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; input snapshot; frame publication | Dedicated thread. The game-facing engine state is tick-thread affine. |
+| Render thread | The newest published frame lease; releases it after consuming | M1 consumes and releases frames without GPU work. M2 adds the backend, device, swapchain, present, and recovery. Never calls user code. |
+| Asset loader | Pack I/O, decompression, deserialization, CPU decode (M3) | No loader thread exists in M1; M3 adds it and hands GPU upload requests to the render thread. |
 | Sound thread | Audio mixer (post-1.0) | Not present in v1. |
 
-Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, `RayBork.Render`,
-`RayBork.Asset`, `RayBork.Audio`.
+Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, and `RayBork.Render`. M3 adds
+`RayBork.Asset`; the post-1.0 audio milestone adds `RayBork.Audio`.
 
 ### Thread-affine state
 
-- `IGame` callbacks and every object created by them (`Camera`, `RenderTexture`, `Font`
-  preloading, `Shader.SetUniform`) are tick-thread affine.
-- `IAssetCatalog.Load`, `LoadData`, and `Exists` are thread-safe. Concurrent loads are allowed.
-  Engine assets may be used on the tick thread after completion; custom data returned by the same
-  `Load<T>` method is caller-owned. Custom types must be registered with `WithAssetType<T>()`
-  before `Build`.
-- `EngineContext.Time`, `DeltaTime`, `FrameCount`, `Fps`, and `Stats` are snapshots for the
-  current tick. They are not synchronization primitives.
-- `IInput` and `IWindow` getters return the last confirmed snapshot and are safe to read from
-  the tick thread. Window setters are queued to the main thread.
+- `IGame` callbacks run on the tick thread. Every object created by them (`Camera` in M4,
+  `RenderTexture` in M8, `Font` preloading in M6, `Shader.SetUniform` in M4) is tick-thread affine.
+- M3 adds `IAssetCatalog.Load`, `LoadData`, and `Exists` as thread-safe calls with concurrent loads
+  allowed. Engine assets may be used on the tick thread after completion; custom data returned by
+  the same `Load<T>` method is caller-owned. Custom types must be registered with
+  `WithAssetType<T>()` before `Build`.
+- `EngineContext.Time`, `DeltaTime`, `FrameCount`, and `Fps` are snapshots for the current tick.
+  They are not synchronization primitives. `Stats` joins them in M2.
+- `IInput` getters read the tick snapshot and are tick-thread only. `IWindow` getters return the
+  last confirmed snapshot and are safe to read from any thread; window setters are queued to the
+  main thread.
 - Renderer backend objects are internal. No public type is a Vulkan handle.
 - `ILoggerFactory` is safe to use from any thread; the app owns the default factory.
 - If user code starts its own threads, it must join them before `Tick` returns. RayBork does not
@@ -207,12 +244,15 @@ public async Task Setup(EngineContext ctx) {
 }
 ```
 
+The asset calls in this example arrive in M3; the continuation rule is already M1.
 `ConfigureAwait(false)` opts out of the context and may resume on a pool thread. Asset calls are
 still safe there, but tick-affine objects must not be touched from that continuation.
 
 ## Frame handoff
 
-The tick and render threads run concurrently. The render thread draws the previous completed tick.
+The tick and render threads run concurrently. M1 ships the handoff skeleton: the tick thread
+publishes a sealed frame, and the render thread consumes the newest frame without GPU work. M2
+replaces the consumer body with the renderer backend's record/submit/present path.
 
 ```text
 tick thread                                  render thread
@@ -220,35 +260,35 @@ tick thread                                  render thread
 wait for a free slot
 snapshot input / advance clock
 IGame.Tick(ctx)
-  camera 1: record draws -> slot
-  camera 1: Dispose -> seal pass
-  camera 2: ...
 seal slot, publish as newest ready
                                               wait for newest ready
-                                              plan passes, build batches
-                                              record command buffer
-                                              submit, present
-                                              release slot on fence signal
+                                              take the newest ready frame
+                                              consume and release the slot
 ```
 
 - The ring has three slots. A tick blocks only when all three are occupied; this bounds run-ahead.
-- A newer publish supersedes an older `Ready` slot, never a slot that is being rendered.
-- The renderer always draws the newest completed tick. It does not queue a backlog of stale frames.
-- A tick that requests exit still publishes its final frame.
-- A frame with no camera still presents a cleared image, so the swapchain never starves.
+- A newer publish supersedes an older `Ready` slot, never a slot that is being consumed.
+- The consumer always takes the newest completed tick. It does not queue a backlog of stale frames.
+- A tick that requests exit still publishes its final frame before `IGame.Shutdown` runs. In M1 the
+  render thread consumes and releases it during teardown; there is no GPU work.
+- M1 frames contain no cameras, draw commands, or GPU work. M2 adds the camera packet and the
+  cleared-background present path; M4 adds mesh draws.
 - The engine does not interpolate between ticks in v1. Movement at a tick rate below the display
   rate will show discrete steps. Fixed timestep with interpolation is a later milestone.
-- When the window is minimized or unfocused, the tick loop continues at a **30 FPS cap**;
-  the renderer may idle while the swapchain has no extent.
+- When the window is minimized or unfocused, the tick loop continues at a **30 FPS cap**. The M1
+  consumer has no swapchain to idle; M2 may idle the renderer while the swapchain has no extent.
 
 ## Time
 
 - `EngineContext.Time` is absolute monotonic seconds since `Run` started, measured with
-  `Stopwatch`. It is not the sum of `DeltaTime`.
+  `Stopwatch`. It is live during `Setup`; a tick sees the value captured at the start of the tick.
+  It is not the sum of `DeltaTime`.
 - `EngineContext.DeltaTime` is the elapsed seconds since the previous tick, clamped to
   `MaxDeltaTime`.
 - `EngineContext.UnscaledDeltaTime` is the unclamped value.
-- The first tick reports `DeltaTime = 0`.
+- The first tick reports `DeltaTime = 0` and `UnscaledDeltaTime = 0`.
+- `EngineContext.Fps` is the tick rate averaged over a 1-second sliding window. It is `0` before
+  two ticks have been sampled.
 - `MaxDeltaTime` is configured on the builder and defaults to `0.25` seconds.
 - `Time` continues across a long stall; `DeltaTime` does not. Games that need a stall-free clock
   should accumulate `DeltaTime` themselves.
@@ -377,10 +417,10 @@ specified in the API reference's tooling section.
 - `Load<T>` maps built-in engine asset types with a closed type switch; custom data uses a
   builder-registered compiled shape delegate. `LoadData` covers opaque bytes.
 - `Microsoft.Extensions.Logging` and ZLogger are AOT-gated runtime dependencies; M1 is their first
-  feature-level gate.
-- M0 validates SDL3 end to end with the `samples/HelloInterop` AOT host. The other runtime
-  packages are in the M0 publish graph and are feature-validated in M1 (logging), M2 (Vulkan), and
-  M3 (PolyType/MessagePack).
+  feature-level gate and exercises them on both RIDs.
+- M1 validates SDL3 and logging end to end with the `samples/HelloInterop` AOT host. The other
+  runtime packages are in the M1 publish graph and are feature-validated in M2 (Vulkan) and M3
+  (PolyType/MessagePack).
 - P/Invoke is direct; native SDL3 and Vulkan libraries are deployed per RID.
 - The generic asset loader maps a closed set of built-in types; custom data goes through the
   `WithAssetType<T>()` registry or `LoadData`.
@@ -395,10 +435,13 @@ specified in the API reference's tooling section.
 2. A `Camera` is valid only between `CreateCamera` and `Dispose`, inside one `Tick`.
 3. A frame packet owns a reference to every engine asset it references.
 4. Shader state is captured at draw time; later mutation cannot change a recorded draw.
-5. The renderer draws the newest completed tick, never a stale queue.
+5. The render thread consumes the newest completed tick, never a stale queue.
 6. Public API never exposes a native handle or a backend type.
 7. A game assembly published with `PublishAot=true` must start, load a pack, draw, and shut down.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
 10. The engine's built-in assets are always mounted, so an empty game can clear the screen.
 11. Only one RayBork app runs per process in v1.
+
+Invariants 2-4, 7, 8, and 10 describe the renderer and asset milestones; M1 enforces 1, 5, 6, and
+11.

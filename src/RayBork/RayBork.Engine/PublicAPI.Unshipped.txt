@@ -1,3 +1,588 @@
 #nullable enable
+override RayBork.Color.Equals(object? obj) -> bool
+override RayBork.Color.GetHashCode() -> int
+override RayBork.Color.ToString() -> string!
+override RayBork.Monitor.GetHashCode() -> int
+override RayBork.Rect.GetHashCode() -> int
+RayBork.Color
+RayBork.Color.A.get -> float
+RayBork.Color.B.get -> float
+RayBork.Color.Color() -> void
+RayBork.Color.Color(float r, float g, float b) -> void
+RayBork.Color.Color(float r, float g, float b, float a) -> void
+RayBork.Color.Equals(RayBork.Color other) -> bool
+RayBork.Color.G.get -> float
+RayBork.Color.Grayscale.get -> float
+RayBork.Color.MaxColorComponent.get -> float
+RayBork.Color.R.get -> float
+RayBork.Color.this[int index].get -> float
+RayBork.Color.ToOkLab(out float l, out float a, out float b) -> void
+RayBork.Color.ToString(string? format, System.IFormatProvider? formatProvider) -> string!
+RayBork.CursorMode
+RayBork.CursorMode.Disabled = 2 -> RayBork.CursorMode
+RayBork.CursorMode.Hidden = 1 -> RayBork.CursorMode
+RayBork.CursorMode.Normal = 0 -> RayBork.CursorMode
+RayBork.EngineContext
+RayBork.EngineContext.DeltaTime.get -> double
+RayBork.EngineContext.Fps.get -> double
+RayBork.EngineContext.FrameCount.get -> long
+RayBork.EngineContext.Input.get -> RayBork.IInput!
+RayBork.EngineContext.IsExiting.get -> bool
+RayBork.EngineContext.IsFirstTick.get -> bool
+RayBork.EngineContext.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory!
+RayBork.EngineContext.MaxDeltaTime.get -> double
+RayBork.EngineContext.RequestExit() -> void
+RayBork.EngineContext.Time.get -> double
+RayBork.EngineContext.UnscaledDeltaTime.get -> double
+RayBork.EngineContext.Window.get -> RayBork.IWindow!
 RayBork.EngineVersion
+RayBork.GameException
+RayBork.GameException.GameException() -> void
+RayBork.GameException.GameException(string! message) -> void
+RayBork.GameException.GameException(string! message, System.Exception? innerException) -> void
+RayBork.GamepadAxis
+RayBork.GamepadAxis.LeftX = 0 -> RayBork.GamepadAxis
+RayBork.GamepadAxis.LeftY = 1 -> RayBork.GamepadAxis
+RayBork.GamepadAxis.RightX = 2 -> RayBork.GamepadAxis
+RayBork.GamepadAxis.RightY = 3 -> RayBork.GamepadAxis
+RayBork.GamepadButton
+RayBork.GamepadButton.Back = 4 -> RayBork.GamepadButton
+RayBork.GamepadButton.DpadDown = 12 -> RayBork.GamepadButton
+RayBork.GamepadButton.DpadLeft = 13 -> RayBork.GamepadButton
+RayBork.GamepadButton.DpadRight = 14 -> RayBork.GamepadButton
+RayBork.GamepadButton.DpadUp = 11 -> RayBork.GamepadButton
+RayBork.GamepadButton.East = 1 -> RayBork.GamepadButton
+RayBork.GamepadButton.Guide = 5 -> RayBork.GamepadButton
+RayBork.GamepadButton.LeftShoulder = 9 -> RayBork.GamepadButton
+RayBork.GamepadButton.LeftStick = 7 -> RayBork.GamepadButton
+RayBork.GamepadButton.Misc1 = 15 -> RayBork.GamepadButton
+RayBork.GamepadButton.Misc2 = 21 -> RayBork.GamepadButton
+RayBork.GamepadButton.Misc3 = 22 -> RayBork.GamepadButton
+RayBork.GamepadButton.North = 3 -> RayBork.GamepadButton
+RayBork.GamepadButton.RightShoulder = 10 -> RayBork.GamepadButton
+RayBork.GamepadButton.RightStick = 8 -> RayBork.GamepadButton
+RayBork.GamepadButton.South = 0 -> RayBork.GamepadButton
+RayBork.GamepadButton.Start = 6 -> RayBork.GamepadButton
+RayBork.GamepadButton.Touchpad = 20 -> RayBork.GamepadButton
+RayBork.GamepadButton.West = 2 -> RayBork.GamepadButton
+RayBork.GamepadTrigger
+RayBork.GamepadTrigger.Left = 0 -> RayBork.GamepadTrigger
+RayBork.GamepadTrigger.Right = 1 -> RayBork.GamepadTrigger
+RayBork.IGame
+RayBork.IGame.Setup(RayBork.EngineContext! context) -> System.Threading.Tasks.Task!
+RayBork.IGame.Shutdown() -> System.Threading.Tasks.Task!
+RayBork.IGame.Tick(RayBork.EngineContext! context) -> void
+RayBork.IGamepad
+RayBork.IGamepad.GetAxis(RayBork.GamepadAxis axis) -> float
+RayBork.IGamepad.GetTrigger(RayBork.GamepadTrigger trigger) -> float
+RayBork.IGamepad.Index.get -> int
+RayBork.IGamepad.InstanceId.get -> int
+RayBork.IGamepad.IsButtonDown(RayBork.GamepadButton button) -> bool
+RayBork.IGamepad.IsButtonPressed(RayBork.GamepadButton button) -> bool
+RayBork.IGamepad.IsButtonReleased(RayBork.GamepadButton button) -> bool
+RayBork.IGamepad.IsConnected.get -> bool
+RayBork.IGamepad.Name.get -> string!
+RayBork.IGamepad.SetVibration(float lowFrequency, float highFrequency, double seconds) -> void
+RayBork.IGamepad.StopVibration() -> void
+RayBork.IInput
+RayBork.IInput.Gamepads.get -> System.Collections.Generic.IReadOnlyList<RayBork.IGamepad!>!
+RayBork.IInput.GetGamepad(int index) -> RayBork.IGamepad?
+RayBork.IInput.IsKeyDown(RayBork.Key key) -> bool
+RayBork.IInput.IsKeyPressed(RayBork.Key key) -> bool
+RayBork.IInput.IsKeyPressedRepeat(RayBork.Key key) -> bool
+RayBork.IInput.IsKeyReleased(RayBork.Key key) -> bool
+RayBork.IInput.IsKeyUp(RayBork.Key key) -> bool
+RayBork.IInput.IsMouseButtonDown(RayBork.MouseButton button) -> bool
+RayBork.IInput.IsMouseButtonPressed(RayBork.MouseButton button) -> bool
+RayBork.IInput.IsMouseButtonReleased(RayBork.MouseButton button) -> bool
+RayBork.IInput.IsMouseButtonUp(RayBork.MouseButton button) -> bool
+RayBork.IInput.MouseDelta.get -> System.Numerics.Vector2
+RayBork.IInput.MousePosition.get -> System.Numerics.Vector2
+RayBork.IInput.MouseWheel.get -> float
+RayBork.IInput.TextInput.get -> string!
+RayBork.IWindow
+RayBork.IWindow.Bounds.get -> RayBork.Rect
+RayBork.IWindow.Close() -> void
+RayBork.IWindow.CloseRequested.get -> bool
+RayBork.IWindow.CurrentMonitor.get -> RayBork.Monitor
+RayBork.IWindow.DpiScale.get -> float
+RayBork.IWindow.GetClipboardText() -> string!
+RayBork.IWindow.Height.get -> int
+RayBork.IWindow.IsFocused.get -> bool
+RayBork.IWindow.IsFullscreen.get -> bool
+RayBork.IWindow.IsMinimized.get -> bool
+RayBork.IWindow.IsResizable.get -> bool
+RayBork.IWindow.Maximize() -> void
+RayBork.IWindow.Minimize() -> void
+RayBork.IWindow.Monitors.get -> System.Collections.Generic.IReadOnlyList<RayBork.Monitor>!
+RayBork.IWindow.RenderHeight.get -> int
+RayBork.IWindow.RenderWidth.get -> int
+RayBork.IWindow.Restore() -> void
+RayBork.IWindow.SetBorderless(bool borderless) -> void
+RayBork.IWindow.SetClipboardText(string! text) -> void
+RayBork.IWindow.SetCursor(RayBork.CursorMode mode) -> void
+RayBork.IWindow.SetFullscreen(bool fullscreen) -> void
+RayBork.IWindow.SetMaxSize(int width, int height) -> void
+RayBork.IWindow.SetMinSize(int width, int height) -> void
+RayBork.IWindow.SetMonitor(int monitorIndex) -> void
+RayBork.IWindow.SetPosition(int x, int y) -> void
+RayBork.IWindow.SetSize(int width, int height) -> void
+RayBork.IWindow.SetTitle(string! title) -> void
+RayBork.IWindow.State.get -> RayBork.WindowState
+RayBork.IWindow.Title.get -> string!
+RayBork.IWindow.WasResized.get -> bool
+RayBork.IWindow.Width.get -> int
+RayBork.Key
+RayBork.Key.A = 4 -> RayBork.Key
+RayBork.Key.AccessibilityBack = 282 -> RayBork.Key
+RayBork.Key.AccessibilityBookmarks = 286 -> RayBork.Key
+RayBork.Key.AccessibilityClose = 275 -> RayBork.Key
+RayBork.Key.AccessibilityExit = 276 -> RayBork.Key
+RayBork.Key.AccessibilityForward = 283 -> RayBork.Key
+RayBork.Key.AccessibilityHome = 281 -> RayBork.Key
+RayBork.Key.AccessibilityNew = 273 -> RayBork.Key
+RayBork.Key.AccessibilityOpen = 274 -> RayBork.Key
+RayBork.Key.AccessibilityPrint = 278 -> RayBork.Key
+RayBork.Key.AccessibilityProperties = 279 -> RayBork.Key
+RayBork.Key.AccessibilityRefresh = 285 -> RayBork.Key
+RayBork.Key.AccessibilitySave = 277 -> RayBork.Key
+RayBork.Key.AccessibilitySearch = 280 -> RayBork.Key
+RayBork.Key.AccessibilityStop = 284 -> RayBork.Key
+RayBork.Key.Again = 121 -> RayBork.Key
+RayBork.Key.AltErase = 153 -> RayBork.Key
+RayBork.Key.Apostrophe = 52 -> RayBork.Key
+RayBork.Key.Application = 101 -> RayBork.Key
+RayBork.Key.B = 5 -> RayBork.Key
+RayBork.Key.Backslash = 49 -> RayBork.Key
+RayBork.Key.Backspace = 42 -> RayBork.Key
+RayBork.Key.C = 6 -> RayBork.Key
+RayBork.Key.Call = 289 -> RayBork.Key
+RayBork.Key.Cancel = 155 -> RayBork.Key
+RayBork.Key.CapsLock = 57 -> RayBork.Key
+RayBork.Key.ChannelDecrement = 261 -> RayBork.Key
+RayBork.Key.ChannelIncrement = 260 -> RayBork.Key
+RayBork.Key.Clear = 156 -> RayBork.Key
+RayBork.Key.ClearAgain = 162 -> RayBork.Key
+RayBork.Key.Comma = 54 -> RayBork.Key
+RayBork.Key.Copy = 124 -> RayBork.Key
+RayBork.Key.CrSel = 163 -> RayBork.Key
+RayBork.Key.CurrencySubunit = 181 -> RayBork.Key
+RayBork.Key.CurrencyUnit = 180 -> RayBork.Key
+RayBork.Key.Cut = 123 -> RayBork.Key
+RayBork.Key.D = 7 -> RayBork.Key
+RayBork.Key.D0 = 39 -> RayBork.Key
+RayBork.Key.D1 = 30 -> RayBork.Key
+RayBork.Key.D2 = 31 -> RayBork.Key
+RayBork.Key.D3 = 32 -> RayBork.Key
+RayBork.Key.D4 = 33 -> RayBork.Key
+RayBork.Key.D5 = 34 -> RayBork.Key
+RayBork.Key.D6 = 35 -> RayBork.Key
+RayBork.Key.D7 = 36 -> RayBork.Key
+RayBork.Key.D8 = 37 -> RayBork.Key
+RayBork.Key.D9 = 38 -> RayBork.Key
+RayBork.Key.DecimalSeparator = 179 -> RayBork.Key
+RayBork.Key.Delete = 76 -> RayBork.Key
+RayBork.Key.Down = 81 -> RayBork.Key
+RayBork.Key.E = 8 -> RayBork.Key
+RayBork.Key.End = 77 -> RayBork.Key
+RayBork.Key.EndCall = 290 -> RayBork.Key
+RayBork.Key.Enter = 40 -> RayBork.Key
+RayBork.Key.Equal = 46 -> RayBork.Key
+RayBork.Key.Escape = 41 -> RayBork.Key
+RayBork.Key.Execute = 116 -> RayBork.Key
+RayBork.Key.ExSel = 164 -> RayBork.Key
+RayBork.Key.F = 9 -> RayBork.Key
+RayBork.Key.F1 = 58 -> RayBork.Key
+RayBork.Key.F10 = 67 -> RayBork.Key
+RayBork.Key.F11 = 68 -> RayBork.Key
+RayBork.Key.F12 = 69 -> RayBork.Key
+RayBork.Key.F13 = 104 -> RayBork.Key
+RayBork.Key.F14 = 105 -> RayBork.Key
+RayBork.Key.F15 = 106 -> RayBork.Key
+RayBork.Key.F16 = 107 -> RayBork.Key
+RayBork.Key.F17 = 108 -> RayBork.Key
+RayBork.Key.F18 = 109 -> RayBork.Key
+RayBork.Key.F19 = 110 -> RayBork.Key
+RayBork.Key.F2 = 59 -> RayBork.Key
+RayBork.Key.F20 = 111 -> RayBork.Key
+RayBork.Key.F21 = 112 -> RayBork.Key
+RayBork.Key.F22 = 113 -> RayBork.Key
+RayBork.Key.F23 = 114 -> RayBork.Key
+RayBork.Key.F24 = 115 -> RayBork.Key
+RayBork.Key.F3 = 60 -> RayBork.Key
+RayBork.Key.F4 = 61 -> RayBork.Key
+RayBork.Key.F5 = 62 -> RayBork.Key
+RayBork.Key.F6 = 63 -> RayBork.Key
+RayBork.Key.F7 = 64 -> RayBork.Key
+RayBork.Key.F8 = 65 -> RayBork.Key
+RayBork.Key.F9 = 66 -> RayBork.Key
+RayBork.Key.Find = 126 -> RayBork.Key
+RayBork.Key.Front = 165 -> RayBork.Key
+RayBork.Key.G = 10 -> RayBork.Key
+RayBork.Key.Grave = 53 -> RayBork.Key
+RayBork.Key.H = 11 -> RayBork.Key
+RayBork.Key.Help = 117 -> RayBork.Key
+RayBork.Key.Home = 74 -> RayBork.Key
+RayBork.Key.I = 12 -> RayBork.Key
+RayBork.Key.Insert = 73 -> RayBork.Key
+RayBork.Key.International1 = 135 -> RayBork.Key
+RayBork.Key.International2 = 136 -> RayBork.Key
+RayBork.Key.International3 = 137 -> RayBork.Key
+RayBork.Key.International4 = 138 -> RayBork.Key
+RayBork.Key.International5 = 139 -> RayBork.Key
+RayBork.Key.International6 = 140 -> RayBork.Key
+RayBork.Key.International7 = 141 -> RayBork.Key
+RayBork.Key.International8 = 142 -> RayBork.Key
+RayBork.Key.International9 = 143 -> RayBork.Key
+RayBork.Key.J = 13 -> RayBork.Key
+RayBork.Key.K = 14 -> RayBork.Key
+RayBork.Key.Keypad0 = 98 -> RayBork.Key
+RayBork.Key.Keypad00 = 176 -> RayBork.Key
+RayBork.Key.Keypad000 = 177 -> RayBork.Key
+RayBork.Key.Keypad1 = 89 -> RayBork.Key
+RayBork.Key.Keypad2 = 90 -> RayBork.Key
+RayBork.Key.Keypad3 = 91 -> RayBork.Key
+RayBork.Key.Keypad4 = 92 -> RayBork.Key
+RayBork.Key.Keypad5 = 93 -> RayBork.Key
+RayBork.Key.Keypad6 = 94 -> RayBork.Key
+RayBork.Key.Keypad7 = 95 -> RayBork.Key
+RayBork.Key.Keypad8 = 96 -> RayBork.Key
+RayBork.Key.Keypad9 = 97 -> RayBork.Key
+RayBork.Key.KeypadA = 188 -> RayBork.Key
+RayBork.Key.KeypadAdd = 87 -> RayBork.Key
+RayBork.Key.KeypadAmpersand = 199 -> RayBork.Key
+RayBork.Key.KeypadAt = 206 -> RayBork.Key
+RayBork.Key.KeypadB = 189 -> RayBork.Key
+RayBork.Key.KeypadBackspace = 187 -> RayBork.Key
+RayBork.Key.KeypadBinary = 218 -> RayBork.Key
+RayBork.Key.KeypadC = 190 -> RayBork.Key
+RayBork.Key.KeypadClear = 216 -> RayBork.Key
+RayBork.Key.KeypadClearEntry = 217 -> RayBork.Key
+RayBork.Key.KeypadColon = 203 -> RayBork.Key
+RayBork.Key.KeypadComma = 133 -> RayBork.Key
+RayBork.Key.KeypadD = 191 -> RayBork.Key
+RayBork.Key.KeypadDecimal = 99 -> RayBork.Key
+RayBork.Key.KeypadDecimalSeparator = 220 -> RayBork.Key
+RayBork.Key.KeypadDivide = 84 -> RayBork.Key
+RayBork.Key.KeypadDoubleAmpersand = 200 -> RayBork.Key
+RayBork.Key.KeypadDoubleVerticalBar = 202 -> RayBork.Key
+RayBork.Key.KeypadE = 192 -> RayBork.Key
+RayBork.Key.KeypadEnter = 88 -> RayBork.Key
+RayBork.Key.KeypadEqual = 103 -> RayBork.Key
+RayBork.Key.KeypadEqualsAs400 = 134 -> RayBork.Key
+RayBork.Key.KeypadExclamation = 207 -> RayBork.Key
+RayBork.Key.KeypadF = 193 -> RayBork.Key
+RayBork.Key.KeypadGreater = 198 -> RayBork.Key
+RayBork.Key.KeypadHash = 204 -> RayBork.Key
+RayBork.Key.KeypadHexadecimal = 221 -> RayBork.Key
+RayBork.Key.KeypadLeftBrace = 184 -> RayBork.Key
+RayBork.Key.KeypadLeftParen = 182 -> RayBork.Key
+RayBork.Key.KeypadLess = 197 -> RayBork.Key
+RayBork.Key.KeypadMemoryAdd = 211 -> RayBork.Key
+RayBork.Key.KeypadMemoryClear = 210 -> RayBork.Key
+RayBork.Key.KeypadMemoryDivide = 214 -> RayBork.Key
+RayBork.Key.KeypadMemoryMultiply = 213 -> RayBork.Key
+RayBork.Key.KeypadMemoryRecall = 209 -> RayBork.Key
+RayBork.Key.KeypadMemoryStore = 208 -> RayBork.Key
+RayBork.Key.KeypadMemorySubtract = 212 -> RayBork.Key
+RayBork.Key.KeypadMultiply = 85 -> RayBork.Key
+RayBork.Key.KeypadOctal = 219 -> RayBork.Key
+RayBork.Key.KeypadPercent = 196 -> RayBork.Key
+RayBork.Key.KeypadPlusMinus = 215 -> RayBork.Key
+RayBork.Key.KeypadPower = 195 -> RayBork.Key
+RayBork.Key.KeypadRightBrace = 185 -> RayBork.Key
+RayBork.Key.KeypadRightParen = 183 -> RayBork.Key
+RayBork.Key.KeypadSpace = 205 -> RayBork.Key
+RayBork.Key.KeypadSubtract = 86 -> RayBork.Key
+RayBork.Key.KeypadTab = 186 -> RayBork.Key
+RayBork.Key.KeypadVerticalBar = 201 -> RayBork.Key
+RayBork.Key.KeypadXor = 194 -> RayBork.Key
+RayBork.Key.L = 15 -> RayBork.Key
+RayBork.Key.Lang1 = 144 -> RayBork.Key
+RayBork.Key.Lang2 = 145 -> RayBork.Key
+RayBork.Key.Lang3 = 146 -> RayBork.Key
+RayBork.Key.Lang4 = 147 -> RayBork.Key
+RayBork.Key.Lang5 = 148 -> RayBork.Key
+RayBork.Key.Lang6 = 149 -> RayBork.Key
+RayBork.Key.Lang7 = 150 -> RayBork.Key
+RayBork.Key.Lang8 = 151 -> RayBork.Key
+RayBork.Key.Lang9 = 152 -> RayBork.Key
+RayBork.Key.Left = 80 -> RayBork.Key
+RayBork.Key.LeftAlt = 226 -> RayBork.Key
+RayBork.Key.LeftBracket = 47 -> RayBork.Key
+RayBork.Key.LeftControl = 224 -> RayBork.Key
+RayBork.Key.LeftShift = 225 -> RayBork.Key
+RayBork.Key.LeftSuper = 227 -> RayBork.Key
+RayBork.Key.M = 16 -> RayBork.Key
+RayBork.Key.MediaEject = 270 -> RayBork.Key
+RayBork.Key.MediaFastForward = 265 -> RayBork.Key
+RayBork.Key.MediaNextTrack = 267 -> RayBork.Key
+RayBork.Key.MediaPause = 263 -> RayBork.Key
+RayBork.Key.MediaPlay = 262 -> RayBork.Key
+RayBork.Key.MediaPlayPause = 271 -> RayBork.Key
+RayBork.Key.MediaPreviousTrack = 268 -> RayBork.Key
+RayBork.Key.MediaRecord = 264 -> RayBork.Key
+RayBork.Key.MediaRewind = 266 -> RayBork.Key
+RayBork.Key.MediaSelect = 272 -> RayBork.Key
+RayBork.Key.MediaStop = 269 -> RayBork.Key
+RayBork.Key.Menu = 118 -> RayBork.Key
+RayBork.Key.Minus = 45 -> RayBork.Key
+RayBork.Key.Mode = 257 -> RayBork.Key
+RayBork.Key.Mute = 127 -> RayBork.Key
+RayBork.Key.N = 17 -> RayBork.Key
+RayBork.Key.NonUsBackslash = 100 -> RayBork.Key
+RayBork.Key.NonUsHash = 50 -> RayBork.Key
+RayBork.Key.NumLock = 83 -> RayBork.Key
+RayBork.Key.O = 18 -> RayBork.Key
+RayBork.Key.Oper = 161 -> RayBork.Key
+RayBork.Key.Out = 160 -> RayBork.Key
+RayBork.Key.P = 19 -> RayBork.Key
+RayBork.Key.PageDown = 78 -> RayBork.Key
+RayBork.Key.PageUp = 75 -> RayBork.Key
+RayBork.Key.Paste = 125 -> RayBork.Key
+RayBork.Key.Pause = 72 -> RayBork.Key
+RayBork.Key.Period = 55 -> RayBork.Key
+RayBork.Key.Power = 102 -> RayBork.Key
+RayBork.Key.PrintScreen = 70 -> RayBork.Key
+RayBork.Key.Prior = 157 -> RayBork.Key
+RayBork.Key.Q = 20 -> RayBork.Key
+RayBork.Key.R = 21 -> RayBork.Key
+RayBork.Key.Return2 = 158 -> RayBork.Key
+RayBork.Key.Right = 79 -> RayBork.Key
+RayBork.Key.RightAlt = 230 -> RayBork.Key
+RayBork.Key.RightBracket = 48 -> RayBork.Key
+RayBork.Key.RightControl = 228 -> RayBork.Key
+RayBork.Key.RightShift = 229 -> RayBork.Key
+RayBork.Key.RightSuper = 231 -> RayBork.Key
+RayBork.Key.S = 22 -> RayBork.Key
+RayBork.Key.ScrollLock = 71 -> RayBork.Key
+RayBork.Key.Select = 119 -> RayBork.Key
+RayBork.Key.Semicolon = 51 -> RayBork.Key
+RayBork.Key.Separator = 159 -> RayBork.Key
+RayBork.Key.Slash = 56 -> RayBork.Key
+RayBork.Key.Sleep = 258 -> RayBork.Key
+RayBork.Key.SoftLeft = 287 -> RayBork.Key
+RayBork.Key.SoftRight = 288 -> RayBork.Key
+RayBork.Key.Space = 44 -> RayBork.Key
+RayBork.Key.Stop = 120 -> RayBork.Key
+RayBork.Key.SysReq = 154 -> RayBork.Key
+RayBork.Key.T = 23 -> RayBork.Key
+RayBork.Key.Tab = 43 -> RayBork.Key
+RayBork.Key.ThousandsSeparator = 178 -> RayBork.Key
+RayBork.Key.U = 24 -> RayBork.Key
+RayBork.Key.Undo = 122 -> RayBork.Key
+RayBork.Key.Unknown = 0 -> RayBork.Key
+RayBork.Key.Up = 82 -> RayBork.Key
+RayBork.Key.V = 25 -> RayBork.Key
+RayBork.Key.VolumeDown = 129 -> RayBork.Key
+RayBork.Key.VolumeUp = 128 -> RayBork.Key
+RayBork.Key.W = 26 -> RayBork.Key
+RayBork.Key.Wake = 259 -> RayBork.Key
+RayBork.Key.X = 27 -> RayBork.Key
+RayBork.Key.Y = 28 -> RayBork.Key
+RayBork.Key.Z = 29 -> RayBork.Key
+RayBork.Monitor
+RayBork.Monitor.Bounds.get -> RayBork.Rect
+RayBork.Monitor.Bounds.init -> void
+RayBork.Monitor.Deconstruct(out int Index, out string! Name, out RayBork.Rect Bounds, out RayBork.Rect WorkArea, out float DpiScale, out int RefreshRate) -> void
+RayBork.Monitor.DpiScale.get -> float
+RayBork.Monitor.DpiScale.init -> void
+RayBork.Monitor.Equals(RayBork.Monitor other) -> bool
+RayBork.Monitor.Index.get -> int
+RayBork.Monitor.Index.init -> void
+RayBork.Monitor.Monitor() -> void
+RayBork.Monitor.Monitor(int Index, string! Name, RayBork.Rect Bounds, RayBork.Rect WorkArea, float DpiScale, int RefreshRate) -> void
+RayBork.Monitor.Name.get -> string!
+RayBork.Monitor.Name.init -> void
+RayBork.Monitor.RefreshRate.get -> int
+RayBork.Monitor.RefreshRate.init -> void
+RayBork.Monitor.WorkArea.get -> RayBork.Rect
+RayBork.Monitor.WorkArea.init -> void
+RayBork.MouseButton
+RayBork.MouseButton.Left = 0 -> RayBork.MouseButton
+RayBork.MouseButton.Middle = 1 -> RayBork.MouseButton
+RayBork.MouseButton.Right = 2 -> RayBork.MouseButton
+RayBork.MouseButton.X1 = 3 -> RayBork.MouseButton
+RayBork.MouseButton.X2 = 4 -> RayBork.MouseButton
+RayBork.PlatformException
+RayBork.PlatformException.PlatformException() -> void
+RayBork.PlatformException.PlatformException(string! message) -> void
+RayBork.PlatformException.PlatformException(string! message, System.Exception? innerException) -> void
+RayBork.QuaternionExtensions
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion)
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Angle(System.Numerics.Quaternion other) -> float
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).EulerAngles.get -> System.Numerics.Vector3
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Normalized.get -> System.Numerics.Quaternion
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).RotateTowards(System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Slerp(System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
+RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).ToAngleAxis(out float angle, out System.Numerics.Vector3 axis) -> void
+RayBork.RayBorkException
+RayBork.RayBorkException.DiagnosticCode.get -> string?
+RayBork.RayBorkException.RayBorkException() -> void
+RayBork.RayBorkException.RayBorkException(string! message) -> void
+RayBork.RayBorkException.RayBorkException(string! message, System.Exception? innerException) -> void
+RayBork.Rect
+RayBork.Rect.Bottom.get -> float
+RayBork.Rect.Contains(System.Numerics.Vector2 point) -> bool
+RayBork.Rect.Deconstruct(out float X, out float Y, out float Width, out float Height) -> void
+RayBork.Rect.Equals(RayBork.Rect other) -> bool
+RayBork.Rect.Height.get -> float
+RayBork.Rect.Height.init -> void
+RayBork.Rect.Position.get -> System.Numerics.Vector2
+RayBork.Rect.Rect() -> void
+RayBork.Rect.Rect(float X, float Y, float Width, float Height) -> void
+RayBork.Rect.Right.get -> float
+RayBork.Rect.Size.get -> System.Numerics.Vector2
+RayBork.Rect.Width.get -> float
+RayBork.Rect.Width.init -> void
+RayBork.Rect.X.get -> float
+RayBork.Rect.X.init -> void
+RayBork.Rect.Y.get -> float
+RayBork.Rect.Y.init -> void
+RayBork.Transform
+RayBork.Transform.Forward.get -> System.Numerics.Vector3
+RayBork.Transform.Inverse() -> RayBork.Transform
+RayBork.Transform.Position.get -> System.Numerics.Vector3
+RayBork.Transform.Position.set -> void
+RayBork.Transform.Right.get -> System.Numerics.Vector3
+RayBork.Transform.Rotation.get -> System.Numerics.Quaternion
+RayBork.Transform.Rotation.set -> void
+RayBork.Transform.Scale.get -> System.Numerics.Vector3
+RayBork.Transform.Scale.set -> void
+RayBork.Transform.ToMatrix() -> System.Numerics.Matrix4x4
+RayBork.Transform.Transform() -> void
+RayBork.Transform.Transform(System.Numerics.Vector3 position) -> void
+RayBork.Transform.Transform(System.Numerics.Vector3 position, System.Numerics.Quaternion rotation, System.Numerics.Vector3 scale) -> void
+RayBork.Transform.TransformDirection(System.Numerics.Vector3 direction) -> System.Numerics.Vector3
+RayBork.Transform.TransformPoint(System.Numerics.Vector3 point) -> System.Numerics.Vector3
+RayBork.Transform.Up.get -> System.Numerics.Vector3
+RayBork.Transform.WithParent(RayBork.Transform parent) -> RayBork.Transform
+RayBork.Transform.WithPosition(System.Numerics.Vector3 position) -> RayBork.Transform
+RayBork.Transform.WithRotation(System.Numerics.Quaternion rotation) -> RayBork.Transform
+RayBork.Transform.WithScale(System.Numerics.Vector3 scale) -> RayBork.Transform
+RayBork.Vector3Extensions
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3)
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Angle(System.Numerics.Vector3 other) -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).ClampMagnitude(float maxLength) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Magnitude.get -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Normalized.get -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Project(System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).ProjectOnPlane(System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Reflect(System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Rotated(System.Numerics.Quaternion rotation) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).SignedAngle(System.Numerics.Vector3 other, System.Numerics.Vector3 axis) -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).SqrMagnitude.get -> float
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithX(float x) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithY(float y) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithZ(float z) -> System.Numerics.Vector3
+RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Xz.get -> System.Numerics.Vector3
+RayBork.WindowException
+RayBork.WindowException.WindowException() -> void
+RayBork.WindowException.WindowException(string! message) -> void
+RayBork.WindowException.WindowException(string! message, System.Exception? innerException) -> void
+RayBork.WindowState
+RayBork.WindowState.BorderlessFullscreen = 4 -> RayBork.WindowState
+RayBork.WindowState.Fullscreen = 3 -> RayBork.WindowState
+RayBork.WindowState.Hidden = 5 -> RayBork.WindowState
+RayBork.WindowState.Maximized = 2 -> RayBork.WindowState
+RayBork.WindowState.Minimized = 1 -> RayBork.WindowState
+RayBork.WindowState.Normal = 0 -> RayBork.WindowState
+static RayBork.Color.FromOkLab(float l, float a, float b, float alpha = 1) -> RayBork.Color
+static RayBork.Color.HSVToRGB(float h, float s, float v) -> RayBork.Color
+static RayBork.Color.HSVToRGB(float h, float s, float v, bool hdr) -> RayBork.Color
+static RayBork.Color.implicit operator RayBork.Color(System.Numerics.Vector4 value) -> RayBork.Color
+static RayBork.Color.implicit operator System.Numerics.Vector4(RayBork.Color color) -> System.Numerics.Vector4
+static RayBork.Color.Lerp(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.LerpOkLab(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.LerpOkLabUnclamped(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.LerpUnclamped(RayBork.Color a, RayBork.Color b, float t) -> RayBork.Color
+static RayBork.Color.operator *(float a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator *(RayBork.Color a, float b) -> RayBork.Color
+static RayBork.Color.operator *(RayBork.Color a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator +(RayBork.Color a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator -(RayBork.Color a, RayBork.Color b) -> RayBork.Color
+static RayBork.Color.operator /(RayBork.Color a, float b) -> RayBork.Color
+static RayBork.Color.RGBToHSV(RayBork.Color rgb, out float h, out float s, out float v) -> void
 static RayBork.EngineVersion.Current.get -> System.Version!
+static RayBork.Monitor.operator !=(RayBork.Monitor left, RayBork.Monitor right) -> bool
+static RayBork.Monitor.operator ==(RayBork.Monitor left, RayBork.Monitor right) -> bool
+static RayBork.QuaternionExtensions.Angle(this System.Numerics.Quaternion value, System.Numerics.Quaternion other) -> float
+static RayBork.QuaternionExtensions.AngleAxis(float degrees, System.Numerics.Vector3 axis) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.Euler(float x, float y, float z) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).AngleAxis(float degrees, System.Numerics.Vector3 axis) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Euler(float x, float y, float z) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).FromToRotation(System.Numerics.Vector3 from, System.Numerics.Vector3 to) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).LookRotation(System.Numerics.Vector3 forward, System.Numerics.Vector3 upwards) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.FromToRotation(System.Numerics.Vector3 from, System.Numerics.Vector3 to) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.get_EulerAngles(System.Numerics.Quaternion value) -> System.Numerics.Vector3
+static RayBork.QuaternionExtensions.get_Normalized(System.Numerics.Quaternion value) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.LookRotation(System.Numerics.Vector3 forward, System.Numerics.Vector3 upwards) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.RotateTowards(this System.Numerics.Quaternion value, System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.Slerp(this System.Numerics.Quaternion value, System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
+static RayBork.QuaternionExtensions.ToAngleAxis(this System.Numerics.Quaternion value, out float angle, out System.Numerics.Vector3 axis) -> void
+static RayBork.Rect.FromSize(float width, float height) -> RayBork.Rect
+static RayBork.Rect.operator !=(RayBork.Rect left, RayBork.Rect right) -> bool
+static RayBork.Rect.operator ==(RayBork.Rect left, RayBork.Rect right) -> bool
+static RayBork.Transform.Identity.get -> RayBork.Transform
+static RayBork.Transform.Lerp(RayBork.Transform a, RayBork.Transform b, float t) -> RayBork.Transform
+static RayBork.Vector3Extensions.Angle(this System.Numerics.Vector3 value, System.Numerics.Vector3 other) -> float
+static RayBork.Vector3Extensions.ClampMagnitude(this System.Numerics.Vector3 value, float maxLength) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Back.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Down.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Forward.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Left.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Right.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Up.get -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Back() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Down() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Forward() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Left() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Magnitude(System.Numerics.Vector3 value) -> float
+static RayBork.Vector3Extensions.get_Normalized(System.Numerics.Vector3 value) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Right() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_SqrMagnitude(System.Numerics.Vector3 value) -> float
+static RayBork.Vector3Extensions.get_Up() -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.get_Xz(System.Numerics.Vector3 value) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.Project(this System.Numerics.Vector3 value, System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.ProjectOnPlane(this System.Numerics.Vector3 value, System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.Reflect(this System.Numerics.Vector3 value, System.Numerics.Vector3 normal) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.Rotated(this System.Numerics.Vector3 value, System.Numerics.Quaternion rotation) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.SignedAngle(this System.Numerics.Vector3 value, System.Numerics.Vector3 other, System.Numerics.Vector3 axis) -> float
+static RayBork.Vector3Extensions.WithX(this System.Numerics.Vector3 value, float x) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.WithY(this System.Numerics.Vector3 value, float y) -> System.Numerics.Vector3
+static RayBork.Vector3Extensions.WithZ(this System.Numerics.Vector3 value, float z) -> System.Numerics.Vector3
+static readonly RayBork.Color.Black -> RayBork.Color
+static readonly RayBork.Color.Blue -> RayBork.Color
+static readonly RayBork.Color.Clear -> RayBork.Color
+static readonly RayBork.Color.Cyan -> RayBork.Color
+static readonly RayBork.Color.DarkCyan -> RayBork.Color
+static readonly RayBork.Color.Gray -> RayBork.Color
+static readonly RayBork.Color.Green -> RayBork.Color
+static readonly RayBork.Color.Grey -> RayBork.Color
+static readonly RayBork.Color.Magenta -> RayBork.Color
+static readonly RayBork.Color.Red -> RayBork.Color
+static readonly RayBork.Color.Transparent -> RayBork.Color
+static readonly RayBork.Color.White -> RayBork.Color
+static readonly RayBork.Color.Yellow -> RayBork.Color
+~override RayBork.Monitor.Equals(object obj) -> bool
+~override RayBork.Monitor.ToString() -> string
+~override RayBork.Rect.Equals(object obj) -> bool
+~override RayBork.Rect.ToString() -> string
+RayBork.RayBorkApp
+RayBork.RayBorkApp.Dispose() -> void
+RayBork.RayBorkApp.IsDisposed.get -> bool
+RayBork.RayBorkApp.IsRunning.get -> bool
+RayBork.RayBorkApp.RequestExit() -> void
+RayBork.RayBorkApp.Run() -> void
+RayBork.RayBorkAppBuilder
+RayBork.RayBorkAppBuilder.Build() -> RayBork.RayBorkApp!
+RayBork.RayBorkAppBuilder.RayBorkAppBuilder() -> void
+RayBork.RayBorkAppBuilder.WithGame(RayBork.IGame! game) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithLogLevel(Microsoft.Extensions.Logging.LogLevel level) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithMaxDeltaTime(double seconds) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithResizable(bool resizable = true) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithSize(int width, int height) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithTargetFps(int framesPerSecond) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithTitle(string! title) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithWindowState(RayBork.WindowState state) -> RayBork.RayBorkAppBuilder!

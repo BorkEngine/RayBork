@@ -7,6 +7,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="RayBork.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
         <PackageReference Include="Silk.NET.Vulkan" />
         <PackageReference Include="SDL3-CS" />
         <PackageReference Include="SDL3-CS.Native" />
