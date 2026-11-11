@@ -15,8 +15,10 @@ namespace RayBork.Internal;
 /// logical device with <c>VK_KHR_swapchain</c> enabled.
 /// </para>
 /// <para>
-/// M2 enables no optional device features beyond Vulkan 1.2 core. Descriptor indexing is probed for
-/// the later bindless texture table but is not required.
+/// M2 enables no optional device features beyond Vulkan 1.2 core. M3 additionally enables
+/// <c>samplerAnisotropy</c> and <c>textureCompressionBC</c> when the selected device advertises them,
+/// because the asset path samples BC-compressed textures and may request anisotropic filtering.
+/// Descriptor indexing is probed for the later bindless texture table but is not required.
 /// </para>
 /// <para>
 /// Every member is render-thread only. Dispose the device before the surface and the instance.
@@ -411,6 +413,14 @@ internal sealed class VulkanDevice : IDisposable {
             }
 
             byte* extensionNamePointer = swapchainExtensionPointer;
+            // The M3 asset path samples BC-compressed textures and may request anisotropic
+            // filtering. Both are optional Vulkan 1.2 features, so enable each only when the
+            // selected physical device advertises it. Every other feature stays disabled.
+            PhysicalDeviceFeatures supportedFeatures = vulkan.GetPhysicalDeviceFeatures(physicalDevice);
+            PhysicalDeviceFeatures enabledFeatures = new() {
+                SamplerAnisotropy = supportedFeatures.SamplerAnisotropy,
+                TextureCompressionBC = supportedFeatures.TextureCompressionBC,
+            };
             DeviceCreateInfo createInfo = new() {
                 SType = StructureType.DeviceCreateInfo,
                 QueueCreateInfoCount = (uint)families.Count,
@@ -419,7 +429,7 @@ internal sealed class VulkanDevice : IDisposable {
                 PpEnabledLayerNames = null,
                 EnabledExtensionCount = 1,
                 PpEnabledExtensionNames = &extensionNamePointer,
-                PEnabledFeatures = null,
+                PEnabledFeatures = &enabledFeatures,
             };
             Result result = vulkan.CreateDevice(physicalDevice, &createInfo, null, out Device device);
             ThrowIfFailed(result, "vkCreateDevice");
