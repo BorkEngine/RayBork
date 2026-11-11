@@ -21,6 +21,11 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
 
     public IPlatformWindow Window => FakeWindow;
 
+    /// <summary>
+    /// Gets or sets the cached window HDR state reported by the platform.
+    /// </summary>
+    public WindowHdrState WindowHdrState { get; set; } = WindowHdrState.Sdr;
+
     public PlatformOptions? Options { get; private set; }
 
     public int InitializeCount { get; private set; }
