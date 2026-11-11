@@ -1,0 +1,3 @@
+#nullable enable
+RayBork.EngineVersion
+static RayBork.EngineVersion.Current.get -> System.Version!
