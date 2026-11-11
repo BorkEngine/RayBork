@@ -5,7 +5,36 @@ override RayBork.Color.ToString() -> string!
 override RayBork.EngineInfo.GetHashCode() -> int
 override RayBork.Monitor.GetHashCode() -> int
 override RayBork.Rect.GetHashCode() -> int
+override RayBork.RenderState.GetHashCode() -> int
 override RayBork.RenderStats.GetHashCode() -> int
+override RayBork.SamplerState.GetHashCode() -> int
+override RayBork.ShaderTextureBinding.GetHashCode() -> int
+override RayBork.ShaderUniform.GetHashCode() -> int
+RayBork.AssetException
+RayBork.AssetException.AssetException() -> void
+RayBork.AssetException.AssetException(string! message) -> void
+RayBork.AssetException.AssetException(string! message, System.Exception? innerException) -> void
+RayBork.AssetLoadException
+RayBork.AssetLoadException.AssetLoadException() -> void
+RayBork.AssetLoadException.AssetLoadException(string! message) -> void
+RayBork.AssetLoadException.AssetLoadException(string! message, System.Exception? innerException) -> void
+RayBork.AssetNotFoundException
+RayBork.AssetNotFoundException.AssetNotFoundException() -> void
+RayBork.AssetNotFoundException.AssetNotFoundException(string! message) -> void
+RayBork.AssetNotFoundException.AssetNotFoundException(string! message, System.Exception? innerException) -> void
+RayBork.AssetPackException
+RayBork.AssetPackException.AssetPackException() -> void
+RayBork.AssetPackException.AssetPackException(string! message) -> void
+RayBork.AssetPackException.AssetPackException(string! message, System.Exception? innerException) -> void
+RayBork.AssetTypeMismatchException
+RayBork.AssetTypeMismatchException.AssetTypeMismatchException() -> void
+RayBork.AssetTypeMismatchException.AssetTypeMismatchException(string! message) -> void
+RayBork.AssetTypeMismatchException.AssetTypeMismatchException(string! message, System.Exception? innerException) -> void
+RayBork.BlendMode
+RayBork.BlendMode.Additive = 2 -> RayBork.BlendMode
+RayBork.BlendMode.Alpha = 1 -> RayBork.BlendMode
+RayBork.BlendMode.Multiply = 3 -> RayBork.BlendMode
+RayBork.BlendMode.Opaque = 0 -> RayBork.BlendMode
 RayBork.Color
 RayBork.Color.A.get -> float
 RayBork.Color.B.get -> float
@@ -20,10 +49,21 @@ RayBork.Color.R.get -> float
 RayBork.Color.this[int index].get -> float
 RayBork.Color.ToOkLab(out float l, out float a, out float b) -> void
 RayBork.Color.ToString(string? format, System.IFormatProvider? formatProvider) -> string!
+RayBork.CullMode
+RayBork.CullMode.Back = 2 -> RayBork.CullMode
+RayBork.CullMode.Front = 1 -> RayBork.CullMode
+RayBork.CullMode.None = 0 -> RayBork.CullMode
 RayBork.CursorMode
 RayBork.CursorMode.Disabled = 2 -> RayBork.CursorMode
 RayBork.CursorMode.Hidden = 1 -> RayBork.CursorMode
 RayBork.CursorMode.Normal = 0 -> RayBork.CursorMode
+RayBork.DepthTest
+RayBork.DepthTest.Always = 5 -> RayBork.DepthTest
+RayBork.DepthTest.Disabled = 0 -> RayBork.DepthTest
+RayBork.DepthTest.Greater = 1 -> RayBork.DepthTest
+RayBork.DepthTest.GreaterOrEqual = 2 -> RayBork.DepthTest
+RayBork.DepthTest.Less = 3 -> RayBork.DepthTest
+RayBork.DepthTest.LessOrEqual = 4 -> RayBork.DepthTest
 RayBork.EngineContext
 RayBork.EngineContext.DeltaTime.get -> double
 RayBork.EngineContext.Fps.get -> double
@@ -105,6 +145,13 @@ RayBork.GraphicsException
 RayBork.GraphicsException.GraphicsException() -> void
 RayBork.GraphicsException.GraphicsException(string! message) -> void
 RayBork.GraphicsException.GraphicsException(string! message, System.Exception? innerException) -> void
+RayBork.IAsset
+RayBork.IAsset.IsDisposed.get -> bool
+RayBork.IAsset.Path.get -> string!
+RayBork.IAssetCatalog
+RayBork.IAssetCatalog.Exists(string! path) -> bool
+RayBork.IAssetCatalog.Load<T>(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
+RayBork.IAssetCatalog.LoadData(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
 RayBork.IGame
 RayBork.IGame.Setup(RayBork.EngineContext! context) -> System.Threading.Tasks.Task!
 RayBork.IGame.Shutdown() -> System.Threading.Tasks.Task!
@@ -449,6 +496,12 @@ RayBork.PresentMode
 RayBork.PresentMode.Fifo = 1 -> RayBork.PresentMode
 RayBork.PresentMode.Immediate = 2 -> RayBork.PresentMode
 RayBork.PresentMode.Mailbox = 0 -> RayBork.PresentMode
+RayBork.PrimitiveTopology
+RayBork.PrimitiveTopology.LineList = 2 -> RayBork.PrimitiveTopology
+RayBork.PrimitiveTopology.LineStrip = 3 -> RayBork.PrimitiveTopology
+RayBork.PrimitiveTopology.PointList = 4 -> RayBork.PrimitiveTopology
+RayBork.PrimitiveTopology.TriangleList = 0 -> RayBork.PrimitiveTopology
+RayBork.PrimitiveTopology.TriangleStrip = 1 -> RayBork.PrimitiveTopology
 RayBork.QuaternionExtensions
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion)
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Angle(System.Numerics.Quaternion other) -> float
@@ -486,6 +539,17 @@ RayBork.Rect.X.get -> float
 RayBork.Rect.X.init -> void
 RayBork.Rect.Y.get -> float
 RayBork.Rect.Y.init -> void
+RayBork.RenderState
+RayBork.RenderState.Blend.get -> RayBork.BlendMode
+RayBork.RenderState.Blend.init -> void
+RayBork.RenderState.Cull.get -> RayBork.CullMode
+RayBork.RenderState.Cull.init -> void
+RayBork.RenderState.DepthTest.get -> RayBork.DepthTest
+RayBork.RenderState.DepthTest.init -> void
+RayBork.RenderState.DepthWrite.get -> bool
+RayBork.RenderState.DepthWrite.init -> void
+RayBork.RenderState.Equals(RayBork.RenderState other) -> bool
+RayBork.RenderState.RenderState() -> void
 RayBork.RenderStats
 RayBork.RenderStats.CpuFrameMilliseconds.get -> double
 RayBork.RenderStats.CpuFrameMilliseconds.init -> void
@@ -517,6 +581,66 @@ RayBork.RenderStats.TextureCount.get -> int
 RayBork.RenderStats.TextureCount.init -> void
 RayBork.RenderStats.Triangles.get -> int
 RayBork.RenderStats.Triangles.init -> void
+RayBork.SamplerState
+RayBork.SamplerState.Deconstruct(out RayBork.TextureFilter Filter, out RayBork.TextureWrap Wrap, out float MaxAnisotropy) -> void
+RayBork.SamplerState.Equals(RayBork.SamplerState other) -> bool
+RayBork.SamplerState.Filter.get -> RayBork.TextureFilter
+RayBork.SamplerState.Filter.init -> void
+RayBork.SamplerState.MaxAnisotropy.get -> float
+RayBork.SamplerState.MaxAnisotropy.init -> void
+RayBork.SamplerState.SamplerState() -> void
+RayBork.SamplerState.SamplerState(RayBork.TextureFilter Filter, RayBork.TextureWrap Wrap, float MaxAnisotropy = 1) -> void
+RayBork.SamplerState.Wrap.get -> RayBork.TextureWrap
+RayBork.SamplerState.Wrap.init -> void
+RayBork.ShaderStageMask
+RayBork.ShaderStageMask.Fragment = 2 -> RayBork.ShaderStageMask
+RayBork.ShaderStageMask.None = 0 -> RayBork.ShaderStageMask
+RayBork.ShaderStageMask.Vertex = 1 -> RayBork.ShaderStageMask
+RayBork.ShaderTextureBinding
+RayBork.ShaderTextureBinding.Deconstruct(out string! Name, out int Index) -> void
+RayBork.ShaderTextureBinding.Equals(RayBork.ShaderTextureBinding other) -> bool
+RayBork.ShaderTextureBinding.Index.get -> int
+RayBork.ShaderTextureBinding.Index.init -> void
+RayBork.ShaderTextureBinding.Name.get -> string!
+RayBork.ShaderTextureBinding.Name.init -> void
+RayBork.ShaderTextureBinding.ShaderTextureBinding() -> void
+RayBork.ShaderTextureBinding.ShaderTextureBinding(string! Name, int Index) -> void
+RayBork.ShaderUniform
+RayBork.ShaderUniform.Deconstruct(out string! Name, out RayBork.ShaderUniformType Type) -> void
+RayBork.ShaderUniform.Equals(RayBork.ShaderUniform other) -> bool
+RayBork.ShaderUniform.Name.get -> string!
+RayBork.ShaderUniform.Name.init -> void
+RayBork.ShaderUniform.ShaderUniform() -> void
+RayBork.ShaderUniform.ShaderUniform(string! Name, RayBork.ShaderUniformType Type) -> void
+RayBork.ShaderUniform.Type.get -> RayBork.ShaderUniformType
+RayBork.ShaderUniform.Type.init -> void
+RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Bool = 3 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Float = 0 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Int = 1 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Matrix4x4 = 7 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Texture2D = 8 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.UInt = 2 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Vector2 = 4 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Vector3 = 5 -> RayBork.ShaderUniformType
+RayBork.ShaderUniformType.Vector4 = 6 -> RayBork.ShaderUniformType
+RayBork.TextureFilter
+RayBork.TextureFilter.Anisotropic = 2 -> RayBork.TextureFilter
+RayBork.TextureFilter.Linear = 1 -> RayBork.TextureFilter
+RayBork.TextureFilter.Nearest = 0 -> RayBork.TextureFilter
+RayBork.TextureFormat
+RayBork.TextureFormat.Bc5Unorm = 4 -> RayBork.TextureFormat
+RayBork.TextureFormat.Bc7Srgb = 3 -> RayBork.TextureFormat
+RayBork.TextureFormat.Bc7Unorm = 2 -> RayBork.TextureFormat
+RayBork.TextureFormat.Depth32Float = 7 -> RayBork.TextureFormat
+RayBork.TextureFormat.R8Unorm = 5 -> RayBork.TextureFormat
+RayBork.TextureFormat.Rgba16Float = 6 -> RayBork.TextureFormat
+RayBork.TextureFormat.Rgba8Srgb = 1 -> RayBork.TextureFormat
+RayBork.TextureFormat.Rgba8Unorm = 0 -> RayBork.TextureFormat
+RayBork.TextureWrap
+RayBork.TextureWrap.Clamp = 1 -> RayBork.TextureWrap
+RayBork.TextureWrap.Mirror = 2 -> RayBork.TextureWrap
+RayBork.TextureWrap.Repeat = 0 -> RayBork.TextureWrap
 RayBork.TonemappingMode
 RayBork.TonemappingMode.AgX = 0 -> RayBork.TonemappingMode
 RayBork.TonemappingMode.None = 1 -> RayBork.TonemappingMode
@@ -606,8 +730,20 @@ static RayBork.QuaternionExtensions.ToAngleAxis(this System.Numerics.Quaternion 
 static RayBork.Rect.FromSize(float width, float height) -> RayBork.Rect
 static RayBork.Rect.operator !=(RayBork.Rect left, RayBork.Rect right) -> bool
 static RayBork.Rect.operator ==(RayBork.Rect left, RayBork.Rect right) -> bool
+static RayBork.RenderState.Additive.get -> RayBork.RenderState
+static RayBork.RenderState.AlphaBlend.get -> RayBork.RenderState
+static RayBork.RenderState.Multiply.get -> RayBork.RenderState
+static RayBork.RenderState.Opaque.get -> RayBork.RenderState
+static RayBork.RenderState.operator !=(RayBork.RenderState left, RayBork.RenderState right) -> bool
+static RayBork.RenderState.operator ==(RayBork.RenderState left, RayBork.RenderState right) -> bool
 static RayBork.RenderStats.operator !=(RayBork.RenderStats left, RayBork.RenderStats right) -> bool
 static RayBork.RenderStats.operator ==(RayBork.RenderStats left, RayBork.RenderStats right) -> bool
+static RayBork.SamplerState.operator !=(RayBork.SamplerState left, RayBork.SamplerState right) -> bool
+static RayBork.SamplerState.operator ==(RayBork.SamplerState left, RayBork.SamplerState right) -> bool
+static RayBork.ShaderTextureBinding.operator !=(RayBork.ShaderTextureBinding left, RayBork.ShaderTextureBinding right) -> bool
+static RayBork.ShaderTextureBinding.operator ==(RayBork.ShaderTextureBinding left, RayBork.ShaderTextureBinding right) -> bool
+static RayBork.ShaderUniform.operator !=(RayBork.ShaderUniform left, RayBork.ShaderUniform right) -> bool
+static RayBork.ShaderUniform.operator ==(RayBork.ShaderUniform left, RayBork.ShaderUniform right) -> bool
 static RayBork.Transform.Identity.get -> RayBork.Transform
 static RayBork.Transform.Lerp(RayBork.Transform a, RayBork.Transform b, float t) -> RayBork.Transform
 static RayBork.Vector3Extensions.Angle(this System.Numerics.Vector3 value, System.Numerics.Vector3 other) -> float
@@ -673,5 +809,13 @@ RayBork.RayBorkAppBuilder.WithSize(int width, int height) -> RayBork.RayBorkAppB
 RayBork.RayBorkAppBuilder.WithTargetFps(int framesPerSecond) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithTitle(string! title) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithWindowState(RayBork.WindowState state) -> RayBork.RayBorkAppBuilder!
+~override RayBork.RenderState.Equals(object obj) -> bool
+~override RayBork.RenderState.ToString() -> string
 ~override RayBork.RenderStats.Equals(object obj) -> bool
 ~override RayBork.RenderStats.ToString() -> string
+~override RayBork.SamplerState.Equals(object obj) -> bool
+~override RayBork.SamplerState.ToString() -> string
+~override RayBork.ShaderTextureBinding.Equals(object obj) -> bool
+~override RayBork.ShaderTextureBinding.ToString() -> string
+~override RayBork.ShaderUniform.Equals(object obj) -> bool
+~override RayBork.ShaderUniform.ToString() -> string

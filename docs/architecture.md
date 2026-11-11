@@ -1,12 +1,14 @@
 # RayBork Architecture
 
-Status: M2 as-built for the renderer, host, platform, threads, frame handoff, HDR presentation,
-recovery, and time. M0 established the build, dependency, and AOT guardrails. M1 ships the app
-host, dedicated tick thread, SDL3 window/input/platform seam, the render-thread frame handoff,
-time/pacing, and logging. M2 adds the Vulkan 1.2 backend behind the internal seam, the linear HDR
-scene target, the AgX/scRGB present pass, MSAA with color resolve, reverse-Z depth, bounded
-recovery, the main-thread surface handshake, committed present shaders, and GPU tests. The asset
-pipeline remains the M3 design and is not shipped.
+Status: M3 as-built for the asset pipeline, on top of the M2 renderer, host, platform, threads,
+frame handoff, HDR presentation, recovery, and time. M0 established the build, dependency, and AOT
+guardrails. M1 ships the app host, dedicated tick thread, SDL3 window/input/platform seam, the
+render-thread frame handoff, time/pacing, and logging. M2 adds the Vulkan 1.2 backend behind the
+internal seam, the linear HDR scene target, the AgX/scRGB present pass, MSAA with color resolve,
+reverse-Z depth, bounded recovery, the main-thread surface handshake, committed present shaders, and
+GPU tests. M3 adds the RAYBORKP v1 pack, canonical asset paths, the dedicated asset loader, the
+runtime catalog and reference counting, the render-thread GPU upload bridge, the custom-data
+pipeline, the bake tooling, and the build-time built-in pack.
 
 ## Goals
 
@@ -32,29 +34,38 @@ Those can be built on top of the draw API or added in later milestones.
 RayBork.Tests ──────> RayBork.Engine, RayBork.Bake
 
 RayBork.Engine ─────> Silk.NET.Vulkan, SDL3-CS, PolyType, Nerdbank.MessagePack,
-                      Microsoft.Extensions.Logging, ZLogger
+                      System.IO.Hashing, Microsoft.Extensions.Logging, ZLogger
                       System.IO.Compression.Zstandard* (in-box, net11.0)
-RayBork.Bake  ──────> RayBork.Engine (pack writer/types), shaderc, image/font/model tooling (JIT)
-samples/HelloInterop -> RayBork.Engine (M1 diagnostic host; M2 AOT gate host, Native AOT)
+RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, StbImageSharp,
+                      BCnEncoder.Net, Silk.NET.Shaderc(+.Native), SharpGLTF.Core,
+                      System.IO.Hashing (JIT)
+build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
+samples/HelloInterop -> RayBork.Engine (M1/M2 AOT gate host, M3 assets gate, Native AOT)
+samples/HelloInterop.Assets -> RayBork.Bake (M3 assets executable, JIT)
 Samples (M11) ──────> RayBork.Engine
 ```
 
 | Project | Role |
 | --- | --- |
-| `RayBork.Engine` | Public API and all runtime internals: app host, SDL3 platform, renderer seam and Vulkan backend, built-in present shaders, asset catalog, pack reader, font/MSDF, input, logging. Native AOT compatible. |
-| `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, pack writer, incremental manifest. Not referenced by a runtime project. |
+| `RayBork.Engine` | Public API and all runtime internals: app host, SDL3 platform, renderer seam and Vulkan backend, built-in present shaders, asset catalog, pack reader, loader thread, GPU upload bridge, input, logging. Native AOT compatible. |
+| `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, KTX2/BC encoding, GLSL compilation, pack writer, incremental manifest. Not referenced by a runtime project. |
+| `build/RayBork.BuiltInAssets` | JIT build-only generator: runs the ordinary bake over the checked-in built-in sources and emits a C# byte array compiled into `RayBork.Engine`. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/HelloInterop` | M1 diagnostic host and the M2 AOT gate host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene through the renderer, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It exercises the AOT publish path on `win-x64` and `linux-x64`. |
+| `samples/HelloInterop` | M1 diagnostic host, M2 AOT gate host, and M3 assets gate host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, optionally loads a baked pack and custom data with `--assets`, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. |
+| `samples/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck`, registers a custom type, and demonstrates a custom processor. JIT only. |
 | `samples/` | Castle, Pong, Text, Instancing, RenderTarget (M11). Each has assets, a bake step, and a Native AOT publish target. |
 
 Rules:
 
-- No runtime project references `RayBork.Bake`.
+- No runtime project references `RayBork.Bake` or `build/RayBork.BuiltInAssets`.
+- The built-in pack generator is invoked by an MSBuild target out of process; `RayBork.Engine` only
+  compiles the generated byte array. The generator's packages never enter the engine output or AOT
+  publish graph.
 - No public type exposes a Silk.NET, SDL3, Vulkan, or other backend-native handle.
 - The engine may reference only pinned, license-reviewed packages. Every package added to
   `RayBork.Engine` must stay in a trim/AOT publish graph without AOT/trim warnings; the milestone
   that first uses its features owns feature-level AOT validation.
-- `RayBork.Bake` may use reflection-heavy libraries because it is never published as AOT.
+- `RayBork.Bake` may use reflection-heavy and native tooling because it is never published as AOT.
 - Tests may reference everything.
 - The renderer backend is selected internally. The public API does not expose Vulkan types or
   device handles.
@@ -74,8 +85,9 @@ policy.
 | `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, events, window HDR state, and Vulkan surfaces | Exercised end to end by the M1 and M2 `samples/HelloInterop` AOT hosts on `win-x64` and `linux-x64`. |
 | `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same hosts on both RIDs. |
 | `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the M2 backend | Exercised end to end by the M2 AOT gate: the published host creates the instance, device, swapchain, scene target, and present pass. |
-| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
-| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack entries | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
+| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by the M3 AOT gate: the published host loads a MessagePack custom-data entry and an engine asset descriptor through compiled shapes. |
+| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the M3 AOT gate. |
+| `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the M3 AOT gate; no reflection or dynamic code. |
 | `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M1 AOT host on both RIDs. |
 | `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M1 AOT host on both RIDs. |
 | `System.IO.Compression.Zstandard*` | in-box `net11.0` | Zstandard pack payload compression | Part of the .NET 11 shared framework; no package and no separate AOT gate. |
@@ -89,15 +101,21 @@ policy.
 | `xunit.runner.visualstudio` | 3.1.5 | Test | VSTest adapter for xUnit v3 | JIT only; not in the runtime publish graph. |
 | `Microsoft.NET.Test.Sdk` | 18.11.1 | Test | Test host and MSBuild integration | JIT only; not in the runtime publish graph. |
 | `Moq` | 4.21.0 | Test | Mocking for unit tests | JIT only; not in the runtime publish graph. |
+| `Tomlyn` | 2.11.1 | Tooling | TOML parse and DOM binding for the bake | JIT only; not in the runtime publish graph. |
+| `StbImageSharp` | 2.30.16 | Tooling | PNG/JPEG/TGA/BMP decoding for the texture processor | JIT only; not in the runtime publish graph. |
+| `BCnEncoder.Net` | 2.3.0 | Tooling | BC1/BC4/BC5/BC7 block encoding for KTX2 payloads | JIT only; not in the runtime publish graph. |
+| `Silk.NET.Shaderc` | 2.23.0 | Tooling | Managed shaderc bindings used by the GLSL compiler | JIT only; not in the runtime publish graph. |
+| `Silk.NET.Shaderc.Native` | 2.23.0 | Tooling | Per-RID native libshaderc binaries for the bake | JIT only; not in the runtime publish graph. |
+| `SharpGLTF.Core` | 1.0.7 | Tooling | glTF 2.0/GLB reading for the model processor | JIT only; not in the runtime publish graph. |
 
 SDL3 and logging are exercised end to end by the M1 `samples/HelloInterop` AOT host. The M2
 milestone gate republishes that host with the renderer and exercises Silk.NET.Vulkan end to end on
-`win-x64` and `linux-x64`; both publishes must finish with zero AOT/trim warnings. The Vulkan
-loader itself is a system/GPU-driver component, not a NuGet dependency. PolyType and
-Nerdbank.MessagePack are pinned and remain in the AOT publish graph without AOT/trim warnings, but
-their feature-level validation lands in M3. The bake's source-format tooling (shaderc and the
-image/font/model libraries) is added in M3; it is JIT only and never enters the runtime publish
-graph, so this matrix gains its pinned versions when M3 selects them.
+`win-x64` and `linux-x64`; both publishes must finish with zero AOT/trim warnings. The M3 gate
+extends the same host with a baked pack, a KTX2 texture upload, a mesh upload, a shader-module
+upload, and a MessagePack custom-data load on both RIDs. The Vulkan loader is a system/GPU-driver
+component, not a NuGet dependency. The bake's source-format tooling is JIT only and never enters
+the runtime publish graph; `build/RayBork.BuiltInAssets` invokes it at engine build time but its
+output is only the generated byte array.
 
 ## Platform seam (M1, Vulkan surface in M2)
 
@@ -242,6 +260,11 @@ diagnostics, not seam members: a readback creates its own command pool, staging 
 and stalls the GPU, so it is never used by the frame path. The scene color is resolved to a
 single-sample image the present pass samples; multisampled depth is not resolved.
 
+M3 adds the `GpuAssetBridge` as an internal companion to the backend, not a new seam operation. The
+render loop drains upload and destroy requests before frame waits and recreates live asset resources
+after a successful device recovery. The backend never sees a game-facing asset type: the bridge
+carries descriptor values and payload bytes only.
+
 ## Threads
 
 | Thread | Owns | Notes |
@@ -249,11 +272,11 @@ single-sample image the present pass samples; multisampled depth is not resolved
 | Main / window thread | SDL3 initialization, window, event pump, monitor and clipboard snapshots, queued window commands, gamepad reconciliation, native Vulkan surface | Runs `RayBorkApp.Run`. The process main thread. Services `MainThreadSurfaceChannel` during startup, the main loop, and shutdown. No game callbacks. |
 | Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; input snapshot; frame publication | Dedicated thread. Starts only after the renderer published `Info`, so `Setup` can read it. The game-facing engine state is tick-thread affine. |
 | Render thread | Backend, instance, device, queues, swapchain, scene target, present pipeline, the newest published frame lease | Creates the Vulkan objects, consumes the newest frame, submits and presents, recovers, and disposes. Never calls user code and never touches the window directly. |
-| Asset loader | Pack I/O, decompression, deserialization, CPU decode (M3) | No loader thread exists in M2; M3 adds it and hands GPU upload requests to the render thread. |
+| Asset loader | Pack I/O, decompression, descriptor decode, MessagePack custom data | Dedicated `RayBork.Asset` thread added in M3. Reads only; it never calls SDL, Vulkan, or game code. Engine-asset GPU uploads are requested from the render thread through the upload bridge. |
 | Sound thread | Audio mixer (post-1.0) | Not present in v1. |
 
-Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, and `RayBork.Render`. M3 adds
-`RayBork.Asset`; the post-1.0 audio milestone adds `RayBork.Audio`.
+Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, `RayBork.Render`, and
+`RayBork.Asset`. The post-1.0 audio milestone adds `RayBork.Audio`.
 
 ### Thread-affine state
 
@@ -262,7 +285,8 @@ Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, and `RayBork
 - M3 adds `IAssetCatalog.Load`, `LoadData`, and `Exists` as thread-safe calls with concurrent loads
   allowed. Engine assets may be used on the tick thread after completion; custom data returned by
   the same `Load<T>` method is caller-owned. Custom types must be registered with
-  `WithAssetType<T>()` before `Build`.
+  `WithAssetType<T>()` before `Build`. Engine asset metadata reads and `Dispose` are thread-safe;
+  the M4 draw path requires the tick thread.
 - `EngineContext.Time`, `DeltaTime`, `FrameCount`, and `Fps` are snapshots for the current tick.
   They are not synchronization primitives. `Stats` and `Info` join them in M2.
 - `IInput` getters read the tick snapshot and are tick-thread only. `IWindow` getters return the
@@ -285,24 +309,30 @@ Startup runs on the main thread and interleaves with the render thread:
    marshalled through the channel; the render thread blocks on it while the main thread services
    the channel and pumps. The main thread also waits for the backend to publish `Info`, bounded to
    30 seconds; the surface request has the same 30-second bound.
-4. The tick thread starts and `IGame.Setup` runs. Because the tick thread starts only after the
+4. The main thread mounts the built-in pack and every configured user pack, then starts the asset
+   loader thread. A pack failure is a startup failure and no game callback runs. The loader is ready
+   before `Setup`, so `Setup` can await engine-asset loads.
+5. The tick thread starts and `IGame.Setup` runs. Because the tick thread starts only after the
    renderer is ready, `Setup` observes a valid `EngineContext.Info`.
-5. The main loop services the surface channel, pumps events, and checks for exit, tick completion,
+6. The main loop services the surface channel, pumps events, and checks for exit, tick completion,
    or a render-thread failure before it stops.
 
 Shutdown unwinds in the opposite direction:
 
 1. The main thread stops accepting ticks and waits for the current tick to finish; the tick thread
    publishes the final frame and runs `IGame.Shutdown` on that thread, then exits.
-2. The main thread joins the tick thread (pumping the platform while it waits) and completes the
-   frame ring. The complete ring still drains its last ready frame.
-3. The main thread joins the render thread while it services the surface channel and pumps. The
+2. The main thread joins the tick thread (pumping the platform while it waits), then cancels and
+   joins the asset loader. The catalog releases its public assets and queues their GPU destruction
+   on the render thread through the upload bridge.
+3. The main thread completes the frame ring. The complete ring still drains its last ready frame.
+   The render thread services the pending GPU destructions before it disposes the backend.
+4. The main thread joins the render thread while it services the surface channel and pumps. The
    render thread drains and presents the final frame, disposes the backend (including destroying
    the native surface through the channel), and exits; the join is bounded to 30 seconds.
-4. The main thread closes the surface channel and disposes the platform, which destroys the window
+5. The main thread closes the surface channel and disposes the platform, which destroys the window
    and unloads SDL3 and the Vulkan loader. GPU resources are not destroyed before `Shutdown`
    returns.
-5. `Run` returns.
+6. `Run` returns.
 
 The render thread never blocks on the platform directly and the main thread never blocks
 unboundedly on the render thread. A renderer initialization failure before `Setup` is a startup
@@ -317,16 +347,16 @@ the setup/shutdown task is pending. This keeps this legal:
 
 ```csharp
 public async Task Setup(EngineContext ctx) {
-    _model = await ctx.Assets.Load<Model>("/models/castle");
+    _mesh = await ctx.Assets.Load<Mesh>("/models/castle/wall");
     _texture = await ctx.Assets.Load<Texture>("/textures/castle");
     _shader = await ctx.Assets.Load<Shader>("/shaders/castle");
-    _shader.SetUniform("mainTexture", _texture);
+    _settings = await ctx.Assets.Load<GameSettings>("/data/settings");
 }
 ```
 
-The asset calls in this example arrive in M3; the continuation rule is already M1.
-`ConfigureAwait(false)` opts out of the context and may resume on a pool thread. Asset calls are
-still safe there, but tick-affine objects must not be touched from that continuation.
+The asset calls are M3; the continuation rule is M1. The M4 `Model` and `SetUniform` calls extend the
+same pattern. `ConfigureAwait(false)` opts out of the context and may resume on a pool thread. Asset
+calls are still safe there, but tick-affine objects must not be touched from that continuation.
 
 ## Frame handoff
 
@@ -352,9 +382,15 @@ seal slot, publish as newest ready
 - The consumer always takes the newest completed tick. It does not queue a backlog of stale frames.
 - A tick that requests exit still publishes its final frame before `IGame.Shutdown` runs. In M2 the
   render thread drains and presents it during teardown before the backend is disposed.
-- M2 frames carry only the frame index: no cameras, draw commands, or texture state. The scene pass
+- M3 frames carry only the frame index: no cameras, draw commands, or texture state. The scene pass
   clears the linear HDR target and the present pass draws one fullscreen triangle. M4 adds the
   camera packet and mesh draws.
+- The frame slot retains every engine asset recorded into it and releases the hold when the render
+  thread releases the slot after present. M3 implements and tests the retention mechanism directly;
+  M4 calls it from the draw recorder. An asset disposed after recording a draw stays alive until
+  the consuming frame completes.
+- The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
+  a frame, so a load that starts in `Setup` does not wait for the first tick.
 - The engine does not interpolate between ticks in v1. Movement at a tick rate below the display
   rate will show discrete steps. Fixed timestep with interpolation is a later milestone.
 - When the window is minimized or unfocused, the tick loop continues at a **30 FPS cap**. The M2
@@ -475,6 +511,12 @@ src/RayBork/RayBork.Engine/Shaders/Present.frag.spv    committed SPIR-V build in
   values are the shader ABI: changing one requires recompiling the committed blob in the same
   change.
 
+M3 also bakes the present vertex/fragment pair into the built-in pack through the shared shaderc
+compiler, so the pack contains the same program as ordinary content. The runtime present pipeline
+continues to consume the committed embedded blobs directly; M4 can switch a render path to the
+pack entry without changing the present ABI. The built-in pack additionally contains a white and an
+error texture generated by the built-in texture processor.
+
 ## Shader state, batching, and instancing
 
 RayBork has no public `Material`. A `Shader` is a complete program plus a mutable uniform cursor:
@@ -513,46 +555,114 @@ still separate draws in v1. Multi-draw indirect is post-1.0.
 The runtime never loads loose source assets in normal operation.
 
 ```text
-source files + TOML sidecars
+source files + TOML data/sidecars
         |
         v
 RayBork.Bake assets executable (JIT)
-  texture/model/shader/font processors, TOML data binding, validation, hashing
+  texture/model/shader/font processors, TOML binding, validation, hashing,
+  KTX2/BC encoding, shaderc GLSL compilation
         |
         v
-assets.pck (RAYBORKP v1, Zstandard payloads, binary index, aligned GPU blobs)
+assets.pck (RAYBORKP v1, binary index, Zstandard payloads, aligned GPU blobs)
         |
         v
-RayBork.Engine asset loader (I/O, decompress, deserialize, GPU upload)
+RayBork.Engine asset catalog (I/O, decompress, descriptor decode, GPU upload)
         |
         v
-game code: await ctx.Assets.Load<Model>("/models/castle")
+game code: await ctx.Assets.Load<Texture>("/textures/castle")
+           await ctx.Assets.Load<Mesh>("/models/castle/wall")
            await ctx.Assets.Load<GameSettings>("/data/settings")
 ```
 
-- The pack is the unit of deployment. Multiple packs can be mounted in order; later packs shadow
-  earlier paths. The engine's built-in pack is mounted first.
-- `Load<T>` is one typed loader. It handles built-in engine assets (`Mesh`, `Model`, `Texture`,
-  `Shader`, `Font`, later `AudioClip`) and custom data types registered with
-  `WithAssetType<T>()`.
-- A custom data load reads a MessagePack entry through a compiled `[GenerateShape]`; the result is
-  a fresh caller-owned instance per call, matching Bork2d. The type is registered at build time with
-  `WithAssetType<T>()`; an unregistered type is a `NotSupportedException`.
-- `LoadData` returns raw bytes.
-- glTF and OBJ are source formats. The bake converts them to the engine's packed mesh/model format;
-  the runtime never parses them.
-- A load for an engine asset completes after GPU upload, so the first draw does not trigger a
-  hidden upload hitch.
-- Engine assets are reference-counted. A completed frame keeps its referenced assets alive until
-  the GPU fence signals. Disposing an asset after recording a draw is safe; using the public object
-  after `Dispose` is not.
-- The loader is bounded and cancellation-aware. Shutdown cancels pending loads and drains the
-  renderer before destroying GPU resources.
-- Built-in assets are not special: the engine's built-in pack is produced by the same
-  `IAssetProcessor` implementations through `UseDefaultProcessors`.
+### Pack format and mounting
 
-The pack format, bake application builder, processors, sidecars, and incremental manifest are
-specified in the API reference's tooling section.
+The pack is the unit of deployment. `RAYBORKP` v1 is a 40-byte little-endian prefix followed by a
+sorted binary index and alignment-padded payloads. The index stores the canonical path, asset type,
+flags, absolute payload offset, stored and uncompressed lengths, alignment, and an XXH3-64 hash of
+the stored bytes; the prefix carries the XXH32 index hash. Every offset, length, alignment, path,
+order, and hash is validated before an entry becomes visible. Payloads are read through a memory
+map and decompressed with the in-box Zstandard APIs, bounded to the declared length.
+
+Multiple packs mount in order; later packs shadow earlier paths. The engine built-in pack is
+mounted first. Mounting is atomic: a failed mount leaves the previous stack unchanged and startup
+fails with `AssetPackException`. v1 has no runtime mount or unmount API.
+
+Asset paths are canonical lowercase ASCII with `/` separators and the `a-z0-9_-` segment grammar.
+Public input may carry one optional leading `/`, is lowercased invariantly, and rejects
+backslashes. The public `IAsset.Path` is the canonical path with a leading `/`; the pack index
+stores it without one.
+
+### Loader, coalescing, and reference counting
+
+The app owns an `AssetCatalog` with one dedicated `RayBork.Asset` thread. `Load<T>`, `LoadData`, and
+`Exists` are thread-safe. A request normalizes the path, resolves the winning entry at enqueue time,
+and queues the read on the loader. The loader reads and decompresses the payload, decodes the
+descriptor or MessagePack custom data, and never touches SDL or Vulkan.
+
+Engine assets (`Mesh`, `Texture`, `Shader` in M3) are cached by `(canonical path, engine asset type)`
+and reference-counted:
+
+- the first successful load creates the object and returns it with one reference;
+- a concurrent load of the same key joins the in-flight operation and acquires one reference on
+  success;
+- a later load increments the count and returns the same object;
+- `Dispose` releases one reference; at zero the public object is marked disposed and its GPU
+  resource destruction is queued on the render thread;
+- a caller that cancels its wait acquires no reference and does not cancel the shared load for
+  other callers;
+- a failed load is not cached, so a retry is allowed.
+
+A load for an engine asset completes only after the GPU upload succeeds, so the first draw never
+triggers a hidden upload. Custom data is not an `IAsset`, is never cached, and returns a fresh
+caller-owned instance per call. `LoadData` returns a fresh copy of the decompressed entry payload.
+
+### GPU upload bridge and frame retention
+
+The render thread is the only thread that calls Vulkan. The catalog hands each engine-asset upload
+to the `GpuAssetBridge`, a thread-safe queue with a signal and one completion task per request. The
+render thread drains the bridge before it waits for a frame, creates the image, buffer, or shader
+module with a short-lived command buffer and fence, and completes the request. A canceled requester
+destroys the just-created resource instead of leaking it. Destructions use the same queue and run at
+a frame boundary.
+
+The bridge retains the CPU upload descriptor for every live GPU resource. After the backend recovers
+a lost device, the render loop asks the bridge to recreate the live resources from those
+descriptors before frame submission resumes; the public asset objects stay valid.
+
+A frame slot owns an engine-asset retention set. Recording an asset into a frame retains it; the
+frame ring releases the set after the render thread releases the slot following present. An asset
+disposed while a recorded frame still references it becomes pending, and its GPU destruction is
+queued only when the last frame hold is gone. M3 implements and tests this mechanism directly; M4
+calls it from the camera draw recorder.
+
+### Custom data, Model, and Font
+
+A custom data source is a TOML file with a root `[raybork]` table naming a registered CLR type. The
+bake binds constructor parameters and properties with the compiled PolyType shape, runs semantic
+validators, and writes one MessagePack `Data` entry. The runtime `Load<T>` deserializes it with the
+registered `[GenerateShape]` shape; there is no reflection resolver and no runtime TOML parser.
+
+M3 bakes and validates `Model` and `Font` entries but does not expose their runtime types. The model
+processor emits a `Model` descriptor plus one `Mesh` part per primitive; the font processor emits a
+`Font` descriptor plus the face payload. Model loading arrives in M4 and font parsing/MSDF in M6.
+
+### Bake tooling and the built-in pack
+
+`RayBork.Bake` is a JIT library and assets-executable host. It discovers sources, parses TOML,
+binds registered data types, runs processors, validates references and duplicate paths, writes the
+pack, and maintains the per-source incremental manifest. It may use Tomlyn, StbImageSharp,
+BCnEncoder.Net, Silk.NET.Shaderc, and SharpGLTF.Core; no runtime project references it.
+
+Built-in assets are not special: the engine's built-in pack is produced by the same processors
+through the same bake pipeline. A JIT-only generator under `build/RayBork.BuiltInAssets` runs the
+ordinary `bake` command over `src/RayBork/RayBork.Engine/BuiltInAssets/Assets` into a temporary
+directory and emits a C# byte array. An MSBuild target imported by `RayBork.Engine.csproj` builds
+and runs the generator before `CoreCompile` and adds the generated file to the compilation. The
+generated file lives under the intermediate output, is never committed, and is not published as a
+loose pack; the generator and its packages do not enter the engine's output or AOT publish graph.
+
+The pack format, bake application builder, processors, sidecars, validation, and incremental
+manifest are specified in the [API reference](api.md#13-asset-tooling-rayborkbake).
 
 ## Native AOT
 
@@ -566,19 +676,23 @@ specified in the API reference's tooling section.
   feature-level gate and exercises them on both RIDs.
 - M1 validates SDL3 and logging end to end with the `samples/HelloInterop` AOT host. M2 extends the
   same gate to Silk.NET.Vulkan: the published host creates the instance, device, swapchain, scene
-  target, and present pass and presents frames. PolyType and Nerdbank.MessagePack stay pinned and
-  in the publish graph; their feature-level validation lands in M3.
+  target, and present pass and presents frames. M3 extends it again: the published host mounts a
+  baked pack, loads a KTX2 texture, a mesh, a shader, and a MessagePack custom-data value, and
+  uploads the engine assets through the render thread before it exits.
+- PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
+  M3 gate; the pack reader and custom-data path contain no reflection resolver.
 - The Vulkan loader is loaded through `NativeLibrary` with a custom `INativeContext` instead of
   Silk.NET's path resolution, so the published host does not depend on a per-RID Silk.NET loader
   asset. The loader itself is a system/GPU-driver component and is not redistributed with the
   engine.
-- Built-in shader blobs are embedded assembly resources. The publish graph contains no shader
-  compiler, GLSL parser, or source shader file.
+- Built-in shader blobs are embedded assembly resources. The built-in pack is a generated byte array
+  compiled into the assembly. The publish graph contains no shader compiler, GLSL parser, TOML
+  parser, image decoder, or block encoder.
 - P/Invoke is direct; native SDL3 and Vulkan libraries are deployed per RID.
 - The generic asset loader maps a closed set of built-in types; custom data goes through the
   `WithAssetType<T>()` registry or `LoadData`.
-- The bake tool is JIT and may use reflection, `MetadataLoadContext`, and native executables. It is
-  never referenced by a runtime project and never enters the publish graph.
+- The bake tool and the built-in pack generator are JIT and may use reflection and native tooling.
+  Neither is referenced by a runtime project, and neither enters the publish graph.
 - Every milestone's exit gate includes at least one `win-x64` and one `linux-x64` AOT publish of
   a sample.
 
@@ -593,6 +707,11 @@ specified in the API reference's tooling section.
   samples, resize recreation, minimized idle, SDR-to-HDR presentation recreation, stats fields, and
   validation-layer cleanliness. The recovery suite covers swapchain out-of-date, surface loss,
   device loss, the three-recovery bound, and the fatal path.
+- M3 adds GPU asset tests: a KTX2 texture creates one image/view/sampler and the expected format;
+  a mesh creates the expected vertex/index buffers; a shader creates both modules; loading the same
+  path twice creates one GPU resource; disposing after a simulated frame hold defers destruction
+  until the hold is released; a device recovery re-creates the live resources; and the validation
+  layer reports no errors for the upload path.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
@@ -604,21 +723,28 @@ specified in the API reference's tooling section.
   `VK_ICD_FILENAMES` pointing at that ICD, so the validation layer is active in CI. The
   `build-test` jobs continue to run the full suite; GPU tests skip there when the runner has no
   display or Vulkan device.
-- CI consumes the committed shader blobs and never needs the Vulkan SDK, `glslc`, or a GPU to build.
+- CI consumes the committed present shader blobs and runs the shader compiler only inside the JIT
+  bake and built-in pack generation. It never needs the Vulkan SDK, `glslc`, or a GPU to build; the
+  shaderc native binaries come from the pinned `Silk.NET.Shaderc.Native` package.
 
 ## Invariants
 
 1. The tick thread never calls the renderer backend. The render thread never calls user code.
 2. A `Camera` is valid only between `CreateCamera` and `Dispose`, inside one `Tick`.
-3. A frame packet owns a reference to every engine asset it references.
+3. A frame slot retains every engine asset a recorded frame references until the frame completes.
 4. Shader state is captured at draw time; later mutation cannot change a recorded draw.
 5. The render thread consumes the newest completed tick, never a stale queue.
 6. Public API never exposes a native handle or a backend type.
-7. A game assembly published with `PublishAot=true` must start, load a pack, draw, and shut down.
+7. A game assembly published with `PublishAot=true` must start, load a pack and custom data, draw
+   where the milestone has a draw path, and shut down.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
-10. The engine's built-in assets are always mounted, so an empty game can clear the screen.
+10. The engine's built-in pack is always mounted first; M3 supplies placeholder textures and the
+    present shader pair, and M4/M6 add the default draw assets.
 11. Only one RayBork app runs per process in v1.
+12. A GPU resource is created, re-created after a device recovery, and destroyed only on the render
+    thread, and only after every frame that references it has completed.
 
-Invariants 2-4, 7, and 10 arrive with the camera, shader, and asset milestones. M1 enforces 1, 5,
-6, and 11; M2 adds 8.
+Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3. Invariants 2-4, 7, and 10 gain their
+end-to-end draw and default-asset coverage with M4/M6; M3 enforces the asset and frame-retention
+parts of 3, 7, and 10.

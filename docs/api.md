@@ -1,10 +1,13 @@
 # RayBork API Reference
 
-Status: **v0.1 M2**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M3**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
-backend. The rest of this document remains the 1.0 contract, not a description of shipped behavior.
+backend. M3 ships the asset pipeline: `IAsset`, `IAssetCatalog`, `Mesh`, `Texture`, `Shader`, the
+asset and shader metadata value types, the asset exceptions, pack mounting and lookup, custom TOML
+data through `WithAssetType<T>()`, `RayBork.Bake`, and the build-time built-in pack. The rest of
+this document remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -116,8 +119,9 @@ owns the deferred surface; the full code blocks below stay the 1.0 contract.
 | `Transform`, `Color`, `Rect`, `Vector3Extensions`, `QuaternionExtensions` | M1 |
 | `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
 | `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, `WithClearColor`) | M2 |
-| `IAssetCatalog`, the asset types, `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, and the asset exceptions | M3 |
-| `Camera`, `CameraProjection`, `ClearMode`, `Mesh`, `Model`, `Shader`, `Texture`, `RenderState`, and the other render enums | M4 |
+| `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
+| `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, and `EngineContext.Assets` | M3 |
+| `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
 | `Collision` and `RayCollision` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
@@ -137,6 +141,14 @@ count and present mode, whether the scRGB HDR path is active, and whether valida
 `WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, and
 `WithClearColor`. M2 has no camera or draw API: a frame clears the linear scene target and presents
 it. `Assets`, cameras, render textures, and custom asset types remain later milestones.
+
+**M3 subset.** `EngineContext` additionally exposes `Assets`, which is valid from `Setup` and safe
+to call from any thread. `RayBorkAppBuilder` additionally exposes `WithAssetsPack`,
+`WithAssetsPacks`, and `WithAssetType<T>`. M3 ships the loading and metadata surface of `Mesh`,
+`Texture`, and `Shader`: `Path`, `IsDisposed`, `Dispose`, and the metadata getters documented in
+§7.3, §7.5, and §7.6. It does not ship `Model`, `Font`, cameras, render textures, `Shader.SetUniform`,
+`ResetUniforms`, or any `Draw*` member; those arrive in M4, M6, and M8. The M3 sample loads a texture,
+a mesh part, a shader, and registered custom data, and reads back their metadata without drawing.
 
 ## 2. Quick start
 
@@ -315,6 +327,13 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > `Build`. The remaining methods in the block above are the 1.0 contract; their milestones are in
 > §1.6.
 
+> **M3 subset.** M3 additionally ships `WithAssetsPack`, `WithAssetsPacks`, and `WithAssetType<T>`.
+> Pack paths are not opened by `Build`; a missing or corrupt pack is an `AssetPackException` from
+> `Run`, because the bake may produce the pack as part of the build. `WithAssetType<T>()` requires
+> `T : IShapeable<T>` and a compiled `[GenerateShape]`; it registers a non-reflective loader delegate
+> and is idempotent for the same type. A conflicting registration is an `InvalidOperationException`
+> from the method call.
+
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
 
@@ -405,7 +424,8 @@ public sealed class EngineContext {
 > **M1 subset.** M1 exposes only `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`,
 > `UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and
 > `RequestExit`. `Assets`, camera creation, and render-texture creation are the later contract;
-> their milestones are in §1.6. M2 adds `Info` and `Stats`.
+> their milestones are in §1.6. M2 adds `Info` and `Stats`. M3 adds `Assets`; camera creation and
+> render-texture creation remain later contract.
 
 | Member | Thread | Notes |
 | --- | --- | --- |
@@ -829,9 +849,14 @@ There is one typed loader. `Load<T>` handles both engine assets and registered c
 
 | `T` | Behavior |
 | --- | --- |
-| `Mesh`, `Model`, `Texture`, `Shader`, `Font`, later `AudioClip` | Loads a shared, reference-counted engine asset. Completes after GPU upload. `T` is an `IAsset` and must be disposed once per successful load. |
+| `Mesh`, `Texture`, `Shader` (M3) | Loads a shared, reference-counted engine asset. Completes after GPU upload. `T` is an `IAsset` and must be disposed once per successful load. |
+| `Model` (M4), `Font` (M6), later `AudioClip` | The same shared, reference-counted contract; the types arrive with their milestones. |
 | A custom type registered with `WithAssetType<T>()` | Deserializes a MessagePack data entry through the compiled `[GenerateShape]`. Returns a fresh caller-owned instance per call; no reference counting and no `Dispose`. |
 | Any other type | `NotSupportedException` naming the type and asking for `WithAssetType<T>()`. |
+
+`IAsset.Path` is the canonical path with a leading `/`; `Load` accepts the same path with or without
+it. A disposed asset keeps `Path` and `IsDisposed` readable for diagnostics; every other member
+throws `ObjectDisposedException`.
 
 A custom type registration is explicit on the builder:
 
@@ -877,42 +902,50 @@ no `TryLoad` in v1: catch `AssetNotFoundException` when absence is expected.
 | No extension | `/shaders/castle`, not `/shaders/castle.glsl` |
 | No `.` or `..` segments | |
 | No trailing slash | |
-| Segments use lowercase letters, digits, `_`, `-` | Bork2d-compatible canonical grammar |
-| UTF-8, no NUL | |
+| Segments use ASCII lowercase letters, digits, `_`, `-` | Bork2d-compatible canonical grammar |
+| Maximum length is 4096 bytes | |
 
-The runtime normalizes input by stripping an optional leading slash and lowercasing with invariant
-rules. Backslashes are rejected; use forward slashes. The canonical path is lowercase with `/`
+The runtime normalizes input by stripping one optional leading slash and lowercasing with invariant
+rules. Backslashes are rejected; use forward slashes. The canonical path is lowercase ASCII with `/`
 separators. A path that normalizes to the same key as another entry is a collision; the bake reports
 it and does not publish the pack.
 
 A canonical path is an asset identity. Two different source files cannot produce the same path in
-one pack. Two packs may contain the same path; the later-mounted pack wins.
+one pack. Two packs may contain the same path; the later-mounted pack wins. The public `IAsset.Path`
+is the canonical path with a leading `/`; the pack index stores it without one.
 
 ### 6.3 Asset types
 
-| Type | Baked from | Runtime form |
-| --- | --- | --- |
-| `Mesh` | A single mesh primitive | GPU vertex/index buffers; CPU positions retained for collision |
-| `Model` | glTF 2.0, OBJ | Multi-part model with meshes, local transforms, baked shader state, texture references |
-| `Texture` | PNG, JPEG, TGA, KTX2 | GPU-ready format, mips, sRGB flag, sampler state |
-| `Shader` | GLSL vertex + fragment pair | SPIR-V plus reflection metadata, entry points, and a default render state |
-| `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs |
-| Custom data | TOML source | MessagePack payload deserialized through `Load<T>` after `WithAssetType<T>()` |
-| Raw data | Any processor output or raw source | Opaque bytes through `LoadData` |
+| Type | Baked from | Runtime form | Milestone |
+| --- | --- | --- | --- |
+| `Mesh` | One primitive from glTF 2.0 or OBJ | GPU vertex/index buffers; CPU positions retained for collision | M3 |
+| `Texture` | PNG, JPEG, TGA, BMP | GPU-ready KTX2 payload, mips, sRGB flag, sampler state | M3 |
+| `Shader` | GLSL vertex + fragment pair | SPIR-V plus sidecar metadata, entry points, and a default render state | M3 |
+| `Model` | glTF 2.0, OBJ | Multi-part model with meshes, local transforms, shader references | M4 (baked in M3) |
+| `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs | M6 (baked in M3) |
+| Custom data | TOML source | MessagePack payload deserialized through `Load<T>` after `WithAssetType<T>()` | M3 |
+| Raw data | Any processor output or raw source | Opaque bytes through `LoadData` | M3 |
 
 glTF and OBJ are **source formats only**. The bake converts them to the engine's packed mesh/model
-format; the runtime never parses glTF or OBJ. KTX2 is a source container for textures; the runtime
-reads the engine's packed texture descriptor and payload.
+format; the runtime never parses glTF or OBJ. The engine texture payload is a complete KTX2 2.0
+file; PNG/JPEG/TGA/BMP are the M3 source formats and the runtime only reads the packed KTX2
+payload. KTX2 source passthrough is a later addition, not an M3 source format.
 
 `RenderTexture` is created at runtime and is not a pack asset. `AudioClip` is post-1.0.
 
-`Model` is the normal entry point for a glTF/OBJ file. `Load<Model>` loads the model's referenced
-meshes, textures, and shaders and holds its own references to them. Disposing the model releases
-those references. If the game also loaded one of those textures directly, it holds a separate
-reference and must dispose it separately.
+`Model` is the normal entry point for a glTF/OBJ file from M4. A model's parts are separate `Mesh`
+assets at `<model-path>/<part>`; M3 emits and validates both the model descriptor and the part mesh
+entries. `Load<Model>` will load the model's referenced meshes and shaders and hold its own
+references to them; disposing the model releases those references. If the game also loaded one of
+those parts directly, it holds a separate reference and must dispose it separately.
 
-`Load<Mesh>` is for a standalone mesh asset. Loading a multi-part model as `Mesh` throws
-`AssetTypeMismatchException` unless the bake explicitly emitted a single-mesh asset at that path.
+`Load<Mesh>` is for a standalone mesh-part asset. Loading a multi-part model path as `Mesh` throws
+`AssetTypeMismatchException`.
+
+Texture formats in M3 are `Rgba8Unorm`, `Rgba8Srgb`, `Bc7Unorm`, `Bc7Srgb`, `Bc5Unorm`, and
+`R8Unorm`. `Rgba16Float` and `Depth32Float` are render-target formats and are not accepted in a
+packed texture in M3. The bake writes an sRGB transfer function into the KTX2 data format
+descriptor for the sRGB formats; the runtime creates the matching Vulkan format.
 
 ### 6.4 Identity, reference counting, and lifetime
 
@@ -924,9 +957,13 @@ reference and must dispose it separately.
 - A load of the same path with a different engine asset type throws `AssetTypeMismatchException`.
 - `Dispose` releases one reference. Once the count reaches zero, the public object becomes
   disposed and GPU destruction is queued on the render thread.
-- The engine keeps its own references for every frame packet that uses the asset. Disposing an
-  asset immediately after recording a draw is safe; the frame keeps the GPU resource alive until
-  its fence signals.
+- A frame packet that uses an engine asset holds its own reference for the lifetime of that frame.
+  Recording a draw calls an internal retain on each referenced asset; the frame ring releases the
+  hold after the frame is presented. Disposing an asset immediately after recording a draw is
+  therefore safe; the frame keeps the GPU resource alive until its fence signals. M3 implements and
+  tests the retain/release mechanism directly; M4 wires `Camera.Draw*` into it.
+- A device recovery re-uploads the live GPU resources from the retained CPU descriptors before
+  frame submission resumes. A public asset object stays valid across the recovery.
 - Using a disposed engine asset (reading a property or passing it to a draw) throws
   `ObjectDisposedException`.
 
@@ -940,14 +977,21 @@ cache, and has no `Dispose`. It never keeps a GPU resource alive.
 
 Loading the same engine path concurrently is coalesced: one load runs, all callers receive the same
 result and each caller owns one reference. If the load fails, every caller observes the failure
-and no reference is created. Custom data loads are independent; each call produces a new instance.
+and no reference is created. A caller that cancels its wait does not acquire a reference, even if
+the shared load later succeeds. Custom data loads are independent; each call produces a new instance.
+
+`LoadData` returns the decompressed bytes of the winning entry. For a typed engine asset entry that
+is the serialized descriptor, not the GPU payload; tooling that needs a raw texture or mesh payload
+uses the payload entry path emitted by the bake. For a `[raybork]` data entry it is the MessagePack
+bytes.
 
 ### 6.5 Load pipeline and errors
 
 ```text
 Load<T>(path)
-  -> resolve winning entry
-  -> engine asset?  -> read/decompress -> descriptor -> GPU upload -> wait -> refcount -> return
+  -> resolve winning entry in the mounted pack stack
+  -> engine asset?  -> read/decompress -> descriptor -> GPU upload on the render thread
+                    -> wait -> refcount -> return
   -> registered?    -> read/decompress -> MessagePack shape -> fresh instance -> return
   -> otherwise      -> NotSupportedException
 ```
@@ -955,22 +999,28 @@ Load<T>(path)
 Consequences:
 
 - `Load<T>` for engine assets is asynchronous because pack I/O, decompression, and GPU upload are
-  asynchronous.
+  asynchronous. The read runs on the dedicated `RayBork.Asset` thread; the upload runs on the render
+  thread through an internal queue, and the load task completes only after the upload succeeds.
 - Engine assets do not return half-uploaded, so the first draw never triggers a hidden upload.
 - Custom data is CPU-only and can complete without the renderer; it is still a `Task` because pack
   I/O runs on the loader.
 - `Load` may be called from any thread, but awaiting it from the tick thread blocks that tick's
   continuation, not the render thread. Load in `Setup` unless a hitch is acceptable.
 - Cancellation before completion releases all partial resources and throws
-  `OperationCanceledException`. Cancellation after the asset is returned has no effect.
+  `OperationCanceledException`. A canceled caller does not acquire a reference. Cancellation after
+  the asset is returned has no effect. A canceled GPU upload destroys the just-created resource on
+  the render thread instead of leaking it.
 - A failed load is not cached as a permanently failed entry; retrying is allowed.
+- The loader is bounded: pack payload reads validate every length and offset before allocation, and
+  a decompressed payload larger than its declared size is an `AssetLoadException`.
 
 | Exception | When |
 | --- | --- |
+| `AssetException` | Base type for every asset pipeline failure with a diagnostic code. |
 | `AssetPackException` | The pack is missing, truncated, has a bad magic/version, fails a hash, or has an invalid index. |
 | `AssetNotFoundException` | The path is not in any mounted pack. |
 | `AssetTypeMismatchException` | The path exists but was baked as a different engine asset type. |
-| `AssetLoadException` | The payload is corrupt, decode fails, or GPU upload fails. |
+| `AssetLoadException` | The payload is corrupt, decode fails, a custom-data shape fails, or GPU upload fails. |
 | `OperationCanceledException` | The caller's token was canceled before completion. |
 | `ObjectDisposedException` | The catalog or a required dependency is already disposed. |
 | `NotSupportedException` | `T` is neither an engine asset nor registered with `WithAssetType<T>()`. |
@@ -980,17 +1030,26 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 
 ### 6.6 Pack mounting and built-in assets
 
-- The engine's built-in pack is mounted first. It contains the default shaders, a white texture,
-  an error glyph, and the primitive geometry used by the built-in draw helpers.
+- The engine's built-in pack is mounted first, below every user pack. In M3 it contains the
+  placeholder white and error textures and the present shader pair, produced by the same
+  `IAssetProcessor` pipeline as game content. The default draw shader, primitive meshes, and error
+  glyph arrive with M4 and M6.
 - `WithAssetsPack` mounts user packs in call order after the built-in pack. Later packs shadow
   earlier packs for the same canonical path.
 - The winning entry is the last mounted pack that contains the path. A shadowed entry is never
   partially used.
-- v1 has no runtime pack mount/unmount API. Packs are fixed at `Build`.
+- v1 has no runtime pack mount/unmount API. Packs are fixed when the app is built.
 - A missing pack file is an `AssetPackException` from `Run`, not from `Build`, because the bake may
   produce the pack as part of the build.
 - Relative pack paths resolve against `AppContext.BaseDirectory`, so a published game finds its
   pack next to the executable.
+- The built-in pack is generated at engine build time by a JIT-only generator that references
+  `RayBork.Bake`, runs the ordinary `bake` command over the checked-in built-in sources into a
+  temporary directory, and emits a C# byte array that `RayBork.Engine` compiles into the assembly.
+  The generator never enters a runtime project or an AOT publish graph, and no generated pack is
+  committed.
+- Mounting validates every pack before it becomes visible. A failed mount leaves the previous pack
+  stack unchanged, and startup fails with `AssetPackException`.
 
 ## 7. Rendering
 
@@ -1278,6 +1337,11 @@ public readonly record struct ShaderUniform(string Name, ShaderUniformType Type)
 public readonly record struct ShaderTextureBinding(string Name, int Index);
 ```
 
+> **M3 subset.** M3 loads and exposes the metadata members only: `Path`, `Stages`,
+> `DefaultRenderState`, `Uniforms`, `Textures`, `IsDisposed`, and `Dispose`. `SetUniform` and
+> `ResetUniforms` are M4. `Uniforms` and `Textures` come from the bake sidecar metadata, not from
+> runtime SPIR-V reflection.
+
 A `Shader` is a complete vertex+fragment program. It owns a **mutable uniform cursor**:
 
 1. `SetUniform` writes the current value for the named uniform.
@@ -1499,6 +1563,10 @@ public enum PrimitiveTopology {
 }
 ```
 
+> **M3 subset.** M3 ships `Mesh` and loads standalone mesh-part assets. `Model` and `ModelPart` are
+> M4; M3 bakes model descriptors and their part mesh entries. `Mesh.Bounds` is a
+> `System.Numerics.BoundingBox`.
+
 - `Mesh` is one primitive: one vertex/index buffer pair and one topology. It is immutable after
   load. `Bounds` is in mesh space. The fixed vertex layout is listed in §7.4: position, normal,
   uv, uv1, uv2, uv3, color, and tangent.
@@ -1561,6 +1629,10 @@ public enum TextureFormat {
     Depth32Float,
 }
 ```
+
+> **M3 subset.** M3 loads and exposes `Path`, `Width`, `Height`, `MipLevels`, `Format`, `IsSrgb`,
+> `Sampler`, `IsDisposed`, and `Dispose`. The GPU image is created from the packed KTX2 payload.
+> Mip generation, format selection, sRGB, and sampler settings are fixed at bake time.
 
 - Textures are immutable GPU resources. The bake chooses format, mip count, sRGB, and sampler;
   v1 has no runtime sampler override or texture upload API.
@@ -2265,7 +2337,7 @@ public class RayBorkException : Exception {
 }
 
 public sealed class GameException : RayBorkException { }
-public sealed class AssetException : RayBorkException { }
+public class AssetException : RayBorkException { }
 public sealed class AssetNotFoundException : AssetException { }
 public sealed class AssetTypeMismatchException : AssetException { }
 public sealed class AssetPackException : AssetException { }
@@ -2279,8 +2351,8 @@ public sealed class PlatformException : RayBorkException { }
 
 M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowException`. M2 ships
 `GraphicsException` and `GraphicsDeviceLostException`; `GraphicsException` is not sealed, and
-`GraphicsDeviceLostException` derives from it. The asset and shader exceptions in the block above
-are the later contract.
+`GraphicsDeviceLostException` derives from it. M3 ships `AssetException` and its four sealed
+subtypes. `ShaderException` remains the M4 shader-ABI contract.
 
 Game and platform diagnostic codes (M1, M2):
 
@@ -2299,6 +2371,38 @@ Graphics diagnostic codes (M2):
 | `RB3002` | `GraphicsDeviceLostException` | A bounded recovery failed or the consecutive-recovery limit was reached. Fatal. |
 | `RB3003` | `GraphicsException` | An unrecoverable Vulkan acquire or present failure stopped the app. Fatal. |
 
+Asset diagnostic codes (M3):
+
+| Code | Exception | Meaning |
+| --- | --- | --- |
+| `RB1001` | `AssetPackException` | A pack could not be opened or is truncated. |
+| `RB1002` | `AssetPackException` | Unsupported pack magic or version. |
+| `RB1003` | `AssetPackException` | The pack index is structurally invalid, unsorted, or contains a duplicate path. |
+| `RB1004` | `AssetPackException` | The index hash does not match the index bytes. |
+| `RB1005` | `AssetLoadException` | A payload hash does not match the stored bytes. |
+| `RB1006` | `AssetNotFoundException` | The path is absent from every mounted pack. |
+| `RB1007` | `AssetTypeMismatchException` | The path exists with a different asset type. |
+| `RB1008` | `AssetLoadException` | A descriptor, KTX2 payload, mesh payload, or custom-data shape could not be decoded. |
+| `RB1009` | `AssetException` | An asset path is not canonical. |
+| `RB1010` | `AssetLoadException` | A GPU upload or device-recovery re-upload failed. |
+
+Bake diagnostic codes (M3, `RayBork.Bake`):
+
+| Range | Meaning |
+| --- | --- |
+| `RB4001` | Builder configuration, pack/root paths, or registration errors. |
+| `RB4002` | TOML syntax, binding, sidecar, or unknown-key errors. |
+| `RB4003` | Source discovery, canonical path, duplicate path, or unsupported source errors. |
+| `RB4004` | Pack layout, size overflow, or write errors. |
+| `RB4005` | Incremental manifest or cache errors. |
+| `RB4006` | A custom processor failed. |
+| `RB4007` | Texture decode, KTX2, mip, or block-encoding errors. |
+| `RB4008` | Shader source, shaderc compilation, or metadata errors. |
+| `RB4009` | glTF/OBJ parse or model/mesh conversion errors. |
+| `RB4010` | Font container, face validation, or packaging errors. |
+| `RB4011` | Missing or invalid baked references. |
+| `RB4012` | A semantic asset validator reported an error. |
+
 | Exception | Typical cause |
 | --- | --- |
 | `GameException` | `Setup`, `Tick`, or `Shutdown` threw. `InnerException` is the game's exception. |
@@ -2313,9 +2417,9 @@ Graphics diagnostic codes (M2):
 | `PlatformException` | SDL3 initialization, Vulkan surface or loader failure (`RB2003`), audio device (later), or native library failure. |
 
 `DiagnosticCode` is a stable `RB`-prefixed code such as `RB1002` (unsupported pack version),
-`RB2003` (SDL3 Vulkan surface or loader failure), or `RB3002` (bounded recovery failed). Later
-milestones add the asset, shader, and bake codes. Codes are documented in the bake and runtime
-diagnostics tables; tests assert them. They are stable within a major version.
+`RB2003` (SDL3 Vulkan surface or loader failure), or `RB3002` (bounded recovery failed). Codes are
+documented in the runtime and bake diagnostics tables; tests assert them. They are stable within a
+major version.
 
 Lifecycle and argument errors use the standard BCL exceptions, not `RayBorkException`:
 `ArgumentNullException`, `ArgumentException`, `InvalidOperationException`,
@@ -2426,8 +2530,14 @@ RayBork's runtime is designed for Native AOT:
 - P/Invoke is direct. SDL3 native libraries are deployed per RID; the Vulkan loader is resolved from
   the system/GPU driver with `NativeLibrary` and a custom `INativeContext`.
 - The engine may use `unsafe` internally; game projects do not need `AllowUnsafeBlocks`.
-- The bake tool is JIT and may use reflection, `MetadataLoadContext`, and native executables. It is
-  never referenced by a runtime project and never enters the publish graph.
+- The bake tool is JIT and may use reflection, native tooling, and shader compilation. It is never
+  referenced by a runtime project and never enters the publish graph.
+- The built-in pack is generated at engine build time by a JIT-only generator that runs the ordinary
+  bake tool. Its generated C# byte array is compiled into `RayBork.Engine`; the generator, its
+  packages, and shaderc are not part of the runtime publish graph.
+- Pack descriptors and custom data use `[GenerateShape]` and `Nerdbank.MessagePack`; the runtime
+  never uses reflection serialization. `Load<T>` maps engine asset types with a closed type switch
+  and custom data through the registered shape delegate.
 
 A game project uses `WinExe` for release. Samples and diagnostic hosts use `Exe` so console logging
 is visible.
@@ -2455,8 +2565,11 @@ dotnet publish -c Release -r win-x64   -p:PublishAot=true
 dotnet publish -c Release -r linux-x64 -p:PublishAot=true
 ```
 
-Both publishes must start, open a window (or run offscreen in the GPU test harness), load a pack,
-draw, and shut down. AOT publish is a per-milestone gate, not a release-only check.
+Both publishes must start, load a pack and any registered custom data, draw where the milestone has
+a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M3
+gate bakes a sample pack with the assets executable, publishes `samples/HelloInterop`, runs it with
+`--assets <pack> --frames 30` on `win-x64` and `linux-x64`, and requires exit code `0` with zero
+AOT/trim warnings.
 
 Single-file publishing is supported when the native SDL3/Vulkan libraries are deployed alongside
 the executable or extracted by the host. A fully self-extracting single binary is not a v1 gate.
@@ -2468,7 +2581,13 @@ the executable or extracted by the host. A fully self-extracting single binary i
 `RayBork.Bake` is a JIT build library, not a runtime dependency. A game owns a small assets
 executable that configures the bake and calls `RunAsync`. The bake discovers sources, runs
 processors, binds TOML data, validates references, and writes one or more packs. The runtime only
-sees the packed engine format.
+sees the packed engine format. No runtime project references `RayBork.Bake`.
+
+The bake uses JIT-only tooling: `Tomlyn` for TOML, `StbImageSharp` for PNG/JPEG/TGA/BMP decoding,
+`BCnEncoder.Net` for BC1/BC4/BC5/BC7 encoding, `Silk.NET.Shaderc` plus `Silk.NET.Shaderc.Native`
+for GLSL compilation, `SharpGLTF.Core` for glTF 2.0, `PolyType` and `Nerdbank.MessagePack` for
+shapes and payloads, and `System.IO.Hashing` for pack hashes. These packages never enter a runtime
+project or an AOT publish graph.
 
 ### 13.1 Assets executable
 
@@ -2491,14 +2610,24 @@ return await new BakeApplicationBuilder()
 | --- | --- |
 | `WithProjectRoot` | Base for relative roots, pack paths, and diagnostics. |
 | `WithPack(packPath, root)` | Adds one ordered pack. The first is the main pack; later packs are overlays that shadow earlier paths at runtime. |
-| `UseDefaultAssets` | Registers the engine authoring types and their built-in validators. Idempotent. |
+| `UseDefaultAssets` | Registers the engine authoring descriptor types and their built-in validators. Idempotent. |
 | `RegisterAsset<T>()` | Registers one TOML data type. `T` must carry a compiled `[GenerateShape]`. |
-| `RegisterAsset<T>(validator)` | Registers the type if needed and appends a semantic validator. |
-| `UseDefaultProcessors` | Registers the built-in texture, model, shader, and font processors. Audio processors are added in A1. |
+| `RegisterAsset<T>(validator)` | Registers the type if needed and appends an `IAssetValidator<T>`. |
+| `UseDefaultProcessors` | Registers the built-in texture, model, shader, font, and raw processors. Audio processors are added in A1. |
 | `WithTextureDefaults` | Sampler defaults for textures without a sidecar. |
 | `AddProcessor` | Adds a custom `IAssetProcessor`; later registrations override earlier ones for the same extension. |
 | `Build` | Validates configuration and returns the bake application. |
-| `RunAsync(args)` | Runs `bake`, `watch`, `clean`, or `inspect`; returns the process exit code. |
+| `RunAsync(args)` | Runs `bake`, `clean`, `inspect`, `--help`, or `--version`; returns the process exit code. |
+
+The `watch` command is deferred to M10. M3 ships `bake`, `clean`, `inspect`, `--help`, and
+`--version`.
+
+M3's public bake surface is `BakeApplicationBuilder`, `BakeApplication`, `IAssetProcessor`,
+`AssetProcessor<TSidecar>`, `AssetProcessorContext`, `IAssetOutputSink`,
+`IAssetProcessorDiagnostics`, `IAssetValidator<T>`, `SidecarPolicy`, `TextureBaker`,
+`BakedTexture`, `TextureChannelType`, and `TextureCompression`. `TextureBaker.Bake` is the one
+KTX2 producer: a custom processor that generates pixels calls it instead of writing KTX2 headers or
+block data itself.
 
 Built-in assets are not special. The engine's built-in pack is produced by the same processors
 through `UseDefaultProcessors`; a game can override a built-in extension with `AddProcessor`.
@@ -2526,12 +2655,16 @@ public sealed partial class GameSettings {
 }
 ```
 
-The bake binds the constructor parameters and properties by name, serializes the value as
-MessagePack, and emits a typed data entry at `data/level`. The runtime reads it with
-`ctx.Assets.Load<GameSettings>("/data/level")`.
+The bake binds constructor parameters and properties by name, serializes the value as MessagePack,
+and emits a typed data entry at `data/level`. The runtime reads it with
+`ctx.Assets.Load<GameSettings>("/data/level")`. Member keys are snake_case by default
+(`PaddleSpeed` is `paddle_speed`); `[JsonPropertyName]` overrides one member. Enums bind by their
+member name, case-insensitively, with snake_case accepted (`greater_or_equal`). Unknown keys,
+missing required members, and type mismatches are errors.
 
-A data TOML file is not a sidecar. A sidecar is `<processor source>.toml` and configures that
-processor; it is not registered as data.
+A data TOML file is not a sidecar. A sidecar configures one processor source and lives at
+`<asset base>.toml` with a table named after the processor (`[texture]`, `[model]`, `[font]`). A
+`[shader]` TOML is a shader source, described below.
 
 ### 13.3 Processors
 
@@ -2545,33 +2678,38 @@ public interface IAssetProcessor {
 }
 ```
 
-- `Name` is stable and participates in diagnostics and incremental hashing.
+- `Name` is stable and participates in diagnostics and incremental hashing. It is also the sidecar
+  table name.
 - `Extensions` lists the source extensions the processor owns; both `"png"` and `".PNG"` are
-  normalized.
+  normalized. A compound extension such as `shader.toml` is matched as one extension when registered.
 - `Policy` is `None`, `Optional`, or `Required`; `SidecarShape` is the compiled shape for a typed
-  sidecar.
+  sidecar. A missing `Optional` sidecar uses `CreateDefaultSidecar`; a missing `Required` sidecar is
+  an error. The bake never creates or rewrites a source sidecar.
 - `Process` runs on the bake thread. It must not retain per-source state between calls.
 - Outputs go through `AssetProcessorContext.Outputs`: `AddAsset<T>` for shaped data and `AddData`
-  for raw payloads. A processor never writes MessagePack or pack bytes directly.
+  for raw payloads. `AddData` takes an alignment of `1`, `16`, `64`, or `256`; GPU payloads use
+  `16` or greater. A processor never writes MessagePack or pack bytes directly.
 - `AssetProcessorContext` exposes the source paths, the canonical base asset path, the output sink,
   and the diagnostic sink. It is valid for one source only.
 - `AssetProcessor<TSidecar>` is the convenience base for a processor with a required sidecar.
+- A processor error discards every output for the source and fails the pack. Warnings do not fail
+  the pack unless `--warnings-as-errors` is set.
 
 Built-in processors:
 
 | Processor | Sources | Outputs |
 | --- | --- | --- |
-| Texture | PNG, JPEG, TGA, KTX2 | Texture descriptor plus GPU payload |
-| Model | glTF 2.0, OBJ | Model and mesh descriptors, engine vertex/index payloads, texture references |
-| Shader | GLSL vertex/fragment | SPIR-V stages, reflection, generated prologue, render state |
-| Font | TTF/OTF | Font face bytes and metrics; runtime MSDF data |
+| Texture | PNG, JPEG, TGA, BMP | `Texture` descriptor plus its KTX2 payload |
+| Model | glTF 2.0 (`.gltf`, `.glb`), OBJ | `Model` descriptor, one `Mesh` descriptor per part, vertex/index payloads |
+| Shader | GLSL vertex + fragment pair named by a `[shader]` TOML | `Shader` descriptor plus vertex and fragment SPIR-V payloads |
+| Font | TTF, OTF | `Font` descriptor plus the face payload |
+| Raw | Any unclaimed source | Opaque bytes for `LoadData` |
 | Audio (A1, post-1.0) | WAV, OGG, MP3, FLAC, AIFF | AAC-LC payload via FFmpeg; not registered by `UseDefaultProcessors` in 1.0 |
-| Raw | Anything not claimed | Opaque bytes for `LoadData` |
 
-Per-asset sidecars use TOML. A texture sidecar:
+A texture source `Assets/Textures/castle.png` with an optional sidecar
+`Assets/Textures/castle.toml`:
 
 ```toml
-# Assets/Textures/castle.toml
 [texture]
 srgb = true
 format = "bc7"
@@ -2580,19 +2718,39 @@ wrap = "repeat"
 anisotropy = 8
 ```
 
-A model sidecar can request a scale or front-axis correction:
+- `format` is `rgba8`, `bc7`, `bc5`, or `r8`; the default is `rgba8`. `bc5` and `r8` are linear data
+  formats and reject `srgb = true`. `srgb` defaults to `true` for `rgba8`/`bc7`.
+- `filter` is `nearest`, `linear`, or `anisotropic`; the builder default is `linear`.
+- `wrap` is `repeat`, `clamp`, or `mirror`; the builder default is `repeat`.
+- `anisotropy` defaults to `1` and is clamped to the device limit at load time.
+- The bake generates the full mip chain with a deterministic box filter, encodes every level, and
+  writes one complete KTX2 2.0 payload. The descriptor and payload agree on format, mip count, and
+  sRGB transfer.
+- A texture that decodes to an unsupported dimension, a 16-bit PNG, or a non-finite payload value is
+  a `RB4007` error and emits no outputs.
+
+A model source `Assets/Models/castle.glb` with an optional sidecar
+`Assets/Models/castle.toml`:
 
 ```toml
-# Assets/Models/castle.toml
 [model]
 scale = 1.0
 front = "+z"
+shader = "shaders/castle"
 ```
 
-A font sidecar can list preload ranges and MSDF parameters:
+- glTF 2.0 static meshes and OBJ static meshes are supported. Skins, morph targets, animations,
+  cameras, and lights are rejected or ignored with a diagnostic; a source with no mesh is an error.
+- The model is emitted at the base path. Each primitive becomes a `Mesh` part at
+  `<base>/<part>` with its own vertex/index payload. The `Model` descriptor records the flat part
+  list, local transforms, bounds, and the shared sidecar shader path.
+- `scale` and `front` apply the authoring correction before bounds and payloads are written.
+- glTF material and image import is M4 work. M3 validates that referenced images exist and warns
+  that they are not imported.
+
+A font source `Assets/Fonts/inter.ttf` with an optional sidecar `Assets/Fonts/inter.toml`:
 
 ```toml
-# Assets/Fonts/inter.toml
 [font]
 ranges = ["U+0020-007E", "U+00A0-00FF"]
 msdf_pixel_size = 32
@@ -2600,91 +2758,169 @@ msdf_range = 4
 msdf_padding = 2
 ```
 
-The shader sidecar is shown in §7.4. Unknown keys are errors, not silently ignored.
+The font processor validates the sfnt container and table directory, stores the settings in the
+`Font` descriptor, and emits the original face bytes. The runtime parser and MSDF generation are M6.
 
-### 13.4 Pack v1 (target layout)
+A shader is authored as one TOML source at the asset base path:
 
-The pack is little-endian and starts with a fixed header:
+```toml
+# Assets/Shaders/castle.toml
+[shader]
+vertex = "castle.vert"
+fragment = "castle.frag"
+vertex_entry = "main_vertex"
+fragment_entry = "main_fragment"
+
+[[shader.uniforms]]
+name = "uTint"
+type = "vec4"
+default = [1.0, 1.0, 1.0, 1.0]
+
+[[shader.textures]]
+name = "mainTexture"
+
+[shader.render_state]
+blend = "opaque"
+cull = "back"
+depth_test = "greater_equal"
+depth_write = true
+```
+
+- `vertex` and `fragment` are paths relative to the TOML file and must stay inside the pack root.
+  They are tracked inputs, not assets. The TOML source itself is not a data asset.
+- The entry points default to `main_vertex` and `main_fragment`; M3 accepts an explicit value only
+  for built-in shaders. The bake validates that each entry point exists in its SPIR-V module.
+- Supported uniform types are `float`, `int`, `uint`, `bool`, `vec2`, `vec3`, `vec4`, `mat4`, and
+  `sampler2D`. `default` is a scalar for `float`/`int`/`uint`/`bool`, and an array whose length
+  matches the component count for the vector and matrix types. Arrays, structs, and extra uniform
+  blocks are errors.
+- `blend` is `opaque`, `alpha`, `additive`, or `multiply`; `cull` is `none`, `front`, or `back`;
+  `depth_test` is `disabled`, `greater`, `greater_equal`, `less`, `less_or_equal`, or `always`.
+  `depth_write` is a bool.
+- The generated prologue, shader ABI bindings, and full SPIR-V reflection are M4. M3 compiles the
+  two-stage program with shaderc, validates the entry points, and records the sidecar metadata and
+  render state in the `Shader` descriptor.
+
+The built-in processors use `RB4007`-`RB4010`; the shared TOML and discovery failures use
+`RB4002`/`RB4003`. Unknown keys are errors, not silently ignored.
+
+### 13.4 Pack v1 (as built)
+
+The pack is little-endian and starts with a fixed 40-byte header:
 
 | Field | Size | Notes |
 | --- | --- | --- |
 | Magic | 8 bytes | ASCII `RAYBORKP` |
 | Version | `u32` | `1` |
-| Flags | `u32` | Compression policy, reserved bits |
-| Entry count | `u32` | |
-| Index offset | `u64` | Absolute file offset |
-| Index length | `u32` | Bytes |
-| Index hash | `u32` | XXH32 of the index bytes |
+| Flags | `u32` | Reserved; zero |
+| Entry count | `u32` | At most 1,000,000 |
+| Index offset | `u64` | Absolute file offset, 40 |
+| Index length | `u32` | Bytes, at most 64 MiB |
+| Index hash | `u32` | XXH32 of the index bytes, seed `0` |
 | Reserved | `u32` | Zero |
 
-The index is a sorted array of entries (ordinal path order):
+The index is a sorted array of entries (ordinal canonical-path order). Every field is
+little-endian:
 
-| Field | Notes |
-| --- | --- |
-| Path length + UTF-8 path | Canonical asset path |
-| Asset type | `u16` from the fixed type table; custom data uses the MessagePack type |
-| Flags | raw/MessagePack, compressed, aligned, reserved |
-| Payload offset | `u64` |
-| Stored length | `u32` |
-| Uncompressed size | `u32` |
-| Alignment | `u32` (16, 64, 256, or 1) |
-| Payload hash | XXH3-64 |
+| Field | Size | Notes |
+| --- | --- | --- |
+| Path length | `u16` | UTF-8 byte length, at most 4096 |
+| Path | bytes | Canonical asset path without a leading slash |
+| Asset type | `u16` | `Raw=0`, `Mesh=1`, `Model=2`, `Texture=3`, `Shader=4`, `Font=5`, `Data=6` |
+| Flags | `u16` | Bit 0 compressed, bit 1 aligned; other bits zero |
+| Payload offset | `u64` | Absolute file offset |
+| Stored length | `u32` | Bytes as stored |
+| Uncompressed size | `u32` | Bytes after decompression |
+| Alignment | `u32` | `1`, `16`, `64`, or `256` |
+| Payload hash | `u64` | XXH3-64 of the stored bytes, seed `0` |
 
-Payloads are Zstandard-compressed when the packed-entry flag says so. Debug packs may store payloads
-uncompressed for fast iteration; release packs compress by default. GPU payloads are aligned to
-the requested boundary so they can be uploaded without an intermediate copy when the driver
-supports it.
+Payloads start after the index. Each payload begins at an offset that is a multiple of its
+alignment; the writer inserts zero padding. The reader verifies the alignment, bounds, lengths,
+index hash, and payload hash before exposing an entry. A path is rejected if it is not canonical,
+if entries are not strictly ordinal-sorted, or if two entries normalize to the same path.
+
+A payload is Zstandard-compressed when its entry flags say so. Debug packs store payloads
+uncompressed for fast iteration; release packs compress when the compressed bytes are strictly
+smaller. The decompressor is bounded to the declared uncompressed size, and a stream that produces
+more or fewer bytes is corruption.
+
+Engine asset entries are MessagePack descriptors that reference sibling raw payload entries
+(`<base>-ktx2`, `<base>-mesh`, `<base>-vert`, `<base>-frag`, `<base>-face`). A `Data` entry holds the
+MessagePack bytes of one registered custom type; `Load<T>` deserializes it with the compiled shape
+and returns a fresh instance.
 
 Pack bytes are **not deterministic**. The entry set and canonical paths are ordered, but the
-compressor version, encoder choices, and output build can change the bytes. Incremental caching
-uses input/output hashes, not byte-for-byte reproducibility.
+compressor version, encoder choices, and build can change the bytes. Incremental caching uses
+input/output hashes, not byte-for-byte reproducibility.
 
 The pack is not encrypted or signed in v1. Integrity is a hash, not authenticity. A corrupt
-header, index, or payload is a hard failure with a diagnostic code; the runtime never guesses.
+header, index, or payload is a hard failure with a diagnostic code; the runtime never guesses. An
+unknown version is `RB1002`.
 
 ### 13.5 Incremental builds
 
-The bake writes a manifest next to the output (or in a configured cache directory) containing:
+The bake writes a manifest at `<project root>/obj/raybork/bake/manifest.json`. It records:
 
-- the canonical source set and content hashes;
-- sidecar hashes;
-- processor and tool versions;
-- output hashes;
+- the bake tool version and configuration hash (mode, pack paths, roots, texture defaults,
+  processors, data type registrations, and the tool markers for the texture, shader, model, and
+  font pipelines);
+- every tracked input path and content hash, including sidecars and shader GLSL files;
+- every output entry path, entry hash, and payload hash;
 - the pack logical-layout hash.
 
-A rebuild processes only sources whose inputs changed. Deleted sources are removed from the pack.
-The manifest is not part of the runtime pack. The manifest never promises byte-identical pack
-output; it only avoids redundant work.
+A rebuild reuses the previous pack's descriptor and payload bytes for a source whose input hashes,
+processor identity, tool version, and configuration are unchanged. It reruns the processor for
+changed and new sources, drops deleted sources, and composes a new pack from the reused and fresh
+entries. A tool-version or configuration change invalidates the cache and reprocesses every source.
+`--force` bypasses the cache. A missing, corrupt, or incompatible previous pack is a full bake.
+
+The manifest is not part of the runtime pack. It never promises byte-identical pack output; it only
+avoids redundant processing. Tests assert the processor invocation count for an unchanged source,
+not pack byte identity.
 
 ### 13.6 Validation and diagnostics
 
 The bake fails the build on:
 
 - duplicate or case-normalized canonical paths;
-- missing referenced assets;
-- unsupported source formats;
-- shader compile/reflection/redeclaration errors;
-- texture dimensions or formats the target cannot sample;
-- fonts that cannot produce a required glyph;
-- TOML binding or shape failures;
+- missing referenced assets or a missing required sidecar;
+- unsupported source formats or an unclaimed file with no raw fallback;
+- shader compile, entry-point, or sidecar metadata errors;
+- texture dimensions, formats, or block-encoding failures;
+- model sources with no mesh or invalid accessors;
+- font containers that are not valid sfnt files;
+- TOML parse, bind, unknown-key, or shape failures;
+- a semantic validator error;
 - pack size or alignment overflow.
 
-Diagnostics carry a code, severity, source path, and line/column where available. The CLI exits
-non-zero on any error. Warnings do not fail the build unless `--warnings-as-errors` is set.
+Diagnostics carry a code, severity, source path, and line/column where available. The CLI renders
+`path(line,col): error RBxxxx: message` on `stderr` and a summary on `stdout`. The process exits
+`0` on success or up to date, `1` on source diagnostics, `2` on usage or configuration errors, and
+`3` on an unexpected internal failure. Warnings do not fail the build unless `--warnings-as-errors`
+is set.
 
 ### 13.7 Built-in pack
 
 `RayBork.Engine` embeds a small built-in pack produced by the same processors:
 
-- the default unlit/texture/vertex-color shader;
-- the MSDF text shader;
-- a white texture and an error texture;
-- primitive meshes for the built-in draw helpers;
-- an error glyph.
+- a white 1x1 texture and a magenta/black error texture, generated by a tool-only processor that
+  calls `TextureBaker.Bake`;
+- the present vertex/fragment shader pair, compiled from the engine's committed GLSL sources by a
+  tool-only processor through the shared shaderc compiler.
 
-The built-in pack is mounted before user packs. It is generated at engine build time by a JIT step
-and compiled into the assembly as bytes, so a game with no pack can still clear the screen and draw
-primitives.
+The default draw shader, primitive meshes, and error glyph are added when M4 and M6 introduce them.
+
+The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
+that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by
+`RayBork.Engine.csproj`: before `CoreCompile` it restores and builds the generator out of process,
+runs the ordinary `bake` command over `src/RayBork/RayBork.Engine/BuiltInAssets/Assets` into a
+unique temporary directory, and emits a generated C# byte array under the intermediate output. The
+generated file is compiled into the assembly, never committed, and never published as a loose pack.
+The generator and its packages are not referenced by the runtime project and do not enter the AOT
+publish graph.
+
+The built-in pack is mounted first, before every game pack. A game pack shadows a built-in entry at
+the same canonical path.
 
 ## 14. Versioning and compatibility
 
@@ -2692,7 +2928,7 @@ primitives.
 | --- | --- |
 | Public C# API | 0.x is preview; 1.0 follows semantic versioning. |
 | License | MIT; see [LICENSE](../LICENSE). |
-| Pack format | `RAYBORKP` v1 is the only accepted format in 1.x; an unknown major version is rejected with `RB1002`. Pack bytes are not deterministic; the logical entry layout is. |
+| Pack format | `RAYBORKP` v1 is the only accepted format in 1.x; an unknown magic or version is rejected with `RB1002`. The 40-byte header, sorted binary index, alignment, and XXH32/XXH3-64 hashes are part of the format. Pack bytes are not deterministic; the logical entry layout is. |
 | Shader ABI | The generated prologue identifiers, binding layout, and entry points (`main_vertex`, `main_fragment`) are stable within a major version. |
 | Custom data shapes | The `[GenerateShape]` contract and MessagePack wire shape are stable within a major version. |
 | Diagnostic codes | Stable within a major version. |
@@ -2781,7 +3017,8 @@ disposed first.
 | `Vector3Extensions`, `QuaternionExtensions` | §5.6 |
 | `IAsset`, `IAssetCatalog` | §6.1 |
 | `Mesh`, `Model`, `ModelPart`, `PrimitiveTopology` | §7.5 |
-| `Texture`, `SamplerState`, `TextureFormat` | §7.6 |
+| `Texture`, `TextureFormat`, `TextureFilter`, `TextureWrap`, `SamplerState` | §7.6 |
+| `Shader`, `ShaderStageMask`, `ShaderUniform`, `ShaderUniformType`, `ShaderTextureBinding` | §7.3 |
 | `RenderState`, `BlendMode`, `CullMode`, `DepthTest` | §7.7 |
 | `Camera`, `CameraProjection`, `ClearMode`, `TonemappingMode` | §7.1, §7.2 |
 | `Shader`, `ShaderUniform`, `ShaderTextureBinding` | §7.3 |
@@ -2794,4 +3031,4 @@ disposed first.
 | `EngineVersion` | §10.2 |
 | `EngineInfo` | §10.3 |
 | `RayBorkException` and derived exceptions | §10.4 |
-| `BakeApplicationBuilder`, `IAssetProcessor`, `AssetProcessorContext`, `IAssetOutputSink`, `SidecarPolicy` | §13 |
+| `BakeApplicationBuilder`, `BakeApplication`, `IAssetProcessor`, `AssetProcessor<TSidecar>`, `AssetProcessorContext`, `IAssetOutputSink`, `IAssetProcessorDiagnostics`, `IAssetValidator<T>`, `TextureBaker`, `BakedTexture`, `TextureChannelType`, `TextureCompression`, `SidecarPolicy` | §13 |

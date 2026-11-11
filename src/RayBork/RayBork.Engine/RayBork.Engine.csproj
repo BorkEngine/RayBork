@@ -8,6 +8,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="RayBork.Bake" />
         <InternalsVisibleTo Include="RayBork.Tests" />
     </ItemGroup>
 
@@ -23,6 +24,7 @@
         <PackageReference Include="PolyType" />
         <PackageReference Include="Nerdbank.MessagePack" />
         <PackageReference Include="Microsoft.Extensions.Logging" />
+        <PackageReference Include="System.IO.Hashing" />
         <PackageReference Include="ZLogger" />
         <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     </ItemGroup>
