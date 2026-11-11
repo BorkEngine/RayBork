@@ -30,9 +30,6 @@ public sealed class RayBorkAppBuilder {
     private const bool DEFAULT_VALIDATION_ENABLED = false;
 #endif
 
-    private static readonly Color _defaultClearColor =
-        Color.Black.A == 1f ? Color.Black : new Color(0f, 0f, 0f, 1f);
-
     private IGame? _game;
     private string _title = DEFAULT_TITLE;
     private int _width = DEFAULT_WIDTH;
@@ -43,7 +40,7 @@ public sealed class RayBorkAppBuilder {
     private int _sampleCount = DEFAULT_SAMPLE_COUNT;
     private TonemappingMode _tonemapping = DEFAULT_TONEMAPPING;
     private float _exposure = DEFAULT_EXPOSURE;
-    private Color _clearColor = _defaultClearColor;
+    private Color _clearColor = Color.Black;
     private bool _validationEnabled = DEFAULT_VALIDATION_ENABLED;
     private int _targetFps = DEFAULT_TARGET_FPS;
     private WindowState _windowState = DEFAULT_WINDOW_STATE;
