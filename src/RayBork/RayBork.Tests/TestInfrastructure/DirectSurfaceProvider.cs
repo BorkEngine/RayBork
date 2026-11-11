@@ -13,6 +13,9 @@ namespace RayBork.Tests;
 internal sealed class DirectSurfaceProvider : IRendererSurfaceProvider {
     private readonly IEnginePlatform _platform;
 
+    private int _createCount;
+    private int _destroyCount;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="DirectSurfaceProvider"/> class.
     /// </summary>
@@ -21,6 +24,18 @@ internal sealed class DirectSurfaceProvider : IRendererSurfaceProvider {
         ArgumentNullException.ThrowIfNull(platform);
         _platform = platform;
     }
+
+    /// <summary>
+    /// Gets the number of surfaces this provider created successfully, including the initial one.
+    /// </summary>
+    /// <remarks>Diagnostic counter for the recovery tests; it is not used by the renderer.</remarks>
+    internal int CreateCount => _createCount;
+
+    /// <summary>
+    /// Gets the number of non-zero surfaces this provider destroyed successfully.
+    /// </summary>
+    /// <remarks>Diagnostic counter for the recovery tests; it is not used by the renderer.</remarks>
+    internal int DestroyCount => _destroyCount;
 
     /// <inheritdoc />
     public IntPtr CreateSurface(IntPtr instance) {
@@ -33,6 +48,7 @@ internal sealed class DirectSurfaceProvider : IRendererSurfaceProvider {
                     null);
             }
 
+            _createCount++;
             return surface;
         } catch (Exception exception) when (exception is PlatformException or InvalidOperationException or ObjectDisposedException) {
             throw new GraphicsException(
@@ -50,6 +66,7 @@ internal sealed class DirectSurfaceProvider : IRendererSurfaceProvider {
 
         try {
             _platform.DestroyVulkanSurface(instance, surface);
+            _destroyCount++;
         } catch (Exception exception) when (exception is PlatformException or InvalidOperationException or ObjectDisposedException) {
             throw new GraphicsException(
                 $"Direct Vulkan surface destruction failed: {exception.Message}",

@@ -13,9 +13,10 @@ namespace RayBork.Internal;
 /// <para>
 /// The render thread owns every member. M2 records one scene pass that only clears the linear HDR
 /// target and one present pass that samples the resolved target; there are no draw commands from game
-/// code yet. Recoverable presentation failures are handled inside the backend by recreating the
-/// presentation path and dropping the affected frame; unrecoverable failures throw
-/// <see cref="GraphicsException"/>, and validation errors are fatal.
+/// code yet. Recoverable presentation, surface, and device failures are handled inside the backend:
+/// <see cref="Recover"/> idles the device, drops the affected frame, recreates the presentation path,
+/// surface, or device, and resumes. A bounded recovery loop or a failed recovery throws
+/// <see cref="GraphicsDeviceLostException"/>, and validation errors are fatal.
 /// </para>
 /// <para>
 /// The backend does not call user code. It reads the surface snapshot from
@@ -25,6 +26,12 @@ namespace RayBork.Internal;
 /// </para>
 /// </remarks>
 internal sealed unsafe class Vulkan12Backend : IRendererBackend {
+    /// <summary>
+    /// The number of consecutive recovery attempts without a completed frame after which recovery is
+    /// fatal. The bound stops a recovery loop that can never make progress.
+    /// </summary>
+    internal const int MAX_CONSECUTIVE_RECOVERIES = 3;
+
     private const int FRAMES_IN_FLIGHT = 3;
     private const int MIN_RENDER_FINISHED_SEMAPHORES = 3;
     private const string APPLICATION_NAME = "RayBork";
@@ -54,6 +61,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     private uint _pendingImageIndex;
     private Semaphore _pendingRenderFinished;
     private bool _swapchainOutOfDate;
+    private bool _suboptimalRecoveryPending;
+    private int _recoveryCount;
+    private int _consecutiveRecoveries;
+    private RenderRecoveryReason? _simulatedFailure;
+    private bool _unrecoverableFailureForTests;
     private bool _initialized;
     private bool _disposed;
     private EngineInfo _info = RenderStatus.CreateDefaultInfo();
@@ -120,11 +132,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">
-    /// A presentation result is a recoverable status and does not throw. A fatal Vulkan failure or a
-    /// validation error throws with the diagnostic code <c>RB3001</c>.
+    /// A fatal Vulkan failure or a validation error throws with the diagnostic code <c>RB3001</c>.
+    /// </exception>
+    /// <exception cref="GraphicsDeviceLostException">
+    /// A recoverable presentation failure could not be recovered. The diagnostic code is
+    /// <c>RB3002</c>.
     /// </exception>
     public void Submit(RenderFramePacket frame) {
         EnsureInitialized();
+        HandleSimulatedFailure();
         if (_pendingPresent) {
             PresentPending();
         }
@@ -137,7 +153,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         }
 
         if (_swapchainOutOfDate) {
-            RecreatePresentation(state, LogLevel.Debug, "an out-of-date presentation result");
+            RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
         }
 
         if (state.RenderWidth != (int)_swapchain!.Extent.Width || state.RenderHeight != (int)_swapchain.Extent.Height) {
@@ -157,15 +173,21 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         Semaphore imageAvailable = _imageAvailableSemaphores[frameSlot];
         SwapchainResult acquire = _swapchain.Acquire(frameSlot, imageAvailable, out uint imageIndex);
         if (acquire == SwapchainResult.OutOfDate) {
-            RecreatePresentation(state, LogLevel.Debug, "an out-of-date swapchain image acquisition");
+            RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
+            _stats = CreateZeroDrawStats(frame.FrameIndex);
+            return;
+        }
+
+        if (acquire == SwapchainResult.SurfaceLost) {
+            RecoverOrThrow(RenderRecoveryReason.SurfaceLost);
             _stats = CreateZeroDrawStats(frame.FrameIndex);
             return;
         }
 
         if (acquire == SwapchainResult.Suboptimal) {
-            _swapchainOutOfDate = true;
+            _suboptimalRecoveryPending = true;
             _options.Logger.LogDebug(
-                "The swapchain image acquisition was suboptimal; the presentation path is recreated at the next frame.");
+                "The swapchain image acquisition was suboptimal; the presentation path is recreated after the present.");
         }
 
         CommandBuffer commandBuffer = _commandBuffers[frameSlot];
@@ -220,7 +242,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
             cpuMilliseconds,
             0,
             CountFramesInFlight(),
-            0);
+            _recoveryCount);
         _instance!.ThrowIfValidationError("submitting a frame");
     }
 
@@ -228,28 +250,133 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     /// <exception cref="GraphicsException">
     /// A validation error was recorded while presenting. The diagnostic code is <c>RB3001</c>.
     /// </exception>
+    /// <exception cref="GraphicsDeviceLostException">
+    /// A recoverable presentation failure could not be recovered. The diagnostic code is
+    /// <c>RB3002</c>.
+    /// </exception>
     public void Present() {
         EnsureInitialized();
+        HandleSimulatedFailure();
         PresentPending();
     }
 
     /// <inheritdoc />
     /// <remarks>
-    /// The swapchain failures are recovered by recreating the presentation path at the next frame
-    /// boundary. Surface and device recreation is added by the recovery work; until then those
-    /// failures are reported as fatal.
+    /// <para>
+    /// The call waits for the device to idle and drops the pending present before it destroys any
+    /// resource, so no in-flight frame is partially presented. It recreates the affected presentation
+    /// path, surface, or device and publishes the new <see cref="Info"/> and
+    /// <see cref="RenderStats.RecoveryCount"/> before it returns.
+    /// </para>
+    /// <para>
+    /// The call is bounded: more than <see cref="MAX_CONSECUTIVE_RECOVERIES"/> attempts without a
+    /// completed frame, an injected unrecoverable fault, a platform failure while recreating the
+    /// surface, or an unexpected exception returns <see langword="false"/>. Every field is cleared
+    /// before its resource is destroyed, so a later <see cref="Dispose"/> is safe even after a failed
+    /// recovery. Recovery never throws for a recoverable failure; it throws only when validation
+    /// reported an error.
+    /// </para>
     /// </remarks>
+    /// <exception cref="GraphicsException">
+    /// The Vulkan validation layer reported an error while recovering. The diagnostic code is
+    /// <c>RB3001</c>.
+    /// </exception>
     public bool Recover(RenderRecoveryReason reason) {
         EnsureInitialized();
-        switch (reason) {
-            case RenderRecoveryReason.SwapchainOutOfDate:
-            case RenderRecoveryReason.SwapchainSuboptimal:
-                _swapchainOutOfDate = true;
-                return true;
-            default:
-                return false;
+        if (_consecutiveRecoveries >= MAX_CONSECUTIVE_RECOVERIES) {
+            _options!.Logger.LogError(
+                "The renderer already attempted {Limit} consecutive recoveries without completing a frame; the failure {Reason} is fatal.",
+                MAX_CONSECUTIVE_RECOVERIES,
+                reason);
+            return false;
         }
+
+        if (_unrecoverableFailureForTests) {
+            _unrecoverableFailureForTests = false;
+            _options!.Logger.LogError(
+                "The renderer cannot recover from {Reason} because an unrecoverable failure was injected.",
+                reason);
+            return false;
+        }
+
+        _consecutiveRecoveries++;
+        try {
+            WindowSurfaceState state = _options!.WindowStateProvider();
+            switch (reason) {
+                case RenderRecoveryReason.SwapchainOutOfDate:
+                    RecreatePresentation(state, LogLevel.Warning, "an out-of-date swapchain");
+                    break;
+                case RenderRecoveryReason.SwapchainSuboptimal:
+                    RecreatePresentation(state, LogLevel.Information, "a suboptimal swapchain");
+                    break;
+                case RenderRecoveryReason.SurfaceLost:
+                    if (!RecreateSurface(state)) {
+                        return false;
+                    }
+
+                    break;
+                case RenderRecoveryReason.DeviceLost:
+                    RecreateDevice(state);
+                    break;
+                default:
+                    _options.Logger.LogError("The renderer cannot recover from the unknown reason {Reason}.", reason);
+                    return false;
+            }
+        } catch (Exception exception) {
+            _options!.Logger.LogError(exception, "The renderer recovery from {Reason} failed.", reason);
+            return false;
+        }
+
+        _recoveryCount++;
+        _stats = _stats with { RecoveryCount = _recoveryCount };
+        string operation = reason switch {
+            RenderRecoveryReason.SwapchainSuboptimal => "recovering the presentation path",
+            RenderRecoveryReason.SurfaceLost => "recovering the surface",
+            RenderRecoveryReason.DeviceLost => "recovering the device",
+            _ => "recovering the presentation path",
+        };
+        _instance!.ThrowIfValidationError(operation);
+        return true;
     }
+
+    /// <summary>
+    /// Marks the device as lost so the next <see cref="Submit"/> or <see cref="Present"/> runs the
+    /// device-loss recovery path. Test-only; it is not part of the renderer seam.
+    /// </summary>
+    /// <remarks>
+    /// The request is consumed by the next frame call and routed through <see cref="Recover"/>, so a
+    /// test exercises the same logic a driver-detected device loss uses.
+    /// </remarks>
+    internal void SimulateDeviceLossForTests() => _simulatedFailure = RenderRecoveryReason.DeviceLost;
+
+    /// <summary>
+    /// Marks the surface as lost so the next <see cref="Submit"/> or <see cref="Present"/> runs the
+    /// surface-loss recovery path. Test-only; it is not part of the renderer seam.
+    /// </summary>
+    /// <remarks>
+    /// The request is consumed by the next frame call and routed through <see cref="Recover"/>, so a
+    /// test exercises the same logic a driver-detected surface loss uses.
+    /// </remarks>
+    internal void SimulateSurfaceLossForTests() => _simulatedFailure = RenderRecoveryReason.SurfaceLost;
+
+    /// <summary>
+    /// Makes the next recovery return <see langword="false"/> without touching GPU state. Test-only;
+    /// it is not part of the renderer seam.
+    /// </summary>
+    /// <remarks>
+    /// When no loss is pending, the next <see cref="Submit"/> or <see cref="Present"/> requests a
+    /// device-loss recovery, so a test reaches the fatal path with one call.
+    /// </remarks>
+    internal void SimulateUnrecoverableFailureForTests() {
+        _unrecoverableFailureForTests = true;
+        _simulatedFailure ??= RenderRecoveryReason.DeviceLost;
+    }
+
+    /// <summary>
+    /// Sets the out-of-date flag so the next <see cref="Submit"/> recreates the presentation path
+    /// through <see cref="Recover"/>. Test-only; it is not part of the renderer seam.
+    /// </summary>
+    internal void SimulateSwapchainOutOfDateForTests() => _swapchainOutOfDate = true;
 
     /// <inheritdoc />
     public void Resize(int renderWidth, int renderHeight) {
@@ -295,7 +422,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
 
         _disposed = true;
         DeviceWaitIdle();
-        _pendingPresent = false;
+        DropPendingPresent();
         _presentPipeline?.Dispose();
         _presentPipeline = null;
         _sceneTarget?.Dispose();
@@ -345,73 +472,107 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         _device = VulkanDevice.Create(_instance, _surfaceHandle, logger);
         VulkanDeviceCapabilities capabilities = _device.Capabilities;
         WindowSurfaceState state = options.WindowStateProvider();
-        _selectedHdrState = state.Hdr;
         _requestedWidth = state.RenderWidth;
         _requestedHeight = state.RenderHeight;
         _sampleCount = VulkanSampleCountSelection.Select(options.Settings.SampleCount, capabilities.SupportedSampleCounts);
+        CreatePresentationPath(state);
+        CreateFrameResources(_swapchain!.ImageCount);
+        UpdateInfo();
+        LogInitialized(capabilities, state, _swapchain.Extent);
+        LogSelectionWarnings(state);
+        _initialized = true;
+        _instance.ThrowIfValidationError("initializing the renderer");
+    }
+
+    /// <summary>
+    /// Creates the swapchain, scene target, and present pipeline from scratch for the current device
+    /// and surface.
+    /// </summary>
+    /// <remarks>
+    /// Used at startup and after a device or surface loss, when no previous swapchain can be reused.
+    /// The caller has selected the sample count from the current device capabilities and must create
+    /// the frame resources after this call. Render-thread only; the device must be idle.
+    /// </remarks>
+    /// <param name="state">The current window surface snapshot.</param>
+    private void CreatePresentationPath(WindowSurfaceState state) {
+        VulkanDevice device = _device!;
+        RendererBackendOptions options = _options!;
+        VulkanDeviceCapabilities capabilities = device.Capabilities;
+        _selectedHdrState = state.Hdr;
         _swapchainFormat = VulkanSwapchainFormatSelection.Select(capabilities.SurfaceFormats, state.Hdr);
-        _presentMode = VulkanPresentModeSelection.Select(capabilities.Swapchain.PresentModes, options.Settings.PresentMode);
+        _presentMode = VulkanPresentModeSelection.Select(
+            capabilities.Swapchain.PresentModes,
+            options.Settings.PresentMode);
         VulkanSwapchainSupport support = capabilities.Swapchain;
         Extent2D extent = SelectExtent(support.Capabilities, state.RenderWidth, state.RenderHeight);
         uint imageCount = VulkanSwapchainImageCount.Select(
             support.Capabilities.MinImageCount,
             support.Capabilities.MaxImageCount);
         _swapchain = VulkanSwapchain.Create(
-            _device,
+            device,
             _surface,
             _swapchainFormat,
             _presentMode.Native,
             (int)imageCount,
             extent);
-        _sceneTarget = VulkanSceneTarget.Create(_device, extent, _sampleCount, options.Settings.ClearColor);
+        _sceneTarget = VulkanSceneTarget.Create(device, extent, _sampleCount, options.Settings.ClearColor);
         _presentPipeline = VulkanPresentPipeline.Create(
-            _device,
+            device,
             extent,
             _swapchainFormat.Format,
             _sceneTarget.ResolvedColorView);
         _presentPipeline.RecreateFramebuffers(extent, _swapchain.ImageViews);
-        CreateFrameResources((int)imageCount);
-        UpdateInfo();
-        LogInitialized(capabilities, state, extent);
-        LogSelectionWarnings(state);
-        _initialized = true;
-        _instance.ThrowIfValidationError("initializing the renderer");
+        _swapchainOutOfDate = false;
+        _suboptimalRecoveryPending = false;
     }
 
     private void RecreatePresentation(WindowSurfaceState state, LogLevel logLevel, string reason) {
         VulkanDevice device = _device!;
+        RendererBackendOptions options = _options!;
         DeviceWaitIdle();
-        _pendingPresent = false;
+        DropPendingPresent();
         VulkanSwapchainSupport support = VulkanSwapchainSupport.Query(device.Vulkan, device.PhysicalDevice, _surface);
         VulkanSwapchainFormat format = VulkanSwapchainFormatSelection.Select(support.Formats, state.Hdr);
         VulkanPresentModeChoice presentMode = VulkanPresentModeSelection.Select(
             support.PresentModes,
-            _options!.Settings.PresentMode);
+            options.Settings.PresentMode);
         Extent2D extent = SelectExtent(support.Capabilities, state.RenderWidth, state.RenderHeight);
         uint imageCount = VulkanSwapchainImageCount.Select(
             support.Capabilities.MinImageCount,
             support.Capabilities.MaxImageCount);
         bool formatChanged = format != _swapchainFormat;
 
-        _swapchain!.Recreate(device, _surface, format, presentMode.Native, (int)imageCount, extent);
-        _sceneTarget!.Dispose();
-        _sceneTarget = VulkanSceneTarget.Create(device, extent, _sampleCount, _options.Settings.ClearColor);
-        if (formatChanged) {
-            _presentPipeline!.Dispose();
-            _presentPipeline = VulkanPresentPipeline.Create(device, extent, format.Format, _sceneTarget.ResolvedColorView);
+        if (_swapchain is null) {
+            _swapchain = VulkanSwapchain.Create(device, _surface, format, presentMode.Native, (int)imageCount, extent);
         } else {
-            _presentPipeline!.WriteDescriptor(_sceneTarget.ResolvedColorView);
+            _swapchain.Recreate(device, _surface, format, presentMode.Native, (int)imageCount, extent);
         }
 
-        _presentPipeline.RecreateFramebuffers(extent, _swapchain.ImageViews);
+        VulkanSceneTarget? sceneTarget = _sceneTarget;
+        _sceneTarget = null;
+        sceneTarget?.Dispose();
+        _sceneTarget = VulkanSceneTarget.Create(device, extent, _sampleCount, options.Settings.ClearColor);
+        VulkanPresentPipeline? presentPipeline = _presentPipeline;
+        if (presentPipeline is null || formatChanged) {
+            _presentPipeline = null;
+            presentPipeline?.Dispose();
+            _presentPipeline = VulkanPresentPipeline.Create(device, extent, format.Format, _sceneTarget.ResolvedColorView);
+        } else {
+            presentPipeline.WriteDescriptor(_sceneTarget.ResolvedColorView);
+        }
+
+        _presentPipeline!.RecreateFramebuffers(extent, _swapchain.ImageViews);
         _swapchainFormat = format;
         _presentMode = presentMode;
         _selectedHdrState = state.Hdr;
-        RecreateRenderFinishedSemaphores((int)imageCount);
+        _requestedWidth = state.RenderWidth;
+        _requestedHeight = state.RenderHeight;
+        RecreateRenderFinishedSemaphores(_swapchain.ImageCount);
         _swapchainOutOfDate = false;
+        _suboptimalRecoveryPending = false;
         UpdateInfo();
         LogSelectionWarnings(state);
-        _options.Logger.Log(
+        options.Logger.Log(
             logLevel,
             "The presentation path was recreated for {Reason}: {Format}/{ColorSpace}, present mode {PresentMode}, {SampleCount}x MSAA, {ImageCount} swapchain image(s), {Width}x{Height}.",
             reason,
@@ -422,6 +583,159 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
             _swapchain.ImageCount,
             extent.Width,
             extent.Height);
+    }
+
+    /// <summary>
+    /// Recreates the native surface and the presentation path that depends on it.
+    /// </summary>
+    /// <remarks>
+    /// The destination surface is destroyed through the platform before the replacement is created;
+    /// the Vulkan swapchain is destroyed first because a surface must outlive its swapchains. A
+    /// platform failure is fatal: the method returns <see langword="false"/> with every field that
+    /// was destroyed already cleared. Render-thread only; the caller must have waited for the device
+    /// to idle.
+    /// </remarks>
+    /// <param name="state">The current window surface snapshot.</param>
+    /// <returns><see langword="true"/> when the surface and presentation path were recreated.</returns>
+    private bool RecreateSurface(WindowSurfaceState state) {
+        VulkanInstance instance = _instance!;
+        RendererBackendOptions options = _options!;
+        DeviceWaitIdle();
+        DropPendingPresent();
+        DestroyPresentationResources();
+        IntPtr instanceHandle = instance.Handle.Handle;
+        if (_surfaceHandle != IntPtr.Zero) {
+            IntPtr lostSurface = _surfaceHandle;
+            _surfaceHandle = IntPtr.Zero;
+            _surface = default;
+            try {
+                options.SurfaceProvider.DestroySurface(instanceHandle, lostSurface);
+            } catch (GraphicsException exception) {
+                options.Logger.LogError(
+                    exception,
+                    "The lost native Vulkan surface could not be destroyed; the renderer cannot recover.");
+                return false;
+            }
+        }
+
+        try {
+            _surfaceHandle = options.SurfaceProvider.CreateSurface(instanceHandle);
+        } catch (GraphicsException exception) {
+            options.Logger.LogError(
+                exception,
+                "The native Vulkan surface could not be recreated after surface loss; the renderer cannot recover.");
+            return false;
+        }
+
+        if (_surfaceHandle == IntPtr.Zero) {
+            options.Logger.LogError(
+                "The native Vulkan surface could not be recreated after surface loss; the renderer cannot recover.");
+            return false;
+        }
+
+        _surface = new SurfaceKHR { Handle = unchecked((ulong)_surfaceHandle.ToInt64()) };
+        RecreatePresentation(state, LogLevel.Warning, "a lost surface");
+        return true;
+    }
+
+    /// <summary>
+    /// Recreates the logical device and every device-level resource while keeping the instance and
+    /// the surface.
+    /// </summary>
+    /// <remarks>
+    /// The destroyed fields are cleared before their resources are released so that a later
+    /// <see cref="Dispose"/> is safe even when creation of the new device fails. Render-thread only.
+    /// </remarks>
+    /// <param name="state">The current window surface snapshot.</param>
+    private void RecreateDevice(WindowSurfaceState state) {
+        VulkanInstance instance = _instance!;
+        RendererBackendOptions options = _options!;
+        DeviceWaitIdle();
+        DropPendingPresent();
+        DestroyPresentationResources();
+        DestroyFrameResources();
+        VulkanDevice? lostDevice = _device;
+        _device = null;
+        lostDevice?.Dispose();
+
+        _device = VulkanDevice.Create(instance, _surfaceHandle, options.Logger);
+        _sampleCount = VulkanSampleCountSelection.Select(
+            options.Settings.SampleCount,
+            _device.Capabilities.SupportedSampleCounts);
+        _requestedWidth = state.RenderWidth;
+        _requestedHeight = state.RenderHeight;
+        CreatePresentationPath(state);
+        CreateFrameResources(_swapchain!.ImageCount);
+        UpdateInfo();
+        LogSelectionWarnings(state);
+        options.Logger.LogWarning(
+            "The Vulkan device was recreated after device loss: {GpuName}, API {ApiVersion}, present mode {PresentMode}, {SampleCount}x MSAA.",
+            _device.Capabilities.DeviceName,
+            VulkanVersion.Format(_device.Capabilities.ApiVersion),
+            _presentMode.Public,
+            _sampleCount);
+    }
+
+    /// <summary>
+    /// Destroys the swapchain, scene target, and present pipeline in dependency order, clearing each
+    /// field before its resource is released.
+    /// </summary>
+    /// <remarks>Render-thread only; the caller has waited for the device to idle.</remarks>
+    private void DestroyPresentationResources() {
+        VulkanPresentPipeline? presentPipeline = _presentPipeline;
+        _presentPipeline = null;
+        presentPipeline?.Dispose();
+        VulkanSceneTarget? sceneTarget = _sceneTarget;
+        _sceneTarget = null;
+        sceneTarget?.Dispose();
+        VulkanSwapchain? swapchain = _swapchain;
+        _swapchain = null;
+        swapchain?.Dispose();
+    }
+
+    /// <summary>
+    /// Drops the submitted frame that was waiting for presentation.
+    /// </summary>
+    /// <remarks>
+    /// The device has been idled, so the frame's fence is signaled and the swapchain image can be
+    /// released without presenting a partial image.
+    /// </remarks>
+    private void DropPendingPresent() {
+        _pendingPresent = false;
+        _pendingRenderFinished = default;
+        _suboptimalRecoveryPending = false;
+    }
+
+    /// <summary>
+    /// Runs a recovery request from a frame call and converts a fatal result into
+    /// <see cref="GraphicsDeviceLostException"/>.
+    /// </summary>
+    /// <param name="reason">The failure to recover from.</param>
+    /// <exception cref="GraphicsDeviceLostException">
+    /// The recovery returned <see langword="false"/>. The diagnostic code is <c>RB3002</c>.
+    /// </exception>
+    private void RecoverOrThrow(RenderRecoveryReason reason) {
+        if (Recover(reason)) {
+            return;
+        }
+
+        throw new GraphicsDeviceLostException(
+            $"The Vulkan renderer could not recover from {reason}; the app stops.",
+            DiagnosticCodes.GRAPHICS_DEVICE_LOST,
+            null);
+    }
+
+    /// <summary>
+    /// Consumes a fault-injection request and routes it through the normal recovery path.
+    /// </summary>
+    /// <remarks>Test-only; the caller is the render thread.</remarks>
+    private void HandleSimulatedFailure() {
+        if (_simulatedFailure is not { } reason) {
+            return;
+        }
+
+        _simulatedFailure = null;
+        RecoverOrThrow(reason);
     }
 
     private void CreateFrameResources(int imageCount) {
@@ -582,14 +896,32 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         SwapchainResult result = _swapchain!.Present(_device!.PresentQueue, _pendingRenderFinished, _pendingImageIndex);
         _pendingPresent = false;
         _pendingRenderFinished = default;
-        if (result != SwapchainResult.Success) {
-            _swapchainOutOfDate = true;
-            _options!.Logger.LogDebug(
-                "The swapchain presentation returned {Status}; the presentation path is recreated at the next frame.",
-                result);
+        _instance!.ThrowIfValidationError("presenting a frame");
+        if (result is SwapchainResult.Success or SwapchainResult.Suboptimal) {
+            // The image reached the presentation engine, so a frame completed. A suboptimal hint is a
+            // routine driver notification and must not count toward the recovery bound.
+            _consecutiveRecoveries = 0;
         }
 
-        _instance!.ThrowIfValidationError("presenting a frame");
+        bool recoverSuboptimal = _suboptimalRecoveryPending;
+        _suboptimalRecoveryPending = false;
+        switch (result) {
+            case SwapchainResult.OutOfDate:
+                RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
+                break;
+            case SwapchainResult.SurfaceLost:
+                RecoverOrThrow(RenderRecoveryReason.SurfaceLost);
+                break;
+            case SwapchainResult.Suboptimal:
+                RecoverOrThrow(RenderRecoveryReason.SwapchainSuboptimal);
+                break;
+            default:
+                if (recoverSuboptimal) {
+                    RecoverOrThrow(RenderRecoveryReason.SwapchainSuboptimal);
+                }
+
+                break;
+        }
     }
 
     private int CountFramesInFlight() {
@@ -617,7 +949,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
         0,
         0,
         0,
-        0);
+        _recoveryCount);
 
     private bool HdrSelectionChanged(WindowHdrState hdr) =>
         hdr.HdrEnabled != _selectedHdrState.HdrEnabled
