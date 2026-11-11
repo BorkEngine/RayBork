@@ -1,8 +1,8 @@
 # RayBork API Reference
 
-Status: **v0.1 design draft**, 2026-11-11. M0 implements only `EngineVersion`. This document is the
-contract the implementation and samples are written against, not a description of shipped
-behavior.
+Status: **v0.1 M1**, 2026-11-11. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick
+thread, SDL3 window/input/gamepads, time/pacing, and logging surface listed in §1.6. The rest of
+this document remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -55,7 +55,7 @@ and `finally` stay on the closing-brace line.
 | Time | `double` seconds; monotonic `Stopwatch` |
 | Angle | User-facing RayBork APIs use **degrees**; raw `System.Numerics` rotation methods use radians |
 | Color | Linear float RGBA, HDR values allowed; AgX maps to the output |
-| Screen space | Top-left origin, pixels; `Window.Width/Height` are logical, `RenderWidth/RenderHeight` are physical |
+| Screen space | Top-left origin, pixels; `Window.Width/Height` are window coordinates, `RenderWidth/RenderHeight` are physical pixels |
 | Depth | Reverse-Z, `[0,1]`, clear `0.0`, default compare `GreaterOrEqual` |
 
 The engine flips Vulkan's Y-down NDC internally. World space stays Y-up. Public `gl_Position`
@@ -92,6 +92,37 @@ Unless marked otherwise, a mutable object (`Shader`, `Camera`, `Font` preloading
   recovery is logged at Warning; the app stops and rethrows only when recovery fails.
   `GraphicsDeviceLostException` means recovery failed.
 - Logging is structured through `Microsoft.Extensions.Logging`; the default provider is ZLogger.
+
+### 1.6 Milestone availability
+
+M0 ships `EngineVersion`. M1 ships the host, thread, window, input, time, and logging surface. The
+remaining rows name the milestone that owns the deferred surface; the full code blocks below stay
+the 1.0 contract.
+
+| Surface | Milestone |
+| --- | --- |
+| `EngineVersion` | M0 |
+| `RayBorkAppBuilder` with `WithGame`, `WithTitle`, `WithSize`, `WithResizable`, `WithMaxDeltaTime`, `WithTargetFps`, `WithWindowState`, `WithLoggerFactory`, `WithLogLevel`, and `Build` | M1 |
+| `RayBorkApp` with `Run`, `RequestExit`, `IsRunning`, `IsDisposed`, and `Dispose` | M1 |
+| `EngineContext` with `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`, `UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and `RequestExit` | M1 |
+| `IGame`; `IInput`, `Key`, `MouseButton`; `IGamepad`, `GamepadButton`, `GamepadAxis`, `GamepadTrigger` | M1 |
+| `IWindow`, `WindowState`, `CursorMode`, `Monitor`; logging through `Microsoft.Extensions.Logging` | M1 |
+| `Transform`, `Color`, `Rect`, `Vector3Extensions`, `QuaternionExtensions` | M1 |
+| `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
+| `EngineInfo`, `PresentMode`, `RenderStats`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`) | M2 |
+| `IAssetCatalog`, the asset types, `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, and the asset exceptions | M3 |
+| `Camera`, `CameraProjection`, `ClearMode`, `TonemappingMode`, `Mesh`, `Model`, `Shader`, `Texture`, `RenderState`, and the render enums | M4 |
+| `Collision` and `RayCollision` | M5 |
+| `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
+| `RenderTexture` and `RenderTextureDescription` | M8 |
+
+In M1, `EngineContext` exposes **only** `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`,
+`UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and
+`RequestExit`. It has no `Assets`, `Info`, `Stats`, camera, or render-texture members.
+
+In M1, `RayBorkAppBuilder` exposes **only** `WithGame`, `WithTitle`, `WithSize`, `WithResizable`,
+`WithMaxDeltaTime`, `WithTargetFps`, `WithWindowState`, `WithLoggerFactory`, `WithLogLevel`, and
+`Build`. The other builder methods in §3.2 are the later contract.
 
 ## 2. Quick start
 
@@ -263,6 +294,11 @@ public sealed class RayBorkAppBuilder {
 The builder is single-use. `Build` validates the configuration and creates a `RayBorkApp`.
 Configuration is not thread-safe; configure before `Build` and do not mutate after.
 
+> **M1 subset.** M1 ships only `WithGame`, `WithTitle`, `WithSize`, `WithResizable`,
+> `WithMaxDeltaTime`, `WithTargetFps`, `WithWindowState`, `WithLoggerFactory`, `WithLogLevel`, and
+> `Build`. The remaining methods in the block above are the 1.0 contract; their milestones are in
+> §1.6.
+
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
 
@@ -287,7 +323,7 @@ public sealed class RayBorkApp : IDisposable {
 | `RequestExit` | Any | Requests a graceful exit after the current tick. Idempotent. The final frame is rendered. |
 | `IsRunning` | Any | `true` between the start and end of `Run`. |
 | `IsDisposed` | Any | `true` after `Dispose`. |
-| `Dispose` | Any | Stops a running app and joins its threads, then releases native resources. Idempotent. |
+| `Dispose` | Any except Tick | Stops a running app and joins its threads, then releases native resources. Idempotent. Calling it on the tick thread throws `InvalidOperationException` instead of self-joining. |
 
 `Run` throws `InvalidOperationException` if it has already run, `ObjectDisposedException` if the
 app was disposed, and `RayBorkException` for startup or runtime failures. It is not legal to call
@@ -296,6 +332,8 @@ the main thread.
 
 If `Dispose` is called while `Run` is blocking on another thread, `Dispose` calls `RequestExit` and
 waits for `Run` to finish. This is supported but not the normal path; prefer a single owner.
+Calling `Dispose` from the tick thread is rejected because waiting for the tick thread from inside
+a game callback would deadlock.
 
 Recoverable renderer failures do not terminate the app. The render thread pauses, recreates the
 swapchain or device, logs the recovery, and resumes. A failed recovery stops the app with
@@ -348,22 +386,27 @@ public sealed class EngineContext {
 }
 ```
 
+> **M1 subset.** M1 exposes only `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`,
+> `UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and
+> `RequestExit`. `Assets`, `Info`, `Stats`, camera creation, and render-texture creation are the
+> later contract; their milestones are in §1.6.
+
 | Member | Thread | Notes |
 | --- | --- | --- |
-| `Assets` | Any | Shared catalog; see §6. |
+| `Assets` | Any | Shared catalog; see §6. M3. |
 | `Input` | Tick | Input snapshot for the current tick. |
 | `Window` | Any | Snapshot getters; setters are queued. |
 | `LoggerFactory` | Any | App-owned factory; create category loggers from it. Never `null`. |
-| `Info` | Any | Engine version, renderer/backend name, GPU name, Vulkan API version, HDR output flag, validation state. |
-| `Time` | Tick | Absolute seconds from `Run` start. It advances during `Setup` and is not reset at the first tick. |
+| `Info` | Any | Engine version, renderer/backend name, GPU name, Vulkan API version, HDR output flag, validation state. M2. |
+| `Time` | Tick | Absolute seconds from `Run` start. It is live during `Setup` and is not reset at the first tick. |
 | `DeltaTime` | Tick | Clamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
-| `UnscaledDeltaTime` | Tick | Unclamped seconds since the previous tick. |
+| `UnscaledDeltaTime` | Tick | Unclamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
 | `FrameCount` | Tick | `0` in `Setup`; `1` during the first `Tick`. |
-| `Fps` | Tick | Smoothed ticks per second. |
+| `Fps` | Tick | Ticks per second averaged over a 1-second sliding window; `0` before two ticks. |
 | `IsFirstTick` | Tick | `true` only during the first `Tick`. |
 | `IsExiting` | Tick | `true` after `RequestExit`, a window close, or an engine stop request. |
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
-| `Stats` | Tick | Last completed frame's render statistics. May be stale by one tick. |
+| `Stats` | Tick | Last completed frame's render statistics. May be stale by one tick. M2. |
 | `CreateCamera` | Tick | Perspective camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateOrthographicCamera` | Tick | Orthographic camera. `height` is the visible world-space height. |
 | `CreateRenderTextureAsync` | Tick | Creates an offscreen target and completes when the render thread has allocated it. Legal in `Setup` and `Tick`. |
@@ -409,7 +452,8 @@ Failure behavior:
 
 ## 4. Time and frames
 
-`EngineContext` exposes time directly; there is no separate `EngineTime` object.
+`EngineContext` exposes time directly; there is no separate `EngineTime` object. The time members
+are M1; the camera line in the example is later contract.
 
 ```csharp
 using var camera = ctx.CreateCamera(...);
@@ -422,18 +466,19 @@ long frame = ctx.FrameCount;
 
 Semantics:
 
-- `Time` starts at `0` when `Run` begins and advances with `Stopwatch`, including during `Setup`.
-  It is absolute, so a long stall (or a slow setup) makes it larger. It is not the sum of
-  `DeltaTime`.
+- `Time` starts at `0` when `Run` begins and advances with `Stopwatch`. It is **live during
+  `Setup`**; during `Tick` it is the value captured at the start of the tick. It is absolute, so a
+  long stall (or a slow setup) makes it larger. It is not the sum of `DeltaTime`.
 - `DeltaTime` is `min(now - lastTick, MaxDeltaTime)`. It is `0` in `Setup` and on the first tick.
-- `UnscaledDeltaTime` is the raw interval, useful for diagnostics.
-- `Fps` is a smoothed estimate, not an instantaneous `1 / DeltaTime`.
+- `UnscaledDeltaTime` is the raw interval, useful for diagnostics. It is also `0` on the first tick.
+- `Fps` is a **1-second sliding-window average** of the tick rate, not an instantaneous
+  `1 / DeltaTime`. It is `0` before two ticks have been sampled.
 - `FrameCount` increments once per `Tick`, after `Setup`.
 - `MaxDeltaTime` is fixed at build time; it prevents a debugger pause or a window drag from
   teleporting the simulation.
-- There is no interpolation between ticks in v1. The render thread draws the previous completed
-  tick. A game that needs smoother motion at low tick rates must interpolate its own render
-  transforms or wait for the fixed-timestep milestone.
+- There is no interpolation between ticks in v1. In M1 the render thread consumes the previous
+  completed tick without drawing; M2 adds drawing. A game that needs smoother motion at low tick
+  rates must interpolate its own render transforms or wait for the fixed-timestep milestone.
 - `Tick` must not block. If it does, it delays the next input snapshot and the frame handoff.
 
 ### 4.1 Minimized and unfocused windows
@@ -528,7 +573,8 @@ Semantics:
 - `Transform` is a mutable value type. Copy semantics apply. Use the `With*` methods when a new
   value is intended.
 - `Inverse()` throws `InvalidOperationException` when the scale has a zero component or the matrix
-  is singular.
+  is singular. It also throws when the matrix inverse contains shear and cannot be represented as a
+  translation, rotation, and scale, for example a non-uniform scale combined with a rotation.
 - Rotation helpers in §5.6 use degrees. The raw `Quaternion.CreateFromAxisAngle` and other
   `System.Numerics` methods use radians.
 
@@ -609,9 +655,11 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
 
 - Equality is exact per-component `float` equality, matching the Bork2d type.
 - `Color` serializes as four linear floats. The Bork2d `ColorMarshaler` is reused.
-- `HSVToRGB` can produce HDR values above `1` when `hdr` is true.
-- `Color` values are **authored in linear space**. `Color.DarkCyan` is the linear preset value, not
-  an sRGB byte triple.
+- `HSVToRGB` uses Unity-style HSV components with `h`, `s`, and `v` in `[0, 1]`. Hue wraps around
+  the color wheel, saturation is clamped to `[0, 1]`, and `v` is clamped to `[0, 1]` only when
+  `hdr` is false. With `hdr: true`, values above `1` are preserved for HDR colors.
+- `Color` values are **authored in linear space**; every preset field is a linear value. For example
+  `Color.DarkCyan` is `(0, 0.5, 0.5, 1)`, not an sRGB byte triple.
 - The final output path applies AgX tone mapping and then the swapchain transfer function. Sampling
   an sRGB texture decodes to linear before lighting. Sampling a linear texture stays linear.
 
@@ -706,18 +754,18 @@ public static class QuaternionExtensions {
         public static Quaternion FromToRotation(Vector3 from, Vector3 to);
 
         public Quaternion Normalized => Quaternion.Normalize(value);
-        public Quaternion Inverse => Quaternion.Inverse(value);
     }
 }
 ```
 
 Additional members follow the same pattern: `EulerAngles` returns degrees, `Angle(Quaternion)`
 returns degrees, `ToAngleAxis` returns a degree angle and axis, and `RotateTowards`/`Slerp`
-interpolate with degree-based angular limits.
+interpolate with degree-based angular limits. There is no `Inverse` extension property; use the
+static `Quaternion.Inverse(q)` for quaternion inversion.
 
-Unity-style static `Vector3` members are also provided through extension properties: `Zero`, `One`,
-`Up`, `Down`, `Left`, `Right`, `Forward`, and `Back`. `Forward` is `-Z` to match the world
-convention; `Back` is `+Z`.
+Unity-style static `Vector3` members are also provided through extension properties: `Up`, `Down`,
+`Left`, `Right`, `Forward`, and `Back`. `Forward` is `-Z` to match the world convention; `Back` is
+`+Z`. `Vector3.Zero` and `Vector3.One` come from `System.Numerics` and are not shadowed.
 
 Example:
 
@@ -1042,8 +1090,9 @@ builds its own projection must preserve both conventions if it wants to match th
 and screen-space helpers.
 
 `ScreenToWorldRay` takes **render pixels** with a top-left origin. `Input.MousePosition` is in
-logical window units, so multiply by `Window.DpiScale` before passing it when the scale is not 1.
-`WorldToScreen` returns render pixels.
+window coordinates, so convert it with `ctx.Window.RenderWidth / (float)ctx.Window.Width` when
+`Width` is nonzero. `DpiScale` is the OS display scale, not the pixel ratio, and is not the
+conversion factor for this call. `WorldToScreen` returns render pixels.
 
 `DrawModel(model, transform)` uses each model part's baked shader and shader state. This is the
 normal path for an imported model with authored per-part shading.
@@ -1881,9 +1930,11 @@ public readonly record struct Monitor(
 
 Semantics:
 
-- `Width`/`Height` are logical window units. `RenderWidth`/`RenderHeight` are physical
-  framebuffer pixels. `DpiScale` is the ratio between them. Mouse positions are logical units;
-  cameras and viewports are render pixels.
+- `Width`/`Height` are **window coordinates**. On Windows they equal render pixels; on platforms
+  that distinguish logical points they may differ from the physical framebuffer.
+  `RenderWidth`/`RenderHeight` are **physical pixels**. `DpiScale` is the OS display/content scale,
+  for example `1.5` at 150%, **not** the pixel ratio; the pixel ratio is `RenderWidth / Width`.
+  Mouse positions are window coordinates; cameras and viewports are render pixels.
 - `Bounds` is in desktop coordinates. It is a snapshot, not a live handle.
 - `WasResized` is true for exactly the first tick after a resize; it is reset by the engine.
 - `CloseRequested` is true after the window close request. The engine treats it as a graceful exit
@@ -1896,13 +1947,18 @@ Semantics:
 - `SetSize` is ignored while fullscreen; it is remembered for the next windowed restore.
 - `SetMonitor` moves a windowed window to the monitor at the given stable index. An out-of-range
   index throws `ArgumentOutOfRangeException`; the call is queued.
-- `SetMinSize`/`SetMaxSize` use logical units. A zero maximum means "no maximum".
+- `SetMinSize`/`SetMaxSize` use window units. A zero maximum means "no maximum".
 - `SetCursor(CursorMode.Disabled)` locks and hides the cursor and enables relative mouse motion;
   use `Input.MouseDelta` for look. `Hidden` hides the cursor without locking.
 - Window setters are **Any**-thread safe. They are queued to the main thread and coalesced; a
   getter returns the last confirmed value, which may lag the setter by one event-pump cycle.
+  `SetClipboardText` follows the same queued, coalesced setter path.
+- `GetClipboardText` returns the last cached clipboard snapshot immediately and queues a
+  main-thread read that a later event-pump cycle refreshes.
 - `Monitors` and `CurrentMonitor` are snapshots. Monitor indices are stable for the process
   lifetime; a monitor hotplug may change the list between ticks.
+- `RayBork.Monitor` collides with `System.Threading.Monitor` when `System.Threading` is imported.
+  Qualify `RayBork.Monitor` or use `var` for monitor locals; the public type name is unchanged.
 - When `IsMinimized` or `IsFocused` is false, the tick loop is capped at 30 FPS as described in
   §4.1. The renderer may idle while the swapchain has no extent.
 - v1 has one window. Multiple windows are post-1.0.
@@ -1971,15 +2027,16 @@ public enum Key {
   of the user's keyboard layout. This is what games want for movement.
 - `TextInput` is the UTF-16 text entered during the current tick, in layout order. It is the right
   API for names, chat, and console input. It is empty when no text was entered.
-- `IsKeyPressed` is true for one tick. `IsKeyPressedRepeat` is true for OS-generated repeats as
-  well. `IsKeyDown`/`IsKeyUp` are level state.
+- `IsKeyPressed` is true for the first press of a key only; OS-generated repeat events do not set
+  it. `IsKeyPressedRepeat` is true only for an OS-generated repeat event, never for the first
+  press. `IsKeyDown`/`IsKeyUp` are level state.
 - Input is snapshotted at the start of `Tick`; events that arrive while `Tick` runs are applied to
   the next tick. A slow `Tick` therefore coalesces input.
 - IME composition, text editing, and clipboard image are M9. v1 handles direct text input.
 
 ### 9.2 Mouse
 
-- `MousePosition` is in logical window coordinates, top-left origin.
+- `MousePosition` is in window coordinates, top-left origin.
 - `MouseDelta` is the movement since the previous tick. It is especially useful with
   `CursorMode.Disabled`.
 - `MouseWheel` is the vertical wheel delta for the tick. Horizontal wheel and high-resolution
@@ -2095,11 +2152,12 @@ public static class EngineVersion {
 | --- | --- | --- |
 | `Current` | **Any** | The version of the loaded `RayBork.Engine` assembly. Immutable for the app lifetime. Safe to read from any thread. Throws no `RayBorkException`. |
 
-`Current` is the loaded `RayBork.Engine` assembly's `Version`; it reports `0.1.0.0` in M0. The build
-and package version is `0.1.0`. It describes the engine assembly that is actually loaded, not the
-game assembly, the pack format, or the shader ABI. The value cannot change while the process runs,
-and no RayBork API mutates it. `EngineVersion` is the only public type added in M0; every other type
-in this reference remains a contract for later milestones.
+`Current` is the loaded `RayBork.Engine` assembly's `Version`; it reports `0.1.0.0` in the 0.1
+release, including M1. The build and package version is `0.1.0`. It describes the engine assembly
+that is actually loaded, not the game assembly, the pack format, or the shader ABI. The value
+cannot change while the process runs, and no RayBork API mutates it. `EngineVersion` is the only
+public type added in M0; M1 adds the host, window, input, time, and logging surface listed in
+§1.6, and every other type in this reference remains a contract for later milestones.
 
 The getter has no dependency on a pack, window, GPU, renderer, or logger. It does not block, does not
 require synchronization, and throws no `RayBorkException`; the value is available to loggers,
@@ -2151,6 +2209,17 @@ public sealed class WindowException : RayBorkException { }
 public sealed class PlatformException : RayBorkException { }
 ```
 
+M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowException`. The asset
+and graphics exceptions in the block above are the later contract.
+
+M1 diagnostic codes:
+
+| Code | Exception | Meaning |
+| --- | --- | --- |
+| `RB0001` | `GameException` | A `Setup`, `Tick`, or `Shutdown` callback failed. |
+| `RB2001` | `PlatformException` | SDL3/platform initialization failed. |
+| `RB2002` | `WindowException` | Window creation failed. |
+
 | Exception | Typical cause |
 | --- | --- |
 | `GameException` | `Setup`, `Tick`, or `Shutdown` threw. `InnerException` is the game's exception. |
@@ -2165,8 +2234,9 @@ public sealed class PlatformException : RayBorkException { }
 | `PlatformException` | SDL3 initialization, audio device (later), or native library failure. |
 
 `DiagnosticCode` is a stable `RB`-prefixed code such as `RB1002` (unsupported pack version) or
-`RB3002` (device lost after failed recovery). Codes are documented in the bake and runtime
-diagnostics tables; tests assert them. They are stable within a major version.
+`RB3002` (device lost after failed recovery). Later milestones add the asset, graphics, and bake
+codes. Codes are documented in the bake and runtime diagnostics tables; tests assert them. They are
+stable within a major version.
 
 Lifecycle and argument errors use the standard BCL exceptions, not `RayBorkException`:
 `ArgumentNullException`, `ArgumentException`, `InvalidOperationException`,
@@ -2226,7 +2296,8 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 - `Load<T>` and `LoadData` results for custom data are caller-owned and are not disposed by the
   engine.
 - `RayBorkApp.Dispose` stops a running app, joins threads, and releases native resources. It is
-  idempotent.
+  idempotent. Calling it from the tick thread throws `InvalidOperationException` instead of
+  deadlocking on a self-join; call it from another thread.
 - The engine never calls `Dispose` on game-owned assets. `Shutdown` is the game's responsibility;
   the engine logs leaked references in debug builds but does not guess ownership.
 - A double asset `Dispose` is a usage error (see §6.4).
@@ -2245,6 +2316,11 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 The order is deliberate: `Shutdown` can still call `Assets.Load` if it must (not recommended), but
 it cannot draw. GPU resources are not destroyed until after `Shutdown` returns, so a final
 readback or save is possible.
+
+In M1 there is no renderer and no asset loader. The render thread consumes and releases each
+published frame, including the final one, without GPU work; shutdown therefore has no GPU frames or
+loader references to drain. M2 owns frame retirement before renderer shutdown; the numbered order
+above remains the 1.0 contract.
 
 ### 11.5 Multiple apps and restarts
 

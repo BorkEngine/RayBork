@@ -127,14 +127,19 @@ dotnet test src/RayBork/RayBork.slnx -c Debug --no-build
 dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
 pwsh scripts/check-docs.ps1
 dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r win-x64 -p:PublishAot=true
+# Run the published Windows host and require exit 0:
+samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --frames 30
 # Run the same publish inside WSL from the repository root for linux-x64:
 # ~/.dotnet/dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r linux-x64 -p:PublishAot=true
+# Run the published Linux host; use the dummy video driver when the WSL display is unavailable:
+# SDL_VIDEODRIVER=dummy samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --frames 30
 ```
 
-The exact sample paths are added in M11. Until then, the AOT gate uses the current sample host.
-Both publishes must finish with zero AOT/trim warnings and the host must run. GPU tests render
-offscreen and do not require a visible window. A GPU test that cannot run on the host is reported
-as a skip with the reason, never silently dropped.
+The AOT gate uses `samples/HelloInterop` until the M11 samples land. Both publishes must finish with
+zero AOT/trim warnings, and each published host must run with `--frames 30` and exit 0. On a
+headless WSL host, `SDL_VIDEODRIVER=dummy` is accepted. GPU tests render offscreen and do not
+require a visible window. A GPU test that cannot run on the host is reported as a skip with the
+reason, never silently dropped.
 
 ## 5. Testing
 
