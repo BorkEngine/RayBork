@@ -12,6 +12,7 @@ namespace RayBork.Internal;
 /// </summary>
 internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     private const double GAMEPAD_POLL_SECONDS = 0.25;
+    private const string VULKAN_SURFACE_EXTENSION = "VK_KHR_surface";
     private const string WINDOW_LOGGER_CATEGORY = "RayBork.Window";
     private const string INPUT_LOGGER_CATEGORY = "RayBork.Input";
 
@@ -51,6 +52,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     private readonly SdlInput _input;
     private readonly MonitorRegistry _monitors = new();
     private readonly Dictionary<uint, IntPtr> _openGamepads = [];
+    private readonly HashSet<IntPtr> _vulkanSurfaces = [];
     private readonly Lock _vibrationGate = new();
     private readonly Queue<VibrationRequest> _vibrationRequests = new();
 
@@ -59,6 +61,8 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     private long _lastGamepadPollTimestamp;
     private bool _sdlInitialized;
     private bool _textInputStarted;
+    private bool _vulkanEnabled;
+    private bool _vulkanLoaderLoaded;
     private bool _initialized;
     private bool _disposed;
 
@@ -90,6 +94,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         }
 
         _sdlInitialized = true;
+        _vulkanEnabled = options.EnableVulkan;
         SDL.WindowFlags windowFlags = 0;
         if (options.Resizable) {
             windowFlags |= SDL.WindowFlags.Resizable;
@@ -97,6 +102,10 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
 
         if (options.WindowState == WindowState.Hidden) {
             windowFlags |= SDL.WindowFlags.Hidden;
+        }
+
+        if (options.EnableVulkan) {
+            windowFlags |= SDL.WindowFlags.Vulkan;
         }
 
         _windowHandle = SDL.CreateWindow(options.Title, options.Width, options.Height, windowFlags);
@@ -138,6 +147,103 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
             _window.CurrentMonitor.Index,
             _window.CurrentMonitor.Name);
         _inputLogger.LogInformation("Input initialized with {GamepadCount} gamepad(s).", _openGamepads.Count);
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> GetVulkanInstanceExtensions() {
+        if (_disposed || !_initialized) {
+            throw new PlatformException(
+                "The platform has not been initialized.",
+                DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                null);
+        }
+
+        if (!_vulkanEnabled) {
+            throw new PlatformException(
+                "The window was not created for Vulkan.",
+                DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                null);
+        }
+
+        string[]? extensions = SDL.VulkanGetInstanceExtensions(out uint count);
+        SortedSet<string> unique = new(StringComparer.Ordinal);
+        if (extensions is not null && count > 0) {
+            foreach (string extension in extensions) {
+                if (!string.IsNullOrEmpty(extension)) {
+                    unique.Add(extension);
+                }
+            }
+        }
+
+        if (unique.Count == 0) {
+            throw new PlatformException(
+                $"SDL returned no Vulkan instance extensions: {SDL.GetError()}",
+                DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                null);
+        }
+
+        if (!unique.Contains(VULKAN_SURFACE_EXTENSION)) {
+            throw new PlatformException(
+                $"SDL did not report the required {VULKAN_SURFACE_EXTENSION} instance extension.",
+                DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                null);
+        }
+
+        return [.. unique];
+    }
+
+    /// <inheritdoc />
+    public IntPtr CreateVulkanSurface(IntPtr instance) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!_initialized) {
+            throw new InvalidOperationException("The platform has not been initialized.");
+        }
+
+        if (!_vulkanEnabled) {
+            throw new InvalidOperationException("The window was not created for Vulkan.");
+        }
+
+        if (!_vulkanLoaderLoaded) {
+            // SDL treats a null path as "load the platform default Vulkan loader".
+            if (!SDL.VulkanLoadLibrary(null!)) {
+                throw new PlatformException(
+                    $"SDL failed to load the Vulkan loader: {SDL.GetError()}",
+                    DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                    null);
+            }
+
+            _vulkanLoaderLoaded = true;
+        }
+
+        if (!SDL.VulkanCreateSurface(_windowHandle, instance, IntPtr.Zero, out IntPtr surface)) {
+            throw new PlatformException(
+                $"SDL failed to create the Vulkan surface: {SDL.GetError()}",
+                DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                null);
+        }
+
+        if (surface == IntPtr.Zero) {
+            throw new PlatformException(
+                "SDL returned a zero Vulkan surface handle.",
+                DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                null);
+        }
+
+        _vulkanSurfaces.Add(surface);
+        return surface;
+    }
+
+    /// <inheritdoc />
+    public void DestroyVulkanSurface(IntPtr instance, IntPtr surface) {
+        if (surface == IntPtr.Zero || _disposed || !_initialized || !_vulkanEnabled) {
+            return;
+        }
+
+        if (!_vulkanSurfaces.Remove(surface)) {
+            return;
+        }
+
+        SDL.VulkanDestroySurface(instance, surface, IntPtr.Zero);
     }
 
     /// <inheritdoc />
@@ -198,8 +304,15 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
                 SDL.DestroyWindow(_windowHandle);
                 _windowHandle = IntPtr.Zero;
             }
+
+            _vulkanSurfaces.Clear();
         } finally {
             if (_sdlInitialized) {
+                if (_vulkanLoaderLoaded) {
+                    SDL.VulkanUnloadLibrary();
+                    _vulkanLoaderLoaded = false;
+                }
+
                 SDL.Quit();
                 _sdlInitialized = false;
             }

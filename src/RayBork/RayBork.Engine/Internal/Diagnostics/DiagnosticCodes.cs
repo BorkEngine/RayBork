@@ -18,4 +18,9 @@ internal static class DiagnosticCodes {
     /// Window creation failed.
     /// </summary>
     public const string WINDOW_CREATION_FAILED = "RB2002";
+
+    /// <summary>
+    /// SDL3 Vulkan surface creation or loader failure.
+    /// </summary>
+    public const string VULKAN_SURFACE_CREATION_FAILED = "RB2003";
 }
