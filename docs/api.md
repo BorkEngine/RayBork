@@ -1,8 +1,11 @@
 # RayBork API Reference
 
-Status: **v0.1 M1**, 2026-11-11. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick
-thread, SDL3 window/input/gamepads, time/pacing, and logging surface listed in §1.6. The rest of
-this document remains the 1.0 contract, not a description of shipped behavior.
+Status: **v0.1 M2**, 2026-11-11. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick
+thread, SDL3 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the
+renderer public contract: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer
+builder options, the graphics exceptions, and `EngineContext.Info`/`Stats`. The M2 sample and the
+Vulkan backend are still pending later M2 tasks. The rest of this document remains the 1.0 contract,
+not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -95,9 +98,10 @@ Unless marked otherwise, a mutable object (`Shader`, `Camera`, `Font` preloading
 
 ### 1.6 Milestone availability
 
-M0 ships `EngineVersion`. M1 ships the host, thread, window, input, time, and logging surface. The
-remaining rows name the milestone that owns the deferred surface; the full code blocks below stay
-the 1.0 contract.
+M0 ships `EngineVersion`. M1 ships the host, thread, window, input, time, and logging surface. M2
+ships the renderer public contract, while the renderer backend and the M2 sample remain pending M2
+tasks. The remaining rows name the milestone that owns the deferred surface; the full code blocks
+below stay the 1.0 contract.
 
 | Surface | Milestone |
 | --- | --- |
@@ -109,9 +113,9 @@ the 1.0 contract.
 | `IWindow`, `WindowState`, `CursorMode`, `Monitor`; logging through `Microsoft.Extensions.Logging` | M1 |
 | `Transform`, `Color`, `Rect`, `Vector3Extensions`, `QuaternionExtensions` | M1 |
 | `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
-| `EngineInfo`, `PresentMode`, `RenderStats`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`) | M2 |
+| `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, `WithClearColor`) | M2 |
 | `IAssetCatalog`, the asset types, `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, and the asset exceptions | M3 |
-| `Camera`, `CameraProjection`, `ClearMode`, `TonemappingMode`, `Mesh`, `Model`, `Shader`, `Texture`, `RenderState`, and the render enums | M4 |
+| `Camera`, `CameraProjection`, `ClearMode`, `Mesh`, `Model`, `Shader`, `Texture`, `RenderState`, and the other render enums | M4 |
 | `Collision` and `RayCollision` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
@@ -123,6 +127,11 @@ In M1, `EngineContext` exposes **only** `Input`, `Window`, `LoggerFactory`, `Tim
 In M1, `RayBorkAppBuilder` exposes **only** `WithGame`, `WithTitle`, `WithSize`, `WithResizable`,
 `WithMaxDeltaTime`, `WithTargetFps`, `WithWindowState`, `WithLoggerFactory`, `WithLogLevel`, and
 `Build`. The other builder methods in §3.2 are the later contract.
+
+**M2 subset.** `EngineContext` additionally exposes `Info` and `Stats`, both valid from `Setup`.
+`RayBorkAppBuilder` additionally exposes `WithPresentMode`, `WithMSAA`, `WithTonemapping`,
+`WithExposure`, `WithValidation`, and `WithClearColor`. `Assets`, cameras, render textures, and
+custom asset types remain later milestones.
 
 ## 2. Quick start
 
@@ -262,6 +271,7 @@ public sealed class RayBorkAppBuilder {
     public RayBorkAppBuilder WithMSAA(int sampleCount = 4);
     public RayBorkAppBuilder WithTonemapping(TonemappingMode mode = TonemappingMode.AgX);
     public RayBorkAppBuilder WithExposure(float ev = 0f);
+    public RayBorkAppBuilder WithClearColor(Color color);
     public RayBorkAppBuilder WithTargetFps(int framesPerSecond);
     public RayBorkAppBuilder WithValidation(bool enabled = true);
     public RayBorkAppBuilder WithLoggerFactory(ILoggerFactory loggerFactory);
@@ -282,9 +292,10 @@ public sealed class RayBorkAppBuilder {
 | `WithAssetsPacks` | none | Same, in order. |
 | `WithAssetType<T>` | none | Registers a custom TOML data type for `Load<T>`. `T` must carry a compiled `[GenerateShape]`. Idempotent for the same type; a conflicting registration is an `InvalidOperationException`. |
 | `WithPresentMode` | `Mailbox` | `Mailbox` is preferred; if unavailable, the engine falls back to `Fifo`. `Immediate` is available when the user explicitly chooses it. |
-| `WithMSAA` | `4` | Valid sample counts are 1, 2, 4, and 8, subject to device support. Invalid or unsupported counts fall back to the highest supported count and log a warning. |
+| `WithMSAA` | `4` | Valid sample counts are 1, 2, 4, and 8, subject to device support. The renderer selects the highest supported sample count that does not exceed the request, and 1 if none is supported, logging a warning when the effective count differs. |
 | `WithTonemapping` | `AgX` | `AgX` maps linear HDR to the output; `None` is for custom output/presentation paths. |
 | `WithExposure` | `0` EV | Exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. |
+| `WithClearColor` | linear opaque black | Sets the scene-pass clear color. Until cameras arrive in M4 it is the only clear color; from M4 a camera's own clear color takes precedence. |
 | `WithTargetFps` | `0` (uncapped) | Caps the tick loop when vsync/mailbox is not throttling. `0` means no cap. |
 | `WithValidation` | `true` in Debug, `false` in Release | If the validation layer is unavailable, the app logs a warning and continues without it. |
 | `WithLoggerFactory` | default ZLogger console factory | A caller-supplied factory is not disposed by the app. `EngineContext.LoggerFactory` always returns a usable factory. |
@@ -388,8 +399,8 @@ public sealed class EngineContext {
 
 > **M1 subset.** M1 exposes only `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`,
 > `UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and
-> `RequestExit`. `Assets`, `Info`, `Stats`, camera creation, and render-texture creation are the
-> later contract; their milestones are in §1.6.
+> `RequestExit`. `Assets`, camera creation, and render-texture creation are the later contract;
+> their milestones are in §1.6. M2 adds `Info` and `Stats`.
 
 | Member | Thread | Notes |
 | --- | --- | --- |
@@ -397,7 +408,7 @@ public sealed class EngineContext {
 | `Input` | Tick | Input snapshot for the current tick. |
 | `Window` | Any | Snapshot getters; setters are queued. |
 | `LoggerFactory` | Any | App-owned factory; create category loggers from it. Never `null`. |
-| `Info` | Any | Engine version, renderer/backend name, GPU name, Vulkan API version, HDR output flag, validation state. M2. |
+| `Info` | Any | Engine version, renderer/backend name, GPU name, Vulkan API version, HDR output flag, sample count, present mode, and validation state. Valid from `Setup`; a read may be stale by one tick. |
 | `Time` | Tick | Absolute seconds from `Run` start. It is live during `Setup` and is not reset at the first tick. |
 | `DeltaTime` | Tick | Clamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
 | `UnscaledDeltaTime` | Tick | Unclamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
@@ -406,7 +417,7 @@ public sealed class EngineContext {
 | `IsFirstTick` | Tick | `true` only during the first `Tick`. |
 | `IsExiting` | Tick | `true` after `RequestExit`, a window close, or an engine stop request. |
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
-| `Stats` | Tick | Last completed frame's render statistics. May be stale by one tick. M2. |
+| `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. |
 | `CreateCamera` | Tick | Perspective camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateOrthographicCamera` | Tick | Orthographic camera. `height` is the visible world-space height. |
 | `CreateRenderTextureAsync` | Tick | Creates an offscreen target and completes when the render thread has allocated it. Legal in `Setup` and `Tick`. |
@@ -1146,6 +1157,9 @@ public enum TonemappingMode {
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
   target inside the same pass that writes it is invalid and is reported as a validation error.
+
+In M2, before `Camera` exists, `WithClearColor` is the scene clear color. Cameras add per-camera
+clear control in M4; a camera's own clear color then takes precedence.
 
 **HDR chain.** Cameras render into a linear `Rgba16Float` scene target. The present pass applies
 `TonemappingMode` and exposure, then encodes to the swapchain. The default is `AgX` at `0` EV.
@@ -2202,15 +2216,16 @@ public sealed class AssetNotFoundException : AssetException { }
 public sealed class AssetTypeMismatchException : AssetException { }
 public sealed class AssetPackException : AssetException { }
 public sealed class AssetLoadException : AssetException { }
-public sealed class GraphicsException : RayBorkException { }
+public class GraphicsException : RayBorkException { }
 public sealed class GraphicsDeviceLostException : GraphicsException { }
 public sealed class ShaderException : GraphicsException { }
 public sealed class WindowException : RayBorkException { }
 public sealed class PlatformException : RayBorkException { }
 ```
 
-M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowException`. The asset
-and graphics exceptions in the block above are the later contract.
+M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowException`. M2 ships
+`GraphicsException` and `GraphicsDeviceLostException`; the asset and shader exceptions in the block
+above are the later contract.
 
 M1 diagnostic codes:
 
@@ -2219,6 +2234,14 @@ M1 diagnostic codes:
 | `RB0001` | `GameException` | A `Setup`, `Tick`, or `Shutdown` callback failed. |
 | `RB2001` | `PlatformException` | SDL3/platform initialization failed. |
 | `RB2002` | `WindowException` | Window creation failed. |
+
+M2 diagnostic codes:
+
+| Code | Exception | Meaning |
+| --- | --- | --- |
+| `RB3001` | `GraphicsException` | Graphics initialization or device creation failed. |
+| `RB3002` | `GraphicsDeviceLostException` | Device loss after recovery failed. |
+| `RB3003` | `GraphicsException` | An unrecoverable graphics failure stopped the app. |
 
 | Exception | Typical cause |
 | --- | --- |
@@ -2234,7 +2257,7 @@ M1 diagnostic codes:
 | `PlatformException` | SDL3 initialization, audio device (later), or native library failure. |
 
 `DiagnosticCode` is a stable `RB`-prefixed code such as `RB1002` (unsupported pack version) or
-`RB3002` (device lost after failed recovery). Later milestones add the asset, graphics, and bake
+`RB3002` (device lost after failed recovery). Later milestones add the asset, shader, and bake
 codes. Codes are documented in the bake and runtime diagnostics tables; tests assert them. They are
 stable within a major version.
 
@@ -2269,7 +2292,7 @@ Lifecycle and argument errors use the standard BCL exceptions, not `RayBorkExcep
 | `IWindow` getters | Any thread | Last confirmed snapshot |
 | `IAssetCatalog` | Any thread | Thread-safe load/cache; custom data is caller-owned |
 | `ILoggerFactory` | Any thread | App-owned; create category loggers |
-| `RenderStats` | Render thread writes | Tick thread reads a snapshot |
+| `RenderStats` | Render thread writes | Any thread reads a snapshot |
 | Renderer backend objects | Render thread | Never exposed; the backend is replaceable internally |
 
 ### 11.2 The "join before Tick returns" rule

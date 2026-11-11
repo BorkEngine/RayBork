@@ -2,8 +2,10 @@
 override RayBork.Color.Equals(object? obj) -> bool
 override RayBork.Color.GetHashCode() -> int
 override RayBork.Color.ToString() -> string!
+override RayBork.EngineInfo.GetHashCode() -> int
 override RayBork.Monitor.GetHashCode() -> int
 override RayBork.Rect.GetHashCode() -> int
+override RayBork.RenderStats.GetHashCode() -> int
 RayBork.Color
 RayBork.Color.A.get -> float
 RayBork.Color.B.get -> float
@@ -26,15 +28,42 @@ RayBork.EngineContext
 RayBork.EngineContext.DeltaTime.get -> double
 RayBork.EngineContext.Fps.get -> double
 RayBork.EngineContext.FrameCount.get -> long
+RayBork.EngineContext.Info.get -> RayBork.EngineInfo
 RayBork.EngineContext.Input.get -> RayBork.IInput!
 RayBork.EngineContext.IsExiting.get -> bool
 RayBork.EngineContext.IsFirstTick.get -> bool
 RayBork.EngineContext.LoggerFactory.get -> Microsoft.Extensions.Logging.ILoggerFactory!
 RayBork.EngineContext.MaxDeltaTime.get -> double
 RayBork.EngineContext.RequestExit() -> void
+RayBork.EngineContext.Stats.get -> RayBork.RenderStats
 RayBork.EngineContext.Time.get -> double
 RayBork.EngineContext.UnscaledDeltaTime.get -> double
 RayBork.EngineContext.Window.get -> RayBork.IWindow!
+RayBork.EngineInfo
+RayBork.EngineInfo.Deconstruct(out string! Name, out System.Version! Version, out string! RendererName, out string! GpuName, out uint VulkanApiVersion, out string! SwapchainFormat, out bool HdrOutput, out int SampleCount, out RayBork.PresentMode PresentMode, out bool ValidationEnabled) -> void
+RayBork.EngineInfo.EngineInfo() -> void
+RayBork.EngineInfo.EngineInfo(string! Name, System.Version! Version, string! RendererName, string! GpuName, uint VulkanApiVersion, string! SwapchainFormat, bool HdrOutput, int SampleCount, RayBork.PresentMode PresentMode, bool ValidationEnabled) -> void
+RayBork.EngineInfo.Equals(RayBork.EngineInfo other) -> bool
+RayBork.EngineInfo.GpuName.get -> string!
+RayBork.EngineInfo.GpuName.init -> void
+RayBork.EngineInfo.HdrOutput.get -> bool
+RayBork.EngineInfo.HdrOutput.init -> void
+RayBork.EngineInfo.Name.get -> string!
+RayBork.EngineInfo.Name.init -> void
+RayBork.EngineInfo.PresentMode.get -> RayBork.PresentMode
+RayBork.EngineInfo.PresentMode.init -> void
+RayBork.EngineInfo.RendererName.get -> string!
+RayBork.EngineInfo.RendererName.init -> void
+RayBork.EngineInfo.SampleCount.get -> int
+RayBork.EngineInfo.SampleCount.init -> void
+RayBork.EngineInfo.SwapchainFormat.get -> string!
+RayBork.EngineInfo.SwapchainFormat.init -> void
+RayBork.EngineInfo.ValidationEnabled.get -> bool
+RayBork.EngineInfo.ValidationEnabled.init -> void
+RayBork.EngineInfo.Version.get -> System.Version!
+RayBork.EngineInfo.Version.init -> void
+RayBork.EngineInfo.VulkanApiVersion.get -> uint
+RayBork.EngineInfo.VulkanApiVersion.init -> void
 RayBork.EngineVersion
 RayBork.GameException
 RayBork.GameException.GameException() -> void
@@ -68,6 +97,14 @@ RayBork.GamepadButton.West = 2 -> RayBork.GamepadButton
 RayBork.GamepadTrigger
 RayBork.GamepadTrigger.Left = 0 -> RayBork.GamepadTrigger
 RayBork.GamepadTrigger.Right = 1 -> RayBork.GamepadTrigger
+RayBork.GraphicsDeviceLostException
+RayBork.GraphicsDeviceLostException.GraphicsDeviceLostException() -> void
+RayBork.GraphicsDeviceLostException.GraphicsDeviceLostException(string! message) -> void
+RayBork.GraphicsDeviceLostException.GraphicsDeviceLostException(string! message, System.Exception? innerException) -> void
+RayBork.GraphicsException
+RayBork.GraphicsException.GraphicsException() -> void
+RayBork.GraphicsException.GraphicsException(string! message) -> void
+RayBork.GraphicsException.GraphicsException(string! message, System.Exception? innerException) -> void
 RayBork.IGame
 RayBork.IGame.Setup(RayBork.EngineContext! context) -> System.Threading.Tasks.Task!
 RayBork.IGame.Shutdown() -> System.Threading.Tasks.Task!
@@ -408,6 +445,10 @@ RayBork.PlatformException
 RayBork.PlatformException.PlatformException() -> void
 RayBork.PlatformException.PlatformException(string! message) -> void
 RayBork.PlatformException.PlatformException(string! message, System.Exception? innerException) -> void
+RayBork.PresentMode
+RayBork.PresentMode.Fifo = 1 -> RayBork.PresentMode
+RayBork.PresentMode.Immediate = 2 -> RayBork.PresentMode
+RayBork.PresentMode.Mailbox = 0 -> RayBork.PresentMode
 RayBork.QuaternionExtensions
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion)
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Angle(System.Numerics.Quaternion other) -> float
@@ -416,6 +457,12 @@ RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Normalized.ge
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).RotateTowards(System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Slerp(System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).ToAngleAxis(out float angle, out System.Numerics.Vector3 axis) -> void
+RayBork.RayBorkAppBuilder.WithClearColor(RayBork.Color color) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithExposure(float ev = 0) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithMSAA(int sampleCount = 4) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithPresentMode(RayBork.PresentMode mode = RayBork.PresentMode.Mailbox) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithTonemapping(RayBork.TonemappingMode mode = RayBork.TonemappingMode.AgX) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithValidation(bool enabled = true) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkException
 RayBork.RayBorkException.DiagnosticCode.get -> string?
 RayBork.RayBorkException.RayBorkException() -> void
@@ -439,6 +486,40 @@ RayBork.Rect.X.get -> float
 RayBork.Rect.X.init -> void
 RayBork.Rect.Y.get -> float
 RayBork.Rect.Y.init -> void
+RayBork.RenderStats
+RayBork.RenderStats.CpuFrameMilliseconds.get -> double
+RayBork.RenderStats.CpuFrameMilliseconds.init -> void
+RayBork.RenderStats.CulledInstances.get -> int
+RayBork.RenderStats.CulledInstances.init -> void
+RayBork.RenderStats.Deconstruct(out long FrameIndex, out int DrawCalls, out int Instances, out int Triangles, out int CulledInstances, out int PipelineCount, out int TextureCount, out int SampleCount, out bool HdrOutput, out double CpuFrameMilliseconds, out double GpuFrameMilliseconds, out int FramesInFlight, out int RecoveryCount) -> void
+RayBork.RenderStats.DrawCalls.get -> int
+RayBork.RenderStats.DrawCalls.init -> void
+RayBork.RenderStats.Equals(RayBork.RenderStats other) -> bool
+RayBork.RenderStats.FrameIndex.get -> long
+RayBork.RenderStats.FrameIndex.init -> void
+RayBork.RenderStats.FramesInFlight.get -> int
+RayBork.RenderStats.FramesInFlight.init -> void
+RayBork.RenderStats.GpuFrameMilliseconds.get -> double
+RayBork.RenderStats.GpuFrameMilliseconds.init -> void
+RayBork.RenderStats.HdrOutput.get -> bool
+RayBork.RenderStats.HdrOutput.init -> void
+RayBork.RenderStats.Instances.get -> int
+RayBork.RenderStats.Instances.init -> void
+RayBork.RenderStats.PipelineCount.get -> int
+RayBork.RenderStats.PipelineCount.init -> void
+RayBork.RenderStats.RecoveryCount.get -> int
+RayBork.RenderStats.RecoveryCount.init -> void
+RayBork.RenderStats.RenderStats() -> void
+RayBork.RenderStats.RenderStats(long FrameIndex, int DrawCalls, int Instances, int Triangles, int CulledInstances, int PipelineCount, int TextureCount, int SampleCount, bool HdrOutput, double CpuFrameMilliseconds, double GpuFrameMilliseconds, int FramesInFlight, int RecoveryCount) -> void
+RayBork.RenderStats.SampleCount.get -> int
+RayBork.RenderStats.SampleCount.init -> void
+RayBork.RenderStats.TextureCount.get -> int
+RayBork.RenderStats.TextureCount.init -> void
+RayBork.RenderStats.Triangles.get -> int
+RayBork.RenderStats.Triangles.init -> void
+RayBork.TonemappingMode
+RayBork.TonemappingMode.AgX = 0 -> RayBork.TonemappingMode
+RayBork.TonemappingMode.None = 1 -> RayBork.TonemappingMode
 RayBork.Transform
 RayBork.Transform.Forward.get -> System.Numerics.Vector3
 RayBork.Transform.Inverse() -> RayBork.Transform
@@ -503,6 +584,8 @@ static RayBork.Color.operator +(RayBork.Color a, RayBork.Color b) -> RayBork.Col
 static RayBork.Color.operator -(RayBork.Color a, RayBork.Color b) -> RayBork.Color
 static RayBork.Color.operator /(RayBork.Color a, float b) -> RayBork.Color
 static RayBork.Color.RGBToHSV(RayBork.Color rgb, out float h, out float s, out float v) -> void
+static RayBork.EngineInfo.operator !=(RayBork.EngineInfo left, RayBork.EngineInfo right) -> bool
+static RayBork.EngineInfo.operator ==(RayBork.EngineInfo left, RayBork.EngineInfo right) -> bool
 static RayBork.EngineVersion.Current.get -> System.Version!
 static RayBork.Monitor.operator !=(RayBork.Monitor left, RayBork.Monitor right) -> bool
 static RayBork.Monitor.operator ==(RayBork.Monitor left, RayBork.Monitor right) -> bool
@@ -523,6 +606,8 @@ static RayBork.QuaternionExtensions.ToAngleAxis(this System.Numerics.Quaternion 
 static RayBork.Rect.FromSize(float width, float height) -> RayBork.Rect
 static RayBork.Rect.operator !=(RayBork.Rect left, RayBork.Rect right) -> bool
 static RayBork.Rect.operator ==(RayBork.Rect left, RayBork.Rect right) -> bool
+static RayBork.RenderStats.operator !=(RayBork.RenderStats left, RayBork.RenderStats right) -> bool
+static RayBork.RenderStats.operator ==(RayBork.RenderStats left, RayBork.RenderStats right) -> bool
 static RayBork.Transform.Identity.get -> RayBork.Transform
 static RayBork.Transform.Lerp(RayBork.Transform a, RayBork.Transform b, float t) -> RayBork.Transform
 static RayBork.Vector3Extensions.Angle(this System.Numerics.Vector3 value, System.Numerics.Vector3 other) -> float
@@ -564,6 +649,8 @@ static readonly RayBork.Color.Red -> RayBork.Color
 static readonly RayBork.Color.Transparent -> RayBork.Color
 static readonly RayBork.Color.White -> RayBork.Color
 static readonly RayBork.Color.Yellow -> RayBork.Color
+~override RayBork.EngineInfo.Equals(object obj) -> bool
+~override RayBork.EngineInfo.ToString() -> string
 ~override RayBork.Monitor.Equals(object obj) -> bool
 ~override RayBork.Monitor.ToString() -> string
 ~override RayBork.Rect.Equals(object obj) -> bool
@@ -586,3 +673,5 @@ RayBork.RayBorkAppBuilder.WithSize(int width, int height) -> RayBork.RayBorkAppB
 RayBork.RayBorkAppBuilder.WithTargetFps(int framesPerSecond) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithTitle(string! title) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithWindowState(RayBork.WindowState state) -> RayBork.RayBorkAppBuilder!
+~override RayBork.RenderStats.Equals(object obj) -> bool
+~override RayBork.RenderStats.ToString() -> string

@@ -34,6 +34,7 @@ public sealed class RayBorkApp : IDisposable {
     private readonly ExitControl _exitControl;
     private readonly Lock _gate = new();
     private readonly ManualResetEventSlim _runCompletedSignal = new(false);
+    private readonly RenderStatus _renderStatus = new();
 
     private TickRunner? _tickRunner;
     private RenderLoop? _renderLoop;
@@ -76,6 +77,13 @@ public sealed class RayBorkApp : IDisposable {
     /// Gets the validated configuration. Used by tests.
     /// </summary>
     internal AppConfiguration Configuration => _configuration;
+
+    /// <summary>
+    /// Gets the status holder that <see cref="EngineContext.Info"/> and
+    /// <see cref="EngineContext.Stats"/> read. Later M2 renderer tasks write it from the render
+    /// thread.
+    /// </summary>
+    internal RenderStatus RenderStatus => _renderStatus;
 
     /// <summary>
     /// Gets the tick thread, or <see langword="null"/> before <see cref="Run"/>. Read it after
@@ -211,7 +219,8 @@ public sealed class RayBorkApp : IDisposable {
                 _exitControl,
                 CaptureInput(platform),
                 configuration.MaxDeltaTime,
-                () => clock.Time);
+                () => clock.Time,
+                _renderStatus);
 
             frameRing = new FrameRing();
             renderLoop = new RenderLoop(frameRing);
