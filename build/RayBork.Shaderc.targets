@@ -16,8 +16,9 @@
     -->
 
     <PropertyGroup>
-        <_RayBorkShadercPackageRoot Condition="'$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
-        <_RayBorkShadercPackageRoot Condition="'$(NuGetPackageRoot)' == '' and '$(HOME)' != ''">$(HOME)/.nuget/packages/silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(PkgSilk_NET_Shaderc_Native)' != ''">$(PkgSilk_NET_Shaderc_Native)</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(_RayBorkShadercPackageRoot)' == '' and '$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(_RayBorkShadercPackageRoot)' == '' and '$(HOME)' != ''">$(HOME)/.nuget/packages/silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
         <_RayBorkShadercNativeDirectory Condition="'$(OS)' == 'Windows_NT'">$(_RayBorkShadercPackageRoot)\runtimes\win-x64\native</_RayBorkShadercNativeDirectory>
         <_RayBorkShadercNativeDirectory Condition="'$(OS)' != 'Windows_NT'">$(_RayBorkShadercPackageRoot)/runtimes/linux-x64/native</_RayBorkShadercNativeDirectory>
         <_RayBorkShadercNativeFile Condition="'$(OS)' == 'Windows_NT'">shaderc_shared.dll</_RayBorkShadercNativeFile>

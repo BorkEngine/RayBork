@@ -147,6 +147,12 @@
             Inputs="@(_RayBorkBuiltInAssetsInputs);$(_RayBorkBuiltInAssetsFingerprintFile)"
             Outputs="$(_RayBorkBuiltInAssetsGeneratedFile)">
         <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_RayBorkBuiltInAssetsGeneratedFile)'))" />
+        <!-- Ensure libshaderc is beside the tool even when the tool build itself was up to date and
+             its AfterTargets copy hook did not run. -->
+        <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
+                 Targets="RayBorkCopyShadercNative"
+                 Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
         <Exec Command="&quot;$(RayBorkDotNetHost)&quot; &quot;$(RayBorkBuiltInAssetsAssembly)&quot; --output &quot;$(_RayBorkBuiltInAssetsGeneratedFile)&quot; --source-root &quot;$(_RayBorkBuiltInAssetsSourceRoot)&quot; --engine-shaders &quot;$(_RayBorkBuiltInAssetsEngineShaders)&quot;"
               WorkingDirectory="$(MSBuildProjectDirectory)"
               StandardOutputImportance="high"
