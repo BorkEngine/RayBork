@@ -214,6 +214,7 @@ public sealed class RayBorkApp : IDisposable {
         EngineClock clock = new(_timeProvider, configuration.MaxDeltaTime);
         clock.Start();
 
+        MainThreadTeardownQueue teardownQueue = new();
         IEnginePlatform? platform = null;
         MainThreadSurfaceChannel? surfaceChannel = null;
         FrameRing? frameRing = null;
@@ -238,7 +239,8 @@ public sealed class RayBorkApp : IDisposable {
                 platform,
                 loggerFactory,
                 instanceExtensions,
-                surfaceChannel);
+                surfaceChannel,
+                teardownQueue);
 
             frameRing = new FrameRing();
             renderLoop = new RenderLoop(frameRing, _rendererBackendFactory, backendOptions, _renderStatus);
@@ -312,6 +314,7 @@ public sealed class RayBorkApp : IDisposable {
             renderLoop,
             tickStarted,
             renderStarted,
+            teardownQueue,
             failure);
 
         if (failure is not null) {
@@ -356,7 +359,8 @@ public sealed class RayBorkApp : IDisposable {
         IEnginePlatform platform,
         ILoggerFactory loggerFactory,
         IReadOnlyList<string> instanceExtensions,
-        IRendererSurfaceProvider surfaceProvider) {
+        IRendererSurfaceProvider surfaceProvider,
+        MainThreadTeardownQueue teardownQueue) {
         IPlatformWindow window = platform.Window;
         return new RendererBackendOptions {
             Settings = configuration.RenderSettings,
@@ -369,6 +373,7 @@ public sealed class RayBorkApp : IDisposable {
                 window.IsFocused,
                 platform.WindowHdrState),
             Logger = loggerFactory.CreateLogger(GRAPHICS_LOGGER_CATEGORY),
+            TeardownQueue = teardownQueue,
         };
     }
 
@@ -419,6 +424,7 @@ public sealed class RayBorkApp : IDisposable {
         RenderLoop? renderLoop,
         bool tickStarted,
         bool renderStarted,
+        MainThreadTeardownQueue teardownQueue,
         Exception? failure) {
         if (tickRunner is not null && tickStarted) {
             failure = RunCleanupStep(logger, "stopping the tick runner", failure, tickRunner.Stop);
@@ -474,6 +480,14 @@ public sealed class RayBorkApp : IDisposable {
         if (surfaceChannel is not null) {
             failure = RunCleanupStep(logger, "closing the surface channel", failure, surfaceChannel.Close);
         }
+
+        // The render thread has stopped, so the deferred teardown can run on this thread now. It must
+        // happen before the platform destroys the window that the teardown may still reference.
+        failure = RunCleanupStep(
+            logger,
+            "running the main-thread teardown queue",
+            failure,
+            () => teardownQueue.RunPending(logger));
 
         if (platform is not null) {
             failure = RunCleanupStep(logger, "disposing the platform", failure, platform.Dispose);

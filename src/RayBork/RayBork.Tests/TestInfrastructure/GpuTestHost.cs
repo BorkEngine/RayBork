@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Internal;
 using Silk.NET.Core.Loader;
-using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
@@ -145,6 +144,7 @@ internal sealed class GpuTestHost : IDisposable {
             }
 
             instance?.Dispose();
+            instance?.DisposeFromMainThread();
             cleanupHost?.Dispose();
         }
     }
@@ -155,8 +155,9 @@ internal sealed class GpuTestHost : IDisposable {
     /// <returns><see langword="true"/> when the loader loads.</returns>
     internal static bool IsVulkanLoaderAvailable() {
         try {
-            return Vk.GetApi() is not null;
-        } catch (Exception exception) when (exception is DllNotFoundException or SymbolLoadingException or TypeInitializationException) {
+            using VulkanLoader loader = VulkanLoader.Load(NullLogger.Instance);
+            return true;
+        } catch (GraphicsException) {
             return false;
         }
     }
@@ -171,11 +172,12 @@ internal sealed class GpuTestHost : IDisposable {
         _device.Dispose();
         _sdlHost.Platform.DestroyVulkanSurface(_instance.Handle.Handle, _surface);
         _instance.Dispose();
+        _instance.DisposeFromMainThread();
         _sdlHost.Dispose();
     }
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>
         exception.InnerException is DllNotFoundException or SymbolLoadingException or TypeInitializationException
-        || exception.Message.StartsWith(VulkanInstance.LOADER_FAILURE_MESSAGE_PREFIX, StringComparison.Ordinal)
+        || exception.Message.StartsWith(VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX, StringComparison.Ordinal)
         || exception.Message.StartsWith(VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX, StringComparison.Ordinal);
 }

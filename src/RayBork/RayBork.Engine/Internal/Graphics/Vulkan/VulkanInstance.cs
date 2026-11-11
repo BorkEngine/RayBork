@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
-using Silk.NET.Core.Loader;
 using Silk.NET.Vulkan;
 
 namespace RayBork.Internal;
@@ -16,16 +15,13 @@ namespace RayBork.Internal;
 /// messenger, and throws when validation reported an error while creating the instance.
 /// </para>
 /// <para>
-/// The instance is not thread-safe. Dispose it on the render thread after every surface, device, and
-/// swapchain created from it has been destroyed.
+/// The instance is not thread-safe. The render thread creates and uses it, and its
+/// <see cref="Dispose"/> only completes the render-thread phase. After the render thread has stopped,
+/// the main thread calls <see cref="DisposeFromMainThread"/>, which destroys the debug messenger, the
+/// instance, the Silk.NET API, and the native loader.
 /// </para>
 /// </remarks>
 internal sealed class VulkanInstance : IDisposable {
-    /// <summary>
-    /// The prefix of the message thrown when the Vulkan loader cannot be loaded.
-    /// </summary>
-    internal const string LOADER_FAILURE_MESSAGE_PREFIX = "Failed to load";
-
     /// <summary>
     /// The Vulkan API version the renderer requests from the loader.
     /// </summary>
@@ -34,18 +30,20 @@ internal sealed class VulkanInstance : IDisposable {
     private const string ENGINE_NAME = "RayBork";
     private const string DEBUG_UTILS_EXTENSION_NAME = "VK_EXT_debug_utils";
     private const string SWAPCHAIN_COLORSPACE_EXTENSION_NAME = "VK_EXT_swapchain_colorspace";
-    private const string LOADER_NAME = "the Vulkan loader (vulkan-1.dll on Windows, libvulkan.so.1 on Linux)";
 
     private readonly ILogger _logger;
 
     private Vk? _vulkan;
+    private VulkanLoader? _loader;
     private Instance _handle;
     private VulkanValidation? _validation;
     private DebugUtilsMessengerEXT _debugMessenger;
-    private bool _disposed;
+    private bool _renderThreadDisposed;
+    private bool _tornDown;
 
     private VulkanInstance(
         Vk vulkan,
+        VulkanLoader loader,
         Instance handle,
         VulkanValidation? validation,
         DebugUtilsMessengerEXT debugMessenger,
@@ -53,6 +51,7 @@ internal sealed class VulkanInstance : IDisposable {
         bool swapchainColorSpaceExtensionEnabled,
         ILogger logger) {
         _vulkan = vulkan;
+        _loader = loader;
         _handle = handle;
         _validation = validation;
         _debugMessenger = debugMessenger;
@@ -116,7 +115,15 @@ internal sealed class VulkanInstance : IDisposable {
         ArgumentNullException.ThrowIfNull(options.SurfaceExtensions);
         ArgumentNullException.ThrowIfNull(options.Logger);
 
-        Vk vulkan = LoadApi();
+        VulkanLoader loader = VulkanLoader.Load(options.Logger);
+        Vk vulkan;
+        try {
+            vulkan = new(loader);
+        } catch {
+            loader.Dispose();
+            throw;
+        }
+
         Instance handle = default;
         VulkanValidation? validation = null;
         DebugUtilsMessengerEXT debugMessenger = default;
@@ -172,6 +179,7 @@ internal sealed class VulkanInstance : IDisposable {
 
             VulkanInstance instance = new(
                 vulkan,
+                loader,
                 handle,
                 validation,
                 debugMessenger,
@@ -187,11 +195,15 @@ internal sealed class VulkanInstance : IDisposable {
                 instance.SwapchainColorSpaceExtensionEnabled ? "enabled" : "disabled");
             return instance;
         } catch {
-            DestroyMessengerBestEffort(vulkan, handle, debugMessenger);
-            validation?.Dispose();
-            if (handle.Handle != 0) {
-                vulkan.DestroyInstance(handle, null);
-                vulkan.CurrentInstance = null;
+            try {
+                DestroyMessengerBestEffort(vulkan, handle, debugMessenger);
+                validation?.Dispose();
+                if (handle.Handle != 0) {
+                    vulkan.DestroyInstance(handle, null);
+                    vulkan.CurrentInstance = null;
+                }
+            } finally {
+                loader.Dispose();
             }
 
             throw;
@@ -219,51 +231,65 @@ internal sealed class VulkanInstance : IDisposable {
     }
 
     /// <summary>
-    /// Destroys the debug messenger and the instance. The call is idempotent and never throws for an
-    /// absent messenger.
+    /// Completes the render-thread phase of disposal. The instance and loader stay alive until the
+    /// main thread calls <see cref="DisposeFromMainThread"/>. The call is idempotent.
     /// </summary>
-    public unsafe void Dispose() {
-        if (_disposed) {
+    /// <remarks>
+    /// Runs on the render thread after every surface, device, and swapchain created from the instance
+    /// has been destroyed. It deliberately does not destroy the instance: the Vulkan loader unloads
+    /// driver libraries that registered thread-local state on the render thread, and running that
+    /// teardown on the stopping render thread crashes when the thread exits.
+    /// </remarks>
+    public void Dispose() {
+        if (_renderThreadDisposed) {
             return;
         }
 
-        _disposed = true;
-        if (_debugMessenger.Handle != 0) {
-            DestroyMessengerBestEffort(Vulkan, _handle, _debugMessenger);
-            _debugMessenger = default;
-        }
-
-        _validation?.Dispose();
-        _validation = null;
-        if (_handle.Handle != 0) {
-            Vulkan.DestroyInstance(_handle, null);
-            _handle = default;
-        }
-
-        Vulkan.CurrentInstance = null;
-        _vulkan = null;
-        _logger.LogDebug("Vulkan instance disposed.");
+        _renderThreadDisposed = true;
+        _logger.LogDebug("Vulkan instance render-thread disposal completed; teardown is deferred to the main thread.");
     }
 
-    private static Vk LoadApi() {
-        Vk? vulkan = null;
+    /// <summary>
+    /// Destroys the debug messenger, the instance, the Silk.NET API, and the native loader. The call
+    /// is idempotent and safe after the render-thread <see cref="Dispose"/>.
+    /// </summary>
+    /// <remarks>
+    /// Main-thread only. It runs after the render thread has stopped and no device, swapchain, or
+    /// surface references the instance. Destroying the instance and loader here, rather than on the
+    /// render thread, keeps driver thread-local destructors valid until that thread has exited.
+    /// </remarks>
+    internal unsafe void DisposeFromMainThread() {
+        if (_tornDown) {
+            return;
+        }
+
+        _tornDown = true;
+        Vk? vulkan = _vulkan;
         try {
-            vulkan = Vk.GetApi();
-        } catch (Exception exception) when (exception is DllNotFoundException or SymbolLoadingException or TypeInitializationException) {
-            throw new GraphicsException(
-                $"{LOADER_FAILURE_MESSAGE_PREFIX} {LOADER_NAME} on {RuntimeInformation.OSDescription}. Install a Vulkan 1.2 driver.",
-                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                exception);
-        }
+            if (vulkan is not null) {
+                if (_debugMessenger.Handle != 0) {
+                    DestroyMessengerBestEffort(vulkan, _handle, _debugMessenger);
+                    _debugMessenger = default;
+                }
 
-        if (vulkan is null) {
-            throw new GraphicsException(
-                $"{LOADER_FAILURE_MESSAGE_PREFIX} {LOADER_NAME} on {RuntimeInformation.OSDescription}. Install a Vulkan 1.2 driver.",
-                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
-        }
+                _validation?.Dispose();
+                _validation = null;
+                if (_handle.Handle != 0) {
+                    vulkan.DestroyInstance(_handle, null);
+                    _handle = default;
+                }
 
-        return vulkan;
+                vulkan.CurrentInstance = null;
+                if (vulkan is IDisposable disposable) {
+                    disposable.Dispose();
+                }
+            }
+        } finally {
+            _vulkan = null;
+            _loader?.Dispose();
+            _loader = null;
+            _logger.LogDebug("Vulkan instance disposed on the main thread.");
+        }
     }
 
     private static unsafe IReadOnlyList<string> EnumerateInstanceExtensions(Vk vulkan) {

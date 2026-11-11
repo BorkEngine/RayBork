@@ -28,6 +28,7 @@ internal sealed class BackendTestHost : IDisposable {
     private readonly IReadOnlyList<string> _instanceExtensions;
     private readonly DirectSurfaceProvider _surfaceProvider;
     private readonly Vulkan12Backend _backend;
+    private readonly MainThreadTeardownQueue _teardownQueue = new();
 
     private WindowSurfaceState _state;
     private bool _disposed;
@@ -209,6 +210,7 @@ internal sealed class BackendTestHost : IDisposable {
 
         _disposed = true;
         _backend.Dispose();
+        _teardownQueue.RunPending(NullLogger.Instance);
         _sdlHost.Dispose();
     }
 
@@ -219,6 +221,7 @@ internal sealed class BackendTestHost : IDisposable {
             SurfaceProvider = _surfaceProvider,
             WindowStateProvider = GetSurfaceState,
             Logger = NullLogger.Instance,
+            TeardownQueue = _teardownQueue,
         };
         _backend.Initialize(options);
     }
@@ -236,7 +239,7 @@ internal sealed class BackendTestHost : IDisposable {
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>
         exception.InnerException is DllNotFoundException or SymbolLoadingException or TypeInitializationException or PlatformException
-        || exception.Message.StartsWith(VulkanInstance.LOADER_FAILURE_MESSAGE_PREFIX, StringComparison.Ordinal)
+        || exception.Message.StartsWith(VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX, StringComparison.Ordinal)
         || exception.Message.StartsWith(VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX, StringComparison.Ordinal)
         || (exception.InnerException is GraphicsException inner && IsEnvironmentalFailure(inner));
 }
