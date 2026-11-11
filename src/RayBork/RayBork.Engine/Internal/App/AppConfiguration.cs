@@ -57,6 +57,17 @@ internal sealed class AppConfiguration {
     public required RenderSettings RenderSettings { get; init; }
 
     /// <summary>
+    /// Gets the user asset pack paths in mount order. Relative paths resolve against
+    /// <see cref="System.AppContext.BaseDirectory"/> when the app starts.
+    /// </summary>
+    public required IReadOnlyList<string> AssetPackPaths { get; init; }
+
+    /// <summary>
+    /// Gets the custom data type registrations captured from the builder.
+    /// </summary>
+    public required IReadOnlyList<AssetTypeRegistration> AssetTypes { get; init; }
+
+    /// <summary>
     /// Gets the caller-supplied logger factory, or <see langword="null"/> when the app must create
     /// and own the default factory.
     /// </summary>

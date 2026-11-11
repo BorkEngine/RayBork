@@ -1,4 +1,5 @@
 #nullable enable
+override RayBork.BoundingBox.GetHashCode() -> int
 override RayBork.Color.Equals(object? obj) -> bool
 override RayBork.Color.GetHashCode() -> int
 override RayBork.Color.ToString() -> string!
@@ -35,6 +36,15 @@ RayBork.BlendMode.Additive = 2 -> RayBork.BlendMode
 RayBork.BlendMode.Alpha = 1 -> RayBork.BlendMode
 RayBork.BlendMode.Multiply = 3 -> RayBork.BlendMode
 RayBork.BlendMode.Opaque = 0 -> RayBork.BlendMode
+RayBork.BoundingBox
+RayBork.BoundingBox.BoundingBox() -> void
+RayBork.BoundingBox.BoundingBox(System.Numerics.Vector3 Min, System.Numerics.Vector3 Max) -> void
+RayBork.BoundingBox.Deconstruct(out System.Numerics.Vector3 Min, out System.Numerics.Vector3 Max) -> void
+RayBork.BoundingBox.Equals(RayBork.BoundingBox other) -> bool
+RayBork.BoundingBox.Max.get -> System.Numerics.Vector3
+RayBork.BoundingBox.Max.init -> void
+RayBork.BoundingBox.Min.get -> System.Numerics.Vector3
+RayBork.BoundingBox.Min.init -> void
 RayBork.Color
 RayBork.Color.A.get -> float
 RayBork.Color.B.get -> float
@@ -65,6 +75,7 @@ RayBork.DepthTest.GreaterOrEqual = 2 -> RayBork.DepthTest
 RayBork.DepthTest.Less = 3 -> RayBork.DepthTest
 RayBork.DepthTest.LessOrEqual = 4 -> RayBork.DepthTest
 RayBork.EngineContext
+RayBork.EngineContext.Assets.get -> RayBork.IAssetCatalog!
 RayBork.EngineContext.DeltaTime.get -> double
 RayBork.EngineContext.Fps.get -> double
 RayBork.EngineContext.FrameCount.get -> long
@@ -465,6 +476,14 @@ RayBork.Key.Wake = 259 -> RayBork.Key
 RayBork.Key.X = 27 -> RayBork.Key
 RayBork.Key.Y = 28 -> RayBork.Key
 RayBork.Key.Z = 29 -> RayBork.Key
+RayBork.Mesh
+RayBork.Mesh.Bounds.get -> RayBork.BoundingBox
+RayBork.Mesh.Dispose() -> void
+RayBork.Mesh.IndexCount.get -> int
+RayBork.Mesh.IsDisposed.get -> bool
+RayBork.Mesh.Path.get -> string!
+RayBork.Mesh.Topology.get -> RayBork.PrimitiveTopology
+RayBork.Mesh.VertexCount.get -> int
 RayBork.Monitor
 RayBork.Monitor.Bounds.get -> RayBork.Rect
 RayBork.Monitor.Bounds.init -> void
@@ -510,6 +529,9 @@ RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Normalized.ge
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).RotateTowards(System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Slerp(System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).ToAngleAxis(out float angle, out System.Numerics.Vector3 axis) -> void
+RayBork.RayBorkAppBuilder.WithAssetsPack(string! path) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithAssetsPacks(params string![]! paths) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithAssetType<T>() -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithClearColor(RayBork.Color color) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithExposure(float ev = 0) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithMSAA(int sampleCount = 4) -> RayBork.RayBorkAppBuilder!
@@ -592,6 +614,14 @@ RayBork.SamplerState.SamplerState() -> void
 RayBork.SamplerState.SamplerState(RayBork.TextureFilter Filter, RayBork.TextureWrap Wrap, float MaxAnisotropy = 1) -> void
 RayBork.SamplerState.Wrap.get -> RayBork.TextureWrap
 RayBork.SamplerState.Wrap.init -> void
+RayBork.Shader
+RayBork.Shader.DefaultRenderState.get -> RayBork.RenderState
+RayBork.Shader.Dispose() -> void
+RayBork.Shader.IsDisposed.get -> bool
+RayBork.Shader.Path.get -> string!
+RayBork.Shader.Stages.get -> RayBork.ShaderStageMask
+RayBork.Shader.Textures.get -> System.Collections.Generic.IReadOnlyList<RayBork.ShaderTextureBinding>!
+RayBork.Shader.Uniforms.get -> System.Collections.Generic.IReadOnlyList<RayBork.ShaderUniform>!
 RayBork.ShaderStageMask
 RayBork.ShaderStageMask.Fragment = 2 -> RayBork.ShaderStageMask
 RayBork.ShaderStageMask.None = 0 -> RayBork.ShaderStageMask
@@ -624,6 +654,16 @@ RayBork.ShaderUniformType.UInt = 2 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector2 = 4 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector3 = 5 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector4 = 6 -> RayBork.ShaderUniformType
+RayBork.Texture
+RayBork.Texture.Dispose() -> void
+RayBork.Texture.Format.get -> RayBork.TextureFormat
+RayBork.Texture.Height.get -> int
+RayBork.Texture.IsDisposed.get -> bool
+RayBork.Texture.IsSrgb.get -> bool
+RayBork.Texture.MipLevels.get -> int
+RayBork.Texture.Path.get -> string!
+RayBork.Texture.Sampler.get -> RayBork.SamplerState
+RayBork.Texture.Width.get -> int
 RayBork.TextureFilter
 RayBork.TextureFilter.Anisotropic = 2 -> RayBork.TextureFilter
 RayBork.TextureFilter.Linear = 1 -> RayBork.TextureFilter
@@ -692,6 +732,8 @@ RayBork.WindowState.Hidden = 5 -> RayBork.WindowState
 RayBork.WindowState.Maximized = 2 -> RayBork.WindowState
 RayBork.WindowState.Minimized = 1 -> RayBork.WindowState
 RayBork.WindowState.Normal = 0 -> RayBork.WindowState
+static RayBork.BoundingBox.operator !=(RayBork.BoundingBox left, RayBork.BoundingBox right) -> bool
+static RayBork.BoundingBox.operator ==(RayBork.BoundingBox left, RayBork.BoundingBox right) -> bool
 static RayBork.Color.FromOkLab(float l, float a, float b, float alpha = 1) -> RayBork.Color
 static RayBork.Color.HSVToRGB(float h, float s, float v) -> RayBork.Color
 static RayBork.Color.HSVToRGB(float h, float s, float v, bool hdr) -> RayBork.Color
@@ -785,6 +827,8 @@ static readonly RayBork.Color.Red -> RayBork.Color
 static readonly RayBork.Color.Transparent -> RayBork.Color
 static readonly RayBork.Color.White -> RayBork.Color
 static readonly RayBork.Color.Yellow -> RayBork.Color
+~override RayBork.BoundingBox.Equals(object obj) -> bool
+~override RayBork.BoundingBox.ToString() -> string
 ~override RayBork.EngineInfo.Equals(object obj) -> bool
 ~override RayBork.EngineInfo.ToString() -> string
 ~override RayBork.Monitor.Equals(object obj) -> bool
