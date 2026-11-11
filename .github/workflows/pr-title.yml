@@ -1,0 +1,32 @@
+name: PR Title
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  pr-title:
+    name: pr-title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check title
+        shell: pwsh
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          $pattern = '^(api|build|chore|ci|docs|fix|perf|refactor|test)(\([a-z0-9-]+\))?: .+$'
+          if ($env:PR_TITLE -notmatch $pattern) {
+              Write-Error "PR title must match '<type>: <summary>' or '<type>(<scope>): <summary>'; got '$env:PR_TITLE'."
+              exit 1
+          }
+          Write-Output "PR title OK: $env:PR_TITLE"
