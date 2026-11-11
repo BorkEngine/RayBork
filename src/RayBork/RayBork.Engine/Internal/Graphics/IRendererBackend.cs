@@ -76,4 +76,26 @@ internal interface IRendererBackend : IDisposable {
     /// </summary>
     /// <remarks>Runs on the render thread.</remarks>
     void Present();
+
+    /// <summary>
+    /// Attempts one recovery from a recoverable failure.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Runs on the render thread. Pauses submission, recreates the affected swapchain, surface, or
+    /// device resources, increments <see cref="RenderStats.RecoveryCount"/> on success, and resumes
+    /// with the newest completed tick. An in-flight frame that cannot complete is dropped, never
+    /// partially presented.
+    /// </para>
+    /// <para>
+    /// Recovery is bounded. A repeated failure loop is unrecoverable, and an unrecoverable failure
+    /// returns <see langword="false"/> so the app can stop with <see cref="GraphicsDeviceLostException"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="reason">The failure to recover from.</param>
+    /// <returns>
+    /// <see langword="true"/> when the renderer recovered; <see langword="false"/> when the failure is
+    /// fatal and the app must stop.
+    /// </returns>
+    bool Recover(RenderRecoveryReason reason);
 }

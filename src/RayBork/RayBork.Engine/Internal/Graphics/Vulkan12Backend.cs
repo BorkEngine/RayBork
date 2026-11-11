@@ -234,6 +234,24 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend {
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The swapchain failures are recovered by recreating the presentation path at the next frame
+    /// boundary. Surface and device recreation is added by the recovery work; until then those
+    /// failures are reported as fatal.
+    /// </remarks>
+    public bool Recover(RenderRecoveryReason reason) {
+        EnsureInitialized();
+        switch (reason) {
+            case RenderRecoveryReason.SwapchainOutOfDate:
+            case RenderRecoveryReason.SwapchainSuboptimal:
+                _swapchainOutOfDate = true;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <inheritdoc />
     public void Resize(int renderWidth, int renderHeight) {
         EnsureInitialized();
         if (renderWidth <= 0 || renderHeight <= 0) {
