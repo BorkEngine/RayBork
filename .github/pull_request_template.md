@@ -23,8 +23,10 @@
 - [ ] `pwsh scripts/check-docs.ps1`
 - [ ] `git diff --check`
 - [ ] HelloInterop AOT publish for `win-x64` on Windows: `dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r win-x64 -p:PublishAot=true`
+- [ ] Windows host run: `samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --frames 30` exits `0`
 - [ ] HelloInterop AOT publish for `linux-x64` from the repository root in WSL (the .NET 11 SDK must be on `PATH`): `dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r linux-x64 -p:PublishAot=true`
-- [ ] Both AOT publishes finish with zero AOT/trim warnings; the host runs and exits.
+- [ ] WSL host run: `samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --frames 30` exits `0`; on a headless WSL host, prefix `SDL_VIDEODRIVER=dummy`
+- [ ] Both AOT publishes finish with zero AOT/trim warnings
 
 <!-- AOT and GPU gates are local. CI covers build-test on Windows and Ubuntu, docs, and pr-title. -->
 

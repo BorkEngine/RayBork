@@ -7,10 +7,12 @@ It aims for the ergonomics of raylib with a modern bindless, instanced renderer:
 frame-scoped draw API, assets from a baked pack, text, and enough 3D/2D primitives to ship a small
 game without adopting a scene graph or an ECS.
 
-**Status: M0 foundations.** The repository carries the build, test, AOT, docs, and public-API
-guardrails. The engine implementation starts with M1. M0 adds only `EngineVersion` to the public
-API; the API reference below remains a contract for the milestones ahead, not a description of
-shipped behavior.
+**Status: M1 host and window.** The engine now opens an SDL3 window, runs `Setup`/`Tick`/`Shutdown`
+on a dedicated tick thread, hands sealed frames to a render thread that consumes them without GPU
+work, snapshots keyboard/mouse/gamepad input, paces time, and logs through
+`Microsoft.Extensions.Logging`. M0 shipped only `EngineVersion`; the rest of the API reference
+remains the 1.0 contract and is delivered by the milestones listed in
+[API reference §1.6](docs/api.md#16-milestone-availability).
 
 ## Documents
 
@@ -56,7 +58,7 @@ shipped behavior.
 src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
 src/RayBork/RayBork.Bake/     JIT asset tooling
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
-samples/HelloInterop/         Native AOT SDL3 interop host (M0)
+samples/HelloInterop/         M1 diagnostic host: AOT window/input/logging sample
 samples/                      Castle, Pong, Text, Instancing, RenderTarget (M11)
 docs/                         API, roadmap, architecture
 .github/                      GitHub Actions CI and PR template
@@ -66,7 +68,17 @@ THIRD-PARTY-NOTICES.md        dependency licenses and runtime/test/tooling polic
 LICENSE                       MIT
 ```
 
+Run the M1 sample from the repository root:
+
+```powershell
+dotnet run --project samples/HelloInterop/HelloInterop.csproj -- --frames 30
+```
+
+Use `--help` for the frame limit, title, size, and log-level options. The sample README covers the
+Native AOT publish and run commands.
+
 ## Next step
 
-M0 establishes the build, test, AOT, docs, and public-API guardrails. M1 begins the engine
-implementation: the app host, tick thread, window, input, time, and logging.
+M2 begins the renderer foundation: the internal backend seam, Vulkan 1.2 swapchain, linear HDR/AgX
+presentation, reverse-Z depth, MSAA, and recovery. The host, threads, window, input, time, and
+logging surface is in place.
