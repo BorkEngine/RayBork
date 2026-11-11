@@ -414,7 +414,8 @@ deliberately deferred and are never selected in M2.
 `SDL.window.SDR_white_level`, and `SDL.window.HDR_headroom`, and refreshes the cache on
 `SDL_EVENT_WINDOW_HDR_STATE_CHANGED` and display changes. A change to the HDR flag, or to the SDR
 white level while HDR is enabled, recreates the presentation path. The scRGB present path scales
-display-linear color by the SDR white level and does not clamp, so values above the white point use
+display-linear color by the SDR white level and does not clamp. AgX saturates at display white, so
+the AgX path does not exceed paper white in M2; `TonemappingMode.None` can write above it and use
 the display headroom. `EngineInfo.HdrOutput` is true only when the presented path is scRGB HDR.
 
 **Present pass.** A fullscreen triangle generated from `gl_VertexIndex` writes the swapchain image

@@ -191,11 +191,14 @@ AgX presentation, MSAA, reverse-Z depth, and recovery from recoverable failures.
   report `EngineInfo`, dispose.
 - `Vulkan12Backend`: instance 1.2, validation/debug-utils in debug, device selection, queue
   families, surface, swapchain, present modes.
-- Swapchain selection: prefer an HDR format (`R16G16B16A16_SFLOAT` or `A2B10G10R10_UNORM_PACK32`
-  where supported), then `B8G8R8A8_SRGB` or `R8G8B8A8_SRGB`.
+- Swapchain selection: prefer `R16G16B16A16_SFLOAT` with an extended-sRGB-linear (scRGB) color
+  space on HDR windows, then `B8G8R8A8_SRGB` or `R8G8B8A8_SRGB`. HDR10/PQ
+  (`A2B10G10R10_UNORM_PACK32`) is deferred until the output transform and HDR metadata exist.
 - Linear `Rgba16Float` scene target; present pass with AgX and exposure; `TonemappingMode.None`
-  escape hatch.
-- MSAA 4x default (1/2/4/8 supported); HDR color and depth resolve before present.
+  escape hatch. AgX is an SDR-referred view transform: it places display white at the window's
+  reported SDR white level and does not use the HDR headroom; the highlight extension is M4.
+- MSAA 4x default (1/2/4/8 supported); HDR color resolves to a single-sample image before present.
+  Depth is cleared and compared under MSAA but not resolved until something samples it (M4/M8).
 - Present mode `Mailbox` default, `Fifo` fallback, `Immediate` by explicit choice.
 - Reverse-Z depth (`D32_SFLOAT`), clear to `0.0`, default compare `GreaterOrEqual`.
 - Two/three frames in flight, acquire/present, resize, minimize/restore, swapchain recreation.
@@ -223,8 +226,13 @@ AgX presentation, MSAA, reverse-Z depth, and recovery from recoverable failures.
   unrecoverable failure produces `GraphicsDeviceLostException` and a clean shutdown.
 - Validation is clean for the clear/resize/present/recover cycle.
 - Native AOT publish runs the M2 sample on Windows and WSL with hardware Vulkan.
-- A software-Vulkan (lavapipe) CI job runs the same clear test without a window, if the CI host
-  has no GPU.
+- A software-Vulkan (lavapipe) CI job runs the same clear test under Xvfb, if the CI host has no
+  GPU.
+
+**Notes.** AgX cannot exceed display white by construction, so M2 presents SDR-referred content at
+the correct luminance in an HDR window but does not produce highlights above paper white.
+`TonemappingMode.None` can write above paper white for direct authoring. The paper-white/peak
+extension that uses the reported HDR headroom is M4.
 
 **Risks.** WSL's Vulkan 1.2 implementation may expose a different feature set than native Windows.
 HDR swapchain support is highly driver-dependent; the SDR fallback is the guaranteed path. The
@@ -299,6 +307,10 @@ automatic instancing, and per-instance textures/uniforms.
 - Fixed vertex layout: position, normal, uv, uv1, uv2, uv3, color, tangent.
 - Entry points `main_vertex` and `main_fragment`.
 - HDR scene target, AgX present, MSAA resolve, `TonemappingMode`, exposure.
+- AgX highlight extension for HDR windows: keep AgX for the SDR range, then extend scene luminance
+  above the AgX white point into the reported HDR headroom at constant chromaticity, using the
+  reported SDR white level as paper white and the reported HDR headroom as the peak. The SDR image
+  stays identical to M2; `TonemappingMode.None` remains the direct HDR authoring path.
 - Default unlit/texture/vertex-color shader, white/error textures, built-in primitive shader.
 - `DrawModel`/`DrawMesh` errors: disposed assets, wrong render state, mismatched topology, missing
   uniforms, unsupported shader interface.
@@ -319,6 +331,9 @@ automatic instancing, and per-instance textures/uniforms.
 - A uniform change between draws does not mutate earlier draws.
 - Near geometry is closer in reverse-Z depth; a depth-precision probe passes at near `0.01` with an
   infinite far plane.
+- On an HDR window, paper white stays at the reported SDR white level and a scene value above the
+  AgX white point reaches the reported peak; the same content on an SDR window produces the M2
+  image. Numeric probes, no golden images.
 - Validation is clean for the gate scene; resize works with the new pipelines.
 - Native AOT publish renders the Castle scene on Windows and Linux.
 
@@ -711,6 +726,7 @@ removed from the release notes rather than weakened silently.
 | --- | --- | --- | --- |
 | WSL Vulkan 1.2 feature gaps | Bindless/instancing unavailable on a target platform | Feature-probe early in M2; document required device features; test both native and WSL | M2 |
 | HDR swapchain variability | HDR path unavailable or inconsistent | Prefer HDR, fall back to sRGB; report `EngineInfo.HdrOutput`; test both | M2/M10 |
+| AgX is SDR-referred | HDR highlights never exceed paper white | Paper-white/peak extension driven by the reported `HDR_headroom`, extended at constant chromaticity; probe paper white and peak on an HDR display | M4 |
 | MSAA + HDR resolve | Extra memory/bandwidth or resolve bugs | 4x default, 1/2/4/8 support or fallback; resolve tests; validation | M2/M8 |
 | Shader ABI complexity | Bake/runtime/sample churn; custom shaders hard to author | Prototype two shaders before M4 batching; explicit sidecar; publish ABI guide | M4 |
 | Per-instance uniform limits | Batches split unexpectedly; performance regressions | Size estimator, device-limit checks, documented split behavior, per-draw fallback | M4 |
