@@ -117,6 +117,7 @@ owns the deferred surface; the full code blocks below stay the 1.0 contract.
 | `IGame`; `IInput`, `Key`, `MouseButton`; `IGamepad`, `GamepadButton`, `GamepadAxis`, `GamepadTrigger` | M1 |
 | `IWindow`, `WindowState`, `CursorMode`, `Monitor`; logging through `Microsoft.Extensions.Logging` | M1 |
 | `Transform`, `Color`, `Rect`, `Vector3Extensions`, `QuaternionExtensions` | M1 |
+| `BoundingBox` | M3 |
 | `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
 | `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, `WithClearColor`) | M2 |
 | `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
@@ -734,10 +735,13 @@ Screen rectangles use a top-left origin.
 
 ### 5.5 Rays, bounds, and collision
 
-RayBork uses `System.Numerics.Ray`, `Plane`, `BoundingBox`, and `BoundingSphere` directly and adds
-a small `Collision` helper plus a `RayCollision` result.
+RayBork uses `System.Numerics.Plane` and the engine's own `RayBork.BoundingBox` value type directly,
+and adds a small `Collision` helper plus a `RayCollision` result. The M5 collision milestone adds the
+ray and sphere helpers and any additional bounds types it needs.
 
 ```csharp
+public readonly record struct BoundingBox(Vector3 Min, Vector3 Max);
+
 public readonly struct RayCollision {
     public bool Hit { get; }
     public float Distance { get; }
@@ -2690,7 +2694,9 @@ public interface IAssetProcessor {
   for raw payloads. `AddData` takes an alignment of `1`, `16`, `64`, or `256`; GPU payloads use
   `16` or greater. A processor never writes MessagePack or pack bytes directly.
 - `AssetProcessorContext` exposes the source paths, the canonical base asset path, the output sink,
-  and the diagnostic sink. It is valid for one source only.
+  the diagnostic sink, and `AddInput(path)`. `AddInput` records a referenced source file, such as a
+  shader's GLSL stages, as a tracked input for the incremental manifest; the path is resolved
+  relative to the source file and must stay inside the pack root. It is valid for one source only.
 - `AssetProcessor<TSidecar>` is the convenience base for a processor with a required sidecar.
 - A processor error discards every output for the source and fails the pack. Warnings do not fail
   the pack unless `--warnings-as-errors` is set.
@@ -2864,7 +2870,8 @@ The bake writes a manifest at `<project root>/obj/raybork/bake/manifest.json`. I
 - the bake tool version and configuration hash (mode, pack paths, roots, texture defaults,
   processors, data type registrations, and the tool markers for the texture, shader, model, and
   font pipelines);
-- every tracked input path and content hash, including sidecars and shader GLSL files;
+- every tracked input path and content hash, including sidecars, `AddInput` dependencies, and shader
+  GLSL files;
 - every output entry path, entry hash, and payload hash;
 - the pack logical-layout hash.
 
@@ -3011,6 +3018,7 @@ disposed first.
 | `RayBorkApp` | §3.3 |
 | `EngineContext` | §3.4 |
 | `Transform` | §5.2 |
+| `BoundingBox` | §5.5 |
 | `Color` | §5.3 |
 | `Rect` | §5.4 |
 | `RayCollision`, `Collision` | §5.5 |
