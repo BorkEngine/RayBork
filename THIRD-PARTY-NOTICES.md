@@ -29,10 +29,14 @@ request.
   review.
 - **Versions move deliberately.** A version bump is a dependency change and follows the rules above.
 
-M0 status: only SDL3 is exercised end to end by the Native AOT `samples/HelloInterop` host. The
-other runtime packages are pinned and remain in the AOT publish graph without AOT/trim warnings,
-but their feature-level gates land in M1 (logging), M2 (Vulkan), and M3 (PolyType and
-Nerdbank.MessagePack). The architecture dependency matrix in
+M2 status: SDL3 and logging are exercised end to end by the M1 `samples/HelloInterop` AOT host,
+and the M2 milestone gate republishes that host with the renderer so Silk.NET.Vulkan is exercised
+end to end on `win-x64` and `linux-x64`. Both publishes must finish with zero AOT/trim warnings.
+The other runtime packages are pinned and remain in the AOT publish graph without AOT/trim
+warnings, but their feature-level gates land in M3 (PolyType and Nerdbank.MessagePack). No new
+package was added in M2: `Silk.NET.Core` is the pinned transitive dependency of `Silk.NET.Vulkan`,
+and the Vulkan loader is a system/GPU-driver component rather than a redistributed package. The
+architecture dependency matrix in
 [docs/architecture.md](docs/architecture.md#dependency-matrix) records the same status.
 
 ## Runtime dependencies
@@ -41,14 +45,14 @@ These packages are referenced by `RayBork.Engine` or deployed with it.
 
 | Package | Version | License | Purpose | AOT status |
 | --- | --- | --- | --- | --- |
-| `SDL3-CS` | 3.4.20 | Zlib | Managed SDL3 bindings for windowing, input, events, and future audio | Exercised end to end by the M0 `samples/HelloInterop` host on `win-x64` and `linux-x64`. |
-| `SDL3-CS.Native` | 3.4.2 | Zlib | Per-RID native SDL3 binaries deployed alongside the engine | Loaded and run by the same M0 host on both RIDs. |
-| SDL3 (native library) | bundled by `SDL3-CS.Native` 3.4.2 | Zlib | The native windowing, input, and audio library itself | Proven by the M0 AOT host; upgraded only with the `SDL3-CS.Native` pin. |
-| `Silk.NET.Vulkan` | 2.23.0 | MIT | Vulkan 1.2 bindings for the M2 renderer backend | Pinned and in the AOT publish graph; feature-level AOT validation lands with the M2 backend. |
+| `SDL3-CS` | 3.4.20 | Zlib | Managed SDL3 bindings for windowing, input, events, the window HDR properties, and the Vulkan surface | Exercised end to end by the M1 and M2 `samples/HelloInterop` AOT hosts on `win-x64` and `linux-x64`. |
+| `SDL3-CS.Native` | 3.4.2 | Zlib | Per-RID native SDL3 binaries deployed alongside the engine | Loaded and run by the same hosts on both RIDs. |
+| SDL3 (native library) | bundled by `SDL3-CS.Native` 3.4.2 | Zlib | The native windowing, input, Vulkan surface, HDR property, and audio library itself | Proven by the M1 and M2 AOT hosts; upgraded only with the `SDL3-CS.Native` pin. |
+| `Silk.NET.Vulkan` | 2.23.0 | MIT | Vulkan 1.2 bindings for the M2 renderer backend; brings `Silk.NET.Core` 2.23.0 as a pinned transitive dependency | Exercised end to end by the M2 AOT gate: the published host creates the instance, device, swapchain, scene target, and present pass. |
 | `PolyType` | 1.4.1 | MIT | Compiled shapes for custom TOML data and AOT-safe serialization | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
 | `Nerdbank.MessagePack` | 1.4.104 | MIT | MessagePack serialization for custom data and pack entries | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
-| `Microsoft.Extensions.Logging` | 11.0.0 | MIT | Logging abstraction exposed as `EngineContext.LoggerFactory` | Pinned and in the AOT publish graph; feature-level AOT validation lands in M1. |
-| `ZLogger` | 2.6.1 | MIT | Default console logging provider | Pinned and in the AOT publish graph; feature-level AOT validation lands in M1. |
+| `Microsoft.Extensions.Logging` | 11.0.0 | MIT | Logging abstraction exposed as `EngineContext.LoggerFactory` | Exercised end to end by the M1 AOT host on both RIDs. |
+| `ZLogger` | 2.6.1 | MIT | Default console logging provider | Exercised end to end by the M1 AOT host on both RIDs. |
 
 ## Platform and in-box APIs
 
@@ -57,6 +61,8 @@ These are part of the target framework rather than NuGet packages.
 | Component | Version | License | Purpose | Classification |
 | --- | --- | --- | --- | --- |
 | .NET 11 runtime and SDK | `net11.0` (SDK `11.0.100`, see `global.json`) | MIT, .NET Foundation | Target framework, runtime, and Native AOT toolchain | Runtime |
+| Vulkan loader (`vulkan-1.dll` / `libvulkan.so.1`) | system/GPU-driver component | Apache-2.0 (Khronos) | Loads the Vulkan implementation the renderer uses; the backend requires Vulkan 1.2 | Runtime; not redistributed by RayBork |
+| Khronos validation layer and `VK_EXT_debug_utils` | installed with the Vulkan SDK or an optional system package | Apache-2.0 (Khronos) | Optional Debug-build validation and the debug-utils messenger; enabled only when the layer is installed | Development-time; never required at run time |
 | `System.IO.Compression.Zstandard*` | in-box in .NET 11 | MIT for the .NET managed API; the native Zstandard library is BSD-3-Clause (Meta Platforms, Inc.) | Zstandard pack payload compression; there is no separate compression package | Runtime |
 
 `.NET` is copyright (c) .NET Foundation and Contributors and is licensed under the MIT License.
@@ -84,7 +90,8 @@ These packages are JIT-only and are not part of the runtime publish graph.
   the runtime, platform, and test/tooling tables intact.
 - Keep versions identical to `Directory.Packages.props`; a review that finds a drift blocks merge.
 - Keep the license value to the SPDX identifier used by the package metadata.
-- Update the M0 status paragraph when a milestone turns a deferred AOT status into an exercised
-  gate.
+- Update the status paragraph when a milestone turns a deferred AOT status into an exercised gate.
+- System components such as the Vulkan loader and the optional validation layer are recorded in the
+  platform table; they are not NuGet packages and are never redistributed with RayBork.
 - If a package's license text is not included in its distribution, add the license text here or
   reject the package.

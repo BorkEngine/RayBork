@@ -7,11 +7,12 @@ It aims for the ergonomics of raylib with a modern bindless, instanced renderer:
 frame-scoped draw API, assets from a baked pack, text, and enough 3D/2D primitives to ship a small
 game without adopting a scene graph or an ECS.
 
-**Status: M1 host and window.** The engine now opens an SDL3 window, runs `Setup`/`Tick`/`Shutdown`
-on a dedicated tick thread, hands sealed frames to a render thread that consumes them without GPU
-work, snapshots keyboard/mouse/gamepad input, paces time, and logs through
-`Microsoft.Extensions.Logging`. M0 shipped only `EngineVersion`; the rest of the API reference
-remains the 1.0 contract and is delivered by the milestones listed in
+**Status: M2 renderer foundation shipped.** The engine opens an SDL3 window, runs
+`Setup`/`Tick`/`Shutdown` on a dedicated tick thread, and presents through a Vulkan 1.2 backend: a
+linear HDR scene target, AgX tone mapping, scRGB HDR output when the window reports HDR, MSAA with
+color resolve, reverse-Z depth, bounded recovery, and a Native AOT gate. The host, window, input,
+time, and logging surface shipped in M1. The rest of the API reference remains the 1.0 contract and
+is delivered by the milestones listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).
 
 ## Documents
@@ -47,8 +48,8 @@ remains the 1.0 contract and is delivered by the milestones listed in
 - Engine assets are reference-counted and loaded from one or more `RAYBORKP` packs produced by the
   bake. Custom TOML data uses `[GenerateShape]`, `WithAssetType<T>()`, and the same `Load<T>` API.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
-- Shaders are GLSL compiled to SPIR-V at bake time with `main_vertex`/`main_fragment`; the runtime
-  never compiles shaders.
+- Shaders are GLSL compiled to SPIR-V ahead of runtime; the runtime never compiles shaders. Game
+  shaders will be baked into packs, and the built-in present pass uses committed blobs.
 - Fonts are TTF/OTF parsed at runtime; MSDF is generated per glyph at 32 px and drawn bindlessly.
 - The renderer recovers from swapchain/device loss where possible; failed recovery is fatal.
 
@@ -56,29 +57,33 @@ remains the 1.0 contract and is delivered by the milestones listed in
 
 ```text
 src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
+  Shaders/                    present-pass GLSL sources and committed SPIR-V blobs
 src/RayBork/RayBork.Bake/     JIT asset tooling
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
-samples/HelloInterop/         M1 diagnostic host: AOT window/input/logging sample
+samples/HelloInterop/         M1 diagnostic host and M2 renderer/AOT gate host
 samples/                      Castle, Pong, Text, Instancing, RenderTarget (M11)
 docs/                         API, roadmap, architecture
 .github/                      GitHub Actions CI and PR template
-scripts/                      repository checks (docs links/fences)
+scripts/                      docs checks and shader compilation
 AGENTS.md                     agent workflow and code style
 THIRD-PARTY-NOTICES.md        dependency licenses and runtime/test/tooling policy
 LICENSE                       MIT
 ```
 
-Run the M1 sample from the repository root:
+Run the HelloInterop sample from the repository root with a Vulkan 1.2 device and a real window
+system (on WSL, use the WSLg display):
 
 ```powershell
 dotnet run --project samples/HelloInterop/HelloInterop.csproj -- --frames 30
 ```
 
 Use `--help` for the frame limit, title, size, and log-level options. The sample README covers the
-Native AOT publish and run commands.
+Native AOT publish and run commands. Built-in shader SPIR-V is regenerated with
+`pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; a normal build and CI use the committed
+blobs.
 
 ## Next step
 
-M2 begins the renderer foundation: the internal backend seam, Vulkan 1.2 swapchain, linear HDR/AgX
-presentation, reverse-Z depth, MSAA, and recovery. The host, threads, window, input, time, and
-logging surface is in place.
+M3 begins the asset pipeline: the pack format, the assets executable, TOML data, and the asset
+loader. The renderer foundation, host, threads, window, input, time, and logging surface are in
+place.

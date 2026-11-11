@@ -6,6 +6,12 @@ namespace RayBork.Tests;
 
 [Collection("SDL")]
 public sealed class SdlPlatformTests {
+    private readonly ITestOutputHelper _output;
+
+    public SdlPlatformTests(ITestOutputHelper output) {
+        _output = output;
+    }
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void InitializeCreatesWindowMonitorsAndInput() {
@@ -230,5 +236,189 @@ public sealed class SdlPlatformTests {
         Assert.Throws<ObjectDisposedException>(() => platform.Pump(TimeSpan.Zero));
         Assert.Throws<ObjectDisposedException>(() => platform.CaptureInput());
         host.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void VulkanWindowExposesRequiredInstanceExtensions() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+
+        IReadOnlyList<string> extensions = host.Platform.GetVulkanInstanceExtensions();
+
+        Assert.Contains("VK_KHR_surface", extensions);
+        if (OperatingSystem.IsWindows()) {
+            Assert.Contains("VK_KHR_win32_surface", extensions);
+        } else {
+            Assert.Contains(
+                extensions,
+                extension => extension is "VK_KHR_xlib_surface" or "VK_KHR_xcb_surface" or "VK_KHR_wayland_surface" or "VK_KHR_android_surface");
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void VulkanInstanceExtensionsAreDeduplicatedAndOrdinalSorted() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+
+        string[] extensions = [.. host.Platform.GetVulkanInstanceExtensions()];
+
+        Assert.NotEmpty(extensions);
+        Assert.Equal(extensions.Order(StringComparer.Ordinal).ToArray(), extensions);
+        Assert.Equal(extensions.Length, extensions.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GetVulkanInstanceExtensionsOnNonVulkanWindowThrowsPlatformException() {
+        using SdlTestHost host = SdlTestHost.Create();
+
+        PlatformException exception = Assert.Throws<PlatformException>(() => host.Platform.GetVulkanInstanceExtensions());
+
+        Assert.Equal(DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED, exception.DiagnosticCode);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GetVulkanInstanceExtensionsBeforeInitializeThrowsPlatformException() {
+        SdlPlatform platform = new(NullLoggerFactory.Instance);
+
+        Assert.Throws<PlatformException>(() => platform.GetVulkanInstanceExtensions());
+        platform.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CreateVulkanSurfaceOnNonVulkanWindowThrowsInvalidOperationException() {
+        using SdlTestHost host = SdlTestHost.Create();
+
+        Assert.Throws<InvalidOperationException>(() => host.Platform.CreateVulkanSurface(IntPtr.Zero));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CreateVulkanSurfaceBeforeInitializeThrowsInvalidOperationException() {
+        SdlPlatform platform = new(NullLoggerFactory.Instance);
+
+        Assert.Throws<InvalidOperationException>(() => platform.CreateVulkanSurface(IntPtr.Zero));
+        platform.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CreateVulkanSurfaceAfterDisposeThrowsObjectDisposedException() {
+        SdlTestHost host = SdlTestHost.Create();
+        SdlPlatform platform = host.Platform;
+
+        platform.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => platform.CreateVulkanSurface(IntPtr.Zero));
+        host.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DestroyVulkanSurfaceIgnoresZeroAndUnknownHandles() {
+        using SdlTestHost host = SdlTestHost.Create();
+        IntPtr unknownSurface = new(0x5EED);
+
+        host.Platform.DestroyVulkanSurface(IntPtr.Zero, IntPtr.Zero);
+        host.Platform.DestroyVulkanSurface(IntPtr.Zero, unknownSurface);
+        host.Platform.DestroyVulkanSurface(IntPtr.Zero, unknownSurface);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DestroyVulkanSurfaceIgnoresUnknownHandlesOnVulkanWindow() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+        IntPtr unknownSurface = new(0x5EED);
+
+        host.Platform.DestroyVulkanSurface(IntPtr.Zero, unknownSurface);
+        host.Platform.DestroyVulkanSurface(IntPtr.Zero, unknownSurface);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void VulkanWindowCreationSucceedsAndTheWindowIsUsable() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+        IWindow window = host.Platform.Window;
+
+        Assert.Equal(320, window.Width);
+        Assert.Equal(200, window.Height);
+        Assert.Equal(WindowState.Hidden, window.State);
+
+        window.SetSize(360, 240);
+        host.Platform.Pump(TimeSpan.Zero);
+        host.Window.BeginTick();
+
+        Assert.Equal(360, window.Width);
+        Assert.Equal(240, window.Height);
+        Assert.True(window.WasResized);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WindowHdrStateOnAHiddenVulkanWindowSatisfiesTheInvariants() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+
+        WindowHdrState state = host.Platform.WindowHdrState;
+
+        _output.WriteLine(
+            "Observed window HDR state: enabled {0}, SDR white level {1}, HDR headroom {2}.",
+            state.HdrEnabled,
+            state.SdrWhiteLevel,
+            state.HdrHeadroom);
+        Assert.True(float.IsFinite(state.SdrWhiteLevel));
+        Assert.True(state.SdrWhiteLevel > 0f);
+        Assert.True(float.IsFinite(state.HdrHeadroom));
+        Assert.True(state.HdrHeadroom >= 1f);
+        if (!state.HdrEnabled) {
+            Assert.Equal(1f, state.SdrWhiteLevel);
+            Assert.Equal(1f, state.HdrHeadroom);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WindowHdrStateIsReadableFromAnotherThread() {
+        using SdlTestHost host = SdlTestHost.CreateVulkan();
+
+        WindowHdrState expected = host.Platform.WindowHdrState;
+        WindowHdrState observed = default;
+        Thread thread = new(() => observed = host.Platform.WindowHdrState);
+        thread.Start();
+        thread.Join();
+
+        Assert.Equal(expected, observed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WindowHdrStateIsSdrBeforeInitializeAndAfterDispose() {
+        SdlPlatform uninitialized = new(NullLoggerFactory.Instance);
+        Assert.Equal(WindowHdrState.Sdr, uninitialized.WindowHdrState);
+        uninitialized.Dispose();
+
+        SdlTestHost host = SdlTestHost.Create();
+        SdlPlatform platform = host.Platform;
+        platform.Dispose();
+        Assert.Equal(WindowHdrState.Sdr, platform.WindowHdrState);
+        host.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void NonVulkanWindowCreationSucceedsAndTheWindowIsUsable() {
+        using SdlTestHost host = SdlTestHost.Create();
+        IWindow window = host.Platform.Window;
+
+        Assert.Equal(320, window.Width);
+        Assert.Equal(200, window.Height);
+        Assert.Equal(WindowState.Normal, window.State);
+
+        window.SetSize(360, 240);
+        host.Platform.Pump(TimeSpan.Zero);
+
+        Assert.Equal(360, window.Width);
+        Assert.Equal(240, window.Height);
     }
 }

@@ -4,10 +4,16 @@
         <RootNamespace>RayBork</RootNamespace>
         <IsAotCompatible>true</IsAotCompatible>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
         <InternalsVisibleTo Include="RayBork.Tests" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Committed SPIR-V blobs are build inputs; the runtime never runs glslc. -->
+        <EmbeddedResource Include="Shaders\*.spv" LogicalName="RayBork.Shaders.%(Filename)%(Extension)" />
     </ItemGroup>
 
     <ItemGroup>

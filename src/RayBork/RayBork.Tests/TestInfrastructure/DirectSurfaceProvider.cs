@@ -1,0 +1,77 @@
+using RayBork.Internal;
+
+namespace RayBork.Tests;
+
+/// <summary>
+/// An <see cref="IRendererSurfaceProvider"/> that calls the platform directly on the caller's
+/// thread.
+/// </summary>
+/// <remarks>
+/// GPU tests use this provider on the test thread. App tests use it to stand in for the real
+/// render-thread-to-main-thread marshalling without depending on the app's message pump.
+/// </remarks>
+internal sealed class DirectSurfaceProvider : IRendererSurfaceProvider {
+    private readonly IEnginePlatform _platform;
+
+    private int _createCount;
+    private int _destroyCount;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DirectSurfaceProvider"/> class.
+    /// </summary>
+    /// <param name="platform">The initialized platform that owns the window.</param>
+    internal DirectSurfaceProvider(IEnginePlatform platform) {
+        ArgumentNullException.ThrowIfNull(platform);
+        _platform = platform;
+    }
+
+    /// <summary>
+    /// Gets the number of surfaces this provider created successfully, including the initial one.
+    /// </summary>
+    /// <remarks>Diagnostic counter for the recovery tests; it is not used by the renderer.</remarks>
+    internal int CreateCount => _createCount;
+
+    /// <summary>
+    /// Gets the number of non-zero surfaces this provider destroyed successfully.
+    /// </summary>
+    /// <remarks>Diagnostic counter for the recovery tests; it is not used by the renderer.</remarks>
+    internal int DestroyCount => _destroyCount;
+
+    /// <inheritdoc />
+    public IntPtr CreateSurface(IntPtr instance) {
+        try {
+            IntPtr surface = _platform.CreateVulkanSurface(instance);
+            if (surface == IntPtr.Zero) {
+                throw new GraphicsException(
+                    "The platform returned a zero Vulkan surface handle.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null);
+            }
+
+            _createCount++;
+            return surface;
+        } catch (Exception exception) when (exception is PlatformException or InvalidOperationException or ObjectDisposedException) {
+            throw new GraphicsException(
+                $"Direct Vulkan surface creation failed: {exception.Message}",
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                exception);
+        }
+    }
+
+    /// <inheritdoc />
+    public void DestroySurface(IntPtr instance, IntPtr surface) {
+        if (surface == IntPtr.Zero) {
+            return;
+        }
+
+        try {
+            _platform.DestroyVulkanSurface(instance, surface);
+            _destroyCount++;
+        } catch (Exception exception) when (exception is PlatformException or InvalidOperationException or ObjectDisposedException) {
+            throw new GraphicsException(
+                $"Direct Vulkan surface destruction failed: {exception.Message}",
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                exception);
+        }
+    }
+}

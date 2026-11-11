@@ -52,6 +52,11 @@ internal sealed class AppConfiguration {
     public required WindowState WindowState { get; init; }
 
     /// <summary>
+    /// Gets the renderer options snapshot captured from the builder.
+    /// </summary>
+    public required RenderSettings RenderSettings { get; init; }
+
+    /// <summary>
     /// Gets the caller-supplied logger factory, or <see langword="null"/> when the app must create
     /// and own the default factory.
     /// </summary>

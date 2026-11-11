@@ -18,4 +18,24 @@ internal static class DiagnosticCodes {
     /// Window creation failed.
     /// </summary>
     public const string WINDOW_CREATION_FAILED = "RB2002";
+
+    /// <summary>
+    /// SDL3 Vulkan surface creation or loader failure.
+    /// </summary>
+    public const string VULKAN_SURFACE_CREATION_FAILED = "RB2003";
+
+    /// <summary>
+    /// Graphics initialization or device creation failed.
+    /// </summary>
+    public const string GRAPHICS_INITIALIZATION_FAILED = "RB3001";
+
+    /// <summary>
+    /// The graphics device was lost after recovery failed.
+    /// </summary>
+    public const string GRAPHICS_DEVICE_LOST = "RB3002";
+
+    /// <summary>
+    /// An unrecoverable graphics failure stopped the app.
+    /// </summary>
+    public const string GRAPHICS_UNRECOVERABLE = "RB3003";
 }

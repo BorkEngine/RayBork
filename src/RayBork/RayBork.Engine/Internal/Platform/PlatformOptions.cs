@@ -28,4 +28,15 @@ internal sealed record PlatformOptions {
     /// Gets the window state to apply at startup.
     /// </summary>
     public required WindowState WindowState { get; init; }
+
+    /// <summary>
+    /// Gets whether the platform creates a Vulkan-capable window.
+    /// </summary>
+    /// <remarks>
+    /// When <see langword="true"/>, the platform creates the window with the SDL Vulkan flag and the
+    /// renderer may later ask the platform for a native surface. When <see langword="false"/>, the
+    /// window is a plain platform window and surface requests fail with
+    /// <see cref="InvalidOperationException"/>.
+    /// </remarks>
+    public bool EnableVulkan { get; init; }
 }
