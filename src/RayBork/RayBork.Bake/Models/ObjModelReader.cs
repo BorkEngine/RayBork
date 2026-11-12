@@ -328,9 +328,9 @@ internal static class ObjModelReader {
     /// <summary>Parses one <c>vt</c> statement into the engine's top-left UV space.</summary>
     /// <remarks>
     /// Wavefront OBJ places the V origin at the bottom of the texture and the engine samples from a
-    /// top-left origin, so V is flipped here: an authored V of 0 maps to the top of the texture and
-    /// an authored V of 1 maps to the bottom. U is unchanged. A <c>vt</c> with only U means an
-    /// authored V of 0, so it flips to 1 like any other.
+    /// top-left origin, so V is flipped here: an authored V of 0 maps to the bottom of the texture
+    /// (engine V of 1) and an authored V of 1 maps to the top (engine V of 0). U is unchanged. A
+    /// <c>vt</c> with only U means an authored V of 0, so it flips to 1 like any other.
     /// </remarks>
     private static Vector2 ParseTextureCoordinate(string rest, string fileName, int lineNumber) {
         float[] values = ParseFloats(rest, 1, "texture coordinate", fileName, lineNumber);

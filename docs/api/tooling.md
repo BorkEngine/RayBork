@@ -202,8 +202,8 @@ shader = "shaders/castle"
   and warns that they are not imported; every part uses the sidecar shader (or the built-in
   `shaders/default`), and the game supplies textures and uniforms with `SetUniform`.
 - UVs use the engine's top-left origin. glTF `TEXCOORD_0`-`TEXCOORD_3` are used as authored. Every
-  OBJ `vt` is flipped on V at bake (`v = 1 - v`), so an authored V of 0 maps to the top of the
-  texture and an authored V of 1 maps to the bottom, matching raylib's OBJ loader; U is unchanged.
+  OBJ `vt` is flipped on V at bake (`v = 1 - v`), so an authored V of 0 maps to the bottom of the
+  texture and an authored V of 1 maps to the top, matching raylib's OBJ loader; U is unchanged.
   Negative UV-index resolution is unchanged, and a face corner with no `vt` keeps the zero UV
   default.
 
