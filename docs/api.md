@@ -185,14 +185,16 @@ member; those arrive in M4, M6, and M8. The M3 sample loads a texture, a mesh pa
 registered custom data, and reads back their metadata without drawing.
 
 **M4 subset.** `EngineContext` additionally exposes `CreateCamera` and `CreateOrthographicCamera`,
-both legal only on the tick thread during `Tick`. `Camera` ships as a frame-scoped recorder with the
+both legal only on the tick thread during `Tick`, and `Defaults`, which exposes the preloaded mesh
+shader program and white/error textures. `Camera` ships as a frame-scoped recorder with the
 `DrawModel`, `DrawMesh`, `DrawInstanced`, and `DrawModelInstanced` draw methods, `Viewport`,
 `ViewMatrix`, `ProjectionMatrix`, `ViewProjectionMatrix`, `Frustum`, `ScreenToWorldRay`, and
 `WorldToScreen`. `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, and
-`BoundingFrustum` ship in M4; `Model` is a reference-counted engine asset whose parts resolve through
-the catalog, and `Shader.SetUniform`/`ResetUniforms` are complete. M4 has no `Camera.Target` or
-`target` parameter (`RenderTexture` arrives in M8), no `Font`, and no
-primitive/line/billboard/text draw helpers. Clear control is per camera:
+`BoundingFrustum` ship in M4. `Model` is a caller-owned composition of parts and meshes, not an
+engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
+write that material's cursor. `Load<Shader>` returns a new independent material over a cached
+internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
+no `Font`, and no primitive/line/billboard/text draw helpers. Clear control is per camera:
 `RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
 `ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
 `InvalidOperationException` naming it, and the frame is not published.
@@ -209,14 +211,14 @@ zero for the draw counters. Textures allocate a bindless slot when their GPU upl
 is rejected during device selection, and the capacity is never reduced.
 
 `samples/Castle` is the M4 AOT gate: the sample solution `samples/Castle/Castle.slnx` builds its
-`Castle.Assets` executable out of process, bakes `/models/obj/castle`, `/models/obj/castle_diffuse`,
-and `/shaders/castle` into `castle.pck`, and copies the pack beside the sample executable, so the
-published `win-x64` and `linux-x64` hosts load it without a manual bake or an `--assets` argument.
-The hosts draw the raylib `models_loading` castle and its reference grid and exit `0`; the sample
-requires at least one completed frame with nonzero `DrawCalls` and `Instances` and throws at shutdown
-when no completed frame ever draws. The Windows hardware path and the conformant lavapipe Linux path
-both pass; [Native AOT](api/aot.md) records the current WSLg dzn driver limitation for the hardware
-WSL run. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not the AOT gate.
+`Castle.Assets` executable out of process, bakes `/models/obj/castle` and
+`/models/obj/castle_diffuse` into `castle.pck`, and copies the pack beside the sample executable, so
+the published `win-x64` and `linux-x64` hosts load it without a manual bake or an `--assets` argument.
+The model parts use the built-in mesh material; the hosts draw the raylib `models_loading` castle and
+exit `0`. The sample requires at least one completed frame with nonzero `DrawCalls` and `Instances`
+and throws at shutdown when no completed frame ever draws. The Windows hardware path, the conformant
+lavapipe Linux path, and the WSLg dzn hardware path all pass; the reference grid is deferred to M5.
+`samples/HelloInterop` remains the M1-M3 diagnostic host; it is not the AOT gate.
 
 ## 2. Quick start
 
@@ -230,14 +232,14 @@ using System.Numerics;
 public sealed class CastleGame : IGame {
     private Model? _castle;
     private Texture? _texture;
-    private Shader? _shader;
 
     public async Task Setup(EngineContext ctx) {
         _castle = await ctx.Assets.Load<Model>("/models/castle");
         _texture = await ctx.Assets.Load<Texture>("/textures/castle");
-        _shader = await ctx.Assets.Load<Shader>("/shaders/castle");
 
-        _shader.SetUniform("mainTexture", _texture);
+        foreach (ModelPart part in _castle.Parts) {
+            part.Shader.SetUniform("mainTexture", _texture);
+        }
     }
 
     public void Tick(EngineContext ctx) {
@@ -262,12 +264,11 @@ public sealed class CastleGame : IGame {
             Scale = Vector3.One,
         };
 
-        camera.DrawModel(_castle!, modelTransform, _shader!);
+        camera.DrawModel(_castle!, modelTransform);
     }
 
     public Task Shutdown() {
         _castle?.Dispose();
-        _shader?.Dispose();
         _texture?.Dispose();
         return Task.CompletedTask;
     }
@@ -307,8 +308,10 @@ internal static class Program {
 What changed:
 
 - `Mesh` became `Model`; a castle is a multi-part model, not one primitive.
-- Two shader loads became one `Shader` program load.
-- `Shader.SetUniform` replaced the fragment-shader call; there is no `Material`.
+- Two shader loads create two independent `Shader` materials over one cached internal program.
+- `Shader` is the material instance; `SetUniform` writes its cursor and there is no `Material`.
+  The model's parts own their materials; set the texture on the part material, not on a separate
+  shader loaded for the model.
 - The camera moved from `z = -10` to `z = +10` for a right-handed, `-Z`-forward world.
 - `ClearMode.Color` became `ClearMode.ColorAndDepth`.
 - `ctx.Time` is already seconds, so the `* 0.001` disappeared.

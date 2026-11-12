@@ -113,10 +113,11 @@ WSLg provides the X display and the Wayland socket that SDL3 needs. Without a di
 cannot create its Vulkan surface and the host exits `1`.
 
 On a WSLg host whose Vulkan device comes from Mesa's non-conformant dzn driver (`Microsoft
-Direct3D12 ...` with the "dzn is not a conformant Vulkan implementation" warning), the first
-geometry draw currently dies inside `libvulkan_dzn.so`. The M2 clear and present path works on the
-same device, and the Windows hardware driver and the conformant lavapipe path both pass this sample.
-For the Linux functional proof, run the same published host under lavapipe:
+Direct3D12 ...` with the "dzn is not a conformant Vulkan implementation" warning), the sample runs
+on that hardware driver with the engine's fixed 2048-slot bindless array. The published host must
+print the dzn device and exit `0` after 30 frames with 2 draw calls and 2 instances. No
+`DZN_DEBUG` workaround is needed. The conformant lavapipe ICD remains available for a software-only
+Linux run:
 
 ```bash
 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
@@ -124,9 +125,9 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
 
-The Linux publish also ships `castle.pck` beside the executable. The M4 as-built notes in
-[docs/roadmap.md](../../docs/roadmap.md) and [docs/api/aot.md](../../docs/api/aot.md) §12 record the
-driver detail.
+The Linux publish also ships `castle.pck` beside the executable. The WSL driver detail and the
+fixed-array rationale are recorded in [docs/roadmap.md](../../docs/roadmap.md) and
+[docs/api/aot.md](../../docs/api/aot.md) §12.
 
 ## Expected output
 

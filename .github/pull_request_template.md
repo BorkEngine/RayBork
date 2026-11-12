@@ -40,7 +40,7 @@ argument are required.
 - [ ] Castle AOT publish for `win-x64` on Windows: `dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64 -p:PublishAot=true`; the publish directory contains `castle.pck` beside the executable and no bake tooling (`Castle.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc natives, glTF packages)
 - [ ] Windows host run: `samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --frames 30` exits `0` with nonzero draw calls and instances; it loads `castle.pck` beside the executable
 - [ ] Castle AOT publish for `linux-x64` from the repository root in WSL: `dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true`; the publish directory contains `castle.pck` and no bake tooling
-- [ ] WSL host run: `samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30` exits `0` with nonzero draw calls and instances; use the WSLg display (`DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`), and run the same published host under `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json` when WSLg's dzn driver crashes
+- [ ] WSL host run: `samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30` exits `0` with nonzero draw calls and instances on the Mesa dzn hardware device; use the WSLg display (`DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`). Optionally run the same published host under `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json` for a conformant software-only check.
 - [ ] Both AOT publishes finish with zero AOT/trim warnings
 
 ## Docs

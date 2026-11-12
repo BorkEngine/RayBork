@@ -52,9 +52,9 @@ dotnet build samples/Castle/Castle.slnx -c Release
 dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64   -p:PublishAot=true
 dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
 samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --frames 30
-# WSL, from the repository root, on the WSLg display:
+# WSL, from the repository root, on the WSLg display (dzn hardware):
 # DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
-# WSL, when WSLg's dzn driver crashes on the first geometry draw, use the conformant lavapipe ICD:
+# WSL, optional conformant software run:
 # VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
 
@@ -70,19 +70,21 @@ packages.
 Both publishes must start, load a pack and any registered custom data, draw where the milestone has
 a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M4
 gate is `samples/Castle`: it recreates raylib's `models_loading` example, so the published hosts load
-`/models/obj/castle`, `/models/obj/castle_diffuse`, `/shaders/castle`, and the built-in
-`/shaders/default`, draw the unlit castle model and the reference grid, and must exit `0` with a
-completed frame that reports nonzero draw calls and instances. The sample records whether any
-completed frame drew and fails at shutdown when none ever did, so an invisible scene cannot pass and
-a slow host is judged on completed frames instead of a fixed tick number. Both publishes must finish
-with zero AOT/trim warnings.
+`/models/obj/castle` and `/models/obj/castle_diffuse`, bind the texture to the loaded parts' built-in
+`/shaders/mesh` materials, draw the unlit castle model, and must exit `0` with a completed frame that
+reports nonzero draw calls and instances. The sample records whether any completed frame drew and
+fails at shutdown when none ever did, so an invisible scene cannot pass and a slow host is judged on
+completed frames instead of a fixed tick number. Both publishes must finish with zero AOT/trim
+warnings.
 
-On the WSL gate host, WSLg selects the non-conformant dzn Vulkan driver and the first geometry draw
-currently crashes inside `libvulkan_dzn.so` (see the M4 as-built notes in
-[the roadmap](../roadmap.md#m4--core-3d-renderer-shader-state-and-instancing)). Run the Linux
-functional gate under the conformant lavapipe ICD with
-`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`; the same published host then exits `0`
-with the expected draw calls and instances. The Windows gate runs on the hardware driver.
+On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver
+(`Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)`) and prints "dzn is not a conformant Vulkan
+implementation, testing use only". The M4 gate runs on that hardware driver: the fixed 2048-element
+bindless texture array avoids dzn's runtime-descriptor-array DXIL lowering and fits its 2048-slot
+sampler heap, so the published host exits `0` with the expected draw calls and instances and needs no
+`DZN_DEBUG` workaround. The conformant lavapipe ICD remains available for a software-only Linux run
+with `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. The Windows gate runs on the hardware
+driver.
 
 Single-file publishing is supported when the native SDL3/Vulkan libraries are deployed alongside
 the executable or extracted by the host. A fully self-extracting single binary is not a v1 gate.

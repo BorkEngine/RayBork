@@ -37,7 +37,7 @@ using (var offscreen = ctx.CreateCamera(
     fieldOfView: 60f,
     clearMode: ClearMode.ColorAndDepth,
     target: target)) {
-    offscreen.DrawModel(model, Transform.Identity, shader);
+    offscreen.DrawModel(model, Transform.Identity);
 }
 
 using (var screen = ctx.CreateOrthographicCamera(

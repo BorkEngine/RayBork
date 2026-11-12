@@ -142,15 +142,15 @@ samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --frames 30
 # Run the same publish inside WSL from the repository root for linux-x64:
 # ~/.dotnet/dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
 # Run the published Linux host; it needs a Vulkan 1.2 device and a real window system.
-# On WSL use the WSLg display:
+# On WSL use the WSLg display (Mesa dzn hardware is the expected gate device):
 # DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
-# When WSLg's dzn driver crashes on the first geometry draw, run the same host under lavapipe:
+# Optional conformant software run:
 # VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
 
-The AOT gate is `samples/Castle`: it loads `/models/obj/castle`, `/models/obj/castle_diffuse`,
-`/shaders/castle`, and the built-in `/shaders/default`, draws the raylib castle model and the
-reference grid every tick, and requires at least one completed frame with nonzero
+The AOT gate is `samples/Castle`: it loads `/models/obj/castle` and
+`/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in `/shaders/mesh`
+materials, draws the raylib castle model, and requires at least one completed frame with nonzero
 `RenderStats.DrawCalls` and `RenderStats.Instances`; when no completed frame ever draws, shutdown
 throws and the run fails. Both publishes must finish with zero AOT/trim warnings and must place
 `castle.pck` beside the executable without any bake-tooling assemblies; each published host must run
@@ -159,10 +159,9 @@ with `--frames 30` and exit 0, loading the adjacent pack with no `--assets` argu
 and asset-loading metadata; its build bakes `hello.pck` beside the host, which auto-mounts it. It is
 not the AOT gate. The gate host needs a Vulkan 1.2 device and a real window system;
 `SDL_VIDEODRIVER=dummy` cannot create a Vulkan surface. On WSL, run it with the WSLg display: set
-`DISPLAY=:0` and `XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. WSLg's dzn driver can crash inside
-`libvulkan_dzn.so` on the first geometry draw; that run is reported as a skipped hardware gate and
-the Linux functional proof uses the lavapipe ICD. GPU tests open a hidden window through the real
-video driver
+`DISPLAY=:0` and `XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. The Mesa dzn hardware path passes with the
+fixed 2048-slot bindless array and needs no `DZN_DEBUG` workaround; the lavapipe ICD remains available
+for a conformant software-only run. GPU tests open a hidden window through the real video driver
 and are run with `dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"`. A GPU test
 that cannot run on the host is reported as a skip with the reason, never silently dropped. The `gpu`
 CI job runs the GPU-filtered suite under `xvfb-run` with the lavapipe ICD. Shader SPIR-V is

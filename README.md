@@ -12,20 +12,19 @@ game without adopting a scene graph or an ECS.
 linear HDR scene target, AgX tone mapping, scRGB HDR output when the window reports HDR, MSAA with
 color resolve, reverse-Z depth, bounded recovery, and a Native AOT gate. M3 added the asset pipeline:
 the RAYBORKP v1 pack, canonical asset paths, a dedicated asset loader, reference-counted
-`Mesh`/`Texture`/`Shader` assets, procedural `MeshBuilder`/`TextureBuilder` creation, custom TOML
-data through compiled shapes, a non-blocking GPU upload bridge with frame retention and
-device-recovery re-upload, the JIT `RayBork.Bake` tooling, and a build-time embedded built-in pack.
-M4 adds the core 3D renderer: the frame-scoped camera and draw API (`DrawModel`, `DrawMesh`,
-`DrawInstanced`, `DrawModelInstanced`), `Model` loading with per-part local transforms and baked
-shader state, `Shader.SetUniform`/`ResetUniforms` through the generated shader ABI, a bindless
-texture table with sampler and pipeline caches, automatic batch planning with frustum culling and
-opaque/transparency sorting, per-instance uniforms and textures, and the AgX highlight extension
-that maps scene luminance above the AgX white point into the reported HDR headroom.
+`Mesh`/`Texture` assets, procedural `MeshBuilder`/`TextureBuilder` creation, custom TOML data through
+compiled shapes, a non-blocking GPU upload bridge with frame retention and device-recovery re-upload,
+the JIT `RayBork.Bake` tooling, and a build-time embedded built-in pack. M4 adds the core 3D renderer:
+the frame-scoped camera and draw API (`DrawModel`, `DrawMesh`, `DrawInstanced`, `DrawModelInstanced`),
+`Model` as a user-owned composition of parts, `Shader` as a material instance over an internal
+program with `SetUniform`/`ResetUniforms`, a fixed 2048-slot bindless texture table with sampler and
+pipeline caches, automatic batch planning with frustum culling and opaque/transparency sorting,
+per-instance uniforms and textures, and the AgX highlight extension that maps scene luminance above
+the AgX white point into the reported HDR headroom.
 `samples/Castle` is the M4 gate: a recreation of raylib's `models_loading` example that draws the
-raylib castle model, its diffuse texture, and the reference grid from a Native AOT publish on
-Windows and Linux. The Windows hardware path and the conformant lavapipe Linux path both
-pass; [samples/Castle/README.md](samples/Castle/README.md) records the current WSLg dzn driver
-limitation for the hardware WSL run. The host, window, input, time, and logging surface shipped in
+raylib castle model and its diffuse texture with the built-in mesh material from a Native AOT publish.
+The grid is deferred to M5. The Windows hardware path, the conformant lavapipe Linux path, and the
+WSLg Mesa dzn hardware path all pass. The host, window, input, time, and logging surface shipped in
 M1; the renderer foundation shipped in M2. The rest of the API reference remains the 1.0 contract
 and is delivered by the milestones listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).
@@ -58,25 +57,30 @@ and is delivered by the milestones listed in
 - Dedicated tick thread; main thread pumps the window; a render thread draws the previous completed
   tick at full rate, or 30 FPS when minimized/unfocused.
 - No scene graph and no ECS. The game owns its objects and transforms.
-- No public `Material`. A `Shader` owns a uniform cursor; every draw captures an immutable snapshot;
-  per-instance uniforms and bindless textures let different draws batch together. A `Camera` is a
-  frame-scoped recorder: create it in `Tick`, record `DrawModel`/`DrawMesh`/`DrawInstanced`/
-  `DrawModelInstanced` calls, and dispose it before `Tick` returns. Draws batch by
-  `(mesh, shader, effective render state)`.
-- Engine assets are reference-counted and loaded from one or more `RAYBORKP` packs produced by the
-  bake. Custom TOML data uses `[GenerateShape]`, `WithAssetType<T>()`, and the same `Load<T>` API.
-- A `Model` is a flat list of parts. Each part has a mesh, a baked shader, a local transform, and
-  bounds; a part with no authored shader uses the built-in `/shaders/default` draw shader.
+- No public `Material`. A `Shader` is a material instance with its own uniform cursor and texture
+  bindings, backed by one internal cached GPU program. `Load<Shader>` returns a new independent
+  material every call; every draw captures an immutable snapshot, so later cursor changes affect
+  later draws only. Per-instance uniforms and textures let different materials over one program
+  batch together. A `Camera` is a frame-scoped recorder: create it in `Tick`, record
+  `DrawModel`/`DrawMesh`/`DrawInstanced`/`DrawModelInstanced` calls, and dispose it before `Tick`
+  returns. Draws batch by `(mesh, program, effective render state)`.
+- `Mesh` and `Texture` are reference-counted engine assets loaded from one or more `RAYBORKP` packs
+  produced by the bake. Custom TOML data uses `[GenerateShape]`, `WithAssetType<T>()`, and the same
+  `Load<T>` API. `Shader` materials and `Model` objects are caller-owned, not engine assets.
+- A `Model` is a user-owned flat list of parts. Each part has a mesh, a material, a render state,
+  a local transform, and computed bounds; constructing a model acquires its meshes and transfers
+  its part materials to the model. A part with no authored shader uses the built-in `/shaders/mesh`
+  material program, which the engine preloads with the white/error textures and exposes through
+  `EngineContext.Defaults`.
 - Games can create procedural meshes and textures with `ctx.CreateMeshBuilder()` and
   `ctx.CreateTextureBuilder(...)`. Builders expose CPU vertices/indices, compute normals, tangents,
   and bounds, and `BuildAsync` returns an immutable asset only after the GPU upload finishes.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
-  the assembly. It contains the present shader pair, the default draw shader, and white/error
-  textures.
+  the assembly. It contains the present shader pair, the mesh draw shader, and white/error textures.
 - Shaders are GLSL compiled to SPIR-V ahead of runtime by the bake; the runtime never compiles
   shaders. The M4 shader ABI generates the prologue and reflection for a frame uniform block, a
-  bindless texture array, and a per-instance storage buffer.
+  fixed 2048-element bindless texture array, and a per-instance storage buffer.
 - Fonts are TTF/OTF parsed at runtime; MSDF is generated per glyph at 32 px and drawn bindlessly.
   M3 packages the face bytes; M6 adds the runtime parser.
 - The renderer recovers from swapchain/device loss where possible; failed recovery is fatal. Live
@@ -90,7 +94,7 @@ and is delivered by the milestones listed in
 ```text
 src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
   Shaders/                    present-pass GLSL sources and committed SPIR-V blobs
-  BuiltInAssets/Assets/       built-in pack sources (default draw shader, present shader, textures)
+  BuiltInAssets/Assets/       built-in pack sources (mesh and present shaders, textures)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
