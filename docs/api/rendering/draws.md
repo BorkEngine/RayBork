@@ -26,31 +26,39 @@ Consequently:
 - Different cameras do not batch together.
 - Model parts are separate meshes; a model with three parts produces at most three batches per
   shader/state, each with one instance per model draw.
-- The renderer may split a batch if a device limit is reached (storage-buffer range, descriptor
-  count, or instance-data size). Splitting is an implementation detail and does not change
-  correctness.
+- The planner splits a batch when it would exceed `MaxInstancesPerBatch` (default `16384`) or
+  `MaxInstanceBytesPerBatch` (default 1 MiB, including the 96-byte instance header). Splitting
+  preserves instance order and counts as separate draw calls. A single instance larger than the byte
+  limit is still a batch of one.
 
 **Per-instance data.** Each instance carries the world transform, the tint, a UV rectangle for
 sprite/text-style shaders, and the reflected uniform/texture data. Built-in shaders consume the
-fields they need; custom shaders see them through the generated ABI.
+fields they need; custom shaders see them through the generated ABI. Uniform values and texture
+bindings never split a batch.
 
-**Culling.** Instances are frustum-culled against their world bounds. A model part uses its part
-bounds transformed by the instance transform; a mesh uses its mesh bounds. `RenderStats` reports
-the number of culled instances. There is no occlusion culling, LOD, or GPU-driven culling in v1.
-Custom vertex displacement can invalidate bounds; v1 has no per-draw bounds override, so such a
-shader should disable culling by drawing a larger mesh or accepting incorrect culling.
+**Culling.** Instances are frustum-culled against the pass view-projection. The planner transforms the
+mesh-space bounds to a world-space AABB and tests it against the six normalized frustum planes; an
+instance is culled only when its bounds are fully outside a plane. A model part's world matrix
+already includes its local transform. `RenderStats` reports the number of culled instances. There is
+no occlusion culling, LOD, or GPU-driven culling in v1. Custom vertex displacement can invalidate
+bounds; v1 has no per-draw bounds override, so such a shader should disable culling by drawing a
+larger mesh or accepting incorrect culling.
 
-**Sorting.**
+**Sorting.** The planner emits one ordered plan per camera pass; it never reorders across passes.
 
-- Opaque batches are submitted in a stable order. Depth testing with reverse-Z resolves visibility;
-  there is no front-to-back sort guarantee.
-- Alpha and multiply batches are sorted back-to-front by instance depth within a batch. Batches
-  themselves are ordered by their nearest instance. Additive batches are sorted back-to-front for
-  determinism.
-- Sorting is stable for equal depths. The renderer does not reorder draws across cameras.
+- Opaque batches keep the order in which their first instance was recorded.
+- Alpha, additive, and multiply batches are ordered back-to-front by their nearest instance depth,
+  and the instances inside each transparent batch are sorted back-to-front by depth.
+- Sorting is stable for equal depths: equal-depth items keep their recording order.
+- A split batch's chunks preserve the sorted instance order and stay adjacent in submission order.
+
+The plan reports draw calls after splitting, instances submitted after culling, triangles, and
+culled instances. Triangles count `indexCount / 3` per triangle-list instance, `indexCount - 2` per
+triangle-strip instance, and `0` for line and point topologies. The renderer derives pipeline counts,
+not the planner.
 
 **Explicit instancing.** `DrawInstanced` records one snapshot of the current shader state and
-applies it to every transform in the span. It is one batch by construction, subject to device
+applies it to every transform in the span. It is one batch by construction, subject to the split
 limits. To vary a texture per instance, use separate `DrawMesh` calls; the automatic batcher will
 merge them.
 
