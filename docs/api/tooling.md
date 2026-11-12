@@ -256,15 +256,15 @@ depth_write = true
 - The bake inserts the generated shader prologue after the first `#version` directive line. When a
   stage has no `#version` directive, the bake prepends `#version 450` before the prologue, so the
   version line always stays first.
-- The prologue declares the frame block, the bindless texture array, the per-instance record and
-  storage buffer, the `rbFrame`/`rbInstance` accessors, one macro per reflected uniform and texture,
-  and the stage wrapper. User GLSL must not declare the generated identifiers (`main`,
-  `RayBorkFrame`, `RayBorkFrameBlock`, `rbFrameBlock`, `RayBorkTextures`, `RayBorkInstance`,
-  `RayBorkInstanceBuffer`, `RayBorkInstances`, `rbFrame`, `rbInstance`, `rbInstanceIndex`,
-  `rbInstanceIndexOut`, `rbUserVertexMain`, `rbUserFragmentMain`) or any uniform/texture name from
-  its sidecar. It must not declare a `layout(set = ...)` binding or use varying location 15, which
-  is reserved for the engine instance index. Declarations are detected on the comment-stripped
-  source, and a violation is `RB4008` with the source line and no outputs.
+- The prologue declares the frame block, the fixed-size 2048-element bindless texture array, the
+  per-instance record and storage buffer, the `rbFrame`/`rbInstance` accessors, one macro per
+  reflected uniform and texture, and the stage wrapper. User GLSL must not declare the generated
+  identifiers (`main`, `RayBorkFrame`, `RayBorkFrameBlock`, `rbFrameBlock`, `RayBorkTextures`,
+  `RayBorkInstance`, `RayBorkInstanceBuffer`, `RayBorkInstances`, `rbFrame`, `rbInstance`,
+  `rbInstanceIndex`, `rbInstanceIndexOut`, `rbUserVertexMain`, `rbUserFragmentMain`) or any
+  uniform/texture name from its sidecar. It must not declare a `layout(set = ...)` binding or use
+  varying location 15, which is reserved for the engine instance index. Declarations are detected on
+  the comment-stripped source, and a violation is `RB4008` with the source line and no outputs.
 - Supported uniform types are `float`, `int`, `uint`, `bool`, `vec2`, `vec3`, `vec4`, `mat4`, and
   `sampler2D`. `default` is a scalar for `float`/`int`/`uint`/`bool`, and an array whose length
   matches the component count for the vector and matrix types. Arrays, structs, and extra uniform

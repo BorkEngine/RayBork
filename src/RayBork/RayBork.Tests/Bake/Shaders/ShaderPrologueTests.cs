@@ -111,7 +111,8 @@ public sealed class ShaderPrologueTests {
         Assert.True(macro < user, "The entry-point macro must precede the user function.");
 
         Assert.Contains("layout(set = 0, binding = 0, std140) uniform RayBorkFrameBlock", wrapped);
-        Assert.Contains("layout(set = 0, binding = 1) uniform sampler2D RayBorkTextures[];", wrapped);
+        Assert.Contains("layout(set = 0, binding = 1) uniform sampler2D RayBorkTextures[2048];", wrapped);
+        Assert.DoesNotContain("RayBorkTextures[]", wrapped);
         Assert.Contains("layout(set = 0, binding = 2, std430) readonly buffer RayBorkInstanceBuffer", wrapped);
         Assert.Contains("layout(location = 15) flat out uint rbInstanceIndexOut;", wrapped);
         Assert.Contains("rbInstanceIndexOut = uint(gl_InstanceIndex);", wrapped);

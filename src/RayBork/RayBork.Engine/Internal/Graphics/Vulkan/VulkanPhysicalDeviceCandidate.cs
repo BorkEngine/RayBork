@@ -14,6 +14,10 @@ namespace RayBork.Internal;
 /// Whether at least one queue family supports presentation to the target surface.
 /// </param>
 /// <param name="HasSwapchainExtension">Whether the device advertises <c>VK_KHR_swapchain</c>.</param>
+/// <param name="BindlessTextureCapacity">
+/// The number of update-after-bind sampled images the device supports: the smaller of its per-stage
+/// and per-set limits.
+/// </param>
 /// <param name="MissingBindlessFeatures">
 /// The M4 descriptor-indexing feature names the device does not advertise, separated by commas, or an
 /// empty string when the bindless subset is supported.
@@ -26,4 +30,5 @@ internal readonly record struct VulkanPhysicalDeviceCandidate(
     bool SupportsGraphicsQueue,
     bool SupportsPresentQueue,
     bool HasSwapchainExtension,
+    uint BindlessTextureCapacity = VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
     string MissingBindlessFeatures = "");

@@ -9,11 +9,13 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Set 0 binding 0 is the frame uniform block, binding 1 is the bindless combined-image-sampler
-/// array, and binding 2 is the per-instance storage buffer. The array binding is partially bound and
-/// update-after-bind, so the renderer can write a newly allocated slot while frames are in flight;
-/// the uniform and storage-buffer bindings are ordinary descriptors. The set layout and pool carry
-/// the update-after-bind flags the array binding requires. No push constants are declared.
+/// Set 0 binding 0 is the frame uniform block, binding 1 is the fixed-size bindless
+/// combined-image-sampler array, and binding 2 is the per-instance storage buffer. The array binding
+/// has exactly <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/> descriptors to match
+/// <c>RayBorkTextures[2048]</c> in every geometry shader; it is partially bound and update-after-bind,
+/// so the renderer can write a newly allocated slot while frames are in flight. The uniform and
+/// storage-buffer bindings are ordinary descriptors. The set layout and pool carry the
+/// update-after-bind flags the array binding requires. No push constants are declared.
 /// </para>
 /// <para>
 /// The state is created on the render thread with the logical device and destroyed before the device.
@@ -59,19 +61,25 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// Creates the set layout, descriptor pool, and pipeline layout.
     /// </summary>
     /// <param name="device">The device that owns the state.</param>
-    /// <param name="bindlessCapacity">The bindless texture array capacity.</param>
+    /// <param name="bindlessCapacity">The bindless texture array capacity; it must equal
+    /// <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/>.</param>
     /// <param name="maxSets">The number of frame descriptor sets to pool.</param>
     /// <returns>The created descriptor state.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="bindlessCapacity"/> does not match the fixed shader array, or
+    /// <paramref name="maxSets"/> is zero.
+    /// </exception>
     /// <exception cref="GraphicsException">
     /// A Vulkan object could not be created. The diagnostic code is <c>RB3001</c>.
     /// </exception>
     internal static VulkanDescriptorState Create(VulkanDevice device, uint bindlessCapacity, uint maxSets) {
         ArgumentNullException.ThrowIfNull(device);
-        if (bindlessCapacity == 0) {
+        if (bindlessCapacity != ShaderAbiNames.TEXTURE_CAPACITY) {
             throw new ArgumentOutOfRangeException(
                 nameof(bindlessCapacity),
                 bindlessCapacity,
-                "The bindless texture capacity must be positive.");
+                "The bindless texture descriptor count must equal the fixed shader array size "
+                + $"({ShaderAbiNames.TEXTURE_CAPACITY}) so the set layout matches the generated GLSL.");
         }
 
         if (maxSets == 0) {

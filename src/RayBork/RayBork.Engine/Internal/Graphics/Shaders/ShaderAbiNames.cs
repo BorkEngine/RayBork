@@ -27,6 +27,13 @@ internal static class ShaderAbiNames {
     /// <summary>The bindless sampler array: <c>RayBorkTextures</c>.</summary>
     internal const string TEXTURES = "RayBorkTextures";
 
+    /// <summary>
+    /// The fixed number of combined image samplers in <see cref="TEXTURES"/>: 2048. The prologue
+    /// declares <c>RayBorkTextures[2048]</c> and the descriptor set layout must declare the same
+    /// descriptor count.
+    /// </summary>
+    internal const uint TEXTURE_CAPACITY = 2048;
+
     /// <summary>The per-instance record struct type: <c>RayBorkInstance</c>.</summary>
     internal const string INSTANCE_TYPE = "RayBorkInstance";
 

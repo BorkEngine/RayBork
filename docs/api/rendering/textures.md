@@ -96,11 +96,13 @@ public enum TextureFormat {
 - `Rgba16Float` is the default HDR render-target format. Ordinary packed color textures are usually
   `Bc7Srgb`; linear data textures use `Bc7Unorm`, `Bc5Unorm`, or `R8Unorm`.
 - Bindless slots are allocated when a texture's GPU upload completes, not lazily at the first draw.
-  The renderer creates a table whose capacity is the smaller of 4096 slots and the device's
-  `maxPerStageDescriptorUpdateAfterBindSampledImages` and
-  `maxDescriptorSetUpdateAfterBindSampledImages` limits, and never less than one slot. Slot 0 is
-  always reserved for the renderer's built-in 1x1 white texture, so a `null` texture binding and a
-  texture binding that uses the bake default sample white.
+  The renderer creates a fixed table of 2048 slots, matching the shader ABI's
+  `RayBorkTextures[2048]` descriptor array. A device whose
+  `maxPerStageDescriptorUpdateAfterBindSampledImages` or
+  `maxDescriptorSetUpdateAfterBindSampledImages` limit is below 2048 is rejected during device
+  selection with a clear diagnostic; the capacity is never reduced. Slot 0 is always reserved for
+  the renderer's built-in 1x1 white texture, so a `null` texture binding and a texture binding that
+  uses the bake default sample white.
 - If the table is full, the texture upload fails with `AssetLoadException` (diagnostic code
   `RB1010`). The message names the table capacity and the failing texture path; the game must
   reduce the number of live textures or dispose unused textures and wait for frame retirement before

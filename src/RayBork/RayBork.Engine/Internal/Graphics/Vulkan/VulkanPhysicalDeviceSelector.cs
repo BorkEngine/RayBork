@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Silk.NET.Vulkan;
 
@@ -8,9 +9,11 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// Selection is pure so it can be unit tested without a GPU. A device qualifies only when it
-/// supports Vulkan 1.2 or newer, graphics and presentation queues, <c>VK_KHR_swapchain</c>, and the
-/// M4 descriptor-indexing subset the bindless texture table needs. A device without the bindless
-/// subset is not suitable; the renderer never falls back to one texture per draw.
+/// supports Vulkan 1.2 or newer, graphics and presentation queues, <c>VK_KHR_swapchain</c>, the
+/// M4 descriptor-indexing subset the bindless texture table needs, and enough update-after-bind
+/// sampled images for the fixed <c>RayBorkTextures[2048]</c> array. A device without the bindless
+/// subset or the capacity is not suitable; the renderer never falls back to one texture per draw or
+/// to a smaller array.
 /// </remarks>
 internal static class VulkanPhysicalDeviceSelector {
     private const uint REQUIRED_API_VERSION = (1u << 22) | (2u << 12);
@@ -25,6 +28,7 @@ internal static class VulkanPhysicalDeviceSelector {
         && candidate.SupportsGraphicsQueue
         && candidate.SupportsPresentQueue
         && candidate.HasSwapchainExtension
+        && candidate.BindlessTextureCapacity >= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY
         && string.IsNullOrEmpty(candidate.MissingBindlessFeatures);
 
     /// <summary>
@@ -97,6 +101,14 @@ internal static class VulkanPhysicalDeviceSelector {
 
         if (!candidate.HasSwapchainExtension) {
             reasons.Add("the VK_KHR_swapchain extension is missing");
+        }
+
+        if (candidate.BindlessTextureCapacity < VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY) {
+            reasons.Add(
+                "update-after-bind sampled-image capacity "
+                + $"{candidate.BindlessTextureCapacity.ToString(CultureInfo.InvariantCulture)} is below the "
+                + "required "
+                + $"{VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}");
         }
 
         if (!string.IsNullOrEmpty(candidate.MissingBindlessFeatures)) {

@@ -75,10 +75,9 @@ public sealed class VulkanDeviceTests {
         VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
 
         Assert.True(capabilities.DescriptorIndexing);
-        Assert.True(capabilities.BindlessTextureCapacity >= 1);
-        Assert.True(capabilities.BindlessTextureCapacity <= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY);
-        Assert.True(capabilities.MaxPerStageDescriptorUpdateAfterBindSampledImages >= 1);
-        Assert.True(capabilities.MaxDescriptorSetUpdateAfterBindSampledImages >= 1);
+        Assert.Equal(VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY, capabilities.BindlessTextureCapacity);
+        Assert.True(capabilities.MaxPerStageDescriptorUpdateAfterBindSampledImages >= capabilities.BindlessTextureCapacity);
+        Assert.True(capabilities.MaxDescriptorSetUpdateAfterBindSampledImages >= capabilities.BindlessTextureCapacity);
         Assert.True(capabilities.MaxPerStageDescriptorUpdateAfterBindSamplers >= 1);
         Assert.True(capabilities.MaxStorageBufferRange > 0);
         Assert.True(capabilities.MaxMemoryAllocationSize > 0);

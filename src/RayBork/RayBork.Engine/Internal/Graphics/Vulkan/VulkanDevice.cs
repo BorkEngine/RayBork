@@ -15,8 +15,9 @@ namespace RayBork.Internal;
 /// logical device with <c>VK_KHR_swapchain</c> enabled.
 /// </para>
 /// <para>
-/// M4 requires Vulkan 1.2 core and the descriptor-indexing subset in
-/// <see cref="VulkanBindlessFeatures"/>; a physical device without it is rejected. The optional
+/// M4 requires Vulkan 1.2 core, the descriptor-indexing subset in
+/// <see cref="VulkanBindlessFeatures"/>, and enough update-after-bind sampled images for the fixed
+/// <c>RayBorkTextures[2048]</c> array; a physical device without them is rejected. The optional
 /// <c>samplerAnisotropy</c> and <c>textureCompressionBC</c> features are enabled when the selected
 /// device advertises them, because the asset path samples BC-compressed textures and may request
 /// anisotropic filtering. Update-after-bind stays disabled for uniform and storage buffers, and
@@ -150,6 +151,7 @@ internal sealed class VulkanDevice : IDisposable {
             bool hasSwapchain = HasDeviceExtension(vulkan, physicalDevice, SWAPCHAIN_EXTENSION_NAME);
             IReadOnlyList<string> missingBindlessFeatures = VulkanBindlessFeatures.GetMissingFeatures(
                 VulkanBindlessFeatures.Query(vulkan, physicalDevice));
+            uint bindlessTextureCapacity = VulkanBindlessFeatures.QueryTextureCapacity(vulkan, physicalDevice);
             VulkanPhysicalDeviceCandidate candidate = new(
                 index,
                 name,
@@ -158,11 +160,12 @@ internal sealed class VulkanDevice : IDisposable {
                 supportsGraphics,
                 supportsPresent,
                 hasSwapchain,
+                bindlessTextureCapacity,
                 string.Join(", ", missingBindlessFeatures));
             candidates.Add(candidate);
             queueFamiliesByDevice.Add(queueFamilies);
             logger.LogDebug(
-                "Vulkan physical device [{Index}] {Name}: API {ApiVersion}, type {DeviceType}, graphics {Graphics}, present {Present}, swapchain {Swapchain}, bindless descriptor indexing {Bindless}.",
+                "Vulkan physical device [{Index}] {Name}: API {ApiVersion}, type {DeviceType}, graphics {Graphics}, present {Present}, swapchain {Swapchain}, bindless descriptor indexing {Bindless}, update-after-bind sampled-image capacity {BindlessCapacity}.",
                 index,
                 name,
                 VulkanVersion.Format(properties.ApiVersion),
@@ -170,7 +173,8 @@ internal sealed class VulkanDevice : IDisposable {
                 supportsGraphics,
                 supportsPresent,
                 hasSwapchain,
-                missingBindlessFeatures.Count == 0 ? "supported" : "missing " + candidate.MissingBindlessFeatures);
+                missingBindlessFeatures.Count == 0 ? "supported" : "missing " + candidate.MissingBindlessFeatures,
+                bindlessTextureCapacity);
         }
 
         int selectedIndex = VulkanPhysicalDeviceSelector.Select(candidates);
