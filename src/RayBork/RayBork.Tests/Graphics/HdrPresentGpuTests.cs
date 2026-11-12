@@ -136,6 +136,12 @@ public sealed class HdrPresentGpuTests {
         PresentAndProbe(host.Backend, BackendPacketTestHelper.CreateClearingPacket(host, 1, clearColor));
 
     private static (float R, float G, float B) PresentAndProbe(Vulkan12Backend backend, RenderFramePacket packet) {
+        if (!backend.Swapchain.SupportsPresentReadback) {
+            Assert.Skip(
+                "The swapchain images were not created with VK_IMAGE_USAGE_TRANSFER_SRC_BIT, so " +
+                "the presented-pixel probes cannot read the image this surface presented.");
+        }
+
         backend.Submit(packet);
         VulkanSwapchain swapchain = backend.Swapchain;
         uint imageIndex = backend.PendingPresentImageIndex;

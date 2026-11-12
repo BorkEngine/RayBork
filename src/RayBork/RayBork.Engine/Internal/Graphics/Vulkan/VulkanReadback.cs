@@ -149,6 +149,9 @@ internal static unsafe class VulkanReadback {
     /// <exception cref="ArgumentOutOfRangeException">
     /// The image index or the pixel lies outside the swapchain.
     /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The surface did not advertise transfer-source usage, so the swapchain images cannot be copied.
+    /// </exception>
     /// <exception cref="GraphicsException">
     /// The swapchain format is not a supported presented-color format, or a Vulkan object could not
     /// be created or the copy failed. The diagnostic code is <c>RB3001</c>.
@@ -164,6 +167,12 @@ internal static unsafe class VulkanReadback {
         out float b) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(swapchain);
+        if (!swapchain.SupportsPresentReadback) {
+            throw new NotSupportedException(
+                "The swapchain images were not created with VK_IMAGE_USAGE_TRANSFER_SRC_BIT, so the " +
+                "presented pixel cannot be read back on this surface.");
+        }
+
         if (imageIndex >= (uint)swapchain.ImageCount) {
             throw new ArgumentOutOfRangeException(
                 nameof(imageIndex),

@@ -81,6 +81,12 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
     internal IReadOnlyList<ImageView> ImageViews => _imageViews;
 
     /// <summary>
+    /// Gets whether the swapchain images were created with transfer-source usage, so a diagnostic
+    /// presented-pixel readback is possible. The frame path never reads images back.
+    /// </summary>
+    internal bool SupportsPresentReadback { get; private set; }
+
+    /// <summary>
     /// Gets the swapchain images, in image index order.
     /// </summary>
     /// <remarks>
@@ -281,6 +287,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         uint presentFamily = device.Capabilities.PresentQueueFamily;
         bool concurrent = graphicsFamily != presentFamily;
         uint[] familyIndices = [graphicsFamily, presentFamily];
+        (ImageUsageFlags imageUsage, bool supportsPresentReadback) =
+            VulkanSwapchainImageUsage.Select(capabilities.SupportedUsageFlags);
         SwapchainCreateInfoKHR createInfo = new() {
             SType = StructureType.SwapchainCreateInfoKhr,
             Surface = surface,
@@ -289,7 +297,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             ImageColorSpace = format.ColorSpace,
             ImageExtent = extent,
             ImageArrayLayers = IMAGE_ARRAY_LAYERS,
-            ImageUsage = ImageUsageFlags.ColorAttachmentBit,
+            ImageUsage = imageUsage,
             ImageSharingMode = concurrent ? SharingMode.Concurrent : SharingMode.Exclusive,
             PreTransform = capabilities.CurrentTransform,
             CompositeAlpha = SelectCompositeAlpha(capabilities),
@@ -324,7 +332,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             throw;
         }
 
-        return new SwapchainResources(swapchain, images, views, format.Format, extent);
+        return new SwapchainResources(swapchain, images, views, format.Format, extent, supportsPresentReadback);
     }
 
     private ImageView CreateImageView(Image image, Format format) {
@@ -358,6 +366,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         _imageViews = resources.ImageViews;
         _format = resources.Format;
         _extent = resources.Extent;
+        SupportsPresentReadback = resources.SupportsPresentReadback;
     }
 
     private void DestroyImageViews(ImageView[] views) {
@@ -408,5 +417,6 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         Image[] Images,
         ImageView[] ImageViews,
         Format Format,
-        Extent2D Extent);
+        Extent2D Extent,
+        bool SupportsPresentReadback);
 }
