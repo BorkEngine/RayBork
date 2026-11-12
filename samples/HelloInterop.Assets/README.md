@@ -4,7 +4,7 @@
 JIT-only console app that configures `BakeApplicationBuilder`, runs the default processors plus the
 sample's `CircleProcessor`, and writes `hello.pck` next to its own executable. No runtime project
 references it, and it is never part of an AOT publish graph; see
-[docs/api.md](../../docs/api.md#13-asset-tooling-rayborkbake) §13 and
+[docs/api/tooling.md](../../docs/api/tooling.md#13-asset-tooling-rayborkbake) §13 and
 [docs/architecture.md](../../docs/architecture.md#assets).
 
 ## Sources

@@ -31,7 +31,8 @@ RayBork 1.0 is done when all of the following are true:
    green on the release matrix. There is no golden-image suite.
 8. The renderer seam is internal and Vulkan is the only backend, but the public API exposes no
    Vulkan types and a second backend can be added without changing game code.
-9. The known-limitations list is honest and matches the out-of-scope table in [api.md](api.md).
+9. The known-limitations list is honest and matches the out-of-scope table in the
+   [API reference](api/versioning.md#15-out-of-scope-for-v1).
 
 Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 

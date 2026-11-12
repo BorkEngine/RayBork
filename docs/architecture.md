@@ -549,7 +549,7 @@ a frame uniform buffer, a bindless `sampler2D[]`, and a per-instance storage buf
 transform, tint, UV rectangle, texture indices, and the reflected user uniforms. v1 has one fixed
 vertex input layout: position, normal, uv, uv1, uv2, uv3, color, tangent. Vertex and fragment entry
 points are `main_vertex` and `main_fragment`. The full ABI is in the
-[API reference](api.md#74-shader-abi).
+[API reference](api/rendering/shaders.md#74-shader-abi).
 
 Vulkan instancing consumes one vertex/index buffer, so different meshes with the same shader are
 still separate draws in v1. Multi-draw indirect is post-1.0.
@@ -680,7 +680,7 @@ generated file lives under the intermediate output, is never committed, and is n
 loose pack; the generator and its packages do not enter the engine's output or AOT publish graph.
 
 The pack format, bake application builder, processors, sidecars, validation, and incremental
-manifest are specified in the [API reference](api.md#13-asset-tooling-rayborkbake).
+manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-rayborkbake).
 
 ## Native AOT
 
