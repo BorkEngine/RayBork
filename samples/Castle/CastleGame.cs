@@ -68,10 +68,11 @@ internal sealed class CastleGame : IGame {
 
         // The orbit transform sits at the point we want to look at. Rotating it moves the camera
         // around that point; the camera is its child at a local +Z offset. Camera forward is -Z, so
-        // the child looks back at the orbit center.
+        // the child looks back at the orbit center. A positive elevation must move the camera up,
+        // which is the negative pitch in the yaw/pitch rotation.
         Transform orbit = new(
             _orbitCenter,
-            Quaternion.CreateFromYawPitchRoll(_yaw, _pitch, 0f),
+            Quaternion.CreateFromYawPitchRoll(_yaw, -_pitch, 0f),
             Vector3.One);
         Transform cameraTransform = new Transform(new Vector3(0f, 0f, _distance)).WithParent(orbit);
 
