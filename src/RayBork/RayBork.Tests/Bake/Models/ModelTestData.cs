@@ -85,6 +85,65 @@ internal static class ModelTestData {
         => BinaryPrimitives.ReadUInt32LittleEndian(
             payload.AsSpan((vertexCount * 88) + (index * sizeof(uint))));
 
+    internal static byte[] UvTriangleBufferData() {
+        var buffer = new byte[66];
+        WriteVector(buffer, 0, 0f, 0f, 0f);
+        WriteVector(buffer, 12, 1f, 0f, 0f);
+        WriteVector(buffer, 24, 0f, 1f, 0f);
+        WriteVector2(buffer, 36, 0.25f, 0.75f);
+        WriteVector2(buffer, 44, 0.5f, 0.5f);
+        WriteVector2(buffer, 52, 0.75f, 0.25f);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(60), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(62), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(64), 2);
+        return buffer;
+    }
+
+    internal static string UvTriangleGltf()
+        => $$"""
+            {
+              "asset": { "version": "2.0" },
+              "scene": 0,
+              "scenes": [ { "nodes": [ 0 ] } ],
+              "nodes": [ { "name": "Tri", "mesh": 0 } ],
+              "meshes": [
+                {
+                  "name": "TriMesh",
+                  "primitives": [
+                    {
+                      "attributes": { "POSITION": 0, "TEXCOORD_0": 2 },
+                      "indices": 1,
+                      "mode": 4
+                    }
+                  ]
+                }
+              ],
+              "buffers": [
+                {
+                  "byteLength": 66,
+                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(UvTriangleBufferData())}}"
+                }
+              ],
+              "bufferViews": [
+                { "buffer": 0, "byteOffset": 0, "byteLength": 36, "target": 34962 },
+                { "buffer": 0, "byteOffset": 60, "byteLength": 6, "target": 34963 },
+                { "buffer": 0, "byteOffset": 36, "byteLength": 24, "target": 34962 }
+              ],
+              "accessors": [
+                {
+                  "bufferView": 0,
+                  "componentType": 5126,
+                  "count": 3,
+                  "type": "VEC3",
+                  "min": [ 0, 0, 0 ],
+                  "max": [ 1, 1, 0 ]
+                },
+                { "bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR" },
+                { "bufferView": 2, "componentType": 5126, "count": 3, "type": "VEC2" }
+              ]
+            }
+            """;
+
     internal static byte[] TriangleBufferData() {
         var buffer = new byte[42];
         WriteVector(buffer, 0, 0f, 0f, 0f);
@@ -275,5 +334,10 @@ internal static class ModelTestData {
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset), x);
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset + 4), y);
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset + 8), z);
+    }
+
+    private static void WriteVector2(byte[] buffer, int offset, float x, float y) {
+        BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset), x);
+        BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset + 4), y);
     }
 }

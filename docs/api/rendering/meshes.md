@@ -144,6 +144,10 @@ Mesh mesh = await builder.BuildAsync();
 - `Model` is a flat list of parts. It has no node hierarchy in v1; glTF node transforms are baked
   into each part's `LocalTransform`. `Bounds` is the union in model space. glTF 2.0 and OBJ are
   converted to this packed engine format by the bake; the runtime never parses them.
+- UVs use a top-left origin. glTF texture coordinates are used as authored; Wavefront OBJ authors V
+  from the bottom of the texture, so the bake flips it (`v = 1 - v`) into the engine's top-left
+  convention, matching raylib's OBJ loader. U is unchanged, and a face corner with no `vt` keeps the
+  zero UV default.
 - `ModelPart.LocalTransform` is applied before the draw's instance transform:
   `world = part.LocalTransform.ToMatrix() * instanceTransform.ToMatrix()` under the row-vector
   convention. The engine deliberately does not compose it through `Transform.WithParent`, which can
