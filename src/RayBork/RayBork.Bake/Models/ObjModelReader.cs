@@ -11,8 +11,11 @@ namespace RayBork.Bake.Models;
 /// Supported statements are <c>v</c>, <c>vn</c>, <c>vt</c>, <c>f</c>, <c>o</c>, and <c>g</c>.
 /// Polygons are fan-triangulated. Positive and negative face indices are resolved against the
 /// vertices declared so far. A face without normals gets a flat geometric normal per triangle; a
-/// missing UV is zero. <c>mtllib</c> is ignored with a warning because M3 does not import
-/// materials. Other statements, including <c>usemtl</c>, <c>s</c>, and comments, are ignored.
+/// face corner without a <c>vt</c> index keeps the zero UV default. Wavefront authors V from the
+/// bottom of the texture, while the engine samples from a top-left origin, so every parsed
+/// <c>vt</c> has its V flipped (<c>v = 1 - v</c>) and keeps U unchanged; this matches raylib's OBJ
+/// loader. <c>mtllib</c> is ignored with a warning because M3 does not import materials. Other
+/// statements, including <c>usemtl</c>, <c>s</c>, and comments, are ignored.
 /// </para>
 /// <para>
 /// Each <c>o</c> or <c>g</c> statement starts a new part. Faces before the first one belong to a
@@ -322,9 +325,17 @@ internal static class ObjModelReader {
         return Vector3.Normalize(normal);
     }
 
+    /// <summary>Parses one <c>vt</c> statement into the engine's top-left UV space.</summary>
+    /// <remarks>
+    /// Wavefront OBJ places the V origin at the bottom of the texture and the engine samples from a
+    /// top-left origin, so V is flipped here: an authored V of 0 maps to the top of the texture and
+    /// an authored V of 1 maps to the bottom. U is unchanged. A <c>vt</c> with only U means an
+    /// authored V of 0, so it flips to 1 like any other.
+    /// </remarks>
     private static Vector2 ParseTextureCoordinate(string rest, string fileName, int lineNumber) {
         float[] values = ParseFloats(rest, 1, "texture coordinate", fileName, lineNumber);
-        return values.Length >= 2 ? new Vector2(values[0], values[1]) : new Vector2(values[0], 0f);
+        float v = values.Length >= 2 ? values[1] : 0f;
+        return new Vector2(values[0], 1f - v);
     }
 
     private static float[] ParseFloats(

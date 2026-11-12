@@ -225,9 +225,65 @@ public sealed class ModelProcessorTests {
         byte[] payload = ModelTestData.ReadPayload(
             archive,
             ModelTestData.ReadMesh(archive, part.MeshPath).Payload);
-        AssertVector(new Vector2(0f, 0f), ModelTestData.UvAt(payload, 0));
-        AssertVector(new Vector2(1f, 0f), ModelTestData.UvAt(payload, 1));
-        AssertVector(new Vector2(1f, 1f), ModelTestData.UvAt(payload, 2));
+        AssertVector(new Vector2(0f, 1f), ModelTestData.UvAt(payload, 0));
+        AssertVector(new Vector2(1f, 1f), ModelTestData.UvAt(payload, 1));
+        AssertVector(new Vector2(1f, 0f), ModelTestData.UvAt(payload, 2));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ObjQuadFlipsVToTheTopLeftUvOrigin() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/uvquad.obj", """
+            o quad
+            v 0 0 0
+            v 0 1 0
+            v 1 1 0
+            v 1 0 0
+            vt 0 0
+            vt 0 1
+            vt 1 1
+            vt 1 0
+            vn 0 0 1
+            f 1/1/1 2/2/1 3/3/1 4/4/1
+            """);
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/uvquad");
+        ModelPartAsset part = Assert.Single(model.Parts);
+        MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
+        Assert.Equal(4u, mesh.VertexCount);
+        byte[] payload = ModelTestData.ReadPayload(archive, mesh.Payload);
+        AssertIndices([0u, 1u, 2u, 0u, 2u, 3u], payload, 4);
+        AssertVector(new Vector2(0f, 1f), ModelTestData.UvAt(payload, 0));
+        AssertVector(new Vector2(0f, 0f), ModelTestData.UvAt(payload, 1));
+        AssertVector(new Vector2(1f, 0f), ModelTestData.UvAt(payload, 2));
+        AssertVector(new Vector2(1f, 1f), ModelTestData.UvAt(payload, 3));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GltfTextureCoordinatesAreUsedAsAuthored() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/uvtri.gltf", ModelTestData.UvTriangleGltf());
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/uvtri");
+        ModelPartAsset part = Assert.Single(model.Parts);
+        byte[] payload = ModelTestData.ReadPayload(
+            archive,
+            ModelTestData.ReadMesh(archive, part.MeshPath).Payload);
+        AssertVector(new Vector2(0.25f, 0.75f), ModelTestData.UvAt(payload, 0));
+        AssertVector(new Vector2(0.5f, 0.5f), ModelTestData.UvAt(payload, 1));
+        AssertVector(new Vector2(0.75f, 0.25f), ModelTestData.UvAt(payload, 2));
     }
 
     [Theory]
