@@ -23,7 +23,9 @@ namespace RayBork.Internal;
 /// token, so one canceled waiter leaves the other waiters and the created resource intact. When every
 /// waiter cancels before acquiring a reference the created asset is destroyed and removed from the
 /// cache. Custom data is deserialized on the loader and returned as a fresh caller-owned instance;
-/// custom data and <see cref="LoadData"/> payloads are never cached.
+/// custom data and <see cref="LoadData"/> payloads are never cached. <see cref="Shader"/> is a
+/// material, not an engine asset: <c>Load&lt;Shader&gt;</c> loads or reuses the internal
+/// <see cref="ShaderProgram"/> and returns a new material over it for every call.
 /// </para>
 /// <para>
 /// The loader thread only reads and decompresses pack payloads, deserializes custom data, and starts
@@ -57,9 +59,15 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     /// <summary>
     /// The canonical shader path the runtime uses for a model part whose descriptor has no shader path.
-    /// The path is baked into the built-in pack as the default draw shader.
+    /// The path is baked into the built-in pack as the default mesh draw shader.
     /// </summary>
-    private const string DEFAULT_MODEL_SHADER_PATH = "shaders/default";
+    private const string DEFAULT_MODEL_SHADER_PATH = "shaders/mesh";
+
+    /// <summary>
+    /// The shader path older model packs baked when a part had no authored shader. It resolves to
+    /// <see cref="DEFAULT_MODEL_SHADER_PATH"/> because the built-in pack no longer publishes it.
+    /// </summary>
+    private const string LEGACY_MODEL_SHADER_PATH = "shaders/default";
 
     private readonly ILogger _logger;
     private readonly GpuAssetBridge _bridge;
@@ -161,9 +169,13 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         }
 
         Type assetType = typeof(T);
+        if (assetType == typeof(Shader)) {
+            return LoadShaderMaterialAsync<T>(canonical, cancellationToken);
+        }
+
         if (assetType == typeof(Mesh)
             || assetType == typeof(Texture)
-            || assetType == typeof(Shader)
+            || assetType == typeof(ShaderProgram)
             || assetType == typeof(Model)) {
             return LoadEngineAsync<T>(canonical, assetType, cancellationToken);
         }
@@ -179,8 +191,8 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         }
 
         throw new NotSupportedException(
-            $"The asset type '{assetType.FullName}' is not a built-in engine asset (Mesh, Texture, "
-                + "Shader, or Model) and is not a registered custom data type. Register custom types "
+            $"The asset type '{assetType.FullName}' is not a built-in engine asset (Mesh, Texture, or "
+                + "Model), a Shader material, or a registered custom data type. Register custom types "
                 + "with WithAssetType<T>() before Build.");
     }
 
@@ -506,6 +518,31 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     }
 
     /// <summary>
+    /// Loads the internal shader program through the engine cache and returns a new material over it.
+    /// </summary>
+    /// <remarks>
+    /// Every successful call returns a distinct caller-owned <see cref="Shader"/>. The program load is
+    /// coalesced and cached by <c>(canonical path, typeof(ShaderProgram))</c>, so materials over the
+    /// same path share one GPU program and batch together. The load's own program reference is
+    /// released as soon as the material acquired its own, whether the material was created or the
+    /// caller canceled first.
+    /// </remarks>
+    private async Task<T> LoadShaderMaterialAsync<T>(string canonical, CancellationToken cancellationToken) {
+        ShaderProgram program = await LoadEngineAsync<ShaderProgram>(
+            canonical,
+            typeof(ShaderProgram),
+            cancellationToken).ConfigureAwait(false);
+        try {
+            // The caller owns the returned material, never the load's program reference. An
+            // already-canceled caller must not acquire a material even when the program was cached.
+            cancellationToken.ThrowIfCancellationRequested();
+            return (T)(object)program.CreateMaterial();
+        } finally {
+            ReleaseAcquiredReference(program.Lifetime);
+        }
+    }
+
+    /// <summary>
     /// Decodes one engine asset on the loader thread, starts its GPU upload, and constructs the public
     /// asset when the upload completes.
     /// </summary>
@@ -580,7 +617,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         CancellationToken stopToken) {
         string canonical = descriptorEntry.Entry.Path;
         List<Mesh> meshes = [];
-        List<Shader> shaders = [];
+        List<Shader> materials = [];
         try {
             if (descriptorEntry.Entry.Type != AssetEntryType.Model) {
                 throw CreateTypeMismatch(canonical, AssetEntryType.Model, descriptorEntry.Entry.Type);
@@ -600,7 +637,6 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
             ModelPart[] parts = new ModelPart[descriptor.Parts.Length];
             Dictionary<string, Mesh> meshesByPath = new(StringComparer.Ordinal);
-            Dictionary<string, Shader> shadersByPath = new(StringComparer.Ordinal);
             for (int index = 0; index < descriptor.Parts.Length; index++) {
                 ModelPartAsset part = descriptor.Parts[index];
                 string meshPath = AssetPath.Normalize(part.MeshPath);
@@ -610,14 +646,11 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                     meshes.Add(mesh);
                 }
 
-                string shaderPath = part.ShaderPath is null
-                    ? DEFAULT_MODEL_SHADER_PATH
-                    : AssetPath.Normalize(part.ShaderPath);
-                if (!shadersByPath.TryGetValue(shaderPath, out Shader? shader)) {
-                    shader = await Load<Shader>(shaderPath, stopToken).ConfigureAwait(false);
-                    shadersByPath.Add(shaderPath, shader);
-                    shaders.Add(shader);
-                }
+                // Every part gets its own material even when two parts share a program path. The
+                // program is cached and reference-counted, so the parts still share one GPU program.
+                string shaderPath = ResolveModelPartShaderPath(part.ShaderPath);
+                Shader material = await Load<Shader>(shaderPath, stopToken).ConfigureAwait(false);
+                materials.Add(material);
 
                 float[] local = part.LocalTransform;
                 Transform localTransform = new(
@@ -628,7 +661,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 BoundingBox bounds = new(
                     new Vector3(partBounds[0], partBounds[1], partBounds[2]),
                     new Vector3(partBounds[3], partBounds[4], partBounds[5]));
-                parts[index] = new ModelPart(part.Name, mesh, shader, localTransform, bounds);
+                parts[index] = new ModelPart(part.Name, mesh, material, localTransform, bounds);
             }
 
             stopToken.ThrowIfCancellationRequested();
@@ -657,11 +690,11 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 }
             }
 
-            foreach (Shader shader in shaders) {
+            foreach (Shader material in materials) {
                 try {
-                    shader.Lifetime.ReleaseOwnerReference();
+                    material.Dispose();
                 } catch (ObjectDisposedException) {
-                    // Shutdown force-disposed the part after the load started.
+                    // Shutdown force-disposed the program or material after the load started.
                 }
             }
 
@@ -672,6 +705,20 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
             throw WrapLoadFailure(canonical, "could not be loaded", exception);
         }
+    }
+
+    private static string ResolveModelPartShaderPath(string? shaderPath) {
+        if (shaderPath is null) {
+            return DEFAULT_MODEL_SHADER_PATH;
+        }
+
+        string normalized = AssetPath.Normalize(shaderPath);
+        // Packs baked before the mesh shader replaced the old default still name `shaders/default`.
+        // They did not commit that program, so resolve the legacy path to the same built-in mesh
+        // shader instead of failing the model load with AssetNotFoundException.
+        return string.Equals(normalized, LEGACY_MODEL_SHADER_PATH, StringComparison.Ordinal)
+            ? DEFAULT_MODEL_SHADER_PATH
+            : normalized;
     }
 
     private static void ValidateModelDescriptor(ModelAssetDescriptor descriptor, string canonical) {
@@ -897,7 +944,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 lifetime => new Texture(lifetime, captured));
         }
 
-        if (assetType == typeof(Shader)) {
+        if (assetType == typeof(ShaderProgram)) {
             ShaderAssetDescriptor descriptor = AssetSerialization.Deserialize<ShaderAssetDescriptor>(descriptorPayload);
             byte[] vertexPayload = ReadRawPayload(
                 visibleStack,
@@ -913,7 +960,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             ShaderAssetDescriptor captured = descriptor;
             return new DecodedAsset(
                 new ShaderGpuUpload(canonical, descriptor, vertexPayload, fragmentPayload),
-                lifetime => new Shader(lifetime, captured));
+                lifetime => new ShaderProgram(lifetime, captured));
         }
 
         throw new NotSupportedException(

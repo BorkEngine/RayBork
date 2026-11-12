@@ -1250,7 +1250,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             foreach (PlannedBatch batch in passPlan.Batches) {
-                VulkanShaderAssetResource shader = RequireShaderResource(batch.Shader);
+                VulkanShaderAssetResource shader = RequireShaderResource(batch.Program);
                 VulkanMeshAssetResource mesh = RequireMeshResource(batch.Mesh);
                 Pipeline pipeline = _geometryPipelines!.GetOrCreate(shader, batch.RenderState, batch.Topology);
                 pipelines.Add(pipeline.Handle);

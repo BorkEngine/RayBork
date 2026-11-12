@@ -26,7 +26,7 @@ public sealed class ModelProcessorTests {
         Assert.Equal(new[] { "first", "second" }, model.Parts.Select(part => part.Name));
         Assert.Equal("models/shapes/first", model.Parts[0].MeshPath);
         Assert.Equal("models/shapes/second", model.Parts[1].MeshPath);
-        Assert.Equal("shaders/default", model.Parts[0].ShaderPath);
+        Assert.Equal("shaders/mesh", model.Parts[0].ShaderPath);
         AssertBounds([-3f, 0f, 0f, 0f, 1f, 0f], model.Bounds);
 
         MeshAssetDescriptor first = ModelTestData.ReadMesh(archive, "models/shapes/first");
@@ -262,7 +262,7 @@ public sealed class ModelProcessorTests {
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
         ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/plain");
-        Assert.All(model.Parts, part => Assert.Equal("shaders/default", part.ShaderPath));
+        Assert.All(model.Parts, part => Assert.Equal("shaders/mesh", part.ShaderPath));
     }
 
     [Fact]
@@ -323,7 +323,7 @@ public sealed class ModelProcessorTests {
         ModelPartAsset part = Assert.Single(model.Parts);
         Assert.Equal("trimesh", part.Name);
         Assert.Equal("models/tri/trimesh", part.MeshPath);
-        Assert.Equal("shaders/default", part.ShaderPath);
+        Assert.Equal("shaders/mesh", part.ShaderPath);
         AssertTransform([1f, 2f, 3f, 0f, 0f, 0f, 1f, 1f, 1f, 1f], part.LocalTransform);
         AssertBounds([0f, 2f, 3f, 1f, 3f, 3f], part.Bounds);
         AssertBounds([0f, 2f, 3f, 1f, 3f, 3f], model.Bounds);

@@ -195,12 +195,14 @@ shader = "shaders/castle"
 - The model is emitted at the base path. Each primitive becomes a `Mesh` part at
   `<base>/<part>` with its own vertex/index payload. The `Model` descriptor records the flat part
   list, local transforms, bounds, and the shared sidecar shader path. A part with no `shader` in
-  the sidecar is baked with the built-in canonical path `shaders/default`, so every part always
-  names a shader.
+  the sidecar is baked with the built-in canonical path `shaders/mesh`, so every part always names
+  a shader program.
 - `scale` and `front` apply the authoring correction before bounds and payloads are written.
 - glTF materials and images are not imported in M4. The bake validates that referenced images exist
   and warns that they are not imported; every part uses the sidecar shader (or the built-in
-  `shaders/default`), and the game supplies textures and uniforms with `SetUniform`.
+  `shaders/mesh`), and the game supplies textures and uniforms with `SetUniform`. The model loader
+  maps an older pack's `shaders/default` part path to the built-in `/shaders/mesh` program, so packs
+  baked before the mesh shader replaced the old default still load.
 
 A font source `Assets/Fonts/inter.ttf` with an optional sidecar `Assets/Fonts/inter.toml`:
 
@@ -381,13 +383,16 @@ is set.
   calls `TextureBaker.Bake`;
 - the present vertex/fragment shader pair, compiled from the engine's committed GLSL sources by a
   tool-only processor through the shared shaderc compiler;
-- the default draw shader at `/shaders/default`, baked by the ordinary shader processor through the
-  generated prologue with one `uTint` uniform, one `mainTexture` binding, and an opaque/back/
-  `greater_equal`/depth-write render state.
+- the built-in mesh draw shader program at `/shaders/mesh`, baked by the ordinary shader processor
+  through the generated prologue with one `uTint` uniform, one `mainTexture` binding, and an
+  opaque/back/`greater_equal`/depth-write render state. It is the unlit raylib default model shader:
+  position, uv, and color only, `texture(mainTexture, vUv) * vColor * uTint * rbInstance.Color`, with
+  no normals or lighting.
 
 Primitive meshes and the error glyph are added by later milestones (M5 and M6). Pack v1 is unchanged
-by M4: the default draw shader is an ordinary shader entry at a reserved built-in path, not a format
-change.
+by M4: the mesh shader is an ordinary shader entry at a reserved built-in path, not a format change.
+The app preloads it into `EngineContext.Defaults` before `IGame.Setup`; there is no longer a built-in
+`/shaders/default` entry.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
 that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by

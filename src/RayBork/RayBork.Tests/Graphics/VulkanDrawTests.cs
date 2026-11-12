@@ -87,6 +87,41 @@ public sealed class VulkanDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void TwoMaterialsOverOneProgramAreOneInstancedDraw() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        Shader firstMaterial = CreateTexturedShader(harness);
+        Shader secondMaterial = harness.CreateMaterial(firstMaterial);
+        Mesh quad = harness.CreateQuad();
+        Color leftColor = new(0.8f, 0.2f, 0.2f, 1f);
+        Color rightColor = new(0.2f, 0.2f, 0.8f, 1f);
+        Texture leftTexture = harness.CreateTexture("textures/material-left", leftColor);
+        Texture rightTexture = harness.CreateTexture("textures/material-right", rightColor);
+        float aspect = host.SceneTarget.Extent.Width / (float)host.SceneTarget.Extent.Height;
+        Matrix4x4 left = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+            * Matrix4x4.CreateTranslation(-aspect * 0.5f, 0f, 0f);
+        Matrix4x4 right = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+            * Matrix4x4.CreateTranslation(aspect * 0.5f, 0f, 0f);
+
+        harness.SubmitFrame(
+            1,
+            _clearColor,
+            VulkanDrawTestHarness.OrthographicCamera(host),
+            new VulkanDrawTestHarness.DrawSpec(quad, firstMaterial, [left], TextureBindings: [leftTexture]),
+            new VulkanDrawTestHarness.DrawSpec(quad, secondMaterial, [right], TextureBindings: [rightTexture]));
+
+        RenderStats stats = host.Backend.Stats;
+        Assert.Equal(1, stats.DrawCalls);
+        Assert.Equal(2, stats.Instances);
+        Assert.Equal(4, stats.Triangles);
+        Assert.Equal(1, harness.PipelineCount);
+        AssertColorNear(leftColor, harness.ReadColor(host.SceneTarget.Extent.Width / 4, CenterY(host)));
+        AssertColorNear(rightColor, harness.ReadColor(host.SceneTarget.Extent.Width * 3 / 4, CenterY(host)));
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void ThousandCubeInstancesAreOneDraw() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);

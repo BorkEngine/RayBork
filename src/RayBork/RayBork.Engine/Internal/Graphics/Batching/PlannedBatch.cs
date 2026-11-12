@@ -1,7 +1,7 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// One submission-ready batch: every instance shares the mesh, shader, render state, and topology.
+/// One submission-ready batch: every instance shares the mesh, internal shader program, render state, and topology.
 /// </summary>
 /// <remarks>
 /// A batch appears in <see cref="PassPlan.Batches"/> in submission order. Opaque batches keep their
@@ -16,7 +16,7 @@ internal sealed class PlannedBatch {
     /// Initializes a planned batch.
     /// </summary>
     /// <param name="mesh">The mesh asset shared by every instance.</param>
-    /// <param name="shader">The shader asset shared by every instance.</param>
+    /// <param name="program">The internal shader program asset shared by every instance.</param>
     /// <param name="renderState">The effective render state shared by every instance.</param>
     /// <param name="topology">The mesh topology.</param>
     /// <param name="instances">The ordered instances, already in submission order.</param>
@@ -24,17 +24,17 @@ internal sealed class PlannedBatch {
     /// <exception cref="ArgumentNullException">An asset is <c>null</c>.</exception>
     internal PlannedBatch(
         EngineAsset mesh,
-        EngineAsset shader,
+        EngineAsset program,
         RenderState renderState,
         PrimitiveTopology topology,
         List<PlannedInstance> instances,
         float nearestDepth) {
         ArgumentNullException.ThrowIfNull(mesh);
-        ArgumentNullException.ThrowIfNull(shader);
+        ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(instances);
 
         Mesh = mesh;
-        Shader = shader;
+        Program = program;
         RenderState = renderState;
         Topology = topology;
         _instances = instances;
@@ -44,8 +44,8 @@ internal sealed class PlannedBatch {
     /// <summary>Gets the mesh asset. Read its GPU resource from the asset lifetime for the draw.</summary>
     internal EngineAsset Mesh { get; }
 
-    /// <summary>Gets the shader asset shared by the batch.</summary>
-    internal EngineAsset Shader { get; }
+    /// <summary>Gets the internal shader program asset shared by the batch.</summary>
+    internal EngineAsset Program { get; }
 
     /// <summary>Gets the effective render state shared by the batch.</summary>
     internal RenderState RenderState { get; }

@@ -37,11 +37,12 @@ internal static class RenderingTestAssets {
         return new Mesh(asset, descriptor, vertices, indices, isProcedural: true);
     }
 
-    internal static Shader CreateShader(
+    internal static ShaderProgram CreateProgram(
         string path = SHADER_PATH,
         RenderState? defaultRenderState = null,
         float defaultValue = 0f,
-        ShaderStageMask stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment) {
+        ShaderStageMask stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
+        List<GpuAssetResource>? destroyed = null) {
         ShaderAssetDescriptor descriptor = new() {
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
@@ -59,9 +60,37 @@ internal static class RenderingTestAssets {
             Textures = [TEXTURE_BINDING],
         };
         var upload = new ShaderGpuUpload(path, descriptor, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty);
-        var asset = new EngineAsset(path, new FakeGpuAssetResource(upload, 1), static _ => { }, static () => { });
+        Action<GpuAssetResource> queueDestruction = destroyed is null ? static _ => { } : destroyed.Add;
+        var asset = new EngineAsset(
+            path,
+            new FakeGpuAssetResource(upload, 1),
+            queueDestruction,
+            static () => { });
         asset.AddOwnerReference();
-        return new Shader(asset, descriptor);
+        return new ShaderProgram(asset, descriptor);
+    }
+
+    internal static Shader CreateShader(
+        string path = SHADER_PATH,
+        RenderState? defaultRenderState = null,
+        float defaultValue = 0f,
+        ShaderStageMask stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
+        List<GpuAssetResource>? destroyed = null) {
+        ShaderProgram program = CreateProgram(path, defaultRenderState, defaultValue, stages, destroyed);
+        Shader material = program.CreateMaterial();
+        // The helper's reference only stood in for the catalog's cache reference; the material owns
+        // the program from here on.
+        program.Lifetime.ReleaseOwnerReference();
+        return material;
+    }
+
+    internal static void ReleaseProgram(ShaderProgram program) {
+        ArgumentNullException.ThrowIfNull(program);
+        try {
+            program.Lifetime.ReleaseOwnerReference();
+        } catch (ObjectDisposedException) {
+            // Shutdown-style force disposal already removed the helper's reference.
+        }
     }
 
     internal static Texture CreateTexture(string path = TEXTURE_PATH, List<GpuAssetResource>? destroyed = null) {

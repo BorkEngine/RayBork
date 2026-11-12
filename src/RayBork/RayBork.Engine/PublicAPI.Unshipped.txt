@@ -121,6 +121,7 @@ RayBork.DepthTest.Less = 3 -> RayBork.DepthTest
 RayBork.DepthTest.LessOrEqual = 4 -> RayBork.DepthTest
 RayBork.EngineContext
 RayBork.EngineContext.Assets.get -> RayBork.IAssetCatalog!
+RayBork.EngineContext.Defaults.get -> RayBork.EngineDefaults!
 RayBork.EngineContext.CreateMeshBuilder(RayBork.PrimitiveTopology topology = RayBork.PrimitiveTopology.TriangleList) -> RayBork.MeshBuilder!
 RayBork.EngineContext.CreateOrthographicCamera(RayBork.Transform transform, float height, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = 1000, RayBork.Rect? viewport = null) -> RayBork.Camera!
 RayBork.EngineContext.CreateCamera(RayBork.Transform transform, RayBork.CameraProjection projection, float fieldOfView, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = Infinity, RayBork.Rect? viewport = null) -> RayBork.Camera!
@@ -139,6 +140,10 @@ RayBork.EngineContext.Stats.get -> RayBork.RenderStats
 RayBork.EngineContext.Time.get -> double
 RayBork.EngineContext.UnscaledDeltaTime.get -> double
 RayBork.EngineContext.Window.get -> RayBork.IWindow!
+RayBork.EngineDefaults
+RayBork.EngineDefaults.CreateMeshShader() -> RayBork.Shader!
+RayBork.EngineDefaults.Error.get -> RayBork.Texture!
+RayBork.EngineDefaults.White.get -> RayBork.Texture!
 RayBork.EngineInfo
 RayBork.EngineInfo.Deconstruct(out string! Name, out System.Version! Version, out string! RendererName, out string! GpuName, out uint VulkanApiVersion, out string! SwapchainFormat, out bool HdrOutput, out int SampleCount, out RayBork.PresentMode PresentMode, out bool ValidationEnabled) -> void
 RayBork.EngineInfo.EngineInfo() -> void

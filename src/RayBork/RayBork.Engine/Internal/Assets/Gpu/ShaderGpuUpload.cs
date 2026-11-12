@@ -1,11 +1,13 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The GPU upload for one shader asset: the packed descriptor plus the vertex and fragment SPIR-V.
+/// The GPU upload for one internal shader program: the packed descriptor plus the vertex and fragment
+/// SPIR-V.
 /// </summary>
 /// <remarks>
 /// The runtime never parses GLSL or SPIR-V. The render thread creates one shader module per stage from
-/// the committed SPIR-V payloads and keeps the bake sidecar metadata for pipeline creation.
+/// the committed SPIR-V payloads and keeps the bake sidecar metadata for pipeline creation. The
+/// catalog caches the uploaded program; public <see cref="Shader"/> values are materials over it.
 /// </remarks>
 internal sealed class ShaderGpuUpload : AssetGpuUpload {
     /// <summary>

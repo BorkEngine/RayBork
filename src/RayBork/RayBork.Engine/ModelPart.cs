@@ -14,10 +14,12 @@ namespace RayBork;
 /// can throw on shear.
 /// </para>
 /// <para>
-/// <see cref="Shader"/> is the shader baked for the part. <see cref="Camera.DrawModel(Model, Transform)"/>
-/// uses that shader's bake-default render state, uniform template, and texture fallbacks; mutating the
-/// shader cursor with <see cref="Shader.SetUniform(string, float)"/> does not change the draw.
-/// <see cref="Mesh"/> and <see cref="Shader"/> are owned by the model until the model is disposed.
+/// <see cref="Shader"/> is the material baked for the part. <see cref="Camera.DrawModel(Model, Transform)"/>
+/// uses that material's program bake-default render state, uniform template, and texture fallbacks;
+/// mutating the material cursor with <see cref="Shader.SetUniform(string, float)"/> does not change the
+/// draw. <see cref="Mesh"/> is a shared engine asset and <see cref="Shader"/> is a material the model
+/// owns; both stay valid until the model is disposed. Two parts that name the same shader program path
+/// still receive distinct materials over the one shared internal program.
 /// </para>
 /// </remarks>
 public readonly struct ModelPart {
@@ -38,7 +40,7 @@ public readonly struct ModelPart {
     /// <summary>Gets the mesh asset for the part. The model holds one owner reference to it.</summary>
     public Mesh Mesh { get; }
 
-    /// <summary>Gets the baked shader for the part. The model holds one owner reference to it.</summary>
+    /// <summary>Gets the baked material for the part. The model owns it and disposes it with the model.</summary>
     public Shader Shader { get; }
 
     /// <summary>Gets the part-local transform, applied before the draw's instance transform.</summary>

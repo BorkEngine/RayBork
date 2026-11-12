@@ -447,7 +447,11 @@ public sealed class ShaderUniformCursorTests {
             static _ => { },
             static () => { });
         asset.AddOwnerReference();
-        return new Shader(asset, descriptor);
+        ShaderProgram program = new(asset, descriptor);
+        Shader material = program.CreateMaterial();
+        // Transfer the helper's catalog-style reference to the material.
+        program.Lifetime.ReleaseOwnerReference();
+        return material;
     }
 
     private static ShaderUniformAsset Uniform(

@@ -25,14 +25,14 @@ namespace RayBork.Bake.Processors;
 /// quaternion, scale), so <c>world = part.LocalTransform.ToMatrix() * instanceTransform.ToMatrix()</c>
 /// reproduces the authored placement. Part and payload paths are canonical and deterministic;
 /// duplicate names receive numeric suffixes. A part with no <c>[model] shader</c> defaults to the
-/// built-in canonical path <c>shaders/default</c>. Every error is <c>RB4009</c> and emits no outputs.
+/// built-in canonical path <c>shaders/mesh</c>. Every error is <c>RB4009</c> and emits no outputs.
 /// </para>
 /// </remarks>
 internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
     private const float DEFAULT_SCALE = 1f;
 
     /// <summary>The built-in shader path a part uses when the sidecar names no shader.</summary>
-    internal const string DEFAULT_SHADER_PATH = "shaders/default";
+    internal const string DEFAULT_SHADER_PATH = "shaders/mesh";
 
     private static readonly string[] _extensions = ["gltf", "glb", "obj"];
 

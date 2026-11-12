@@ -2,10 +2,10 @@
 
 [API overview](../../api.md) · [document map](../../api.md#document-map)
 
-### 7.3 `Shader` and `SetUniform`
+### 7.3 `Shader` materials and `SetUniform`
 
 ```csharp
-public sealed class Shader : IAsset {
+public sealed class Shader : IDisposable {
     public string Path { get; }
     public ShaderStageMask Stages { get; }
     public RenderState DefaultRenderState { get; }
@@ -27,6 +27,12 @@ public sealed class Shader : IAsset {
 
     public void ResetUniforms();
     public void Dispose();
+}
+
+public sealed class EngineDefaults {
+    public Shader CreateMeshShader();
+    public Texture White { get; }
+    public Texture Error { get; }
 }
 
 [Flags]
@@ -53,23 +59,28 @@ public readonly record struct ShaderUniform(string Name, ShaderUniformType Type)
 public readonly record struct ShaderTextureBinding(string Name, int Index);
 ```
 
-> **M4 realized.** `Shader` loads the metadata members and owns the uniform cursor. `SetUniform` and
-> `ResetUniforms` write the cursor; each draw snapshots it into the frame packet. `Uniforms` and
-> `Textures` come from the bake sidecar metadata, not from runtime SPIR-V reflection. The cursor
-> writes the per-instance shader ABI record described in [§7.4](#74-shader-abi), so `int` and `uint`
-> values round-trip exactly and texture bindings become bindless indices at draw time.
+> **M4 realized.** A `Shader` is a **material instance**, not a loaded program asset. The GPU program is
+> an internal engine asset (there is no public shader-program type). `Load<Shader>(path)` returns a new
+> independent material on every call, all backed by one cached program for that path; materials are not
+> reference-counted engine assets. `Stages`, `Uniforms`, and `Textures` come from the bake sidecar
+> metadata, not from runtime SPIR-V reflection. `SetUniform` and `ResetUniforms` write the material's
+> own cursor; each draw snapshots it into the frame packet. The cursor writes the per-instance shader
+> ABI record described in [§7.4](#74-shader-abi), so `int` and `uint` values round-trip exactly and
+> texture bindings become bindless indices at draw time.
 
-A `Shader` is a complete vertex+fragment program. It owns a **mutable uniform cursor**:
+A `Shader` is one material over an internal vertex+fragment program. It owns a **mutable uniform
+cursor**:
 
-1. `SetUniform` writes the current value for the named uniform.
+1. `SetUniform` writes the current value for the named uniform on this material.
 2. Each `Draw*` call snapshots the cursor into the frame packet.
 3. Later `SetUniform` calls affect later draws only.
 4. The renderer packs the snapshot into the per-instance parameter block and resolves textures
    to bindless indices.
 
 The snapshot copies the cursor's raw instance data and texture references synchronously on the tick
-thread. The recorded frame retains the shader and every referenced texture, so later cursor changes
-and a later public texture `Dispose` cannot corrupt an already recorded draw.
+thread. The recorded frame retains the internal program and every referenced texture, so later cursor
+changes, disposing the material, and a later public texture `Dispose` cannot corrupt an already
+recorded draw.
 
 This is the central ergonomic rule:
 
@@ -81,8 +92,24 @@ shader.SetUniform("mainTexture", textureB);
 camera.DrawMesh(mesh, transformB, shader);
 ```
 
-Both draws use the same mesh, shader, and render state, so they become one instanced draw with two
-instances and two bindless textures. No `Material` object is involved.
+Both draws use the same mesh, material, and render state, so they become one instanced draw with two
+instances and two bindless textures. No separate `Material` object is involved.
+
+Materials over the same internal program also batch together. Creating one material per draw site is
+the normal way to vary state without perturbing another system:
+
+```csharp
+Shader red = await ctx.Assets.Load<Shader>("/shaders/castle");
+Shader blue = await ctx.Assets.Load<Shader>("/shaders/castle");
+red.SetUniform("mainTexture", redTexture);
+blue.SetUniform("mainTexture", blueTexture);
+camera.DrawMesh(mesh, transformA, red);
+camera.DrawMesh(mesh, transformB, blue);
+```
+
+The two materials share one GPU program and one pipeline, and the batcher merges them into one
+instanced draw. Batching is keyed by the internal program, mesh, effective render state, and topology;
+uniform bytes and texture bindings are per-instance data.
 
 Rules and errors:
 
@@ -91,13 +118,13 @@ Rules and errors:
   maps to `vec4`; `Quaternion` maps to `vec4`; `bool` maps to `uint`.
 - A `Texture` value must not be disposed at the moment of the call. `null` binds the built-in white
   texture; this is useful for optional texture uniforms and for shaders that branch on a flag.
-- Setting a texture records an engine reference in the shader cursor. Disposing the public texture
+- Setting a texture records an engine reference in the material cursor. Disposing the public texture
   afterwards does not invalidate the cursor; overwrite the uniform, call `ResetUniforms`, or
-  dispose the shader to release the cursor's reference. Passing a texture that was already disposed
+  dispose the material to release the cursor's reference. Passing a texture that was already disposed
   to `SetUniform` throws `ObjectDisposedException`.
-- The shader's default values come from the bake sidecar. `ResetUniforms` restores those defaults
-  and clears every texture binding to the built-in white fallback; it releases every texture
-  reference the cursor acquired.
+- The material's default values come from the program's bake sidecar. `ResetUniforms` restores those
+  defaults and clears every texture binding to the built-in white fallback; it releases every texture
+  reference the cursor acquired. It does not affect any other material over the same program.
 - Uniform values are stored as raw little-endian 4-byte components in the per-instance record.
   `float`, `int`, `uint`, and `bool` therefore round-trip exactly, and `Matrix4x4` is stored in
   `M11` through `M44` component order.
@@ -105,20 +132,37 @@ Rules and errors:
   `Shutdown`. Calling them from the render thread, main thread, or a user background thread throws
   `InvalidOperationException`. Cursor mutation is safe against a concurrent `Dispose` from another
   thread.
-- Shader state is shared by all draws that use the shader. There is no per-camera or per-thread
-  state. Interleaved systems must set the state immediately before the draws that need it; the
-  snapshot rule makes this correct even when the render thread runs in parallel.
+- The cursor is per material. State is not shared by other materials over the same program; two
+  systems that need different values use two materials (or set the state immediately before their own
+  draws on the same tick thread). The snapshot rule makes both patterns correct even when the render
+  thread runs in parallel.
 - `DrawInstanced` uses one snapshot for all instances in the call. To vary a texture or uniform
   per instance, record separate `DrawMesh`/`DrawModel` calls with the automatic batcher.
 - `Shader` uniforms are not global frame uniforms. Time, camera matrices, viewport, and similar
   values are supplied by the engine's frame block and are not settable through `SetUniform`.
-- `SetUniform` on a disposed shader throws `ObjectDisposedException`.
-- `Dispose` follows the asset reference-count rules. A recorded frame keeps the shader and its
-  textures alive.
+- `SetUniform` on a disposed material throws `ObjectDisposedException`.
+- `Dispose` releases this material's internal program reference and its texture references exactly
+  once. The program and textures stay alive while another material or a recorded frame holds them;
+  disposing one material never invalidates a sibling over the same program. Dispose each material
+  returned by `Load<Shader>` or `EngineDefaults.CreateMeshShader` exactly once.
+- A recorded frame keeps the internal program and its textures alive. Disposing the material
+  immediately after recording a draw is safe.
 
 `Uniforms` and `Textures` expose bake reflection metadata for diagnostics and tooling. They are
 read-only and do not reflect the current values. There is no public `GetUniform` in v1; if it is
 added, it will read the cursor, not the GPU.
+
+**Engine defaults.** The app preloads the built-in mesh shader program at `/shaders/mesh` and the
+white and error textures after the asset catalog starts and before `IGame.Setup`. `EngineDefaults`
+exposes them through `EngineContext.Defaults`:
+
+- `CreateMeshShader()` returns a new caller-owned material over the preloaded program. Dispose every
+  material it returns exactly once.
+- `White` is the opaque 1x1 white sRGB texture (bindless slot 0) and `Error` is the 4x4 magenta/black
+  checkerboard with nearest filtering. Both are engine-owned; do not dispose them.
+- Startup fails with an `AssetLoadException` when a built-in default is missing or corrupt.
+- The `EngineDefaults` owner references are released during shutdown, after the game callbacks
+  return. After that, every `EngineDefaults` member throws `ObjectDisposedException`.
 
 ### 7.4 Shader ABI
 
@@ -219,8 +263,9 @@ shader sidecar may restate the fixed entry-point names for clarity, but it canno
 Only the attributes a shader declares are read. The geometry pipeline declares the full fixed
 layout as vertex attribute descriptions, so a custom shader may omit normals, UV sets, color, or
 tangents and the unconsumed attributes are ignored; the Vulkan validation layer reports that case
-as a performance warning, not an error, because the layout itself remains fixed. Custom vertex
-layouts are post-1.0.
+as a performance warning, not an error, because the layout itself remains fixed. The built-in
+`/shaders/mesh` program declares only position (location 0), uv (location 2), and color (location 6);
+it has no normal input and no lighting. Custom vertex layouts are post-1.0.
 
 **Generated accessors**
 

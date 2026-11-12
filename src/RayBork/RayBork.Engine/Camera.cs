@@ -16,9 +16,10 @@ namespace RayBork;
 /// names it.
 /// </para>
 /// <para>
-/// Each draw copies value snapshots of the mesh, shader state, tint, and transforms into the frame
+/// Each draw copies value snapshots of the mesh, shader cursor state, tint, and transforms into the frame
 /// packet. The renderer never reads a live game object. Every recorded frame retains the model, mesh,
-/// shader, and bound textures until the render thread releases the frame slot after presentation.
+/// internal shader program, and bound textures until the render thread releases the frame slot after
+/// presentation.
 /// </para>
 /// <para>
 /// The camera looks down local <c>-Z</c> in a right-handed, Y-up world. The projection uses Vulkan's
@@ -289,7 +290,8 @@ public sealed class Camera : IDisposable {
     /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
     /// <remarks>
     /// The current shader cursor is snapshotted once for every part. Baked per-part shader state is
-    /// ignored; set the uniforms and textures you need before the call.
+    /// ignored; set the uniforms and textures you need before the call. The frame retains the override
+    /// material's internal program, not the material itself.
     /// </remarks>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">The camera, model, shader, or a bound texture is disposed.</exception>
@@ -369,7 +371,7 @@ public sealed class Camera : IDisposable {
             mesh.Topology,
             mesh.Bounds,
             mesh.IndexCount,
-            shader.Lifetime,
+            shader.Program.Lifetime,
             renderState ?? shader.DefaultRenderState,
             tint ?? Color.White);
         record.SetShaderState(shader.InstanceData, textures);
@@ -416,7 +418,7 @@ public sealed class Camera : IDisposable {
             mesh.Topology,
             mesh.Bounds,
             mesh.IndexCount,
-            shader.Lifetime,
+            shader.Program.Lifetime,
             renderState ?? shader.DefaultRenderState,
             tint ?? Color.White);
         record.SetShaderState(shader.InstanceData, textures);
@@ -482,7 +484,7 @@ public sealed class Camera : IDisposable {
                 part.Mesh.Topology,
                 part.Mesh.Bounds,
                 part.Mesh.IndexCount,
-                shader.Lifetime,
+                shader.Program.Lifetime,
                 effectiveState,
                 effectiveTint);
             record.SetShaderState(template, textures);
@@ -587,11 +589,11 @@ public sealed class Camera : IDisposable {
         PrimitiveTopology topology,
         BoundingBox bounds,
         int indexCount,
-        EngineAsset shader,
+        EngineAsset program,
         RenderState renderState,
         Color tint) {
         RenderDrawRecord record = _packet.RentDrawRecord();
-        record.Begin(mesh, topology, bounds, indexCount, shader, renderState, tint);
+        record.Begin(mesh, topology, bounds, indexCount, program, renderState, tint);
         _pass.Add(record);
         return record;
     }
@@ -605,13 +607,13 @@ public sealed class Camera : IDisposable {
         ReadOnlySpan<Texture?> textures,
         Matrix4x4 worldMatrix) {
         _packet.Retention.Add(part.Mesh.Lifetime);
-        _packet.Retention.Add(shader.Lifetime);
+        _packet.Retention.Add(shader.Program.Lifetime);
         RenderDrawRecord record = BeginDraw(
             part.Mesh.Lifetime,
             part.Mesh.Topology,
             part.Mesh.Bounds,
             part.Mesh.IndexCount,
-            shader.Lifetime,
+            shader.Program.Lifetime,
             renderState,
             tint);
         record.SetShaderState(instanceTemplate, textures);
@@ -619,7 +621,7 @@ public sealed class Camera : IDisposable {
     }
 
     private void RetainShader(Shader shader, ReadOnlySpan<Texture?> textures) {
-        _packet.Retention.Add(shader.Lifetime);
+        _packet.Retention.Add(shader.Program.Lifetime);
         foreach (Texture? texture in textures) {
             if (texture is not null) {
                 _packet.Retention.Add(texture.Lifetime);

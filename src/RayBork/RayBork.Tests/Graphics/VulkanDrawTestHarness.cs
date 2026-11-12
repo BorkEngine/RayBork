@@ -208,7 +208,24 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         };
         GpuAssetResource resource = _uploads.Upload(
             new ShaderGpuUpload(path, descriptor, vertexSpirV, fragmentSpirV));
-        return new Shader(CreateAsset(path, resource), descriptor);
+        ShaderProgram program = new(CreateAsset(path, resource), descriptor);
+        Shader material = program.CreateMaterial();
+        // The harness keeps no long-lived program reference; the returned material owns the program
+        // and the caller disposes the material.
+        program.Lifetime.ReleaseOwnerReference();
+        return material;
+    }
+
+    /// <summary>
+    /// Creates another material over the same internal program as an existing material. The two
+    /// materials have independent cursors and batch together.
+    /// </summary>
+    /// <param name="shader">A material whose program is shared.</param>
+    /// <returns>The new material; the caller disposes it.</returns>
+    internal Shader CreateMaterial(Shader shader) {
+        AssertNotDisposed();
+        ArgumentNullException.ThrowIfNull(shader);
+        return shader.Program.CreateMaterial();
     }
 
     /// <summary>
@@ -296,7 +313,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
                 draw.Mesh.Topology,
                 draw.Mesh.Bounds,
                 draw.Mesh.IndexCount,
-                draw.Shader.Lifetime,
+                draw.Shader.Program.Lifetime,
                 draw.RenderState ?? draw.Shader.DefaultRenderState,
                 draw.Tint ?? Color.White);
             record.SetShaderState(
