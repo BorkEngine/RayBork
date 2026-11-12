@@ -10,8 +10,9 @@ Get-ChildItem -LiteralPath $repoRoot -Filter '*.md' -File | Sort-Object Name | F
     $files.Add($_.FullName)
 }
 
-# Owned documentation. Sorted so the check is deterministic on every file system.
-Get-ChildItem -LiteralPath (Join-Path $repoRoot 'docs') -Filter '*.md' -File |
+# Owned documentation, including the split API reference under docs/api/.
+# Sorted so the check is deterministic on every file system.
+Get-ChildItem -LiteralPath (Join-Path $repoRoot 'docs') -Filter '*.md' -File -Recurse |
     Sort-Object FullName | ForEach-Object { $files.Add($_.FullName) }
 
 # Sample READMEs are included when the sample exists, starting with samples/HelloInterop in M0.
