@@ -30,13 +30,17 @@ draw API, so `Setup` only loads and logs metadata; the M2 renderer-only behavior
 `--assets` is absent. The custom data type is registered with
 `WithAssetType<HelloSettings>()`, which is backed by the compiled `[GenerateShape]` in
 `HelloSettings.cs`, so the load path stays reflection-free and Native AOT compatible. See
-[docs/api.md](../../docs/api.md) §6 and §12.
+[docs/api/assets.md](../../docs/api/assets.md) §6 and
+[docs/api/aot.md](../../docs/api/aot.md) §12.
 
 The host uses `RayBorkAppBuilder` with a resizable window, a 60 FPS tick cap, a 0.25 second maximum
 delta, and the renderer options on the command line. It is an `Exe` with `PublishAot=true`, so console
 logging is visible and the AOT gate can run it on Windows and Linux. HDR presentation is automatic
 from the OS/window state: there is no HDR override, and the selected state is reported through
-`EngineContext.Info` as described in [docs/api.md](../../docs/api.md) §3.4, §7.2, §7.12, and §10.3.
+`EngineContext.Info` as described in [docs/api/lifecycle.md](../../docs/api/lifecycle.md) §3.4,
+[docs/api/rendering/camera.md](../../docs/api/rendering/camera.md) §7.2,
+[docs/api/rendering/render-targets.md](../../docs/api/rendering/render-targets.md) §7.12, and
+[docs/api/diagnostics.md](../../docs/api/diagnostics.md) §10.3.
 
 ## Options
 
