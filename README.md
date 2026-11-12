@@ -122,8 +122,7 @@ dotnet run --project samples/Castle/Castle.csproj -c Debug -- --frames 30
 ```
 
 Use `--help` for the available options. [samples/Castle/README.md](samples/Castle/README.md) covers
-the Native AOT publish and run commands, the controls, the omitted raylib features, the sample-only
-asset license, and the gate assertion. `samples/HelloInterop` remains the M1-M3 diagnostic host for
+the Native AOT publish and run commands, the controls, the omitted raylib features, and the gate assertion. `samples/HelloInterop` remains the M1-M3 diagnostic host for
 window, input, time, logging, renderer, and asset-loading metadata; its build also bakes `hello.pck`
 beside the host and mounts it automatically. Built-in shader SPIR-V is regenerated with
 `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; a normal build and CI use the committed blobs.

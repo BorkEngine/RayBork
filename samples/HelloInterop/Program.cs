@@ -52,8 +52,8 @@ internal static class Program {
 
         With --assets, or with the auto-mounted hello.pck beside the executable, the host mounts the
         baked pack and loads a KTX2 texture, an OBJ mesh part, a compiled shader, and the registered
-        HelloSettings TOML data, then logs their metadata. It does not draw; the M4 draw API is not
-        part of this milestone. Without a pack the host keeps the M2 renderer-only behavior.
+        HelloSettings TOML data, then logs their metadata. It does not draw; the Castle sample is the
+        M4 draw-capable host. Without a pack the host keeps the renderer-only behavior.
 
         Controls:
           Escape            Request exit.

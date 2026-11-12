@@ -410,10 +410,9 @@ automatic instancing, and per-instance textures/uniforms.
   without the features that need later milestones: model/texture drag-and-drop (post-1.0 platform
   work), click selection and `DrawBoundingBox` (ray/box collision and the wire-box helper arrive in
   M5), and the `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The sample logs the render
-  statistics instead of drawing them. The castle model and texture are sample-only assets by
-  Alberto Cano (Medieval Assets Pack, CC BY-NC 4.0), credited in
-  `samples/Castle/THIRD-PARTY-NOTICES.md`; they are not covered by RayBork's MIT license and the
-  notice is deliberately not duplicated in the repository-root notices.
+  statistics instead of drawing them. The raylib castle model and texture are sample-only assets
+  with their own notice under `samples/Castle/`; that notice is deliberately not duplicated in the
+  repository-root notices.
 - **Known limitation: the WSLg dzn driver crashes on the first geometry draw.** On the WSL gate host
   WSLg selects `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and
   prints "dzn is not a conformant Vulkan implementation, testing use only". The M4 published host
