@@ -274,7 +274,7 @@ values and payload bytes only.
 | Main / window thread | SDL3 initialization, window, event pump, monitor and clipboard snapshots, queued window commands, gamepad reconciliation, native Vulkan surface | Runs `RayBorkApp.Run`. The process main thread. Services `MainThreadSurfaceChannel` during startup, the main loop, and shutdown. No game callbacks. |
 | Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; input snapshot; frame publication | Dedicated thread. Starts only after the renderer published `Info`, so `Setup` can read it. The game-facing engine state is tick-thread affine. |
 | Render thread | Backend, instance, device, queues, swapchain, scene target, present pipeline, the newest published frame lease | Creates the Vulkan objects, consumes the newest frame, submits and presents, recovers, and disposes. Never calls user code and never touches the window directly. |
-| Asset loader | Pack I/O, decompression, descriptor decode, MessagePack custom data | Dedicated `RayBork.Asset` thread added in M3. Reads only; it never calls SDL, Vulkan, or game code. Engine-asset GPU uploads are requested from the render thread through the upload bridge. |
+| Asset loader | Pack I/O, decompression, descriptor decode, MessagePack custom data | Dedicated `RayBork.Asset` thread added in M3. Reads only; it never calls SDL, Vulkan, or game code. It queues engine-asset GPU uploads and continues serving the next request instead of waiting for the copy. |
 | Sound thread | Audio mixer (post-1.0) | Not present in v1. |
 
 Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, `RayBork.Render`, and
@@ -392,7 +392,9 @@ seal slot, publish as newest ready
   M4 calls it from the draw recorder. An asset disposed after recording a draw stays alive until
   the consuming frame completes.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
-  a frame, so a load that starts in `Setup` does not wait for the first tick.
+  a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
+  starts in `Setup` completes without waiting for the first tick and does not stall frame
+  presentation.
 - The engine does not interpolate between ticks in v1. Movement at a tick rate below the display
   rate will show discrete steps. Fixed timestep with interpolation is a later milestone.
 - When the window is minimized or unfocused, the tick loop continues at a **30 FPS cap**. The M2
@@ -599,7 +601,9 @@ stores it without one.
 The app owns an `AssetCatalog` with one dedicated `RayBork.Asset` thread. `Load<T>`, `LoadData`, and
 `Exists` are thread-safe. A request normalizes the path, resolves the winning entry at enqueue time,
 and queues the read on the loader. The loader reads and decompresses the payload, decodes the
-descriptor or MessagePack custom data, and never touches SDL or Vulkan.
+descriptor or MessagePack custom data, and never touches SDL or Vulkan. An engine-asset request is
+deferred: the loader queues its GPU upload and immediately serves the next request, so custom data
+and `LoadData` do not wait behind a GPU copy.
 
 Engine assets (`Mesh`, `Texture`, `Shader` in M3) are cached by `(canonical path, engine asset type)`
 and reference-counted:
@@ -615,21 +619,33 @@ and reference-counted:
 - a failed load is not cached, so a retry is allowed.
 
 A load for an engine asset completes only after the GPU upload succeeds, so the first draw never
-triggers a hidden upload. Custom data is not an `IAsset`, is never cached, and returns a fresh
-caller-owned instance per call. `LoadData` returns a fresh copy of the decompressed entry payload.
+triggers a hidden upload. The completion is a deferred loader item: the loader starts the upload and
+keeps serving queued requests, and the asset is constructed and committed when the upload finishes.
+Custom data is not an `IAsset`, is never cached, and returns a fresh caller-owned instance per call.
+`LoadData` returns a fresh copy of the decompressed entry payload.
 
 ### GPU upload bridge and frame retention
 
 The render thread is the only thread that calls Vulkan. The catalog hands each engine-asset upload
 to the `GpuAssetBridge`, a thread-safe queue with a signal and one completion task per request. The
 render thread drains the bridge before it waits for a frame, creates the image, buffer, or shader
-module with a short-lived command buffer and fence, and completes the request. A canceled requester
-destroys the just-created resource instead of leaking it. Destructions use the same queue and run at
-a frame boundary.
+module, records a short-lived command buffer, and submits it **without waiting for the fence**. It
+polls completion on later loop turns, frees staging memory and the submission objects only after the
+fence signals, and completes the request. Frames continue to submit and present while uploads are in
+flight. While upload work is queued or in flight the render loop's wait is bounded to 2 ms so it can
+poll even when no frame is being published; with no upload work it waits indefinitely.
+
+At most eight uploads and 256 MiB of estimated upload payload are in flight. A single upload larger
+than the byte budget may start when nothing is in flight, so a load always makes progress. A
+canceled requester destroys the just-created resource instead of leaking it; cancellation of an
+already-submitted copy waits briefly for its fence before cleanup. Destructions use the same queue
+and run at a frame boundary.
 
 The bridge retains the CPU upload descriptor for every live GPU resource. After the backend recovers
 a lost device, the render loop asks the bridge to recreate the live resources from those
-descriptors before frame submission resumes; the public asset objects stay valid.
+descriptors before frame submission resumes; the public asset objects stay valid. Pending uploads
+are canceled before the old device is destroyed and their `Load` calls fail with `RB1010`; they can
+be retried after recovery.
 
 A frame slot owns an engine-asset retention set. Recording an asset into a frame retains it; the
 frame ring releases the set after the render thread releases the slot following present. An asset

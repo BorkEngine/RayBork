@@ -994,27 +994,39 @@ bytes.
 ```text
 Load<T>(path)
   -> resolve winning entry in the mounted pack stack
-  -> engine asset?  -> read/decompress -> descriptor -> GPU upload on the render thread
-                    -> wait -> refcount -> return
+  -> engine asset?  -> read/decompress -> descriptor -> queue GPU upload
+                    -> loader continues with the next request
+                    -> on upload completion -> construct -> refcount -> complete Load
   -> registered?    -> read/decompress -> MessagePack shape -> fresh instance -> return
   -> otherwise      -> NotSupportedException
 ```
 
 Consequences:
 
-- `Load<T>` for engine assets is asynchronous because pack I/O, decompression, and GPU upload are
-  asynchronous. The read runs on the dedicated `RayBork.Asset` thread; the upload runs on the render
-  thread through an internal queue, and the load task completes only after the upload succeeds.
+- `Load<T>` for engine assets is asynchronous. The read runs on the dedicated `RayBork.Asset`
+  thread; the upload is queued to the render thread. The loader does not wait for the GPU copy and
+  immediately serves the next request; the load task completes only after the upload succeeds.
+- The render thread records and submits uploads without waiting for their fences. It polls
+  completion on later loop turns, so frames continue to submit and present while an upload is in
+  flight. A bounded wait of a few milliseconds is used only while upload work is queued or in
+  flight.
 - Engine assets do not return half-uploaded, so the first draw never triggers a hidden upload.
+- At most eight GPU uploads and 256 MiB of estimated upload payload are in flight at once. A single
+  upload larger than the byte budget may start when nothing is in flight so a load always makes
+  progress. Further requests wait in the loader queue; the loader keeps serving custom data and
+  `LoadData` while engine uploads are pending.
 - Custom data is CPU-only and can complete without the renderer; it is still a `Task` because pack
   I/O runs on the loader.
 - `Load` may be called from any thread, but awaiting it from the tick thread blocks that tick's
-  continuation, not the render thread. Load in `Setup` unless a hitch is acceptable.
+  continuation, not the loader or render thread. Load in `Setup` unless a hitch is acceptable.
 - Cancellation before completion releases all partial resources and throws
   `OperationCanceledException`. A canceled caller does not acquire a reference. Cancellation after
   the asset is returned has no effect. A canceled GPU upload destroys the just-created resource on
-  the render thread instead of leaking it.
-- A failed load is not cached as a permanently failed entry; retrying is allowed.
+  the render thread instead of leaking it; a cancellation that arrives after the copy started may
+  wait briefly for that fence before cleanup.
+- A failed load is not cached as a permanently failed entry; retrying is allowed. A device loss
+  cancels in-flight uploads with `AssetLoadException` `RB1010`; the load can be retried once the
+  device has recovered.
 - The loader is bounded: pack payload reads validate every length and offset before allocation, and
   a decompressed payload larger than its declared size is an `AssetLoadException`.
 

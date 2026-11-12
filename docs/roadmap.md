@@ -296,6 +296,9 @@ engine assets and custom data, and rely on correct lifetime and GPU residency.
 changes require a migration note. M3 does not need to draw the loaded assets; M4 consumes them. The
 runtime `Model` and `Font` loaders land in M4 and M6; M3 bakes and validates their entries. The
 `watch` bake command is deferred to M10; M3 ships `bake`, `clean`, `inspect`, and `--help`.
+GPU uploads are submitted without a fence wait and polled on later render-loop turns, so the loader
+and renderer are not blocked by a copy; a dedicated transfer queue is a later optimization, not an
+M3 requirement.
 
 ### M4 — Core 3D renderer, shader state, and instancing
 
