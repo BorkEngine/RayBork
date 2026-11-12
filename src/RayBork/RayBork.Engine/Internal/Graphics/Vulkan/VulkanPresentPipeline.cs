@@ -5,26 +5,47 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The 16-byte push-constant block the present fragment shader reads.
+/// The 32-byte push-constant block the present fragment shader reads.
 /// </summary>
 /// <remarks>
-/// The layout is the shader ABI: two floats at offsets 0 and 4 followed by two 32-bit integers at
-/// offsets 8 and 12, for a total of 16 bytes. The struct is sequential and contains only unmanaged
-/// fields so it can be passed to <c>vkCmdPushConstants</c> directly.
+/// The layout is the shader ABI: four floats at offsets 0, 4, 8, and 12, followed by four 32-bit
+/// integers at offsets 16, 20, 24, and 28, for a total of 32 bytes. The struct is sequential and
+/// contains only unmanaged fields so it can be passed to <c>vkCmdPushConstants</c> directly. Keep the
+/// field order; <c>Present.frag.glsl</c> declares the same block.
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
 internal struct PresentPushConstants {
     /// <summary>The exposure multiplier, computed on the CPU as <c>exp2(exposureEv)</c>.</summary>
     public float ExposureMultiplier;
 
-    /// <summary>The window SDR white level for the scRGB path, or one on the SDR paths.</summary>
+    /// <summary>
+    /// The paper white in scRGB units: the window's reported SDR white level on an HDR window, or
+    /// one on an SDR window.
+    /// </summary>
     public float HdrWhiteScale;
+
+    /// <summary>
+    /// The displayed peak in scRGB units: the paper white multiplied by the reported HDR headroom,
+    /// or one on an SDR window.
+    /// </summary>
+    public float HdrPeakScale;
+
+    /// <summary>
+    /// The AgX white point in scene-linear luminance after exposure; the highlight knee.
+    /// </summary>
+    public float AgxWhiteSceneLuminance;
 
     /// <summary>The tone mapping selector: <c>0</c> is AgX and <c>1</c> is none.</summary>
     public int Tonemapping;
 
     /// <summary>The encoding selector, as a <see cref="PresentEncoding"/> value.</summary>
     public int Encoding;
+
+    /// <summary>Whether the HDR highlight extension is active: <c>1</c> when it is, else <c>0</c>.</summary>
+    public int HdrHighlight;
+
+    /// <summary>Reserved padding, always <c>0</c>; keeps the block 32 bytes.</summary>
+    public int Reserved;
 }
 
 /// <summary>
@@ -179,7 +200,9 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
     /// <param name="vulkan">The loaded Vulkan API.</param>
     /// <param name="commandBuffer">The command buffer to record into.</param>
     /// <param name="imageIndex">The acquired swapchain image index.</param>
-    /// <param name="constants">The exposure, SDR white scale, tone mapping, and encoding values.</param>
+    /// <param name="constants">
+    /// The exposure, paper white, peak, AgX knee, tone mapping, encoding, and highlight values.
+    /// </param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="imageIndex"/> has no framebuffer because <see cref="RecreateFramebuffers"/> has
     /// not run for the current swapchain.
