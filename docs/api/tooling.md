@@ -236,8 +236,9 @@ depth_write = true
   source, and a violation is `RB4008` with the source line and no outputs.
 - Supported uniform types are `float`, `int`, `uint`, `bool`, `vec2`, `vec3`, `vec4`, `mat4`, and
   `sampler2D`. `default` is a scalar for `float`/`int`/`uint`/`bool`, and an array whose length
-  matches the component count for the vector and matrix types. Arrays, structs, extra uniform
-  blocks, and an instance record above 16 KiB are errors.
+  matches the component count for the vector and matrix types. Arrays, structs, and extra uniform
+  blocks are errors. An instance record above 4 KiB produces a warning and one above 16 KiB is an
+  error.
 - `blend` is `opaque`, `alpha`, `additive`, or `multiply`; `cull` is `none`, `front`, or `back`;
   `depth_test` is `disabled`, `greater`, `greater_equal`, `less`, `less_or_equal`, or `always`.
   `depth_write` is a bool.

@@ -14,5 +14,5 @@ void main_vertex() {
     gl_Position = rbFrame.ViewProjection * world;
     vUv = aUv;
     vNormal = normalize(mat3(rbInstance.Transform) * aNormal);
-    vColor = aColor * rbInstance.Color;
+    vColor = aColor;
 }

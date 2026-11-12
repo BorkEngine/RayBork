@@ -81,6 +81,18 @@ public sealed class ShaderAssetTests {
         Assert.Equal(ReadCommittedModule(FRAGMENT_MODULE_FILE), firstRead);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DefaultDrawShaderAppliesTheInstanceTintOnce() {
+        string vertex = File.ReadAllText(DefaultShaderPathOf("default.vert"));
+        string fragment = File.ReadAllText(DefaultShaderPathOf("default.frag"));
+
+        Assert.Contains("vColor = aColor;", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("rbInstance.Color", vertex, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(fragment, "rbInstance.Color"));
+        Assert.Contains("texture(mainTexture, vUv) * vColor * uTint * rbInstance.Color", fragment);
+    }
+
     private static void AssertSpirvHeader(ReadOnlySpan<byte> module, string moduleFileName) {
         Assert.False(module.IsEmpty, $"The '{moduleFileName}' module must not be empty.");
         Assert.Equal(0, module.Length % sizeof(uint));
@@ -103,4 +115,25 @@ public sealed class ShaderAssetTests {
 
     private static string ShaderPathOf(string fileName) =>
         RepositoryLayout.PathOf("src", "RayBork", "RayBork.Engine", "Shaders", fileName);
+
+    private static string DefaultShaderPathOf(string fileName) =>
+        RepositoryLayout.PathOf(
+            "src",
+            "RayBork",
+            "RayBork.Engine",
+            "BuiltInAssets",
+            "Assets",
+            "shaders",
+            fileName);
+
+    private static int CountOccurrences(string text, string value) {
+        int count = 0;
+        int index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
 }

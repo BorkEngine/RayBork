@@ -37,6 +37,7 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
     private const string VERTEX_PAYLOAD_SUFFIX = "-vert";
     private const string FRAGMENT_PAYLOAD_SUFFIX = "-frag";
     private const int MAX_TEXTURE_BINDINGS = 16;
+    private const int RECOMMENDED_INSTANCE_RECORD_SIZE = 4 * 1024;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
 
     private static readonly string[] _extensions = ["shader.toml"];
@@ -113,6 +114,15 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Shader '{context.RelativePath}' cannot be laid out: {exception.Message}");
             return;
+        }
+
+        if (layout.InstanceRecordSize > RECOMMENDED_INSTANCE_RECORD_SIZE) {
+            context.Diagnostics.Warning(
+                ShaderDiagnosticCodes.SHADER_INVALID,
+                $"Shader '{context.RelativePath}' has a per-instance record of "
+                    + $"{layout.InstanceRecordSize} bytes; records above "
+                    + $"{RECOMMENDED_INSTANCE_RECORD_SIZE} bytes may exceed practical storage-buffer "
+                    + "range or batch limits.");
         }
 
         if (!TryCompileStage(

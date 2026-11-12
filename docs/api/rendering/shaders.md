@@ -177,8 +177,11 @@ Uniform members follow GLSL std430:
 
 A uniform's offset is the next aligned position after the previous member. A `vec3` occupies 12
 bytes, so a following scalar can pack at offset + 12 even though the `vec3` itself is 16-byte
-aligned. The complete record is rounded up to a multiple of 16 bytes. A record above 16 KiB per
-instance is rejected by the bake with `RB4008`; no outputs are emitted.
+aligned. The complete record is rounded up to a multiple of 16 bytes. The bake estimates the
+reflected record size and warns above 4 KiB per instance; the runtime may split a batch if the
+device's storage-buffer range or descriptor limits require it, and correctness does not depend on
+the batch not splitting. A record above 16 KiB per instance is rejected by the bake with `RB4008`;
+no outputs are emitted.
 
 **Prologue insertion and `#version`**
 
