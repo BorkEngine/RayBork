@@ -45,8 +45,8 @@ internal sealed class CastleGame : IGame {
         // Start from the rotation that looks from the initial camera position at the orbit center,
         // then store its degrees so the rest of the sample only deals in degrees.
         Vector3 angles = Quaternion.LookRotation(-offset, Vector3.UnitY).EulerAngles;
-        _yawDegrees = angles.Y;
-        _pitchDegrees = -angles.X;
+        _yawDegrees = MathF.IEEERemainder(angles.Y, 360f);
+        _pitchDegrees = MathF.IEEERemainder(-angles.X, 360f);
     }
 
     /// <inheritdoc/>
