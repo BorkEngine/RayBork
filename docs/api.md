@@ -204,7 +204,9 @@ rejections; `PipelineCount` counts distinct scene pipelines; `TextureCount` coun
 texture slots, including the reserved white slot. A frame with no camera passes and no draws reports
 zero for the draw counters. Textures allocate a bindless slot when their GPU upload completes; slot
 0 is always the built-in white fallback, and a full table fails the upload with
-`AssetLoadException` `RB1010`.
+`AssetLoadException` `RB1010`. The bindless table has exactly 2048 slots matching the shader ABI's
+`RayBorkTextures[2048]` array; a device whose update-after-bind sampled-image limits are below 2048
+is rejected during device selection, and the capacity is never reduced.
 
 `samples/Castle` is the M4 AOT gate: the sample solution `samples/Castle/Castle.slnx` builds its
 `Castle.Assets` executable out of process, bakes `/models/obj/castle`, `/models/obj/castle_diffuse`,

@@ -18,10 +18,18 @@ public sealed class ShaderAbiConstantsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void BindlessTextureCapacityMatchesTheFixedShaderArray() {
+        Assert.Equal(2048u, VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY);
+        Assert.Equal(ShaderAbiNames.TEXTURE_CAPACITY, VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void GeneratedGlslIdentifiersMatchTheShaderAbiContract() {
         Assert.Equal("RayBorkFrame", ShaderAbiNames.FRAME_TYPE);
         Assert.Equal("RayBorkFrameBlock", ShaderAbiNames.FRAME_BLOCK);
         Assert.Equal("RayBorkTextures", ShaderAbiNames.TEXTURES);
+        Assert.Equal(2048u, ShaderAbiNames.TEXTURE_CAPACITY);
         Assert.Equal("RayBorkInstance", ShaderAbiNames.INSTANCE_TYPE);
         Assert.Equal("RayBorkInstanceBuffer", ShaderAbiNames.INSTANCE_BUFFER);
         Assert.Equal("RayBorkInstances", ShaderAbiNames.INSTANCES);

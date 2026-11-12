@@ -77,14 +77,29 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
             Candidate(
                 0,
                 "No Bindless GPU",
-                missingBindlessFeatures: "runtimeDescriptorArray, descriptorBindingPartiallyBound"),
+                missingBindlessFeatures: "descriptorBindingPartiallyBound, shaderSampledImageArrayNonUniformIndexing"),
         ];
 
         GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
-        Assert.Contains("runtimeDescriptorArray", exception.Message, StringComparison.Ordinal);
         Assert.Contains("descriptorBindingPartiallyBound", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("shaderSampledImageArrayNonUniformIndexing", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("runtimeDescriptorArray", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void InsufficientBindlessTextureCapacityIsRejectedAndNamed() {
+        VulkanPhysicalDeviceCandidate[] candidates = [
+            Candidate(0, "Small Table GPU", bindlessTextureCapacity: 1024),
+        ];
+
+        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+
+        Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
+        Assert.Contains("1024", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("2048", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -136,6 +151,8 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "Old", PhysicalDeviceType.DiscreteGpu, API_1_1)));
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
             Candidate(0, "No Bindless", missingBindlessFeatures: "shaderSampledImageArrayNonUniformIndexing")));
+        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
+            Candidate(0, "Small Table", bindlessTextureCapacity: 2047)));
     }
 
     private static VulkanPhysicalDeviceCandidate Candidate(
@@ -146,6 +163,7 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
         bool supportsGraphics = true,
         bool supportsPresent = true,
         bool hasSwapchainExtension = true,
+        uint bindlessTextureCapacity = VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
         string missingBindlessFeatures = "") =>
         new(
             index,
@@ -155,5 +173,6 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
             supportsGraphics,
             supportsPresent,
             hasSwapchainExtension,
+            bindlessTextureCapacity,
             missingBindlessFeatures);
 }

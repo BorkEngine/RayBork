@@ -176,8 +176,18 @@ with the draw recorder, so the tables below are normative.
 | Binding | Type | Contents |
 | --- | --- | --- |
 | 0 | uniform buffer, std140, 256 bytes | `RayBorkFrame`: view-projection, view, projection, camera position, viewport, time/delta/frame, screen size/exposure |
-| 1 | bindless combined image samplers | `RayBorkTextures[]`, capacity queried from the device (4096 target) |
+| 1 | bindless combined image samplers | `RayBorkTextures[2048]`, a fixed-size array of 2048 slots |
 | 2 | storage buffer, std430 | `RayBorkInstances[]`, one record per instance, plus reflected user uniforms |
+
+The texture binding is a fixed-size descriptor array of 2048 combined image samplers, not a runtime
+descriptor array: the prologue always emits `RayBorkTextures[2048]` and the descriptor set layout
+declares exactly 2048 descriptors. The renderer requires three Vulkan 1.2 descriptor-indexing
+features: `descriptorBindingPartiallyBound`, `descriptorBindingSampledImageUpdateAfterBind`, and
+`shaderSampledImageArrayNonUniformIndexing`. A physical device that lacks any of them, or whose
+`maxPerStageDescriptorUpdateAfterBindSampledImages` or
+`maxDescriptorSetUpdateAfterBindSampledImages` limit is below 2048, is rejected during device
+selection with a diagnostic naming the missing feature or limit. The capacity is never reduced and
+the layout is never created with a count different from the shader array.
 
 The frame block is declared as `layout(set = 0, binding = 0, std140) uniform RayBorkFrameBlock
 { RayBorkFrame frame; } rbFrameBlock;` and `rbFrame` expands to `rbFrameBlock.frame`.
@@ -232,8 +242,9 @@ no outputs are emitted.
 The prologue is inserted immediately after the first `#version` directive line. A source without a
 `#version` directive gets `#version 450` prepended, followed by the prologue. The `#version` line
 stays first. The prologue starts with `#extension GL_EXT_nonuniform_qualifier : require`, then the
-frame struct and block, the bindless texture array when the shader has at least one texture, the
-instance struct and storage buffer, the stage-specific instance varying, and the macros below.
+frame struct and block, the fixed 2048-element bindless texture array when the shader has at least
+one texture, the instance struct and storage buffer, the stage-specific instance varying, and the
+macros below.
 
 The bake compiles the generated wrapper function named `main` with shaderc, then renames the compiled
 `OpEntryPoint` to `main_vertex` or `main_fragment` and validates the module. The runtime never parses

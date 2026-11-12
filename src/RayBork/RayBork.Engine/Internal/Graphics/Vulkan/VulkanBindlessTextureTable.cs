@@ -4,8 +4,8 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The bindless combined-image-sampler table that backs <c>RayBorkTextures[]</c> in every geometry
-/// shader.
+/// The bindless combined-image-sampler table that backs the fixed <c>RayBorkTextures[2048]</c> array
+/// in every geometry shader.
 /// </summary>
 /// <remarks>
 /// <para>

@@ -10,8 +10,9 @@ namespace RayBork.Bake.Shaders;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The prologue declares the frame block, the bindless texture array, the per-instance record and
-/// storage buffer, the texture macros, and the stage wrapper that forwards to the user entry point.
+/// The prologue declares the frame block, the fixed 2048-element bindless texture array, the
+/// per-instance record and storage buffer, the texture macros, and the stage wrapper that forwards to
+/// the user entry point.
 /// It is inserted immediately after the <c>#version</c> directive; a source without one gets
 /// <c>#version 450</c> prepended first. The shaderc entry point is always the generated <c>main</c>
 /// function, and the compiled module is renamed to <c>main_vertex</c> or <c>main_fragment</c>.
@@ -206,7 +207,10 @@ internal static class ShaderPrologueGenerator {
         if (layout.Textures.Count > 0) {
             text.Append('\n');
             text.Append("layout(set = 0, binding = 1) uniform sampler2D ")
-                .Append(ShaderAbiNames.TEXTURES).Append("[];\n");
+                .Append(ShaderAbiNames.TEXTURES)
+                .Append('[')
+                .Append(ShaderAbiNames.TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture))
+                .Append("];\n");
         }
 
         text.Append('\n');

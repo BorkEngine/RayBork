@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Silk.NET.Vulkan;
 
@@ -15,17 +16,20 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// The descriptor-indexing flags and update-after-bind limits describe the M4 bindless texture
-/// table. <see cref="BindlessTextureCapacity"/> is the largest table the device can support, capped
-/// at <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/>; device selection rejects a device without the
-/// feature subset, so a created device always reports at least one slot.
+/// table. <see cref="BindlessTextureCapacity"/> is always
+/// <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/>: the shader ABI declares
+/// <c>RayBorkTextures[2048]</c>, so the descriptor set layout must use exactly that count and the
+/// capacity is never reduced. Device selection rejects a device without the feature subset or with
+/// update-after-bind sampled-image limits below the capacity.
 /// </para>
 /// </remarks>
 internal sealed class VulkanDeviceCapabilities {
     /// <summary>
-    /// The renderer's target bindless texture capacity. The effective capacity is this value capped
-    /// by the device's per-stage and per-set update-after-bind sampled-image limits.
+    /// The renderer's bindless texture capacity: 2048 combined image samplers, matching the fixed
+    /// <c>RayBorkTextures[2048]</c> shader array. A device whose update-after-bind sampled-image
+    /// limits are below this value is rejected during device selection.
     /// </summary>
-    internal const uint TARGET_BINDLESS_TEXTURE_CAPACITY = 4096;
+    internal const uint TARGET_BINDLESS_TEXTURE_CAPACITY = ShaderAbiNames.TEXTURE_CAPACITY;
 
     private static readonly int[] _sampleCounts = [1, 2, 4, 8, 16, 32, 64];
 
@@ -130,8 +134,8 @@ internal sealed class VulkanDeviceCapabilities {
 
     /// <summary>
     /// Gets whether the device supports and the renderer enables the M4 descriptor-indexing subset:
-    /// runtime descriptor arrays, partially bound arrays, sampled-image update-after-bind, and
-    /// non-uniform indexing of sampled-image arrays.
+    /// partially bound arrays, sampled-image update-after-bind, and non-uniform indexing of
+    /// sampled-image arrays.
     /// </summary>
     internal bool DescriptorIndexing { get; }
 
@@ -161,9 +165,9 @@ internal sealed class VulkanDeviceCapabilities {
     internal ulong MaxMemoryAllocationSize { get; }
 
     /// <summary>
-    /// Gets the bindless texture table capacity the backend creates: the smaller of
-    /// <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/> and the device's per-stage and per-set
-    /// update-after-bind sampled-image limits, and never less than one.
+    /// Gets the bindless texture table capacity the backend creates. It is always
+    /// <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/>, which matches the fixed shader array; device
+    /// selection guarantees the device's update-after-bind sampled-image limits cover it.
     /// </summary>
     internal uint BindlessTextureCapacity { get; }
 
@@ -249,13 +253,22 @@ internal sealed class VulkanDeviceCapabilities {
         int[] supportedSampleCounts = SelectSupportedSampleCounts(
             properties.Limits.FramebufferColorSampleCounts,
             properties.Limits.FramebufferDepthSampleCounts);
-        uint capacity = Math.Max(
-            1u,
-            Math.Min(
-                TARGET_BINDLESS_TEXTURE_CAPACITY,
-                Math.Min(
-                    vulkan12Properties.MaxPerStageDescriptorUpdateAfterBindSampledImages,
-                    vulkan12Properties.MaxDescriptorSetUpdateAfterBindSampledImages)));
+        uint sampledImageCapacity = VulkanBindlessFeatures.GetTextureCapacity(vulkan12Properties);
+        if (sampledImageCapacity < TARGET_BINDLESS_TEXTURE_CAPACITY) {
+            throw new GraphicsException(
+                $"The Vulkan device '{deviceName}' supports "
+                + $"{sampledImageCapacity.ToString(CultureInfo.InvariantCulture)} update-after-bind "
+                + "sampled image(s), which is below the M4 bindless texture capacity of "
+                + $"{TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}. "
+                + "The shader ABI declares RayBorkTextures["
+                + $"{TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}] and the "
+                + "descriptor set layout must declare the same count; the renderer does not reduce "
+                + "the capacity.",
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                null);
+        }
+
+        uint capacity = TARGET_BINDLESS_TEXTURE_CAPACITY;
 
         return new VulkanDeviceCapabilities(
             deviceName,

@@ -44,8 +44,7 @@ public sealed class Vulkan12BackendTests {
         VulkanBindlessTextureTable table = host.Backend.BindlessTextures;
 
         Assert.True(capabilities.DescriptorIndexing);
-        Assert.True(capabilities.BindlessTextureCapacity >= 1);
-        Assert.True(capabilities.BindlessTextureCapacity <= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY);
+        Assert.Equal(VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY, capabilities.BindlessTextureCapacity);
         Assert.Equal(capabilities.BindlessTextureCapacity, table.Capacity);
         Assert.Equal(1, table.LiveCount);
         Assert.NotEqual(0ul, table.WhiteImage.Handle);
