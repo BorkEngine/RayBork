@@ -886,6 +886,18 @@ RayBork.RayBorkAppBuilder
 RayBork.RayBorkAppBuilder.Build() -> RayBork.RayBorkApp!
 RayBork.RayBorkAppBuilder.RayBorkAppBuilder() -> void
 RayBork.RayBorkAppBuilder.WithGame(RayBork.IGame! game) -> RayBork.RayBorkAppBuilder!
+RayBork.Shader.ResetUniforms() -> void
+RayBork.Shader.SetUniform(string! name, bool value) -> void
+RayBork.Shader.SetUniform(string! name, float value) -> void
+RayBork.Shader.SetUniform(string! name, int value) -> void
+RayBork.Shader.SetUniform(string! name, RayBork.Color value) -> void
+RayBork.Shader.SetUniform(string! name, RayBork.Texture? texture) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Matrix4x4 value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Quaternion value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Vector2 value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Vector3 value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Vector4 value) -> void
+RayBork.Shader.SetUniform(string! name, uint value) -> void
 RayBork.RayBorkAppBuilder.WithLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithLogLevel(Microsoft.Extensions.Logging.LogLevel level) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithMaxDeltaTime(double seconds) -> RayBork.RayBorkAppBuilder!

@@ -1,0 +1,17 @@
+[shader]
+vertex = "default.vert"
+fragment = "default.frag"
+
+[[shader.uniforms]]
+name = "uTint"
+type = "vec4"
+default = [1.0, 1.0, 1.0, 1.0]
+
+[[shader.textures]]
+name = "mainTexture"
+
+[shader.render_state]
+blend = "opaque"
+cull = "back"
+depth_test = "greater_equal"
+depth_write = true
