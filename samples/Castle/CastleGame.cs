@@ -8,9 +8,8 @@ namespace Castle;
 
 /// <summary>
 /// The M4 Castle sample: a RayBork recreation of raylib's <c>models_loading</c> example. It loads the
-/// raylib castle model, its diffuse texture, and a custom unlit shader from the baked pack, draws the
-/// model with an orbital perspective camera, and draws the reference grid with the built-in default
-/// shader every tick.
+/// raylib castle model and its diffuse texture from the baked pack, binds the texture on the model's
+/// built-in mesh-shader material, and draws the model with an orbital perspective camera every tick.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -21,16 +20,15 @@ namespace Castle;
 /// rather than on a fixed tick number.
 /// </para>
 /// <para>
-/// The camera is created and disposed inside each <see cref="Tick"/>; the model, shaders, texture, and
-/// grid mesh are created or loaded once in <see cref="Setup"/> and disposed exactly once in
-/// <see cref="Shutdown"/>.
+/// The camera is created and disposed inside each <see cref="Tick"/>; the model and texture are loaded
+/// once in <see cref="Setup"/> and disposed exactly once in <see cref="Shutdown"/>. The model owns its
+/// part materials: the bake defaults the castle part to the built-in <c>/shaders/mesh</c> program, so
+/// the sample binds the diffuse texture on that material's cursor and never loads a custom shader.
 /// </para>
 /// </remarks>
 internal sealed class CastleGame : IGame {
     private const int STATS_LOG_INTERVAL = 30;
     private const string MODEL_PATH = "/models/obj/castle";
-    private const int GRID_SLICES = 20;
-    private const float GRID_SPACING = 10f;
     private const float FIELD_OF_VIEW_DEGREES = 45f;
     private const float NEAR_PLANE = 0.01f;
     private const float ORBIT_RADIANS_PER_PIXEL = 0.25f * DEGREES_TO_RADIANS;
@@ -48,7 +46,6 @@ internal sealed class CastleGame : IGame {
     private static readonly Vector3 _cameraTarget = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
     private static readonly Color _clearColor = new(RAYWHITE_LINEAR, RAYWHITE_LINEAR, RAYWHITE_LINEAR, 1f);
-    private static readonly Color _gridColor = new(0.5f, 0.5f, 0.5f, 1f);
 
     private readonly int _frameLimit;
 
@@ -56,8 +53,6 @@ internal sealed class CastleGame : IGame {
     private ILogger _logger = NullLogger.Instance;
     private Model? _model;
     private Texture? _texture;
-    private Shader? _gridShader;
-    private Mesh? _gridMesh;
     private float _yaw;
     private float _pitch;
     private float _distance;
@@ -117,26 +112,17 @@ internal sealed class CastleGame : IGame {
 
         _model = await context.Assets.Load<Model>(MODEL_PATH);
         _texture = await context.Assets.Load<Texture>("/models/obj/castle_diffuse");
-        _gridShader = await context.Assets.Load<Shader>("/shaders/mesh");
 
-        // The model owns its part materials; the Castle pack bakes the one castle part with
-        // /shaders/castle. Until the sample's cleanup task, bind the diffuse texture on that material
-        // and draw the model with its part material.
-        Shader castleMaterial = _model.Parts[0].Shader;
+        // The model owns one material per part, and the bake defaults the castle part to the built-in
+        // /shaders/mesh program. Bind the diffuse texture on every distinct part material instead of
+        // loading a custom shader; the cursor snapshot makes the draw use it.
         LogModelMetadata(_model);
         LogTextureMetadata(_texture);
-        LogShaderMetadata(castleMaterial);
+        foreach (Shader material in DistinctMaterials(_model)) {
+            material.SetUniform("mainTexture", _texture);
+            LogShaderMetadata(material);
+        }
 
-        castleMaterial.SetUniform("mainTexture", _texture);
-        _gridMesh = await CreateGridMeshAsync(context);
-
-        _logger.LogInformation(
-            "Grid mesh {Path}: {VertexCount} vertex/vertices, {IndexCount} index/indices, topology {Topology}, shader {ShaderPath}.",
-            _gridMesh.Path,
-            _gridMesh.VertexCount,
-            _gridMesh.IndexCount,
-            _gridMesh.Topology,
-            _gridShader.Path);
         _logger.LogInformation(
             "Camera: target {Target}, initial position {Position}, field of view {FieldOfView} degrees, near {Near}, far +infinity.",
             _cameraTarget,
@@ -199,18 +185,14 @@ internal sealed class CastleGame : IGame {
             _lastFrameCount,
             _exitReason);
 
-        // The model owns one reference to every distinct part mesh and its part materials. Dispose the
-        // model first, then this sample's own texture, grid shader, and grid mesh references, exactly
-        // once each; the catalog releases the GPU resources on the render thread and a recorded frame
-        // keeps them alive.
+        // The model owns one reference to every distinct part mesh and its part materials, including
+        // the material whose cursor holds the diffuse texture. Dispose the model first, then this
+        // sample's own texture reference, exactly once each; the catalog releases the GPU resources
+        // on the render thread and a recorded frame keeps them alive.
         _model?.Dispose();
         _model = null;
         _texture?.Dispose();
         _texture = null;
-        _gridShader?.Dispose();
-        _gridShader = null;
-        _gridMesh?.Dispose();
-        _gridMesh = null;
 
         if (!_sawDrawnFrame) {
             throw new InvalidOperationException(
@@ -233,29 +215,16 @@ internal sealed class CastleGame : IGame {
         }
     }
 
-    private static async Task<Mesh> CreateGridMeshAsync(EngineContext context) {
-        MeshBuilder builder = context.CreateMeshBuilder(PrimitiveTopology.LineList);
-        int halfSlices = GRID_SLICES / 2;
-        float extent = halfSlices * GRID_SPACING;
-
-        // raylib DrawGrid(20, 10.0f): 21 lines per axis from -100 to +100 at 10-unit spacing.
-        for (int slice = -halfSlices; slice <= halfSlices; slice++) {
-            float offset = slice * GRID_SPACING;
-
-            uint first = (uint)builder.Vertices.Count;
-            builder.Vertices.Add(new Vertex(new Vector3(offset, 0f, -extent), color: _gridColor));
-            builder.Vertices.Add(new Vertex(new Vector3(offset, 0f, extent), color: _gridColor));
-            builder.Indices.Add(first);
-            builder.Indices.Add(first + 1u);
-
-            first = (uint)builder.Vertices.Count;
-            builder.Vertices.Add(new Vertex(new Vector3(-extent, 0f, offset), color: _gridColor));
-            builder.Vertices.Add(new Vertex(new Vector3(extent, 0f, offset), color: _gridColor));
-            builder.Indices.Add(first);
-            builder.Indices.Add(first + 1u);
+    private static List<Shader> DistinctMaterials(Model model) {
+        List<Shader> materials = [];
+        HashSet<Shader> seen = new(ReferenceEqualityComparer.Instance);
+        foreach (ModelPart part in model.Parts) {
+            if (seen.Add(part.Shader)) {
+                materials.Add(part.Shader);
+            }
         }
 
-        return await builder.BuildAsync();
+        return materials;
     }
 
     private void UpdateOrbit(IInput input) {
@@ -302,9 +271,8 @@ internal sealed class CastleGame : IGame {
             near: NEAR_PLANE,
             far: float.PositiveInfinity);
 
-        // raylib DrawModel at the origin with the model's per-part material, then DrawGrid.
+        // raylib DrawModel at the origin with the model's per-part material.
         camera.DrawModel(_model!, Transform.Identity);
-        camera.DrawMesh(_gridMesh!, Transform.Identity, _gridShader!);
     }
 
     private void ObserveCompletedFrame(EngineContext context) {

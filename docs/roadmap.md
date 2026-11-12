@@ -396,23 +396,25 @@ automatic instancing, and per-instance textures/uniforms.
 - **Castle AOT gate.** `samples/Castle` and `samples/Castle/Castle.Assets` are the per-milestone AOT
   gate. The sample owns `samples/Castle/Castle.slnx`; it is not part of `src/RayBork/RayBork.slnx`.
   The sample build invokes the JIT assets executable out of process without the sample's publish
-  settings, bakes `castle.pck` from the checked-in raylib castle OBJ and diffuse texture plus the
-  custom shader and TOML sources, and copies the pack beside the sample executable; the publish also
-  copies it into the publish directory. The published `win-x64` and `linux-x64` hosts load the
-  adjacent pack with no `--assets` argument, draw the unlit castle model and the raylib reference
-  grid, and must exit `0` on the Windows hardware driver and the conformant lavapipe Linux path. The
-  sample records whether any completed frame reported both `DrawCalls` and `Instances`; when no
-  completed frame ever draws, shutdown throws and the run fails, so an invisible scene cannot pass
-  and a slow host is judged on completed frames instead of a fixed tick number.
+  settings, bakes `castle.pck` from the checked-in raylib castle OBJ, its diffuse texture, and the
+  model sidecar, and copies the pack beside the sample executable; the publish also copies it into
+  the publish directory. The published `win-x64` and `linux-x64` hosts load the adjacent pack with no
+  `--assets` argument, draw the unlit castle model with the built-in mesh shader, and must exit `0`
+  on the Windows hardware driver and the conformant lavapipe Linux path. The sample records whether
+  any completed frame reported both `DrawCalls` and `Instances`; when no completed frame ever draws,
+  shutdown throws and the run fails, so an invisible scene cannot pass and a slow host is judged on
+  completed frames instead of a fixed tick number.
   `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
   diagnostic host.
 - **Castle sample recreation scope.** The sample recreates raylib's `models_loading` behavior
-  without the features that need later milestones: model/texture drag-and-drop (post-1.0 platform
-  work), click selection and `DrawBoundingBox` (ray/box collision and the wire-box helper arrive in
-  M5), and the `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The sample logs the render
-  statistics instead of drawing them. The raylib castle model and texture are sample-only assets
-  with their own notice under `samples/Castle/`; that notice is deliberately not duplicated in the
-  repository-root notices.
+  without the features that need later milestones: the reference XZ grid (`DrawGrid` arrives in
+  M5), model/texture drag-and-drop (post-1.0 platform work), click selection and `DrawBoundingBox`
+  (ray/box collision and the wire-box helper arrive in M5), and the `DrawText`/`DrawFPS` overlay
+  (runtime text arrives in M6). The model and its diffuse texture are drawn with the built-in
+  `/shaders/mesh` material that the loaded model owns; there is no custom Castle shader. The sample
+  logs the render statistics instead of drawing them. The raylib castle model and texture are
+  sample-only assets with their own notice under `samples/Castle/`; that notice is deliberately not
+  duplicated in the repository-root notices.
 - **Known limitation: the WSLg dzn driver crashes on the first geometry draw.** On the WSL gate host
   WSLg selects `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and
   prints "dzn is not a conformant Vulkan implementation, testing use only". The M4 published host
@@ -423,9 +425,9 @@ automatic instancing, and per-instance textures/uniforms.
   `--validation on`, the layer loads, `EngineInfo.ValidationEnabled` is true, and no validation
   **error** is reported from the engine's usage before the crash; the only messages are
   `WARNING-Shader-OutputNotConsumed` performance warnings for the fixed vertex-layout attributes
-  3-7 that a custom shader does not read, which are expected and valid. The same build and pack run
-  correctly under the conformant lavapipe ICD, so this is a WSL driver limitation, not an engine
-  defect. The Windows hardware gate passes on the same GPU. Treat the WSLg hardware run as a
+  3-7 that the built-in mesh shader does not read, which are expected and valid. The same build and
+  pack run correctly under the conformant lavapipe ICD, so this is a WSL driver limitation, not an
+  engine defect. The Windows hardware gate passes on the same GPU. Treat the WSLg hardware run as a
   skipped gate with this reason until WSLg ships a conformant driver; use lavapipe for the Linux
   functional proof.
 - **M4 limitation: one frame block per frame slot.** The renderer writes one 256-byte `rbFrame`
@@ -448,6 +450,7 @@ Linux gate is reported with the driver limitation until WSLg ships a conformant 
 **Scope.**
 
 - Built-in meshes: cube, sphere, cylinder, plane, grid, wire cube, wire sphere.
+- `DrawGrid` for raylib's reference XZ grid.
 - Line, line-strip, point (camera-facing quad), and triangle helpers.
 - Billboard and textured-quad helpers.
 - Default vertex-color/unlit shader; per-instance linear tint.
@@ -464,6 +467,7 @@ Linux gate is reported with the driver limitation until WSLg ships a conformant 
 - Collision unit tests cover hit/miss, inside-origin rays, parallel rays, and degenerate triangles.
 - `GetRayMesh` hits a loaded mesh and returns the expected point/normal/distance.
 - All helpers batch with the same rules as user draws; stats reflect it.
+- Castle uses `DrawGrid` for the raylib reference grid.
 - Native AOT publish runs the gallery on Windows and Linux.
 
 ### M6 — Text and runtime MSDF
