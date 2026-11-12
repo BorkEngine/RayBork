@@ -9,9 +9,9 @@ internal static class Program {
     private const int EXIT_FAILURE = 1;
     private const int EXIT_INVALID_ARGUMENTS = 2;
     private const int DEFAULT_FRAMES = 0;
-    private const int DEFAULT_WIDTH = 1280;
-    private const int DEFAULT_HEIGHT = 720;
-    private const string WINDOW_TITLE = "RayBork Castle";
+    private const int DEFAULT_WIDTH = 800;
+    private const int DEFAULT_HEIGHT = 450;
+    private const string WINDOW_TITLE = "RayBork [models] example - loading";
     private const string DEFAULT_PACK_FILE_NAME = "castle.pck";
     private const LogLevel DEFAULT_LOG_LEVEL = LogLevel.Information;
     private const int DEFAULT_MSAA = 4;
@@ -22,14 +22,19 @@ internal static class Program {
     private const string USAGE_TEXT = """
         Castle - RayBork M4 core 3D renderer sample and Native AOT gate host
 
+        A RayBork recreation of raylib's models_loading example: the castle OBJ and its diffuse
+        texture are drawn unlit with a custom shader and an orbital camera, and the reference XZ grid
+        is drawn with the built-in default shader.
+
         Usage:
           Castle [options]
 
         Options:
           --assets PATH     Mount the baked Castle asset pack. A relative path resolves against the
-                            current directory (default: castle.pck beside the executable).
+                            current directory (default: castle.pck beside the executable, baked by
+                            the sample build).
           --frames N        Run N ticks, then exit; 0 runs until close (default: 0).
-          --size WxH        Window client size; both values positive (default: 1280x720).
+          --size WxH        Window client size; both values positive (default: 800x450).
           --msaa N          Requested MSAA sample count; positive (default: 4).
           --present-mode NAME
                             Presentation mode: Mailbox, Fifo, or Immediate, case-insensitive
@@ -41,9 +46,10 @@ internal static class Program {
                             Critical, or None (default: Information).
           --help            Show this help and exit.
 
-        The sample loads /models/castle, /textures/stone, and /shaders/castle from the pack, applies
-        a warm tint and the stone texture to the custom shader, and draws the model every tick with a
-        perspective camera orbiting the castle while the model turns. The shader uses the M4 ABI:
+        The sample loads /models/obj/castle, /models/obj/castle_diffuse, and /shaders/castle from
+        the pack, applies the texture to the shader, and draws the model every tick with a
+        perspective camera orbiting the castle. The camera target is (0, 12, 0), the initial position
+        is (50, 50, 50), and the field of view is 45 degrees. The custom shader uses the M4 ABI:
         rbFrame.ViewProjection, rbInstance.Transform, rbInstance.Color, uTint, and a bindless
         mainTexture.
 
@@ -54,6 +60,8 @@ internal static class Program {
         calls and instances that were submitted.
 
         Controls:
+          Left mouse drag   Orbit the camera around the castle.
+          Mouse wheel       Zoom the camera distance.
           Escape            Request exit.
 
         Exit codes:
@@ -62,8 +70,8 @@ internal static class Program {
           2  Invalid command line.
 
         Examples:
-          Castle --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
-          Castle --frames 120 --size 1920x1080 --msaa 8
+          Castle --frames 30
+          Castle --frames 120 --size 1280x720 --msaa 8
           Castle --present-mode Fifo --validation off --log-level Debug
         """;
 
@@ -80,6 +88,15 @@ internal static class Program {
             return EXIT_SUCCESS;
         }
 
+        string assetsPath = options.Assets ?? ResolveDefaultPackPath();
+        if (!File.Exists(assetsPath)) {
+            Console.Error.WriteLine(
+                $"Castle failed: the asset pack '{assetsPath}' does not exist. Build the sample first; "
+                    + "the sample build bakes castle.pck beside the executable. Pass --assets <path> to "
+                    + "mount a different pack.");
+            return EXIT_FAILURE;
+        }
+
         try {
             CastleGame game = new(options.Frames);
             RayBorkAppBuilder builder = new RayBorkAppBuilder()
@@ -89,7 +106,7 @@ internal static class Program {
                 .WithResizable(true)
                 .WithTargetFps(TARGET_FPS)
                 .WithMaxDeltaTime(MAX_DELTA_TIME)
-                .WithAssetsPack(options.Assets)
+                .WithAssetsPack(assetsPath)
                 .WithMSAA(options.Msaa)
                 .WithPresentMode(options.PresentMode)
                 .WithLogLevel(options.LogLevel);
@@ -107,12 +124,15 @@ internal static class Program {
         }
     }
 
+    private static string ResolveDefaultPackPath()
+        => Path.Combine(AppContext.BaseDirectory, DEFAULT_PACK_FILE_NAME);
+
     private static bool TryParseCommandLine(
         string[] args,
         out CommandLineOptions options,
         out string error) {
         int frames = DEFAULT_FRAMES;
-        string assets = Path.Combine(AppContext.BaseDirectory, DEFAULT_PACK_FILE_NAME);
+        string? assets = null;
         int width = DEFAULT_WIDTH;
         int height = DEFAULT_HEIGHT;
         LogLevel logLevel = DEFAULT_LOG_LEVEL;
@@ -326,7 +346,7 @@ internal static class Program {
 
     private sealed record CommandLineOptions(
         int Frames,
-        string Assets,
+        string? Assets,
         int Width,
         int Height,
         LogLevel LogLevel,

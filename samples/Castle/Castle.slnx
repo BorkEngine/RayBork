@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Castle.csproj" />
+  <Project Path="Castle.Assets/Castle.Assets.csproj" />
+</Solution>

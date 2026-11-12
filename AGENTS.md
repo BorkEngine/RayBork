@@ -127,27 +127,42 @@ dotnet test src/RayBork/RayBork.slnx -c Debug --no-build
 dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"
 dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
 pwsh scripts/check-docs.ps1
-# Bake the Castle sample pack, then publish and run the M4 gate host with it:
-dotnet run --project samples/Castle.Assets/Castle.Assets.csproj -c Release -- bake
+# The samples are separate solutions outside the engine solution. Each build also bakes its pack
+# beside the sample executable, so no manual bake step and no mandatory --assets argument are needed:
+dotnet build samples/Castle/Castle.slnx -c Debug
+dotnet build samples/Castle/Castle.slnx -c Release
+dotnet format samples/Castle/Castle.slnx --verify-no-changes --no-restore
+dotnet build samples/HelloInterop/HelloInterop.slnx -c Debug
+dotnet build samples/HelloInterop/HelloInterop.slnx -c Release
+dotnet format samples/HelloInterop/HelloInterop.slnx --verify-no-changes --no-restore
+# Publish the M4 gate host; castle.pck is baked by the build and copied beside the executable:
 dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64 -p:PublishAot=true
 # Run the published Windows host and require exit 0:
-samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
+samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --frames 30
 # Run the same publish inside WSL from the repository root for linux-x64:
 # ~/.dotnet/dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
 # Run the published Linux host; it needs a Vulkan 1.2 device and a real window system.
 # On WSL use the WSLg display:
-# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
+# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
+# When WSLg's dzn driver crashes on the first geometry draw, run the same host under lavapipe:
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
 
-The AOT gate is `samples/Castle`: it loads `/models/castle`, `/textures/stone`, and `/shaders/castle`,
-draws the scene, and requires at least one completed frame with nonzero `RenderStats.DrawCalls` and
-`RenderStats.Instances`; when no completed frame ever draws, shutdown throws and the run fails. Both
-publishes must finish with zero AOT/trim warnings, and each published host must run with
-`--assets <pack> --frames 30` and exit 0. `samples/HelloInterop` remains the M1-M3 diagnostic host
-for window, input, time, logging, renderer, and asset-loading metadata; it is not the AOT gate. The
-gate host needs a Vulkan 1.2 device and a real window system; `SDL_VIDEODRIVER=dummy` cannot create a
-Vulkan surface. On WSL, run it with the WSLg display: set `DISPLAY=:0` and
-`XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. GPU tests open a hidden window through the real video driver
+The AOT gate is `samples/Castle`: it loads `/models/obj/castle`, `/models/obj/castle_diffuse`,
+`/shaders/castle`, and the built-in `/shaders/default`, draws the raylib castle model and the
+reference grid every tick, and requires at least one completed frame with nonzero
+`RenderStats.DrawCalls` and `RenderStats.Instances`; when no completed frame ever draws, shutdown
+throws and the run fails. Both publishes must finish with zero AOT/trim warnings and must place
+`castle.pck` beside the executable without any bake-tooling assemblies; each published host must run
+with `--frames 30` and exit 0, loading the adjacent pack with no `--assets` argument.
+`samples/HelloInterop` remains the M1-M3 diagnostic host for window, input, time, logging, renderer,
+and asset-loading metadata; its build bakes `hello.pck` beside the host, which auto-mounts it. It is
+not the AOT gate. The gate host needs a Vulkan 1.2 device and a real window system;
+`SDL_VIDEODRIVER=dummy` cannot create a Vulkan surface. On WSL, run it with the WSLg display: set
+`DISPLAY=:0` and `XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. WSLg's dzn driver can crash inside
+`libvulkan_dzn.so` on the first geometry draw; that run is reported as a skipped hardware gate and
+the Linux functional proof uses the lavapipe ICD. GPU tests open a hidden window through the real
+video driver
 and are run with `dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"`. A GPU test
 that cannot run on the host is reported as a skip with the reason, never silently dropped. The `gpu`
 CI job runs the GPU-filtered suite under `xvfb-run` with the lavapipe ICD. Shader SPIR-V is

@@ -46,7 +46,28 @@ return await new BakeApplicationBuilder()
 | `RunAsync(args)` | Runs `bake`, `clean`, `inspect`, `--help`, or `--version`; returns the process exit code. |
 
 The `watch` command is deferred to M10. M3 ships `bake`, `clean`, `inspect`, `--help`, and
-`--version`.
+`--version`. `bake`, `clean`, and `inspect` accept `--project-root <dir>` and `--output-root <dir>`;
+the project root defaults to the working directory and the output root defaults to
+`AppContext.BaseDirectory`, so a build can invoke the assets executable from any working directory.
+
+#### Build-time bake in a game or sample project
+
+A game or sample can run its assets executable as part of its own build instead of a manual step.
+`samples/Castle/Castle.csproj` and `samples/HelloInterop/HelloInterop.csproj` use the same
+out-of-process pattern as the engine's built-in pack: an `AfterTargets="Build"` target invokes the
+assets project with the `MSBuild` task (passing only `Configuration` and removing the sample's
+runtime/publish properties), runs the built assets executable as
+`<sample>.dll bake --project-root <assets dir> --output-root <intermediate pack dir>`, and copies
+`<sample>.pck` beside the sample executable as a recorded build output. A separate target after
+`Publish` copies the same pack into the publish directory and fails the publish with a clear error if
+it is missing. The pack lives under the sample's intermediate output, so `dotnet clean` removes it
+and the next build bakes again.
+
+Because the assets executable is only invoked out of process, the sample project never references
+`RayBork.Bake`, and the JIT tooling never enters the sample's Native AOT publish graph. The explicit
+`--project-root` and `--output-root` arguments keep the bake independent of the working directory.
+The samples are separate solutions (`samples/Castle/Castle.slnx`,
+`samples/HelloInterop/HelloInterop.slnx`) and are not part of `src/RayBork/RayBork.slnx`.
 
 M3's public bake surface is `BakeApplicationBuilder`, `BakeApplication`, `IAssetProcessor`,
 `AssetProcessor<TSidecar>`, `AssetProcessorContext`, `IAssetOutputSink`,
@@ -327,7 +348,9 @@ entries. A tool-version or configuration change invalidates the cache and reproc
 
 The manifest is not part of the runtime pack. It never promises byte-identical pack output; it only
 avoids redundant processing. Tests assert the processor invocation count for an unchanged source,
-not pack byte identity.
+not pack byte identity. The samples bake into their own intermediate output at build time and copy
+only the pack; the manifest stays under the assets project's `obj/raybork/bake`, so a missing pack
+(for example after `dotnet clean`) forces a full bake on the next build.
 
 ### 13.6 Validation and diagnostics
 

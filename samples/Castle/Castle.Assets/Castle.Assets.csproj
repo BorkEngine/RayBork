@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- The builder uses WithProjectRoot("."), so a direct `dotnet run` must start in this
+             directory for the checked-in Assets/ sources to resolve. The sample build passes the
+             project root and output root explicitly, so its bake is independent of the working
+             directory. The output root still defaults to AppContext.BaseDirectory, which puts
+             castle.pck next to the assets executable for a direct run. -->
+        <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+        <!-- Build-time tooling: this executable is JIT and must never enter a runtime publish graph. -->
+        <PublishAot>false</PublishAot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\RayBork\RayBork.Bake\RayBork.Bake.csproj" />
+    </ItemGroup>
+
+    <!-- libshaderc is a JIT build-time dependency of the bake. The package's native asset lives
+         under runtimes/<rid>/native, which is not on the native loader's search path for a net11.0
+         tool; this shared target copies the pinned library beside the assets executable. The sample
+         build invokes RayBorkCopyShadercNative explicitly after Build, because an AfterTargets hook
+         is not reliable when Build is driven by another project's MSBuild task. -->
+    <Import Project="..\..\..\build\RayBork.Shaderc.targets" />
+
+</Project>
