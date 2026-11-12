@@ -271,6 +271,89 @@ public sealed class BatchPlannerTests {
         Assert.Equal(0, plan.CulledInstances);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MaterialsOverTheSameProgramShareOneBatch() {
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        ShaderProgram program = RenderingTestAssets.CreateProgram("shaders/shared");
+        Shader first = program.CreateMaterial();
+        Shader second = program.CreateMaterial();
+        try {
+            RenderFramePacket packet = CreatePacket();
+            CameraPass pass = BeginPass(packet);
+
+            AddDraw(packet, pass, mesh, first, RenderState.Opaque, Translation(0f, 0f, -5f));
+            AddDraw(packet, pass, mesh, second, RenderState.Opaque, Translation(1f, 0f, -5f));
+
+            FramePlan plan = new BatchPlanner().Plan(packet);
+
+            PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
+            Assert.Equal(2, batch.InstanceCount);
+            Assert.Equal(2, plan.Instances);
+            Assert.Equal(1, plan.DrawCalls);
+            Assert.Same(program.Lifetime, batch.Program);
+            // Each draw record carries its own instance list, so both planned instances are the first
+            // instance of their record.
+            Assert.Equal(
+                [0, 0],
+                batch.Instances.Select(instance => instance.InstanceIndex));
+        } finally {
+            first.Dispose();
+            second.Dispose();
+            RenderingTestAssets.ReleaseProgram(program);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PerMaterialUniformsAndTexturesStayWithEachInstanceWithoutSplittingTheBatch() {
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        ShaderProgram program = RenderingTestAssets.CreateProgram("shaders/shared", defaultValue: 0f);
+        Shader first = program.CreateMaterial();
+        Shader second = program.CreateMaterial();
+        Texture firstTexture = RenderingTestAssets.CreateTexture("textures/first");
+        Texture secondTexture = RenderingTestAssets.CreateTexture("textures/second");
+        try {
+            OnTickThread(() => {
+                first.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 1f);
+                first.SetUniform(RenderingTestAssets.TEXTURE_BINDING, firstTexture);
+                second.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 2f);
+                second.SetUniform(RenderingTestAssets.TEXTURE_BINDING, secondTexture);
+            });
+
+            RenderFramePacket packet = CreatePacket();
+            CameraPass pass = BeginPass(packet);
+            AddDraw(packet, pass, mesh, first, RenderState.Opaque, Translation(0f, 0f, -5f));
+            AddDraw(packet, pass, mesh, second, RenderState.Opaque, Translation(1f, 0f, -5f));
+
+            FramePlan plan = new BatchPlanner().Plan(packet);
+
+            PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
+            Assert.Equal(2, batch.InstanceCount);
+            Assert.Equal(1f, RenderingTestAssets.ReadInstanceFloat(
+                first,
+                batch.Instances[0].Record.InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM));
+            Assert.Equal(2f, RenderingTestAssets.ReadInstanceFloat(
+                second,
+                batch.Instances[1].Record.InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM));
+            Assert.Same(firstTexture, batch.Instances[0].Record.GetTextureBindings()[0]);
+            Assert.Same(secondTexture, batch.Instances[1].Record.GetTextureBindings()[0]);
+        } finally {
+            first.Dispose();
+            second.Dispose();
+            RenderingTestAssets.ReleaseProgram(program);
+            if (!firstTexture.IsDisposed) {
+                firstTexture.Dispose();
+            }
+
+            if (!secondTexture.IsDisposed) {
+                secondTexture.Dispose();
+            }
+        }
+    }
+
     private static RenderFramePacket CreatePacket() {
         RenderFramePacket packet = new(1);
         packet.BeginRecording(1.0, 1.0 / 60.0);
@@ -309,12 +392,21 @@ public sealed class BatchPlannerTests {
             mesh.Topology,
             mesh.Bounds,
             mesh.IndexCount,
-            shader.Lifetime,
+            shader.Program.Lifetime,
             renderState,
             Color.White);
-        record.SetShaderState(shader.DefaultInstanceData, shader.DefaultTextureValues);
+        record.SetShaderState(shader.InstanceData, shader.TextureValues);
         worldMatrices.AsSpan().CopyTo(record.BeginInstances(worldMatrices.Length));
         pass.Add(record);
+    }
+
+    private static void OnTickThread(Action action) {
+        TickThread.Attach();
+        try {
+            action();
+        } finally {
+            TickThread.Detach();
+        }
     }
 
     private static Matrix4x4 Translation(float x, float y, float z)

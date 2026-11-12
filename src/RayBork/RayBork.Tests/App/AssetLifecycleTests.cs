@@ -72,8 +72,9 @@ public sealed class AssetLifecycleTests {
         Assert.True(mesh!.IsDisposed);
         Assert.True(texture!.IsDisposed);
         Assert.True(shader!.IsDisposed);
-        Assert.Equal(3, worker.UploadCallCount);
-        Assert.Equal(3, worker.DestroyCalls.Count);
+        // Three game assets plus the three engine defaults the app preloads before Setup.
+        Assert.Equal(6, worker.UploadCallCount);
+        Assert.Equal(6, worker.DestroyCalls.Count);
         Assert.Throws<ObjectDisposedException>(() => setupContext!.Assets.Exists("/meshes/quad"));
         Assert.Throws<ObjectDisposedException>(
             () => {
@@ -149,7 +150,8 @@ public sealed class AssetLifecycleTests {
 
         Assert.NotNull(mesh);
         Assert.True(mesh!.IsDisposed);
-        Assert.Single(worker.DestroyCalls);
+        // The leaked mesh plus the three engine defaults, all released by shutdown.
+        Assert.Equal(4, worker.DestroyCalls.Count);
         Assert.Throws<ObjectDisposedException>(() => mesh.Dispose());
     }
 

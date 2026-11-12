@@ -118,7 +118,7 @@ internal sealed class CastleGame : IGame {
         _model = await context.Assets.Load<Model>("/models/obj/castle");
         _texture = await context.Assets.Load<Texture>("/models/obj/castle_diffuse");
         _shader = await context.Assets.Load<Shader>("/shaders/castle");
-        _gridShader = await context.Assets.Load<Shader>("/shaders/default");
+        _gridShader = await context.Assets.Load<Shader>("/shaders/mesh");
 
         LogModelMetadata(_model);
         LogTextureMetadata(_texture);

@@ -18,9 +18,9 @@ public sealed class BuiltInPackTests {
     private const string PRESENT_PATH = "shaders/present";
     private const string PRESENT_VERTEX_PAYLOAD_PATH = "shaders/present-vert";
     private const string PRESENT_FRAGMENT_PAYLOAD_PATH = "shaders/present-frag";
-    private const string DEFAULT_PATH = "shaders/default";
-    private const string DEFAULT_VERTEX_PAYLOAD_PATH = "shaders/default-vert";
-    private const string DEFAULT_FRAGMENT_PAYLOAD_PATH = "shaders/default-frag";
+    private const string MESH_SHADER_PATH = "shaders/mesh";
+    private const string MESH_VERTEX_PAYLOAD_PATH = "shaders/mesh-vert";
+    private const string MESH_FRAGMENT_PAYLOAD_PATH = "shaders/mesh-frag";
     private const int ENTRY_COUNT = 10;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
 
@@ -68,9 +68,9 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, PRESENT_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, PRESENT_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, PRESENT_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
-        AssertEntry(archive, DEFAULT_PATH, AssetEntryType.Shader, isGpuPayload: false);
-        AssertEntry(archive, DEFAULT_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
-        AssertEntry(archive, DEFAULT_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, MESH_SHADER_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, MESH_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, MESH_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
     }
 
     [Fact]
@@ -130,12 +130,12 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultDrawShaderCarriesTheGeneratedAbiMetadata() {
+    public void MeshShaderCarriesTheGeneratedAbiMetadata() {
         using PackArchive archive = OpenBuiltInPack();
-        ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, DEFAULT_PATH);
+        ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, MESH_SHADER_PATH);
 
-        Assert.Equal(DEFAULT_VERTEX_PAYLOAD_PATH, descriptor.VertexPayload);
-        Assert.Equal(DEFAULT_FRAGMENT_PAYLOAD_PATH, descriptor.FragmentPayload);
+        Assert.Equal(MESH_VERTEX_PAYLOAD_PATH, descriptor.VertexPayload);
+        Assert.Equal(MESH_FRAGMENT_PAYLOAD_PATH, descriptor.FragmentPayload);
         Assert.Equal("main_vertex", descriptor.VertexEntry);
         Assert.Equal("main_fragment", descriptor.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, descriptor.Stages);

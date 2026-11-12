@@ -1,6 +1,6 @@
 [shader]
-vertex = "default.vert"
-fragment = "default.frag"
+vertex = "mesh.vert"
+fragment = "mesh.frag"
 
 [[shader.uniforms]]
 name = "uTint"

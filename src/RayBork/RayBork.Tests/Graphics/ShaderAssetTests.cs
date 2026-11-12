@@ -83,10 +83,19 @@ public sealed class ShaderAssetTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultDrawShaderAppliesTheInstanceTintOnce() {
-        string vertex = File.ReadAllText(DefaultShaderPathOf("default.vert"));
-        string fragment = File.ReadAllText(DefaultShaderPathOf("default.frag"));
+    public void MeshDrawShaderMatchesTheRaylibDefaultModelShader() {
+        string vertex = File.ReadAllText(BuiltInShaderPathOf("mesh.vert"));
+        string fragment = File.ReadAllText(BuiltInShaderPathOf("mesh.frag"));
 
+        // raylib's default model shader is unlit: only position, uv, and color, and the instance tint
+        // is applied once, in the fragment stage.
+        Assert.Contains("layout(location = 0) in vec3 aPosition;", vertex, StringComparison.Ordinal);
+        Assert.Contains("layout(location = 2) in vec2 aUv;", vertex, StringComparison.Ordinal);
+        Assert.Contains("layout(location = 6) in vec4 aColor;", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("aNormal", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("vNormal", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("aNormal", fragment, StringComparison.Ordinal);
+        Assert.DoesNotContain("vNormal", fragment, StringComparison.Ordinal);
         Assert.Contains("vColor = aColor;", vertex, StringComparison.Ordinal);
         Assert.DoesNotContain("rbInstance.Color", vertex, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(fragment, "rbInstance.Color"));
@@ -116,7 +125,7 @@ public sealed class ShaderAssetTests {
     private static string ShaderPathOf(string fileName) =>
         RepositoryLayout.PathOf("src", "RayBork", "RayBork.Engine", "Shaders", fileName);
 
-    private static string DefaultShaderPathOf(string fileName) =>
+    private static string BuiltInShaderPathOf(string fileName) =>
         RepositoryLayout.PathOf(
             "src",
             "RayBork",

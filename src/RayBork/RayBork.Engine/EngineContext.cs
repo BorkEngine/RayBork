@@ -4,8 +4,8 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// The engine context: the asset catalog, window, input, logging, renderer status, frame clock, and
-/// exit control.
+/// The engine context: the asset catalog, engine defaults, window, input, logging, renderer status,
+/// frame clock, and exit control.
 /// </summary>
 /// <remarks>
 /// The context is stable for the app lifetime, but its per-frame members are tick-thread snapshots.
@@ -26,6 +26,7 @@ public sealed class EngineContext {
         IEnginePlatform platform,
         ILoggerFactory loggerFactory,
         IAssetCatalog assets,
+        EngineDefaults defaults,
         IAppControl appControl,
         IInput initialInput,
         double maxDeltaTime,
@@ -35,6 +36,7 @@ public sealed class EngineContext {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(defaults);
         ArgumentNullException.ThrowIfNull(appControl);
         ArgumentNullException.ThrowIfNull(initialInput);
         ArgumentNullException.ThrowIfNull(elapsedTime);
@@ -52,6 +54,7 @@ public sealed class EngineContext {
         _cameras = cameras;
         _proceduralAssets = proceduralProvider.ProceduralAssets;
         Assets = assets;
+        Defaults = defaults;
         Input = initialInput;
         LoggerFactory = loggerFactory;
         MaxDeltaTime = maxDeltaTime;
@@ -68,6 +71,19 @@ public sealed class EngineContext {
     /// <see cref="ObjectDisposedException"/>.
     /// </remarks>
     public IAssetCatalog Assets { get; }
+
+    /// <summary>
+    /// Gets the engine-owned default assets: the built-in mesh shader program, the white texture, and
+    /// the error texture. Valid from <see cref="IGame.Setup"/> and released during shutdown.
+    /// </summary>
+    /// <remarks>
+    /// The defaults are preloaded after the catalog starts and before <see cref="IGame.Setup"/> runs.
+    /// <see cref="EngineDefaults.CreateMeshShader"/> returns a new caller-owned material per call;
+    /// <see cref="EngineDefaults.White"/> and <see cref="EngineDefaults.Error"/> are engine-owned and
+    /// must not be disposed by the game. After the app stops, every member throws
+    /// <see cref="ObjectDisposedException"/>.
+    /// </remarks>
+    public EngineDefaults Defaults { get; }
 
     /// <summary>
     /// Creates a builder for one procedural <see cref="Mesh"/>.

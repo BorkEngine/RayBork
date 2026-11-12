@@ -13,11 +13,13 @@ namespace RayBork;
 /// releases it.
 /// </para>
 /// <para>
-/// The model owns one reference to every distinct part mesh and shader object. The references are
-/// released when the model's last owner releases it; one owner disposing a shared model does not
-/// invalidate the parts for the remaining owners. Two distinct models that share a part each release
-/// their own reference. M4 models are static: there is no skeletal or morph animation, and the part
-/// list is immutable.
+/// The model owns one reference to every distinct part mesh and one material per part. The meshes are
+/// shared engine assets; each part's <see cref="ModelPart.Shader"/> is a material the model owns and
+/// disposes with its last owner. Two parts that name the same shader program path still get distinct
+/// materials over the same internal program. The references are released when the model's last owner
+/// releases it; one owner disposing a shared model does not invalidate the parts for the remaining
+/// owners. Two distinct models that share a part each release their own reference. M4 models are
+/// static: there is no skeletal or morph animation, and the part list is immutable.
 /// </para>
 /// <para>
 /// <see cref="Path"/> and <see cref="IsDisposed"/> stay readable after disposal. Every other member
@@ -106,18 +108,17 @@ public sealed class Model : IAsset {
     }
 
     /// <summary>
-    /// Releases the distinct part references without releasing the model's own owner reference. The
-    /// catalog calls it when the model's last owner goes away, and when a load is disposed before any
-    /// waiter receives the model, so the part references acquired during the load cannot leak.
+    /// Releases the distinct part references and the part materials without releasing the model's own
+    /// owner reference. The catalog calls it when the model's last owner goes away, and when a load is
+    /// disposed before any waiter receives the model, so the references acquired during the load cannot
+    /// leak.
     /// </summary>
     /// <remarks>
-    /// The references are released through the shared <see cref="EngineAsset"/> lifetime, not through
-    /// the public <c>Dispose</c> of each part. A part mesh or shader may be shared by another model, and
-    /// a shared shader's public <c>Dispose</c> is one-shot for its uniform cursor; releasing the engine
-    /// reference is what "one reference per model" means. <see cref="Mesh.IsDisposed"/> and
-    /// <see cref="Shader.IsDisposed"/> still report the shared lifetime, so the part objects become
-    /// disposed when their last owner releases them. A part that the catalog already force-disposed
-    /// during shutdown is skipped; it has no reference left to release. Idempotent.
+    /// Mesh references are released through the shared <see cref="EngineAsset"/> lifetime because a
+    /// part mesh may be shared by another model. Every part material is owned by this model alone, so
+    /// it is disposed exactly once here; a material the catalog already force-disposed during shutdown
+    /// is skipped. A part that another model also uses has its own material in that model, so disposing
+    /// one model never invalidates the other. Idempotent.
     /// </remarks>
     internal void ReleasePartReferences() {
         if (_partsReleased) {
@@ -133,11 +134,11 @@ public sealed class Model : IAsset {
             }
         }
 
-        foreach (Shader shader in _shaders) {
+        foreach (Shader material in _shaders) {
             try {
-                shader.Lifetime.ReleaseOwnerReference();
+                material.Dispose();
             } catch (ObjectDisposedException) {
-                // The catalog force-disposed the part during shutdown.
+                // The catalog force-disposed the material's program during shutdown.
             }
         }
     }

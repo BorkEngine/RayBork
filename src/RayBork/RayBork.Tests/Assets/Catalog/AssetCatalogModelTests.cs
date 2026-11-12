@@ -33,7 +33,7 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ModelDisposeReleasesEveryDistinctPartOnce() {
+    public async Task ModelDisposeReleasesEveryDistinctPartAssetOnce() {
         using CatalogTestHarness harness = new(
             userPacks: [BuildModelPack(CreateDescriptor(partCount: 2, shareParts: true))]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -42,15 +42,20 @@ public sealed class AssetCatalogModelTests {
         ModelPart second = model.Parts[1];
 
         Assert.Same(first.Mesh, second.Mesh);
-        Assert.Same(first.Shader, second.Shader);
+        // Both parts name the same program path, but each part owns its own material over the one
+        // cached program.
+        Assert.NotSame(first.Shader, second.Shader);
+        Assert.Same(first.Shader.Program, second.Shader.Program);
+        Assert.Equal(first.Shader.Path, second.Shader.Path);
 
         model.Dispose();
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 2,
-            "The shared mesh and shader are released exactly once each.");
+            "The shared mesh and the one shared program are released exactly once each.");
         Assert.True(first.Mesh.IsDisposed);
         Assert.True(first.Shader.IsDisposed);
+        Assert.True(second.Shader.IsDisposed);
     }
 
     [Fact]
@@ -65,28 +70,35 @@ public sealed class AssetCatalogModelTests {
         Model castle = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
         Model tower = await harness.Catalog.Load<Model>("/models/tower", cancellationToken);
         Mesh sharedMesh = castle.Parts[0].Mesh;
-        Shader sharedShader = castle.Parts[0].Shader;
+        Shader castleMaterial = castle.Parts[0].Shader;
+        Shader towerMaterial = tower.Parts[0].Shader;
         Assert.Same(sharedMesh, tower.Parts[0].Mesh);
-        Assert.Same(sharedShader, tower.Parts[0].Shader);
+        Assert.NotSame(castleMaterial, towerMaterial);
+        Assert.Same(castleMaterial.Program, towerMaterial.Program);
         Assert.NotSame(castle, tower);
 
         castle.Dispose();
         Assert.False(sharedMesh.IsDisposed);
-        Assert.False(sharedShader.IsDisposed);
+        // The castle's own material is disposed with the model. The tower's material shares the same
+        // program but not the castle's material reference, so it stays usable.
+        Assert.True(castleMaterial.IsDisposed);
+        Assert.False(towerMaterial.IsDisposed);
+        Assert.Empty(harness.Worker.DestroyCalls);
 
         tower.Dispose();
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 2,
-            "The last model reference destroys the shared mesh and shader.");
+            "The last model reference destroys the shared mesh and the shared program.");
         Assert.True(sharedMesh.IsDisposed);
+        Assert.True(towerMaterial.IsDisposed);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task PartWithoutAShaderPathFallsBackToTheBuiltInDefaultShader() {
+    public async Task PartWithoutAShaderPathFallsBackToTheBuiltInMeshShader() {
         PackBuilder builder = CatalogTestData.CreateStandardBuilder();
-        builder.Add("shaders/default", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor()));
+        builder.Add("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor()));
         builder.Add(
             "models/castle",
             AssetEntryType.Model,
@@ -98,7 +110,29 @@ public sealed class AssetCatalogModelTests {
             TestContext.Current.CancellationToken);
 
         try {
-            Assert.Equal("/shaders/default", model.Parts[0].Shader.Path);
+            Assert.Equal("/shaders/mesh", model.Parts[0].Shader.Path);
+        } finally {
+            model.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LegacyDefaultShaderPathResolvesToTheBuiltInMeshShader() {
+        PackBuilder builder = CatalogTestData.CreateStandardBuilder();
+        builder.Add("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor()));
+        builder.Add(
+            "models/castle",
+            AssetEntryType.Model,
+            AssetSerialization.Serialize(CreateDescriptor(shaderPath: "shaders/default")));
+        using CatalogTestHarness harness = new(userPacks: [builder.Build()]);
+
+        Model model = await harness.Catalog.Load<Model>(
+            "/models/castle",
+            TestContext.Current.CancellationToken);
+
+        try {
+            Assert.Equal("/shaders/mesh", model.Parts[0].Shader.Path);
         } finally {
             model.Dispose();
         }

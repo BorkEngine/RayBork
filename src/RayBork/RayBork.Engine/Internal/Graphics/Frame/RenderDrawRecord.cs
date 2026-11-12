@@ -3,7 +3,7 @@ using System.Numerics;
 namespace RayBork.Internal;
 
 /// <summary>
-/// One recorded draw call: a mesh/shader/state snapshot with one or more instance transforms.
+/// One recorded draw call: a mesh/shader-program/state snapshot with one or more instance transforms.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -23,7 +23,7 @@ namespace RayBork.Internal;
 /// </remarks>
 internal sealed class RenderDrawRecord {
     private EngineAsset? _mesh;
-    private EngineAsset? _shader;
+    private EngineAsset? _program;
     private Matrix4x4[] _worldMatrices = new Matrix4x4[4];
     private byte[] _instanceTemplate = [];
     private Texture?[] _textureBindings = [];
@@ -45,10 +45,10 @@ internal sealed class RenderDrawRecord {
     /// <summary>Gets the mesh index count, used for triangle statistics.</summary>
     internal int IndexCount { get; private set; }
 
-    /// <summary>Gets the shader asset. It is retained by the frame's retention set until the frame ends.</summary>
+    /// <summary>Gets the internal shader program asset. It is retained by the frame's retention set until the frame ends.</summary>
     /// <exception cref="InvalidOperationException">The record was reset.</exception>
-    internal EngineAsset Shader => _shader
-        ?? throw new InvalidOperationException("The draw record has no shader; it was reset or never recorded.");
+    internal EngineAsset Program => _program
+        ?? throw new InvalidOperationException("The draw record has no shader program; it was reset or never recorded.");
 
     /// <summary>Gets the effective render state of this draw.</summary>
     internal RenderState RenderState { get; private set; }
@@ -85,7 +85,7 @@ internal sealed class RenderDrawRecord {
     /// <param name="topology">The mesh topology.</param>
     /// <param name="meshBounds">The mesh-space bounds.</param>
     /// <param name="indexCount">The mesh index count.</param>
-    /// <param name="shader">The shader asset.</param>
+    /// <param name="program">The internal shader program asset.</param>
     /// <param name="renderState">The effective render state.</param>
     /// <param name="tint">The linear tint.</param>
     /// <exception cref="ArgumentNullException">A required argument is <c>null</c>.</exception>
@@ -94,14 +94,14 @@ internal sealed class RenderDrawRecord {
         PrimitiveTopology topology,
         BoundingBox meshBounds,
         int indexCount,
-        EngineAsset shader,
+        EngineAsset program,
         RenderState renderState,
         Color tint) {
         ArgumentNullException.ThrowIfNull(mesh);
-        ArgumentNullException.ThrowIfNull(shader);
+        ArgumentNullException.ThrowIfNull(program);
 
         _mesh = mesh;
-        _shader = shader;
+        _program = program;
         Topology = topology;
         MeshBounds = meshBounds;
         IndexCount = indexCount;
@@ -158,7 +158,7 @@ internal sealed class RenderDrawRecord {
     /// </summary>
     internal void Reset() {
         _mesh = null;
-        _shader = null;
+        _program = null;
         Array.Clear(_textureBindings, 0, _textureCount);
         _textureCount = 0;
         _instanceCount = 0;
