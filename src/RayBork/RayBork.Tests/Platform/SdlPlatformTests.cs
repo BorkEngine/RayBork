@@ -33,7 +33,15 @@ public sealed class SdlPlatformTests {
         Assert.True(window.CurrentMonitor.RefreshRate >= 0);
 
         IInput input = host.Platform.CaptureInput();
-        Assert.Empty(input.Gamepads);
+        // The host may have a physical gamepad connected, which is also what a real game sees. Assert
+        // the snapshot is internally consistent instead of assuming no device is present.
+        foreach (IGamepad gamepad in input.Gamepads) {
+            Assert.True(gamepad.IsConnected);
+            Assert.True(gamepad.Index >= 0);
+            Assert.NotEqual(0, gamepad.InstanceId);
+            Assert.Equal(gamepad.InstanceId, input.GetGamepad(gamepad.Index)?.InstanceId);
+        }
+
         Assert.Equal(string.Empty, input.TextInput);
     }
 
