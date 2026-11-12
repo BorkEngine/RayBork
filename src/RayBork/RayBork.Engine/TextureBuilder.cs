@@ -93,6 +93,56 @@ public sealed class TextureBuilder {
     }
 
     /// <summary>
+    /// Gets the base-level width in pixels.
+    /// </summary>
+    public int Width {
+        get {
+            _service.ThrowIfStopped();
+            return _width;
+        }
+    }
+
+    /// <summary>
+    /// Gets the base-level height in pixels.
+    /// </summary>
+    public int Height {
+        get {
+            _service.ThrowIfStopped();
+            return _height;
+        }
+    }
+
+    /// <summary>
+    /// Gets the uncompressed storage format.
+    /// </summary>
+    public TextureFormat Format {
+        get {
+            _service.ThrowIfStopped();
+            return _format;
+        }
+    }
+
+    /// <summary>
+    /// Gets the sampler state the built texture uses.
+    /// </summary>
+    public SamplerState Sampler {
+        get {
+            _service.ThrowIfStopped();
+            return _sampler;
+        }
+    }
+
+    /// <summary>
+    /// Gets whether <see cref="BuildAsync"/> generates the full mip chain when no chain exists.
+    /// </summary>
+    public bool GenerateMipsEnabled {
+        get {
+            _service.ThrowIfStopped();
+            return _generateMips;
+        }
+    }
+
+    /// <summary>
     /// Sets the base-level pixels from a tightly packed byte buffer. The buffer length must be exactly
     /// <c>width × height × 4</c> for the RGBA8 formats or <c>width × height</c> for
     /// <see cref="TextureFormat.R8Unorm"/>.

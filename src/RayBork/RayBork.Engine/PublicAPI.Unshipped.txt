@@ -686,9 +686,14 @@ RayBork.Texture.Sampler.get -> RayBork.SamplerState
 RayBork.Texture.Width.get -> int
 RayBork.TextureBuilder
 RayBork.TextureBuilder.BuildAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<RayBork.Texture!>!
+RayBork.TextureBuilder.Format.get -> RayBork.TextureFormat
 RayBork.TextureBuilder.GenerateMips() -> void
+RayBork.TextureBuilder.GenerateMipsEnabled.get -> bool
+RayBork.TextureBuilder.Height.get -> int
+RayBork.TextureBuilder.Sampler.get -> RayBork.SamplerState
 RayBork.TextureBuilder.SetPixels(System.ReadOnlySpan<byte> pixels) -> void
 RayBork.TextureBuilder.SetPixels(System.ReadOnlySpan<RayBork.Color> colors) -> void
+RayBork.TextureBuilder.Width.get -> int
 RayBork.TextureFilter
 RayBork.TextureFilter.Anisotropic = 2 -> RayBork.TextureFilter
 RayBork.TextureFilter.Linear = 1 -> RayBork.TextureFilter

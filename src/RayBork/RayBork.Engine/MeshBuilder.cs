@@ -57,7 +57,11 @@ public sealed class MeshBuilder {
     /// <exception cref="ArgumentOutOfRangeException">The value is not a defined topology.</exception>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
     public PrimitiveTopology Topology {
-        get => _topology;
+        get {
+            _service.ThrowIfStopped();
+            return _topology;
+        }
+
         set {
             _service.ThrowIfStopped();
             ValidateTopology(value);
@@ -69,13 +73,23 @@ public sealed class MeshBuilder {
     /// Gets the mutable vertex list. Add vertices directly or replace the list contents with
     /// <see cref="SetVertices"/>.
     /// </summary>
-    public List<Vertex> Vertices => _vertices;
+    public List<Vertex> Vertices {
+        get {
+            _service.ThrowIfStopped();
+            return _vertices;
+        }
+    }
 
     /// <summary>
     /// Gets the mutable 32-bit index list. Add indices directly or replace the list contents with
     /// <see cref="SetIndices"/>.
     /// </summary>
-    public List<uint> Indices => _indices;
+    public List<uint> Indices {
+        get {
+            _service.ThrowIfStopped();
+            return _indices;
+        }
+    }
 
     /// <summary>
     /// Replaces every vertex with the supplied span. The builder keeps a copy.
