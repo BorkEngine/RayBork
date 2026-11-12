@@ -15,10 +15,13 @@ namespace RayBork.Internal;
 /// logical device with <c>VK_KHR_swapchain</c> enabled.
 /// </para>
 /// <para>
-/// M2 enables no optional device features beyond Vulkan 1.2 core. M3 additionally enables
-/// <c>samplerAnisotropy</c> and <c>textureCompressionBC</c> when the selected device advertises them,
-/// because the asset path samples BC-compressed textures and may request anisotropic filtering.
-/// Descriptor indexing is probed for the later bindless texture table but is not required.
+/// M4 requires Vulkan 1.2 core, the descriptor-indexing subset in
+/// <see cref="VulkanBindlessFeatures"/>, and enough update-after-bind sampled images for the fixed
+/// <c>RayBorkTextures[2048]</c> array; a physical device without them is rejected. The optional
+/// <c>samplerAnisotropy</c> and <c>textureCompressionBC</c> features are enabled when the selected
+/// device advertises them, because the asset path samples BC-compressed textures and may request
+/// anisotropic filtering. Update-after-bind stays disabled for uniform and storage buffers, and
+/// variable descriptor counts are never used.
 /// </para>
 /// <para>
 /// Every member is render-thread only. Dispose the device before the surface and the instance.
@@ -146,6 +149,9 @@ internal sealed class VulkanDevice : IDisposable {
                 queueFamilies,
                 static family => family.SupportsPresent);
             bool hasSwapchain = HasDeviceExtension(vulkan, physicalDevice, SWAPCHAIN_EXTENSION_NAME);
+            IReadOnlyList<string> missingBindlessFeatures = VulkanBindlessFeatures.GetMissingFeatures(
+                VulkanBindlessFeatures.Query(vulkan, physicalDevice));
+            uint bindlessTextureCapacity = VulkanBindlessFeatures.QueryTextureCapacity(vulkan, physicalDevice);
             VulkanPhysicalDeviceCandidate candidate = new(
                 index,
                 name,
@@ -153,18 +159,22 @@ internal sealed class VulkanDevice : IDisposable {
                 properties.DeviceType,
                 supportsGraphics,
                 supportsPresent,
-                hasSwapchain);
+                hasSwapchain,
+                bindlessTextureCapacity,
+                string.Join(", ", missingBindlessFeatures));
             candidates.Add(candidate);
             queueFamiliesByDevice.Add(queueFamilies);
             logger.LogDebug(
-                "Vulkan physical device [{Index}] {Name}: API {ApiVersion}, type {DeviceType}, graphics {Graphics}, present {Present}, swapchain {Swapchain}.",
+                "Vulkan physical device [{Index}] {Name}: API {ApiVersion}, type {DeviceType}, graphics {Graphics}, present {Present}, swapchain {Swapchain}, bindless descriptor indexing {Bindless}, update-after-bind sampled-image capacity {BindlessCapacity}.",
                 index,
                 name,
                 VulkanVersion.Format(properties.ApiVersion),
                 properties.DeviceType,
                 supportsGraphics,
                 supportsPresent,
-                hasSwapchain);
+                hasSwapchain,
+                missingBindlessFeatures.Count == 0 ? "supported" : "missing " + candidate.MissingBindlessFeatures,
+                bindlessTextureCapacity);
         }
 
         int selectedIndex = VulkanPhysicalDeviceSelector.Select(candidates);
@@ -223,13 +233,14 @@ internal sealed class VulkanDevice : IDisposable {
                 logger);
             instance.ThrowIfValidationError("creating the Vulkan device");
             logger.LogInformation(
-                "Vulkan device created: {Name} (API {ApiVersion}, {VendorId}:{DeviceId}, {SampleCount} sample counts, descriptor indexing {DescriptorIndexing}).",
+                "Vulkan device created: {Name} (API {ApiVersion}, {VendorId}:{DeviceId}, {SampleCount} sample counts, descriptor indexing {DescriptorIndexing}, bindless texture capacity {BindlessCapacity}).",
                 capabilities.DeviceName,
                 VulkanVersion.Format(capabilities.ApiVersion),
                 capabilities.VendorId,
                 capabilities.DeviceId,
                 capabilities.SupportedSampleCounts.Count,
-                capabilities.DescriptorIndexing);
+                capabilities.DescriptorIndexing,
+                capabilities.BindlessTextureCapacity);
             return result;
         } catch {
             vulkan.DestroyDevice(device, null);
@@ -413,6 +424,13 @@ internal sealed class VulkanDevice : IDisposable {
             }
 
             byte* extensionNamePointer = swapchainExtensionPointer;
+            // The M4 bindless texture table needs the core Vulkan 1.2 descriptor-indexing subset;
+            // device selection already rejected a device that lacks it. Update-after-bind stays off
+            // for uniform and storage buffers, and variable descriptor counts are not enabled.
+            PhysicalDeviceVulkan12Features vulkan12Features = new() {
+                SType = StructureType.PhysicalDeviceVulkan12Features,
+            };
+            VulkanBindlessFeatures.Enable(ref vulkan12Features);
             // The M3 asset path samples BC-compressed textures and may request anisotropic
             // filtering. Both are optional Vulkan 1.2 features, so enable each only when the
             // selected physical device advertises it. Every other feature stays disabled.
@@ -423,6 +441,7 @@ internal sealed class VulkanDevice : IDisposable {
             };
             DeviceCreateInfo createInfo = new() {
                 SType = StructureType.DeviceCreateInfo,
+                PNext = &vulkan12Features,
                 QueueCreateInfoCount = (uint)families.Count,
                 PQueueCreateInfos = queueCreateInfosPointer,
                 EnabledLayerCount = 0,

@@ -27,6 +27,27 @@ namespace RayBork.Internal;
 /// </remarks>
 internal interface IAssetGpuWorker {
     /// <summary>
+    /// Gets whether no submitted frame can still reference a GPU asset resource.
+    /// </summary>
+    /// <remarks>
+    /// The bridge defers destruction requests while this is <see langword="false"/>, so a texture or
+    /// mesh destroyed after the tick that drew it stays alive until the GPU finished every frame that
+    /// could reference it. The Vulkan worker polls every frame fence without blocking. Render-thread
+    /// only.
+    /// </remarks>
+    bool AreFrameResourcesIdle { get; }
+
+    /// <summary>
+    /// Blocks until no submitted frame can still reference a GPU asset resource.
+    /// </summary>
+    /// <remarks>
+    /// The render loop calls it once before it closes the bridge and destroys the live resources. It
+    /// is not a per-frame operation; a device that already stopped cannot throw from it, because
+    /// shutdown must still release what it can. Render-thread only.
+    /// </remarks>
+    void WaitForFrameResourcesIdle();
+
+    /// <summary>
     /// Starts the GPU work for one upload without waiting for it to finish.
     /// </summary>
     /// <param name="upload">The retained upload description.</param>

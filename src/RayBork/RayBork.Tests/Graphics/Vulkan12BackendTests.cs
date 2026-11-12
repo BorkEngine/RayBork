@@ -5,6 +5,8 @@ namespace RayBork.Tests;
 
 [Collection("SDL")]
 public sealed class Vulkan12BackendTests {
+    private static readonly Color _clearColor = new(0.25f, 0.5f, 0.75f, 1f);
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void BackendInitializesAndReportsInfo() {
@@ -31,6 +33,22 @@ public sealed class Vulkan12BackendTests {
         Assert.Equal(expectedSampleCount, info.SampleCount);
         Assert.Equal(expectedPresentMode.Public, info.PresentMode);
         Assert.Equal(host.Instance.ValidationLayersEnabled, info.ValidationEnabled);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void BindlessCapabilitiesAndTableAreReported() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
+        VulkanBindlessTextureTable table = host.Backend.BindlessTextures;
+
+        Assert.True(capabilities.DescriptorIndexing);
+        Assert.Equal(VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY, capabilities.BindlessTextureCapacity);
+        Assert.Equal(capabilities.BindlessTextureCapacity, table.Capacity);
+        Assert.Equal(1, table.LiveCount);
+        Assert.NotEqual(0ul, table.WhiteImage.Handle);
+        Assert.NotEqual(0ul, table.WhiteView.Handle);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -72,16 +90,16 @@ public sealed class Vulkan12BackendTests {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         const long frameIndex = 42;
 
-        host.Backend.Submit(new RenderFramePacket(frameIndex));
+        host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, frameIndex, _clearColor));
         RenderStats stats = host.Backend.Stats;
         EngineInfo info = host.Backend.Info;
 
         Assert.Equal(frameIndex, stats.FrameIndex);
-        Assert.Equal(1, stats.DrawCalls);
-        Assert.Equal(1, stats.Instances);
-        Assert.Equal(1, stats.Triangles);
+        Assert.Equal(0, stats.DrawCalls);
+        Assert.Equal(0, stats.Instances);
+        Assert.Equal(0, stats.Triangles);
         Assert.Equal(0, stats.CulledInstances);
-        Assert.Equal(1, stats.PipelineCount);
+        Assert.Equal(0, stats.PipelineCount);
         Assert.Equal(1, stats.TextureCount);
         Assert.Equal(info.SampleCount, stats.SampleCount);
         Assert.Equal(info.HdrOutput, stats.HdrOutput);
@@ -94,14 +112,35 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SceneColorClearIsTheConfiguredLinearColor() {
-        Color clearColor = new(0.25f, 0.5f, 0.75f, 1f);
-        using BackendTestHost host = BackendTestHost.CreateOrSkip(clearColor: clearColor, hdr: WindowHdrState.Sdr);
+    public void SceneColorClearIsTheCameraPassColor() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         Extent2D extent = host.SceneTarget.Extent;
 
-        AssertColorNear(clearColor, ReadColor(host, 1, 1), 1e-4f);
-        AssertColorNear(clearColor, ReadColor(host, extent.Width - 2, extent.Height - 2), 1e-4f);
+        AssertColorNear(_clearColor, ReadColor(host, 1, 1), 1e-4f);
+        AssertColorNear(_clearColor, ReadColor(host, extent.Width - 2, extent.Height - 2), 1e-4f);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void HdrClearColorAboveOneIsStoredLiterally() {
+        Color hdrClear = new(4f, 2f, 0.5f, 1f);
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, 1, hdrClear));
+        host.Backend.Present();
+
+        AssertColorNear(hdrClear, ReadColor(host, 8, 8), 1e-3f);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ClearOnlyColorKeepsDepthUndefined() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: 1, hdr: WindowHdrState.Sdr);
+        BackendPacketTestHelper.SubmitClearingFrame(host, 1, _clearColor, ClearMode.Color);
+
+        AssertColorNear(_clearColor, ReadColor(host, 1, 1), 1e-4f);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -124,38 +163,25 @@ public sealed class Vulkan12BackendTests {
     [InlineData(1)]
     [InlineData(8)]
     public void MsaaResolveProducesTheClearColor(int requestedSampleCount) {
-        Color clearColor = new(0.25f, 0.5f, 0.75f, 1f);
         using BackendTestHost host = BackendTestHost.CreateOrSkip(
             sampleCount: requestedSampleCount,
-            clearColor: clearColor,
             hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         Extent2D extent = host.SceneTarget.Extent;
 
         Assert.Equal(host.Backend.Info.SampleCount, host.SceneTarget.SampleCount);
-        AssertColorNear(clearColor, ReadColor(host, extent.Width / 2, extent.Height / 2), 1e-3f);
+        AssertColorNear(_clearColor, ReadColor(host, extent.Width / 2, extent.Height / 2), 1e-3f);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void ResizeRecreatesThePresentationPath() {
-        Color clearColor = new(0.1f, 0.2f, 0.3f, 1f);
-        using BackendTestHost host = BackendTestHost.CreateOrSkip(clearColor: clearColor, hdr: WindowHdrState.Sdr);
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         EngineInfo infoBefore = host.Backend.Info;
 
-        host.Platform.Window.SetSize(400, 300);
-        bool observed = false;
-        for (int attempt = 0; attempt < 200; attempt++) {
-            host.Platform.Pump(TimeSpan.Zero);
-            if (host.Platform.Window.RenderWidth == 400 && host.Platform.Window.RenderHeight == 300) {
-                observed = true;
-                break;
-            }
-        }
-
-        if (!observed) {
+        if (!TryResizeWindow(host, 400, 300)) {
             Assert.Skip("The host did not apply the SDL window resize synchronously.");
         }
 
@@ -165,7 +191,7 @@ public sealed class Vulkan12BackendTests {
 
         Assert.Equal(400u, host.SceneTarget.Extent.Width);
         Assert.Equal(300u, host.SceneTarget.Extent.Height);
-        AssertColorNear(clearColor, ReadColor(host, 1, 1), 1e-3f);
+        AssertColorNear(_clearColor, ReadColor(host, 1, 1), 1e-3f);
         Assert.Equal(infoBefore, host.Backend.Info);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
@@ -176,13 +202,13 @@ public sealed class Vulkan12BackendTests {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         host.State = host.State with { IsMinimized = true };
 
-        host.Backend.Submit(new RenderFramePacket(1));
+        host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, 1, _clearColor));
         host.Backend.Present();
         Assert.Equal(0, host.Backend.Stats.DrawCalls);
 
         host.State = host.State with { IsMinimized = false };
         RenderFrame(host, 2);
-        Assert.Equal(1, host.Backend.Stats.DrawCalls);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -201,8 +227,19 @@ public sealed class Vulkan12BackendTests {
     }
 
     private static void RenderFrame(BackendTestHost host, long frameIndex) {
-        host.Backend.Submit(new RenderFramePacket(frameIndex));
-        host.Backend.Present();
+        BackendPacketTestHelper.SubmitClearingFrame(host, frameIndex, _clearColor);
+    }
+
+    private static bool TryResizeWindow(BackendTestHost host, int width, int height) {
+        host.Platform.Window.SetSize(width, height);
+        for (int attempt = 0; attempt < 200; attempt++) {
+            host.Platform.Pump(TimeSpan.Zero);
+            if (host.Platform.Window.RenderWidth == width && host.Platform.Window.RenderHeight == height) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static (float R, float G, float B) ReadColor(BackendTestHost host, uint x, uint y) {

@@ -1,0 +1,99 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <PublishAot>true</PublishAot>
+        <!-- The assets executable is JIT build-time tooling. The bake targets below build and run it
+             out of process, exactly like build/RayBork.BuiltInAssets.targets, so neither it nor
+             RayBork.Bake and its packages enter this project's Native AOT publish graph. -->
+        <CastleAssetsProjectFile Condition="'$(CastleAssetsProjectFile)' == ''">$(MSBuildProjectDirectory)\Castle.Assets\Castle.Assets.csproj</CastleAssetsProjectFile>
+        <CastlePackFileName Condition="'$(CastlePackFileName)' == ''">castle.pck</CastlePackFileName>
+    </PropertyGroup>
+
+    <!-- The assets project lives inside this sample directory (flat per-sample layout). Keep its
+         sources and its build output out of this project's default item globs. -->
+    <ItemGroup>
+        <Compile Remove="Castle.Assets/**" />
+        <None Remove="Castle.Assets/**" />
+    </ItemGroup>
+
+    <!-- Record the generated pack as a build output so dotnet clean removes it and the next build
+         runs a full bake. These paths are evaluated after the SDK has set IntermediateOutputPath and
+         TargetDir. -->
+    <ItemGroup Condition="'$(DesignTimeBuild)' != 'true'">
+        <FileWrites Include="$(IntermediateOutputPath)castle-pack\$(CastlePackFileName)" />
+        <FileWrites Include="$(TargetDir)$(CastlePackFileName)" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="PolyType" />
+        <PackageReference Include="SDL3-CS" />
+        <PackageReference Include="SDL3-CS.Native" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../src/RayBork/RayBork.Engine/RayBork.Engine.csproj" />
+    </ItemGroup>
+
+    <!--
+        Bakes castle.pck as part of the sample build and copies it beside the sample executable.
+        The assets executable is built with the outer Configuration but without the outer publish
+        settings, so an AOT publish of this project never carries the JIT bake tool or its packages.
+        The pack is generated under the intermediate output, so dotnet clean removes it and the next
+        build bakes in full. Explicit project and output roots keep the checked-in Assets directory
+        and the generated pack independent of the working directory.
+    -->
+    <Target Name="CastleBakeAssets"
+            AfterTargets="Build"
+            Condition="'$(DesignTimeBuild)' != 'true'">
+        <PropertyGroup>
+            <_CastleAssetsDirectory>$([System.IO.Path]::GetDirectoryName('$(CastleAssetsProjectFile)'))</_CastleAssetsDirectory>
+            <_CastleAssetsAssembly>$(_CastleAssetsDirectory)\bin\$(Configuration)\$(TargetFramework)\Castle.Assets.dll</_CastleAssetsAssembly>
+            <_CastlePackDirectory>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)castle-pack</_CastlePackDirectory>
+            <_CastlePackPath>$(_CastlePackDirectory)\$(CastlePackFileName)</_CastlePackPath>
+        </PropertyGroup>
+        <!-- Restore first so a standalone publish or a build on another host has the assets
+             project's NuGet state, then build it without the sample's runtime/publish settings. -->
+        <MSBuild Projects="$(CastleAssetsProjectFile)"
+                 Targets="Restore"
+                 Properties="Configuration=$(Configuration)"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <MSBuild Projects="$(CastleAssetsProjectFile)"
+                 Targets="Build"
+                 Properties="Configuration=$(Configuration)"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <!-- An AfterTargets hook is not reliable when Build is driven by another project's MSBuild
+             task, so invoke the pinned libshaderc copy explicitly before the bake needs it. -->
+        <MSBuild Projects="$(CastleAssetsProjectFile)"
+                 Targets="RayBorkCopyShadercNative"
+                 Properties="Configuration=$(Configuration)"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <Error Condition="!Exists('$(_CastleAssetsAssembly)')"
+               Text="RayBork Castle sample: the assets executable was not produced at '$(_CastleAssetsAssembly)'." />
+        <MakeDir Directories="$(_CastlePackDirectory)" />
+        <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(_CastleAssetsAssembly)&quot; bake --project-root &quot;$(_CastleAssetsDirectory)&quot; --output-root &quot;$(_CastlePackDirectory)&quot;"
+              WorkingDirectory="$(_CastleAssetsDirectory)"
+              StandardOutputImportance="high"
+              StandardErrorImportance="high" />
+        <Error Condition="!Exists('$(_CastlePackPath)')"
+               Text="RayBork Castle sample: the bake did not produce '$(_CastlePackPath)'." />
+        <Copy SourceFiles="$(_CastlePackPath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+    <!--
+        dotnet publish builds first, so CastleBakeAssets has already written the pack under the
+        intermediate output. This target copies that pack beside the published executable. A missing
+        pack is an error instead of a published host that cannot start.
+    -->
+    <Target Name="CastleCopyPackToPublish"
+            AfterTargets="Publish"
+            Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'">
+        <PropertyGroup>
+            <_CastlePublishedPackPath>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)castle-pack\$(CastlePackFileName)</_CastlePublishedPackPath>
+        </PropertyGroup>
+        <Error Condition="!Exists('$(_CastlePublishedPackPath)')"
+               Text="RayBork Castle sample: the baked pack '$(_CastlePublishedPackPath)' is missing; the publish cannot place $(CastlePackFileName) beside the published executable." />
+        <Copy SourceFiles="$(_CastlePublishedPackPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+</Project>

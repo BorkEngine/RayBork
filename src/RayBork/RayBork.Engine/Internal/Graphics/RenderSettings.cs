@@ -37,9 +37,4 @@ internal sealed class RenderSettings {
     /// builds and disabled by default in Release builds.
     /// </summary>
     public required bool ValidationEnabled { get; init; }
-
-    /// <summary>
-    /// Gets the linear scene clear color used until cameras provide their own clear color in M4.
-    /// </summary>
-    public required Color ClearColor { get; init; }
 }

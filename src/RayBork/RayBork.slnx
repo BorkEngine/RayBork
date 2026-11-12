@@ -2,6 +2,4 @@
   <Project Path="RayBork.Bake/RayBork.Bake.csproj" />
   <Project Path="RayBork.Engine/RayBork.Engine.csproj" />
   <Project Path="RayBork.Tests/RayBork.Tests.csproj" />
-  <Project Path="../../samples/HelloInterop/HelloInterop.csproj" />
-  <Project Path="../../samples/HelloInterop.Assets/HelloInterop.Assets.csproj" />
 </Solution>

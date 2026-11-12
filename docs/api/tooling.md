@@ -46,7 +46,28 @@ return await new BakeApplicationBuilder()
 | `RunAsync(args)` | Runs `bake`, `clean`, `inspect`, `--help`, or `--version`; returns the process exit code. |
 
 The `watch` command is deferred to M10. M3 ships `bake`, `clean`, `inspect`, `--help`, and
-`--version`.
+`--version`. `bake`, `clean`, and `inspect` accept `--project-root <dir>` and `--output-root <dir>`;
+the project root defaults to the working directory and the output root defaults to
+`AppContext.BaseDirectory`, so a build can invoke the assets executable from any working directory.
+
+#### Build-time bake in a game or sample project
+
+A game or sample can run its assets executable as part of its own build instead of a manual step.
+`samples/Castle/Castle.csproj` and `samples/HelloInterop/HelloInterop.csproj` use the same
+out-of-process pattern as the engine's built-in pack: an `AfterTargets="Build"` target invokes the
+assets project with the `MSBuild` task (passing only `Configuration` and removing the sample's
+runtime/publish properties), runs the built assets executable as
+`<sample>.dll bake --project-root <assets dir> --output-root <intermediate pack dir>`, and copies
+`<sample>.pck` beside the sample executable as a recorded build output. A separate target after
+`Publish` copies the same pack into the publish directory and fails the publish with a clear error if
+it is missing. The pack lives under the sample's intermediate output, so `dotnet clean` removes it
+and the next build bakes again.
+
+Because the assets executable is only invoked out of process, the sample project never references
+`RayBork.Bake`, and the JIT tooling never enters the sample's Native AOT publish graph. The explicit
+`--project-root` and `--output-root` arguments keep the bake independent of the working directory.
+The samples are separate solutions (`samples/Castle/Castle.slnx`,
+`samples/HelloInterop/HelloInterop.slnx`) and are not part of `src/RayBork/RayBork.slnx`.
 
 M3's public bake surface is `BakeApplicationBuilder`, `BakeApplication`, `IAssetProcessor`,
 `AssetProcessor<TSidecar>`, `AssetProcessorContext`, `IAssetOutputSink`,
@@ -173,10 +194,20 @@ shader = "shaders/castle"
   cameras, and lights are rejected or ignored with a diagnostic; a source with no mesh is an error.
 - The model is emitted at the base path. Each primitive becomes a `Mesh` part at
   `<base>/<part>` with its own vertex/index payload. The `Model` descriptor records the flat part
-  list, local transforms, bounds, and the shared sidecar shader path.
+  list, local transforms, bounds, and the shared sidecar shader path. A part with no `shader` in
+  the sidecar is baked with the built-in canonical path `shaders/mesh`, so every part always names
+  a shader program.
 - `scale` and `front` apply the authoring correction before bounds and payloads are written.
-- glTF material and image import is M4 work. M3 validates that referenced images exist and warns
-  that they are not imported.
+- glTF materials and images are not imported in M4. The bake validates that referenced images exist
+  and warns that they are not imported; every part uses the sidecar shader (or the built-in
+  `shaders/mesh`), and the game supplies textures and uniforms with `SetUniform`. The model loader
+  maps an older pack's `shaders/default` part path to the built-in `/shaders/mesh` program, so packs
+  baked before the mesh shader replaced the old default still load.
+- UVs use the engine's top-left origin. glTF `TEXCOORD_0`-`TEXCOORD_3` are used as authored. Every
+  OBJ `vt` is flipped on V at bake (`v = 1 - v`), so an authored V of 0 maps to the bottom of the
+  texture and an authored V of 1 maps to the top, matching raylib's OBJ loader; U is unchanged.
+  Negative UV-index resolution is unchanged, and a face corner with no `vt` keeps the zero UV
+  default.
 
 A font source `Assets/Fonts/inter.ttf` with an optional sidecar `Assets/Fonts/inter.toml`:
 
@@ -218,25 +249,42 @@ depth_write = true
 
 - `vertex` and `fragment` are paths relative to the TOML file and must stay inside the pack root.
   They are tracked inputs, not assets. The TOML source itself is not a data asset.
-- The entry points default to `main_vertex` and `main_fragment`; M3 accepts an explicit value only
-  for built-in shaders. The bake validates that each entry point exists in its SPIR-V module.
+- The entry points default to `main_vertex` and `main_fragment`; a sidecar may restate those exact
+  values, but it cannot rename them in v1. The GLSL defines the user functions `main_vertex` and
+  `main_fragment`; the bake compiles a generated wrapper `main` and renames the compiled
+  `OpEntryPoint` back to the fixed name.
+- The bake inserts the generated shader prologue after the first `#version` directive line. When a
+  stage has no `#version` directive, the bake prepends `#version 450` before the prologue, so the
+  version line always stays first.
+- The prologue declares the frame block, the fixed-size 2048-element bindless texture array, the
+  per-instance record and storage buffer, the `rbFrame`/`rbInstance` accessors, one macro per
+  reflected uniform and texture, and the stage wrapper. User GLSL must not declare the generated
+  identifiers (`main`, `RayBorkFrame`, `RayBorkFrameBlock`, `rbFrameBlock`, `RayBorkTextures`,
+  `RayBorkInstance`, `RayBorkInstanceBuffer`, `RayBorkInstances`, `rbFrame`, `rbInstance`,
+  `rbInstanceIndex`, `rbInstanceIndexOut`, `rbUserVertexMain`, `rbUserFragmentMain`) or any
+  uniform/texture name from its sidecar. It must not declare a `layout(set = ...)` binding or use
+  varying location 15, which is reserved for the engine instance index. Declarations are detected on
+  the comment-stripped source, and a violation is `RB4008` with the source line and no outputs.
 - Supported uniform types are `float`, `int`, `uint`, `bool`, `vec2`, `vec3`, `vec4`, `mat4`, and
   `sampler2D`. `default` is a scalar for `float`/`int`/`uint`/`bool`, and an array whose length
   matches the component count for the vector and matrix types. Arrays, structs, and extra uniform
-  blocks are errors.
+  blocks are errors. An instance record above 4 KiB produces a warning and one above 16 KiB is an
+  error.
 - `blend` is `opaque`, `alpha`, `additive`, or `multiply`; `cull` is `none`, `front`, or `back`;
   `depth_test` is `disabled`, `greater`, `greater_equal`, `less`, `less_or_equal`, or `always`.
   `depth_write` is a bool.
-- The generated prologue, shader ABI bindings, and full SPIR-V reflection are M4. M3 compiles the
-  two-stage program with shaderc, validates the entry points, and records the sidecar metadata and
-  render state in the `Shader` descriptor.
+- The full shader ABI, generated accessors, instance layout, and reserved names are specified in
+  [Rendering: Shaders](rendering/shaders.md#74-shader-abi). The descriptor shape is unchanged: the
+  bake derives the layout from sidecar declaration order and records the uniform and texture arrays
+  in the `Shader` descriptor.
 
 The built-in processors use `RB4007`-`RB4010`; the shared TOML and discovery failures use
 `RB4002`/`RB4003`. Unknown keys are errors, not silently ignored.
 
 ### 13.4 Pack v1 (as built)
 
-The pack is little-endian and starts with a fixed 40-byte header:
+M4 did not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
+starts with a fixed 40-byte header:
 
 | Field | Size | Notes |
 | --- | --- | --- |
@@ -307,7 +355,9 @@ entries. A tool-version or configuration change invalidates the cache and reproc
 
 The manifest is not part of the runtime pack. It never promises byte-identical pack output; it only
 avoids redundant processing. Tests assert the processor invocation count for an unchanged source,
-not pack byte identity.
+not pack byte identity. The samples bake into their own intermediate output at build time and copy
+only the pack; the manifest stays under the assets project's `obj/raybork/bake`, so a missing pack
+(for example after `dotnet clean`) forces a full bake on the next build.
 
 ### 13.6 Validation and diagnostics
 
@@ -316,7 +366,7 @@ The bake fails the build on:
 - duplicate or case-normalized canonical paths;
 - missing referenced assets or a missing required sidecar;
 - unsupported source formats or an unclaimed file with no raw fallback;
-- shader compile, entry-point, or sidecar metadata errors;
+- shader prologue validation, compile, entry-point, or sidecar metadata errors;
 - texture dimensions, formats, or block-encoding failures;
 - model sources with no mesh or invalid accessors;
 - font containers that are not valid sfnt files;
@@ -337,9 +387,17 @@ is set.
 - a white 1x1 texture and a magenta/black error texture, generated by a tool-only processor that
   calls `TextureBaker.Bake`;
 - the present vertex/fragment shader pair, compiled from the engine's committed GLSL sources by a
-  tool-only processor through the shared shaderc compiler.
+  tool-only processor through the shared shaderc compiler;
+- the built-in mesh draw shader program at `/shaders/mesh`, baked by the ordinary shader processor
+  through the generated prologue with one `uTint` uniform, one `mainTexture` binding, and an
+  opaque/back/`greater_equal`/depth-write render state. It is the unlit raylib default model shader:
+  position, uv, and color only, `texture(mainTexture, vUv) * vColor * uTint * rbInstance.Color`, with
+  no normals or lighting.
 
-The default draw shader, primitive meshes, and error glyph are added when M4 and M6 introduce them.
+Primitive meshes and the error glyph are added by later milestones (M5 and M6). Pack v1 is unchanged
+by M4: the mesh shader is an ordinary shader entry at a reserved built-in path, not a format change.
+The app preloads it into `EngineContext.Defaults` before `IGame.Setup`; there is no longer a built-in
+`/shaders/default` entry.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
 that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by

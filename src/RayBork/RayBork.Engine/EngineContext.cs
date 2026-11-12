@@ -4,8 +4,8 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// The engine context: the asset catalog, window, input, logging, renderer status, frame clock, and
-/// exit control.
+/// The engine context: the asset catalog, engine defaults, window, input, logging, renderer status,
+/// frame clock, and exit control.
 /// </summary>
 /// <remarks>
 /// The context is stable for the app lifetime, but its per-frame members are tick-thread snapshots.
@@ -17,6 +17,7 @@ public sealed class EngineContext {
     private readonly Func<double> _elapsedTime;
     private readonly IEnginePlatform _platform;
     private readonly RenderStatus _renderStatus;
+    private readonly CameraService _cameras;
     private readonly ProceduralAssetService _proceduralAssets;
     private bool _hasFrame;
     private double _time;
@@ -25,18 +26,22 @@ public sealed class EngineContext {
         IEnginePlatform platform,
         ILoggerFactory loggerFactory,
         IAssetCatalog assets,
+        EngineDefaults defaults,
         IAppControl appControl,
         IInput initialInput,
         double maxDeltaTime,
         Func<double> elapsedTime,
-        RenderStatus renderStatus) {
+        RenderStatus renderStatus,
+        CameraService cameras) {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(assets);
+        ArgumentNullException.ThrowIfNull(defaults);
         ArgumentNullException.ThrowIfNull(appControl);
         ArgumentNullException.ThrowIfNull(initialInput);
         ArgumentNullException.ThrowIfNull(elapsedTime);
         ArgumentNullException.ThrowIfNull(renderStatus);
+        ArgumentNullException.ThrowIfNull(cameras);
         if (assets is not IProceduralAssetProvider proceduralProvider) {
             throw new InvalidOperationException(
                 "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog.");
@@ -46,8 +51,10 @@ public sealed class EngineContext {
         _appControl = appControl;
         _elapsedTime = elapsedTime;
         _renderStatus = renderStatus;
+        _cameras = cameras;
         _proceduralAssets = proceduralProvider.ProceduralAssets;
         Assets = assets;
+        Defaults = defaults;
         Input = initialInput;
         LoggerFactory = loggerFactory;
         MaxDeltaTime = maxDeltaTime;
@@ -64,6 +71,19 @@ public sealed class EngineContext {
     /// <see cref="ObjectDisposedException"/>.
     /// </remarks>
     public IAssetCatalog Assets { get; }
+
+    /// <summary>
+    /// Gets the engine-owned default assets: the built-in mesh shader program, the white texture, and
+    /// the error texture. Valid from <see cref="IGame.Setup"/> and released during shutdown.
+    /// </summary>
+    /// <remarks>
+    /// The defaults are preloaded after the catalog starts and before <see cref="IGame.Setup"/> runs.
+    /// <see cref="EngineDefaults.CreateMeshShader"/> returns a new caller-owned material per call;
+    /// <see cref="EngineDefaults.White"/> and <see cref="EngineDefaults.Error"/> are engine-owned and
+    /// must not be disposed by the game. After the app stops, every member throws
+    /// <see cref="ObjectDisposedException"/>.
+    /// </remarks>
+    public EngineDefaults Defaults { get; }
 
     /// <summary>
     /// Creates a builder for one procedural <see cref="Mesh"/>.
@@ -122,6 +142,109 @@ public sealed class EngineContext {
         bool generateMips = true,
         SamplerState? sampler = null)
         => _proceduralAssets.CreateTextureBuilder(width, height, format, generateMips, sampler);
+
+    /// <summary>
+    /// Creates a perspective camera that records one pass into the current frame.
+    /// </summary>
+    /// <param name="transform">The world-space camera transform. The camera looks down local <c>-Z</c>.</param>
+    /// <param name="projection">
+    /// The projection kind. M4 accepts <see cref="CameraProjection.Perspective"/> here; use
+    /// <see cref="CreateOrthographicCamera"/> when an orthographic height is needed.
+    /// </param>
+    /// <param name="fieldOfView">
+    /// The vertical field of view in degrees. It must be finite and inside <c>(0, 180)</c>.
+    /// </param>
+    /// <param name="clearMode">The buffers the pass clears. The default is color and depth.</param>
+    /// <param name="clearColor">
+    /// The linear clear color. <see langword="null"/> means opaque black; HDR components above <c>1</c>
+    /// are allowed.
+    /// </param>
+    /// <param name="near">The near clip distance. It must be finite and greater than zero.</param>
+    /// <param name="far">
+    /// The far clip distance. It must be greater than <paramref name="near"/>; positive infinity is
+    /// allowed for a perspective camera.
+    /// </param>
+    /// <param name="viewport">
+    /// The pixel viewport, or <see langword="null"/> for the full window render size. The rectangle is
+    /// clamped to the target and must not clamp to an empty region.
+    /// </param>
+    /// <returns>The camera. Dispose it before <see cref="IGame.Tick"/> returns.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="projection"/> is <see cref="CameraProjection.Orthographic"/>, the resolved
+    /// viewport is invalid or empty, or the clear color has a non-finite component.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">A projection or clip-plane parameter is outside its range.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
+    /// transform is singular.
+    /// </exception>
+    /// <remarks>
+    /// Legal only during <see cref="IGame.Tick"/>. Cameras are sequential: dispose one before creating
+    /// the next. A camera left undisposed when the tick returns stops the app with
+    /// <see cref="InvalidOperationException"/> naming it; the frame is not published.
+    /// </remarks>
+    public Camera CreateCamera(
+        Transform transform,
+        CameraProjection projection,
+        float fieldOfView,
+        ClearMode clearMode = ClearMode.ColorAndDepth,
+        Color? clearColor = null,
+        float near = 0.01f,
+        float far = float.PositiveInfinity,
+        Rect? viewport = null) {
+        if (!Enum.IsDefined(projection)) {
+            throw new ArgumentOutOfRangeException(nameof(projection), projection, "The projection is not a defined value.");
+        }
+
+        if (projection != CameraProjection.Perspective) {
+            throw new ArgumentException(
+                "CreateCamera records a perspective camera. Use CreateOrthographicCamera for an "
+                    + "orthographic camera, which requires a visible height.",
+                nameof(projection));
+        }
+
+        return _cameras.CreateCamera(transform, fieldOfView, clearMode, clearColor, near, far, viewport);
+    }
+
+    /// <summary>
+    /// Creates an orthographic camera that records one pass into the current frame.
+    /// </summary>
+    /// <param name="transform">The world-space camera transform. The camera looks down local <c>-Z</c>.</param>
+    /// <param name="height">The visible world-space height. It must be finite and greater than zero.</param>
+    /// <param name="clearMode">The buffers the pass clears. The default is color and depth.</param>
+    /// <param name="clearColor">
+    /// The linear clear color. <see langword="null"/> means opaque black; HDR components above <c>1</c>
+    /// are allowed.
+    /// </param>
+    /// <param name="near">The near clip distance. It must be finite and greater than zero.</param>
+    /// <param name="far">The finite far clip distance. It must be greater than <paramref name="near"/>.</param>
+    /// <param name="viewport">
+    /// The pixel viewport, or <see langword="null"/> for the full window render size. The rectangle is
+    /// clamped to the target and must not clamp to an empty region.
+    /// </param>
+    /// <returns>The camera. Dispose it before <see cref="IGame.Tick"/> returns.</returns>
+    /// <exception cref="ArgumentException">
+    /// The resolved viewport is invalid or empty, or the clear color has a non-finite component.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">A projection or clip-plane parameter is outside its range.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
+    /// transform is singular.
+    /// </exception>
+    /// <remarks>
+    /// Legal only during <see cref="IGame.Tick"/>. Cameras are sequential: dispose one before creating
+    /// the next. A camera left undisposed when the tick returns stops the app with
+    /// <see cref="InvalidOperationException"/> naming it; the frame is not published.
+    /// </remarks>
+    public Camera CreateOrthographicCamera(
+        Transform transform,
+        float height,
+        ClearMode clearMode = ClearMode.ColorAndDepth,
+        Color? clearColor = null,
+        float near = 0.01f,
+        float far = 1000f,
+        Rect? viewport = null)
+        => _cameras.CreateOrthographicCamera(transform, height, clearMode, clearColor, near, far, viewport);
 
     /// <summary>
     /// Gets the input snapshot for the current tick. Read it on the tick thread.

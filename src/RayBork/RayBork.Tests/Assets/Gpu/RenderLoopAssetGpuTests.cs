@@ -100,7 +100,6 @@ public sealed class RenderLoopAssetGpuTests {
             Tonemapping = TonemappingMode.AgX,
             Exposure = 0f,
             ValidationEnabled = false,
-            ClearColor = Color.White,
         },
         InstanceExtensions = [],
         SurfaceProvider = new StaticSurfaceProvider(),

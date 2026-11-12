@@ -15,17 +15,18 @@ namespace RayBork.Bake.Processors;
 /// <remarks>
 /// <para>
 /// The TOML source is the processor source and its own sidecar. It names two GLSL files relative to
-/// itself; M3 requires those paths to resolve inside the source's directory subtree. Both files are
-/// registered through <see cref="AssetProcessorContext.AddInput"/> as tracked inputs and are read as
-/// strict UTF-8. <c>#version</c> is allowed: the bake never prepends a prologue in M3. Because
-/// shaderc ignores GLSL entry point names, the shared compiler renames the authoring entry point to
-/// <c>main</c> with a preprocessor macro and restores the fixed M3 name in the compiled module.
+/// itself; the paths must resolve inside the source's directory subtree. Both files are registered
+/// through <see cref="AssetProcessorContext.AddInput"/> as tracked inputs and are read as strict
+/// UTF-8. The processor builds the instance layout from the sidecar uniforms and textures, validates
+/// each user stage against the generated ABI, and inserts the M4 prologue after the stage's
+/// <c>#version</c> directive (prepending <c>#version 450</c> when the source has none).
 /// </para>
 /// <para>
-/// Both stages are compiled through the shared <see cref="GlslCompiler"/> with the fixed M3 entry
-/// points and validated with <see cref="SpirvEntryPointInspector"/>. A compile, entry-point, or
-/// metadata failure is <c>RB4008</c> and emits no outputs; unknown keys and wrong types are the
-/// framework's <c>RB4002</c> binding errors.
+/// shaderc ignores GLSL entry point names, so the generated wrapper is compiled with the entry point
+/// <c>main</c>; the compiled <c>OpEntryPoint</c> is then renamed to the fixed <c>main_vertex</c> or
+/// <c>main_fragment</c> name and validated with <see cref="SpirvEntryPointInspector"/>. A validation,
+/// compile, entry-point, or metadata failure is <c>RB4008</c> and emits no outputs; unknown keys and
+/// wrong types are the framework's <c>RB4002</c> binding errors.
 /// </para>
 /// <para>
 /// The processor is synchronous, runs on the bake thread, and keeps no per-source state, matching the
@@ -36,6 +37,7 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
     private const string VERTEX_PAYLOAD_SUFFIX = "-vert";
     private const string FRAGMENT_PAYLOAD_SUFFIX = "-frag";
     private const int MAX_TEXTURE_BINDINGS = 16;
+    private const int RECOMMENDED_INSTANCE_RECORD_SIZE = 4 * 1024;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
 
     private static readonly string[] _extensions = ["shader.toml"];
@@ -76,7 +78,7 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Shader '{context.RelativePath}' declares the vertex entry point "
-                    + $"'{vertexEntry}'; the M3 vertex entry point is fixed to "
+                    + $"'{vertexEntry}'; the v1 vertex entry point is fixed to "
                     + $"'{ShaderEntryPoints.VERTEX}'.");
             return;
         }
@@ -86,7 +88,7 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Shader '{context.RelativePath}' declares the fragment entry point "
-                    + $"'{fragmentEntry}'; the M3 fragment entry point is fixed to "
+                    + $"'{fragmentEntry}'; the v1 fragment entry point is fixed to "
                     + $"'{ShaderEntryPoints.FRAGMENT}'.");
             return;
         }
@@ -104,14 +106,35 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
             return;
         }
 
+        ShaderAbiLayout layout;
+        try {
+            layout = new ShaderAbiLayout(uniforms, textures);
+        } catch (InvalidOperationException exception) {
+            context.Diagnostics.Error(
+                ShaderDiagnosticCodes.SHADER_INVALID,
+                $"Shader '{context.RelativePath}' cannot be laid out: {exception.Message}");
+            return;
+        }
+
+        if (layout.InstanceRecordSize > RECOMMENDED_INSTANCE_RECORD_SIZE) {
+            context.Diagnostics.Warning(
+                ShaderDiagnosticCodes.SHADER_INVALID,
+                $"Shader '{context.RelativePath}' has a per-instance record of "
+                    + $"{layout.InstanceRecordSize} bytes; records above "
+                    + $"{RECOMMENDED_INSTANCE_RECORD_SIZE} bytes may exceed practical storage-buffer "
+                    + "range or batch limits.");
+        }
+
         if (!TryCompileStage(
                 context,
                 vertexSource,
                 vertexPath,
                 "vertex",
                 ShaderKind.GlslVertexShader,
+                ShaderStageMask.Vertex,
                 vertexEntry,
                 SpirvExecutionModel.Vertex,
+                layout,
                 out byte[] vertexSpirV)
             || !TryCompileStage(
                 context,
@@ -119,8 +142,10 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
                 fragmentPath,
                 "fragment",
                 ShaderKind.GlslFragmentShader,
+                ShaderStageMask.Fragment,
                 fragmentEntry,
                 SpirvExecutionModel.Fragment,
+                layout,
                 out byte[] fragmentSpirV)) {
             return;
         }
@@ -161,7 +186,7 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Shader '{context.RelativePath}' declares the {stage} GLSL path '{declared}'; an "
-                    + "M3 stage path must be relative to the shader TOML and stay inside its "
+                    + "v1 stage path must be relative to the shader TOML and stay inside its "
                     + "directory subtree.");
             return false;
         }
@@ -184,7 +209,7 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Shader '{context.RelativePath}' declares the {stage} GLSL path '{declared}', "
-                    + "which resolves outside the shader source's directory subtree; M3 stage files "
+                    + "which resolves outside the shader source's directory subtree; v1 stage files "
                     + "must stay inside it.");
             return false;
         }
@@ -253,17 +278,32 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
         string fullPath,
         string stage,
         ShaderKind kind,
+        ShaderStageMask stageMask,
         string entryPoint,
         SpirvExecutionModel executionModel,
+        ShaderAbiLayout layout,
         out byte[] spirV) {
         spirV = [];
         string fileName = Path.GetFileName(fullPath);
 
-        if (!GlslCompiler.TryCompile(
+        if (!ShaderPrologueGenerator.TryBuild(
                 source,
+                layout,
+                stageMask,
+                out string wrappedSource,
+                out string problem)) {
+            context.Diagnostics.Error(
+                ShaderDiagnosticCodes.SHADER_INVALID,
+                $"The {stage} stage '{fileName}' of shader '{context.RelativePath}' is not valid for "
+                    + $"the generated M4 shader ABI: {problem}");
+            return false;
+        }
+
+        if (!GlslCompiler.TryCompile(
+                wrappedSource,
                 fileName,
                 kind,
-                entryPoint,
+                ShaderAbiNames.GLSL_ENTRY_POINT,
                 out spirV,
                 out string message)) {
             context.Diagnostics.Error(
@@ -273,11 +313,26 @@ internal sealed class ShaderProcessor : AssetProcessor<ShaderSidecar> {
             return false;
         }
 
-        if (!SpirvEntryPointInspector.TryValidate(spirV, entryPoint, executionModel, out string problem)) {
+        if (!SpirvEntryPointRewriter.TryRename(
+                spirV,
+                executionModel,
+                ShaderAbiNames.GLSL_ENTRY_POINT,
+                entryPoint,
+                out byte[] renamed,
+                out string renameMessage)) {
+            context.Diagnostics.Error(
+                ShaderDiagnosticCodes.SHADER_INVALID,
+                $"The {stage} stage '{fileName}' of shader '{context.RelativePath}' cannot use entry "
+                    + $"point '{entryPoint}': {renameMessage}");
+            return false;
+        }
+
+        spirV = renamed;
+        if (!SpirvEntryPointInspector.TryValidate(spirV, entryPoint, executionModel, out string inspectorProblem)) {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The {stage} stage '{fileName}' of shader '{context.RelativePath}' is not a valid "
-                    + $"SPIR-V module for entry point '{entryPoint}': {problem}");
+                    + $"SPIR-V module for entry point '{entryPoint}': {inspectorProblem}");
             return false;
         }
 

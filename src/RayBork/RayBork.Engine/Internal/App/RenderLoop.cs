@@ -167,7 +167,10 @@ internal sealed class RenderLoop {
 
                 if (_frameRing.TryAcquireNewest(out FrameLease lease)) {
                     try {
-                        backend.Submit(new RenderFramePacket(lease.FrameIndex));
+                        RenderFramePacket packet = lease.Packet
+                            ?? throw new InvalidOperationException(
+                                "The frame ring returned a rendering lease without a frame packet.");
+                        backend.Submit(packet);
                         backend.Present();
                         _status.SetStats(backend.Stats);
                         int deviceGeneration = backend.DeviceGeneration;
@@ -192,9 +195,12 @@ internal sealed class RenderLoop {
                     return;
                 }
 
-                // An upload in flight must be polled even when no frame is published; the bridge
-                // signal covers queues and destructions, but a GPU copy finishing does not signal.
-                int timeout = _gpuAssetBridge.HasPendingWork
+                // An upload in flight must be polled even when no frame is published, and a destroy
+                // deferred by an in-flight frame must be retried until the frame fences signal; the
+                // bridge signal covers queues, but neither a GPU copy finishing nor a fence retiring
+                // a frame signals. A minimized window therefore keeps polling instead of stranding
+                // the work.
+                int timeout = _gpuAssetBridge.HasPendingWork || _gpuAssetBridge.HasPendingDestroys
                     ? UPLOAD_POLL_TIMEOUT_MILLISECONDS
                     : Timeout.Infinite;
                 WaitHandle.WaitAny(_waitHandles, timeout);
@@ -202,6 +208,7 @@ internal sealed class RenderLoop {
         } catch (Exception exception) {
             _failure = exception;
         } finally {
+            WaitForFrameResourcesIdle();
             try {
                 _gpuAssetBridge.Close(_failure);
             } catch (Exception exception) {
@@ -229,6 +236,28 @@ internal sealed class RenderLoop {
     private void ProcessPendingAssets() {
         if (_assetGpuWorker is not null) {
             _gpuAssetBridge.ProcessPending(_assetGpuWorker);
+        }
+    }
+
+    /// <summary>
+    /// Waits for every submitted frame to complete before the bridge destroys live resources.
+    /// </summary>
+    /// <remarks>
+    /// The wait runs once, after the frame ring is complete and drained. A device that is already lost
+    /// cannot signal its fences; the worker logs and returns instead of throwing, because shutdown
+    /// must still release what it can.
+    /// </remarks>
+    private void WaitForFrameResourcesIdle() {
+        if (_assetGpuWorker is null) {
+            return;
+        }
+
+        try {
+            _assetGpuWorker.WaitForFrameResourcesIdle();
+        } catch (Exception exception) {
+            _options.Logger.LogWarning(
+                exception,
+                "The GPU asset worker could not wait for frame idleness before the bridge closed; resources are destroyed best effort.");
         }
     }
 

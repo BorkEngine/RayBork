@@ -81,6 +81,22 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
     internal IReadOnlyList<ImageView> ImageViews => _imageViews;
 
     /// <summary>
+    /// Gets whether the swapchain images were created with transfer-source usage, so a diagnostic
+    /// presented-pixel readback is possible. The frame path never reads images back.
+    /// </summary>
+    internal bool SupportsPresentReadback { get; private set; }
+
+    /// <summary>
+    /// Gets the swapchain images, in image index order.
+    /// </summary>
+    /// <remarks>
+    /// Diagnostics only: <see cref="VulkanReadback.ReadPresentedColorPixel"/> uses this to probe the
+    /// image a submitted frame rendered. The renderer reaches the images through
+    /// <see cref="ImageViews"/> and the present pipeline's framebuffers.
+    /// </remarks>
+    internal IReadOnlyList<Image> Images => _images;
+
+    /// <summary>
     /// Creates a swapchain and its image views.
     /// </summary>
     /// <param name="device">The device that owns the swapchain.</param>
@@ -267,19 +283,25 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             _vulkan,
             device.PhysicalDevice,
             surface);
+        Extent2D imageExtent = VulkanSwapchainExtentSelection.Select(
+            capabilities,
+            checked((int)extent.Width),
+            checked((int)extent.Height));
         uint graphicsFamily = device.Capabilities.GraphicsQueueFamily;
         uint presentFamily = device.Capabilities.PresentQueueFamily;
         bool concurrent = graphicsFamily != presentFamily;
         uint[] familyIndices = [graphicsFamily, presentFamily];
+        (ImageUsageFlags imageUsage, bool supportsPresentReadback) =
+            VulkanSwapchainImageUsage.Select(capabilities.SupportedUsageFlags);
         SwapchainCreateInfoKHR createInfo = new() {
             SType = StructureType.SwapchainCreateInfoKhr,
             Surface = surface,
             MinImageCount = (uint)imageCount,
             ImageFormat = format.Format,
             ImageColorSpace = format.ColorSpace,
-            ImageExtent = extent,
+            ImageExtent = imageExtent,
             ImageArrayLayers = IMAGE_ARRAY_LAYERS,
-            ImageUsage = ImageUsageFlags.ColorAttachmentBit,
+            ImageUsage = imageUsage,
             ImageSharingMode = concurrent ? SharingMode.Concurrent : SharingMode.Exclusive,
             PreTransform = capabilities.CurrentTransform,
             CompositeAlpha = SelectCompositeAlpha(capabilities),
@@ -314,7 +336,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             throw;
         }
 
-        return new SwapchainResources(swapchain, images, views, format.Format, extent);
+        return new SwapchainResources(swapchain, images, views, format.Format, imageExtent, supportsPresentReadback);
     }
 
     private ImageView CreateImageView(Image image, Format format) {
@@ -348,6 +370,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         _imageViews = resources.ImageViews;
         _format = resources.Format;
         _extent = resources.Extent;
+        SupportsPresentReadback = resources.SupportsPresentReadback;
     }
 
     private void DestroyImageViews(ImageView[] views) {
@@ -398,5 +421,6 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         Image[] Images,
         ImageView[] ImageViews,
         Format Format,
-        Extent2D Extent);
+        Extent2D Extent,
+        bool SupportsPresentReadback);
 }

@@ -13,7 +13,7 @@ namespace RayBork.Bake.Processors;
 /// The TOML file is both the processor source and its own sidecar, so its table is named after the
 /// processor. <see cref="Vertex"/> and <see cref="Fragment"/> are required and are paths relative to
 /// the TOML file; the processor requires them to resolve inside the source's directory subtree in
-/// M3. The entry points default to <c>main_vertex</c> and <c>main_fragment</c> and may only restate
+/// v1. The entry points default to <c>main_vertex</c> and <c>main_fragment</c> and may only restate
 /// those exact values.
 /// </para>
 /// <para>
@@ -32,13 +32,13 @@ internal sealed partial class ShaderSidecar {
     public required string Fragment { get; set; }
 
     /// <summary>
-    /// Gets or sets the vertex entry point. The only accepted value in M3 is <c>main_vertex</c>;
+    /// Gets or sets the vertex entry point. The only accepted value in v1 is <c>main_vertex</c>;
     /// <see langword="null"/> uses that default.
     /// </summary>
     public string? VertexEntry { get; set; }
 
     /// <summary>
-    /// Gets or sets the fragment entry point. The only accepted value in M3 is <c>main_fragment</c>;
+    /// Gets or sets the fragment entry point. The only accepted value in v1 is <c>main_fragment</c>;
     /// <see langword="null"/> uses that default.
     /// </summary>
     public string? FragmentEntry { get; set; }

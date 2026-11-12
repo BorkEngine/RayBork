@@ -43,7 +43,6 @@ public sealed class RayBorkAppBuilder {
     private int _sampleCount = DEFAULT_SAMPLE_COUNT;
     private TonemappingMode _tonemapping = DEFAULT_TONEMAPPING;
     private float _exposure = DEFAULT_EXPOSURE;
-    private Color _clearColor = Color.Black;
     private bool _validationEnabled = DEFAULT_VALIDATION_ENABLED;
     private int _targetFps = DEFAULT_TARGET_FPS;
     private WindowState _windowState = DEFAULT_WINDOW_STATE;
@@ -280,30 +279,6 @@ public sealed class RayBorkAppBuilder {
     }
 
     /// <summary>
-    /// Sets the scene clear color. Until cameras provide their own clear color in M4, this is the
-    /// color the scene pass clears to.
-    /// </summary>
-    /// <param name="color">
-    /// The linear RGBA clear color. Every component must be finite. The default is linear opaque
-    /// black.
-    /// </param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentException">A component of <paramref name="color"/> is not finite.</exception>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithClearColor(Color color) {
-        ThrowIfBuilt();
-        if (!float.IsFinite(color.R)
-            || !float.IsFinite(color.G)
-            || !float.IsFinite(color.B)
-            || !float.IsFinite(color.A)) {
-            throw new ArgumentException("The clear color components must all be finite.", nameof(color));
-        }
-
-        _clearColor = color;
-        return this;
-    }
-
-    /// <summary>
     /// Sets the tick cap.
     /// </summary>
     /// <param name="framesPerSecond">The cap, or zero for an uncapped loop. It must not be negative.</param>
@@ -432,7 +407,6 @@ public sealed class RayBorkAppBuilder {
                 Tonemapping = _tonemapping,
                 Exposure = _exposure,
                 ValidationEnabled = _validationEnabled,
-                ClearColor = _clearColor,
             },
             LoggerFactory = _loggerFactory,
             LogLevel = _logLevel,

@@ -5,6 +5,7 @@ override RayBork.Color.GetHashCode() -> int
 override RayBork.Color.ToString() -> string!
 override RayBork.EngineInfo.GetHashCode() -> int
 override RayBork.Monitor.GetHashCode() -> int
+override RayBork.Ray.GetHashCode() -> int
 override RayBork.Rect.GetHashCode() -> int
 override RayBork.RenderState.GetHashCode() -> int
 override RayBork.RenderStats.GetHashCode() -> int
@@ -45,6 +46,49 @@ RayBork.BoundingBox.Max.get -> System.Numerics.Vector3
 RayBork.BoundingBox.Max.init -> void
 RayBork.BoundingBox.Min.get -> System.Numerics.Vector3
 RayBork.BoundingBox.Min.init -> void
+RayBork.BoundingFrustum
+RayBork.BoundingFrustum.BoundingFrustum() -> void
+RayBork.BoundingFrustum.BoundingFrustum(System.Numerics.Matrix4x4 viewProjection) -> void
+RayBork.BoundingFrustum.Bottom.get -> System.Numerics.Plane
+RayBork.BoundingFrustum.Contains(System.Numerics.Vector3 point) -> bool
+RayBork.BoundingFrustum.Far.get -> System.Numerics.Plane
+RayBork.BoundingFrustum.Intersects(RayBork.BoundingBox bounds) -> bool
+RayBork.BoundingFrustum.Left.get -> System.Numerics.Plane
+RayBork.BoundingFrustum.Near.get -> System.Numerics.Plane
+RayBork.BoundingFrustum.Right.get -> System.Numerics.Plane
+RayBork.BoundingFrustum.Top.get -> System.Numerics.Plane
+RayBork.Camera
+RayBork.Camera.ClearColor.get -> RayBork.Color
+RayBork.Camera.ClearMode.get -> RayBork.ClearMode
+RayBork.Camera.Dispose() -> void
+RayBork.Camera.DrawInstanced(RayBork.Mesh! mesh, RayBork.Shader! shader, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
+RayBork.Camera.DrawMesh(RayBork.Mesh! mesh, RayBork.Transform transform, RayBork.Shader! shader, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
+RayBork.Camera.DrawModel(RayBork.Model! model, RayBork.Transform transform, RayBork.Color? tint = null) -> void
+RayBork.Camera.DrawModelInstanced(RayBork.Model! model, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.Color? tint = null) -> void
+RayBork.Camera.Far.get -> float
+RayBork.Camera.FieldOfView.get -> float
+RayBork.Camera.Frustum.get -> RayBork.BoundingFrustum
+RayBork.Camera.IsDisposed.get -> bool
+RayBork.Camera.Near.get -> float
+RayBork.Camera.OrthographicHeight.get -> float
+RayBork.Camera.Projection.get -> RayBork.CameraProjection
+RayBork.Camera.ProjectionMatrix.get -> System.Numerics.Matrix4x4
+RayBork.Camera.ScreenToWorldRay(System.Numerics.Vector2 screenPosition) -> RayBork.Ray
+RayBork.Camera.Transform.get -> RayBork.Transform
+RayBork.Camera.ViewMatrix.get -> System.Numerics.Matrix4x4
+RayBork.Camera.Viewport.get -> RayBork.Rect
+RayBork.Camera.ViewProjectionMatrix.get -> System.Numerics.Matrix4x4
+RayBork.Camera.WorldToScreen(System.Numerics.Vector3 worldPosition) -> System.Numerics.Vector2
+RayBork.CameraProjection
+RayBork.CameraProjection.Orthographic = 1 -> RayBork.CameraProjection
+RayBork.CameraProjection.Perspective = 0 -> RayBork.CameraProjection
+RayBork.ClearMode
+RayBork.ClearMode.All = RayBork.ClearMode.ColorAndDepth | RayBork.ClearMode.Stencil -> RayBork.ClearMode
+RayBork.ClearMode.Color = 1 -> RayBork.ClearMode
+RayBork.ClearMode.ColorAndDepth = RayBork.ClearMode.Color | RayBork.ClearMode.Depth -> RayBork.ClearMode
+RayBork.ClearMode.Depth = 2 -> RayBork.ClearMode
+RayBork.ClearMode.None = 0 -> RayBork.ClearMode
+RayBork.ClearMode.Stencil = 4 -> RayBork.ClearMode
 RayBork.Color
 RayBork.Color.A.get -> float
 RayBork.Color.B.get -> float
@@ -76,7 +120,10 @@ RayBork.DepthTest.Less = 3 -> RayBork.DepthTest
 RayBork.DepthTest.LessOrEqual = 4 -> RayBork.DepthTest
 RayBork.EngineContext
 RayBork.EngineContext.Assets.get -> RayBork.IAssetCatalog!
+RayBork.EngineContext.Defaults.get -> RayBork.EngineDefaults!
 RayBork.EngineContext.CreateMeshBuilder(RayBork.PrimitiveTopology topology = RayBork.PrimitiveTopology.TriangleList) -> RayBork.MeshBuilder!
+RayBork.EngineContext.CreateOrthographicCamera(RayBork.Transform transform, float height, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = 1000, RayBork.Rect? viewport = null) -> RayBork.Camera!
+RayBork.EngineContext.CreateCamera(RayBork.Transform transform, RayBork.CameraProjection projection, float fieldOfView, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = Infinity, RayBork.Rect? viewport = null) -> RayBork.Camera!
 RayBork.EngineContext.CreateTextureBuilder(int width, int height, RayBork.TextureFormat format = RayBork.TextureFormat.Rgba8Srgb, bool generateMips = true, RayBork.SamplerState? sampler = null) -> RayBork.TextureBuilder!
 RayBork.EngineContext.DeltaTime.get -> double
 RayBork.EngineContext.Fps.get -> double
@@ -92,6 +139,10 @@ RayBork.EngineContext.Stats.get -> RayBork.RenderStats
 RayBork.EngineContext.Time.get -> double
 RayBork.EngineContext.UnscaledDeltaTime.get -> double
 RayBork.EngineContext.Window.get -> RayBork.IWindow!
+RayBork.EngineDefaults
+RayBork.EngineDefaults.CreateMeshShader() -> RayBork.Shader!
+RayBork.EngineDefaults.Error.get -> RayBork.Texture!
+RayBork.EngineDefaults.White.get -> RayBork.Texture!
 RayBork.EngineInfo
 RayBork.EngineInfo.Deconstruct(out string! Name, out System.Version! Version, out string! RendererName, out string! GpuName, out uint VulkanApiVersion, out string! SwapchainFormat, out bool HdrOutput, out int SampleCount, out RayBork.PresentMode PresentMode, out bool ValidationEnabled) -> void
 RayBork.EngineInfo.EngineInfo() -> void
@@ -503,6 +554,22 @@ RayBork.MeshBuilder.Vertices.get -> System.Collections.Generic.List<RayBork.Vert
 RayBork.MeshNormalMode
 RayBork.MeshNormalMode.Flat = 1 -> RayBork.MeshNormalMode
 RayBork.MeshNormalMode.Smooth = 0 -> RayBork.MeshNormalMode
+RayBork.Model
+RayBork.Model.Bounds.get -> RayBork.BoundingBox
+RayBork.Model.Dispose() -> void
+RayBork.Model.IsDisposed.get -> bool
+RayBork.Model.Model(System.Collections.Generic.IEnumerable<RayBork.ModelPart>! parts) -> void
+RayBork.Model.Model(params RayBork.ModelPart[]! parts) -> void
+RayBork.Model.Parts.get -> System.Collections.Generic.IReadOnlyList<RayBork.ModelPart>!
+RayBork.ModelPart
+RayBork.ModelPart.Bounds.get -> RayBork.BoundingBox
+RayBork.ModelPart.LocalTransform.get -> RayBork.Transform
+RayBork.ModelPart.Mesh.get -> RayBork.Mesh!
+RayBork.ModelPart.ModelPart() -> void
+RayBork.ModelPart.ModelPart(string! name, RayBork.Mesh! mesh, RayBork.Shader! shader, RayBork.RenderState? renderState = null, RayBork.Transform? localTransform = null) -> void
+RayBork.ModelPart.Name.get -> string!
+RayBork.ModelPart.RenderState.get -> RayBork.RenderState
+RayBork.ModelPart.Shader.get -> RayBork.Shader!
 RayBork.Monitor
 RayBork.Monitor.Bounds.get -> RayBork.Rect
 RayBork.Monitor.Bounds.init -> void
@@ -548,10 +615,18 @@ RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Normalized.ge
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).RotateTowards(System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Slerp(System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).ToAngleAxis(out float angle, out System.Numerics.Vector3 axis) -> void
+RayBork.Ray
+RayBork.Ray.Deconstruct(out System.Numerics.Vector3 Origin, out System.Numerics.Vector3 Direction) -> void
+RayBork.Ray.Direction.get -> System.Numerics.Vector3
+RayBork.Ray.Direction.init -> void
+RayBork.Ray.Equals(RayBork.Ray other) -> bool
+RayBork.Ray.Origin.get -> System.Numerics.Vector3
+RayBork.Ray.Origin.init -> void
+RayBork.Ray.Ray() -> void
+RayBork.Ray.Ray(System.Numerics.Vector3 Origin, System.Numerics.Vector3 Direction) -> void
 RayBork.RayBorkAppBuilder.WithAssetsPack(string! path) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetsPacks(params string![]! paths) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetType<T>() -> RayBork.RayBorkAppBuilder!
-RayBork.RayBorkAppBuilder.WithClearColor(RayBork.Color color) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithExposure(float ev = 0) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithMSAA(int sampleCount = 4) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithPresentMode(RayBork.PresentMode mode = RayBork.PresentMode.Mailbox) -> RayBork.RayBorkAppBuilder!
@@ -810,6 +885,8 @@ static RayBork.QuaternionExtensions.LookRotation(System.Numerics.Vector3 forward
 static RayBork.QuaternionExtensions.RotateTowards(this System.Numerics.Quaternion value, System.Numerics.Quaternion target, float maxDegreesDelta) -> System.Numerics.Quaternion
 static RayBork.QuaternionExtensions.Slerp(this System.Numerics.Quaternion value, System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
 static RayBork.QuaternionExtensions.ToAngleAxis(this System.Numerics.Quaternion value, out float angle, out System.Numerics.Vector3 axis) -> void
+static RayBork.Ray.operator !=(RayBork.Ray left, RayBork.Ray right) -> bool
+static RayBork.Ray.operator ==(RayBork.Ray left, RayBork.Ray right) -> bool
 static RayBork.Rect.FromSize(float width, float height) -> RayBork.Rect
 static RayBork.Rect.operator !=(RayBork.Rect left, RayBork.Rect right) -> bool
 static RayBork.Rect.operator ==(RayBork.Rect left, RayBork.Rect right) -> bool
@@ -874,6 +951,8 @@ static readonly RayBork.Color.Yellow -> RayBork.Color
 ~override RayBork.EngineInfo.ToString() -> string
 ~override RayBork.Monitor.Equals(object obj) -> bool
 ~override RayBork.Monitor.ToString() -> string
+~override RayBork.Ray.Equals(object obj) -> bool
+~override RayBork.Ray.ToString() -> string
 ~override RayBork.Rect.Equals(object obj) -> bool
 ~override RayBork.Rect.ToString() -> string
 RayBork.RayBorkApp
@@ -886,6 +965,18 @@ RayBork.RayBorkAppBuilder
 RayBork.RayBorkAppBuilder.Build() -> RayBork.RayBorkApp!
 RayBork.RayBorkAppBuilder.RayBorkAppBuilder() -> void
 RayBork.RayBorkAppBuilder.WithGame(RayBork.IGame! game) -> RayBork.RayBorkAppBuilder!
+RayBork.Shader.ResetUniforms() -> void
+RayBork.Shader.SetUniform(string! name, bool value) -> void
+RayBork.Shader.SetUniform(string! name, float value) -> void
+RayBork.Shader.SetUniform(string! name, int value) -> void
+RayBork.Shader.SetUniform(string! name, RayBork.Color value) -> void
+RayBork.Shader.SetUniform(string! name, RayBork.Texture? texture) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Matrix4x4 value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Quaternion value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Vector2 value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Vector3 value) -> void
+RayBork.Shader.SetUniform(string! name, System.Numerics.Vector4 value) -> void
+RayBork.Shader.SetUniform(string! name, uint value) -> void
 RayBork.RayBorkAppBuilder.WithLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory! loggerFactory) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithLogLevel(Microsoft.Extensions.Logging.LogLevel level) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithMaxDeltaTime(double seconds) -> RayBork.RayBorkAppBuilder!

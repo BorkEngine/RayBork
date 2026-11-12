@@ -48,15 +48,40 @@ is visible.
 Publish commands used by the gate:
 
 ```text
-dotnet publish -c Release -r win-x64   -p:PublishAot=true
-dotnet publish -c Release -r linux-x64 -p:PublishAot=true
+dotnet build samples/Castle/Castle.slnx -c Release
+dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64   -p:PublishAot=true
+dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
+samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --frames 30
+# WSL, from the repository root, on the WSLg display (dzn hardware):
+# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
+# WSL, optional conformant software run:
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
 
+The sample is its own solution, `samples/Castle/Castle.slnx`, outside `src/RayBork/RayBork.slnx`.
+Its build invokes the JIT assets executable out of process with the sample's configuration but
+without its publish settings, bakes `castle.pck`, and copies the pack beside the sample executable.
+`dotnet publish` copies the same pack into the publish directory, so the published hosts load the
+adjacent `castle.pck` with no `--assets` argument; `--assets` remains an optional override. The
+publish directory must contain `castle.pck` and must not contain `Castle.Assets.dll`,
+`RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native libraries, or the glTF
+packages.
+
 Both publishes must start, load a pack and any registered custom data, draw where the milestone has
-a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M3
-gate bakes a sample pack with the assets executable, publishes `samples/HelloInterop`, runs it with
-`--assets <pack> --frames 30` on `win-x64` and `linux-x64`, and requires exit code `0` with zero
-AOT/trim warnings.
+a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M4
+gate is `samples/Castle`: the published hosts load `/models/obj/castle` and
+`/models/obj/castle_diffuse`, bind the texture to the loaded parts' built-in `/shaders/mesh`
+materials, draw the castle, and must exit `0`. The sample is a plain user-facing example and contains
+no test-only draw assertion. Both publishes must finish with zero AOT/trim warnings.
+
+On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver
+(`Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)`) and prints "dzn is not a conformant Vulkan
+implementation, testing use only". The M4 gate runs on that hardware driver: the fixed 2048-element
+bindless texture array avoids dzn's runtime-descriptor-array DXIL lowering and fits its 2048-slot
+sampler heap, so the published host exits `0` on the hardware dzn device and needs no
+`DZN_DEBUG` workaround. The conformant lavapipe ICD remains available for a software-only Linux run
+with `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. The Windows gate runs on the hardware
+driver.
 
 Single-file publishing is supported when the native SDL3/Vulkan libraries are deployed alongside
 the executable or extracted by the host. A fully self-extracting single binary is not a v1 gate.

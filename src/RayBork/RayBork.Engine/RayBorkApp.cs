@@ -219,6 +219,7 @@ public sealed class RayBorkApp : IDisposable {
         MainThreadSurfaceChannel? surfaceChannel = null;
         FrameRing? frameRing = null;
         AssetCatalog? assetCatalog = null;
+        EngineDefaults? engineDefaults = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
         bool tickStarted = false;
@@ -229,6 +230,7 @@ public sealed class RayBorkApp : IDisposable {
         try {
             platform = CreatePlatform(loggerFactory);
             platform.Initialize(CreatePlatformOptions(configuration), RequestExit);
+            CameraService cameraService = new(platform.Window);
 
             // The platform owns the window, so the instance extensions and the native surface must be
             // obtained and created on this thread. The render thread owns the instance and is waiting
@@ -262,15 +264,21 @@ public sealed class RayBorkApp : IDisposable {
                 configuration.AssetTypes);
             assetCatalog.Start();
 
+            // The built-in defaults are engine-owned assets the game reads instead of loading them
+            // itself. They must be ready before Setup and stay referenced until shutdown.
+            engineDefaults = LoadEngineDefaults(assetCatalog);
+
             EngineContext context = new(
                 platform,
                 loggerFactory,
                 assetCatalog,
+                engineDefaults,
                 _exitControl,
                 CaptureInput(platform),
                 configuration.MaxDeltaTime,
                 () => clock.Time,
-                _renderStatus);
+                _renderStatus,
+                cameraService);
 
             tickRunner = new TickRunner(
                 platform,
@@ -279,7 +287,8 @@ public sealed class RayBorkApp : IDisposable {
                 clock,
                 _timeProvider,
                 new TickPacer(configuration.TargetFps),
-                frameRing);
+                frameRing,
+                cameraService);
 
             _tickRunner = tickRunner;
             tickRunner.Start();
@@ -325,6 +334,7 @@ public sealed class RayBorkApp : IDisposable {
             surfaceChannel,
             frameRing,
             assetCatalog,
+            engineDefaults,
             tickRunner,
             renderLoop,
             tickStarted,
@@ -430,12 +440,24 @@ public sealed class RayBorkApp : IDisposable {
             ?? throw new PlatformException("The platform returned a null input snapshot.");
     }
 
+    /// <summary>
+    /// Preloads the engine's built-in default assets before <see cref="IGame.Setup"/> runs.
+    /// </summary>
+    /// <remarks>
+    /// The tick thread has not started yet, so blocking the main thread on the loads is safe: the
+    /// loader and the render thread service the reads and uploads. <see cref="EngineDefaults.LoadAsync"/>
+    /// already reports a missing or corrupt built-in default as an <see cref="AssetLoadException"/>.
+    /// </remarks>
+    private static EngineDefaults LoadEngineDefaults(IAssetCatalog assets)
+        => EngineDefaults.LoadAsync(assets).GetAwaiter().GetResult();
+
     private static Exception? Cleanup(
         ILogger logger,
         IEnginePlatform? platform,
         MainThreadSurfaceChannel? surfaceChannel,
         FrameRing? frameRing,
         AssetCatalog? assetCatalog,
+        EngineDefaults? engineDefaults,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
         bool tickStarted,
@@ -472,6 +494,17 @@ public sealed class RayBorkApp : IDisposable {
                     logger.LogError(tickRunner.Failure, "The tick runner also failed while the app was stopping.");
                 }
             }
+        }
+
+        // Shutdown already ran on the tick thread, so the game can no longer use the defaults. Release
+        // the engine's owner references before the catalog force-disposes whatever a leaked game
+        // reference still holds.
+        if (engineDefaults is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "releasing the engine default assets",
+                failure,
+                engineDefaults.Dispose);
         }
 
         // Shutdown already ran on the tick thread, so no game callback can still load an asset. Stop

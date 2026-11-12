@@ -21,6 +21,7 @@ internal sealed class TickRunner {
     private readonly TimeProvider _timeProvider;
     private readonly TickPacer _pacer;
     private readonly FrameRing _frameRing;
+    private readonly CameraService _cameras;
     private readonly CancellationTokenSource _stopSource = new();
     private readonly ManualResetEventSlim _stopSignal = new(false);
     private readonly Thread _thread;
@@ -40,6 +41,7 @@ internal sealed class TickRunner {
     /// <param name="timeProvider">The time provider that measures how long each tick takes.</param>
     /// <param name="pacer">The tick pacer.</param>
     /// <param name="frameRing">The frame ring producer side.</param>
+    /// <param name="cameras">The tick-thread camera recording service.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal TickRunner(
         IEnginePlatform platform,
@@ -48,7 +50,8 @@ internal sealed class TickRunner {
         EngineClock clock,
         TimeProvider timeProvider,
         TickPacer pacer,
-        FrameRing frameRing) {
+        FrameRing frameRing,
+        CameraService cameras) {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(game);
@@ -56,6 +59,7 @@ internal sealed class TickRunner {
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(pacer);
         ArgumentNullException.ThrowIfNull(frameRing);
+        ArgumentNullException.ThrowIfNull(cameras);
 
         _platform = platform;
         _context = context;
@@ -64,6 +68,7 @@ internal sealed class TickRunner {
         _timeProvider = timeProvider;
         _pacer = pacer;
         _frameRing = frameRing;
+        _cameras = cameras;
         _thread = new Thread(RunThread) {
             IsBackground = true,
             Name = THREAD_NAME,
@@ -124,11 +129,22 @@ internal sealed class TickRunner {
         TickSynchronizationContext synchronizationContext = new();
         SynchronizationContext.SetSynchronizationContext(synchronizationContext);
 
+        bool tickThreadAttached = false;
         try {
+            TickThread.Attach();
+            tickThreadAttached = true;
             RunCallbacks(synchronizationContext);
         } catch (Exception exception) {
             _failure ??= WrapUnexpectedFailure(exception);
         } finally {
+            if (tickThreadAttached) {
+                try {
+                    TickThread.Detach();
+                } catch (Exception exception) {
+                    _failure ??= WrapUnexpectedFailure(exception);
+                }
+            }
+
             try {
                 SynchronizationContext.SetSynchronizationContext(previousContext);
             } catch (Exception exception) {
@@ -203,6 +219,26 @@ internal sealed class TickRunner {
                 return null;
             }
 
+            RenderFramePacket? packet = lease.Value.Packet;
+            if (packet is null) {
+                TryAbandon(lease.Value);
+                return new TickFailure(
+                    new InvalidOperationException(
+                        "The frame ring returned a recording lease without a frame packet."),
+                    IsGameCallback: false);
+            }
+
+            try {
+                // Attach the recorder's retention set before Tick runs so a camera draw retains its
+                // assets and a Tick failure still releases every hold through Abandon.
+                _frameRing.AttachRetention(lease.Value, packet.Retention);
+            } catch (Exception exception) {
+                TryAbandon(lease.Value);
+                return new TickFailure(
+                    WrapRingFailure("attaching the frame retention set", exception),
+                    IsGameCallback: false);
+            }
+
             // UnscaledDeltaTime is the interval since the previous tick, not how long this tick has
             // been running, so it cannot drive pacing. Measure the current tick from its start.
             long tickStartedAt = _timeProvider.GetTimestamp();
@@ -226,10 +262,28 @@ internal sealed class TickRunner {
                 tick.IsFirstTick));
 
             try {
+                _cameras.BeginFrame(packet, tick.Time, tick.DeltaTime);
+            } catch (Exception exception) {
+                _cameras.AbandonFrame();
+                TryAbandon(lease.Value);
+                return new TickFailure(exception, IsGameCallback: false);
+            }
+
+            try {
                 _game.Tick(_context);
             } catch (Exception exception) {
+                _cameras.AbandonFrame();
                 TryAbandon(lease.Value);
                 return new TickFailure(exception, IsGameCallback: true);
+            }
+
+            try {
+                // A camera that is still active when Tick returns is a leak: stop without publishing.
+                _cameras.EndFrame();
+            } catch (Exception exception) {
+                _cameras.AbandonFrame();
+                TryAbandon(lease.Value);
+                return new TickFailure(exception, IsGameCallback: false);
             }
 
             try {

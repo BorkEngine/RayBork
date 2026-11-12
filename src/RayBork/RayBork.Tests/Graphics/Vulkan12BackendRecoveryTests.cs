@@ -27,7 +27,7 @@ public sealed class Vulkan12BackendRecoveryTests {
         Assert.True(recovered);
         Assert.Equal(recoveriesBefore + 1, host.Backend.Stats.RecoveryCount);
         RenderFrame(host, 2);
-        Assert.Equal(1, host.Backend.Stats.DrawCalls);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Equal(recoveriesBefore + 1, host.Backend.Stats.RecoveryCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
@@ -43,7 +43,7 @@ public sealed class Vulkan12BackendRecoveryTests {
         RenderFrame(host, 2);
 
         Assert.Equal(recoveriesBefore + 1, host.Backend.Stats.RecoveryCount);
-        Assert.Equal(1, host.Backend.Stats.DrawCalls);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -58,7 +58,7 @@ public sealed class Vulkan12BackendRecoveryTests {
         RenderFrame(host, 2);
 
         Assert.Equal(1, host.Backend.Stats.RecoveryCount);
-        Assert.Equal(1, host.Backend.Stats.DrawCalls);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Equal(infoBefore.GpuName, host.Backend.Info.GpuName);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
@@ -75,7 +75,7 @@ public sealed class Vulkan12BackendRecoveryTests {
         RenderFrame(host, 2);
 
         Assert.Equal(1, host.Backend.Stats.RecoveryCount);
-        Assert.Equal(1, host.Backend.Stats.DrawCalls);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Equal(destroyedBefore + 1, host.SurfaceProvider.DestroyCount);
         Assert.Equal(createdBefore + 1, host.SurfaceProvider.CreateCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
@@ -97,7 +97,7 @@ public sealed class Vulkan12BackendRecoveryTests {
         Assert.Equal(createdBefore + 1, host.SurfaceProvider.CreateCount);
         Assert.Equal(recoveriesBefore + 1, host.Backend.Stats.RecoveryCount);
         RenderFrame(host, 2);
-        Assert.Equal(1, host.Backend.Stats.DrawCalls);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -120,7 +120,7 @@ public sealed class Vulkan12BackendRecoveryTests {
         Assert.True(Enum.IsDefined(infoAfter.PresentMode));
         Assert.Equal(recoveriesBefore + 1, host.Backend.Stats.RecoveryCount);
         RenderFrame(host, 2);
-        Assert.Equal(1, host.Backend.Stats.DrawCalls);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -184,7 +184,6 @@ public sealed class Vulkan12BackendRecoveryTests {
     }
 
     private static void RenderFrame(BackendTestHost host, long frameIndex) {
-        host.Backend.Submit(new RenderFramePacket(frameIndex));
-        host.Backend.Present();
+        BackendPacketTestHelper.SubmitClearingFrame(host, frameIndex, Color.Black);
     }
 }

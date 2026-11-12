@@ -163,6 +163,18 @@ internal sealed class GpuAssetBridge {
     }
 
     /// <summary>
+    /// Gets whether a destroy request is queued. The render loop uses it to keep polling while a
+    /// submitted frame still references the resource, so a minimized window cannot strand the destroy.
+    /// </summary>
+    internal bool HasPendingDestroys {
+        get {
+            lock (_gate) {
+                return _destroys.Count > 0;
+            }
+        }
+    }
+
+    /// <summary>
     /// Gets the number of queued destroy requests. Diagnostic, for tests.
     /// </summary>
     internal int PendingDestroyCount {
@@ -290,6 +302,12 @@ internal sealed class GpuAssetBridge {
     /// The call never blocks on a fence and a single failed upload or destruction never throws out of
     /// it.
     /// </summary>
+    /// <remarks>
+    /// Destructions are drained only when <see cref="IAssetGpuWorker.AreFrameResourcesIdle"/> is
+    /// <see langword="true"/>. A resource destroyed after the tick that drew it stays queued while a
+    /// submitted frame can still reference it; a later loop turn retries, and the render loop's short
+    /// wait covers a window that publishes no frames.
+    /// </remarks>
     /// <param name="worker">The worker for the current device.</param>
     /// <exception cref="ArgumentNullException"><paramref name="worker"/> is <c>null</c>.</exception>
     internal void ProcessPending(IAssetGpuWorker worker) {
@@ -300,6 +318,10 @@ internal sealed class GpuAssetBridge {
             progress = PollInFlight(worker);
             progress |= StartQueuedUploads(worker);
         } while (progress);
+
+        if (!worker.AreFrameResourcesIdle) {
+            return;
+        }
 
         while (true) {
             GpuAssetResource? resource = TryDequeueDestroy();

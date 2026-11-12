@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M3 as-built**, 2026-11-11. M0-M3 are shipped. Milestones are ordered by
+Status: **v0.1 M4 as-built**, 2026-11-12. M0-M4 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -46,8 +46,9 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 - **AOT is a gate, not a cleanup task.** Every milestone that touches runtime code must publish a
   Native AOT sample for `win-x64` and `linux-x64`.
 - **No public native handles.** Silk.NET, SDL3, Vulkan, and backend types stay internal.
-- **No public `Material`.** Shader state is a snapshot cursor; the renderer batches by mesh,
-  shader, and render state. Per-instance uniforms and bindless textures do the rest.
+- **No public `Material`.** A public `Shader` is a material instance over an internal program;
+  the renderer batches by mesh, program, and render state. Per-instance uniforms and bindless
+  textures do the rest.
 - **Reverse-Z and linear HDR everywhere.** Projection, clear, compare, tone mapping, MSAA resolve,
   and tests share one convention.
 - **The render thread draws the previous completed tick.** No backlog, no stale queue, no hidden
@@ -320,11 +321,13 @@ automatic instancing, and per-instance textures/uniforms.
   descriptor management, render-state presets.
 - Camera recording: `DrawModel`, `DrawMesh`, `DrawInstanced`, `DrawModelInstanced`; shader-state
   snapshots; per-instance parameter block; bindless texture indices; linear tint/UV fields.
-- Batch planning by `(mesh, shader, render state)`, frustum culling, opaque/alpha sorting, draw
-  call stats.
-- Model parts, local transforms, baked per-part shader state, override shader path.
-- Shader ABI: frame UBO, bindless array, instance SSBO, generated prologue, reflection validation,
-  uniform-type checks, `SetUniform` cursor and `ResetUniforms`.
+- Batch planning by `(mesh, internal shader program, render state)`, frustum culling,
+  opaque/alpha sorting, draw call stats.
+- `Model` as a caller-owned composition of parts with meshes, per-part materials, local transforms,
+  and computed bounds. `Shader` is a material instance over an internal program; `Load<Shader>`
+  returns a new independent material.
+- Shader ABI: frame UBO, fixed 2048-element bindless texture array, instance SSBO, generated
+  prologue, reflection validation, uniform-type checks, `SetUniform` cursor and `ResetUniforms`.
 - Fixed vertex layout: position, normal, uv, uv1, uv2, uv3, color, tangent.
 - Entry points `main_vertex` and `main_fragment`.
 - HDR scene target, AgX present, MSAA resolve, `TonemappingMode`, exposure.
@@ -332,7 +335,8 @@ automatic instancing, and per-instance textures/uniforms.
   above the AgX white point into the reported HDR headroom at constant chromaticity, using the
   reported SDR white level as paper white and the reported HDR headroom as the peak. The SDR image
   stays identical to M2; `TonemappingMode.None` remains the direct HDR authoring path.
-- Default unlit/texture/vertex-color shader, white/error textures, built-in primitive shader.
+- Built-in unlit mesh shader (`/shaders/mesh`), white/error textures, preloaded through
+  `EngineContext.Defaults`.
 - `DrawModel`/`DrawMesh` errors: disposed assets, wrong render state, mismatched topology, missing
   uniforms, unsupported shader interface.
 - Reverse-Z depth testing, alpha blending, back-face culling, viewport/scissor basics.
@@ -341,11 +345,11 @@ automatic instancing, and per-instance textures/uniforms.
 
 **Exit criteria.**
 
-- The Castle sample renders a textured model with correct depth and AgX output at 1280x720 on
-  Windows and WSL.
-- Two draws of the same mesh/shader/render state with different textures produce **one** draw call
+- The Castle sample renders a textured model with correct depth and AgX output at 800x450 on Windows
+  hardware, native Linux, and WSLg dzn hardware.
+- Two materials over the same internal program with different textures produce **one** draw call
   and two instances, as reported by `RenderStats.DrawCalls`.
-- One thousand cubes with the same mesh/shader/state produce one instanced draw (or a documented
+- One thousand cubes with the same mesh/program/state produce one instanced draw (or a documented
   device-limit split), not one thousand draws.
 - A custom vertex/fragment pair using `main_vertex`/`main_fragment` and the generated ABI compiles
   at bake, loads, and renders.
@@ -358,9 +362,90 @@ automatic instancing, and per-instance textures/uniforms.
 - Validation is clean for the gate scene; resize works with the new pipelines.
 - Native AOT publish renders the Castle scene on Windows and Linux.
 
+**As-built notes.** M4 shipped the planned scope with the following as-built shape:
+
+- **Bindless table, sampler cache, and pipeline cache.** The renderer allocates a bindless texture
+  table of exactly 2048 slots, matching the shader ABI's fixed `RayBorkTextures[2048]` array; slot 0
+  is reserved for the built-in 1x1 white texture. A device whose update-after-bind sampled-image
+  limits are below 2048 is rejected during device selection, and the capacity is never reduced.
+  The array is fixed-size rather than a runtime array: dzn's DXIL lowering needs a declared resource
+  range, and dzn's sampler heap is limited to 2048 descriptors. Samplers are cached per device and
+  keyed by `(filter, wrap, anisotropy)`. Geometry pipelines are cached by the shader-state snapshot
+  `(vertex module, fragment module, effective render state, topology)`; the present pipeline and the
+  scene target are owned separately by the backend. A texture allocates its slot when its GPU upload
+  completes, not at the first draw, and a full table fails that upload with `AssetLoadException`
+  `RB1010`.
+- **Batch planner, culling, and sorting.** A pass plan groups instances by
+  `(mesh, internal shader program, effective render state)`; material instances over one program
+  share a batch. A group splits at `MaxInstancesPerBatch` (16,384) or
+  `MaxInstanceBytesPerBatch` (1 MiB, including the 96-byte instance header), and each split chunk is
+  a separate draw call. Instance bounds are transformed to world-space AABBs and frustum-culled
+  against six normalized planes; an instance is culled only when it is fully outside one plane. An
+  opaque batch keeps recording order; alpha, additive, and multiply batches are sorted back-to-front
+  by nearest instance depth, and their instances are sorted back-to-front too. Sorting is stable for
+  equal depths. Stats count draw calls after splitting and instances after culling.
+- **Per-instance uniforms and textures.** Every instance record carries the transform, tint, UV
+  rectangle, one bindless index per sidecar texture binding, and the reflected uniform values, so
+  uniform and texture changes never split a batch. `Draw*` snapshots the shader cursor once per call;
+  `DrawInstanced` applies one snapshot to every transform.
+- **AgX highlight extension with paper-white normalization.** AgX remains the SDR-referred curve. On
+  an HDR window the scRGB path normalizes AgX's neutral white by
+  `luma(AgX(white)) = 0.9829795037669735` to display luminance `1.0` and scales that to the window's
+  reported SDR white level (paper white). Above the AgX white point at
+  `AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear luminance, with
+  `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
+  `t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
+  `yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom`, the
+  normalized AgX color is scaled by `yOut / luma(normalized)`. Displayed luminance is `yOut` and
+  channel ratios are preserved; the mapping is continuous at the knee and clamps beyond the reported
+  peak. It is disabled when the headroom is at most one or when `TonemappingMode.None` is selected.
+  SDR windows keep paper white and peak at `1`, so their image is unchanged from M2, and `None`
+  remains the direct HDR authoring path.
+- **Castle AOT gate.** `samples/Castle` and `samples/Castle/Castle.Assets` are the per-milestone AOT
+  gate. The sample owns `samples/Castle/Castle.slnx`; it is not part of `src/RayBork/RayBork.slnx`.
+  The sample build invokes the JIT assets executable out of process without the sample's publish
+  settings, bakes `castle.pck` from the checked-in raylib castle OBJ, its diffuse texture, and the
+  model sidecar, and copies the pack beside the sample executable; the publish also copies it into
+  the publish directory. The published `win-x64` and `linux-x64` hosts load the adjacent pack with no
+  `--assets` argument, draw the unlit castle model with the built-in mesh shader, and must exit `0`
+  on the Windows hardware driver, native Linux, and the WSLg dzn hardware path. The sample is a plain
+  user-facing example and contains no test-only draw assertion.
+  `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
+  diagnostic host.
+- **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
+  texture, and an orbital camera. It deliberately leaves out features that need later milestones:
+  the reference XZ grid (`DrawGrid` arrives in M5), model/texture drag-and-drop (post-1.0 platform
+  work), click selection and `DrawBoundingBox` (ray/box collision and the wire-box helper arrive in
+  M5), and the `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The model and its diffuse
+  texture are drawn with the built-in `/shaders/mesh` material that the loaded model owns; there is
+  no custom Castle shader. The sample draws only the castle; render statistics are available to
+  games but are not drawn. The castle model and texture are
+  sample-only assets with their own notice under `samples/Castle/`; that notice is deliberately not
+  duplicated in the repository-root notices.
+- **WSLg dzn compatibility.** On the WSL gate host WSLg selects
+  `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and prints
+  "dzn is not a conformant Vulkan implementation, testing use only". The original runtime
+  `RayBorkTextures[]` declaration crashed dzn's DXIL lowering on the first geometry pipeline
+  (`nir_to_dxil.c: emit_createhandle_call_dynamic` asserted "Resource access for undeclared range");
+  a 4096-slot combined-sampler layout also exceeds dzn's 2048-descriptor sampler heap. The shipped
+  fixed `RayBorkTextures[2048]` array gives dzn a declared resource range and exactly fills one
+  sampler heap, so the published host now completes the 30-frame hardware gate on dzn with 2 draw
+  calls, 2 instances, and 7168 triangles, with no `DZN_DEBUG` workaround. The validation layer's
+  expected `WARNING-Shader-OutputNotConsumed` performance warnings for unused fixed vertex-layout
+  attributes still appear; they are not errors. The Windows hardware gate passes on the same GPU,
+  and the conformant lavapipe ICD remains available for a software-only Linux run.
+- **M4 limitation: one frame block per frame slot.** The renderer writes one 256-byte `rbFrame`
+  block per frame slot. A frame that records more than one camera pass overwrites that block for
+  each pass, so every pass in that frame sees the last recorded pass' view-projection, view,
+  projection, camera position, and viewport. Single-camera frames are correct; split-screen
+  cameras and multiple cameras with different views need per-pass frame data, which lands with the
+  M8 multiple-camera work. This is the honest M4 limitation, not an M8 feature already shipped.
+
 **Risks.** This is the largest milestone. The shader ABI and per-instance layout can force changes
 in the bake, the renderer, and the sample at the same time. Prototype the ABI on two shaders before
-building the full batching path.
+building the full batching path. The as-built WSLg dzn issue was fixed by the fixed-size texture
+array; the remaining device constraint is the 2048-slot sampler heap, which the engine enforces at
+device selection instead of clamping silently.
 
 ### M5 — Primitives, lines, billboards, and collision
 
@@ -369,6 +454,7 @@ building the full batching path.
 **Scope.**
 
 - Built-in meshes: cube, sphere, cylinder, plane, grid, wire cube, wire sphere.
+- `DrawGrid` for raylib's reference XZ grid.
 - Line, line-strip, point (camera-facing quad), and triangle helpers.
 - Billboard and textured-quad helpers.
 - Default vertex-color/unlit shader; per-instance linear tint.
@@ -385,6 +471,7 @@ building the full batching path.
 - Collision unit tests cover hit/miss, inside-origin rays, parallel rays, and degenerate triangles.
 - `GetRayMesh` hits a loaded mesh and returns the expected point/normal/distance.
 - All helpers batch with the same rules as user draws; stats reflect it.
+- Castle uses `DrawGrid` for the raylib reference grid.
 - Native AOT publish runs the gallery on Windows and Linux.
 
 ### M6 — Text and runtime MSDF
@@ -548,8 +635,9 @@ with Native AOT without reading the engine source.
 
 **Scope.**
 
-- Samples: Castle (3D textured/custom shader/HDR), Pong (2D/input/text), Text (MSDF/layout),
-  Instancing (batching/stats), RenderTarget (offscreen/MSAA/post-process).
+- Samples: Castle (3D textured/custom shader/HDR; the sample and its assets executable ship in M4,
+  and M11 polishes them), Pong (2D/input/text), Text (MSDF/layout), Instancing (batching/stats),
+  RenderTarget (offscreen/MSAA/post-process).
 - `dotnet new raybork` template with a game project, assets executable, and AOT publish profile.
 - NuGet packages: `RayBork.Engine` and the bake tool; package validation and symbol packages.
 - XML docs for every public member; the API reference synchronized with the implementation.

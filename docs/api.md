@@ -1,13 +1,16 @@
 # RayBork API Reference
 
-Status: **v0.1 M3**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M4**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
 backend. M3 ships the asset pipeline: `IAsset`, `IAssetCatalog`, `Mesh`, `Texture`, `Shader`, the
 procedural `MeshBuilder`/`TextureBuilder` API, the asset and shader metadata value types, the asset
 exceptions, pack mounting and lookup, custom TOML data through `WithAssetType<T>()`, `RayBork.Bake`,
-and the build-time built-in pack. The rest of
+and the build-time built-in pack. M4 ships the core 3D renderer: `Camera`, `CameraProjection`,
+`ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, the camera draw methods,
+`Shader.SetUniform`/`ResetUniforms`, and the shader ABI, backed by the bindless texture table,
+instanced batches, pipeline and sampler caches, and the AgX HDR highlight extension. The rest of
 the API reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
@@ -148,10 +151,10 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `Transform`, `Color`, `Rect`, `Vector3Extensions`, `QuaternionExtensions` | M1 |
 | `BoundingBox` | M3 |
 | `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
-| `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, `WithClearColor`) | M2 |
+| `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`) | M2 |
 | `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, `Vertex`, `MeshBuilder`, `MeshNormalMode`, `TextureBuilder`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
 | `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, `EngineContext.Assets`, `EngineContext.CreateMeshBuilder`, and `EngineContext.CreateTextureBuilder` | M3 |
-| `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
+| `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
 | `Collision` and `RayCollision` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
@@ -168,9 +171,9 @@ In M1, `RayBorkAppBuilder` exposes **only** `WithGame`, `WithTitle`, `WithSize`,
 `Info` reports the selected GPU, the Vulkan API version, the swapchain format, the effective sample
 count and present mode, whether the scRGB HDR path is active, and whether validation is active;
 `Stats` describes the last completed frame. `RayBorkAppBuilder` additionally exposes
-`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, and
-`WithClearColor`. M2 has no camera or draw API: a frame clears the linear scene target and presents
-it. `Assets`, cameras, render textures, and custom asset types remain later milestones.
+`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, and `WithValidation`. M2 has no
+camera or draw API: a frame clears the linear scene target and presents it. `Assets`, cameras, render
+textures, and custom asset types remain later milestones.
 
 **M3 subset.** `EngineContext` additionally exposes `Assets`, `CreateMeshBuilder`, and
 `CreateTextureBuilder`. `RayBorkAppBuilder` additionally exposes `WithAssetsPack`, `WithAssetsPacks`,
@@ -180,6 +183,41 @@ procedural `MeshBuilder`/`TextureBuilder` API, and CPU mesh vertices/indices. It
 `Model`, `Font`, cameras, render textures, `Shader.SetUniform`, `ResetUniforms`, or any `Draw*`
 member; those arrive in M4, M6, and M8. The M3 sample loads a texture, a mesh part, a shader, and
 registered custom data, and reads back their metadata without drawing.
+
+**M4 subset.** `EngineContext` additionally exposes `CreateCamera` and `CreateOrthographicCamera`,
+both legal only on the tick thread during `Tick`, and `Defaults`, which exposes the preloaded mesh
+shader program and white/error textures. `Camera` ships as a frame-scoped recorder with the
+`DrawModel`, `DrawMesh`, `DrawInstanced`, and `DrawModelInstanced` draw methods, `Viewport`,
+`ViewMatrix`, `ProjectionMatrix`, `ViewProjectionMatrix`, `Frustum`, `ScreenToWorldRay`, and
+`WorldToScreen`. `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, and
+`BoundingFrustum` ship in M4. `Model` is a caller-owned composition of parts and meshes, not an
+engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
+write that material's cursor. `Load<Shader>` returns a new independent material over a cached
+internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
+no `Font`, and no primitive/line/billboard/text draw helpers. Clear control is per camera:
+`RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
+`ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
+`InvalidOperationException` naming it, and the frame is not published.
+
+M4 `RenderStats` describes the draw path. `DrawCalls` counts scene submissions after batch splitting
+and excludes the present triangle; `Instances` counts instances that survived culling;
+`Triangles` counts submitted triangles after instancing; `CulledInstances` counts frustum
+rejections; `PipelineCount` counts distinct scene pipelines; `TextureCount` counts live bindless
+texture slots, including the reserved white slot. A frame with no camera passes and no draws reports
+zero for the draw counters. Textures allocate a bindless slot when their GPU upload completes; slot
+0 is always the built-in white fallback, and a full table fails the upload with
+`AssetLoadException` `RB1010`. The bindless table has exactly 2048 slots matching the shader ABI's
+`RayBorkTextures[2048]` array; a device whose update-after-bind sampled-image limits are below 2048
+is rejected during device selection, and the capacity is never reduced.
+
+`samples/Castle` is the M4 AOT gate: the sample solution `samples/Castle/Castle.slnx` builds its
+`Castle.Assets` executable out of process, bakes `/models/obj/castle` and
+`/models/obj/castle_diffuse` into `castle.pck`, and copies the pack beside the sample executable, so
+the published `win-x64` and `linux-x64` hosts load it without a manual bake or an `--assets` argument.
+The model parts use the built-in mesh material; the hosts draw the castle and exit `0`. The Windows
+hardware path, the conformant lavapipe Linux path, and the WSLg dzn hardware path all pass; the
+reference grid is deferred to M5. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not
+the AOT gate.
 
 ## 2. Quick start
 
@@ -193,14 +231,14 @@ using System.Numerics;
 public sealed class CastleGame : IGame {
     private Model? _castle;
     private Texture? _texture;
-    private Shader? _shader;
 
     public async Task Setup(EngineContext ctx) {
         _castle = await ctx.Assets.Load<Model>("/models/castle");
         _texture = await ctx.Assets.Load<Texture>("/textures/castle");
-        _shader = await ctx.Assets.Load<Shader>("/shaders/castle");
 
-        _shader.SetUniform("mainTexture", _texture);
+        foreach (ModelPart part in _castle.Parts) {
+            part.Shader.SetUniform("mainTexture", _texture);
+        }
     }
 
     public void Tick(EngineContext ctx) {
@@ -225,12 +263,11 @@ public sealed class CastleGame : IGame {
             Scale = Vector3.One,
         };
 
-        camera.DrawModel(_castle!, modelTransform, _shader!);
+        camera.DrawModel(_castle!, modelTransform);
     }
 
     public Task Shutdown() {
         _castle?.Dispose();
-        _shader?.Dispose();
         _texture?.Dispose();
         return Task.CompletedTask;
     }
@@ -270,8 +307,10 @@ internal static class Program {
 What changed:
 
 - `Mesh` became `Model`; a castle is a multi-part model, not one primitive.
-- Two shader loads became one `Shader` program load.
-- `Shader.SetUniform` replaced the fragment-shader call; there is no `Material`.
+- Two shader loads create two independent `Shader` materials over one cached internal program.
+- `Shader` is the material instance; `SetUniform` writes its cursor and there is no `Material`.
+  The model's parts own their materials; set the texture on the part material, not on a separate
+  shader loaded for the model.
 - The camera moved from `z = -10` to `z = +10` for a right-handed, `-Z`-forward world.
 - `ClearMode.Color` became `ClearMode.ColorAndDepth`.
 - `ctx.Time` is already seconds, so the `* 0.001` disappeared.

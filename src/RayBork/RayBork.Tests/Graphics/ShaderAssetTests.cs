@@ -81,6 +81,27 @@ public sealed class ShaderAssetTests {
         Assert.Equal(ReadCommittedModule(FRAGMENT_MODULE_FILE), firstRead);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MeshDrawShaderMatchesTheRaylibDefaultModelShader() {
+        string vertex = File.ReadAllText(BuiltInShaderPathOf("mesh.vert"));
+        string fragment = File.ReadAllText(BuiltInShaderPathOf("mesh.frag"));
+
+        // raylib's default model shader is unlit: only position, uv, and color, and the instance tint
+        // is applied once, in the fragment stage.
+        Assert.Contains("layout(location = 0) in vec3 aPosition;", vertex, StringComparison.Ordinal);
+        Assert.Contains("layout(location = 2) in vec2 aUv;", vertex, StringComparison.Ordinal);
+        Assert.Contains("layout(location = 6) in vec4 aColor;", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("aNormal", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("vNormal", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("aNormal", fragment, StringComparison.Ordinal);
+        Assert.DoesNotContain("vNormal", fragment, StringComparison.Ordinal);
+        Assert.Contains("vColor = aColor;", vertex, StringComparison.Ordinal);
+        Assert.DoesNotContain("rbInstance.Color", vertex, StringComparison.Ordinal);
+        Assert.Equal(1, CountOccurrences(fragment, "rbInstance.Color"));
+        Assert.Contains("texture(mainTexture, vUv) * vColor * uTint * rbInstance.Color", fragment);
+    }
+
     private static void AssertSpirvHeader(ReadOnlySpan<byte> module, string moduleFileName) {
         Assert.False(module.IsEmpty, $"The '{moduleFileName}' module must not be empty.");
         Assert.Equal(0, module.Length % sizeof(uint));
@@ -103,4 +124,25 @@ public sealed class ShaderAssetTests {
 
     private static string ShaderPathOf(string fileName) =>
         RepositoryLayout.PathOf("src", "RayBork", "RayBork.Engine", "Shaders", fileName);
+
+    private static string BuiltInShaderPathOf(string fileName) =>
+        RepositoryLayout.PathOf(
+            "src",
+            "RayBork",
+            "RayBork.Engine",
+            "BuiltInAssets",
+            "Assets",
+            "shaders",
+            fileName);
+
+    private static int CountOccurrences(string text, string value) {
+        int count = 0;
+        int index = 0;
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) {
+            count++;
+            index += value.Length;
+        }
+
+        return count;
+    }
 }

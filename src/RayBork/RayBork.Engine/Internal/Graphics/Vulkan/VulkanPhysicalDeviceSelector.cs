@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Silk.NET.Vulkan;
 
@@ -8,13 +9,17 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// Selection is pure so it can be unit tested without a GPU. A device qualifies only when it
-/// supports Vulkan 1.2 or newer, graphics and presentation queues, and <c>VK_KHR_swapchain</c>.
+/// supports Vulkan 1.2 or newer, graphics and presentation queues, <c>VK_KHR_swapchain</c>, the
+/// M4 descriptor-indexing subset the bindless texture table needs, and enough update-after-bind
+/// sampled images for the fixed <c>RayBorkTextures[2048]</c> array. A device without the bindless
+/// subset or the capacity is not suitable; the renderer never falls back to one texture per draw or
+/// to a smaller array.
 /// </remarks>
 internal static class VulkanPhysicalDeviceSelector {
     private const uint REQUIRED_API_VERSION = (1u << 22) | (2u << 12);
 
     /// <summary>
-    /// Determines whether a device satisfies every M2 requirement.
+    /// Determines whether a device satisfies every M4 requirement.
     /// </summary>
     /// <param name="candidate">The device facts.</param>
     /// <returns><see langword="true"/> when the device is suitable.</returns>
@@ -22,7 +27,9 @@ internal static class VulkanPhysicalDeviceSelector {
         candidate.ApiVersion >= REQUIRED_API_VERSION
         && candidate.SupportsGraphicsQueue
         && candidate.SupportsPresentQueue
-        && candidate.HasSwapchainExtension;
+        && candidate.HasSwapchainExtension
+        && candidate.BindlessTextureCapacity >= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY
+        && string.IsNullOrEmpty(candidate.MissingBindlessFeatures);
 
     /// <summary>
     /// Selects the preferred suitable device and returns its index in the loader's device array.
@@ -94,6 +101,18 @@ internal static class VulkanPhysicalDeviceSelector {
 
         if (!candidate.HasSwapchainExtension) {
             reasons.Add("the VK_KHR_swapchain extension is missing");
+        }
+
+        if (candidate.BindlessTextureCapacity < VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY) {
+            reasons.Add(
+                "update-after-bind sampled-image capacity "
+                + $"{candidate.BindlessTextureCapacity.ToString(CultureInfo.InvariantCulture)} is below the "
+                + "required "
+                + $"{VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        if (!string.IsNullOrEmpty(candidate.MissingBindlessFeatures)) {
+            reasons.Add($"descriptor-indexing features missing: {candidate.MissingBindlessFeatures}");
         }
 
         return $"- [{candidate.Index}] {candidate.Name}: {string.Join("; ", reasons)}.";

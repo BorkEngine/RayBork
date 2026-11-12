@@ -201,25 +201,6 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithClearColorRejectsNonFiniteComponents() {
-        RayBorkAppBuilder builder = new RayBorkAppBuilder();
-
-        Assert.Equal(
-            "color",
-            Assert.Throws<ArgumentException>(() => builder.WithClearColor(new Color(float.NaN, 0f, 0f, 1f))).ParamName);
-        Assert.Equal(
-            "color",
-            Assert.Throws<ArgumentException>(() => builder.WithClearColor(new Color(0f, float.PositiveInfinity, 0f, 1f))).ParamName);
-        Assert.Equal(
-            "color",
-            Assert.Throws<ArgumentException>(() => builder.WithClearColor(new Color(0f, 0f, float.NegativeInfinity, 1f))).ParamName);
-        Assert.Equal(
-            "color",
-            Assert.Throws<ArgumentException>(() => builder.WithClearColor(new Color(0f, 0f, 0f, float.NaN))).ParamName);
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void BuildWithoutGameThrows() {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
@@ -248,7 +229,6 @@ public sealed class BuilderTests {
         Assert.Equal(4, settings.SampleCount);
         Assert.Equal(TonemappingMode.AgX, settings.Tonemapping);
         Assert.Equal(0f, settings.Exposure);
-        Assert.Equal(Color.Black, settings.ClearColor);
 
 #if DEBUG
         bool expectedValidation = true;
@@ -261,14 +241,12 @@ public sealed class BuilderTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void BuildUsesConfiguredRenderOverrides() {
-        Color clearColor = new(0.1f, 0.2f, 0.3f, 0.4f);
         RayBorkAppBuilder builder = new RayBorkAppBuilder()
             .WithGame(new ScriptedGame())
             .WithPresentMode(PresentMode.Immediate)
             .WithMSAA(8)
             .WithTonemapping(TonemappingMode.None)
             .WithExposure(2.5f)
-            .WithClearColor(clearColor)
             .WithValidation(false);
 
         using RayBorkApp app = BuildWithFakePlatform(builder, out _);
@@ -278,7 +256,6 @@ public sealed class BuilderTests {
         Assert.Equal(8, settings.SampleCount);
         Assert.Equal(TonemappingMode.None, settings.Tonemapping);
         Assert.Equal(2.5f, settings.Exposure);
-        Assert.Equal(clearColor, settings.ClearColor);
         Assert.False(settings.ValidationEnabled);
     }
 
@@ -299,7 +276,6 @@ public sealed class BuilderTests {
         Assert.Throws<InvalidOperationException>(() => builder.WithMSAA(8));
         Assert.Throws<InvalidOperationException>(() => builder.WithTonemapping(TonemappingMode.None));
         Assert.Throws<InvalidOperationException>(() => builder.WithExposure(1f));
-        Assert.Throws<InvalidOperationException>(() => builder.WithClearColor(Color.White));
         Assert.Throws<InvalidOperationException>(() => builder.WithValidation(false));
         Assert.Throws<InvalidOperationException>(() => builder.WithTargetFps(60));
         Assert.Throws<InvalidOperationException>(() => builder.WithWindowState(WindowState.Maximized));

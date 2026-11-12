@@ -19,6 +19,12 @@ namespace RayBork.Internal;
 /// after the ring lock is released because a target's release may queue GPU destruction.
 /// </para>
 /// <para>
+/// A slot also owns one reusable <see cref="RenderFramePacket"/>. A writable acquisition resets the
+/// packet and returns it through the lease; publishing seals it; the consumer reads it through the
+/// rendering lease. The packet's pooled pass and draw buffers are therefore reused per slot and never
+/// shared by two frames, and the tick thread cannot mutate a packet that is ready or rendering.
+/// </para>
+/// <para>
 /// State is guarded by a <see cref="Lock"/>; blocking waits use <see cref="AutoResetEvent"/> and
 /// never hold the lock. <see cref="ReadySignal"/> lets the render loop wait on frame readiness and
 /// GPU upload work at the same time. Blocking acquisitions return <c>null</c> when the ring is
@@ -30,11 +36,21 @@ internal sealed class FrameRing {
 
     private readonly Lock _gate = new();
     private readonly Slot[] _slots = new Slot[SLOT_COUNT];
+    private readonly RenderFramePacket[] _packets = new RenderFramePacket[SLOT_COUNT];
     private readonly AutoResetEvent _writableAvailable = new(false);
     private readonly AutoResetEvent _readyAvailable = new(false);
 
     private long _nextFrameIndex = 1;
     private bool _completed;
+
+    /// <summary>
+    /// Initializes the ring and its three reusable frame packets.
+    /// </summary>
+    internal FrameRing() {
+        for (int index = 0; index < _packets.Length; index++) {
+            _packets[index] = new RenderFramePacket(frameIndex: 0);
+        }
+    }
 
     /// <summary>
     /// Gets the signal that is set when a ready frame becomes available or the ring completes. The
@@ -101,6 +117,7 @@ internal sealed class FrameRing {
         List<FrameAssetRetention>? superseded = null;
         lock (_gate) {
             int slotIndex = ValidateLeaseLocked(lease, SlotState.Recording, nameof(Publish));
+            lease.Packet?.Seal();
             for (int i = 0; i < SLOT_COUNT; i++) {
                 if (i != slotIndex && _slots[i].State == SlotState.Ready) {
                     if (_slots[i].Retention is { } retention) {
@@ -261,8 +278,10 @@ internal sealed class FrameRing {
         for (int i = 0; i < SLOT_COUNT; i++) {
             if (_slots[i].State == SlotState.Free) {
                 long frameIndex = _nextFrameIndex++;
+                RenderFramePacket packet = _packets[i];
+                packet.Reset(frameIndex);
                 _slots[i] = new Slot(SlotState.Recording, frameIndex);
-                lease = new FrameLease(i, frameIndex);
+                lease = new FrameLease(i, frameIndex, packet);
                 return true;
             }
         }
@@ -286,7 +305,7 @@ internal sealed class FrameRing {
         }
 
         _slots[newestSlotIndex] = new Slot(SlotState.Rendering, newestFrameIndex, _slots[newestSlotIndex].Retention);
-        lease = new FrameLease(newestSlotIndex, newestFrameIndex);
+        lease = new FrameLease(newestSlotIndex, newestFrameIndex, _packets[newestSlotIndex]);
         return true;
     }
 

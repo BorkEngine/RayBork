@@ -24,13 +24,7 @@ public sealed class Camera : IDisposable {
     public BoundingFrustum Frustum { get; }
     public bool IsDisposed { get; }
 
-    public void DrawModel(Model model, Transform transform);
-    public void DrawModel(
-        Model model,
-        Transform transform,
-        Shader shader,
-        RenderState? renderState = null,
-        Color? tint = null);
+    public void DrawModel(Model model, Transform transform, Color? tint = null);
 
     public void DrawMesh(
         Mesh mesh,
@@ -48,9 +42,7 @@ public sealed class Camera : IDisposable {
 
     public void DrawModelInstanced(
         Model model,
-        Shader shader,
         ReadOnlySpan<Transform> transforms,
-        RenderState? renderState = null,
         Color? tint = null);
 
     public void DrawLine(Vector3 start, Vector3 end, Color color);
@@ -102,53 +94,100 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - After `Dispose`, any draw or property access throws `ObjectDisposedException`.
 - Creating a camera while another camera is active throws `InvalidOperationException`; cameras are
   sequential, not nested. Multiple cameras in one tick are created and disposed one after another.
+- `CreateCamera` and `CreateOrthographicCamera` require a frame that is being recorded, so they are
+  legal only on the tick thread during `Tick`. Setup, Shutdown, any other thread, and a second active
+  camera are `InvalidOperationException`.
 - If a camera is not disposed when `Tick` returns, the engine throws `InvalidOperationException`
-  naming the leak. In a debug build this happens before the frame is published; in release the
-  frame is failed rather than silently rendered without the pass.
+  naming the leaked camera and the frame is **not** published. The tick loop stops with that
+  exception; `Shutdown` still runs.
 - The camera does not copy the whole scene. It records value snapshots of the draws and shader
   state at each call. The renderer never reads live game objects.
-- `Target == null` means the app's linear HDR scene target. The present pass applies AgX and writes
-  to the swapchain after all cameras finish. A non-null target writes to that offscreen target.
-- MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count; a
-  `RenderTexture` uses its own `SampleCount`. The camera records into whichever target it owns.
+- The pass records the clamped pixel viewport, the clear mode and color, the view, projection, and
+  view-projection matrices, and the camera position. Every recorded frame retains the mesh, internal
+  shader program, and bound textures it recorded until the render thread releases the frame slot; a
+  model or material object is not an engine asset and adds no hold.
+- MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. M4 has
+  no `RenderTexture`: every camera records into the app's linear HDR scene target.
+
+> **M4 subset.** `Camera` ships without a render target: the `Target` property and the `target`
+> parameter arrive with `RenderTexture` in M8. `Viewport`, `Rect? viewport`, `ScreenToWorldRay`,
+> `WorldToScreen`, `Ray`, and `BoundingFrustum` ship in M4. The camera always records into the app's
+> linear HDR scene target, and the present pass applies AgX after all cameras finish. The primitive,
+> line, billboard, texture, and text draw helpers in §7.9 and §7.10 are later milestones; M4 ships
+> `DrawModel`, `DrawMesh`, `DrawInstanced`, and `DrawModelInstanced`.
 
 Properties:
 
 | Property | Meaning |
 | --- | --- |
 | `Transform` | World-space camera transform. The camera looks down local `-Z`. |
-| `FieldOfView` | Vertical field of view in degrees; perspective only. |
-| `OrthographicHeight` | Visible world-space height; orthographic only. |
-| `Near`, `Far` | Clip distances. `Far` may be `+infinity` for perspective. |
+| `FieldOfView` | Vertical field of view in degrees; perspective only (`0` for an orthographic camera). |
+| `OrthographicHeight` | Visible world-space height; orthographic only (`0` for a perspective camera). |
+| `Near`, `Far` | Clip distances. `Far` may be `+infinity` for perspective, never for orthographic. |
 | `ClearMode` | Which buffers this pass clears. |
 | `ClearColor` | Linear color used when `ClearMode.Color` is set. |
-| `Target` | Offscreen target, or `null` for the HDR scene target. |
-| `Viewport` | Pixel rectangle in the target. Defaults to the full target. |
-| `Frustum` | World-space frustum derived from the view-projection matrix; useful for custom culling. |
+| `Viewport` | Pixel rectangle in the target, clamped when the camera was created. Defaults to the full target. |
+| `ViewMatrix` | Inverse of `Transform.ToMatrix()`. |
+| `ProjectionMatrix` | Reverse-Z `[0, 1]` projection with the Vulkan Y-flip already applied. |
+| `ViewProjectionMatrix` | `ViewMatrix * ProjectionMatrix` under the row-vector convention. |
+| `Frustum` | World-space `BoundingFrustum` derived from the view-projection matrix; useful for custom culling. |
 
-`CreateCamera` sets the aspect ratio from the viewport (or target/window size). The projection is
-built with reverse-Z; the `ProjectionMatrix` already contains Vulkan's Y-flip. Custom code that
-builds its own projection must preserve both conventions if it wants to match the engine's depth
-and screen-space helpers.
+`CreateCamera` sets the aspect ratio from the clamped viewport. The projection is built with
+reverse-Z; the `ProjectionMatrix` already contains Vulkan's Y-flip. Custom code that builds its own
+projection must preserve both conventions if it wants to match the engine's depth and screen-space
+helpers.
+
+`clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
+allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`
+must be greater than `near`, and a perspective `far` may be `float.PositiveInfinity`. `fieldOfView`
+must be finite and inside `(0, 180)` degrees. An orthographic camera requires a finite `far`.
+`CreateOrthographicCamera` takes the visible `height`; `CreateCamera` is the perspective entry point
+and rejects `CameraProjection.Orthographic` with `ArgumentException` because it has no height
+parameter.
 
 `ScreenToWorldRay` takes **render pixels** with a top-left origin. `Input.MousePosition` is in
 window coordinates, so convert it with `ctx.Window.RenderWidth / (float)ctx.Window.Width` when
 `Width` is nonzero. `DpiScale` is the OS display scale, not the pixel ratio, and is not the
-conversion factor for this call. `WorldToScreen` returns render pixels.
+conversion factor for this call. The ray starts at the camera position for a perspective camera and
+at the near-plane point for an orthographic camera, and its direction is normalized. A non-finite
+input is `ArgumentException`.
 
-`DrawModel(model, transform)` uses each model part's baked shader and shader state. This is the
-normal path for an imported model with authored per-part shading.
+`WorldToScreen` returns render pixels in the camera viewport with a top-left origin. A point behind
+the camera (`w <= 0`) has no finite screen position, so it returns `(float.NaN, float.NaN)`. A
+non-finite input is `ArgumentException`. A point outside the viewport still projects to a finite
+value; the caller decides whether to clip it.
 
-`DrawModel(model, transform, shader)` overrides the shader for **every** part. The current shader
-state at the time of the call is captured for every part. Baked per-part textures and uniforms are
-ignored; set the uniforms you need before the call. This overload is for simple models and custom
-shading, not for preserving a multi-material glTF's authored look.
+`DrawModel(model, transform, tint)` uses each part's **material**. At the call it snapshots that
+material's current uniform cursor and texture bindings and uses the part's `ModelPart.RenderState`
+(a `null` constructor argument resolved to `Shader.DefaultRenderState`). Different parts may therefore
+use different programs, render states, uniforms, and textures in one model draw, which is the normal
+path for an imported multi-material model.
+
+`DrawModelInstanced(model, transforms, tint)` does the same for every part and applies the part's
+local transform before each instance transform. The frame retains each part material's internal
+program and every bound texture; the material object itself is not an engine asset and is not
+retained.
 
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
-custom shader sees it as `rbInstance.Color` and must use it explicitly.
+custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
+The UV rectangle is `(0, 0, 1, 1)` for every draw in M4.
 
-`renderState` overrides the shader's default render state for this draw only. `null` uses
-`Shader.DefaultRenderState`. The override is part of the batching key.
+For `DrawMesh` and `DrawInstanced`, `renderState` overrides the material's default render state for
+this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of the batching key.
+`DrawModel` and `DrawModelInstanced` have no per-draw state override; they use each part's
+`ModelPart.RenderState`.
+
+**Error model.**
+
+- A `null` model, mesh, or material argument is `ArgumentNullException`.
+- A disposed camera, model, mesh, part material, or bound texture is `ObjectDisposedException`.
+- A material that does not declare both the vertex and fragment stages is
+  `InvalidOperationException`.
+- A camera draw or `Dispose` from a thread other than the tick thread is
+  `InvalidOperationException`.
+- A model part's `LocalTransform` is applied as
+  `world = part.LocalTransform.ToMatrix() * instanceTransform.ToMatrix()`; the engine never composes
+  it through `Transform.WithParent`, which can throw on shear.
 
 ### 7.2 Projection, clear, HDR, and tone mapping
 
@@ -176,21 +215,69 @@ public enum TonemappingMode {
 
 - Default camera clear is `ClearMode.ColorAndDepth`. A 3D frame that uses only `ClearMode.Color`
   will reuse the previous frame's depth buffer and must be treated as an overlay pass.
-- Depth clears to `0.0`. Color clears to `ClearColor`. Stencil clears to `0`.
+- Clears are scoped to the camera viewport, not the whole target. The renderer clears the clamped
+  viewport rectangle with the camera's clear state; a pass with a smaller viewport leaves the pixels
+  outside it untouched.
+- Depth clears to `0.0`. Color clears to `ClearColor`. `ClearMode.Stencil` is a no-op in M4 because
+  the scene target has no stencil attachment; the flag is accepted and does not fail.
+- The scene target's render pass starts with undefined color and depth content. A first camera that
+  wants defined content must clear; a first camera with `ClearMode.None` leaves undefined content,
+  and later cameras see the previous pass' pixels.
 - The depth test defaults to `GreaterOrEqual`; depth writes are on for opaque draws.
 - Perspective supports an infinite far plane. The projection maps the near plane to `1.0` and
   infinity to `0.0`.
 - Orthographic supports reverse-Z too, but requires a finite far plane.
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
-- Multiple cameras can render to the same target. The first camera usually clears; later cameras
-  choose `ClearMode.None` or `ClearMode.Depth` for overlays.
+- Multiple cameras can clear different passes sequentially in one tick. The first camera usually
+  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. M4 shares one
+  frame uniform block per frame slot across every camera pass: a frame with more than one camera
+  pass submits the same `rbFrame` values (the last recorded pass') to every pass. Split-screen
+  cameras in one frame are therefore a known M4 limitation rather than a supported layout.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
-  target inside the same pass that writes it is invalid and is reported as a validation error.
+  target inside the same pass that writes it is invalid and is reported as a validation error. This
+  applies from M8; M4 has no render target.
 
-In M2, before `Camera` exists, `WithClearColor` is the scene clear color. Cameras add per-camera
-clear control in M4; a camera's own clear color then takes precedence.
+M4 has no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
+the scene clear control for its pass. A camera that does not clear color leaves the previous pass'
+color in place, which is the documented overlay behavior.
+
+**Projection math.** The engine is right-handed and Y-up and the camera looks down local `-Z`.
+`ViewMatrix` is the inverse of `Transform.ToMatrix()`. `ProjectionMatrix` uses Vulkan's `[0, 1]`
+reverse-Z range and includes the Y-flip that maps world `+Y` to the top of the screen;
+`ViewProjectionMatrix = ViewMatrix * ProjectionMatrix` under the row-vector convention.
+
+For a perspective camera, with `f = 1 / tan(fieldOfView / 2)` and `aspect = viewport.Width /
+viewport.Height`, the conventional column-vector form is:
+
+```text
+[ f/aspect   0        0        0 ]
+[ 0          f        0        0 ]
+[ 0          0        a        b ]
+[ 0          0       -1        0 ]
+```
+
+An infinite far plane uses `a = 0` and `b = near`. A finite far plane uses
+`a = near / (far - near)` and `b = near * far / (far - near)`. This maps the near plane to `1.0` and
+the far plane (or infinity) to `0.0`. The engine applies Vulkan's Y-flip by negating the second row,
+so a world-space point above the camera projects to negative NDC Y, which is the top of the screen.
+`Camera.ProjectionMatrix` stores the row-vector transpose of this formula because `System.Numerics`
+multiplies row vectors.
+
+For an orthographic camera with a finite `far`, `width = height * aspect`, and the conventional
+column-vector form is:
+
+```text
+[ 2/width    0          0             0               ]
+[ 0         -2/height   0             0               ]
+[ 0          0          1/(far-near)  far/(far-near)  ]
+[ 0          0          0             1               ]
+```
+
+The orthographic projection maps the near plane to `1.0`, the far plane to `0.0`, and includes the
+same Y-flip. `BoundingFrustum` extracts its planes from the engine's Y-flipped NDC, so `Top` and
+`Bottom` follow the flipped screen convention rather than the mathematical world axes.
 
 **HDR chain.** The scene target is linear `R16G16B16A16_SFLOAT` color with a `D32_SFLOAT` depth
 attachment. The present pass applies exposure, `TonemappingMode`, and the output encoding. The
@@ -206,21 +293,39 @@ order and reports `HdrOutput = false`.
 
 The SDR order is `B8G8R8A8_SRGB`, `R8G8B8A8_SRGB`, `B8G8R8A8_UNORM`, `R8G8B8A8_UNORM` (manual sRGB
 encode in the present shader), then `R16G16B16A16_SFLOAT` (linear clamp). HDR10
-(`A2B10G10R10_UNORM_PACK32`, PQ) is deliberately deferred and is never selected in M2. The selected
+(`A2B10G10R10_UNORM_PACK32`, PQ) is deliberately deferred and is never selected in M4. The selected
 format token is reported by `EngineInfo.SwapchainFormat`; `HdrOutput` is true only when the window
 reports HDR and the selected pair presents through the scRGB HDR path.
 
-**HDR output.** The scRGB present path scales display-linear color by the window's SDL SDR white
-level and does not clamp, so values above the SDR white point use the display headroom. The cached
-HDR state also carries the headroom for diagnostics. A window HDR state change, or a change to the
-SDR white level while HDR is active, recreates the presentation path.
+**HDR output and the AgX highlight extension.** On an HDR window the scRGB present path keeps AgX
+as the SDR-referred curve, then normalizes AgX's neutral-white response by
+`luma(AgX(white)) = 0.9829795037669735` so its white sits at display luminance `1.0`, and scales that
+to paper white: the window's reported `SDR_white_level`, for example `2.0`. The normalization makes
+the AgX white about 1.7% brighter than the raw M2 response; it is the same curve presented at the
+reported paper white.
+
+Above the AgX white point (`AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear
+luminance after exposure) the extension maps the remaining scene luminance into the reported HDR
+headroom at constant chromaticity. With `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
+`t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
+`yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom`
+(for example `12.5` in scRGB units), the output is the normalized AgX color scaled by
+`yOut / luma(normalized)`. Displayed luminance is therefore exactly `yOut` and the channel ratios
+are preserved. The mapping is continuous at the knee at paper white, reaches the reported peak at
+`r = headroom`, and clamps beyond it. It is disabled when the headroom is at most one or when
+`TonemappingMode.None` is selected; `None` remains the direct HDR authoring path and writes
+`scene * paperWhite` without the extension. HDR10/PQ output is still deferred.
+
+An SDR window uses a paper white and peak of `1` and disables the extension, so its image is
+unchanged from M2. The cached HDR state also carries the headroom for diagnostics. A window HDR state
+change, or a change to the SDR white level while HDR is active, recreates the presentation path.
 
 **MSAA.** The requested sample count comes from `WithMSAA` (default 4). The effective count is the
 highest device-supported count that does not exceed the request, or `1` when none is supported, and
 a fallback logs a warning. The scene target color and depth attachments use the effective count;
 the swapchain images are single-sample. Scene color is resolved into a single-sample sampled image
 before the present pass. Depth is cleared to `0.0` and the reverse-Z state is defined; multisampled
-depth is not resolved in M2 because nothing samples depth before M4/M8. A `RenderTexture` uses its
+depth is not resolved in M4 because nothing samples depth until M8. A `RenderTexture` uses its
 own `SampleCount` (M8).
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
@@ -230,8 +335,8 @@ instead of falling back. Mailbox is not a guarantee of tearing-free presentation
 the selected mode is reported by `EngineInfo.PresentMode`.
 
 **Reverse-Z.** The scene target clears depth to `0.0`. Depth-tested pipelines use `GreaterOrEqual`,
-enable depth test and depth write, and use the `[0, 1]` depth range. The M2 present triangle is not
-depth-tested; M4's geometry pipelines consume the state.
+enable depth test and depth write, and use the `[0, 1]` depth range. The present triangle is not
+depth-tested; the geometry pipelines consume the state.
 
 Reverse-Z is a whole-pipeline convention. Custom projection code must not mix in a
 `[-1,1]`-style OpenGL projection or the depth test will be wrong. The engine exposes no

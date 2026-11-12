@@ -59,13 +59,15 @@ The following are deliberate exclusions, not forgotten features. The roadmap pla
 | `Mesh? _model` | `Model? _model` | A castle is a multi-part model; `Mesh` is one primitive. |
 | `Load<Mesh>("/models/castle")` | `Load<Model>("/models/castle")` | Multi-part glTF/OBJ support. |
 | `Load<Mesh>("/textures/castle")` | `Load<Texture>("/textures/castle")` | The seed's type is a typo. |
-| `_vertShader`, `_fragShader` | one `Shader` | A shader is a complete program; the bake pairs the stages. |
-| `_fragShader.SetUniform(...)` | `_shader.SetUniform(...)` | No `Material`; the shader owns the uniform cursor. |
-| `DrawModel(model, transform, vert, frag)` | `DrawModel(model, transform, shader)` | One program, one batching key. |
+| `_vertShader`, `_fragShader` | one `Shader` material over one internal program | The bake pairs the stages; a material owns the uniform cursor. |
+| `_fragShader.SetUniform(...)` | `_model.Parts[i].Shader.SetUniform(...)`, or a `ctx.Defaults.CreateMeshShader()` material | No `Material`; a `Shader` is a material instance over an internal program. |
+| `DrawModel(model, transform, vert, frag)` | `DrawModel(model, transform)` | Each model part supplies its own material and render state; there is no model-level shader override. |
 | Camera at `z = -10` | `z = +10` | Right-handed, `-Z`-forward world. |
 | `ClearMode.Color` | `ClearMode.ColorAndDepth` | A 3D pass must clear depth too. |
 | `(float)(ctx.Time * 0.001)` | `(float)ctx.Time` | `Time` is seconds. |
-| `Mesh?`/`Texture?`/`Shader?` disposal | same `Dispose` calls, once per load | Shared, reference-counted assets. |
+| `Mesh?`/`Texture?` disposal | same `Dispose` calls, once per load | Shared, reference-counted engine assets. |
+| `Shader?` disposal | dispose each `Load<Shader>` material and each `CreateMeshShader()` material once | Materials are caller-owned; they are not reference-counted. |
+| `Model?` disposal | dispose the model once | `Model` owns its part materials and mesh references; it is not an engine asset. |
 | `using var app = ...Build()` | unchanged | `RayBorkApp` is `IDisposable`. |
 | `WithAssetsPack(packPath)` | unchanged | Relative paths resolve next to the executable. |
 | `MaxDeltaTime = 0.25` | unchanged | Seconds. |

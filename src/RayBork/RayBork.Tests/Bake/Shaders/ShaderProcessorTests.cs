@@ -502,6 +502,38 @@ public sealed class ShaderProcessorTests {
         Assert.Contains("magic", malformed);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void InstanceRecordSizeAboveFourKiBWarnsWithoutFailingTheBake() {
+        using var below = new TempBakeWorkspace();
+        BakeRunResult accepted = RunDefault(below, MatrixUniformToml(62));
+        Assert.True(accepted.ExitCode == 0, accepted.Error + accepted.Output);
+        Assert.DoesNotContain("warning RB4008", accepted.Error);
+
+        using var above = new TempBakeWorkspace();
+        BakeRunResult warned = RunDefault(above, MatrixUniformToml(63));
+        Assert.True(warned.ExitCode == 0, warned.Error + warned.Output);
+        Assert.Contains("warning RB4008", warned.Error);
+        Assert.Contains("4128", warned.Error);
+        Assert.Contains("4096", warned.Error);
+        Assert.Contains("shaders/castle", warned.Error);
+        Assert.True(File.Exists(above.GetPackPath()));
+    }
+
+    private static string MatrixUniformToml(int count) {
+        var toml = new System.Text.StringBuilder();
+        toml.AppendLine("[shader]");
+        toml.AppendLine("vertex = \"castle.vert\"");
+        toml.AppendLine("fragment = \"castle.frag\"");
+        for (int index = 0; index < count; index++) {
+            toml.AppendLine("[[shader.uniforms]]");
+            toml.AppendLine($"name = \"uMatrix{index}\"");
+            toml.AppendLine("type = \"mat4\"");
+        }
+
+        return toml.ToString();
+    }
+
     private static BakeRunResult RunDefault(
         TempBakeWorkspace workspace,
         string toml,

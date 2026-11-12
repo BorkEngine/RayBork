@@ -83,6 +83,8 @@ StyleCopReport.xml
 *.obj
 # Sample OBJ sources are authored assets, not compiler intermediates.
 !samples/**/Assets/**/*.obj
+# Sample model sources may use an obj/ directory under Assets; it is not build output.
+!samples/**/Assets/**/obj/
 *.iobj
 *.pch
 *.pdb

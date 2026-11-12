@@ -18,7 +18,10 @@ public sealed class BuiltInPackTests {
     private const string PRESENT_PATH = "shaders/present";
     private const string PRESENT_VERTEX_PAYLOAD_PATH = "shaders/present-vert";
     private const string PRESENT_FRAGMENT_PAYLOAD_PATH = "shaders/present-frag";
-    private const int ENTRY_COUNT = 7;
+    private const string MESH_SHADER_PATH = "shaders/mesh";
+    private const string MESH_VERTEX_PAYLOAD_PATH = "shaders/mesh-vert";
+    private const string MESH_FRAGMENT_PAYLOAD_PATH = "shaders/mesh-frag";
+    private const int ENTRY_COUNT = 10;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
 
     private static readonly byte[] _ktx2Identifier =
@@ -65,6 +68,9 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, PRESENT_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, PRESENT_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, PRESENT_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, MESH_SHADER_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, MESH_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, MESH_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
     }
 
     [Fact]
@@ -117,6 +123,36 @@ public sealed class BuiltInPackTests {
         Assert.Equal(RenderState.Opaque, descriptor.DefaultRenderState);
         Assert.Empty(descriptor.Uniforms);
         Assert.Empty(descriptor.Textures);
+
+        AssertSpirvPayload(archive, descriptor.VertexPayload);
+        AssertSpirvPayload(archive, descriptor.FragmentPayload);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MeshShaderCarriesTheGeneratedAbiMetadata() {
+        using PackArchive archive = OpenBuiltInPack();
+        ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, MESH_SHADER_PATH);
+
+        Assert.Equal(MESH_VERTEX_PAYLOAD_PATH, descriptor.VertexPayload);
+        Assert.Equal(MESH_FRAGMENT_PAYLOAD_PATH, descriptor.FragmentPayload);
+        Assert.Equal("main_vertex", descriptor.VertexEntry);
+        Assert.Equal("main_fragment", descriptor.FragmentEntry);
+        Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, descriptor.Stages);
+        Assert.Equal(
+            new RenderState {
+                Blend = BlendMode.Opaque,
+                Cull = CullMode.Back,
+                DepthTest = DepthTest.GreaterOrEqual,
+                DepthWrite = true,
+            },
+            descriptor.DefaultRenderState);
+
+        ShaderUniformAsset uniform = Assert.Single(descriptor.Uniforms);
+        Assert.Equal("uTint", uniform.Name);
+        Assert.Equal(ShaderUniformType.Vector4, uniform.Type);
+        Assert.Equal([1f, 1f, 1f, 1f], uniform.Default);
+        Assert.Equal(["mainTexture"], descriptor.Textures);
 
         AssertSpirvPayload(archive, descriptor.VertexPayload);
         AssertSpirvPayload(archive, descriptor.FragmentPayload);

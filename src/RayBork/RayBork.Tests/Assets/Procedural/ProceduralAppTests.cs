@@ -92,8 +92,9 @@ public sealed class ProceduralAppTests {
         Assert.Equal(TextureFormat.Rgba8Srgb, textureFormat);
         Assert.True(mesh!.IsDisposed);
         Assert.True(texture.IsDisposed);
-        Assert.Equal(2, worker.UploadCallCount);
-        Assert.Equal(2, worker.DestroyCalls.Count);
+        // Two procedural assets plus the three engine defaults the app preloads before Setup.
+        Assert.Equal(5, worker.UploadCallCount);
+        Assert.Equal(5, worker.DestroyCalls.Count);
 
         Assert.Throws<ObjectDisposedException>(() => setupContext!.CreateMeshBuilder());
         Assert.Throws<ObjectDisposedException>(() => setupContext!.CreateTextureBuilder(1, 1));
@@ -152,7 +153,8 @@ public sealed class ProceduralAppTests {
         Assert.NotNull(mesh);
         Assert.True(meshWasProcedural);
         Assert.True(mesh!.IsDisposed);
-        Assert.Equal(1, worker.UploadCallCount);
-        Assert.Single(worker.DestroyCalls);
+        // One procedural mesh plus the three engine defaults the app preloads before Setup.
+        Assert.Equal(4, worker.UploadCallCount);
+        Assert.Equal(4, worker.DestroyCalls.Count);
     }
 }

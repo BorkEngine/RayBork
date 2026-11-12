@@ -23,10 +23,18 @@ There is one typed loader. `Load<T>` handles both engine assets and registered c
 
 | `T` | Behavior |
 | --- | --- |
-| `Mesh`, `Texture`, `Shader` (M3) | Loads a shared, reference-counted engine asset. Completes after GPU upload. `T` is an `IAsset` and must be disposed once per successful load. |
-| `Model` (M4), `Font` (M6), later `AudioClip` | The same shared, reference-counted contract; the types arrive with their milestones. |
+| `Mesh`, `Texture` | Loads a shared, reference-counted engine asset. Completes after GPU upload. `T` is an `IAsset` and must be disposed once per successful load. |
+| `Shader` (M4) | Returns a **new independent material instance** every call, backed by one cached internal shader program for the path. `Shader` is not an `IAsset` and is never reference-counted. Dispose every material exactly once. |
+| `Model` (M4) | Returns a **new `Model` wrapper** every call over the shared cached part meshes and programs, with one new material per part. `Model` is not an `IAsset`, is never reference-counted, and owns its part materials. Dispose every returned model exactly once. |
+| `Font` (M6), later `AudioClip` | The shared, reference-counted engine-asset contract; the types arrive with their milestones. |
 | A custom type registered with `WithAssetType<T>()` | Deserializes a MessagePack data entry through the compiled `[GenerateShape]`. Returns a fresh caller-owned instance per call; no reference counting and no `Dispose`. |
 | Any other type | `NotSupportedException` naming the type and asking for `WithAssetType<T>()`. |
+
+> **M4 shader semantics.** The GPU program is an internal engine asset: there is no public
+> shader-program type and no public program handle. `Load<Shader>` caches the internal program by
+> `(canonical path, internal program type)` and coalesces program loads; it then constructs the
+> material. Two materials over one program batch together, and disposing one never invalidates the
+> other. See [Rendering: Shaders](rendering/shaders.md#73-shader-materials-and-setuniform).
 
 `IAsset.Path` is the canonical path with a leading `/`; `Load` accepts the same path with or without
 it. A disposed asset keeps `Path` and `IsDisposed` readable for diagnostics; every other member
@@ -60,7 +68,9 @@ same type must be registered in the bake with `RegisterAsset<T>()`; the two regi
 independent because the runtime never scans assemblies.
 
 `Load<T>` is not cached for custom data; every call returns a new instance. Engine assets remain
-cached and reference-counted by `(canonical path, engine asset type)`.
+cached and reference-counted by `(canonical path, engine asset type)`. `Load<Shader>` is the
+exception to the reference-counted return shape: it caches the internal program and returns a new
+material per call, because a material carries a mutable cursor and must never be shared implicitly.
 
 `LoadData` returns a copy of a raw or decompressed payload for custom formats and tooling. There is
 no `TryLoad` in v1: catch `AssetNotFoundException` when absence is expected.
@@ -99,32 +109,41 @@ prefix.
 | --- | --- | --- | --- |
 | `Mesh` | One primitive from glTF 2.0 or OBJ, or a `MeshBuilder` | GPU vertex/index buffers; CPU vertices and indices retained for collision and inspection | M3 |
 | `Texture` | PNG, JPEG, TGA, BMP, or a `TextureBuilder` | GPU-ready KTX2 payload or procedural uncompressed levels, mips, sRGB flag, sampler state | M3 |
-| `Shader` | GLSL vertex + fragment pair | SPIR-V plus sidecar metadata, entry points, and a default render state | M3 |
-| `Model` | glTF 2.0, OBJ | Multi-part model with meshes, local transforms, shader references | M4 (baked in M3) |
+| `Shader` | GLSL vertex + fragment pair | Internal SPIR-V program plus sidecar metadata, entry points, and a default render state; public `Shader` materials are created over it | M3 program, M4 material |
+| `Model` | glTF 2.0, OBJ | Multi-part wrapper with per-part materials over shared cached meshes and programs; not an engine asset | M4 (baked in M3) |
 | `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs | M6 (baked in M3) |
 | Custom data | TOML source | MessagePack payload deserialized through `Load<T>` after `WithAssetType<T>()` | M3 |
 | Raw data | Any processor output or raw source | Opaque bytes through `LoadData` | M3 |
 
 glTF and OBJ are **source formats only**. The bake converts them to the engine's packed mesh/model
 format; the runtime never parses glTF or OBJ. The engine texture payload is a complete KTX2 2.0
-file; PNG/JPEG/TGA/BMP are the M3 source formats and the runtime only reads the packed KTX2
-payload. KTX2 source passthrough is a later addition, not an M3 source format.
+file; PNG/JPEG/TGA/BMP have been the texture source formats since M3, and the runtime only reads the
+packed KTX2 payload. KTX2 source passthrough is a later addition, not a supported source format.
 
 `RenderTexture` is created at runtime and is not a pack asset. `AudioClip` is post-1.0.
 
 `Model` is the normal entry point for a glTF/OBJ file from M4. A model's parts are separate `Mesh`
-assets at `<model-path>/<part>`; M3 emits and validates both the model descriptor and the part mesh
-entries. `Load<Model>` will load the model's referenced meshes and shaders and hold its own
-references to them; disposing the model releases those references. If the game also loaded one of
-those parts directly, it holds a separate reference and must dispose it separately.
+assets at `<model-path>/<part>`; the bake emits and validates both the model descriptor and the part
+mesh entries. `Load<Model>` loads the model's referenced meshes and creates one material per part from
+the part's shader program path; the model owns those materials. Disposing the model disposes its own
+materials and releases its own mesh references. If the game also loaded one of those part meshes
+directly, it holds a separate reference and must dispose it separately. A part's material is never
+shared with another model: two models that name the same part program each get their own materials
+over the one cached internal program.
+
+`Model` is not an `IAsset`: it has no path, no cache entry, and no reference count. Every
+`Load<Model>` call returns a new wrapper over the shared cached part meshes and programs, so two loads
+never share the model or its materials even though they share the underlying GPU resources. A failed
+or canceled model load disposes every material and releases every mesh reference it already acquired;
+a retry starts a fresh wrapper. See [Rendering: Meshes](rendering/meshes.md#75-mesh-and-model).
 
 `Load<Mesh>` is for a standalone mesh-part asset. Loading a multi-part model path as `Mesh` throws
 `AssetTypeMismatchException`.
 
-Texture formats in M3 are `Rgba8Unorm`, `Rgba8Srgb`, `Bc7Unorm`, `Bc7Srgb`, `Bc5Unorm`, and
+Texture formats in M4 are `Rgba8Unorm`, `Rgba8Srgb`, `Bc7Unorm`, `Bc7Srgb`, `Bc5Unorm`, and
 `R8Unorm`. `Rgba16Float` and `Depth32Float` are render-target formats and are not accepted in a
-packed texture in M3. The bake writes an sRGB transfer function into the KTX2 data format
-descriptor for the sRGB formats; the runtime creates the matching Vulkan format.
+packed texture. The bake writes an sRGB transfer function into the KTX2 data format descriptor for
+the sRGB formats; the runtime creates the matching Vulkan format.
 
 ### 6.4 Identity, reference counting, and lifetime
 
@@ -139,12 +158,39 @@ descriptor for the sRGB formats; the runtime creates the matching Vulkan format.
 - A frame packet that uses an engine asset holds its own reference for the lifetime of that frame.
   Recording a draw calls an internal retain on each referenced asset; the frame ring releases the
   hold after the frame is presented. Disposing an asset immediately after recording a draw is
-  therefore safe; the frame keeps the GPU resource alive until its fence signals. M3 implements and
-  tests the retain/release mechanism directly; M4 wires `Camera.Draw*` into it.
+  therefore safe; the frame keeps the GPU resource alive until its fence signals. The M4
+  `Camera.Draw*` path calls the retain/release mechanism for every recorded mesh, internal shader
+  program, and bound texture. A model and a material are not engine assets and are not retained.
 - A device recovery re-uploads the live GPU resources from the retained CPU descriptors before
   frame submission resumes. A public asset object stays valid across the recovery.
 - Using a disposed engine asset (reading a property or passing it to a draw) throws
   `ObjectDisposedException`.
+
+`Shader` and `Model` are the exceptions to the shared-object rule for their public types.
+`Load<Shader>` caches the internal program and returns a **new material per call**:
+
+- The program is cached by `(canonical path, internal program type)` and reference-counted. Every
+  successful `Load<Shader>` acquires one program reference for the material it creates, and the
+  material releases it exactly once on `Dispose`.
+- Two materials over the same path are distinct objects, are not `IAsset`s, and have independent
+  uniform cursors and texture bindings.
+- Disposing one material leaves every other material over the same program usable; the program's GPU
+  resource is destroyed when the last material reference and every frame hold are gone.
+- A frame that recorded a draw holds the internal program and the bound textures, not the material
+  object. Disposing the material immediately after recording is safe.
+- `Load<Shader>` cancellation follows the same rule: a caller that cancels before the material is
+  constructed acquires no material and releases its program reference. An already-canceled caller
+  does not receive a material even when the program is cached.
+- The engine preloads `/shaders/mesh` and the white/error textures into `EngineContext.Defaults`; see
+  [Rendering: Shaders](rendering/shaders.md#73-shader-materials-and-setuniform).
+
+`Load<Model>` follows the same shape for a different reason: it loads or reuses every part mesh and
+the internal program of every part material through the engine-asset cache, then returns a **new
+`Model` wrapper** with one new material per part. A model is caller-owned, is not an `IAsset`, and has
+no reference count; the wrapper acquires one reference to every distinct part mesh and owns every
+distinct part material. Disposing the model disposes its materials and releases its mesh references
+exactly once. A canceled model load releases every part it already acquired before reporting
+`OperationCanceledException`.
 
 Because `Load<T>` returns the shared object for engine assets, `Dispose` must be called **exactly
 once for each successful engine-asset load**. The engine cannot distinguish a double-dispose from a
@@ -155,9 +201,12 @@ A custom data type loaded with `Load<T>` is not an `IAsset`. It is a caller-owne
 cache, and has no `Dispose`. It never keeps a GPU resource alive.
 
 Loading the same engine path concurrently is coalesced: one load runs, all callers receive the same
-result and each caller owns one reference. If the load fails, every caller observes the failure
-and no reference is created. A caller that cancels its wait does not acquire a reference, even if
-the shared load later succeeds. Custom data loads are independent; each call produces a new instance.
+result and each caller owns one reference. `Load<Shader>` coalesces the program load the same way but
+returns one new material per caller. `Load<Model>` coalesces the shared part mesh and program loads
+but never coalesces the model itself: every caller gets its own wrapper and materials. If the load
+fails, every caller observes the failure and no reference is created. A caller that cancels its wait
+does not acquire a reference, even if the shared load later succeeds. Custom data loads are
+independent; each call produces a new instance.
 
 `LoadData` returns the decompressed bytes of the winning entry. For a typed engine asset entry that
 is the serialized descriptor, not the GPU payload; tooling that needs a raw texture or mesh payload
@@ -172,6 +221,10 @@ Load<T>(path)
   -> engine asset?  -> read/decompress -> descriptor -> queue GPU upload
                     -> loader continues with the next request
                     -> on upload completion -> construct -> refcount -> complete Load
+  -> Shader?        -> load the internal program through the engine-asset path
+                    -> acquire one program reference for the new material -> return a new material
+  -> Model?         -> resolve every part mesh and internal program through the engine-asset path
+                    -> create one material per part -> return a new model wrapper
   -> registered?    -> read/decompress -> MessagePack shape -> fresh instance -> return
   -> otherwise      -> NotSupportedException
 ```
@@ -195,7 +248,8 @@ Consequences:
 - `Load` may be called from any thread, but awaiting it from the tick thread blocks that tick's
   continuation, not the loader or render thread. Load in `Setup` unless a hitch is acceptable.
 - Cancellation before completion releases all partial resources and throws
-  `OperationCanceledException`. A canceled caller does not acquire a reference. Cancellation after
+  `OperationCanceledException`. A canceled caller does not acquire a reference. A canceled model load
+  disposes the materials it created and releases the mesh references it acquired. Cancellation after
   the asset is returned has no effect. A canceled GPU upload destroys the just-created resource on
   the render thread instead of leaking it; a cancellation that arrives after the copy started may
   wait briefly for that fence before cleanup.
@@ -221,10 +275,13 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 
 ### 6.6 Pack mounting and built-in assets
 
-- The engine's built-in pack is mounted first, below every user pack. In M3 it contains the
-  placeholder white and error textures and the present shader pair, produced by the same
-  `IAssetProcessor` pipeline as game content. The default draw shader, primitive meshes, and error
-  glyph arrive with M4 and M6.
+- The engine's built-in pack is mounted first, below every user pack. It contains the white and
+  error textures, the present shader pair, and the built-in mesh draw shader program at
+  `/shaders/mesh`, produced by the same `IAssetProcessor` pipeline as game content. The app preloads
+  the mesh program and the two textures into `EngineContext.Defaults` before `IGame.Setup`; the
+  built-in pack replaces the old `/shaders/default` program, and model packs baked against that path
+  resolve to `/shaders/mesh` at load time. Primitive meshes arrive with M5 and the missing-glyph
+  error glyph with M6.
 - `WithAssetsPack` mounts user packs in call order after the built-in pack. Later packs shadow
   earlier packs for the same canonical path.
 - The winning entry is the last mounted pack that contains the path. A shadowed entry is never

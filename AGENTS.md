@@ -23,6 +23,8 @@ ask.
 
 - There is no decision log. Decisions live in the docs they affect: API contracts in `api.md`,
   runtime shape in `architecture.md`, delivery in `roadmap.md`.
+- To learn what earlier work did or decided, read the closed pull requests. Do not rely on
+  memory, status files, or this workflow document.
 - Do not create status, progress, report, planning, or evidence documents. The user's request and
   the final response are the report.
 - Do not create golden-image tests. Use unit tests, GPU integration tests that assert validation and
@@ -66,6 +68,9 @@ public sealed class Counter {
 - Use `System.Threading.Lock` for locks; never lock on a plain `object`; never hold a lock across an
   `await` or blocking wait.
 - Async methods end in `Async`; no `async void`; no blocking on async work in hot paths.
+- Samples are user-facing examples, not test fixtures. Keep them small, readable, and commented like
+  the raylib example they mirror. Test-only logging, assertions, and command-line surface belong in
+  tests or gates, not in the sample. Temporary diagnostics must be removed before the final report.
 
 ## 3. Roles and workflow
 
@@ -73,35 +78,44 @@ public sealed class Counter {
 
 - The agent that receives the milestone request is the **lead**. The lead owns the milestone from
   the first question to the pull request.
+- The lead must present an implementation plan to the user and wait for explicit approval before
+  implementing anything.
+- The lead must not make product, API, scope, ownership, default, or behavior decisions alone. Ask
+  the user; a skipped question is not permission to guess.
+- If the lead or a worker is blocked by the environment, a missing tool/SDK, unavailable root
+  access, a failing external dependency, or any other condition that needs user action, stop and
+  report the exact blocker. Do not silently skip a gate, weaken a check, or substitute a different
+  environment. The user will provide what is needed or give different instructions.
+- If you need visual feedback (whether a window resized, how a frame looks, colors, layout), ask the
+  user. Do not guess and do not build complex screenshot/capture tooling; the user can provide
+  feedback or a screenshot of the point of interest.
 - A subagent is a **worker**. A worker owns exactly one task branch and one repository copy. It
   implements, tests, and commits that task. It does not create branches, merge, push, open pull
   requests, or edit files outside its task.
-- The lead may ask the user as many questions as it needs. There is no upper limit. Use
-  `ask_user_question`, put the recommended option first, and batch related questions before
-  waiting. Do not guess on public API, behavior, units, defaults, ownership, dependencies, or
-  workflow when the user can answer.
 - The plan is the session task list. Do not create a planning, status, progress, report, or evidence
   document.
+- There is no time pressure. Split complex work into as many small, independently reviewable tasks
+  as needed; there is no upper limit. Prefer a clear, correct result over speed.
+- `AGENTS.md` is workflow policy, not a progress log. Do not edit it unless the user asks. Do not
+  record milestone-specific details in it.
 
 ### 3.2 Branch and copy naming
 
-- Milestone branch: `milestone/<milestone>`, for example `milestone/m0-foundations`, created from
-  the current `develop`.
-- Task branch: `milestone/<milestone>-tasks/<task>`, for example
-  `milestone/m0-foundations-tasks/m0-build-foundation`, created from the milestone branch.
-- Task copy: a sibling `git worktree` outside the repository, for example
-  `../RayBork-worktrees/m0-build-foundation`. One task per copy.
+- Milestone branch: `milestone/<milestone>`, created from the current `develop`.
+- Task branch: `milestone/<milestone>-tasks/<task>`, created from the milestone branch.
+- Task copy: a sibling `git worktree` outside the repository, one task per copy.
 - Task branches stay local. Only the milestone branch is pushed for the pull request.
-- After a task merges, remove its worktree and delete its branch. Before the pull request, only the
-  milestone branch, `develop`, and the main checkout remain.
+- After a task merges, remove its worktree and delete its branch.
 
 ### 3.3 Milestone loop
 
-1. Read the owning docs and state the change in one paragraph.
-2. Resolve every open question with the user; wait for the answer.
+1. Read the owning documents and the closed pull requests that cover related work. State the change
+   in one paragraph.
+2. Resolve every open question with the user and present the implementation plan. Wait for explicit
+   approval before creating task branches or changing code.
 3. Create the milestone branch from `develop`. Commit only prerequisites that later tasks depend on
-   directly to the milestone branch (for example this workflow).
-4. Split the milestone into independently reviewable tasks with disjoint file ownership and
+   directly.
+4. Split the approved plan into independently reviewable tasks with disjoint file ownership and
    explicit acceptance gates. Use the session task list as the plan.
 5. For each task, create the task branch from the milestone branch and a sibling worktree copy.
 6. Give one worker the complete task: goal, context, file ownership, constraints, acceptance
@@ -112,11 +126,16 @@ public sealed class Counter {
    delete the task branch. If a merge conflict occurs, resolve it on the milestone branch and
    record the resolution in the PR body.
 9. After every merge, run the full gates on the milestone branch.
-10. After all tasks are merged, clean up task branches and worktrees, push the milestone branch, and
-    open one pull request against `develop`. The PR body is the report.
-
-No implementation starts before the API and architecture documents agree. No new dependency enters
-`RayBork.Engine` unless it is pinned, license-reviewed, and passes the Native AOT publish gate.
+10. Before opening or updating a pull request, run the full gates, write a **work report** for the
+    user (what changed, verification, docs, risks, follow-ups), and wait for the user's review.
+    The user may add follow-up tasks.
+11. Only after the user approves the work report: remove every task worktree and task branch, push
+    the milestone branch, and open or update the single pull request against `develop`.
+12. After the pull request is created, delete every local branch for that milestone, including the
+    local milestone/PR branch; the remote branch remains for the PR. Use `develop` as the local
+    checkout afterwards.
+13. Write all documentation as if the PR is already merged. Do not leave "pending PR", "will be
+    merged", "this branch", or similar work-in-progress wording in shipped docs.
 
 ## 4. Gates
 
@@ -127,28 +146,22 @@ dotnet test src/RayBork/RayBork.slnx -c Debug --no-build
 dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"
 dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
 pwsh scripts/check-docs.ps1
-# Bake the M3 sample pack, then publish and run the sample with it:
-dotnet run --project samples/HelloInterop.Assets/HelloInterop.Assets.csproj -c Release -- bake
-dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r win-x64 -p:PublishAot=true
-# Run the published Windows host and require exit 0:
-samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
-# Run the same publish inside WSL from the repository root for linux-x64:
-# ~/.dotnet/dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r linux-x64 -p:PublishAot=true
-# Run the published Linux host; it needs a Vulkan 1.2 device and a real window system.
-# On WSL use the WSLg display:
-# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
+git diff --check
 ```
 
-The AOT gate uses `samples/HelloInterop` until the M11 samples land. Both publishes must finish with
-zero AOT/trim warnings, and each published host must run with `--frames 30` and exit 0. The host
-needs a Vulkan 1.2 device and a real window system; `SDL_VIDEODRIVER=dummy` cannot create a Vulkan
-surface. On WSL, run it with the WSLg display: set `DISPLAY=:0` and
-`XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. GPU tests open a hidden window through the real video driver
-and are run with `dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"`. A GPU test
-that cannot run on the host is reported as a skip with the reason, never silently dropped. The `gpu`
-CI job runs the GPU-filtered suite under `xvfb-run` with the lavapipe ICD. Shader SPIR-V is
-regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; CI and normal builds consume
-the committed `.spv` blobs and never need `glslc`.
+- Every sample is a separate solution under `samples/` and is outside
+  `src/RayBork/RayBork.slnx`. Build and format every sample solution. Each sample build bakes its
+  pack beside the sample executable; do not require a manual bake or an `--assets` argument.
+- Publish the milestone's documented Native AOT gate for `win-x64` and `linux-x64` and run each
+  published host. The current gate sample and exact host commands are recorded in the README, the
+  sample README, and the PR; read them before running the gate.
+- Both AOT publishes must finish with zero AOT/trim warnings and must not include bake tooling in
+  the publish directory.
+- GPU tests open a hidden window through the real video driver. A GPU test that cannot run on the
+  host is reported as a skip with the reason, never silently dropped. CI runs the GPU-filtered suite
+  under `xvfb-run` with the lavapipe ICD.
+- Shader SPIR-V is regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; CI and
+  normal builds consume the committed blobs and never need `glslc`.
 
 ## 5. Testing
 
@@ -168,12 +181,10 @@ the committed `.spv` blobs and never need `glslc`.
 The GitHub remote is `BorkEngine/RayBork`. `develop` is the integration branch. A milestone lands by
 one pull request from its milestone branch.
 
-- The lead creates the milestone branch from the current `develop` and opens the PR against
-  `develop`. Do not commit or push directly to `develop`. Do not push task branches.
-- Run the full gates on the milestone branch before opening the PR. Draft it until CI is green and
+- Before opening or updating the PR, provide the work report and wait for approval. Only then push
+  the milestone branch and create/update the PR against `develop`.
+- Run the full gates on the milestone branch before pushing. Keep the PR draft until CI is green and
   the description is complete.
-- Before opening the PR, remove every task worktree and delete every task branch. Only the milestone
-  branch remains.
 - Keep the PR scoped to the milestone. Use [.github/pull_request_template.md](.github/pull_request_template.md):
   goal, scope, decisions, verification, docs, risks and follow-ups. The PR body is the report; do
   not create a status doc.
@@ -182,16 +193,12 @@ one pull request from its milestone branch.
 - Squash and merge. The PR title becomes the squash commit message and must follow the commit
   convention (`api: ...`, `build: ...`, `docs: ...`, `fix: ...`, `test: ...`). Do not create a merge
   commit, force-push, or rewrite published history.
-- If CI fails, fix the same branch and push again. Never disable or weaken a check to make it green.
+- If CI fails, fix the same branch and push again; if the local branch was already deleted, fetch
+  the remote milestone branch first. Never disable or weaken a check to make it green.
+- After the PR is created, clean up every local branch for the milestone, including the local
+  milestone/PR branch, and switch back to `develop`. The remote branch stays with the PR.
+- After the user merges, delete the milestone branch remotely if it still exists.
 - AOT checks remain local; the `gpu` CI job runs the GPU tests. Report skipped gates with reasons.
-- After the user merges, delete the milestone branch locally and remotely.
-
-```powershell
-git switch -c milestone/m0-foundations develop
-# create task worktrees, merge tasks, run gates, clean up
-git push -u origin milestone/m0-foundations
-gh pr create --base develop --head milestone/m0-foundations --title "<type: summary>"
-```
 
 ## 7. Git
 
@@ -208,10 +215,11 @@ gh pr create --base develop --head milestone/m0-foundations --title "<type: summ
 - [ ] Public API, units, defaults, ownership, and exceptions match `api.md`.
 - [ ] Architecture, threading, and renderer-backend rules match `architecture.md`.
 - [ ] Tests cover the behavior and failure modes; no golden-image dependency.
-- [ ] Docs updated in the same change; relative links resolve.
+- [ ] Docs updated in the same change; relative links resolve; docs read as already merged.
 - [ ] GitHub Actions `build-test`, `docs`, and `pr-title` are green on the PR.
 - [ ] PR uses the template, has an approval, and is squash-merged with a conventional title.
-- [ ] `dotnet format` and `git diff --check` pass.
+- [ ] `dotnet format`, `pwsh scripts/check-docs.ps1`, and `git diff --check` pass.
 - [ ] AOT publish passes for the supported RIDs.
 - [ ] No `TODO`, placeholder, dead code, or unreported skipped gate.
-- [ ] Task branches and worktrees are cleaned up; only the milestone branch remains.
+- [ ] Task branches and worktrees are cleaned up, then all local milestone branches are deleted
+  after the PR is created.
