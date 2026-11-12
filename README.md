@@ -21,8 +21,9 @@ shader state, `Shader.SetUniform`/`ResetUniforms` through the generated shader A
 texture table with sampler and pipeline caches, automatic batch planning with frustum culling and
 opaque/transparency sorting, per-instance uniforms and textures, and the AgX highlight extension
 that maps scene luminance above the AgX white point into the reported HDR headroom.
-`samples/Castle` is the M4 gate: a multi-part castle drawn with a custom shader from a Native AOT
-publish on Windows and Linux. The Windows hardware path and the conformant lavapipe Linux path both
+`samples/Castle` is the M4 gate: a recreation of raylib's `models_loading` example that draws the
+raylib castle model, its diffuse texture, and the reference grid from a Native AOT publish on
+Windows and Linux. The Windows hardware path and the conformant lavapipe Linux path both
 pass; [samples/Castle/README.md](samples/Castle/README.md) records the current WSLg dzn driver
 limitation for the hardware WSL run. The host, window, input, time, and logging surface shipped in
 M1; the renderer foundation shipped in M2. The rest of the API reference remains the 1.0 contract
@@ -93,10 +94,12 @@ src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
+samples/Castle/               M4 sample and Native AOT gate (raylib models_loading recreation)
+  Castle.slnx                 sample-owned solution (sample + assets executable)
+  Castle.Assets/              JIT assets executable (bakes castle.pck at sample build time)
 samples/HelloInterop/         M1-M3 diagnostic host (window/input/time/logging/assets; no draws)
-samples/HelloInterop.Assets/  M3 assets executable (bakes hello.pck)
-samples/Castle/               M4 sample and Native AOT gate (3D model, custom shader, HDR)
-samples/Castle.Assets/        M4 assets executable (bakes castle.pck)
+  HelloInterop.slnx           sample-owned solution (host + assets executable)
+  HelloInterop.Assets/        JIT assets executable (bakes hello.pck at sample build time)
 samples/                      Pong, Text, Instancing, RenderTarget (M11)
 docs/                         API reference (overview + section pages), roadmap, architecture
 .github/                      GitHub Actions CI and PR template
@@ -106,20 +109,25 @@ THIRD-PARTY-NOTICES.md        dependency licenses and runtime/test/tooling polic
 LICENSE                       MIT
 ```
 
+The samples are outside `src/RayBork/RayBork.slnx`: each sample owns its own solution and assets
+executable, and the engine solution builds only the engine, bake, and test projects.
+
 Run the Castle sample from the repository root with a Vulkan 1.2 device and a real window system (on
-WSL, use the WSLg display). Bake its pack first:
+WSL, use the WSLg display). The sample build bakes `castle.pck` beside the executable, and the sample
+loads it automatically; `--assets` is only an optional override:
 
 ```powershell
-dotnet run --project samples/Castle.Assets/Castle.Assets.csproj -c Release -- bake
-dotnet run --project samples/Castle/Castle.csproj -c Release -- --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
+dotnet build samples/Castle/Castle.slnx -c Debug
+dotnet run --project samples/Castle/Castle.csproj -c Debug -- --frames 30
 ```
 
 Use `--help` for the available options. [samples/Castle/README.md](samples/Castle/README.md) covers
-the Native AOT publish and run commands, the controls, and the gate assertion. `samples/HelloInterop`
-remains the M1-M3 diagnostic host for window, input, time, logging, renderer, and asset-loading
-metadata. Built-in shader SPIR-V is regenerated with `pwsh scripts/compile-shaders.ps1` and the
-Vulkan SDK; a normal build and CI use the committed blobs. The bake and built-in pack generator
-compile their GLSL with the pinned native shaderc package; they do not need the Vulkan SDK.
+the Native AOT publish and run commands, the controls, the omitted raylib features, and the gate assertion. `samples/HelloInterop` remains the M1-M3 diagnostic host for
+window, input, time, logging, renderer, and asset-loading metadata; its build also bakes `hello.pck`
+beside the host and mounts it automatically. Built-in shader SPIR-V is regenerated with
+`pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; a normal build and CI use the committed blobs.
+The bake, the built-in pack generator, and the sample builds compile their GLSL with the pinned
+native shaderc package; they do not need the Vulkan SDK.
 
 ## Next step
 

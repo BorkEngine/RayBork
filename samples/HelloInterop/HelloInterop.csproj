@@ -3,7 +3,27 @@
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <PublishAot>true</PublishAot>
+        <!-- The assets executable is JIT build-time tooling. The bake targets below build and run it
+             out of process, exactly like build/RayBork.BuiltInAssets.targets, so neither it nor
+             RayBork.Bake and its packages enter this project's Native AOT publish graph. -->
+        <HelloInteropAssetsProjectFile Condition="'$(HelloInteropAssetsProjectFile)' == ''">$(MSBuildProjectDirectory)\HelloInterop.Assets\HelloInterop.Assets.csproj</HelloInteropAssetsProjectFile>
+        <HelloInteropPackFileName Condition="'$(HelloInteropPackFileName)' == ''">hello.pck</HelloInteropPackFileName>
     </PropertyGroup>
+
+    <!-- The assets project lives inside this sample directory (flat per-sample layout). Keep its
+         sources and its build output out of this project's default item globs. -->
+    <ItemGroup>
+        <Compile Remove="HelloInterop.Assets/**" />
+        <None Remove="HelloInterop.Assets/**" />
+    </ItemGroup>
+
+    <!-- Record the generated pack as a build output so dotnet clean removes it and the next build
+         runs a full bake. These paths are evaluated after the SDK has set IntermediateOutputPath and
+         TargetDir. -->
+    <ItemGroup Condition="'$(DesignTimeBuild)' != 'true'">
+        <FileWrites Include="$(IntermediateOutputPath)hello-pack\$(HelloInteropPackFileName)" />
+        <FileWrites Include="$(TargetDir)$(HelloInteropPackFileName)" />
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="PolyType" />
@@ -14,5 +34,66 @@
     <ItemGroup>
         <ProjectReference Include="../../src/RayBork/RayBork.Engine/RayBork.Engine.csproj" />
     </ItemGroup>
+
+    <!--
+        Bakes hello.pck as part of the sample build and copies it beside the sample executable. The
+        assets executable is built with the outer Configuration but without the outer publish
+        settings, so an AOT publish of this project never carries the JIT bake tool or its packages.
+        The pack is generated under the intermediate output, so dotnet clean removes it and the next
+        build bakes in full. Explicit project and output roots keep the checked-in Assets directory
+        and the generated pack independent of the working directory.
+    -->
+    <Target Name="HelloInteropBakeAssets"
+            AfterTargets="Build"
+            Condition="'$(DesignTimeBuild)' != 'true'">
+        <PropertyGroup>
+            <_HelloInteropAssetsDirectory>$([System.IO.Path]::GetDirectoryName('$(HelloInteropAssetsProjectFile)'))</_HelloInteropAssetsDirectory>
+            <_HelloInteropAssetsAssembly>$(_HelloInteropAssetsDirectory)\bin\$(Configuration)\$(TargetFramework)\HelloInterop.Assets.dll</_HelloInteropAssetsAssembly>
+            <_HelloInteropPackDirectory>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)hello-pack</_HelloInteropPackDirectory>
+            <_HelloInteropPackPath>$(_HelloInteropPackDirectory)\$(HelloInteropPackFileName)</_HelloInteropPackPath>
+        </PropertyGroup>
+        <!-- Restore first so a standalone publish or a build on another host has the assets
+             project's NuGet state, then build it without the sample's runtime/publish settings. -->
+        <MSBuild Projects="$(HelloInteropAssetsProjectFile)"
+                 Targets="Restore"
+                 Properties="Configuration=$(Configuration)"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <MSBuild Projects="$(HelloInteropAssetsProjectFile)"
+                 Targets="Build"
+                 Properties="Configuration=$(Configuration)"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <!-- An AfterTargets hook is not reliable when Build is driven by another project's MSBuild
+             task, so invoke the pinned libshaderc copy explicitly before the bake needs it. -->
+        <MSBuild Projects="$(HelloInteropAssetsProjectFile)"
+                 Targets="RayBorkCopyShadercNative"
+                 Properties="Configuration=$(Configuration)"
+                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <Error Condition="!Exists('$(_HelloInteropAssetsAssembly)')"
+               Text="RayBork HelloInterop sample: the assets executable was not produced at '$(_HelloInteropAssetsAssembly)'." />
+        <MakeDir Directories="$(_HelloInteropPackDirectory)" />
+        <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(_HelloInteropAssetsAssembly)&quot; bake --project-root &quot;$(_HelloInteropAssetsDirectory)&quot; --output-root &quot;$(_HelloInteropPackDirectory)&quot;"
+              WorkingDirectory="$(_HelloInteropAssetsDirectory)"
+              StandardOutputImportance="high"
+              StandardErrorImportance="high" />
+        <Error Condition="!Exists('$(_HelloInteropPackPath)')"
+               Text="RayBork HelloInterop sample: the bake did not produce '$(_HelloInteropPackPath)'." />
+        <Copy SourceFiles="$(_HelloInteropPackPath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+    </Target>
+
+    <!--
+        dotnet publish builds first, so HelloInteropBakeAssets has already written the pack under the
+        intermediate output. This target copies that pack beside the published executable. A missing
+        pack is an error instead of a published host that cannot mount the diagnostic assets.
+    -->
+    <Target Name="HelloInteropCopyPackToPublish"
+            AfterTargets="Publish"
+            Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'">
+        <PropertyGroup>
+            <_HelloInteropPublishedPackPath>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)hello-pack\$(HelloInteropPackFileName)</_HelloInteropPublishedPackPath>
+        </PropertyGroup>
+        <Error Condition="!Exists('$(_HelloInteropPublishedPackPath)')"
+               Text="RayBork HelloInterop sample: the baked pack '$(_HelloInteropPublishedPackPath)' is missing; the publish cannot place $(HelloInteropPackFileName) beside the published executable." />
+        <Copy SourceFiles="$(_HelloInteropPublishedPackPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    </Target>
 
 </Project>

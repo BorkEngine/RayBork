@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HelloInterop.csproj" />
+  <Project Path="HelloInterop.Assets/HelloInterop.Assets.csproj" />
+</Solution>

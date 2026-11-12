@@ -45,9 +45,9 @@ RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, St
                       System.IO.Hashing (JIT)
 build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
 samples/HelloInterop -> RayBork.Engine (M1-M3 diagnostic host, Native AOT)
-samples/HelloInterop.Assets -> RayBork.Bake (M3 assets executable, JIT)
+samples/HelloInterop/HelloInterop.Assets -> RayBork.Bake (M3 assets executable, JIT)
 samples/Castle -> RayBork.Engine (M4 sample and Native AOT gate)
-samples/Castle.Assets -> RayBork.Bake (M4 assets executable, JIT)
+samples/Castle/Castle.Assets -> RayBork.Bake (M4 assets executable, JIT)
 Samples (M11) ──────> RayBork.Engine
 ```
 
@@ -57,11 +57,11 @@ Samples (M11) ──────> RayBork.Engine
 | `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, KTX2/BC encoding, GLSL compilation, pack writer, incremental manifest. Not referenced by a runtime project. |
 | `build/RayBork.BuiltInAssets` | JIT build-only generator: runs the ordinary bake over the checked-in built-in sources and emits a C# byte array compiled into `RayBork.Engine`. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, optionally loads a baked pack and custom data with `--assets`, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the M4 AOT gate. |
-| `samples/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck`, registers a custom type, and demonstrates a custom processor. JIT only. |
-| `samples/Castle` | M4 sample and Native AOT gate: mounts `castle.pck`, loads `/models/castle`, `/textures/stone`, and `/shaders/castle`, records a perspective castle pass every tick, requires at least one completed frame with nonzero draw calls and instances (shutdown throws otherwise), and exits on Escape or `--frames`. |
-| `samples/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources. JIT only. |
-| `samples/` | Pong, Text, Instancing, RenderTarget (M11). Each has assets, a bake step, and a Native AOT publish target. |
+| `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the M4 AOT gate. |
+| `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
+| `samples/Castle` | M4 sample and Native AOT gate, a recreation of raylib's `models_loading` example: mounts the adjacent `castle.pck`, loads `/models/obj/castle`, `/models/obj/castle_diffuse`, `/shaders/castle`, and `/shaders/default`, records an orbital castle pass and the reference grid every tick, requires at least one completed frame with nonzero draw calls and instances (shutdown throws otherwise), and exits on Escape or `--frames`. |
+| `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
+| `samples/` | Pong, Text, Instancing, RenderTarget (M11). Each sample owns a solution, an assets executable with a build-time bake, and a Native AOT publish target. |
 
 Rules:
 
@@ -119,12 +119,14 @@ policy.
 SDL3 and logging are exercised end to end by every sample AOT gate. The M2 milestone gate exercised
 Silk.NET.Vulkan with the presenter; the M3 gate extended the host with a baked pack, a KTX2 texture
 upload, a mesh upload, a shader-module upload, and a MessagePack custom-data load; the M4 gate
-replaces it with `samples/Castle`, which draws a seven-part model with a custom shader and asserts
-that the frame submitted draw calls and instances on both RIDs. Both publishes must finish with zero
-AOT/trim warnings. The Vulkan loader is a system/GPU-driver component, not a NuGet dependency. The
-bake's source-format tooling is JIT only and never enters the runtime publish graph;
-`build/RayBork.BuiltInAssets` invokes it at engine build time but its output is only the generated
-byte array.
+replaces it with `samples/Castle`, which draws the raylib castle model and its reference grid with a
+custom shader and asserts that the frame submitted draw calls and instances on both RIDs. Both
+publishes must finish with zero AOT/trim warnings. The sample solutions are outside the engine
+solution, and each sample build bakes its pack beside the sample executable, so the JIT bake tool and
+its packages stay out of the sample's AOT publish graph. The Vulkan loader is a system/GPU-driver
+component, not a NuGet dependency. The bake's source-format tooling is JIT only and never enters the
+runtime publish graph; `build/RayBork.BuiltInAssets` invokes it at engine build time but its output is
+only the generated byte array.
 
 ## Platform seam (M1, Vulkan surface in M2)
 
@@ -804,10 +806,13 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   same gate to Silk.NET.Vulkan: the published host created the instance, device, swapchain, scene
   target, and present pass and presented frames. M3 extended it again with a baked pack, a KTX2
   texture, a mesh, a shader, and a MessagePack custom-data value. M4 moves the gate to
-  `samples/Castle`: the published host bakes and mounts `castle.pck`, loads `/models/castle`,
-  `/textures/stone`, and `/shaders/castle`, draws the seven-part castle through the geometry
-  pipeline, requires at least one completed frame with nonzero draw calls and instances, and shuts
-  down. `samples/HelloInterop` remains the M1-M3 diagnostic host and is not the AOT gate.
+  `samples/Castle`: the sample build bakes `castle.pck` and copies it beside the executable (the
+  publish copies it into the publish directory), the published host mounts the adjacent pack, loads
+  `/models/obj/castle`, `/models/obj/castle_diffuse`, `/shaders/castle`, and `/shaders/default`,
+  draws the raylib castle model and reference grid through the geometry pipeline, requires at least
+  one completed frame with nonzero draw calls and instances, and shuts down. `samples/HelloInterop`
+  remains the M1-M3 diagnostic host, auto-mounts its own build-baked `hello.pck`, and is not the AOT
+  gate.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   M4 gate; the pack reader and descriptor decoding contain no reflection resolver.
 - The Vulkan loader is loaded through `NativeLibrary` with a custom `INativeContext` instead of

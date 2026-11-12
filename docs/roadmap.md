@@ -341,8 +341,8 @@ automatic instancing, and per-instance textures/uniforms.
 
 **Exit criteria.**
 
-- The Castle sample renders a textured model with correct depth and AgX output at 1280x720 on
-  Windows and WSL.
+- The Castle sample renders a textured model with correct depth and AgX output at 800x450 (the
+  raylib `models_loading` window size) on Windows and WSL.
 - Two draws of the same mesh/shader/render state with different textures produce **one** draw call
   and two instances, as reported by `RenderStats.DrawCalls`.
 - One thousand cubes with the same mesh/shader/state produce one instanced draw (or a documented
@@ -393,13 +393,26 @@ automatic instancing, and per-instance textures/uniforms.
   peak. It is disabled when the headroom is at most one or when `TonemappingMode.None` is selected.
   SDR windows keep paper white and peak at `1`, so their image is unchanged from M2, and `None`
   remains the direct HDR authoring path.
-- **Castle AOT gate.** `samples/Castle` and `samples/Castle.Assets` are the per-milestone AOT gate.
-  The assets executable bakes `castle.pck`; the published `win-x64` and `linux-x64` hosts mount it,
-  draw the seven-part castle with a custom shader, and must exit `0` on the Windows hardware driver
-  and the conformant lavapipe Linux path. The sample records whether any completed frame reported
-  both `DrawCalls` and `Instances`; when no completed frame ever draws, shutdown throws and the run
-  fails, so an invisible scene cannot pass and a slow host is judged on completed frames instead of
-  a fixed tick number. `samples/HelloInterop` remains the M1-M3 diagnostic host.
+- **Castle AOT gate.** `samples/Castle` and `samples/Castle/Castle.Assets` are the per-milestone AOT
+  gate. The sample owns `samples/Castle/Castle.slnx`; it is not part of `src/RayBork/RayBork.slnx`.
+  The sample build invokes the JIT assets executable out of process without the sample's publish
+  settings, bakes `castle.pck` from the checked-in raylib castle OBJ and diffuse texture plus the
+  custom shader and TOML sources, and copies the pack beside the sample executable; the publish also
+  copies it into the publish directory. The published `win-x64` and `linux-x64` hosts load the
+  adjacent pack with no `--assets` argument, draw the unlit castle model and the raylib reference
+  grid, and must exit `0` on the Windows hardware driver and the conformant lavapipe Linux path. The
+  sample records whether any completed frame reported both `DrawCalls` and `Instances`; when no
+  completed frame ever draws, shutdown throws and the run fails, so an invisible scene cannot pass
+  and a slow host is judged on completed frames instead of a fixed tick number.
+  `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
+  diagnostic host.
+- **Castle sample recreation scope.** The sample recreates raylib's `models_loading` behavior
+  without the features that need later milestones: model/texture drag-and-drop (post-1.0 platform
+  work), click selection and `DrawBoundingBox` (ray/box collision and the wire-box helper arrive in
+  M5), and the `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The sample logs the render
+  statistics instead of drawing them. The raylib castle model and texture are sample-only assets
+  with their own notice under `samples/Castle/`; that notice is deliberately not duplicated in the
+  repository-root notices.
 - **Known limitation: the WSLg dzn driver crashes on the first geometry draw.** On the WSL gate host
   WSLg selects `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and
   prints "dzn is not a conformant Vulkan implementation, testing use only". The M4 published host

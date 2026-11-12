@@ -206,13 +206,15 @@ zero for the draw counters. Textures allocate a bindless slot when their GPU upl
 0 is always the built-in white fallback, and a full table fails the upload with
 `AssetLoadException` `RB1010`.
 
-`samples/Castle` is the M4 AOT gate: `samples/Castle.Assets` bakes `/models/castle`,
-`/textures/stone`, and `/shaders/castle`, and the published `win-x64` and `linux-x64` hosts draw the
-castle and exit `0`; the sample requires at least one completed frame with nonzero `DrawCalls` and
-`Instances` and throws at shutdown when no completed frame ever draws. The Windows hardware path and
-the conformant lavapipe Linux path both pass; [Native AOT](api/aot.md) records the current WSLg dzn
-driver limitation for the hardware WSL run. `samples/HelloInterop` remains the M1-M3 diagnostic
-host; it is not the AOT gate.
+`samples/Castle` is the M4 AOT gate: the sample solution `samples/Castle/Castle.slnx` builds its
+`Castle.Assets` executable out of process, bakes `/models/obj/castle`, `/models/obj/castle_diffuse`,
+and `/shaders/castle` into `castle.pck`, and copies the pack beside the sample executable, so the
+published `win-x64` and `linux-x64` hosts load it without a manual bake or an `--assets` argument.
+The hosts draw the raylib `models_loading` castle and its reference grid and exit `0`; the sample
+requires at least one completed frame with nonzero `DrawCalls` and `Instances` and throws at shutdown
+when no completed frame ever draws. The Windows hardware path and the conformant lavapipe Linux path
+both pass; [Native AOT](api/aot.md) records the current WSLg dzn driver limitation for the hardware
+WSL run. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not the AOT gate.
 
 ## 2. Quick start
 

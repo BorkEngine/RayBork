@@ -12,6 +12,7 @@ internal static class Program {
     private const int DEFAULT_WIDTH = 1280;
     private const int DEFAULT_HEIGHT = 720;
     private const string DEFAULT_TITLE = "HelloInterop";
+    private const string DEFAULT_PACK_FILE_NAME = "hello.pck";
     private const LogLevel DEFAULT_LOG_LEVEL = LogLevel.Information;
     private const int DEFAULT_MSAA = 4;
     private const PresentMode DEFAULT_PRESENT_MODE = PresentMode.Mailbox;
@@ -26,7 +27,8 @@ internal static class Program {
 
         Options:
           --assets PATH     Mount a baked asset pack and load the sample assets. Relative paths
-                            resolve against the current directory; no pack is mounted by default.
+                            resolve against the current directory. Default: hello.pck beside the
+                            executable when it exists (baked by the sample build); otherwise no pack.
           --frames N        Run N ticks, then exit; 0 runs until close (default: 0).
           --title TEXT      Window title (default: HelloInterop).
           --size WxH        Window client size; both values positive (default: 1280x720).
@@ -48,10 +50,10 @@ internal static class Program {
         an HDR-capable swapchain format and reports it through EngineContext.Info. There is no HDR
         override.
 
-        With --assets the host mounts the baked pack and loads a KTX2 texture, an OBJ mesh part, a
-        compiled shader, and the registered HelloSettings TOML data, then logs their metadata. It does
-        not draw; the M4 draw API is not part of this milestone. Without --assets the host keeps the M2
-        renderer-only behavior.
+        With --assets, or with the auto-mounted hello.pck beside the executable, the host mounts the
+        baked pack and loads a KTX2 texture, an OBJ mesh part, a compiled shader, and the registered
+        HelloSettings TOML data, then logs their metadata. It does not draw; the Castle sample is the
+        M4 draw-capable host. Without a pack the host keeps the renderer-only behavior.
 
         Controls:
           Escape            Request exit.
@@ -68,7 +70,7 @@ internal static class Program {
 
         Examples:
           HelloInterop --frames 120
-          HelloInterop --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
+          HelloInterop --assets samples/HelloInterop/bin/Debug/net11.0/hello.pck --frames 30
           HelloInterop --frames 120 --size 1920x1080 --msaa 8 --title "M4 diagnostic"
           HelloInterop --tonemapping None --exposure 1.5
           HelloInterop --msaa 8 --present-mode Fifo --validation off --log-level Debug
@@ -87,12 +89,19 @@ internal static class Program {
             return EXIT_SUCCESS;
         }
 
+        string? assetsPackPath = options.Assets ?? FindDefaultPackPath();
+        if (options.Assets is null && assetsPackPath is not null) {
+            Console.Out.WriteLine(
+                $"HelloInterop: no --assets supplied; mounting the baked pack '{assetsPackPath}' "
+                    + "beside the executable.");
+        }
+
         try {
             HelloGame game = new(
                 options.Frames,
                 options.Tonemapping,
                 options.Exposure,
-                options.Assets);
+                assetsPackPath);
             RayBorkAppBuilder builder = new RayBorkAppBuilder()
                 .WithGame(game)
                 .WithTitle(options.Title)
@@ -110,7 +119,7 @@ internal static class Program {
                 builder.WithValidation(validationEnabled);
             }
 
-            if (options.Assets is { } assetsPackPath) {
+            if (assetsPackPath is not null) {
                 builder
                     .WithAssetsPack(assetsPackPath)
                     .WithAssetType<HelloSettings>();
@@ -123,6 +132,11 @@ internal static class Program {
             Console.Error.WriteLine($"HelloInterop failed: {exception}");
             return EXIT_FAILURE;
         }
+    }
+
+    private static string? FindDefaultPackPath() {
+        string path = Path.Combine(AppContext.BaseDirectory, DEFAULT_PACK_FILE_NAME);
+        return File.Exists(path) ? path : null;
     }
 
     private static bool TryParseCommandLine(

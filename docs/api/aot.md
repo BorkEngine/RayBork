@@ -48,22 +48,34 @@ is visible.
 Publish commands used by the gate:
 
 ```text
-dotnet run --project samples/Castle.Assets/Castle.Assets.csproj -c Release -- bake
+dotnet build samples/Castle/Castle.slnx -c Release
 dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64   -p:PublishAot=true
 dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
-samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
+samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --frames 30
 # WSL, from the repository root, on the WSLg display:
-# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
+# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
+# WSL, when WSLg's dzn driver crashes on the first geometry draw, use the conformant lavapipe ICD:
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
+
+The sample is its own solution, `samples/Castle/Castle.slnx`, outside `src/RayBork/RayBork.slnx`.
+Its build invokes the JIT assets executable out of process with the sample's configuration but
+without its publish settings, bakes `castle.pck`, and copies the pack beside the sample executable.
+`dotnet publish` copies the same pack into the publish directory, so the published hosts load the
+adjacent `castle.pck` with no `--assets` argument; `--assets` remains an optional override. The
+publish directory must contain `castle.pck` and must not contain `Castle.Assets.dll`,
+`RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native libraries, or the glTF
+packages.
 
 Both publishes must start, load a pack and any registered custom data, draw where the milestone has
 a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M4
-gate is `samples/Castle`: the assets executable bakes `castle.pck`, the published hosts load
-`/models/castle`, `/textures/stone`, and `/shaders/castle`, draw the seven-part castle, and must
-exit `0` with a completed frame that reports nonzero draw calls and instances. The sample records
-whether any completed frame drew and fails at shutdown when none ever did, so an invisible scene
-cannot pass and a slow host is judged on completed frames instead of a fixed tick number. Both
-publishes must finish with zero AOT/trim warnings.
+gate is `samples/Castle`: it recreates raylib's `models_loading` example, so the published hosts load
+`/models/obj/castle`, `/models/obj/castle_diffuse`, `/shaders/castle`, and the built-in
+`/shaders/default`, draw the unlit castle model and the reference grid, and must exit `0` with a
+completed frame that reports nonzero draw calls and instances. The sample records whether any
+completed frame drew and fails at shutdown when none ever did, so an invisible scene cannot pass and
+a slow host is judged on completed frames instead of a fixed tick number. Both publishes must finish
+with zero AOT/trim warnings.
 
 On the WSL gate host, WSLg selects the non-conformant dzn Vulkan driver and the first geometry draw
 currently crashes inside `libvulkan_dzn.so` (see the M4 as-built notes in
