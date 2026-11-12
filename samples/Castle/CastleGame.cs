@@ -12,12 +12,12 @@ internal sealed class CastleGame : IGame {
     private const string TEXTURE_PATH = "/models/obj/castle_diffuse";
     private const float FIELD_OF_VIEW_DEGREES = 45f;
     private const float NEAR_PLANE = 0.01f;
-    private const float ORBIT_RADIANS_PER_PIXEL = 0.25f * DEGREES_TO_RADIANS;
+    private const float ORBIT_DEGREES_PER_PIXEL = 0.25f;
     private const float ZOOM_PER_WHEEL_STEP = 1.15f;
     private const float MIN_DISTANCE = 5f;
     private const float MAX_DISTANCE = 500f;
     private const float MAX_PITCH_DEGREES = 89f;
-    private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
+    private const float RADIANS_TO_DEGREES = 180f / MathF.PI;
 
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
@@ -27,8 +27,8 @@ internal sealed class CastleGame : IGame {
 
     private Model? _model;
     private Texture? _texture;
-    private float _yaw;
-    private float _pitch;
+    private float _yawDegrees;
+    private float _pitchDegrees;
     private float _distance;
     private int _frameCount;
 
@@ -42,8 +42,8 @@ internal sealed class CastleGame : IGame {
 
         Vector3 offset = _initialCameraPosition - _orbitCenter;
         _distance = offset.Length();
-        _yaw = MathF.Atan2(offset.X, offset.Z);
-        _pitch = MathF.Asin(offset.Y / _distance);
+        _yawDegrees = MathF.Atan2(offset.X, offset.Z) * RADIANS_TO_DEGREES;
+        _pitchDegrees = MathF.Asin(offset.Y / _distance) * RADIANS_TO_DEGREES;
     }
 
     /// <inheritdoc/>
@@ -72,7 +72,7 @@ internal sealed class CastleGame : IGame {
         // which is the negative pitch in the yaw/pitch rotation.
         Transform orbit = new(
             _orbitCenter,
-            Quaternion.CreateFromYawPitchRoll(_yaw, -_pitch, 0f),
+            Quaternion.Euler(-_pitchDegrees, _yawDegrees, 0f),
             Vector3.One);
         Transform cameraTransform = new Transform(new Vector3(0f, 0f, _distance)).WithParent(orbit);
 
@@ -85,7 +85,7 @@ internal sealed class CastleGame : IGame {
             near: NEAR_PLANE,
             far: float.PositiveInfinity);
 
-        camera.DrawModel(_model!, Transform.Identity);
+        camera.DrawModel(_model!, Transform.Identity, Color.White);
 
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
@@ -108,11 +108,11 @@ internal sealed class CastleGame : IGame {
         // downward, so adding the vertical delta raises the camera when the pointer moves up.
         if (input.IsMouseButtonDown(MouseButton.Left)) {
             Vector2 delta = input.MouseDelta;
-            _yaw -= delta.X * ORBIT_RADIANS_PER_PIXEL;
+            _yawDegrees -= delta.X * ORBIT_DEGREES_PER_PIXEL;
 
-            float pitchLimit = MAX_PITCH_DEGREES * DEGREES_TO_RADIANS;
-            _pitch = Math.Clamp(
-                _pitch + (delta.Y * ORBIT_RADIANS_PER_PIXEL),
+            float pitchLimit = MAX_PITCH_DEGREES;
+            _pitchDegrees = Math.Clamp(
+                _pitchDegrees + (delta.Y * ORBIT_DEGREES_PER_PIXEL),
                 -pitchLimit,
                 pitchLimit);
         }
@@ -126,3 +126,4 @@ internal sealed class CastleGame : IGame {
         }
     }
 }
+
