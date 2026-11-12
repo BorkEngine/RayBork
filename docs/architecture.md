@@ -1,14 +1,18 @@
 # RayBork Architecture
 
-Status: M3 as-built for the asset pipeline, on top of the M2 renderer, host, platform, threads,
-frame handoff, HDR presentation, recovery, and time. M0 established the build, dependency, and AOT
-guardrails. M1 ships the app host, dedicated tick thread, SDL3 window/input/platform seam, the
-render-thread frame handoff, time/pacing, and logging. M2 adds the Vulkan 1.2 backend behind the
-internal seam, the linear HDR scene target, the AgX/scRGB present pass, MSAA with color resolve,
-reverse-Z depth, bounded recovery, the main-thread surface handshake, committed present shaders, and
-GPU tests. M3 adds the RAYBORKP v1 pack, canonical asset paths, the dedicated asset loader, the
-runtime catalog and reference counting, the render-thread GPU upload bridge, the custom-data
-pipeline, the bake tooling, and the build-time built-in pack.
+Status: M4 as-built for the core 3D renderer, on top of the M3 asset pipeline, the M2 renderer
+foundation, and the M1 host, platform, threads, frame handoff, HDR presentation, recovery, and time.
+M0 established the build, dependency, and AOT guardrails. M1 ships the app host, dedicated tick
+thread, SDL3 window/input/platform seam, the render-thread frame handoff, time/pacing, and logging.
+M2 adds the Vulkan 1.2 backend behind the internal seam, the linear HDR scene target, the
+AgX/scRGB present pass, MSAA with color resolve, reverse-Z depth, bounded recovery, the main-thread
+surface handshake, committed present shaders, and GPU tests. M3 adds the RAYBORKP v1 pack, canonical
+asset paths, the dedicated asset loader, the runtime catalog and reference counting, the
+render-thread GPU upload bridge, the custom-data pipeline, the bake tooling, and the build-time
+built-in pack. M4 adds the frame-scoped camera and draw API, `Model` loading and parts, the shader
+ABI and uniform cursor, the bindless texture table, the geometry pipeline, sampler and batch caches,
+the batch planner with frustum culling and sorting, the geometry draw stats, the AgX highlight
+extension, and the Castle AOT gate.
 
 ## Goals
 
@@ -40,20 +44,24 @@ RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, St
                       BCnEncoder.Net, Silk.NET.Shaderc(+.Native), SharpGLTF.Core,
                       System.IO.Hashing (JIT)
 build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
-samples/HelloInterop -> RayBork.Engine (M1/M2 AOT gate host, M3 assets gate, Native AOT)
+samples/HelloInterop -> RayBork.Engine (M1-M3 diagnostic host, Native AOT)
 samples/HelloInterop.Assets -> RayBork.Bake (M3 assets executable, JIT)
+samples/Castle -> RayBork.Engine (M4 sample and Native AOT gate)
+samples/Castle.Assets -> RayBork.Bake (M4 assets executable, JIT)
 Samples (M11) ──────> RayBork.Engine
 ```
 
 | Project | Role |
 | --- | --- |
-| `RayBork.Engine` | Public API and all runtime internals: app host, SDL3 platform, renderer seam and Vulkan backend, built-in present shaders, asset catalog, pack reader, loader thread, GPU upload bridge, input, logging. Native AOT compatible. |
+| `RayBork.Engine` | Public API and all runtime internals: app host, SDL3 platform, renderer seam and Vulkan backend, built-in present shaders, asset catalog, pack reader, loader thread, GPU upload bridge, camera/frame recorder, batch planner, input, logging. Native AOT compatible. |
 | `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, KTX2/BC encoding, GLSL compilation, pack writer, incremental manifest. Not referenced by a runtime project. |
 | `build/RayBork.BuiltInAssets` | JIT build-only generator: runs the ordinary bake over the checked-in built-in sources and emits a C# byte array compiled into `RayBork.Engine`. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/HelloInterop` | M1 diagnostic host, M2 AOT gate host, and M3 assets gate host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, optionally loads a baked pack and custom data with `--assets`, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. |
+| `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, optionally loads a baked pack and custom data with `--assets`, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the M4 AOT gate. |
 | `samples/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck`, registers a custom type, and demonstrates a custom processor. JIT only. |
-| `samples/` | Castle, Pong, Text, Instancing, RenderTarget (M11). Each has assets, a bake step, and a Native AOT publish target. |
+| `samples/Castle` | M4 sample and Native AOT gate: mounts `castle.pck`, loads `/models/castle`, `/textures/stone`, and `/shaders/castle`, records a perspective castle pass every tick, requires at least one completed frame with nonzero draw calls and instances (shutdown throws otherwise), and exits on Escape or `--frames`. |
+| `samples/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources. JIT only. |
+| `samples/` | Pong, Text, Instancing, RenderTarget (M11). Each has assets, a bake step, and a Native AOT publish target. |
 
 Rules:
 
@@ -82,14 +90,14 @@ policy.
 
 | Package | Version | Purpose | AOT status |
 | --- | --- | --- | --- |
-| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, events, window HDR state, and Vulkan surfaces | Exercised end to end by the M1 and M2 `samples/HelloInterop` AOT hosts on `win-x64` and `linux-x64`. |
+| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, events, window HDR state, and Vulkan surfaces | Exercised end to end by the M4 `samples/Castle` AOT gate on `win-x64` and `linux-x64`; earlier M1-M3 hosts use the same bindings. |
 | `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same hosts on both RIDs. |
-| `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the M2 backend | Exercised end to end by the M2 AOT gate: the published host creates the instance, device, swapchain, scene target, and present pass. |
-| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by the M3 AOT gate: the published host loads a MessagePack custom-data entry and an engine asset descriptor through compiled shapes. |
-| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the M3 AOT gate. |
-| `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the M3 AOT gate; no reflection or dynamic code. |
-| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M1 AOT host on both RIDs. |
-| `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M1 AOT host on both RIDs. |
+| `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the backend | Exercised end to end by the M4 AOT gate: the published host creates the instance, device, swapchain, scene target, present pass, and geometry draw path. |
+| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by the M4 AOT gate, which loads the packed model, mesh, shader, and texture descriptors through compiled shapes. |
+| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the M4 AOT gate. |
+| `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the M4 AOT gate; no reflection or dynamic code. |
+| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M4 AOT gate on both RIDs. |
+| `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M4 AOT gate on both RIDs. |
 | `System.IO.Compression.Zstandard*` | in-box `net11.0` | Zstandard pack payload compression | Part of the .NET 11 shared framework; no package and no separate AOT gate. |
 
 **Test and tooling dependencies** (JIT only; outside the runtime publish graph):
@@ -108,14 +116,15 @@ policy.
 | `Silk.NET.Shaderc.Native` | 2.23.0 | Tooling | Per-RID native libshaderc binaries for the bake | JIT only; not in the runtime publish graph. |
 | `SharpGLTF.Core` | 1.0.7 | Tooling | glTF 2.0/GLB reading for the model processor | JIT only; not in the runtime publish graph. |
 
-SDL3 and logging are exercised end to end by the M1 `samples/HelloInterop` AOT host. The M2
-milestone gate republishes that host with the renderer and exercises Silk.NET.Vulkan end to end on
-`win-x64` and `linux-x64`; both publishes must finish with zero AOT/trim warnings. The M3 gate
-extends the same host with a baked pack, a KTX2 texture upload, a mesh upload, a shader-module
-upload, and a MessagePack custom-data load on both RIDs. The Vulkan loader is a system/GPU-driver
-component, not a NuGet dependency. The bake's source-format tooling is JIT only and never enters
-the runtime publish graph; `build/RayBork.BuiltInAssets` invokes it at engine build time but its
-output is only the generated byte array.
+SDL3 and logging are exercised end to end by every sample AOT gate. The M2 milestone gate exercised
+Silk.NET.Vulkan with the presenter; the M3 gate extended the host with a baked pack, a KTX2 texture
+upload, a mesh upload, a shader-module upload, and a MessagePack custom-data load; the M4 gate
+replaces it with `samples/Castle`, which draws a seven-part model with a custom shader and asserts
+that the frame submitted draw calls and instances on both RIDs. Both publishes must finish with zero
+AOT/trim warnings. The Vulkan loader is a system/GPU-driver component, not a NuGet dependency. The
+bake's source-format tooling is JIT only and never enters the runtime publish graph;
+`build/RayBork.BuiltInAssets` invokes it at engine build time but its output is only the generated
+byte array.
 
 ## Platform seam (M1, Vulkan surface in M2)
 
@@ -186,17 +195,19 @@ The backend owns:
 | --- | --- | --- |
 | `Initialize` | Render | Creates the instance, requests the native surface through `RendererBackendOptions.SurfaceProvider`, then creates the device, queues, swapchain, scene target, present pipeline, and frame resources. Failure is fatal (`RB3001`; a platform surface failure surfaces as `RB2003` on the main thread and is wrapped as `RB3001` on the render thread). |
 | `Resize` | Render | Recreates the swapchain, scene target, present pipeline framebuffers, and per-image semaphores when the selected extent changes. A zero width or height marks the surface as having no drawable extent and keeps the presentation path. It is idempotent for an unchanged extent. |
-| `Submit` | Render | Consumes one sealed `RenderFramePacket`, waits for a frame slot, acquires a swapchain image, clears the multisampled scene target (with color resolve), records the present pass, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
+| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, clears the multisampled scene target per camera pass, resolves color, records the present pass, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
 | `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
 
-`Submit` takes a **sealed frame packet**, not a live game object or a draw command. The packet is a
-value type that carries only the frame index in M2; the backend never sees `Camera`, `Shader`,
-`Mesh`, or any other game-facing type. `Resize` and the frame call are the only inputs. There is no
-`Draw`, `SetUniform`, or per-object method on the seam, so a backend cannot add a virtual call per
-draw. Batching, pipeline lookup, descriptor updates, and draw recording stay inside the backend
-behind the frame boundary.
+`Submit` takes a **sealed frame packet**, not a live game object or a draw command. In M4 the packet
+carries the frame index, the camera passes, and the recorded draws as value snapshots; the backend
+never sees `Camera`, `Shader`, `Mesh`, or any other game-facing type. `Resize` and the frame call are
+the only inputs. There is no `Draw`, `SetUniform`, or per-object method on the seam, so a backend
+cannot add a virtual call per draw. The backend plans the batches, culls and sorts the instances,
+looks up pipelines and descriptors, writes the frame block and instance storage buffer, and records
+the draw commands behind the frame boundary. The plan itself is produced inside `Submit`; the tick
+thread only records immutable draw records.
 
 ### Ownership and threading
 
@@ -265,7 +276,10 @@ render loop drains upload and destroy requests before frame waits and recreates 
 after a device recovery. `IRendererBackend.DeviceGeneration` increments only when the logical device
 is recreated, so presentation-only recoveries (out-of-date or suboptimal swapchain, lost surface) do
 not re-upload assets. The backend never sees a game-facing asset type: the bridge carries descriptor
-values and payload bytes only.
+values and payload bytes only. M4 adds the render-thread companions the draw path needs: the
+bindless texture table and slot allocator, the per-device sampler cache, the geometry pipeline
+cache, and the frame-instance storage-buffer allocator. They are backend internals behind the same
+seam; the tick thread never touches them.
 
 ## Threads
 
@@ -382,14 +396,15 @@ seal slot, publish as newest ready
 - The ring has three slots. A tick blocks only when all three are occupied; this bounds run-ahead.
 - A newer publish supersedes an older `Ready` slot, never a slot that is being consumed.
 - The consumer always takes the newest completed tick. It does not queue a backlog of stale frames.
-- A tick that requests exit still publishes its final frame before `IGame.Shutdown` runs. In M2 the
-  render thread drains and presents it during teardown before the backend is disposed.
-- M3 frames carry only the frame index: no cameras, draw commands, or texture state. The scene pass
-  clears the linear HDR target and the present pass draws one fullscreen triangle. M4 adds the
-  camera packet and mesh draws.
+- A tick that requests exit still publishes its final frame before `IGame.Shutdown` runs. The render
+  thread drains and presents it during teardown before the backend is disposed.
+- M4 frames carry the camera passes and the recorded draw records: mesh, shader, effective render
+  state, instance matrices, per-instance uniform bytes, and bindless texture references. A tick with
+  no camera pass still clears the linear HDR target; the present pass always draws one fullscreen
+  triangle, which is not counted in `RenderStats.DrawCalls`.
 - The frame slot retains every engine asset recorded into it and releases the hold when the render
-  thread releases the slot after present. M3 implements and tests the retention mechanism directly;
-  M4 calls it from the draw recorder. An asset disposed after recording a draw stays alive until
+  thread releases the slot after present. The camera draw recorder calls the retention set for every
+  model, mesh, shader, and bound texture; an asset disposed after recording a draw stays alive until
   the consuming frame completes.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
@@ -448,15 +463,32 @@ and logs a warning. If the surface advertises no scRGB float pair, it falls back
 reports `EngineInfo.HdrOutput = false`, and logs a warning. The SDR order is `B8G8R8A8_SRGB`,
 `R8G8B8A8_SRGB`, `B8G8R8A8_UNORM`, `R8G8B8A8_UNORM` (manual sRGB encode in the present shader),
 then `R16G16B16A16_SFLOAT` (linear clamp). HDR10, `A2B10G10R10_UNORM_PACK32`, and PQ output are
-deliberately deferred and are never selected in M2.
+deliberately deferred and are never selected in M4.
 
 **HDR state and output.** The platform caches `SDL.window.HDR_enabled`,
 `SDL.window.SDR_white_level`, and `SDL.window.HDR_headroom`, and refreshes the cache on
 `SDL_EVENT_WINDOW_HDR_STATE_CHANGED` and display changes. A change to the HDR flag, or to the SDR
 white level while HDR is enabled, recreates the presentation path. The scRGB present path scales
-display-linear color by the SDR white level and does not clamp. AgX saturates at display white, so
-the AgX path does not exceed paper white in M2; `TonemappingMode.None` can write above it and use
-the display headroom. `EngineInfo.HdrOutput` is true only when the presented path is scRGB HDR.
+display-linear color by the SDR white level and does not clamp.
+
+AgX remains the SDR-referred curve. On an HDR window the scRGB path first normalizes AgX's neutral
+white by `luma(AgX(white)) = 0.9829795037669735` so its white sits at display luminance `1.0`, then
+scales that to the reported paper white (the window's SDR white level, for example `2.0`). The
+normalization makes the AgX white about 1.7% brighter than the raw M2 response; it is the same curve
+presented at the reported paper white. Above the AgX white point
+(`AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear luminance after exposure) the
+highlight extension maps the remaining scene luminance into the reported HDR headroom at constant
+chromaticity. With `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
+`t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
+`yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom` and
+`paperWhite` is the reported SDR white level, the output is the normalized AgX color scaled by
+`yOut / luma(normalized)`. Displayed luminance is exactly `yOut` and the channel ratios are
+preserved. The mapping is continuous at the knee at paper white, reaches the reported peak at
+`r = headroom`, and clamps beyond it. It is disabled when the headroom is at most one or when
+`TonemappingMode.None` is selected; `None` remains the direct HDR authoring path and writes
+`scene * paperWhite` without the extension. An SDR window uses a paper white and peak of `1` and
+disables the extension, so its image is unchanged from M2. HDR10/PQ output is still deferred.
+`EngineInfo.HdrOutput` is true only when the presented path is scRGB HDR.
 
 **Present pass.** A fullscreen triangle generated from `gl_VertexIndex` writes the swapchain image
 and samples the resolved scene color through one combined image sampler. Its push-constant block is
@@ -464,16 +496,18 @@ and samples the resolved scene color through one combined image sampler. Its pus
 `exposureMultiplier` is `2^exposureEV` computed on the CPU; `tonemapping` is `0` for AgX and `1`
 for none; `encoding` is `0` for linear clamp, `1` for manual sRGB encode, and `2` for scRGB HDR
 (scaled by the SDR white level, not clamped). AgX applies the inset matrix, log2 range clamp,
-contrast polynomial, and outset matrix, with no look transform. The scene clear color comes from
-`WithClearColor`; until cameras arrive in M4 it is the only clear control.
+contrast polynomial, and outset matrix, with no look transform. Scene clear control belongs to the
+camera pass: each camera clears its clamped viewport with its own `ClearMode` and `ClearColor`, and
+there is no builder-level clear color in M4. The present triangle is not a scene draw and is not
+counted in `RenderStats.DrawCalls`.
 
 **MSAA and depth.** The requested sample count comes from `WithMSAA` (default 4); the effective
 count is the highest device-supported count that does not exceed the request, or `1` when none is
 supported, and a mismatch logs a warning. The scene target color and depth attachments use the
 effective count; the color attachment is resolved to a single-sample sampled image. Depth is
-cleared to `0.0` and the reverse-Z comparison state is defined, but multisampled depth is not
-resolved in M2 because nothing samples depth before M4/M8. The M2 present triangle is not
-depth-tested; the state is defined for the geometry pipelines that arrive in M4.
+cleared to `0.0` per camera pass and the reverse-Z comparison state is defined, but multisampled
+depth is not resolved in M4 because nothing samples depth until M8. The present triangle is not
+depth-tested; the geometry pipelines consume the reverse-Z state.
 
 The reverse-Z perspective projection used by the engine is, for row vectors:
 
@@ -515,11 +549,14 @@ src/RayBork/RayBork.Engine/Shaders/Present.frag.spv    committed SPIR-V build in
   values are the shader ABI: changing one requires recompiling the committed blob in the same
   change.
 
-M3 also bakes the present vertex/fragment pair into the built-in pack through the shared shaderc
-compiler, so the pack contains the same program as ordinary content. The runtime present pipeline
-continues to consume the committed embedded blobs directly; M4 can switch a render path to the
-pack entry without changing the present ABI. The built-in pack additionally contains a white and an
-error texture generated by the built-in texture processor.
+M3 bakes the present vertex/fragment pair into the built-in pack through the shared shaderc compiler,
+so the pack contains the same program as ordinary content. The runtime present pipeline continues to
+consume the committed embedded blobs directly. M4 adds the default draw shader at
+`/shaders/default` to the built-in pack; it is baked by the ordinary shader processor with the
+generated prologue, one `uTint` uniform, one `mainTexture` binding, and an
+opaque/back/`greater_equal`/depth-write render state. A model part with no authored `[model] shader`
+resolves to that path. The built-in pack also contains the white and error textures generated by the
+built-in texture processor, and the white texture is the reserved bindless slot 0.
 
 ## Shader state, batching, and instancing
 
@@ -531,9 +568,16 @@ RayBork has no public `Material`. A `Shader` is a complete program plus a mutabl
 4. The renderer packs the captured values into a per-instance parameter block.
 5. Texture references become bindless indices in the instance record.
 
-Batching key: `(mesh, shader, render state, topology)`. Uniform values and texture bindings do not
-split a batch. A model with several parts is several mesh groups; each group is one instanced
-draw.
+Batching key: `(camera pass, mesh, shader, effective render state)`; the mesh determines the
+topology. Uniform values and texture bindings do not split a batch. A model with several parts is
+several mesh groups; each group is one instanced draw. The planner splits a group when it would
+exceed `MaxInstancesPerBatch` (16,384) or `MaxInstanceBytesPerBatch` (1 MiB, including the 96-byte
+instance header); each split chunk is a separate draw call, and a single instance larger than the
+byte limit is still a batch of one. Opaque batches keep recording order; alpha, additive, and
+multiply batches sort back-to-front by nearest instance depth, with their instances also sorted
+back-to-front and a stable order for equal depths. Instances are frustum-culled against the pass
+view-projection by transforming the mesh bounds to a world-space AABB and rejecting only when the
+AABB is fully outside a plane. There is no occlusion culling, LOD, or GPU-driven culling in v1.
 
 This makes the following one draw call when `mesh`, `shader`, and render state match:
 
@@ -544,12 +588,29 @@ shader.SetUniform("mainTexture", textureB);
 camera.DrawMesh(mesh, transformB, shader);
 ```
 
-The shader ABI is generated by the bake so custom GLSL does not have to declare the plumbing:
-a frame uniform buffer, a bindless `sampler2D[]`, and a per-instance storage buffer containing the
-transform, tint, UV rectangle, texture indices, and the reflected user uniforms. v1 has one fixed
-vertex input layout: position, normal, uv, uv1, uv2, uv3, color, tangent. Vertex and fragment entry
-points are `main_vertex` and `main_fragment`. The full ABI is in the
+The shader ABI is generated by the bake so custom GLSL does not have to declare the plumbing: a
+256-byte frame uniform buffer in descriptor set 0 binding 0, a bindless combined-image-sampler array
+in binding 1, and a per-instance storage buffer in binding 2 containing the transform, tint, UV
+rectangle, one bindless index per texture binding, and the reflected user uniforms. v1 has one fixed
+vertex input layout: position, normal, uv, uv1, uv2, uv3, color, tangent. The geometry pipeline
+declares the full layout, so unconsumed attributes are ignored by the shader (the validation layer
+reports them as performance warnings). Vertex and fragment entry points are `main_vertex` and
+`main_fragment`. The full ABI is in the
 [API reference](api/rendering/shaders.md#74-shader-abi).
+
+The bindless texture table has the smaller of 4096 slots and the device's update-after-bind sampled
+image limits; slot 0 is always the built-in 1x1 white fallback. Samplers are cached per device by
+`(filter, wrap, anisotropy)`. Geometry pipelines are cached by the shader-state snapshot
+`(vertex module, fragment module, effective render state, topology)`, and the present pipeline is
+owned separately by the backend. `TextureCount` counts the live bindless slots including the white
+slot, and `PipelineCount` counts the distinct scene pipelines the frame used.
+
+M4 writes **one 256-byte frame uniform block per frame slot**. All camera passes recorded in the
+same tick write that block, so a frame with more than one camera pass submits the last recorded
+pass' view-projection, view, projection, camera position, and viewport to every pass. Single-camera
+frames are correct. Split-screen and multiple cameras with different views need per-pass frame data,
+which is M8 work with the multiple-camera gate; the limitation is documented in the M4 as-built
+notes in the roadmap.
 
 Vulkan instancing consumes one vertex/index buffer, so different meshes with the same shader are
 still separate draws in v1. Multi-draw indirect is post-1.0.
@@ -574,7 +635,7 @@ RayBork.Engine asset catalog (I/O, decompress, descriptor decode, GPU upload)
         |
         v
 game code: await ctx.Assets.Load<Texture>("/textures/castle")
-           await ctx.Assets.Load<Mesh>("/models/castle/wall")
+           await ctx.Assets.Load<Model>("/models/castle")
            await ctx.Assets.Load<GameSettings>("/data/settings")
 ```
 
@@ -605,8 +666,8 @@ descriptor or MessagePack custom data, and never touches SDL or Vulkan. An engin
 deferred: the loader queues its GPU upload and immediately serves the next request, so custom data
 and `LoadData` do not wait behind a GPU copy.
 
-Engine assets (`Mesh`, `Texture`, `Shader` in M3) are cached by `(canonical path, engine asset type)`
-and reference-counted:
+Engine assets (`Mesh`, `Texture`, `Shader`, and `Model` in M4) are cached by
+`(canonical path, engine asset type)` and reference-counted:
 
 - the first successful load creates the object and returns it with one reference;
 - a concurrent load of the same key joins the in-flight operation and acquires one reference on
@@ -623,6 +684,19 @@ triggers a hidden upload. The completion is a deferred loader item: the loader s
 keeps serving queued requests, and the asset is constructed and committed when the upload finishes.
 Custom data is not an `IAsset`, is never cached, and returns a fresh caller-owned instance per call.
 `LoadData` returns a fresh copy of the decompressed entry payload.
+
+### Models
+
+`Load<Model>` decodes the model descriptor, resolves every part's mesh and shader through the same
+catalog, and constructs the `Model` only after every part upload has completed. Shared part meshes
+and shaders are the same reference-counted objects as a direct load, and the model owns one
+reference to every distinct part mesh and shader. A part with no `[model] shader`, or an older
+descriptor with a `null` shader path, resolves to the built-in `/shaders/default`. `Model.Parts` is
+a flat list in descriptor order, `Model.Bounds` is the union in model space, and each part keeps its
+baked local transform and shader-default state. A failed model load releases every part reference it
+already acquired and leaves no cache entry, so a retry starts fresh. Disposing the model releases
+its part references with its last owner; a frame that recorded the model keeps the part assets alive
+through its retention set. `Model` is static: no skeletal or morph animation in v1.
 
 ### GPU upload bridge and frame retention
 
@@ -641,17 +715,27 @@ canceled requester destroys the just-created resource instead of leaking it; can
 already-submitted copy waits briefly for its fence before cleanup. Destructions use the same queue
 and run at a frame boundary.
 
+A texture upload allocates its bindless slot when the GPU copy completes, not lazily at the first
+draw. Slot 0 is the renderer's built-in 1x1 white texture, so a `null` binding and a bake default
+both sample white. A full table fails the upload with `AssetLoadException` `RB1010` and names the
+failing path and capacity. The slot is released only when the texture's GPU resource is destroyed,
+which already waits for every submitted frame that can reference it, so a texture disposed while a
+frame is in flight keeps its image and slot until that frame completes. Samplers are cached per
+device and keyed by `(filter, wrap, anisotropy)`; every texture with the same sampler state shares
+one sampler, and the cache is destroyed with the logical device. Mesh uploads create the
+vertex/index buffers; shader uploads create both modules; model uploads resolve through the same
+per-part upload path.
+
 The bridge retains the CPU upload descriptor for every live GPU resource. After the backend recovers
 a lost device, the render loop asks the bridge to recreate the live resources from those
 descriptors before frame submission resumes; the public asset objects stay valid. Pending uploads
 are canceled before the old device is destroyed and their `Load` calls fail with `RB1010`; they can
 be retried after recovery.
 
-A frame slot owns an engine-asset retention set. Recording an asset into a frame retains it; the
-frame ring releases the set after the render thread releases the slot following present. An asset
-disposed while a recorded frame still references it becomes pending, and its GPU destruction is
-queued only when the last frame hold is gone. M3 implements and tests this mechanism directly; M4
-calls it from the camera draw recorder.
+A frame slot owns an engine-asset retention set. The camera draw recorder retains every model, mesh,
+shader, and bound texture it records; the frame ring releases the set after the render thread
+releases the slot following present. An asset disposed while a recorded frame still references it
+becomes pending, and its GPU destruction is queued only when the last frame hold is gone.
 
 ### Procedural assets
 
@@ -683,9 +767,10 @@ bake binds constructor parameters and properties with the compiled PolyType shap
 validators, and writes one MessagePack `Data` entry. The runtime `Load<T>` deserializes it with the
 registered `[GenerateShape]` shape; there is no reflection resolver and no runtime TOML parser.
 
-M3 bakes and validates `Model` and `Font` entries but does not expose their runtime types. The model
-processor emits a `Model` descriptor plus one `Mesh` part per primitive; the font processor emits a
-`Font` descriptor plus the face payload. Model loading arrives in M4 and font parsing/MSDF in M6.
+M4 exposes the runtime `Model` loader. The model processor emits a `Model` descriptor plus one
+`Mesh` part per primitive; the font processor emits a `Font` descriptor plus the face payload.
+Font parsing and MSDF generation arrive in M6. M3 baked and validated both entry types before the
+runtime types existed; M4 adds the `Model` load path and model part lifetime described above.
 
 ### Bake tooling and the built-in pack
 
@@ -715,13 +800,16 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   builder-registered compiled shape delegate. `LoadData` covers opaque bytes.
 - `Microsoft.Extensions.Logging` and ZLogger are AOT-gated runtime dependencies; M1 is their first
   feature-level gate and exercises them on both RIDs.
-- M1 validates SDL3 and logging end to end with the `samples/HelloInterop` AOT host. M2 extends the
-  same gate to Silk.NET.Vulkan: the published host creates the instance, device, swapchain, scene
-  target, and present pass and presents frames. M3 extends it again: the published host mounts a
-  baked pack, loads a KTX2 texture, a mesh, a shader, and a MessagePack custom-data value, and
-  uploads the engine assets through the render thread before it exits.
+- M1 validated SDL3 and logging end to end with the `samples/HelloInterop` AOT host. M2 extended the
+  same gate to Silk.NET.Vulkan: the published host created the instance, device, swapchain, scene
+  target, and present pass and presented frames. M3 extended it again with a baked pack, a KTX2
+  texture, a mesh, a shader, and a MessagePack custom-data value. M4 moves the gate to
+  `samples/Castle`: the published host bakes and mounts `castle.pck`, loads `/models/castle`,
+  `/textures/stone`, and `/shaders/castle`, draws the seven-part castle through the geometry
+  pipeline, requires at least one completed frame with nonzero draw calls and instances, and shuts
+  down. `samples/HelloInterop` remains the M1-M3 diagnostic host and is not the AOT gate.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
-  M3 gate; the pack reader and custom-data path contain no reflection resolver.
+  M4 gate; the pack reader and descriptor decoding contain no reflection resolver.
 - The Vulkan loader is loaded through `NativeLibrary` with a custom `INativeContext` instead of
   Silk.NET's path resolution, so the published host does not depend on a per-RID Silk.NET loader
   asset. The loader itself is a system/GPU-driver component and is not redistributed with the
@@ -753,6 +841,15 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   path twice creates one GPU resource; disposing after a simulated frame hold defers destruction
   until the hold is released; a device recovery re-creates the live resources; and the validation
   layer reports no errors for the upload path.
+- M4 adds the geometry draw suite (`VulkanDrawTests`): a model and mesh draw through a camera and
+  reach the readback target; repeated draws of one mesh/shader/state with different textures and
+  uniforms become one instanced draw with the expected instance count; `RenderStats` reports draw
+  calls after batch splitting, instances after culling, triangles, culled instances, and pipeline
+  and texture counts; a frustum-culled instance is not submitted; an alpha batch is ordered
+  back-to-front; an instanced draw with one cursor snapshot applies it to every instance; a
+  disposed asset recorded into a frame stays alive until the frame completes; and the validation
+  layer reports no errors for the draw path. There are no golden-image tests; the suite asserts
+  counts, validation cleanliness, and explicit numeric readbacks with tolerances.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
@@ -780,12 +877,12 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
    where the milestone has a draw path, and shut down.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
-10. The engine's built-in pack is always mounted first; M3 supplies placeholder textures and the
-    present shader pair, and M4/M6 add the default draw assets.
+10. The engine's built-in pack is always mounted first; it supplies the present shader pair, the
+    default draw shader at `/shaders/default`, and the white/error textures.
 11. Only one RayBork app runs per process in v1.
 12. A GPU resource is created, re-created after a device recovery, and destroyed only on the render
     thread, and only after every frame that references it has completed.
 
-Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3. Invariants 2-4, 7, and 10 gain their
-end-to-end draw and default-asset coverage with M4/M6; M3 enforces the asset and frame-retention
-parts of 3, 7, and 10.
+Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3; 2-4, 7, and 10 are exercised end to end by
+the M4 camera and draw path and the Castle AOT gate. M3 enforced the asset and frame-retention parts
+of 3, 7, and 10 before the draw recorder existed.

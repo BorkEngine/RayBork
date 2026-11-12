@@ -107,24 +107,24 @@ prefix.
 
 glTF and OBJ are **source formats only**. The bake converts them to the engine's packed mesh/model
 format; the runtime never parses glTF or OBJ. The engine texture payload is a complete KTX2 2.0
-file; PNG/JPEG/TGA/BMP are the M3 source formats and the runtime only reads the packed KTX2
-payload. KTX2 source passthrough is a later addition, not an M3 source format.
+file; PNG/JPEG/TGA/BMP have been the texture source formats since M3, and the runtime only reads the
+packed KTX2 payload. KTX2 source passthrough is a later addition, not a supported source format.
 
 `RenderTexture` is created at runtime and is not a pack asset. `AudioClip` is post-1.0.
 
 `Model` is the normal entry point for a glTF/OBJ file from M4. A model's parts are separate `Mesh`
-assets at `<model-path>/<part>`; M3 emits and validates both the model descriptor and the part mesh
-entries. `Load<Model>` will load the model's referenced meshes and shaders and hold its own
+assets at `<model-path>/<part>`; the bake emits and validates both the model descriptor and the part
+mesh entries. `Load<Model>` loads the model's referenced meshes and shaders and holds its own
 references to them; disposing the model releases those references. If the game also loaded one of
 those parts directly, it holds a separate reference and must dispose it separately.
 
 `Load<Mesh>` is for a standalone mesh-part asset. Loading a multi-part model path as `Mesh` throws
 `AssetTypeMismatchException`.
 
-Texture formats in M3 are `Rgba8Unorm`, `Rgba8Srgb`, `Bc7Unorm`, `Bc7Srgb`, `Bc5Unorm`, and
+Texture formats in M4 are `Rgba8Unorm`, `Rgba8Srgb`, `Bc7Unorm`, `Bc7Srgb`, `Bc5Unorm`, and
 `R8Unorm`. `Rgba16Float` and `Depth32Float` are render-target formats and are not accepted in a
-packed texture in M3. The bake writes an sRGB transfer function into the KTX2 data format
-descriptor for the sRGB formats; the runtime creates the matching Vulkan format.
+packed texture. The bake writes an sRGB transfer function into the KTX2 data format descriptor for
+the sRGB formats; the runtime creates the matching Vulkan format.
 
 ### 6.4 Identity, reference counting, and lifetime
 
@@ -139,8 +139,9 @@ descriptor for the sRGB formats; the runtime creates the matching Vulkan format.
 - A frame packet that uses an engine asset holds its own reference for the lifetime of that frame.
   Recording a draw calls an internal retain on each referenced asset; the frame ring releases the
   hold after the frame is presented. Disposing an asset immediately after recording a draw is
-  therefore safe; the frame keeps the GPU resource alive until its fence signals. M3 implements and
-  tests the retain/release mechanism directly; M4 wires `Camera.Draw*` into it.
+  therefore safe; the frame keeps the GPU resource alive until its fence signals. The M4
+  `Camera.Draw*` path calls the retain/release mechanism for every recorded model, mesh, shader, and
+  bound texture.
 - A device recovery re-uploads the live GPU resources from the retained CPU descriptors before
   frame submission resumes. A public asset object stays valid across the recovery.
 - Using a disposed engine asset (reading a property or passing it to a draw) throws
@@ -221,10 +222,10 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 
 ### 6.6 Pack mounting and built-in assets
 
-- The engine's built-in pack is mounted first, below every user pack. In M3 it contains the
-  placeholder white and error textures and the present shader pair, produced by the same
-  `IAssetProcessor` pipeline as game content. The default draw shader, primitive meshes, and error
-  glyph arrive with M4 and M6.
+- The engine's built-in pack is mounted first, below every user pack. It contains the white and
+  error textures, the present shader pair, and the default draw shader at `/shaders/default`,
+  produced by the same `IAssetProcessor` pipeline as game content. Primitive meshes arrive with M5
+  and the missing-glyph error glyph with M6.
 - `WithAssetsPack` mounts user packs in call order after the built-in pack. Later packs shadow
   earlier packs for the same canonical path.
 - The winning entry is the last mounted pack that contains the path. A shadowed entry is never

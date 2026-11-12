@@ -45,13 +45,14 @@ public static class EngineVersion {
 | `Current` | **Any** | The version of the loaded `RayBork.Engine` assembly. Immutable for the app lifetime. Safe to read from any thread. Throws no `RayBorkException`. |
 
 `Current` is the loaded `RayBork.Engine` assembly's `Version`; it reports `0.1.0.0` in the 0.1
-release, including M1 and M2. The build and package version is `0.1.0`. It describes the engine
+release, including M1 through M4. The build and package version is `0.1.0`. It describes the engine
 assembly that is actually loaded, not the game assembly, the pack format, or the shader ABI. The
 value cannot change while the process runs, and no RayBork API mutates it. `EngineVersion` is the
 only public type added in M0. M1 adds the host, window, input, time, and logging surface listed in
 §1.6; M2 adds the renderer diagnostics (`EngineInfo`, `RenderStats`, `PresentMode`,
-`TonemappingMode`, `GraphicsException`, and `GraphicsDeviceLostException`). Every other type in this
-reference remains a contract for later milestones.
+`TonemappingMode`, `GraphicsException`, and `GraphicsDeviceLostException`); M3 adds the asset
+exceptions; M4 adds the camera/draw path and the draw-arm `RenderStats` semantics in §10.6. Every
+other type in this reference remains a contract for later milestones.
 
 The getter has no dependency on a pack, window, GPU, renderer, or logger. It does not block, does not
 require synchronization, and throws no `RayBorkException`; the value is available to loggers,
@@ -109,7 +110,10 @@ public sealed class PlatformException : RayBorkException { }
 M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowException`. M2 ships
 `GraphicsException` and `GraphicsDeviceLostException`; `GraphicsException` is not sealed, and
 `GraphicsDeviceLostException` derives from it. M3 ships `AssetException` and its four sealed
-subtypes. `ShaderException` remains the M4 shader-ABI contract.
+subtypes. M4 ships the camera and draw path without a new exception type: shader interface
+mismatches that escape the bake surface as `AssetLoadException` `RB1008` at load, and draw
+misuse uses the standard exceptions in the table below. `ShaderException` remains a contract for a
+later milestone.
 
 Game and platform diagnostic codes (M1, M2):
 
@@ -192,3 +196,22 @@ Lifecycle and argument errors use the standard BCL exceptions, not `RayBorkExcep
   internal assertions.
 - GPU object names and debug labels are set in debug builds for validation messages and
   RenderDoc/Nsight captures.
+
+### 10.6 `RenderStats`
+
+`EngineContext.Stats` exposes the last completed frame's `RenderStats`. The full field table is in
+[Rendering: render targets](rendering/render-targets.md#712-render-statistics). M4 draw-path
+semantics:
+
+- `DrawCalls` counts scene submissions after batch splitting and excludes the present pass'
+  fullscreen triangle. A frame with no camera passes reports `0`.
+- `Instances` counts instances that survived culling and were submitted; `Triangles` counts
+  submitted triangles after instancing (`0` for line and point topologies); `CulledInstances`
+  counts frustum rejections.
+- `PipelineCount` counts distinct scene pipelines and excludes the present pipeline.
+- `TextureCount` counts live bindless slots including the reserved white slot at slot 0. A texture
+  allocates its slot when its GPU upload completes and releases it only when its GPU resource is
+  destroyed, after every frame that can reference it has completed.
+- `GpuFrameMilliseconds` is `0` in M4 because GPU timestamps are not collected.
+- A frame that idles on a minimized or zero-extent surface reports zero for the draw counters and
+  `TextureCount`, with zero CPU and GPU time.

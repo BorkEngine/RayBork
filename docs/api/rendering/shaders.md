@@ -216,8 +216,11 @@ shader sidecar may restate the fixed entry-point names for clarity, but it canno
 | 6 | `vec4` | color (linear) |
 | 7 | `vec4` | tangent |
 
-Only the attributes a shader declares are bound. A custom shader may omit normals, UV sets, color,
-or tangents, but the mesh layout remains fixed. Custom vertex layouts are post-1.0.
+Only the attributes a shader declares are read. The geometry pipeline declares the full fixed
+layout as vertex attribute descriptions, so a custom shader may omit normals, UV sets, color, or
+tangents and the unconsumed attributes are ignored; the Vulkan validation layer reports that case
+as a performance warning, not an error, because the layout itself remains fixed. Custom vertex
+layouts are post-1.0.
 
 **Generated accessors**
 

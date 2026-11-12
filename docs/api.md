@@ -1,13 +1,16 @@
 # RayBork API Reference
 
-Status: **v0.1 M3**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M4**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
 backend. M3 ships the asset pipeline: `IAsset`, `IAssetCatalog`, `Mesh`, `Texture`, `Shader`, the
 procedural `MeshBuilder`/`TextureBuilder` API, the asset and shader metadata value types, the asset
 exceptions, pack mounting and lookup, custom TOML data through `WithAssetType<T>()`, `RayBork.Bake`,
-and the build-time built-in pack. The rest of
+and the build-time built-in pack. M4 ships the core 3D renderer: `Camera`, `CameraProjection`,
+`ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, the camera draw methods,
+`Shader.SetUniform`/`ResetUniforms`, and the shader ABI, backed by the bindless texture table,
+instanced batches, pipeline and sampler caches, and the AgX HDR highlight extension. The rest of
 the API reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
@@ -188,10 +191,28 @@ both legal only on the tick thread during `Tick`. `Camera` ships as a frame-scop
 `WorldToScreen`. `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, and
 `BoundingFrustum` ship in M4; `Model` is a reference-counted engine asset whose parts resolve through
 the catalog, and `Shader.SetUniform`/`ResetUniforms` are complete. M4 has no `Camera.Target` or
-`target` parameter (`RenderTexture` arrives in M8), no `Font`, and no primitive/line/billboard/text
-draw helpers. A camera left undisposed when `Tick` returns is an `InvalidOperationException` naming
-it, and the frame is not published. `RayBorkAppBuilder.WithClearColor` is removed; clear control is
-per camera pass.
+`target` parameter (`RenderTexture` arrives in M8), no `Font`, and no
+primitive/line/billboard/text draw helpers. Clear control is per camera:
+`RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
+`ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
+`InvalidOperationException` naming it, and the frame is not published.
+
+M4 `RenderStats` describes the draw path. `DrawCalls` counts scene submissions after batch splitting
+and excludes the present triangle; `Instances` counts instances that survived culling;
+`Triangles` counts submitted triangles after instancing; `CulledInstances` counts frustum
+rejections; `PipelineCount` counts distinct scene pipelines; `TextureCount` counts live bindless
+texture slots, including the reserved white slot. A frame with no camera passes and no draws reports
+zero for the draw counters. Textures allocate a bindless slot when their GPU upload completes; slot
+0 is always the built-in white fallback, and a full table fails the upload with
+`AssetLoadException` `RB1010`.
+
+`samples/Castle` is the M4 AOT gate: `samples/Castle.Assets` bakes `/models/castle`,
+`/textures/stone`, and `/shaders/castle`, and the published `win-x64` and `linux-x64` hosts draw the
+castle and exit `0`; the sample requires at least one completed frame with nonzero `DrawCalls` and
+`Instances` and throws at shutdown when no completed frame ever draws. The Windows hardware path and
+the conformant lavapipe Linux path both pass; [Native AOT](api/aot.md) records the current WSLg dzn
+driver limitation for the hardware WSL run. `samples/HelloInterop` remains the M1-M3 diagnostic
+host; it is not the AOT gate.
 
 ## 2. Quick start
 

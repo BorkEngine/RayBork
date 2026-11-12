@@ -48,15 +48,29 @@ is visible.
 Publish commands used by the gate:
 
 ```text
-dotnet publish -c Release -r win-x64   -p:PublishAot=true
-dotnet publish -c Release -r linux-x64 -p:PublishAot=true
+dotnet run --project samples/Castle.Assets/Castle.Assets.csproj -c Release -- bake
+dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64   -p:PublishAot=true
+dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
+samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
+# WSL, from the repository root, on the WSLg display:
+# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
 ```
 
 Both publishes must start, load a pack and any registered custom data, draw where the milestone has
-a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M3
-gate bakes a sample pack with the assets executable, publishes `samples/HelloInterop`, runs it with
-`--assets <pack> --frames 30` on `win-x64` and `linux-x64`, and requires exit code `0` with zero
-AOT/trim warnings.
+a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M4
+gate is `samples/Castle`: the assets executable bakes `castle.pck`, the published hosts load
+`/models/castle`, `/textures/stone`, and `/shaders/castle`, draw the seven-part castle, and must
+exit `0` with a completed frame that reports nonzero draw calls and instances. The sample records
+whether any completed frame drew and fails at shutdown when none ever did, so an invisible scene
+cannot pass and a slow host is judged on completed frames instead of a fixed tick number. Both
+publishes must finish with zero AOT/trim warnings.
+
+On the WSL gate host, WSLg selects the non-conformant dzn Vulkan driver and the first geometry draw
+currently crashes inside `libvulkan_dzn.so` (see the M4 as-built notes in
+[the roadmap](../roadmap.md#m4--core-3d-renderer-shader-state-and-instancing)). Run the Linux
+functional gate under the conformant lavapipe ICD with
+`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`; the same published host then exits `0`
+with the expected draw calls and instances. The Windows gate runs on the hardware driver.
 
 Single-file publishing is supported when the native SDL3/Vulkan libraries are deployed alongside
 the executable or extracted by the host. A fully self-extracting single binary is not a v1 gate.

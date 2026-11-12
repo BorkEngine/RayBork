@@ -297,7 +297,7 @@ order and reports `HdrOutput = false`.
 
 The SDR order is `B8G8R8A8_SRGB`, `R8G8B8A8_SRGB`, `B8G8R8A8_UNORM`, `R8G8B8A8_UNORM` (manual sRGB
 encode in the present shader), then `R16G16B16A16_SFLOAT` (linear clamp). HDR10
-(`A2B10G10R10_UNORM_PACK32`, PQ) is deliberately deferred and is never selected in M2. The selected
+(`A2B10G10R10_UNORM_PACK32`, PQ) is deliberately deferred and is never selected in M4. The selected
 format token is reported by `EngineInfo.SwapchainFormat`; `HdrOutput` is true only when the window
 reports HDR and the selected pair presents through the scRGB HDR path.
 
@@ -329,7 +329,7 @@ highest device-supported count that does not exceed the request, or `1` when non
 a fallback logs a warning. The scene target color and depth attachments use the effective count;
 the swapchain images are single-sample. Scene color is resolved into a single-sample sampled image
 before the present pass. Depth is cleared to `0.0` and the reverse-Z state is defined; multisampled
-depth is not resolved in M2 because nothing samples depth before M4/M8. A `RenderTexture` uses its
+depth is not resolved in M4 because nothing samples depth until M8. A `RenderTexture` uses its
 own `SampleCount` (M8).
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
@@ -339,8 +339,8 @@ instead of falling back. Mailbox is not a guarantee of tearing-free presentation
 the selected mode is reported by `EngineInfo.PresentMode`.
 
 **Reverse-Z.** The scene target clears depth to `0.0`. Depth-tested pipelines use `GreaterOrEqual`,
-enable depth test and depth write, and use the `[0, 1]` depth range. The M2 present triangle is not
-depth-tested; M4's geometry pipelines consume the state.
+enable depth test and depth write, and use the `[0, 1]` depth range. The present triangle is not
+depth-tested; the geometry pipelines consume the state.
 
 Reverse-Z is a whole-pipeline convention. Custom projection code must not mix in a
 `[-1,1]`-style OpenGL projection or the depth test will be wrong. The engine exposes no
