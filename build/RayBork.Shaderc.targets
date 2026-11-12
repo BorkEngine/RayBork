@@ -16,9 +16,20 @@
     -->
 
     <PropertyGroup>
-        <_RayBorkShadercPackageRoot Condition="'$(PkgSilk_NET_Shaderc_Native)' != ''">$(PkgSilk_NET_Shaderc_Native)</_RayBorkShadercPackageRoot>
-        <_RayBorkShadercPackageRoot Condition="'$(_RayBorkShadercPackageRoot)' == '' and '$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
-        <_RayBorkShadercPackageRoot Condition="'$(_RayBorkShadercPackageRoot)' == '' and '$(HOME)' != ''">$(HOME)/.nuget/packages/silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
+        <!--
+            Prefer a package root that matches the build host. The generated obj/project.nuget.g.props
+            file is cached on disk and can be produced by one OS and reused by another when the same
+            checkout is built from both Windows and WSL. A Windows-shaped generated path in that file
+            must not win on Unix: it made the copy silently skip and the built-in pack generator fail
+            with RB4008 because libshaderc_shared.so was missing.
+        -->
+        <_RayBorkShadercHomePackage Condition="'$(HOME)' != ''">$(HOME)/.nuget/packages/silk.net.shaderc.native/2.23.0</_RayBorkShadercHomePackage>
+        <_RayBorkShadercPackageRoot Condition="'$(OS)' == 'Windows_NT' and '$(PkgSilk_NET_Shaderc_Native)' != ''">$(PkgSilk_NET_Shaderc_Native)</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(OS)' != 'Windows_NT' and '$(_RayBorkShadercPackageRoot)' == '' and Exists('$(_RayBorkShadercHomePackage)')">$(_RayBorkShadercHomePackage)</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(OS)' != 'Windows_NT' and '$(_RayBorkShadercPackageRoot)' == '' and '$(NuGetPackageRoot)' != '' and $(NuGetPackageRoot.StartsWith('/'))">$(NuGetPackageRoot)silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(OS)' != 'Windows_NT' and '$(_RayBorkShadercPackageRoot)' == '' and '$(HOME)' != ''">$(_RayBorkShadercHomePackage)</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(OS)' == 'Windows_NT' and '$(_RayBorkShadercPackageRoot)' == '' and '$(NuGetPackageRoot)' != ''">$(NuGetPackageRoot)silk.net.shaderc.native/2.23.0</_RayBorkShadercPackageRoot>
+        <_RayBorkShadercPackageRoot Condition="'$(OS)' == 'Windows_NT' and '$(_RayBorkShadercPackageRoot)' == '' and '$(USERPROFILE)' != ''">$(USERPROFILE)\.nuget\packages\silk.net.shaderc.native\2.23.0</_RayBorkShadercPackageRoot>
         <_RayBorkShadercNativeDirectory Condition="'$(OS)' == 'Windows_NT'">$(_RayBorkShadercPackageRoot)\runtimes\win-x64\native</_RayBorkShadercNativeDirectory>
         <_RayBorkShadercNativeDirectory Condition="'$(OS)' != 'Windows_NT'">$(_RayBorkShadercPackageRoot)/runtimes/linux-x64/native</_RayBorkShadercNativeDirectory>
         <_RayBorkShadercNativeFile Condition="'$(OS)' == 'Windows_NT'">shaderc_shared.dll</_RayBorkShadercNativeFile>
@@ -26,8 +37,9 @@
     </PropertyGroup>
 
     <Target Name="RayBorkCopyShadercNative"
-            AfterTargets="Build"
-            Condition="Exists('$(_RayBorkShadercNativeDirectory)/$(_RayBorkShadercNativeFile)')">
+            AfterTargets="Build">
+        <Error Condition="'$(_RayBorkShadercNativeDirectory)' == '' or !Exists('$(_RayBorkShadercNativeDirectory)/$(_RayBorkShadercNativeFile)')"
+               Text="RayBork: the pinned shaderc native library '$(_RayBorkShadercNativeFile)' was not found under '$(_RayBorkShadercNativeDirectory)' (resolved package root '$(_RayBorkShadercPackageRoot)'). Restore the Silk.NET.Shaderc.Native package for this build host; a JIT tool cannot compile GLSL without it." />
         <Copy SourceFiles="$(_RayBorkShadercNativeDirectory)/$(_RayBorkShadercNativeFile)"
               DestinationFolder="$(OutDir)"
               SkipUnchangedFiles="true" />
