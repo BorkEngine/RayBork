@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M3 as-built**, 2026-11-11. M0-M3 are shipped. Milestones are ordered by
+Status: **v0.1 M4 as-built**, 2026-11-12. M0-M4 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -358,9 +358,75 @@ automatic instancing, and per-instance textures/uniforms.
 - Validation is clean for the gate scene; resize works with the new pipelines.
 - Native AOT publish renders the Castle scene on Windows and Linux.
 
+**As-built notes.** M4 shipped the planned scope with the following as-built shape:
+
+- **Bindless table, sampler cache, and pipeline cache.** The renderer allocates a bindless texture
+  table whose capacity is the smaller of 4096 slots and the device's update-after-bind sampled-image
+  limits, and never less than one slot; slot 0 is reserved for the built-in 1x1 white texture.
+  Samplers are cached per device and keyed by `(filter, wrap, anisotropy)`. Geometry pipelines are
+  cached by the shader-state snapshot `(vertex module, fragment module, effective render state,
+  topology)`; the present pipeline and the scene target are owned separately by the backend. A
+  texture allocates its slot when its GPU upload completes, not at the first draw, and a full table
+  fails that upload with `AssetLoadException` `RB1010`.
+- **Batch planner, culling, and sorting.** A pass plan groups instances by
+  `(mesh, shader, effective render state)`. A group splits at `MaxInstancesPerBatch` (16,384) or
+  `MaxInstanceBytesPerBatch` (1 MiB, including the 96-byte instance header), and each split chunk is
+  a separate draw call. Instance bounds are transformed to world-space AABBs and frustum-culled
+  against six normalized planes; an instance is culled only when it is fully outside one plane. An
+  opaque batch keeps recording order; alpha, additive, and multiply batches are sorted back-to-front
+  by nearest instance depth, and their instances are sorted back-to-front too. Sorting is stable for
+  equal depths. Stats count draw calls after splitting and instances after culling.
+- **Per-instance uniforms and textures.** Every instance record carries the transform, tint, UV
+  rectangle, one bindless index per sidecar texture binding, and the reflected uniform values, so
+  uniform and texture changes never split a batch. `Draw*` snapshots the shader cursor once per call;
+  `DrawInstanced` applies one snapshot to every transform.
+- **AgX highlight extension with paper-white normalization.** AgX remains the SDR-referred curve. On
+  an HDR window the scRGB path normalizes AgX's neutral white by
+  `luma(AgX(white)) = 0.9829795037669735` to display luminance `1.0` and scales that to the window's
+  reported SDR white level (paper white). Above the AgX white point at
+  `AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear luminance, with
+  `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
+  `t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
+  `yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom`, the
+  normalized AgX color is scaled by `yOut / luma(normalized)`. Displayed luminance is `yOut` and
+  channel ratios are preserved; the mapping is continuous at the knee and clamps beyond the reported
+  peak. It is disabled when the headroom is at most one or when `TonemappingMode.None` is selected.
+  SDR windows keep paper white and peak at `1`, so their image is unchanged from M2, and `None`
+  remains the direct HDR authoring path.
+- **Castle AOT gate.** `samples/Castle` and `samples/Castle.Assets` are the per-milestone AOT gate.
+  The assets executable bakes `castle.pck`; the published `win-x64` and `linux-x64` hosts mount it,
+  draw the seven-part castle with a custom shader, and must exit `0` on the Windows hardware driver
+  and the conformant lavapipe Linux path. The sample records whether any completed frame reported
+  both `DrawCalls` and `Instances`; when no completed frame ever draws, shutdown throws and the run
+  fails, so an invisible scene cannot pass and a slow host is judged on completed frames instead of
+  a fixed tick number. `samples/HelloInterop` remains the M1-M3 diagnostic host.
+- **Known limitation: the WSLg dzn driver crashes on the first geometry draw.** On the WSL gate host
+  WSLg selects `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and
+  prints "dzn is not a conformant Vulkan implementation, testing use only". The M4 published host
+  dies on the render thread on the first geometry draw: the kernel reports
+  `RayBork.Render[...]: segfault ... in libvulkan_dzn.so[136a88,...]`, and later runs report a
+  general protection fault in the same code region of `libvulkan_dzn.so`. The M2 clear and present
+  path alone runs fine on the same device. Under the downloaded Khronos validation layer with
+  `--validation on`, the layer loads, `EngineInfo.ValidationEnabled` is true, and no validation
+  **error** is reported from the engine's usage before the crash; the only messages are
+  `WARNING-Shader-OutputNotConsumed` performance warnings for the fixed vertex-layout attributes
+  3-7 that a custom shader does not read, which are expected and valid. The same build and pack run
+  correctly under the conformant lavapipe ICD, so this is a WSL driver limitation, not an engine
+  defect. The Windows hardware gate passes on the same GPU. Treat the WSLg hardware run as a
+  skipped gate with this reason until WSLg ships a conformant driver; use lavapipe for the Linux
+  functional proof.
+- **M4 limitation: one frame block per frame slot.** The renderer writes one 256-byte `rbFrame`
+  block per frame slot. A frame that records more than one camera pass overwrites that block for
+  each pass, so every pass in that frame sees the last recorded pass' view-projection, view,
+  projection, camera position, and viewport. Single-camera frames are correct; split-screen
+  cameras and multiple cameras with different views need per-pass frame data, which lands with the
+  M8 multiple-camera work. This is the honest M4 limitation, not an M8 feature already shipped.
+
 **Risks.** This is the largest milestone. The shader ABI and per-instance layout can force changes
 in the bake, the renderer, and the sample at the same time. Prototype the ABI on two shaders before
-building the full batching path.
+building the full batching path. The as-built WSLg dzn driver crash is an external risk: it blocks
+the hardware WSL run even though the same build and pack pass under lavapipe and on Windows, so the
+Linux gate is reported with the driver limitation until WSLg ships a conformant driver.
 
 ### M5 — Primitives, lines, billboards, and collision
 
@@ -548,8 +614,9 @@ with Native AOT without reading the engine source.
 
 **Scope.**
 
-- Samples: Castle (3D textured/custom shader/HDR), Pong (2D/input/text), Text (MSDF/layout),
-  Instancing (batching/stats), RenderTarget (offscreen/MSAA/post-process).
+- Samples: Castle (3D textured/custom shader/HDR; the sample and its assets executable ship in M4,
+  and M11 polishes them), Pong (2D/input/text), Text (MSDF/layout), Instancing (batching/stats),
+  RenderTarget (offscreen/MSAA/post-process).
 - `dotnet new raybork` template with a game project, assets executable, and AOT publish profile.
 - NuGet packages: `RayBork.Engine` and the bake tool; package validation and symbol packages.
 - XML docs for every public member; the API reference synchronized with the implementation.

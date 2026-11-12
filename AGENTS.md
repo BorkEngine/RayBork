@@ -127,22 +127,26 @@ dotnet test src/RayBork/RayBork.slnx -c Debug --no-build
 dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"
 dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
 pwsh scripts/check-docs.ps1
-# Bake the M3 sample pack, then publish and run the sample with it:
-dotnet run --project samples/HelloInterop.Assets/HelloInterop.Assets.csproj -c Release -- bake
-dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r win-x64 -p:PublishAot=true
+# Bake the Castle sample pack, then publish and run the M4 gate host with it:
+dotnet run --project samples/Castle.Assets/Castle.Assets.csproj -c Release -- bake
+dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64 -p:PublishAot=true
 # Run the published Windows host and require exit 0:
-samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
+samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
 # Run the same publish inside WSL from the repository root for linux-x64:
-# ~/.dotnet/dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r linux-x64 -p:PublishAot=true
+# ~/.dotnet/dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
 # Run the published Linux host; it needs a Vulkan 1.2 device and a real window system.
 # On WSL use the WSLg display:
-# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
+# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --assets samples/Castle.Assets/bin/Release/net11.0/castle.pck --frames 30
 ```
 
-The AOT gate uses `samples/HelloInterop` until the M11 samples land. Both publishes must finish with
-zero AOT/trim warnings, and each published host must run with `--frames 30` and exit 0. The host
-needs a Vulkan 1.2 device and a real window system; `SDL_VIDEODRIVER=dummy` cannot create a Vulkan
-surface. On WSL, run it with the WSLg display: set `DISPLAY=:0` and
+The AOT gate is `samples/Castle`: it loads `/models/castle`, `/textures/stone`, and `/shaders/castle`,
+draws the scene, and requires at least one completed frame with nonzero `RenderStats.DrawCalls` and
+`RenderStats.Instances`; when no completed frame ever draws, shutdown throws and the run fails. Both
+publishes must finish with zero AOT/trim warnings, and each published host must run with
+`--assets <pack> --frames 30` and exit 0. `samples/HelloInterop` remains the M1-M3 diagnostic host
+for window, input, time, logging, renderer, and asset-loading metadata; it is not the AOT gate. The
+gate host needs a Vulkan 1.2 device and a real window system; `SDL_VIDEODRIVER=dummy` cannot create a
+Vulkan surface. On WSL, run it with the WSLg display: set `DISPLAY=:0` and
 `XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`. GPU tests open a hidden window through the real video driver
 and are run with `dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"`. A GPU test
 that cannot run on the host is reported as a skip with the reason, never silently dropped. The `gpu`

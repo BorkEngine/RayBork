@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <PublishAot>true</PublishAot>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="PolyType" />
+        <PackageReference Include="SDL3-CS" />
+        <PackageReference Include="SDL3-CS.Native" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../src/RayBork/RayBork.Engine/RayBork.Engine.csproj" />
+    </ItemGroup>
+
+</Project>

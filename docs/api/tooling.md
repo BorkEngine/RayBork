@@ -173,10 +173,13 @@ shader = "shaders/castle"
   cameras, and lights are rejected or ignored with a diagnostic; a source with no mesh is an error.
 - The model is emitted at the base path. Each primitive becomes a `Mesh` part at
   `<base>/<part>` with its own vertex/index payload. The `Model` descriptor records the flat part
-  list, local transforms, bounds, and the shared sidecar shader path.
+  list, local transforms, bounds, and the shared sidecar shader path. A part with no `shader` in
+  the sidecar is baked with the built-in canonical path `shaders/default`, so every part always
+  names a shader.
 - `scale` and `front` apply the authoring correction before bounds and payloads are written.
-- glTF material and image import is M4 work. M3 validates that referenced images exist and warns
-  that they are not imported.
+- glTF materials and images are not imported in M4. The bake validates that referenced images exist
+  and warns that they are not imported; every part uses the sidecar shader (or the built-in
+  `shaders/default`), and the game supplies textures and uniforms with `SetUniform`.
 
 A font source `Assets/Fonts/inter.ttf` with an optional sidecar `Assets/Fonts/inter.toml`:
 
@@ -252,7 +255,8 @@ The built-in processors use `RB4007`-`RB4010`; the shared TOML and discovery fai
 
 ### 13.4 Pack v1 (as built)
 
-The pack is little-endian and starts with a fixed 40-byte header:
+M4 did not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
+starts with a fixed 40-byte header:
 
 | Field | Size | Notes |
 | --- | --- | --- |
@@ -358,7 +362,9 @@ is set.
   generated prologue with one `uTint` uniform, one `mainTexture` binding, and an opaque/back/
   `greater_equal`/depth-write render state.
 
-Primitive meshes and the error glyph are added by later M4 and M6 tasks.
+Primitive meshes and the error glyph are added by later milestones (M5 and M6). Pack v1 is unchanged
+by M4: the default draw shader is an ordinary shader entry at a reserved built-in path, not a format
+change.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
 that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by

@@ -1,17 +1,17 @@
 # HelloInterop
 
-`HelloInterop` is the RayBork M3 diagnostic and Native AOT gate host. It opens an SDL3 window, runs
-`Setup`, `Tick`, and `Shutdown` on the tick thread, and exercises the Vulkan 1.2 renderer end to end:
-the renderer clears the linear HDR scene target to the configured `--clear-color`, the present pass
-applies `--tonemapping` and `--exposure`, MSAA is resolved before presentation, and the swapchain
-prefers an HDR (scRGB) format when the OS/window HDR state is enabled and falls back to the SDR path
-otherwise.
+`HelloInterop` is the RayBork M1-M3 diagnostic host. It opens an SDL3 window, runs `Setup`, `Tick`,
+and `Shutdown` on the tick thread, and exercises the Vulkan 1.2 renderer end to end: the renderer
+clears the linear HDR scene target, the present pass applies `--tonemapping` and `--exposure`, MSAA
+is resolved before presentation, and the swapchain prefers an HDR (scRGB) format when the OS/window
+HDR state is enabled and falls back to the SDR path otherwise. The M4 AOT gate is
+[samples/Castle](../Castle/README.md); this host intentionally has no camera or draw calls.
 
 The host logs the renderer, GPU, and presentation state selected at startup, the effective MSAA
 sample count and present mode after fallback, per-second `RenderStats` lines, one final statistics
 line and the elapsed runtime on shutdown, and the window, DPI, monitor, input, and gamepad activity of
 the M1 host. It exits on the window close request, Escape, or a scripted frame limit. It also proves
-that the renderer initializes, presents, and shuts down through the Native AOT publish gate.
+that the renderer initializes, presents, and shuts down through a Native AOT publish.
 
 ## M3 asset loading
 
@@ -25,9 +25,10 @@ engine asset type plus the registered custom data:
 | `Shader` | `/shaders/simple` | Stages, uniform declarations, texture bindings, default render state. |
 | `HelloSettings` | `/data/hello` | `Name` and `Difficulty` from the registered TOML data type. |
 
-The host stores the three engine assets and disposes them in `Shutdown` on the tick thread. M3 has no
-draw API, so `Setup` only loads and logs metadata; the M2 renderer-only behavior is unchanged when
-`--assets` is absent. The custom data type is registered with
+The host stores the three engine assets and disposes them in `Shutdown` on the tick thread. This
+diagnostic host does not draw even though M4 ships the camera and draw API; the draw gate is
+[samples/Castle](../Castle/README.md). The M2 renderer-only behavior is unchanged when `--assets` is
+absent. The custom data type is registered with
 `WithAssetType<HelloSettings>()`, which is backed by the compiled `[GenerateShape]` in
 `HelloSettings.cs`, so the load path stays reflection-free and Native AOT compatible. See
 [docs/api/assets.md](../../docs/api/assets.md) §6 and
@@ -67,7 +68,6 @@ from the OS/window state: there is no HDR override, and the selected state is re
 | `--present-mode NAME` | `Mailbox`, `Fifo`, or `Immediate`, case-insensitive. Default `Mailbox`; a surface that does not support Mailbox falls back to `Fifo` with a warning. `Immediate` is used only when explicitly requested. |
 | `--tonemapping NAME` | `AgX` or `None`, case-insensitive. Default `AgX`. `None` writes linear values through the swapchain transfer function for custom presentation paths. |
 | `--exposure EV` | Exposure in stops applied before tone mapping, an invariant finite float. Default `0`; `+1` doubles linear exposure. |
-| `--clear-color R,G,B[,A]` | Linear scene clear color as three or four comma-separated finite invariant floats. Default `0,0,0,1`. |
 | `--validation on\|off` | Request or disable the Vulkan validation layer. When the option is omitted, the engine default applies: on in Debug, off in Release. The effective state is reported by `EngineContext.Info.ValidationEnabled`. |
 | `--log-level NAME` | A defined `Microsoft.Extensions.Logging.LogLevel` name, case-insensitive: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical`, or `None`. Default `Information`. |
 | `--help` | Print usage and exit `0`. |
@@ -88,9 +88,9 @@ Window HDR state: enabled True, SDR white level 2, HDR headroom 6.25.
 The requested present mode Mailbox is not supported by the window surface; using Fifo.
 Engine RayBork 0.1.0.0: renderer Vulkan 1.4, GPU 'AMD Radeon(TM) 8060S Graphics', Vulkan 1.4.359, validation True.
 Presentation: swapchain R16G16B16A16_SFLOAT, HDR True, 4x MSAA, present mode Fifo.
-Requested scene: clear color RGBA(0, 0, 0, 1), exposure 0 EV, tone mapping AgX.
-Tick render stats: frame 59, 1 draw call(s), 1 instance(s), 1 triangle(s), 0 culled instance(s), 1 pipeline(s), 1 texture(s), 4x MSAA, HDR True, CPU 0.536 ms, 1 frame(s) in flight, 0 recoveries.
-Final render stats: frame 119, 1 draw call(s), 1 instance(s), 1 triangle(s), 0 culled instance(s), 1 pipeline(s), 1 texture(s), 4x MSAA, HDR True, CPU 0.463 ms, 1 frame(s) in flight, 0 recoveries.
+Requested scene: exposure 0 EV, tone mapping AgX.
+Tick render stats: frame 59, 0 draw call(s), 0 instance(s), 0 triangle(s), 0 culled instance(s), 0 pipeline(s), 2 texture(s), 4x MSAA, HDR True, CPU 0.536 ms, 1 frame(s) in flight, 0 recoveries.
+Final render stats: frame 119, 0 draw call(s), 0 instance(s), 0 triangle(s), 0 culled instance(s), 0 pipeline(s), 2 texture(s), 4x MSAA, HDR True, CPU 0.463 ms, 1 frame(s) in flight, 0 recoveries.
 Elapsed runtime: 2.664s.
 HelloInterop stopped after 120 tick(s): time 2.664s, fps 60.9, last window 1280x720 (render 1280x720, DPI scale 1.5), exit frame limit (120).
 ```
@@ -119,7 +119,9 @@ Procedural texture /_procedural/texture/1: 2x2, 2 mip level(s), format Rgba8Srgb
   effective sample count and present mode.
 - `RenderStats` is logged every 60 ticks (about one second at the 60 FPS cap) and once more during
   shutdown. The shutdown snapshot is the last frame the render thread completed; it can lag the final
-  tick by one frame because the tick thread enters `Shutdown` before the frame ring is drained.
+  tick by one frame because the tick thread enters `Shutdown` before the frame ring is drained. This
+  host records no camera passes, so the draw counters stay `0`; the present triangle is not a scene
+  draw and `TextureCount` reports the live bindless slots (the built-in white and error textures).
 
 ## Bare renderer run
 
@@ -133,14 +135,14 @@ dotnet run --project samples/HelloInterop/HelloInterop.csproj -- --frames 120 --
 Run the explicit SDR-ish configuration to exercise the option surface:
 
 ```powershell
-dotnet run --project samples/HelloInterop/HelloInterop.csproj -- --msaa 8 --present-mode Fifo --tonemapping None --exposure 1.5 --clear-color 0.05,0.1,0.2,1
+dotnet run --project samples/HelloInterop/HelloInterop.csproj -- --msaa 8 --present-mode Fifo --tonemapping None --exposure 1.5
 ```
 
 Pass `--help` to print the full usage text. The sample uses `var` for monitor locals because
 `RayBork.Monitor` collides with `System.Threading.Monitor` under implicit usings; callers that import
 `System.Threading` should qualify `RayBork.Monitor` or use `var`.
 
-## Bake the M3 sample pack
+## Bake the diagnostic pack
 
 From the repository root:
 
@@ -165,7 +167,8 @@ samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --asse
 ```
 
 The publish must finish with zero AOT/trim warnings and the published host must exit `0` after
-mounting the pack, loading the texture, mesh, shader, and custom data, and presenting 30 frames.
+mounting the pack, loading the texture, mesh, shader, and custom data, and presenting 30 frames. This
+is the diagnostic-host publish; the M4 per-milestone AOT gate is `samples/Castle`.
 
 ## WSL Linux Native AOT
 
@@ -178,8 +181,8 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
 ```
 
 WSLg provides the X display and the Wayland socket that SDL3 needs. Without a display the renderer
-cannot create its Vulkan surface and the host exits `1`. The Linux AOT gate is reported as unavailable
-when this host has no WSL or no Vulkan 1.2 device; it is never faked.
+cannot create its Vulkan surface and the host exits `1`. This diagnostic publish is reported as
+unavailable when the host has no WSL or no Vulkan 1.2 device; it is never faked.
 
 ## No dummy video driver
 
@@ -189,5 +192,6 @@ initialization because the dummy driver has no window system for a Vulkan surfac
 a desktop session or under WSLg instead.
 
 Publish output is generated under `samples/HelloInterop/bin/` and is gitignored. Both publishes must
-finish with zero AOT/trim warnings. The published hosts are the per-milestone gate described in
+finish with zero AOT/trim warnings. This host remains the M1-M3 diagnostic host; the per-milestone
+gate is [samples/Castle](../Castle/README.md) and the gate commands are in
 [AGENTS.md](../../AGENTS.md) §4.
