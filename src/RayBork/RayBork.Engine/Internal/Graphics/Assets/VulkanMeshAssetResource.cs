@@ -8,7 +8,7 @@ namespace RayBork.Internal;
 /// memory allocation that backs both.
 /// </summary>
 /// <remarks>
-/// Created on the render thread by <see cref="VulkanAssetWorker.Upload"/> and recreated by
+/// Created on the render thread by <see cref="VulkanAssetWorker.BeginUpload"/> and recreated by
 /// <see cref="IAssetGpuWorker.Restore"/> after a device recovery. The vertex buffer is the primary
 /// handle. Topology is descriptor metadata, not a buffer property, so it is not stored here. The two
 /// buffers share one allocation: the index buffer starts at the vertex requirement's alignment. The

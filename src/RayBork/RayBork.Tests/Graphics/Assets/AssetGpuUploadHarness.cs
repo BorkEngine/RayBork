@@ -10,10 +10,14 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <remarks>
 /// The bridge and worker are render-thread objects, but the tests call them on the test thread after
 /// the backend initialized; that is the same single-threaded pattern the other GPU recovery and
-/// readback tests use. Dispose closes the bridge, which destroys every live resource before the
-/// backend is disposed.
+/// readback tests use. <see cref="Upload"/> stands in for the render loop and pumps the bridge until
+/// the deferred upload finished; tests that exercise a single poll call the worker's
+/// <c>BeginUpload</c> and <c>TryComplete</c> directly. Dispose closes the bridge, which cancels any
+/// pending upload and destroys every live resource before the backend is disposed.
 /// </remarks>
 internal sealed class AssetGpuUploadHarness : IDisposable {
+    private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(30);
+
     private readonly GpuAssetBridge _bridge = new();
 
     /// <summary>
@@ -24,7 +28,7 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
         ArgumentNullException.ThrowIfNull(backend);
 
         Backend = backend;
-        Worker = backend.CreateAssetGpuWorker();
+        Worker = Assert.IsType<VulkanAssetWorker>(backend.CreateAssetGpuWorker());
         _bridge.AttachWorker(Worker);
     }
 
@@ -36,7 +40,7 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
     /// <summary>
     /// Gets the asset GPU worker attached to the bridge.
     /// </summary>
-    internal IAssetGpuWorker Worker { get; }
+    internal VulkanAssetWorker Worker { get; }
 
     /// <summary>
     /// Gets the bridge.
@@ -44,14 +48,25 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
     internal GpuAssetBridge Bridge => _bridge;
 
     /// <summary>
-    /// Queues an upload, drains the bridge, and returns the created resource.
+    /// Gets the timeout the harness uses while waiting for a GPU upload.
+    /// </summary>
+    internal static TimeSpan Timeout => _timeout;
+
+    /// <summary>
+    /// Queues an upload, pumps the bridge like the render loop, and returns the created resource.
     /// </summary>
     /// <param name="upload">The upload to create.</param>
     /// <returns>The created resource.</returns>
     /// <exception cref="AssetLoadException">The upload or the resource creation failed.</exception>
     internal GpuAssetResource Upload(AssetGpuUpload upload) {
         Task<GpuAssetResource> task = _bridge.UploadAsync(upload, CancellationToken.None);
-        _bridge.ProcessPending(Worker);
+        bool completed = SpinWait.SpinUntil(
+            () => {
+                _bridge.ProcessPending(Worker);
+                return task.IsCompleted;
+            },
+            _timeout);
+        Assert.True(completed, "The GPU upload did not complete.");
         return task.GetAwaiter().GetResult();
     }
 

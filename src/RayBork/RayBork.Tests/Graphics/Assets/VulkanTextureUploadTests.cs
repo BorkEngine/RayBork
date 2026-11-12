@@ -30,12 +30,49 @@ public sealed class VulkanTextureUploadTests {
         Assert.NotEqual(0ul, texture.Memory.Handle);
         Assert.NotEqual(0, texture.Handle);
         Assert.Equal(1, harness.Bridge.LiveResourceCount);
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
+        Assert.Equal(0, harness.Worker.PendingStagingBufferCount);
 
         harness.Destroy(resource);
         harness.Worker.Destroy(resource);
 
         Assert.True(resource.IsDestroyed);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void BeginUploadIsPendingUntilTheCopyCompletes() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using AssetGpuUploadHarness harness = new(host.Backend);
+        TextureGpuUpload upload = AssetUploadTestData.Texture();
+
+        VulkanAssetUploadOperation operation = Assert.IsType<VulkanAssetUploadOperation>(
+            harness.Worker.BeginUpload(upload));
+
+        Assert.False(operation.IsFinished);
+        Assert.Equal(1, harness.Worker.PendingOperationCount);
+        Assert.Equal(1, harness.Worker.PendingStagingBufferCount);
+
+        GpuAssetResource? resource = null;
+        Exception? error = null;
+        bool completed = SpinWait.SpinUntil(
+            () => harness.Worker.TryComplete(operation, out resource, out error),
+            AssetGpuUploadHarness.Timeout);
+
+        Assert.True(completed, "The texture upload did not complete.");
+        Assert.Null(error);
+        VulkanTextureAssetResource texture = Assert.IsType<VulkanTextureAssetResource>(resource);
+        Assert.NotEqual(0ul, texture.Image.Handle);
+        Assert.NotEqual(0ul, texture.View.Handle);
+        Assert.NotEqual(0ul, texture.Sampler.Handle);
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
+        Assert.Equal(0, harness.Worker.PendingStagingBufferCount);
+
+        harness.Worker.Destroy(texture);
+
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -113,10 +150,11 @@ public sealed class VulkanTextureUploadTests {
             },
             Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4));
 
-        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => harness.Worker.Upload(upload));
+        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => harness.Worker.BeginUpload(upload));
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, failure.DiagnosticCode);
         Assert.Contains("render-target", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }

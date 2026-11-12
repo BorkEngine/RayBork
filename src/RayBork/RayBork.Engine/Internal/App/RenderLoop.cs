@@ -15,11 +15,13 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// The loop waits on the frame-ring ready signal and the GPU asset bridge signal together, so an
-/// upload queued during <c>Setup</c> completes without waiting for the first tick and no loop turn
-/// busy-spins. The bridge is serviced before each wait and after every wake. When the backend's
-/// <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the bridge to recreate the
-/// live resources before the next frame is submitted; presentation-only recoveries leave the
-/// generation unchanged and do not re-upload assets.
+/// upload queued during <c>Setup</c> starts without waiting for the first tick and no loop turn
+/// busy-spins. While the bridge still has a queued or in-flight upload the wait is bounded to a few
+/// milliseconds so the loop keeps polling the GPU copy even when no frame is being published; with no
+/// upload in flight it waits indefinitely. The bridge is serviced before each wait and after every
+/// wake. When the backend's <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the
+/// bridge to recreate the live resources before the next frame is submitted; presentation-only
+/// recoveries leave the generation unchanged and do not re-upload assets.
 /// </para>
 /// <para>
 /// <see cref="IsReady"/> becomes <see langword="true"/> after the backend initialized, its
@@ -39,6 +41,13 @@ namespace RayBork.Internal;
 /// </remarks>
 internal sealed class RenderLoop {
     private const string THREAD_NAME = "RayBork.Render";
+
+    /// <summary>
+    /// The bounded wait used while a GPU asset upload is queued or in flight. It is short enough that
+    /// an upload started during <c>Setup</c> completes promptly and long enough not to busy-spin the
+    /// render thread while no frame is ready.
+    /// </summary>
+    private const int UPLOAD_POLL_TIMEOUT_MILLISECONDS = 2;
 
     private readonly FrameRing _frameRing;
     private readonly RendererBackendFactory _backendFactory;
@@ -183,7 +192,12 @@ internal sealed class RenderLoop {
                     return;
                 }
 
-                WaitHandle.WaitAny(_waitHandles);
+                // An upload in flight must be polled even when no frame is published; the bridge
+                // signal covers queues and destructions, but a GPU copy finishing does not signal.
+                int timeout = _gpuAssetBridge.HasPendingWork
+                    ? UPLOAD_POLL_TIMEOUT_MILLISECONDS
+                    : Timeout.Infinite;
+                WaitHandle.WaitAny(_waitHandles, timeout);
             }
         } catch (Exception exception) {
             _failure = exception;

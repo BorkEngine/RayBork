@@ -125,9 +125,10 @@ internal static class CatalogTestData {
 /// One started catalog with a GPU upload pump standing in for the render loop.
 /// </summary>
 /// <remarks>
-/// The catalog is deterministic: the pump thread waits on the bridge signal instead of polling, and
-/// <see cref="Dispose"/> stops the catalog before stopping the pump so every queued destruction is
-/// serviced. Tests synchronize through the fake worker's call records and explicit events.
+/// The catalog is deterministic: the pump thread waits on the bridge signal and the fake worker's
+/// progress signal instead of polling, and <see cref="Dispose"/> stops the catalog before stopping the
+/// pump so every queued destruction is serviced. Tests synchronize through the fake worker's call
+/// records and explicit events.
 /// </remarks>
 internal sealed class CatalogTestHarness : IDisposable {
     private readonly TempPackDirectory _directory = new();
@@ -187,7 +188,7 @@ internal sealed class CatalogTestHarness : IDisposable {
     }
 
     private void PumpLoop() {
-        WaitHandle[] handles = [Bridge.Signal, _pumpStop.WaitHandle];
+        WaitHandle[] handles = [Bridge.Signal, _pumpStop.WaitHandle, Worker.Progress];
         while (true) {
             int index = WaitHandle.WaitAny(handles);
             if (index == 1) {

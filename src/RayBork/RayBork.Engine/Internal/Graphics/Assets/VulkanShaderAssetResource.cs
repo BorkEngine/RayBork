@@ -6,7 +6,7 @@ namespace RayBork.Internal;
 /// The Vulkan objects behind one uploaded shader: the vertex-stage and fragment-stage shader modules.
 /// </summary>
 /// <remarks>
-/// Created on the render thread by <see cref="VulkanAssetWorker.Upload"/> and recreated by
+/// Created on the render thread by <see cref="VulkanAssetWorker.BeginUpload"/> and recreated by
 /// <see cref="IAssetGpuWorker.Restore"/> after a device recovery. The vertex module is the primary
 /// handle. The entry point names, stages, and default render state stay in the retained descriptor;
 /// a shader module does not carry an entry point, so pipeline creation in M4 pairs the modules with

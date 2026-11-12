@@ -17,7 +17,9 @@ public sealed class GpuAssetBridgeTests {
 
         Assert.True(bridge.HasWorker);
         Assert.False(task.IsCompleted);
+        Assert.True(bridge.HasPendingWork);
         Assert.Equal(1, bridge.PendingUploadCount);
+        Assert.Equal(0, bridge.InFlightUploadCount);
         Assert.Equal(0, bridge.LiveResourceCount);
 
         bridge.ProcessPending(worker);
@@ -31,6 +33,124 @@ public sealed class GpuAssetBridgeTests {
         Assert.Same(upload, worker.UploadCalls[0]);
         Assert.Equal(1, bridge.LiveResourceCount);
         Assert.Equal(0, bridge.PendingUploadCount);
+        Assert.Equal(0, bridge.InFlightUploadCount);
+        Assert.False(bridge.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DeferredUploadStaysInFlightAcrossPollsAndCompletesOnALaterCall() {
+        GpuAssetBridge bridge = new();
+        FakeAssetGpuWorker worker = new() { DeferUploads = true };
+        bridge.AttachWorker(worker);
+        TextureGpuUpload upload = CreateTextureUpload("/textures/test");
+        Task<GpuAssetResource> task = bridge.UploadAsync(upload, CancellationToken.None);
+
+        bridge.ProcessPending(worker);
+        FakeGpuAssetUploadOperation operation = worker.WaitForUpload(_timeout);
+
+        Assert.False(task.IsCompleted);
+        Assert.True(bridge.HasPendingWork);
+        Assert.Equal(0, bridge.PendingUploadCount);
+        Assert.Equal(1, bridge.InFlightUploadCount);
+        Assert.Equal(upload.EstimatedBytes, bridge.InFlightUploadBytes);
+
+        bridge.ProcessPending(worker);
+        Assert.False(task.IsCompleted);
+        Assert.Equal(1, bridge.InFlightUploadCount);
+        Assert.Equal(1, worker.UploadCallCount);
+
+        operation.Complete();
+        Assert.False(task.IsCompleted);
+
+        bridge.ProcessPending(worker);
+
+        GpuAssetResource resource = await task.WaitAsync(_timeout, TestContext.Current.CancellationToken);
+        Assert.Same(upload, resource.Upload);
+        Assert.Equal(1, bridge.LiveResourceCount);
+        Assert.Equal(0, bridge.InFlightUploadCount);
+        Assert.Equal(0, bridge.InFlightUploadBytes);
+        Assert.False(bridge.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DeferredUploadsRespectTheInFlightBound() {
+        GpuAssetBridge bridge = new(maxInFlightUploads: 2, maxInFlightUploadBytes: 1_000_000);
+        FakeAssetGpuWorker worker = new() { DeferUploads = true };
+        bridge.AttachWorker(worker);
+        Task<GpuAssetResource>[] tasks = [
+            bridge.UploadAsync(CreateTextureUpload("/textures/a"), CancellationToken.None),
+            bridge.UploadAsync(CreateTextureUpload("/textures/b"), CancellationToken.None),
+            bridge.UploadAsync(CreateTextureUpload("/textures/c"), CancellationToken.None),
+            bridge.UploadAsync(CreateTextureUpload("/textures/d"), CancellationToken.None),
+        ];
+
+        bridge.ProcessPending(worker);
+
+        Assert.Equal(2, worker.UploadCallCount);
+        Assert.Equal(2, bridge.InFlightUploadCount);
+        Assert.Equal(2, bridge.PendingUploadCount);
+        Assert.All(tasks, task => Assert.False(task.IsCompleted));
+
+        worker.WaitForUpload(0, _timeout).Complete();
+        bridge.ProcessPending(worker);
+
+        Assert.Equal(3, worker.UploadCallCount);
+        Assert.Equal(2, bridge.InFlightUploadCount);
+        Assert.Equal(1, bridge.PendingUploadCount);
+
+        worker.WaitForUpload(1, _timeout).Complete();
+        worker.WaitForUpload(2, _timeout).Complete();
+        bridge.ProcessPending(worker);
+
+        Assert.Equal(4, worker.UploadCallCount);
+        Assert.Equal(1, bridge.InFlightUploadCount);
+        Assert.Equal(0, bridge.PendingUploadCount);
+
+        worker.WaitForUpload(3, _timeout).Complete();
+        bridge.ProcessPending(worker);
+        await Task.WhenAll(tasks).WaitAsync(_timeout, TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, bridge.LiveResourceCount);
+        Assert.Equal(0, bridge.InFlightUploadCount);
+        Assert.Equal(0, bridge.PendingUploadCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task InFlightUploadByteBudgetLimitsStartedUploads() {
+        GpuAssetBridge bridge = new(maxInFlightUploads: 8, maxInFlightUploadBytes: 10);
+        FakeAssetGpuWorker worker = new() { DeferUploads = true };
+        bridge.AttachWorker(worker);
+        Task<GpuAssetResource> first = bridge.UploadAsync(
+            CreateTextureUpload("/textures/a", byteCount: 6),
+            CancellationToken.None);
+        Task<GpuAssetResource> second = bridge.UploadAsync(
+            CreateTextureUpload("/textures/b", byteCount: 6),
+            CancellationToken.None);
+
+        bridge.ProcessPending(worker);
+
+        Assert.Equal(1, worker.UploadCallCount);
+        Assert.Equal(1, bridge.InFlightUploadCount);
+        Assert.Equal(1, bridge.PendingUploadCount);
+        Assert.Equal(6, bridge.InFlightUploadBytes);
+
+        // The second upload starts only after the first copy finished and freed its budget.
+        worker.WaitForUpload(0, _timeout).Complete();
+        bridge.ProcessPending(worker);
+
+        Assert.Equal(2, worker.UploadCallCount);
+        Assert.Equal(1, bridge.InFlightUploadCount);
+        Assert.Equal(0, bridge.PendingUploadCount);
+
+        worker.WaitForUpload(1, _timeout).Complete();
+        bridge.ProcessPending(worker);
+
+        await Task.WhenAll(first, second).WaitAsync(_timeout, TestContext.Current.CancellationToken);
+        Assert.Equal(0, bridge.InFlightUploadCount);
+        Assert.Equal(0, bridge.InFlightUploadBytes);
     }
 
     [Fact]
@@ -44,6 +164,7 @@ public sealed class GpuAssetBridgeTests {
             () => task.WaitAsync(_timeout, TestContext.Current.CancellationToken));
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, failure.DiagnosticCode);
         Assert.Equal(0, bridge.PendingUploadCount);
+        Assert.False(bridge.HasPendingWork);
     }
 
     [Fact]
@@ -61,6 +182,7 @@ public sealed class GpuAssetBridgeTests {
             () => task.WaitAsync(_timeout, TestContext.Current.CancellationToken));
         Assert.Equal(0, bridge.PendingUploadCount);
         Assert.Equal(0, worker.UploadCallCount);
+        Assert.False(bridge.HasPendingWork);
     }
 
     [Fact]
@@ -80,31 +202,39 @@ public sealed class GpuAssetBridgeTests {
 
         Assert.Equal(0, worker.UploadCallCount);
         Assert.Equal(0, bridge.LiveResourceCount);
+        Assert.Empty(worker.CancelCalls);
         Assert.Empty(worker.DestroyCalls);
+        Assert.False(bridge.HasPendingWork);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CanceledUploadThatCreatedAResourceDestroysIt() {
+    public async Task CanceledInFlightUploadIsCanceledAndLeavesNoLiveResource() {
         GpuAssetBridge bridge = new();
-        FakeAssetGpuWorker worker = new();
+        FakeAssetGpuWorker worker = new() { DeferUploads = true };
         bridge.AttachWorker(worker);
         using CancellationTokenSource cancellation = new();
-        TextureGpuUpload upload = CreateTextureUpload("/textures/test");
-        worker.UploadHandler = _ => {
-            cancellation.Cancel();
-            return new FakeGpuAssetResource(upload, 42);
-        };
-
-        Task<GpuAssetResource> task = bridge.UploadAsync(upload, cancellation.Token);
+        Task<GpuAssetResource> task = bridge.UploadAsync(
+            CreateTextureUpload("/textures/test"),
+            cancellation.Token);
         bridge.ProcessPending(worker);
+        FakeGpuAssetUploadOperation operation = worker.WaitForUpload(_timeout);
 
+        cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => task.WaitAsync(_timeout, TestContext.Current.CancellationToken));
-        GpuAssetResource destroyed = Assert.Single(worker.DestroyCalls);
-        Assert.Equal(42, destroyed.Handle);
-        Assert.True(destroyed.IsDestroyed);
+
+        Assert.Equal(1, bridge.InFlightUploadCount);
+
+        bridge.ProcessPending(worker);
+
+        GpuAssetUploadOperation canceled = Assert.Single(worker.CancelCalls);
+        Assert.Same(operation, canceled);
+        Assert.True(operation.IsCanceled);
+        Assert.Equal(0, bridge.InFlightUploadCount);
         Assert.Equal(0, bridge.LiveResourceCount);
+        Assert.Empty(worker.DestroyCalls);
+        Assert.False(bridge.HasPendingWork);
     }
 
     [Fact]
@@ -129,6 +259,29 @@ public sealed class GpuAssetBridgeTests {
         GpuAssetResource resource = await healthy.WaitAsync(_timeout, TestContext.Current.CancellationToken);
         Assert.Equal("textures/healthy", resource.Upload.Path);
         Assert.Equal(1, bridge.LiveResourceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DeferredUploadFailureCompletesWithAssetLoadExceptionOnALaterPoll() {
+        GpuAssetBridge bridge = new();
+        FakeAssetGpuWorker worker = new() { DeferUploads = true };
+        bridge.AttachWorker(worker);
+        InvalidOperationException cause = new("copy failed");
+        Task<GpuAssetResource> task = bridge.UploadAsync(CreateTextureUpload("/textures/test"), CancellationToken.None);
+        bridge.ProcessPending(worker);
+        FakeGpuAssetUploadOperation operation = worker.WaitForUpload(_timeout);
+
+        operation.Fail(cause);
+        bridge.ProcessPending(worker);
+
+        AssetLoadException failure = await Assert.ThrowsAsync<AssetLoadException>(
+            () => task.WaitAsync(_timeout, TestContext.Current.CancellationToken));
+        Assert.Equal(DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED, failure.DiagnosticCode);
+        Assert.Same(cause, failure.InnerException);
+        Assert.Equal(0, bridge.InFlightUploadCount);
+        Assert.Equal(0, bridge.LiveResourceCount);
+        Assert.False(bridge.HasPendingWork);
     }
 
     [Fact]
@@ -194,6 +347,8 @@ public sealed class GpuAssetBridgeTests {
         Assert.True(bridge.IsClosed);
         Assert.Equal(0, bridge.LiveResourceCount);
         Assert.Equal(0, bridge.PendingUploadCount);
+        Assert.Equal(0, bridge.InFlightUploadCount);
+        Assert.False(bridge.HasPendingWork);
 
         await Assert.ThrowsAsync<ObjectDisposedException>(
             () => bridge.UploadAsync(CreateTextureUpload("/textures/late"), CancellationToken.None)
@@ -202,6 +357,30 @@ public sealed class GpuAssetBridgeTests {
         bridge.Destroy(live);
         bridge.Close(null);
         Assert.Single(worker.DestroyCalls);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CloseCancelsInFlightUploadsWithoutHanging() {
+        GpuAssetBridge bridge = new();
+        FakeAssetGpuWorker worker = new() { DeferUploads = true };
+        bridge.AttachWorker(worker);
+        Task<GpuAssetResource> task = bridge.UploadAsync(CreateTextureUpload("/textures/test"), CancellationToken.None);
+        bridge.ProcessPending(worker);
+        FakeGpuAssetUploadOperation operation = worker.WaitForUpload(_timeout);
+
+        bridge.Close(null);
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => task.WaitAsync(_timeout, TestContext.Current.CancellationToken));
+        Assert.Same(operation, Assert.Single(worker.CancelCalls));
+        Assert.True(operation.IsCanceled);
+        Assert.Equal(0, bridge.InFlightUploadCount);
+        Assert.Equal(0, bridge.LiveResourceCount);
+        Assert.False(bridge.HasPendingWork);
+
+        bridge.Close(null);
+        Assert.Single(worker.CancelCalls);
     }
 
     [Fact]
@@ -346,6 +525,7 @@ public sealed class GpuAssetBridgeTests {
         Assert.True(task.IsCompletedSuccessfully);
         Assert.Same(resource, await task);
         Assert.Empty(worker.DestroyCalls);
+        Assert.Empty(worker.CancelCalls);
         Assert.Equal(1, bridge.LiveResourceCount);
     }
 
@@ -377,7 +557,29 @@ public sealed class GpuAssetBridgeTests {
         Assert.Throws<InvalidOperationException>(() => bridge.AttachWorker(new FakeAssetGpuWorker()));
     }
 
-    private static TextureGpuUpload CreateTextureUpload(string path) => new(
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void HasPendingWorkTracksQueuedAndInFlightUploads() {
+        GpuAssetBridge bridge = new();
+        FakeAssetGpuWorker worker = new() { DeferUploads = true };
+        bridge.AttachWorker(worker);
+        Task<GpuAssetResource> task = bridge.UploadAsync(CreateTextureUpload("/textures/test"), CancellationToken.None);
+
+        Assert.True(bridge.HasPendingWork);
+
+        bridge.ProcessPending(worker);
+        FakeGpuAssetUploadOperation operation = worker.WaitForUpload(_timeout);
+        Assert.True(bridge.HasPendingWork);
+
+        operation.Complete();
+        Assert.True(bridge.HasPendingWork);
+
+        bridge.ProcessPending(worker);
+        Assert.False(bridge.HasPendingWork);
+        Assert.True(task.IsCompletedSuccessfully);
+    }
+
+    private static TextureGpuUpload CreateTextureUpload(string path, int byteCount = 4) => new(
         path,
         new TextureAssetDescriptor {
             Payload = "payloads/ktx2",
@@ -390,7 +592,7 @@ public sealed class GpuAssetBridgeTests {
             Wrap = TextureWrap.Repeat,
             MaxAnisotropy = 1f,
         },
-        new byte[] { 1, 2, 3, 4 });
+        new byte[byteCount]);
 
     private static MeshGpuUpload CreateMeshUpload(string path) => new(
         path,

@@ -43,4 +43,7 @@ internal sealed class ShaderGpuUpload : AssetGpuUpload {
     /// Gets the fragment-stage SPIR-V module.
     /// </summary>
     internal ReadOnlyMemory<byte> FragmentSpirv { get; }
+
+    /// <inheritdoc/>
+    internal override long EstimatedBytes => VertexSpirv.Length + (long)FragmentSpirv.Length;
 }

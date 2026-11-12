@@ -7,7 +7,7 @@ namespace RayBork.Internal;
 /// image view, and the sampler created from the baked descriptor.
 /// </summary>
 /// <remarks>
-/// Created on the render thread by <see cref="VulkanAssetWorker.Upload"/> and recreated by
+/// Created on the render thread by <see cref="VulkanAssetWorker.BeginUpload"/> and recreated by
 /// <see cref="IAssetGpuWorker.Restore"/> after a device recovery. The image is the primary handle.
 /// The view, sampler, image, and memory are destroyed together by <see
 /// cref="VulkanAssetWorker.Destroy"/> after the last frame that references the texture has completed.

@@ -24,11 +24,47 @@ public sealed class VulkanMeshUploadTests {
         Assert.NotEqual(0ul, mesh.Memory.Handle);
         Assert.Equal(unchecked((long)mesh.VertexBuffer.Handle), mesh.Handle);
         Assert.Equal(1, harness.Bridge.LiveResourceCount);
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
+        Assert.Equal(0, harness.Worker.PendingStagingBufferCount);
 
         harness.Destroy(resource);
 
         Assert.True(resource.IsDestroyed);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void BeginUploadIsPendingUntilTheMeshCopyCompletes() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using AssetGpuUploadHarness harness = new(host.Backend);
+        MeshGpuUpload upload = AssetUploadTestData.Mesh();
+
+        VulkanAssetUploadOperation operation = Assert.IsType<VulkanAssetUploadOperation>(
+            harness.Worker.BeginUpload(upload));
+
+        Assert.False(operation.IsFinished);
+        Assert.Equal(1, harness.Worker.PendingOperationCount);
+        Assert.Equal(1, harness.Worker.PendingStagingBufferCount);
+
+        GpuAssetResource? resource = null;
+        Exception? error = null;
+        bool completed = SpinWait.SpinUntil(
+            () => harness.Worker.TryComplete(operation, out resource, out error),
+            AssetGpuUploadHarness.Timeout);
+
+        Assert.True(completed, "The mesh upload did not complete.");
+        Assert.Null(error);
+        VulkanMeshAssetResource mesh = Assert.IsType<VulkanMeshAssetResource>(resource);
+        Assert.NotEqual(0ul, mesh.VertexBuffer.Handle);
+        Assert.NotEqual(0ul, mesh.IndexBuffer.Handle);
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
+        Assert.Equal(0, harness.Worker.PendingStagingBufferCount);
+
+        harness.Worker.Destroy(mesh);
+
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 

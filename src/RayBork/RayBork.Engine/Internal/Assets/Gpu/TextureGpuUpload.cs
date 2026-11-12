@@ -33,4 +33,7 @@ internal sealed class TextureGpuUpload : AssetGpuUpload {
     /// Gets the complete KTX2 2.0 payload.
     /// </summary>
     internal ReadOnlyMemory<byte> Ktx2Data { get; }
+
+    /// <inheritdoc/>
+    internal override long EstimatedBytes => Ktx2Data.Length;
 }

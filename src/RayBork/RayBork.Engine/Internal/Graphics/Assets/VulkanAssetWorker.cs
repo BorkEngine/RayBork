@@ -21,21 +21,23 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// A texture upload parses the packed KTX2 payload, validates the format against the device, creates a
-/// mip-mapped sampled image, stages and copies every level, transitions the image to <c>SHADER_READ_ONLY_OPTIMAL</c>,
-/// and creates the view and sampler. An anisotropic filter falls back to linear because the logical
-/// device enables no optional features, so the sampler feature is unavailable. A mesh upload stages
-/// the fixed-layout vertex stream and 32-bit indices into device-local buffers that share one
-/// allocation. A shader upload creates the vertex and fragment shader modules; pipelines are M4 work
-/// and are never created here. Each upload uses a one-shot command pool, command buffer, and fence, so
-/// it cannot collide with a frame.
+/// mip-mapped sampled image, stages it, records and submits the copy and barriers, and returns an
+/// operation without waiting. A mesh upload stages the fixed-layout vertex stream and 32-bit indices
+/// into device-local buffers that share one allocation in the same way. A shader upload creates the
+/// vertex and fragment shader modules immediately; pipelines are M4 work and are never created here.
+/// Each upload uses a one-shot command pool, command buffer, and fence, so it cannot collide with a
+/// frame. <see cref="TryComplete"/> polls the fence without blocking; the render loop keeps submitting
+/// frames while the copy runs. Only <see cref="Restore"/> and <see cref="Cancel"/> wait for a fence,
+/// and both run when a device recovery, a cancellation, or shutdown makes the wait acceptable.
 /// </para>
 /// <para>
 /// <see cref="Destroy"/> destroys each native object exactly once and never throws: a failure while
-/// the backend is tearing down is logged and ignored. The worker tracks its live resources so <see
-/// cref="DestroyAllResources"/> can destroy them before the backend destroys the logical device;
-/// Vulkan requires every child object to be gone first, and the bridge recreates the resources from
-/// their retained uploads after the recovery. A payload that cannot be decoded is <c>RB1008</c>; a
-/// resource the device cannot create or support is <c>RB1010</c>.
+/// the backend is tearing down is logged and ignored. The worker tracks its live resources and its
+/// pending operations, so <see cref="DestroyAllResources"/> can cancel the pending uploads and destroy
+/// the live resources before the backend destroys the logical device; Vulkan requires every child
+/// object to be gone first, and the bridge recreates the resources from their retained uploads after
+/// the recovery. A payload that cannot be decoded is <c>RB1008</c>; a resource the device cannot create
+/// or support is <c>RB1010</c>.
 /// </para>
 /// </remarks>
 internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
@@ -43,6 +45,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     private readonly Func<int> _deviceGenerationAccessor;
     private readonly ILogger _logger;
     private readonly HashSet<VulkanAssetResource> _resources = [];
+    private readonly HashSet<VulkanAssetUploadOperation> _pending = [];
 
     /// <summary>
     /// Initializes the worker for one backend.
@@ -64,18 +67,97 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         _logger = logger;
     }
 
+    /// <summary>
+    /// Gets the number of uploads that were started and not completed or canceled yet. Diagnostic, for
+    /// tests and teardown checks.
+    /// </summary>
+    internal int PendingOperationCount => _pending.Count;
+
+    /// <summary>
+    /// Gets the number of pending uploads that still own a staging buffer. Diagnostic, for tests; a
+    /// successful completion and a cancellation both free the staging allocation.
+    /// </summary>
+    internal int PendingStagingBufferCount
+        => _pending.Count(operation => operation.StagingBuffer.Handle != 0);
+
     /// <inheritdoc />
-    public GpuAssetResource Upload(AssetGpuUpload upload) {
+    public GpuAssetUploadOperation BeginUpload(AssetGpuUpload upload) {
         ArgumentNullException.ThrowIfNull(upload);
 
-        return upload.Kind switch {
-            AssetGpuUploadKind.Texture => UploadTexture((TextureGpuUpload)upload),
-            AssetGpuUploadKind.Mesh => UploadMesh((MeshGpuUpload)upload),
-            AssetGpuUploadKind.Shader => UploadShader((ShaderGpuUpload)upload),
+        VulkanAssetUploadOperation operation = upload.Kind switch {
+            AssetGpuUploadKind.Texture => BeginTexture((TextureGpuUpload)upload),
+            AssetGpuUploadKind.Mesh => BeginMesh((MeshGpuUpload)upload),
+            AssetGpuUploadKind.Shader => BeginShader((ShaderGpuUpload)upload),
             _ => throw VulkanAssetErrors.UploadFailed(
                 upload.Path,
                 $"the upload kind {upload.Kind} is not supported."),
         };
+
+        _pending.Add(operation);
+        return operation;
+    }
+
+    /// <inheritdoc />
+    public bool TryComplete(
+        GpuAssetUploadOperation operation,
+        out GpuAssetResource? resource,
+        out Exception? error) {
+        VulkanAssetUploadOperation upload = RequireUploadOperation(operation);
+        if (!upload.IsFinished && !upload.IsCanceled) {
+            try {
+                if (upload.HasCopy
+                    && !VulkanAssetUploadCommands.TryComplete(
+                        upload.Device,
+                        upload.Submission,
+                        upload.Upload.Path)) {
+                    resource = null;
+                    error = null;
+                    return false;
+                }
+
+                CompleteUpload(upload);
+            } catch (Exception exception) {
+                FailUpload(upload, exception);
+            }
+        }
+
+        resource = upload.Resource;
+        error = upload.Error;
+        return true;
+    }
+
+    /// <inheritdoc />
+    public void Cancel(GpuAssetUploadOperation operation) {
+        VulkanAssetUploadOperation upload = RequireUploadOperation(operation);
+        if (!upload.TryMarkCanceled()) {
+            return;
+        }
+
+        _pending.Remove(upload);
+        try {
+            if (!upload.IsFinished) {
+                if (upload.HasCopy) {
+                    // The copy may still be writing the staging buffer or the destination image. Wait
+                    // for it before anything is freed; cancellation and shutdown are rare.
+                    VulkanAssetUploadCommands.Wait(
+                        upload.Device,
+                        upload.Submission,
+                        upload.Upload.Path);
+                }
+
+                upload.MarkFailed(VulkanAssetErrors.UploadFailed(
+                    upload.Upload.Path,
+                    "the GPU upload was canceled before it completed."));
+            }
+
+            DestroyUploadObjects(upload);
+        } catch (Exception exception) {
+            _logger.LogError(
+                exception,
+                "The GPU asset upload of '{Path}' could not be canceled cleanly.",
+                AssetPath.ToPublic(upload.Upload.Path));
+            DestroyUploadObjects(upload);
+        }
     }
 
     /// <inheritdoc />
@@ -98,7 +180,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 $"The GPU asset resource for '{AssetPath.ToPublic(upload.Path)}' is queued for destruction and cannot be restored.");
         }
 
-        GpuAssetResource restored = Upload(upload);
+        GpuAssetResource restored = UploadAndWait(upload);
         try {
             previous.AdoptRestored(restored);
         } catch {
@@ -106,9 +188,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             throw;
         }
 
-        // Upload registered the temporary instance. The live entry the bridge keeps is the previous
-        // instance, so move the registry entry to it; otherwise a later destruction would free the
-        // adopted handles twice.
+        // UploadAndWait registered the temporary instance. The live entry the bridge keeps is the
+        // previous instance, so move the registry entry to it; otherwise a later destruction would
+        // free the adopted handles twice.
         if (restored is VulkanAssetResource restoredResource) {
             _resources.Remove(restoredResource);
         }
@@ -118,6 +200,94 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
 
         return previous;
+    }
+
+    /// <summary>
+    /// Starts an upload and waits for it on the render thread. Used only by <see cref="Restore"/>,
+    /// which runs after a device recovery when the device is idle and the wait is acceptable.
+    /// </summary>
+    private GpuAssetResource UploadAndWait(AssetGpuUpload upload) {
+        VulkanAssetUploadOperation operation = RequireUploadOperation(BeginUpload(upload));
+        try {
+            if (operation.HasCopy) {
+                VulkanAssetUploadCommands.Wait(
+                    operation.Device,
+                    operation.Submission,
+                    upload.Path);
+            }
+
+            if (!TryComplete(operation, out GpuAssetResource? resource, out Exception? error)) {
+                throw VulkanAssetErrors.UploadFailed(
+                    upload.Path,
+                    "the upload did not finish after its fence signaled.");
+            }
+
+            if (error is not null) {
+                throw error;
+            }
+
+            return resource ?? throw VulkanAssetErrors.UploadFailed(
+                upload.Path,
+                "the upload finished without a resource.");
+        } catch {
+            Cancel(operation);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Adopts a finished upload: frees the staging and submission objects, registers the destination
+    /// resource as live, and marks the operation complete.
+    /// </summary>
+    private void CompleteUpload(VulkanAssetUploadOperation upload) {
+        VulkanAssetResource resource = upload.Resource ?? throw VulkanAssetErrors.UploadFailed(
+            upload.Upload.Path,
+            "the upload finished without a resource.");
+
+        DestroyUploadTransients(upload);
+        _resources.Add(resource);
+        _pending.Remove(upload);
+        upload.MarkFinished();
+    }
+
+    /// <summary>
+    /// Finishes a failed upload: frees its staging, submission, and partial resource, and records the
+    /// failure for the bridge to observe.
+    /// </summary>
+    private void FailUpload(VulkanAssetUploadOperation upload, Exception exception) {
+        _pending.Remove(upload);
+        DestroyUploadObjects(upload);
+        upload.MarkFailed(exception);
+    }
+
+    /// <summary>
+    /// Frees the staging buffer, command pool, and fence of an upload after its copy finished.
+    /// </summary>
+    private void DestroyUploadTransients(VulkanAssetUploadOperation upload) {
+        DestroyStagingBuffer(upload.Device, new StagingAllocation(upload.StagingBuffer, upload.StagingMemory));
+        VulkanAssetUploadCommands.Destroy(upload.Device, _logger, upload.Submission);
+        upload.ClearTransients();
+    }
+
+    /// <summary>
+    /// Frees everything a canceled or failed upload owns, including the partial destination resource.
+    /// Idempotent because the operation clears the handles after the first cleanup.
+    /// </summary>
+    private void DestroyUploadObjects(VulkanAssetUploadOperation upload) {
+        DestroyUploadTransients(upload);
+        if (upload.Resource is VulkanAssetResource resource) {
+            _resources.Remove(resource);
+            DestroyResource(resource);
+            upload.ClearResource();
+        }
+    }
+
+    private static VulkanAssetUploadOperation RequireUploadOperation(GpuAssetUploadOperation operation) {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        return operation as VulkanAssetUploadOperation
+            ?? throw new InvalidOperationException(
+                $"The Vulkan asset worker cannot handle a {operation.GetType().Name} operation.");
     }
 
     /// <inheritdoc />
@@ -138,17 +308,30 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     }
 
     /// <summary>
-    /// Destroys every resource the worker still tracks. The backend calls it immediately before it
-    /// destroys the logical device, because Vulkan requires every child object to be destroyed before
-    /// its device and the validation layer reports a live asset object as a leak. The bridge keeps the
-    /// retained upload descriptions, so the resources are recreated by <see cref="Restore"/> on the
-    /// new device.
+    /// Cancels every pending upload and destroys every resource the worker still tracks. The backend
+    /// calls it immediately before it destroys the logical device, because Vulkan requires every child
+    /// object to be destroyed before its device and the validation layer reports a live asset object as
+    /// a leak. The bridge keeps the retained upload descriptions, so the resources are recreated by
+    /// <see cref="Restore"/> on the new device.
     /// </summary>
     /// <remarks>
-    /// Render-thread only, with the device idle. It never throws: a failed destruction is logged and
-    /// the remaining resources are still destroyed, so device recreation can proceed.
+    /// Render-thread only, with the device idle. It never throws: a failed cancellation or destruction
+    /// is logged and the remaining objects are still released, so device recreation can proceed.
     /// </remarks>
     internal void DestroyAllResources() {
+        VulkanAssetUploadOperation[] pending = [.. _pending];
+        foreach (VulkanAssetUploadOperation upload in pending) {
+            try {
+                Cancel(upload);
+            } catch (Exception exception) {
+                _logger.LogError(
+                    exception,
+                    "The pending GPU asset upload of '{Path}' could not be canceled before the device was destroyed.",
+                    AssetPath.ToPublic(upload.Upload.Path));
+            }
+        }
+
+        _pending.Clear();
         VulkanAssetResource[] resources = [.. _resources];
         _resources.Clear();
         foreach (VulkanAssetResource resource in resources) {
@@ -196,7 +379,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
-    private VulkanTextureAssetResource UploadTexture(TextureGpuUpload upload) {
+    private VulkanAssetUploadOperation BeginTexture(TextureGpuUpload upload) {
         VulkanDevice device = _deviceAccessor();
         int deviceGeneration = _deviceGenerationAccessor();
         Ktx2Texture texture = Ktx2Reader.Read(upload.Ktx2Data.Span, upload.Texture);
@@ -210,7 +393,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         DeviceMemory memory = default;
         ImageView view = default;
         Sampler sampler = default;
-        bool created = false;
+        StagingAllocation staging = default;
+        VulkanAssetUploadCommands.UploadSubmission submission = default;
+        VulkanTextureAssetResource? resource = null;
         try {
             image = CreateImage(device, upload.Path, texture, format);
             MemoryRequirements requirements = vulkan.GetImageMemoryRequirements(deviceHandle, image);
@@ -251,9 +436,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 "vkCreateImageView");
 
             sampler = CreateSampler(device, upload, texture.MipLevels);
-            UploadTextureLevels(device, memoryProperties, upload, image, texture);
-
-            VulkanTextureAssetResource resource = new(
+            resource = new VulkanTextureAssetResource(
                 upload,
                 image,
                 view,
@@ -264,20 +447,44 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 texture.Height,
                 texture.MipLevels,
                 deviceGeneration);
-            _resources.Add(resource);
-            created = true;
-            return resource;
-        } finally {
-            if (!created) {
+
+            staging = CreateStagingBuffer(
+                device,
+                memoryProperties,
+                upload.Ktx2Data.Span,
+                upload.Path,
+                "texture");
+            submission = VulkanAssetUploadCommands.RecordAndSubmit(
+                device,
+                _logger,
+                upload.Path,
+                (recordVulkan, commandBuffer) => RecordTextureUpload(
+                    recordVulkan,
+                    commandBuffer,
+                    staging.Buffer,
+                    image,
+                    texture));
+            return new VulkanAssetUploadOperation(
+                upload,
+                device,
+                submission,
+                staging.Buffer,
+                staging.Memory,
+                resource);
+        } catch {
+            DestroyFailedUpload(device, upload, submission, staging, resource);
+            if (resource is null) {
                 DestroySampler(vulkan, deviceHandle, sampler);
                 DestroyImageView(vulkan, deviceHandle, view);
                 DestroyImage(vulkan, deviceHandle, image);
                 DestroyMemory(vulkan, deviceHandle, memory);
             }
+
+            throw;
         }
     }
 
-    private VulkanMeshAssetResource UploadMesh(MeshGpuUpload upload) {
+    private VulkanAssetUploadOperation BeginMesh(MeshGpuUpload upload) {
         MeshAssetDescriptor descriptor = upload.Mesh;
         if (descriptor.VertexCount == 0 || descriptor.IndexCount == 0) {
             throw VulkanAssetErrors.DecodeFailed(
@@ -304,7 +511,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         Buffer vertexBuffer = default;
         Buffer indexBuffer = default;
         DeviceMemory memory = default;
-        bool created = false;
+        StagingAllocation staging = default;
+        VulkanAssetUploadCommands.UploadSubmission submission = default;
+        VulkanMeshAssetResource? resource = null;
         try {
             vertexBuffer = CreateBuffer(
                 device,
@@ -341,8 +550,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 upload.Path,
                 "vkBindBufferMemory for the index buffer");
 
-            UploadMeshBuffers(device, memoryProperties, upload, vertexBuffer, indexBuffer, vertexSize, indexSize);
-            VulkanMeshAssetResource resource = new(
+            resource = new VulkanMeshAssetResource(
                 upload,
                 vertexBuffer,
                 indexBuffer,
@@ -350,19 +558,44 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 vertexSize,
                 indexSize,
                 deviceGeneration);
-            _resources.Add(resource);
-            created = true;
-            return resource;
-        } finally {
-            if (!created) {
+            staging = CreateStagingBuffer(
+                device,
+                memoryProperties,
+                upload.VertexAndIndexData.Span,
+                upload.Path,
+                "mesh");
+            submission = VulkanAssetUploadCommands.RecordAndSubmit(
+                device,
+                _logger,
+                upload.Path,
+                (recordVulkan, commandBuffer) => RecordMeshUpload(
+                    recordVulkan,
+                    commandBuffer,
+                    staging.Buffer,
+                    vertexBuffer,
+                    indexBuffer,
+                    vertexSize,
+                    indexSize));
+            return new VulkanAssetUploadOperation(
+                upload,
+                device,
+                submission,
+                staging.Buffer,
+                staging.Memory,
+                resource);
+        } catch {
+            DestroyFailedUpload(device, upload, submission, staging, resource);
+            if (resource is null) {
                 DestroyBuffer(vulkan, deviceHandle, indexBuffer);
                 DestroyBuffer(vulkan, deviceHandle, vertexBuffer);
                 DestroyMemory(vulkan, deviceHandle, memory);
             }
+
+            throw;
         }
     }
 
-    private VulkanShaderAssetResource UploadShader(ShaderGpuUpload upload) {
+    private VulkanAssetUploadOperation BeginShader(ShaderGpuUpload upload) {
         ValidateShaderDescriptor(upload.Shader);
         VulkanDevice device = _deviceAccessor();
         int deviceGeneration = _deviceGenerationAccessor();
@@ -372,19 +605,54 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             upload.Shader.VertexPayload,
             upload.Path,
             "vertex");
+        ShaderModule fragmentModule = default;
         try {
-            ShaderModule fragmentModule = CreateShaderModule(
+            fragmentModule = CreateShaderModule(
                 device,
                 upload.FragmentSpirv,
                 upload.Shader.FragmentPayload,
                 upload.Path,
                 "fragment");
             VulkanShaderAssetResource resource = new(upload, vertexModule, fragmentModule, deviceGeneration);
-            _resources.Add(resource);
-            return resource;
+            return new VulkanAssetUploadOperation(
+                upload,
+                device,
+                default,
+                default,
+                default,
+                resource);
         } catch {
+            DestroyShaderModule(device.Vulkan, device.Device, fragmentModule);
             DestroyShaderModule(device.Vulkan, device.Device, vertexModule);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Releases the submission, staging, and partial resource of an upload that failed while it was
+    /// being started. A submitted copy is waited out before its staging buffer is freed.
+    /// </summary>
+    private void DestroyFailedUpload(
+        VulkanDevice device,
+        AssetGpuUpload upload,
+        VulkanAssetUploadCommands.UploadSubmission submission,
+        StagingAllocation staging,
+        VulkanAssetResource? resource) {
+        if (submission.Fence.Handle != 0) {
+            try {
+                VulkanAssetUploadCommands.Wait(device, submission, upload.Path);
+            } catch (Exception exception) {
+                _logger.LogError(
+                    exception,
+                    "The failed GPU asset upload of '{Path}' could not be waited out before cleanup.",
+                    AssetPath.ToPublic(upload.Path));
+            }
+        }
+
+        VulkanAssetUploadCommands.Destroy(device, _logger, submission);
+        DestroyStagingBuffer(device, staging);
+        if (resource is not null) {
+            DestroyResource(resource);
         }
     }
 
@@ -522,61 +790,6 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
 
         return sampler;
-    }
-
-    private void UploadTextureLevels(
-        VulkanDevice device,
-        PhysicalDeviceMemoryProperties memoryProperties,
-        TextureGpuUpload upload,
-        Image image,
-        Ktx2Texture texture) {
-        StagingAllocation staging = CreateStagingBuffer(
-            device,
-            memoryProperties,
-            upload.Ktx2Data.Span,
-            upload.Path,
-            "texture");
-        try {
-            VulkanAssetUploadCommands.RecordAndSubmit(
-                device,
-                _logger,
-                upload.Path,
-                (vulkan, commandBuffer) => RecordTextureUpload(vulkan, commandBuffer, staging.Buffer, image, texture));
-        } finally {
-            DestroyStagingBuffer(device, staging);
-        }
-    }
-
-    private void UploadMeshBuffers(
-        VulkanDevice device,
-        PhysicalDeviceMemoryProperties memoryProperties,
-        MeshGpuUpload upload,
-        Buffer vertexBuffer,
-        Buffer indexBuffer,
-        ulong vertexSize,
-        ulong indexSize) {
-        StagingAllocation staging = CreateStagingBuffer(
-            device,
-            memoryProperties,
-            upload.VertexAndIndexData.Span,
-            upload.Path,
-            "mesh");
-        try {
-            VulkanAssetUploadCommands.RecordAndSubmit(
-                device,
-                _logger,
-                upload.Path,
-                (vulkan, commandBuffer) => RecordMeshUpload(
-                    vulkan,
-                    commandBuffer,
-                    staging.Buffer,
-                    vertexBuffer,
-                    indexBuffer,
-                    vertexSize,
-                    indexSize));
-        } finally {
-            DestroyStagingBuffer(device, staging);
-        }
     }
 
     private static void RecordTextureUpload(

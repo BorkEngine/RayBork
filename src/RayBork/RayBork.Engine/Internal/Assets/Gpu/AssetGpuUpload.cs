@@ -33,4 +33,14 @@ internal abstract class AssetGpuUpload {
     /// Gets the canonical asset path without a leading slash. It is diagnostic metadata only.
     /// </summary>
     internal string Path { get; }
+
+    /// <summary>
+    /// Gets the approximate number of payload bytes this upload retains.
+    /// </summary>
+    /// <remarks>
+    /// The bridge uses the estimate for its in-flight upload budget, so the value bounds the memory a
+    /// queue of uploads can pin until their GPU copies complete. It is the payload size, not the size
+    /// of the device-local resource the worker creates.
+    /// </remarks>
+    internal virtual long EstimatedBytes => 0;
 }

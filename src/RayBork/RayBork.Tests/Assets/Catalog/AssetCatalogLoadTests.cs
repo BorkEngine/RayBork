@@ -139,6 +139,78 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task EngineLoadWaitsForTheDeferredGpuUploadWhileOtherLoadsComplete() {
+        using CatalogTestHarness harness = new(
+            builtInPack: null,
+            userPacks: [CatalogTestData.BuildStandardPack()],
+            assetTypes: [CatalogTestData.SettingsRegistration]);
+        harness.Worker.DeferUploads = true;
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+
+        Task<Texture> load = harness.Catalog.Load<Texture>("/textures/albedo", cancellationToken);
+        FakeGpuAssetUploadOperation upload = harness.Worker.WaitForUpload(_timeout);
+        Assert.False(load.IsCompleted);
+
+        byte[] descriptor = await harness.Catalog.LoadData("/meshes/quad", cancellationToken);
+        Assert.Equal(AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor()), descriptor);
+        CatalogTestSettings settings = await harness.Catalog.Load<CatalogTestSettings>(
+            "/data/settings",
+            cancellationToken);
+        Assert.Equal("catalog", settings.Name);
+        Assert.False(load.IsCompleted);
+
+        upload.Complete();
+        Texture texture = await load.WaitAsync(_timeout, cancellationToken);
+
+        try {
+            Assert.Equal("/textures/albedo", texture.Path);
+            Assert.Equal(4, texture.Width);
+            Assert.Equal(1, harness.Worker.UploadCallCount);
+        } finally {
+            texture.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CancellationWhileTheUploadIsPendingAcquiresNoReferenceAndAllowsARetry() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+        harness.Worker.DeferUploads = true;
+        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
+        using CancellationTokenSource cancellation = new();
+
+        Task<Mesh> canceled = harness.Catalog.Load<Mesh>("/meshes/quad", cancellation.Token);
+        FakeGpuAssetUploadOperation firstUpload = harness.Worker.WaitForUpload(_timeout);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceled);
+
+        // A canceled waiter never cancels the shared upload for the other potential waiters.
+        Assert.False(firstUpload.IsCanceled);
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+
+        firstUpload.Complete();
+
+        AssetCatalogLoadTests.WaitUntil(
+            () => harness.Worker.DestroyCalls.Count == 1,
+            "A load with no remaining waiters must destroy the uploaded resource.");
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+
+        Task<Mesh> retryTask = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
+        FakeGpuAssetUploadOperation retryUpload = harness.Worker.WaitForUpload(1, _timeout);
+        retryUpload.Complete();
+        Mesh retry = await retryTask.WaitAsync(_timeout, cancellationToken);
+
+        try {
+            Assert.Equal(3, retry.VertexCount);
+            Assert.Equal(2, harness.Worker.UploadCallCount);
+        } finally {
+            retry.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void UnregisteredTypeThrowsNotSupportedNamingWithAssetType() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 

@@ -61,6 +61,28 @@ public sealed class VulkanAssetRestoreTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void DeviceRecreationCancelsAPendingUpload() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using AssetGpuUploadHarness harness = new(host.Backend);
+        GpuAssetUploadOperation operation = harness.Worker.BeginUpload(AssetUploadTestData.Texture());
+
+        Assert.False(Assert.IsType<VulkanAssetUploadOperation>(operation).IsFinished);
+        Assert.Equal(1, harness.Worker.PendingOperationCount);
+        Assert.Equal(1, harness.Worker.PendingStagingBufferCount);
+
+        Assert.True(host.Backend.Recover(RenderRecoveryReason.DeviceLost));
+
+        Assert.Equal(0, harness.Worker.PendingOperationCount);
+        Assert.Equal(0, harness.Worker.PendingStagingBufferCount);
+        Assert.True(harness.Worker.TryComplete(operation, out GpuAssetResource? resource, out Exception? error));
+        Assert.Null(resource);
+        Assert.IsType<AssetLoadException>(error);
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void DestroySkipsAResourceThatBelongsToADestroyedDevice() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
