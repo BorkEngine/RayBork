@@ -24,13 +24,7 @@ public sealed class Camera : IDisposable {
     public BoundingFrustum Frustum { get; }
     public bool IsDisposed { get; }
 
-    public void DrawModel(Model model, Transform transform);
-    public void DrawModel(
-        Model model,
-        Transform transform,
-        Shader shader,
-        RenderState? renderState = null,
-        Color? tint = null);
+    public void DrawModel(Model model, Transform transform, Color? tint = null);
 
     public void DrawMesh(
         Mesh mesh,
@@ -48,9 +42,7 @@ public sealed class Camera : IDisposable {
 
     public void DrawModelInstanced(
         Model model,
-        Shader shader,
         ReadOnlySpan<Transform> transforms,
-        RenderState? renderState = null,
         Color? tint = null);
 
     public void DrawLine(Vector3 start, Vector3 end, Color color);
@@ -111,8 +103,9 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - The camera does not copy the whole scene. It records value snapshots of the draws and shader
   state at each call. The renderer never reads live game objects.
 - The pass records the clamped pixel viewport, the clear mode and color, the view, projection, and
-  view-projection matrices, and the camera position. Every recorded frame retains the model, mesh,
-  shader, and bound textures until the render thread releases the frame slot.
+  view-projection matrices, and the camera position. Every recorded frame retains the mesh, internal
+  shader program, and bound textures it recorded until the render thread releases the frame slot; a
+  model or material object is not an engine asset and adds no hold.
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. M4 has
   no `RenderTexture`: every camera records into the app's linear HDR scene target.
 
@@ -164,29 +157,32 @@ the camera (`w <= 0`) has no finite screen position, so it returns `(float.NaN, 
 non-finite input is `ArgumentException`. A point outside the viewport still projects to a finite
 value; the caller decides whether to clip it.
 
-`DrawModel(model, transform)` uses each model part's baked shader and that shader's **bake-default**
-state: `DefaultRenderState`, `DefaultInstanceData`, and `DefaultTextureValues` (the built-in white
-fallback for every texture binding). Mutating the part shader with `SetUniform` therefore does not
-change the draw. This is the normal path for an imported model with authored per-part shading.
+`DrawModel(model, transform, tint)` uses each part's **material**. At the call it snapshots that
+material's current uniform cursor and texture bindings and uses the part's `ModelPart.RenderState`
+(a `null` constructor argument resolved to `Shader.DefaultRenderState`). Different parts may therefore
+use different programs, render states, uniforms, and textures in one model draw, which is the normal
+path for an imported multi-material model.
 
-`DrawModel(model, transform, shader)` overrides the shader for **every** part. The current shader
-state at the time of the call is captured for every part. Baked per-part textures and uniforms are
-ignored; set the uniforms you need before the call. This overload is for simple models and custom
-shading, not for preserving a multi-material glTF's authored look.
+`DrawModelInstanced(model, transforms, tint)` does the same for every part and applies the part's
+local transform before each instance transform. The frame retains each part material's internal
+program and every bound texture; the material object itself is not an engine asset and is not
+retained.
 
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
 The UV rectangle is `(0, 0, 1, 1)` for every draw in M4.
 
-`renderState` overrides the shader's default render state for this draw only. `null` uses
-`Shader.DefaultRenderState`. The override is part of the batching key.
+For `DrawMesh` and `DrawInstanced`, `renderState` overrides the material's default render state for
+this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of the batching key.
+`DrawModel` and `DrawModelInstanced` have no per-draw state override; they use each part's
+`ModelPart.RenderState`.
 
 **Error model.**
 
-- A `null` model, mesh, or shader argument is `ArgumentNullException`.
-- A disposed camera, model, mesh, shader, or bound texture is `ObjectDisposedException`.
-- A shader that does not declare both the vertex and fragment stages, or a model part with no
-  shader on the no-override path, is `InvalidOperationException`.
+- A `null` model, mesh, or material argument is `ArgumentNullException`.
+- A disposed camera, model, mesh, part material, or bound texture is `ObjectDisposedException`.
+- A material that does not declare both the vertex and fragment stages is
+  `InvalidOperationException`.
 - A camera draw or `Dispose` from a thread other than the tick thread is
   `InvalidOperationException`.
 - A model part's `LocalTransform` is applied as

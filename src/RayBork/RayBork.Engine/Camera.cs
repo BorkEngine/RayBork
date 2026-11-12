@@ -16,10 +16,10 @@ namespace RayBork;
 /// names it.
 /// </para>
 /// <para>
-/// Each draw copies value snapshots of the mesh, shader cursor state, tint, and transforms into the frame
-/// packet. The renderer never reads a live game object. Every recorded frame retains the model, mesh,
-/// internal shader program, and bound textures until the render thread releases the frame slot after
-/// presentation.
+/// Each draw copies value snapshots of the mesh, material cursor state, tint, and transforms into the
+/// frame packet. The renderer never reads a live game object. Every recorded frame retains each mesh,
+/// internal shader program, and bound texture until the render thread releases the frame slot after
+/// presentation; a material object is not an engine asset and is never retained.
 /// </para>
 /// <para>
 /// The camera looks down local <c>-Z</c> in a right-handed, Y-up world. The projection uses Vulkan's
@@ -231,106 +231,46 @@ public sealed class Camera : IDisposable {
     public bool IsDisposed => _disposed;
 
     /// <summary>
-    /// Records a model with each part's baked shader and its bake-default state.
+    /// Records a model with each part's material snapshot, render state, and local transform.
     /// </summary>
     /// <param name="model">The model to draw.</param>
     /// <param name="transform">The model instance transform applied after each part's local transform.</param>
-    /// <remarks>
-    /// <c>world = part.LocalTransform.ToMatrix() * transform.ToMatrix()</c> under the row-vector
-    /// convention. Each part uses <see cref="Shader.DefaultRenderState"/>,
-    /// <see cref="Shader.DefaultInstanceData"/>, and the built-in white texture fallback, so mutating the
-    /// part shader's uniform cursor does not change the draw. <c>tint</c> is opaque white.
-    /// </remarks>
-    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">The camera or the model is disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// A part has no mesh or shader, a shader lacks a stage, or the caller is not the tick thread.
-    /// </exception>
-    public void DrawModel(Model model, Transform transform) {
-        EnsureDrawable(nameof(DrawModel));
-        ArgumentNullException.ThrowIfNull(model);
-        ThrowIfModelDisposed(model);
-
-        IReadOnlyList<ModelPart> parts = model.Parts;
-        foreach (ModelPart part in parts) {
-            ValidatePartMesh(part);
-            if (part.Shader is null) {
-                throw new InvalidOperationException(
-                    $"The model part '{part.Name}' has no shader; use the DrawModel overload that "
-                        + "takes a shader override.");
-            }
-
-            ValidateShader(part.Shader);
-        }
-
-        _packet.Retention.Add(model.Lifetime);
-        Matrix4x4 instanceMatrix = transform.ToMatrix();
-        foreach (ModelPart part in parts) {
-            Shader shader = part.Shader;
-            RecordPart(
-                part,
-                shader,
-                shader.DefaultRenderState,
-                Color.White,
-                shader.DefaultInstanceData,
-                shader.DefaultTextureValues,
-                part.LocalTransform.ToMatrix() * instanceMatrix);
-        }
-    }
-
-    /// <summary>
-    /// Records a model with one shader override and the shader cursor state captured at the call.
-    /// </summary>
-    /// <param name="model">The model to draw.</param>
-    /// <param name="transform">The model instance transform applied after each part's local transform.</param>
-    /// <param name="shader">The shader used for every part.</param>
-    /// <param name="renderState">
-    /// The render state override, or <see langword="null"/> for <see cref="Shader.DefaultRenderState"/>.
-    /// </param>
     /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
     /// <remarks>
-    /// The current shader cursor is snapshotted once for every part. Baked per-part shader state is
-    /// ignored; set the uniforms and textures you need before the call. The frame retains the override
-    /// material's internal program, not the material itself.
+    /// <para>
+    /// Each part uses its own material. The draw snapshots that material's current uniform cursor and
+    /// texture bindings at the call and uses the part's <see cref="ModelPart.RenderState"/>. Different
+    /// parts may therefore use different programs, render states, uniform values, and textures in one
+    /// model draw.
+    /// </para>
+    /// <para>
+    /// <c>world = part.LocalTransform.ToMatrix() * transform.ToMatrix()</c> under the row-vector
+    /// convention. The recorded frame retains the internal program of every part material and every
+    /// bound texture; a material object itself is not an engine asset and is not retained.
+    /// </para>
     /// </remarks>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">The camera, model, shader, or a bound texture is disposed.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The shader lacks a stage, a part has no mesh, or the caller is not the tick thread.
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, model, a part mesh, a part material, or a bound texture is disposed.
     /// </exception>
-    public void DrawModel(
-        Model model,
-        Transform transform,
-        Shader shader,
-        RenderState? renderState = null,
-        Color? tint = null) {
+    /// <exception cref="InvalidOperationException">
+    /// A part material lacks a stage, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawModel(Model model, Transform transform, Color? tint = null) {
         EnsureDrawable(nameof(DrawModel));
         ArgumentNullException.ThrowIfNull(model);
-        ArgumentNullException.ThrowIfNull(shader);
         ThrowIfModelDisposed(model);
-        ValidateShader(shader);
-        ReadOnlySpan<Texture?> textures = shader.TextureValues;
-        ValidateTextures(textures);
 
         IReadOnlyList<ModelPart> parts = model.Parts;
-        foreach (ModelPart part in parts) {
-            ValidatePartMesh(part);
-        }
+        ValidateParts(parts);
 
-        RenderState effectiveState = renderState ?? shader.DefaultRenderState;
         Color effectiveTint = tint ?? Color.White;
-        ReadOnlySpan<byte> template = shader.InstanceData;
-        _packet.Retention.Add(model.Lifetime);
-        RetainShader(shader, textures);
         Matrix4x4 instanceMatrix = transform.ToMatrix();
         foreach (ModelPart part in parts) {
             RecordPart(
                 part,
-                shader,
-                effectiveState,
+                part.RenderState,
                 effectiveTint,
-                template,
-                textures,
                 part.LocalTransform.ToMatrix() * instanceMatrix);
         }
     }
@@ -429,65 +369,57 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
-    /// Records one instanced model draw. Every part and every transform uses the shader cursor state
-    /// captured once at the call.
+    /// Records one instanced model draw with each part's material snapshot and render state.
     /// </summary>
     /// <param name="model">The model to draw.</param>
-    /// <param name="shader">The shader used for every part and instance.</param>
     /// <param name="transforms">The model instance transforms applied after each part's local transform.</param>
-    /// <param name="renderState">
-    /// The render state override, or <see langword="null"/> for <see cref="Shader.DefaultRenderState"/>.
-    /// </param>
     /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    /// <exception cref="ObjectDisposedException">The camera, model, shader, or a bound texture is disposed.</exception>
+    /// <remarks>
+    /// Each part uses its own material snapshot and <see cref="ModelPart.RenderState"/> for every
+    /// transform. Different parts may use different programs. The recorded frame retains the internal
+    /// program of every part material and every bound texture; a material object itself is not retained.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, model, a part mesh, a part material, or a bound texture is disposed.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The shader lacks a stage, a part has no mesh, or the caller is not the tick thread.
+    /// A part material lacks a stage, or the caller is not the tick thread.
     /// </exception>
     public void DrawModelInstanced(
         Model model,
-        Shader shader,
         ReadOnlySpan<Transform> transforms,
-        RenderState? renderState = null,
         Color? tint = null) {
         EnsureDrawable(nameof(DrawModelInstanced));
         ArgumentNullException.ThrowIfNull(model);
-        ArgumentNullException.ThrowIfNull(shader);
         ThrowIfModelDisposed(model);
-        ValidateShader(shader);
-        ReadOnlySpan<Texture?> textures = shader.TextureValues;
-        ValidateTextures(textures);
 
         IReadOnlyList<ModelPart> parts = model.Parts;
-        foreach (ModelPart part in parts) {
-            ValidatePartMesh(part);
-        }
-
+        ValidateParts(parts);
         if (transforms.Length == 0) {
             return;
         }
 
-        RenderState effectiveState = renderState ?? shader.DefaultRenderState;
         Color effectiveTint = tint ?? Color.White;
-        ReadOnlySpan<byte> template = shader.InstanceData;
-        _packet.Retention.Add(model.Lifetime);
-        RetainShader(shader, textures);
         Matrix4x4[] instanceMatrices = new Matrix4x4[transforms.Length];
         for (int index = 0; index < transforms.Length; index++) {
             instanceMatrices[index] = transforms[index].ToMatrix();
         }
 
         foreach (ModelPart part in parts) {
+            Shader material = part.Shader;
+            ReadOnlySpan<Texture?> textures = material.TextureValues;
             _packet.Retention.Add(part.Mesh.Lifetime);
+            RetainShader(material, textures);
             RenderDrawRecord record = BeginDraw(
                 part.Mesh.Lifetime,
                 part.Mesh.Topology,
                 part.Mesh.Bounds,
                 part.Mesh.IndexCount,
-                shader.Program.Lifetime,
-                effectiveState,
+                material.Program.Lifetime,
+                part.RenderState,
                 effectiveTint);
-            record.SetShaderState(template, textures);
+            record.SetShaderState(material.InstanceData, textures);
             Span<Matrix4x4> worldMatrices = record.BeginInstances(instanceMatrices.Length);
             Matrix4x4 localMatrix = part.LocalTransform.ToMatrix();
             for (int index = 0; index < instanceMatrices.Length; index++) {
@@ -598,25 +530,20 @@ public sealed class Camera : IDisposable {
         return record;
     }
 
-    private void RecordPart(
-        ModelPart part,
-        Shader shader,
-        RenderState renderState,
-        Color tint,
-        ReadOnlySpan<byte> instanceTemplate,
-        ReadOnlySpan<Texture?> textures,
-        Matrix4x4 worldMatrix) {
+    private void RecordPart(ModelPart part, RenderState renderState, Color tint, Matrix4x4 worldMatrix) {
+        Shader material = part.Shader;
+        ReadOnlySpan<Texture?> textures = material.TextureValues;
         _packet.Retention.Add(part.Mesh.Lifetime);
-        _packet.Retention.Add(shader.Program.Lifetime);
+        RetainShader(material, textures);
         RenderDrawRecord record = BeginDraw(
             part.Mesh.Lifetime,
             part.Mesh.Topology,
             part.Mesh.Bounds,
             part.Mesh.IndexCount,
-            shader.Program.Lifetime,
+            material.Program.Lifetime,
             renderState,
             tint);
-        record.SetShaderState(instanceTemplate, textures);
+        record.SetShaderState(material.InstanceData, textures);
         record.BeginInstances(1)[0] = worldMatrix;
     }
 
@@ -629,16 +556,16 @@ public sealed class Camera : IDisposable {
         }
     }
 
-    private static void ValidateMesh(Mesh mesh) {
-        ObjectDisposedException.ThrowIf(mesh.IsDisposed, mesh);
+    private static void ValidateParts(IReadOnlyList<ModelPart> parts) {
+        foreach (ModelPart part in parts) {
+            ValidateMesh(part.Mesh);
+            ValidateShader(part.Shader);
+            ValidateTextures(part.Shader.TextureValues);
+        }
     }
 
-    private void ValidatePartMesh(ModelPart part) {
-        if (part.Mesh is null) {
-            throw new InvalidOperationException("A model part has no mesh and cannot be drawn.");
-        }
-
-        ValidateMesh(part.Mesh);
+    private static void ValidateMesh(Mesh mesh) {
+        ObjectDisposedException.ThrowIf(mesh.IsDisposed, mesh);
     }
 
     private static void ValidateShader(Shader shader) {

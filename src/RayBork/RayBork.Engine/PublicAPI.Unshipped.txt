@@ -63,9 +63,8 @@ RayBork.Camera.ClearMode.get -> RayBork.ClearMode
 RayBork.Camera.Dispose() -> void
 RayBork.Camera.DrawInstanced(RayBork.Mesh! mesh, RayBork.Shader! shader, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawMesh(RayBork.Mesh! mesh, RayBork.Transform transform, RayBork.Shader! shader, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
-RayBork.Camera.DrawModel(RayBork.Model! model, RayBork.Transform transform) -> void
-RayBork.Camera.DrawModel(RayBork.Model! model, RayBork.Transform transform, RayBork.Shader! shader, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
-RayBork.Camera.DrawModelInstanced(RayBork.Model! model, RayBork.Shader! shader, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
+RayBork.Camera.DrawModel(RayBork.Model! model, RayBork.Transform transform, RayBork.Color? tint = null) -> void
+RayBork.Camera.DrawModelInstanced(RayBork.Model! model, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.Color? tint = null) -> void
 RayBork.Camera.Far.get -> float
 RayBork.Camera.FieldOfView.get -> float
 RayBork.Camera.Frustum.get -> RayBork.BoundingFrustum
@@ -559,14 +558,17 @@ RayBork.Model
 RayBork.Model.Bounds.get -> RayBork.BoundingBox
 RayBork.Model.Dispose() -> void
 RayBork.Model.IsDisposed.get -> bool
+RayBork.Model.Model(System.Collections.Generic.IEnumerable<RayBork.ModelPart>! parts) -> void
+RayBork.Model.Model(params RayBork.ModelPart[]! parts) -> void
 RayBork.Model.Parts.get -> System.Collections.Generic.IReadOnlyList<RayBork.ModelPart>!
-RayBork.Model.Path.get -> string!
 RayBork.ModelPart
 RayBork.ModelPart.Bounds.get -> RayBork.BoundingBox
 RayBork.ModelPart.LocalTransform.get -> RayBork.Transform
 RayBork.ModelPart.Mesh.get -> RayBork.Mesh!
 RayBork.ModelPart.ModelPart() -> void
+RayBork.ModelPart.ModelPart(string! name, RayBork.Mesh! mesh, RayBork.Shader! shader, RayBork.RenderState? renderState = null, RayBork.Transform? localTransform = null) -> void
 RayBork.ModelPart.Name.get -> string!
+RayBork.ModelPart.RenderState.get -> RayBork.RenderState
 RayBork.ModelPart.Shader.get -> RayBork.Shader!
 RayBork.Monitor
 RayBork.Monitor.Bounds.get -> RayBork.Rect

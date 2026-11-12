@@ -25,7 +25,8 @@ There is one typed loader. `Load<T>` handles both engine assets and registered c
 | --- | --- |
 | `Mesh`, `Texture` | Loads a shared, reference-counted engine asset. Completes after GPU upload. `T` is an `IAsset` and must be disposed once per successful load. |
 | `Shader` (M4) | Returns a **new independent material instance** every call, backed by one cached internal shader program for the path. `Shader` is not an `IAsset` and is never reference-counted. Dispose every material exactly once. |
-| `Model` (M4), `Font` (M6), later `AudioClip` | The same shared, reference-counted contract; the types arrive with their milestones. |
+| `Model` (M4) | Returns a **new `Model` wrapper** every call over the shared cached part meshes and programs, with one new material per part. `Model` is not an `IAsset`, is never reference-counted, and owns its part materials. Dispose every returned model exactly once. |
+| `Font` (M6), later `AudioClip` | The shared, reference-counted engine-asset contract; the types arrive with their milestones. |
 | A custom type registered with `WithAssetType<T>()` | Deserializes a MessagePack data entry through the compiled `[GenerateShape]`. Returns a fresh caller-owned instance per call; no reference counting and no `Dispose`. |
 | Any other type | `NotSupportedException` naming the type and asking for `WithAssetType<T>()`. |
 
@@ -109,7 +110,7 @@ prefix.
 | `Mesh` | One primitive from glTF 2.0 or OBJ, or a `MeshBuilder` | GPU vertex/index buffers; CPU vertices and indices retained for collision and inspection | M3 |
 | `Texture` | PNG, JPEG, TGA, BMP, or a `TextureBuilder` | GPU-ready KTX2 payload or procedural uncompressed levels, mips, sRGB flag, sampler state | M3 |
 | `Shader` | GLSL vertex + fragment pair | Internal SPIR-V program plus sidecar metadata, entry points, and a default render state; public `Shader` materials are created over it | M3 program, M4 material |
-| `Model` | glTF 2.0, OBJ | Multi-part model with meshes, local transforms, shader references | M4 (baked in M3) |
+| `Model` | glTF 2.0, OBJ | Multi-part wrapper with per-part materials over shared cached meshes and programs; not an engine asset | M4 (baked in M3) |
 | `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs | M6 (baked in M3) |
 | Custom data | TOML source | MessagePack payload deserialized through `Load<T>` after `WithAssetType<T>()` | M3 |
 | Raw data | Any processor output or raw source | Opaque bytes through `LoadData` | M3 |
@@ -129,6 +130,12 @@ materials and releases its own mesh references. If the game also loaded one of t
 directly, it holds a separate reference and must dispose it separately. A part's material is never
 shared with another model: two models that name the same part program each get their own materials
 over the one cached internal program.
+
+`Model` is not an `IAsset`: it has no path, no cache entry, and no reference count. Every
+`Load<Model>` call returns a new wrapper over the shared cached part meshes and programs, so two loads
+never share the model or its materials even though they share the underlying GPU resources. A failed
+or canceled model load disposes every material and releases every mesh reference it already acquired;
+a retry starts a fresh wrapper. See [Rendering: Meshes](rendering/meshes.md#75-mesh-and-model).
 
 `Load<Mesh>` is for a standalone mesh-part asset. Loading a multi-part model path as `Mesh` throws
 `AssetTypeMismatchException`.
@@ -152,15 +159,15 @@ the sRGB formats; the runtime creates the matching Vulkan format.
   Recording a draw calls an internal retain on each referenced asset; the frame ring releases the
   hold after the frame is presented. Disposing an asset immediately after recording a draw is
   therefore safe; the frame keeps the GPU resource alive until its fence signals. The M4
-  `Camera.Draw*` path calls the retain/release mechanism for every recorded model, mesh, internal
-  shader program, and bound texture.
+  `Camera.Draw*` path calls the retain/release mechanism for every recorded mesh, internal shader
+  program, and bound texture. A model and a material are not engine assets and are not retained.
 - A device recovery re-uploads the live GPU resources from the retained CPU descriptors before
   frame submission resumes. A public asset object stays valid across the recovery.
 - Using a disposed engine asset (reading a property or passing it to a draw) throws
   `ObjectDisposedException`.
 
-`Shader` is the one exception to the shared-object rule. `Load<Shader>` caches the internal program
-and returns a **new material per call**:
+`Shader` and `Model` are the exceptions to the shared-object rule for their public types.
+`Load<Shader>` caches the internal program and returns a **new material per call**:
 
 - The program is cached by `(canonical path, internal program type)` and reference-counted. Every
   successful `Load<Shader>` acquires one program reference for the material it creates, and the
@@ -177,6 +184,14 @@ and returns a **new material per call**:
 - The engine preloads `/shaders/mesh` and the white/error textures into `EngineContext.Defaults`; see
   [Rendering: Shaders](rendering/shaders.md#73-shader-materials-and-setuniform).
 
+`Load<Model>` follows the same shape for a different reason: it loads or reuses every part mesh and
+the internal program of every part material through the engine-asset cache, then returns a **new
+`Model` wrapper** with one new material per part. A model is caller-owned, is not an `IAsset`, and has
+no reference count; the wrapper acquires one reference to every distinct part mesh and owns every
+distinct part material. Disposing the model disposes its materials and releases its mesh references
+exactly once. A canceled model load releases every part it already acquired before reporting
+`OperationCanceledException`.
+
 Because `Load<T>` returns the shared object for engine assets, `Dispose` must be called **exactly
 once for each successful engine-asset load**. The engine cannot distinguish a double-dispose from a
 second owner's release; a second `Dispose` after the count reaches zero throws. A debug build also
@@ -187,9 +202,11 @@ cache, and has no `Dispose`. It never keeps a GPU resource alive.
 
 Loading the same engine path concurrently is coalesced: one load runs, all callers receive the same
 result and each caller owns one reference. `Load<Shader>` coalesces the program load the same way but
-returns one new material per caller. If the load fails, every caller observes the failure and no
-reference is created. A caller that cancels its wait does not acquire a reference, even if the
-shared load later succeeds. Custom data loads are independent; each call produces a new instance.
+returns one new material per caller. `Load<Model>` coalesces the shared part mesh and program loads
+but never coalesces the model itself: every caller gets its own wrapper and materials. If the load
+fails, every caller observes the failure and no reference is created. A caller that cancels its wait
+does not acquire a reference, even if the shared load later succeeds. Custom data loads are
+independent; each call produces a new instance.
 
 `LoadData` returns the decompressed bytes of the winning entry. For a typed engine asset entry that
 is the serialized descriptor, not the GPU payload; tooling that needs a raw texture or mesh payload
@@ -206,6 +223,8 @@ Load<T>(path)
                     -> on upload completion -> construct -> refcount -> complete Load
   -> Shader?        -> load the internal program through the engine-asset path
                     -> acquire one program reference for the new material -> return a new material
+  -> Model?         -> resolve every part mesh and internal program through the engine-asset path
+                    -> create one material per part -> return a new model wrapper
   -> registered?    -> read/decompress -> MessagePack shape -> fresh instance -> return
   -> otherwise      -> NotSupportedException
 ```
@@ -229,7 +248,8 @@ Consequences:
 - `Load` may be called from any thread, but awaiting it from the tick thread blocks that tick's
   continuation, not the loader or render thread. Load in `Setup` unless a hitch is acceptable.
 - Cancellation before completion releases all partial resources and throws
-  `OperationCanceledException`. A canceled caller does not acquire a reference. Cancellation after
+  `OperationCanceledException`. A canceled caller does not acquire a reference. A canceled model load
+  disposes the materials it created and releases the mesh references it acquired. Cancellation after
   the asset is returned has no effect. A canceled GPU upload destroys the just-created resource on
   the render thread instead of leaking it; a cancellation that arrives after the copy started may
   wait briefly for that fence before cleanup.

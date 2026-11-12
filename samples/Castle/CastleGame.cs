@@ -28,6 +28,7 @@ namespace Castle;
 /// </remarks>
 internal sealed class CastleGame : IGame {
     private const int STATS_LOG_INTERVAL = 30;
+    private const string MODEL_PATH = "/models/obj/castle";
     private const int GRID_SLICES = 20;
     private const float GRID_SPACING = 10f;
     private const float FIELD_OF_VIEW_DEGREES = 45f;
@@ -55,7 +56,6 @@ internal sealed class CastleGame : IGame {
     private ILogger _logger = NullLogger.Instance;
     private Model? _model;
     private Texture? _texture;
-    private Shader? _shader;
     private Shader? _gridShader;
     private Mesh? _gridMesh;
     private float _yaw;
@@ -115,16 +115,19 @@ internal sealed class CastleGame : IGame {
             "Frame limit: {FrameLimit}.",
             _frameLimit == 0 ? "none (run until close)" : _frameLimit.ToString(CultureInfo.InvariantCulture));
 
-        _model = await context.Assets.Load<Model>("/models/obj/castle");
+        _model = await context.Assets.Load<Model>(MODEL_PATH);
         _texture = await context.Assets.Load<Texture>("/models/obj/castle_diffuse");
-        _shader = await context.Assets.Load<Shader>("/shaders/castle");
         _gridShader = await context.Assets.Load<Shader>("/shaders/mesh");
 
+        // The model owns its part materials; the Castle pack bakes the one castle part with
+        // /shaders/castle. Until the sample's cleanup task, bind the diffuse texture on that material
+        // and draw the model with its part material.
+        Shader castleMaterial = _model.Parts[0].Shader;
         LogModelMetadata(_model);
         LogTextureMetadata(_texture);
-        LogShaderMetadata(_shader);
+        LogShaderMetadata(castleMaterial);
 
-        _shader.SetUniform("mainTexture", _texture);
+        castleMaterial.SetUniform("mainTexture", _texture);
         _gridMesh = await CreateGridMeshAsync(context);
 
         _logger.LogInformation(
@@ -196,14 +199,12 @@ internal sealed class CastleGame : IGame {
             _lastFrameCount,
             _exitReason);
 
-        // The model owns one reference to every distinct part mesh and shader. Dispose the model
-        // first, then this sample's own shader, texture, grid shader, and grid mesh references,
-        // exactly once each; the catalog releases the GPU resources on the render thread and a
-        // recorded frame keeps them alive.
+        // The model owns one reference to every distinct part mesh and its part materials. Dispose the
+        // model first, then this sample's own texture, grid shader, and grid mesh references, exactly
+        // once each; the catalog releases the GPU resources on the render thread and a recorded frame
+        // keeps them alive.
         _model?.Dispose();
         _model = null;
-        _shader?.Dispose();
-        _shader = null;
         _texture?.Dispose();
         _texture = null;
         _gridShader?.Dispose();
@@ -301,8 +302,8 @@ internal sealed class CastleGame : IGame {
             near: NEAR_PLANE,
             far: float.PositiveInfinity);
 
-        // raylib DrawModel at the origin with the default (unlit) model shader, then DrawGrid.
-        camera.DrawModel(_model!, Transform.Identity, _shader!);
+        // raylib DrawModel at the origin with the model's per-part material, then DrawGrid.
+        camera.DrawModel(_model!, Transform.Identity);
         camera.DrawMesh(_gridMesh!, Transform.Identity, _gridShader!);
     }
 
@@ -325,7 +326,7 @@ internal sealed class CastleGame : IGame {
     private void LogModelMetadata(Model model) {
         _logger.LogInformation(
             "Model {Path}: {PartCount} part(s), bounds {Min}..{Max}.",
-            model.Path,
+            MODEL_PATH,
             model.Parts.Count,
             model.Bounds.Min,
             model.Bounds.Max);

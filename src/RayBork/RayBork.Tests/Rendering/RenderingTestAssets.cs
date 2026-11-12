@@ -117,41 +117,32 @@ internal static class RenderingTestAssets {
     }
 
     internal static Model CreateModel(
-        string path = MODEL_PATH,
         string[]? partNames = null,
         Mesh[]? meshes = null,
-        Shader? shader = null,
-        Transform? localTransform = null,
-        BoundingBox? bounds = null) {
-        Mesh[] modelMeshes = meshes ?? [CreateMesh(path + "-mesh")];
-        Shader modelShader = shader ?? CreateShader(path + "-shader");
+        Shader[]? materials = null,
+        Transform? localTransform = null) {
+        Mesh[] modelMeshes = meshes ?? [CreateMesh(MODEL_PATH + "-mesh")];
         string[] names = partNames ?? [.. Enumerable.Range(0, modelMeshes.Length).Select(index => $"part-{index}")];
         Transform local = localTransform ?? Transform.Identity;
-        BoundingBox localBounds = bounds ?? modelMeshes[0].Bounds;
+        if (materials is null) {
+            materials = new Shader[modelMeshes.Length];
+            for (int index = 0; index < materials.Length; index++) {
+                materials[index] = CreateShader(MODEL_PATH + "-shader-" + index);
+            }
+        } else if (materials.Length != modelMeshes.Length) {
+            throw new ArgumentException("Every mesh must have one material.", nameof(materials));
+        }
 
         ModelPart[] parts = new ModelPart[modelMeshes.Length];
         for (int index = 0; index < modelMeshes.Length; index++) {
-            parts[index] = new ModelPart(names[index], modelMeshes[index], modelShader, local, localBounds);
+            parts[index] = new ModelPart(
+                names[index],
+                modelMeshes[index],
+                materials[index],
+                localTransform: local);
         }
 
-        ModelAssetDescriptor descriptor = new() {
-            Parts = [.. parts.Select(part => new ModelPartAsset {
-                Name = part.Name,
-                MeshPath = part.Mesh.Path.TrimStart('/'),
-                ShaderPath = part.Shader.Path.TrimStart('/'),
-                LocalTransform = TransformToArray(part.LocalTransform),
-                Bounds = BoundsToArray(part.Bounds),
-            })],
-            Bounds = BoundsToArray(localBounds),
-        };
-        var upload = new ModelGpuUpload(path);
-        var asset = new EngineAsset(
-            path,
-            new ModelAssetResource(upload),
-            static _ => { },
-            static () => { });
-        asset.AddOwnerReference();
-        return new Model(asset, descriptor, parts);
+        return new Model(parts);
     }
 
     internal static float ReadInstanceFloat(Shader shader, ReadOnlySpan<byte> template, string uniformName) {
@@ -167,18 +158,5 @@ internal static class RenderingTestAssets {
         bounds.Max.X,
         bounds.Max.Y,
         bounds.Max.Z,
-    ];
-
-    internal static float[] TransformToArray(Transform transform) => [
-        transform.Position.X,
-        transform.Position.Y,
-        transform.Position.Z,
-        transform.Rotation.X,
-        transform.Rotation.Y,
-        transform.Rotation.Z,
-        transform.Rotation.W,
-        transform.Scale.X,
-        transform.Scale.Y,
-        transform.Scale.Z,
     ];
 }
