@@ -745,6 +745,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             _presentMode.Native,
             (int)imageCount,
             extent);
+        extent = _swapchain.Extent;
         _sceneTarget = VulkanSceneTarget.Create(device, extent, _sampleCount);
         _presentPipeline = VulkanPresentPipeline.Create(
             device,
@@ -830,6 +831,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         } else {
             _swapchain.Recreate(device, _surface, format, presentMode.Native, (int)imageCount, extent);
         }
+
+        extent = _swapchain.Extent;
 
         VulkanSceneTarget? sceneTarget = _sceneTarget;
         _sceneTarget = null;

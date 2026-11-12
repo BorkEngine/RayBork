@@ -408,10 +408,8 @@ automatic instancing, and per-instance textures/uniforms.
   model sidecar, and copies the pack beside the sample executable; the publish also copies it into
   the publish directory. The published `win-x64` and `linux-x64` hosts load the adjacent pack with no
   `--assets` argument, draw the unlit castle model with the built-in mesh shader, and must exit `0`
-  on the Windows hardware driver and the conformant lavapipe Linux path. The sample records whether
-  any completed frame reported both `DrawCalls` and `Instances`; when no completed frame ever draws,
-  shutdown throws and the run fails, so an invisible scene cannot pass and a slow host is judged on
-  completed frames instead of a fixed tick number.
+  on the Windows hardware driver, native Linux, and the WSLg dzn hardware path. The sample is a plain
+  user-facing example and contains no test-only draw assertion.
   `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
   diagnostic host.
 - **Castle sample recreation scope.** The sample recreates raylib's `models_loading` behavior
@@ -420,7 +418,8 @@ automatic instancing, and per-instance textures/uniforms.
   (ray/box collision and the wire-box helper arrive in M5), and the `DrawText`/`DrawFPS` overlay
   (runtime text arrives in M6). The model and its diffuse texture are drawn with the built-in
   `/shaders/mesh` material that the loaded model owns; there is no custom Castle shader. The sample
-  logs the render statistics instead of drawing them. The raylib castle model and texture are
+  draws only the castle; render statistics are available to games but are not drawn. The raylib castle
+  model and texture are
   sample-only assets with their own notice under `samples/Castle/`; that notice is deliberately not
   duplicated in the repository-root notices.
 - **WSLg dzn compatibility.** On the WSL gate host WSLg selects

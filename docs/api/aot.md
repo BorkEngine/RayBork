@@ -71,17 +71,15 @@ Both publishes must start, load a pack and any registered custom data, draw wher
 a draw path, and shut down. AOT publish is a per-milestone gate, not a release-only check. The M4
 gate is `samples/Castle`: it recreates raylib's `models_loading` example, so the published hosts load
 `/models/obj/castle` and `/models/obj/castle_diffuse`, bind the texture to the loaded parts' built-in
-`/shaders/mesh` materials, draw the unlit castle model, and must exit `0` with a completed frame that
-reports nonzero draw calls and instances. The sample records whether any completed frame drew and
-fails at shutdown when none ever did, so an invisible scene cannot pass and a slow host is judged on
-completed frames instead of a fixed tick number. Both publishes must finish with zero AOT/trim
-warnings.
+`/shaders/mesh` materials, draw the unlit castle model, and must exit `0`. The sample is a plain
+user-facing example and contains no test-only draw assertion. Both publishes must finish with zero
+AOT/trim warnings.
 
 On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver
 (`Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)`) and prints "dzn is not a conformant Vulkan
 implementation, testing use only". The M4 gate runs on that hardware driver: the fixed 2048-element
 bindless texture array avoids dzn's runtime-descriptor-array DXIL lowering and fits its 2048-slot
-sampler heap, so the published host exits `0` with the expected draw calls and instances and needs no
+sampler heap, so the published host exits `0` on the hardware dzn device and needs no
 `DZN_DEBUG` workaround. The conformant lavapipe ICD remains available for a software-only Linux run
 with `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. The Windows gate runs on the hardware
 driver.

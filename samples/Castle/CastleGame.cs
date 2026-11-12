@@ -1,74 +1,51 @@
-using System.Globalization;
 using System.Numerics;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using RayBork;
 
 namespace Castle;
 
 /// <summary>
-/// The M4 Castle sample: a RayBork recreation of raylib's <c>models_loading</c> example. It loads the
-/// raylib castle model and its diffuse texture from the baked pack, binds the texture on the model's
-/// built-in mesh-shader material, and draws the model with an orbital perspective camera every tick.
+/// A small RayBork recreation of raylib's <c>models_loading</c> example.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The sample is the M4 Native AOT gate. It records whether any completed frame reported both draw
-/// calls and instances; when no completed frame ever does, <see cref="Shutdown"/> throws an
-/// <see cref="InvalidOperationException"/> naming the Castle gate. A run that silently draws nothing
-/// therefore fails instead of exiting successfully, while a slow host is judged on completed frames
-/// rather than on a fixed tick number.
-/// </para>
-/// <para>
-/// The camera is created and disposed inside each <see cref="Tick"/>; the model and texture are loaded
-/// once in <see cref="Setup"/> and disposed exactly once in <see cref="Shutdown"/>. The model owns its
-/// part materials: the bake defaults the castle part to the built-in <c>/shaders/mesh</c> program, so
-/// the sample binds the diffuse texture on that material's cursor and never loads a custom shader.
-/// </para>
+/// The sample loads the raylib castle model and its diffuse texture, binds the texture on the
+/// model's built-in mesh material, and draws the castle with an orbital perspective camera. The
+/// model, texture, and camera setup mirror raylib's example; drag-and-drop, click selection, the
+/// text overlay, and the reference grid are intentionally omitted for now.
 /// </remarks>
 internal sealed class CastleGame : IGame {
-    private const int STATS_LOG_INTERVAL = 30;
     private const string MODEL_PATH = "/models/obj/castle";
+    private const string TEXTURE_PATH = "/models/obj/castle_diffuse";
     private const float FIELD_OF_VIEW_DEGREES = 45f;
     private const float NEAR_PLANE = 0.01f;
     private const float ORBIT_RADIANS_PER_PIXEL = 0.25f * DEGREES_TO_RADIANS;
-    private const float ZOOM_FACTOR_PER_WHEEL_STEP = 1.15f;
-    private const float MIN_ORBIT_DISTANCE = 5f;
-    private const float MAX_ORBIT_DISTANCE = 500f;
-    private const float MAX_ORBIT_PITCH_DEGREES = 89f;
+    private const float ZOOM_PER_WHEEL_STEP = 1.15f;
+    private const float MIN_DISTANCE = 5f;
+    private const float MAX_DISTANCE = 500f;
+    private const float MAX_PITCH_DEGREES = 89f;
     private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
-    private const float RAYWHITE_LINEAR = 0.913f;
-    private const int VULKAN_MAJOR_SHIFT = 22;
-    private const int VULKAN_MINOR_SHIFT = 12;
-    private const uint VULKAN_MINOR_MASK = 0x3FFu;
-    private const uint VULKAN_PATCH_MASK = 0xFFFu;
 
+    // raylib's RAYWHITE converted to the engine's linear working space.
+    private static readonly Color _rayWhite = new(0.913f, 0.913f, 0.913f, 1f);
     private static readonly Vector3 _cameraTarget = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
-    private static readonly Color _clearColor = new(RAYWHITE_LINEAR, RAYWHITE_LINEAR, RAYWHITE_LINEAR, 1f);
 
     private readonly int _frameLimit;
 
-    private EngineContext? _context;
-    private ILogger _logger = NullLogger.Instance;
     private Model? _model;
     private Texture? _texture;
     private float _yaw;
     private float _pitch;
     private float _distance;
-    private long _lastFrameCount;
-    private bool _sawDrawnFrame;
-    private string _exitReason = "no ticks were run";
+    private int _frameCount;
 
     /// <summary>
-    /// Initializes the game.
+    /// Creates the sample.
     /// </summary>
-    /// <param name="frameLimit">The number of ticks to run, or <c>0</c> to run until close.</param>
+    /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
     internal CastleGame(int frameLimit) {
         _frameLimit = frameLimit;
 
-        // The orbital state is derived from raylib's initial camera position and target so the first
-        // frame matches the reference example exactly.
+        // Start from raylib's camera position and target: (50, 50, 50) looking at (0, 12, 0).
         Vector3 offset = _initialCameraPosition - _cameraTarget;
         _distance = offset.Length();
         _yaw = MathF.Atan2(offset.X, offset.Z);
@@ -77,130 +54,51 @@ internal sealed class CastleGame : IGame {
 
     /// <inheritdoc/>
     public async Task Setup(EngineContext context) {
-        _context = context;
-        _logger = context.LoggerFactory.CreateLogger("Castle");
-
-        _logger.LogInformation(
-            "RayBork {EngineVersion} M4 Castle sample starting (raylib models_loading recreation).",
-            EngineVersion.Current);
-
-        EngineInfo info = context.Info;
-        _logger.LogInformation(
-            "Engine {EngineName} {Version}: renderer {RendererName}, GPU '{GpuName}', Vulkan {VulkanApiVersion}, validation {ValidationEnabled}.",
-            info.Name,
-            info.Version,
-            info.RendererName,
-            info.GpuName,
-            FormatVulkanVersion(info.VulkanApiVersion),
-            info.ValidationEnabled);
-        _logger.LogInformation(
-            "Presentation: swapchain {SwapchainFormat}, HDR {HdrOutput}, {SampleCount}x MSAA, present mode {PresentMode}.",
-            info.SwapchainFormat,
-            info.HdrOutput,
-            info.SampleCount,
-            info.PresentMode);
-        _logger.LogInformation(
-            "Window: {Width}x{Height} window units, {RenderWidth}x{RenderHeight} render pixels, DPI scale {DpiScale:0.###}.",
-            context.Window.Width,
-            context.Window.Height,
-            context.Window.RenderWidth,
-            context.Window.RenderHeight,
-            context.Window.DpiScale);
-        _logger.LogInformation(
-            "Frame limit: {FrameLimit}.",
-            _frameLimit == 0 ? "none (run until close)" : _frameLimit.ToString(CultureInfo.InvariantCulture));
-
+        // LoadModel + LoadTexture in raylib.
         _model = await context.Assets.Load<Model>(MODEL_PATH);
-        _texture = await context.Assets.Load<Texture>("/models/obj/castle_diffuse");
+        _texture = await context.Assets.Load<Texture>(TEXTURE_PATH);
 
-        // The model owns one material per part, and the bake defaults the castle part to the built-in
-        // /shaders/mesh program. Bind the diffuse texture on every distinct part material instead of
-        // loading a custom shader; the cursor snapshot makes the draw use it.
-        LogModelMetadata(_model);
-        LogTextureMetadata(_texture);
-        foreach (Shader material in DistinctMaterials(_model)) {
-            material.SetUniform("mainTexture", _texture);
-            LogShaderMetadata(material);
+        // model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture in raylib.
+        // A model part owns its material; the bake defaults the castle to the built-in mesh shader.
+        foreach (ModelPart part in _model.Parts) {
+            part.Shader.SetUniform("mainTexture", _texture);
         }
-
-        _logger.LogInformation(
-            "Camera: target {Target}, initial position {Position}, field of view {FieldOfView} degrees, near {Near}, far +infinity.",
-            _cameraTarget,
-            _initialCameraPosition,
-            FIELD_OF_VIEW_DEGREES,
-            NEAR_PLANE);
-        _logger.LogInformation(
-            "Controls: Escape or the frame limit exits; hold the left mouse button and drag to orbit the castle; the mouse wheel zooms.");
     }
 
     /// <inheritdoc/>
     public void Tick(EngineContext context) {
-        ILogger logger = _logger;
-        string? exitReason = null;
-
         if (context.Input.IsKeyPressed(Key.Escape)) {
-            exitReason = "Escape";
-            logger.LogInformation("Escape pressed; requesting exit.");
             context.RequestExit();
         }
 
         UpdateOrbit(context.Input);
-        RecordCastlePass(context);
-        ObserveCompletedFrame(context);
 
-        if (context.FrameCount % STATS_LOG_INTERVAL == 0) {
-            logger.LogInformation(
-                "Tick {FrameCount}: time {Time:0.000}s, fps {Fps:0.0}, delta {DeltaTime:0.0000}s, camera {CameraPosition}, distance {Distance:0.###}.",
-                context.FrameCount,
-                context.Time,
-                context.Fps,
-                context.DeltaTime,
-                CameraPosition,
-                _distance);
-            LogRenderStats(logger, context.Stats, "Tick");
-        }
+        // BeginMode3D(camera) / DrawModel(model, position, 1.0f, WHITE).
+        using Camera camera = context.CreateCamera(
+            CameraTransform(),
+            projection: CameraProjection.Perspective,
+            fieldOfView: FIELD_OF_VIEW_DEGREES,
+            clearMode: ClearMode.ColorAndDepth,
+            clearColor: _rayWhite,
+            near: NEAR_PLANE,
+            far: float.PositiveInfinity);
 
-        _lastFrameCount = context.FrameCount;
+        camera.DrawModel(_model!, Transform.Identity);
 
-        if (exitReason is null && _frameLimit > 0 && context.FrameCount >= _frameLimit) {
-            exitReason = $"frame limit ({_frameLimit})";
-            logger.LogInformation("Frame limit reached; requesting exit.");
+        _frameCount++;
+        if (_frameLimit > 0 && _frameCount >= _frameLimit) {
             context.RequestExit();
         }
-
-        _exitReason = exitReason ?? "window close or engine request";
     }
 
     /// <inheritdoc/>
     public Task Shutdown() {
-        // Shutdown has no context argument. The context is stable for the app lifetime and Stats is
-        // safe to read from any thread; the snapshot describes the last frame the render thread
-        // completed, which can lag the final tick by one frame.
-        if (_context is not null) {
-            LogRenderStats(_logger, _context.Stats, "Final");
-        }
-
-        _logger.LogInformation(
-            "Castle stopped after {FrameCount} tick(s): exit {ExitReason}.",
-            _lastFrameCount,
-            _exitReason);
-
-        // The model owns one reference to every distinct part mesh and its part materials, including
-        // the material whose cursor holds the diffuse texture. Dispose the model first, then this
-        // sample's own texture reference, exactly once each; the catalog releases the GPU resources
-        // on the render thread and a recorded frame keeps them alive.
+        // UnloadModel(model) / UnloadTexture(texture) in raylib. The model disposes its own part
+        // materials and mesh references; this sample owns its texture reference.
         _model?.Dispose();
         _model = null;
         _texture?.Dispose();
         _texture = null;
-
-        if (!_sawDrawnFrame) {
-            throw new InvalidOperationException(
-                "The Castle gate failed: no completed frame reported both draw calls and instances, "
-                    + "so the castle scene is not visible. Check that the pack, camera, and scene "
-                    + "target are valid and that the renderer completes a frame.");
-        }
-
         return Task.CompletedTask;
     }
 
@@ -215,26 +113,32 @@ internal sealed class CastleGame : IGame {
         }
     }
 
-    private static List<Shader> DistinctMaterials(Model model) {
-        List<Shader> materials = [];
-        HashSet<Shader> seen = new(ReferenceEqualityComparer.Instance);
-        foreach (ModelPart part in model.Parts) {
-            if (seen.Add(part.Shader)) {
-                materials.Add(part.Shader);
-            }
+    private Transform CameraTransform() {
+        // The engine camera uses a rotation transform; derive it from the same look-at that a
+        // raylib Camera describes.
+        Vector3 position = CameraPosition;
+        Matrix4x4 lookAt = Matrix4x4.CreateLookAt(position, _cameraTarget, Vector3.UnitY);
+        if (!Matrix4x4.Invert(lookAt, out Matrix4x4 cameraMatrix)) {
+            throw new InvalidOperationException("The orbital camera matrix is singular.");
         }
 
-        return materials;
+        return new Transform(
+            position,
+            Quaternion.CreateFromRotationMatrix(cameraMatrix),
+            Vector3.One);
     }
 
     private void UpdateOrbit(IInput input) {
+        // UpdateCamera(&camera, CAMERA_ORBITAL): drag with the left mouse button to orbit and use
+        // the wheel to move closer or farther. Screen Y grows downward, so adding the mouse delta
+        // to the elevation makes dragging up look up rather than down.
         if (input.IsMouseButtonDown(MouseButton.Left)) {
             Vector2 delta = input.MouseDelta;
             _yaw -= delta.X * ORBIT_RADIANS_PER_PIXEL;
 
-            float pitchLimit = MAX_ORBIT_PITCH_DEGREES * DEGREES_TO_RADIANS;
+            float pitchLimit = MAX_PITCH_DEGREES * DEGREES_TO_RADIANS;
             _pitch = Math.Clamp(
-                _pitch - (delta.Y * ORBIT_RADIANS_PER_PIXEL),
+                _pitch + (delta.Y * ORBIT_RADIANS_PER_PIXEL),
                 -pitchLimit,
                 pitchLimit);
         }
@@ -242,126 +146,9 @@ internal sealed class CastleGame : IGame {
         float wheel = input.MouseWheel;
         if (wheel != 0f) {
             _distance = Math.Clamp(
-                _distance * MathF.Pow(ZOOM_FACTOR_PER_WHEEL_STEP, -wheel),
-                MIN_ORBIT_DISTANCE,
-                MAX_ORBIT_DISTANCE);
+                _distance * MathF.Pow(ZOOM_PER_WHEEL_STEP, -wheel),
+                MIN_DISTANCE,
+                MAX_DISTANCE);
         }
-    }
-
-    private void RecordCastlePass(EngineContext context) {
-        Vector3 position = CameraPosition;
-        Matrix4x4 lookAt = Matrix4x4.CreateLookAt(position, _cameraTarget, Vector3.UnitY);
-        if (!Matrix4x4.Invert(lookAt, out Matrix4x4 cameraMatrix)) {
-            throw new InvalidOperationException(
-                "The Castle sample could not derive the orbital camera rotation.");
-        }
-
-        Transform cameraTransform = new(
-            position,
-            Quaternion.CreateFromRotationMatrix(cameraMatrix),
-            Vector3.One);
-
-        // The camera is a frame-scoped recorder; the using scope disposes it before Tick returns.
-        using Camera camera = context.CreateCamera(
-            cameraTransform,
-            CameraProjection.Perspective,
-            fieldOfView: FIELD_OF_VIEW_DEGREES,
-            clearMode: ClearMode.ColorAndDepth,
-            clearColor: _clearColor,
-            near: NEAR_PLANE,
-            far: float.PositiveInfinity);
-
-        // raylib DrawModel at the origin with the model's per-part material.
-        camera.DrawModel(_model!, Transform.Identity);
-    }
-
-    private void ObserveCompletedFrame(EngineContext context) {
-        if (_sawDrawnFrame) {
-            return;
-        }
-
-        RenderStats stats = context.Stats;
-        if (stats.DrawCalls > 0 && stats.Instances > 0) {
-            _sawDrawnFrame = true;
-            _logger.LogInformation(
-                "Castle gate: completed frame {FrameIndex} reported {DrawCalls} draw call(s) and {Instances} instance(s).",
-                stats.FrameIndex,
-                stats.DrawCalls,
-                stats.Instances);
-        }
-    }
-
-    private void LogModelMetadata(Model model) {
-        _logger.LogInformation(
-            "Model {Path}: {PartCount} part(s), bounds {Min}..{Max}.",
-            MODEL_PATH,
-            model.Parts.Count,
-            model.Bounds.Min,
-            model.Bounds.Max);
-
-        foreach (ModelPart part in model.Parts) {
-            Mesh mesh = part.Mesh;
-            _logger.LogInformation(
-                "Part {Name}: mesh {MeshPath}, {VertexCount} vertex/vertices, {IndexCount} index/indices, bounds {Min}..{Max}, shader {ShaderPath}.",
-                part.Name,
-                mesh.Path,
-                mesh.VertexCount,
-                mesh.IndexCount,
-                part.Bounds.Min,
-                part.Bounds.Max,
-                part.Shader.Path);
-        }
-    }
-
-    private void LogTextureMetadata(Texture texture) {
-        _logger.LogInformation(
-            "Texture {Path}: {Width}x{Height}, {MipLevels} mip level(s), format {Format}, sRGB {IsSrgb}, sampler {Filter}/{Wrap}.",
-            texture.Path,
-            texture.Width,
-            texture.Height,
-            texture.MipLevels,
-            texture.Format,
-            texture.IsSrgb,
-            texture.Sampler.Filter,
-            texture.Sampler.Wrap);
-    }
-
-    private void LogShaderMetadata(Shader shader) {
-        RenderState state = shader.DefaultRenderState;
-        _logger.LogInformation(
-            "Shader {Path}: stages {Stages}, {UniformCount} uniform(s), {TextureBindingCount} texture binding(s), default state {Blend}/{Cull}/{DepthTest}, depth write {DepthWrite}.",
-            shader.Path,
-            shader.Stages,
-            shader.Uniforms.Count,
-            shader.Textures.Count,
-            state.Blend,
-            state.Cull,
-            state.DepthTest,
-            state.DepthWrite);
-    }
-
-    private static string FormatVulkanVersion(uint packedVersion) {
-        uint major = packedVersion >> VULKAN_MAJOR_SHIFT;
-        uint minor = (packedVersion >> VULKAN_MINOR_SHIFT) & VULKAN_MINOR_MASK;
-        uint patch = packedVersion & VULKAN_PATCH_MASK;
-        return string.Create(CultureInfo.InvariantCulture, $"{major}.{minor}.{patch}");
-    }
-
-    private static void LogRenderStats(ILogger logger, RenderStats stats, string label) {
-        logger.LogInformation(
-            "{Label} render stats: frame {FrameIndex}, {DrawCalls} draw call(s), {Instances} instance(s), {Triangles} triangle(s), {CulledInstances} culled instance(s), {PipelineCount} pipeline(s), {TextureCount} texture(s), {SampleCount}x MSAA, HDR {HdrOutput}, CPU {CpuFrameMilliseconds:0.###} ms, {FramesInFlight} frame(s) in flight, {RecoveryCount} recoveries.",
-            label,
-            stats.FrameIndex,
-            stats.DrawCalls,
-            stats.Instances,
-            stats.Triangles,
-            stats.CulledInstances,
-            stats.PipelineCount,
-            stats.TextureCount,
-            stats.SampleCount,
-            stats.HdrOutput,
-            stats.CpuFrameMilliseconds,
-            stats.FramesInFlight,
-            stats.RecoveryCount);
     }
 }

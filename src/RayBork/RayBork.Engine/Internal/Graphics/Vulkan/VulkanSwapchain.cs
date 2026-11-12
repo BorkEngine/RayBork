@@ -283,6 +283,10 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             _vulkan,
             device.PhysicalDevice,
             surface);
+        Extent2D imageExtent = VulkanSwapchainExtentSelection.Select(
+            capabilities,
+            checked((int)extent.Width),
+            checked((int)extent.Height));
         uint graphicsFamily = device.Capabilities.GraphicsQueueFamily;
         uint presentFamily = device.Capabilities.PresentQueueFamily;
         bool concurrent = graphicsFamily != presentFamily;
@@ -295,7 +299,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             MinImageCount = (uint)imageCount,
             ImageFormat = format.Format,
             ImageColorSpace = format.ColorSpace,
-            ImageExtent = extent,
+            ImageExtent = imageExtent,
             ImageArrayLayers = IMAGE_ARRAY_LAYERS,
             ImageUsage = imageUsage,
             ImageSharingMode = concurrent ? SharingMode.Concurrent : SharingMode.Exclusive,
@@ -332,7 +336,7 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             throw;
         }
 
-        return new SwapchainResources(swapchain, images, views, format.Format, extent, supportsPresentReadback);
+        return new SwapchainResources(swapchain, images, views, format.Format, imageExtent, supportsPresentReadback);
     }
 
     private ImageView CreateImageView(Image image, Format format) {

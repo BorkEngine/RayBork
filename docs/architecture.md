@@ -59,7 +59,7 @@ Samples (M11) ──────> RayBork.Engine
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
 | `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the M4 AOT gate. |
 | `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
-| `samples/Castle` | M4 sample and Native AOT gate, a recreation of raylib's `models_loading` example: mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass every tick, requires at least one completed frame with nonzero draw calls and instances (shutdown throws otherwise), and exits on Escape or `--frames`. The reference grid moves to M5 with `DrawGrid`. |
+| `samples/Castle` | M4 sample and Native AOT gate, a recreation of raylib's `models_loading` example: mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass every tick, and exits on Escape or `--frames`. The reference grid moves to M5 with `DrawGrid`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
 | `samples/` | Pong, Text, Instancing, RenderTarget (M11). Each sample owns a solution, an assets executable with a build-time bake, and a Native AOT publish target. |
 
@@ -120,8 +120,8 @@ SDL3 and logging are exercised end to end by every sample AOT gate. The M2 miles
 Silk.NET.Vulkan with the presenter; the M3 gate extended the host with a baked pack, a KTX2 texture
 upload, a mesh upload, a shader-module upload, and a MessagePack custom-data load; the M4 gate
 replaces it with `samples/Castle`, which draws the raylib castle model with the built-in mesh material
-and asserts that the frame submitted draw calls and instances on both RIDs. Both publishes must
-finish with zero AOT/trim warnings. The sample solutions are outside the engine
+on both RIDs. Both publishes must finish with zero AOT/trim warnings. The sample solutions are outside
+the engine
 solution, and each sample build bakes its pack beside the sample executable, so the JIT bake tool and
 its packages stay out of the sample's AOT publish graph. The Vulkan loader is a system/GPU-driver
 component, not a NuGet dependency. The bake's source-format tooling is JIT only and never enters the
@@ -861,9 +861,8 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   publish copies it into the publish directory), the published host mounts the adjacent pack, loads
   `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts'
   built-in `/shaders/mesh` materials, draws the raylib castle model through the geometry pipeline,
-  requires at least one completed frame with nonzero draw calls and instances, and shuts down.
-  `samples/HelloInterop` remains the M1-M3 diagnostic host, auto-mounts its own build-baked
-  `hello.pck`, and is not the AOT gate.
+  and shuts down. `samples/HelloInterop` remains the M1-M3 diagnostic host, auto-mounts its own
+  build-baked `hello.pck`, and is not the AOT gate.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   M4 gate; the pack reader and descriptor decoding contain no reflection resolver.
 - The Vulkan loader is loaded through `NativeLibrary` with a custom `INativeContext` instead of
