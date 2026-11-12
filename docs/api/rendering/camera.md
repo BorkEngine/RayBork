@@ -219,7 +219,14 @@ public enum TonemappingMode {
 
 - Default camera clear is `ClearMode.ColorAndDepth`. A 3D frame that uses only `ClearMode.Color`
   will reuse the previous frame's depth buffer and must be treated as an overlay pass.
-- Depth clears to `0.0`. Color clears to `ClearColor`. Stencil clears to `0`.
+- Clears are scoped to the camera viewport, not the whole target. The renderer clears the clamped
+  viewport rectangle with the camera's clear state; a pass with a smaller viewport leaves the pixels
+  outside it untouched.
+- Depth clears to `0.0`. Color clears to `ClearColor`. `ClearMode.Stencil` is a no-op in M4 because
+  the scene target has no stencil attachment; the flag is accepted and does not fail.
+- The scene target's render pass starts with undefined color and depth content. A first camera that
+  wants defined content must clear; a first camera with `ClearMode.None` leaves undefined content,
+  and later cameras see the previous pass' pixels.
 - The depth test defaults to `GreaterOrEqual`; depth writes are on for opaque draws.
 - Perspective supports an infinite far plane. The projection maps the near plane to `1.0` and
   infinity to `0.0`.
@@ -227,7 +234,10 @@ public enum TonemappingMode {
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
 - Multiple cameras can clear different passes sequentially in one tick. The first camera usually
-  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays.
+  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. M4 shares one
+  frame uniform block per frame slot across every camera pass: a frame with more than one camera
+  pass submits the same `rbFrame` values (the last recorded pass') to every pass. Split-screen
+  cameras in one frame are therefore a known M4 limitation rather than a supported layout.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
   target inside the same pass that writes it is invalid and is reported as a validation error. This

@@ -4,14 +4,17 @@ namespace RayBork.Internal;
 
 /// <summary>
 /// The linear HDR scene target: the multisampled color and depth images, the resolved color image the
-/// present pass samples, and the render pass and framebuffer that clear them.
+/// present pass samples, and the render pass and framebuffer the geometry pass renders into.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The color images use <c>R16G16B16A16_SFLOAT</c> and the depth image uses <c>D32_SFLOAT</c> with
-/// the engine reverse-Z clear. The single-sample resolved color image is readable and copyable so a
-/// GPU test can probe it; the single-sample depth image is also a transfer source. Multisampled depth
-/// is not resolved in M2 because nothing samples depth before M4.
+/// The color images use <c>R16G16B16A16_SFLOAT</c> and the depth image uses <c>D32_SFLOAT</c>. The
+/// render pass loads both attachments with <c>DontCare</c>: the render area starts undefined and the
+/// geometry pass clears the camera viewport with <c>vkCmdClearAttachments</c> when the camera asks for
+/// a clear. A first camera with <see cref="ClearMode.None"/> therefore leaves undefined content, which
+/// is the documented overlay behavior. The single-sample resolved color image is readable and
+/// copyable so a GPU test can probe it; the single-sample depth image is also a transfer source.
+/// Multisampled depth is not resolved in M4 because nothing samples depth before M8.
 /// </para>
 /// <para>
 /// Every member is render-thread only. The caller recreates the target after a device wait-idle and
@@ -25,7 +28,6 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
     private readonly Device _device;
     private readonly PhysicalDevice _physicalDevice;
     private readonly int _sampleCount;
-    private readonly Color _clearColor;
     private readonly List<ImageResources> _imageResources = [];
 
     private RenderPass _renderPass;
@@ -37,13 +39,12 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
     private Extent2D _extent;
     private bool _disposed;
 
-    private VulkanSceneTarget(VulkanDevice device, Extent2D extent, int sampleCount, Color clearColor) {
+    private VulkanSceneTarget(VulkanDevice device, Extent2D extent, int sampleCount) {
         _vulkan = device.Vulkan;
         _device = device.Device;
         _physicalDevice = device.PhysicalDevice;
         _extent = extent;
         _sampleCount = sampleCount;
-        _clearColor = clearColor;
     }
 
     /// <summary>
@@ -57,12 +58,8 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
     internal int SampleCount => _sampleCount;
 
     /// <summary>
-    /// Gets the linear scene clear color.
-    /// </summary>
-    internal Color ClearColor => _clearColor;
-
-    /// <summary>
-    /// Gets the render pass that clears the color and depth attachments.
+    /// Gets the render pass the geometry pass renders into. The pass loads the color and depth
+    /// attachments with <c>DontCare</c>; the geometry pass clears the camera viewport itself.
     /// </summary>
     internal RenderPass RenderPass => _renderPass;
 
@@ -105,7 +102,6 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
     /// <param name="device">The device that owns the target.</param>
     /// <param name="extent">The positive target extent.</param>
     /// <param name="sampleCount">The effective MSAA sample count.</param>
-    /// <param name="clearColor">The linear scene clear color.</param>
     /// <returns>The created scene target.</returns>
     /// <exception cref="GraphicsException">
     /// An image, image view, memory allocation, render pass, or framebuffer could not be created. The
@@ -114,8 +110,7 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
     internal static VulkanSceneTarget Create(
         VulkanDevice device,
         Extent2D extent,
-        int sampleCount,
-        Color clearColor) {
+        int sampleCount) {
         ArgumentNullException.ThrowIfNull(device);
         if (sampleCount <= 0) {
             throw new ArgumentOutOfRangeException(nameof(sampleCount), sampleCount, "The sample count must be positive.");
@@ -125,7 +120,7 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
             throw new ArgumentOutOfRangeException(nameof(extent), extent, "The scene target extent must be positive.");
         }
 
-        VulkanSceneTarget target = new(device, extent, sampleCount, clearColor);
+        VulkanSceneTarget target = new(device, extent, sampleCount);
         try {
             target.CreateResources();
             return target;
@@ -315,7 +310,7 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
             attachments[0] = CreateAttachmentDescription(
                 Format.R16G16B16A16Sfloat,
                 samples,
-                AttachmentLoadOp.Clear,
+                AttachmentLoadOp.DontCare,
                 AttachmentStoreOp.DontCare,
                 ImageLayout.ColorAttachmentOptimal);
             attachments[1] = CreateAttachmentDescription(
@@ -327,21 +322,21 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
             attachments[2] = CreateAttachmentDescription(
                 Format.D32Sfloat,
                 samples,
-                AttachmentLoadOp.Clear,
+                AttachmentLoadOp.DontCare,
                 AttachmentStoreOp.DontCare,
                 ImageLayout.DepthStencilAttachmentOptimal);
         } else {
             attachments[0] = CreateAttachmentDescription(
                 Format.R16G16B16A16Sfloat,
                 SampleCountFlags.Count1Bit,
-                AttachmentLoadOp.Clear,
+                AttachmentLoadOp.DontCare,
                 AttachmentStoreOp.Store,
                 ImageLayout.ShaderReadOnlyOptimal);
             attachments[1] = CreateAttachmentDescription(
                 Format.D32Sfloat,
                 SampleCountFlags.Count1Bit,
-                AttachmentLoadOp.Clear,
-                AttachmentStoreOp.DontCare,
+                AttachmentLoadOp.DontCare,
+                AttachmentStoreOp.Store,
                 ImageLayout.DepthStencilAttachmentOptimal);
         }
 

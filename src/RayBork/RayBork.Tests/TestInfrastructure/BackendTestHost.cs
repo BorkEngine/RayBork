@@ -107,16 +107,14 @@ internal sealed class BackendTestHost : IDisposable {
     /// unavailable.
     /// </summary>
     /// <param name="sampleCount">The requested MSAA sample count.</param>
-    /// <param name="clearColor">The scene clear color, or <see langword="null"/> for white.</param>
     /// <param name="presentMode">The requested present mode.</param>
     /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
     /// <returns>The created and initialized host.</returns>
     internal static BackendTestHost CreateOrSkip(
         int sampleCount = 4,
-        Color? clearColor = null,
         PresentMode presentMode = PresentMode.Mailbox,
         WindowHdrState? hdr = null) {
-        if (!TryCreate(out BackendTestHost? host, out string skipReason, sampleCount, clearColor, presentMode, hdr)) {
+        if (!TryCreate(out BackendTestHost? host, out string skipReason, sampleCount, presentMode, hdr)) {
             Assert.Skip(skipReason);
         }
 
@@ -129,7 +127,6 @@ internal sealed class BackendTestHost : IDisposable {
     /// <param name="host">The created host, or <see langword="null"/> when unavailable.</param>
     /// <param name="skipReason">A specific reason when <paramref name="host"/> is <see langword="null"/>.</param>
     /// <param name="sampleCount">The requested MSAA sample count.</param>
-    /// <param name="clearColor">The scene clear color, or <see langword="null"/> for white.</param>
     /// <param name="presentMode">The requested present mode.</param>
     /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
     /// <returns><see langword="true"/> when the host was created.</returns>
@@ -137,7 +134,6 @@ internal sealed class BackendTestHost : IDisposable {
         out BackendTestHost? host,
         out string skipReason,
         int sampleCount = 4,
-        Color? clearColor = null,
         PresentMode presentMode = PresentMode.Mailbox,
         WindowHdrState? hdr = null) {
         host = null;
@@ -163,7 +159,7 @@ internal sealed class BackendTestHost : IDisposable {
                 sdlHost.Platform.Window.IsMinimized,
                 sdlHost.Platform.Window.IsFocused,
                 hdr ?? sdlHost.Platform.WindowHdrState);
-            RenderSettings settings = CreateSettings(sampleCount, clearColor, presentMode);
+            RenderSettings settings = CreateSettings(sampleCount, presentMode);
             candidate = new BackendTestHost(sdlHost, settings, extensions, initialState);
             try {
                 candidate.Initialize();
@@ -228,13 +224,12 @@ internal sealed class BackendTestHost : IDisposable {
 
     private WindowSurfaceState GetSurfaceState() => _state;
 
-    private static RenderSettings CreateSettings(int sampleCount, Color? clearColor, PresentMode presentMode) => new() {
+    private static RenderSettings CreateSettings(int sampleCount, PresentMode presentMode) => new() {
         PresentMode = presentMode,
         SampleCount = sampleCount,
         Tonemapping = TonemappingMode.AgX,
         Exposure = 0f,
         ValidationEnabled = true,
-        ClearColor = clearColor ?? Color.White,
     };
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>

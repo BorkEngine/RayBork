@@ -14,11 +14,19 @@ namespace RayBork.Internal;
 /// logical device lifetime.
 /// </para>
 /// <para>
-/// No live Vulkan handle or capability query crosses the renderer seam; this value feeds
-/// <see cref="EngineInfo"/> and later renderer tasks.
+/// The descriptor-indexing flags and update-after-bind limits describe the M4 bindless texture
+/// table. <see cref="BindlessTextureCapacity"/> is the largest table the device can support, capped
+/// at <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/>; device selection rejects a device without the
+/// feature subset, so a created device always reports at least one slot.
 /// </para>
 /// </remarks>
 internal sealed class VulkanDeviceCapabilities {
+    /// <summary>
+    /// The renderer's target bindless texture capacity. The effective capacity is this value capped
+    /// by the device's per-stage and per-set update-after-bind sampled-image limits.
+    /// </summary>
+    internal const uint TARGET_BINDLESS_TEXTURE_CAPACITY = 4096;
+
     private static readonly int[] _sampleCounts = [1, 2, 4, 8, 16, 32, 64];
 
     private readonly int[] _supportedSampleCounts;
@@ -35,8 +43,14 @@ internal sealed class VulkanDeviceCapabilities {
         uint maxFramebufferHeight,
         int[] supportedSampleCounts,
         bool descriptorIndexing,
-        uint maxPerStageDescriptorSampledImages,
+        uint maxPerStageDescriptorUpdateAfterBindSampledImages,
+        uint maxDescriptorSetUpdateAfterBindSampledImages,
+        uint maxPerStageDescriptorUpdateAfterBindSamplers,
+        uint maxStorageBufferRange,
+        ulong maxMemoryAllocationSize,
+        uint bindlessTextureCapacity,
         bool samplerAnisotropy,
+        float maxSamplerAnisotropy,
         bool textureCompressionBc,
         bool swapchainColorSpaceExtensionEnabled,
         VulkanSwapchainSupport swapchain) {
@@ -51,8 +65,14 @@ internal sealed class VulkanDeviceCapabilities {
         MaxFramebufferHeight = maxFramebufferHeight;
         _supportedSampleCounts = supportedSampleCounts;
         DescriptorIndexing = descriptorIndexing;
-        MaxPerStageDescriptorSampledImages = maxPerStageDescriptorSampledImages;
+        MaxPerStageDescriptorUpdateAfterBindSampledImages = maxPerStageDescriptorUpdateAfterBindSampledImages;
+        MaxDescriptorSetUpdateAfterBindSampledImages = maxDescriptorSetUpdateAfterBindSampledImages;
+        MaxPerStageDescriptorUpdateAfterBindSamplers = maxPerStageDescriptorUpdateAfterBindSamplers;
+        MaxStorageBufferRange = maxStorageBufferRange;
+        MaxMemoryAllocationSize = maxMemoryAllocationSize;
+        BindlessTextureCapacity = bindlessTextureCapacity;
         SamplerAnisotropy = samplerAnisotropy;
+        MaxSamplerAnisotropy = maxSamplerAnisotropy;
         TextureCompressionBc = textureCompressionBc;
         SwapchainColorSpaceExtensionEnabled = swapchainColorSpaceExtensionEnabled;
         Swapchain = swapchain;
@@ -109,20 +129,55 @@ internal sealed class VulkanDeviceCapabilities {
     internal IReadOnlyList<int> SupportedSampleCounts => _supportedSampleCounts;
 
     /// <summary>
-    /// Gets whether the device supports the descriptor-indexing subset the M2 bindless texture table
-    /// needs. M2 probes this capability but does not require it.
+    /// Gets whether the device supports and the renderer enables the M4 descriptor-indexing subset:
+    /// runtime descriptor arrays, partially bound arrays, sampled-image update-after-bind, and
+    /// non-uniform indexing of sampled-image arrays.
     /// </summary>
     internal bool DescriptorIndexing { get; }
 
     /// <summary>
-    /// Gets the maximum number of sampled images available to one shader stage.
+    /// Gets the maximum update-after-bind sampled images available to one shader stage.
     /// </summary>
-    internal uint MaxPerStageDescriptorSampledImages { get; }
+    internal uint MaxPerStageDescriptorUpdateAfterBindSampledImages { get; }
 
     /// <summary>
-    /// Gets whether the device supports anisotropic sampling.
+    /// Gets the maximum update-after-bind sampled images available to one descriptor set.
+    /// </summary>
+    internal uint MaxDescriptorSetUpdateAfterBindSampledImages { get; }
+
+    /// <summary>
+    /// Gets the maximum update-after-bind samplers available to one shader stage.
+    /// </summary>
+    internal uint MaxPerStageDescriptorUpdateAfterBindSamplers { get; }
+
+    /// <summary>
+    /// Gets the maximum byte range of one storage buffer.
+    /// </summary>
+    internal uint MaxStorageBufferRange { get; }
+
+    /// <summary>
+    /// Gets the maximum size in bytes of one device memory allocation.
+    /// </summary>
+    internal ulong MaxMemoryAllocationSize { get; }
+
+    /// <summary>
+    /// Gets the bindless texture table capacity the backend creates: the smaller of
+    /// <see cref="TARGET_BINDLESS_TEXTURE_CAPACITY"/> and the device's per-stage and per-set
+    /// update-after-bind sampled-image limits, and never less than one.
+    /// </summary>
+    internal uint BindlessTextureCapacity { get; }
+
+    /// <summary>
+    /// Gets whether the device supports anisotropic sampling. The renderer enables the feature when
+    /// it is supported.
     /// </summary>
     internal bool SamplerAnisotropy { get; }
+
+    /// <summary>
+    /// Gets the maximum sampler anisotropy the device supports. It is meaningful only when
+    /// <see cref="SamplerAnisotropy"/> is <see langword="true"/>.
+    /// </summary>
+    internal float MaxSamplerAnisotropy { get; }
 
     /// <summary>
     /// Gets whether the device supports the BC block-compressed formats. A packed BC7 or BC5 texture
@@ -160,8 +215,9 @@ internal sealed class VulkanDeviceCapabilities {
     /// Probes the selected physical device and creates the capabilities snapshot.
     /// </summary>
     /// <remarks>
-    /// Runs on the render thread after the logical device is created. M2 enables no optional device
-    /// features; feature support is probed for later tasks and for reporting.
+    /// Runs on the render thread after the logical device is created. The descriptor-indexing subset
+    /// is reported as enabled only when the device advertises every required feature; device
+    /// selection already guarantees that for a created device.
     /// </remarks>
     /// <param name="vulkan">The loaded Vulkan API.</param>
     /// <param name="physicalDevice">The selected physical device.</param>
@@ -184,23 +240,22 @@ internal sealed class VulkanDeviceCapabilities {
 
         PhysicalDeviceProperties properties = vulkan.GetPhysicalDeviceProperties(physicalDevice);
         PhysicalDeviceFeatures features = vulkan.GetPhysicalDeviceFeatures(physicalDevice);
-
-        PhysicalDeviceVulkan12Features vulkan12Features = new() {
-            SType = StructureType.PhysicalDeviceVulkan12Features,
-        };
-        PhysicalDeviceFeatures2 features2 = new() {
-            SType = StructureType.PhysicalDeviceFeatures2,
-            PNext = &vulkan12Features,
-        };
-        vulkan.GetPhysicalDeviceFeatures2(physicalDevice, &features2);
+        PhysicalDeviceVulkan12Features vulkan12Features = VulkanBindlessFeatures.Query(vulkan, physicalDevice);
+        (PhysicalDeviceVulkan12Properties vulkan12Properties, PhysicalDeviceVulkan11Properties vulkan11Properties) =
+            QueryProperties2(vulkan, physicalDevice);
 
         string deviceName = Marshal.PtrToStringUTF8((IntPtr)properties.DeviceName) ?? string.Empty;
-        bool descriptorIndexing = vulkan12Features.RuntimeDescriptorArray.Value != 0
-            && vulkan12Features.DescriptorBindingPartiallyBound.Value != 0
-            && vulkan12Features.DescriptorBindingSampledImageUpdateAfterBind.Value != 0;
+        bool descriptorIndexing = VulkanBindlessFeatures.GetMissingFeatures(vulkan12Features).Count == 0;
         int[] supportedSampleCounts = SelectSupportedSampleCounts(
             properties.Limits.FramebufferColorSampleCounts,
             properties.Limits.FramebufferDepthSampleCounts);
+        uint capacity = Math.Max(
+            1u,
+            Math.Min(
+                TARGET_BINDLESS_TEXTURE_CAPACITY,
+                Math.Min(
+                    vulkan12Properties.MaxPerStageDescriptorUpdateAfterBindSampledImages,
+                    vulkan12Properties.MaxDescriptorSetUpdateAfterBindSampledImages)));
 
         return new VulkanDeviceCapabilities(
             deviceName,
@@ -214,11 +269,34 @@ internal sealed class VulkanDeviceCapabilities {
             properties.Limits.MaxFramebufferHeight,
             supportedSampleCounts,
             descriptorIndexing,
-            properties.Limits.MaxPerStageDescriptorSampledImages,
+            vulkan12Properties.MaxPerStageDescriptorUpdateAfterBindSampledImages,
+            vulkan12Properties.MaxDescriptorSetUpdateAfterBindSampledImages,
+            vulkan12Properties.MaxPerStageDescriptorUpdateAfterBindSamplers,
+            properties.Limits.MaxStorageBufferRange,
+            vulkan11Properties.MaxMemoryAllocationSize,
+            capacity,
             features.SamplerAnisotropy.Value != 0,
+            properties.Limits.MaxSamplerAnisotropy,
             features.TextureCompressionBC.Value != 0,
             swapchainColorSpaceExtensionEnabled,
             swapchain);
+    }
+
+    private static unsafe (PhysicalDeviceVulkan12Properties Vulkan12, PhysicalDeviceVulkan11Properties Vulkan11)
+        QueryProperties2(Vk vulkan, PhysicalDevice physicalDevice) {
+        PhysicalDeviceVulkan12Properties vulkan12Properties = new() {
+            SType = StructureType.PhysicalDeviceVulkan12Properties,
+        };
+        PhysicalDeviceVulkan11Properties vulkan11Properties = new() {
+            SType = StructureType.PhysicalDeviceVulkan11Properties,
+            PNext = &vulkan12Properties,
+        };
+        PhysicalDeviceProperties2 properties2 = new() {
+            SType = StructureType.PhysicalDeviceProperties2,
+            PNext = &vulkan11Properties,
+        };
+        vulkan.GetPhysicalDeviceProperties2(physicalDevice, &properties2);
+        return (vulkan12Properties, vulkan11Properties);
     }
 
     private static int[] SelectSupportedSampleCounts(

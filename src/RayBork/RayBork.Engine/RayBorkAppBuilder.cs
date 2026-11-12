@@ -407,9 +407,6 @@ public sealed class RayBorkAppBuilder {
                 Tonemapping = _tonemapping,
                 Exposure = _exposure,
                 ValidationEnabled = _validationEnabled,
-                // The M4 camera pass owns clear state. The Vulkan task removes this internal fallback;
-                // keep a black scene clear until the backend consumes the camera packet.
-                ClearColor = Color.Black,
             },
             LoggerFactory = _loggerFactory,
             LogLevel = _logLevel,

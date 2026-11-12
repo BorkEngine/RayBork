@@ -229,7 +229,6 @@ public sealed class BuilderTests {
         Assert.Equal(4, settings.SampleCount);
         Assert.Equal(TonemappingMode.AgX, settings.Tonemapping);
         Assert.Equal(0f, settings.Exposure);
-        Assert.Equal(Color.Black, settings.ClearColor);
 
 #if DEBUG
         bool expectedValidation = true;

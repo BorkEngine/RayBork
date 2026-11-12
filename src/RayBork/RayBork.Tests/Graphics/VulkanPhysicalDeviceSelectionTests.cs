@@ -72,6 +72,23 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MissingBindlessDescriptorFeaturesAreRejectedAndNamed() {
+        VulkanPhysicalDeviceCandidate[] candidates = [
+            Candidate(
+                0,
+                "No Bindless GPU",
+                missingBindlessFeatures: "runtimeDescriptorArray, descriptorBindingPartiallyBound"),
+        ];
+
+        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+
+        Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
+        Assert.Contains("runtimeDescriptorArray", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("descriptorBindingPartiallyBound", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void HigherApiVersionBreaksATypeTie() {
         VulkanPhysicalDeviceCandidate[] candidates = [
             Candidate(0, "Older Discrete", PhysicalDeviceType.DiscreteGpu, API_1_2),
@@ -117,6 +134,8 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "No Present", supportsPresent: false)));
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "No Swapchain", hasSwapchainExtension: false)));
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "Old", PhysicalDeviceType.DiscreteGpu, API_1_1)));
+        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
+            Candidate(0, "No Bindless", missingBindlessFeatures: "shaderSampledImageArrayNonUniformIndexing")));
     }
 
     private static VulkanPhysicalDeviceCandidate Candidate(
@@ -126,6 +145,15 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
         uint apiVersion = API_1_2,
         bool supportsGraphics = true,
         bool supportsPresent = true,
-        bool hasSwapchainExtension = true) =>
-        new(index, name, apiVersion, deviceType, supportsGraphics, supportsPresent, hasSwapchainExtension);
+        bool hasSwapchainExtension = true,
+        string missingBindlessFeatures = "") =>
+        new(
+            index,
+            name,
+            apiVersion,
+            deviceType,
+            supportsGraphics,
+            supportsPresent,
+            hasSwapchainExtension,
+            missingBindlessFeatures);
 }

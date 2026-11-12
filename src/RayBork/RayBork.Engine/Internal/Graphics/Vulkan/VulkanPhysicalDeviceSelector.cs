@@ -8,13 +8,15 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// Selection is pure so it can be unit tested without a GPU. A device qualifies only when it
-/// supports Vulkan 1.2 or newer, graphics and presentation queues, and <c>VK_KHR_swapchain</c>.
+/// supports Vulkan 1.2 or newer, graphics and presentation queues, <c>VK_KHR_swapchain</c>, and the
+/// M4 descriptor-indexing subset the bindless texture table needs. A device without the bindless
+/// subset is not suitable; the renderer never falls back to one texture per draw.
 /// </remarks>
 internal static class VulkanPhysicalDeviceSelector {
     private const uint REQUIRED_API_VERSION = (1u << 22) | (2u << 12);
 
     /// <summary>
-    /// Determines whether a device satisfies every M2 requirement.
+    /// Determines whether a device satisfies every M4 requirement.
     /// </summary>
     /// <param name="candidate">The device facts.</param>
     /// <returns><see langword="true"/> when the device is suitable.</returns>
@@ -22,7 +24,8 @@ internal static class VulkanPhysicalDeviceSelector {
         candidate.ApiVersion >= REQUIRED_API_VERSION
         && candidate.SupportsGraphicsQueue
         && candidate.SupportsPresentQueue
-        && candidate.HasSwapchainExtension;
+        && candidate.HasSwapchainExtension
+        && string.IsNullOrEmpty(candidate.MissingBindlessFeatures);
 
     /// <summary>
     /// Selects the preferred suitable device and returns its index in the loader's device array.
@@ -94,6 +97,10 @@ internal static class VulkanPhysicalDeviceSelector {
 
         if (!candidate.HasSwapchainExtension) {
             reasons.Add("the VK_KHR_swapchain extension is missing");
+        }
+
+        if (!string.IsNullOrEmpty(candidate.MissingBindlessFeatures)) {
+            reasons.Add($"descriptor-indexing features missing: {candidate.MissingBindlessFeatures}");
         }
 
         return $"- [{candidate.Index}] {candidate.Name}: {string.Join("; ", reasons)}.";

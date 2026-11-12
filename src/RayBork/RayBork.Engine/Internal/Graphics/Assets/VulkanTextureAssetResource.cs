@@ -9,11 +9,13 @@ namespace RayBork.Internal;
 /// <remarks>
 /// Created on the render thread by <see cref="VulkanAssetWorker.BeginUpload"/> and recreated by
 /// <see cref="IAssetGpuWorker.Restore"/> after a device recovery. The image is the primary handle.
-/// The view, sampler, image, and memory are destroyed together by <see
-/// cref="VulkanAssetWorker.Destroy"/> after the last frame that references the texture has completed.
-/// A packed texture is described by its KTX2 descriptor; a procedural texture is described by its
-/// <see cref="ProceduralTextureGpuUpload"/>. The public texture metadata is the descriptor's; the
-/// copies here are the validated values the upload used.
+/// The view, image, and memory are destroyed together by <see cref="VulkanAssetWorker.Destroy"/>
+/// after the last frame that references the texture has completed. The sampler handle is owned by the
+/// per-device <see cref="VulkanSamplerCache"/> and is never destroyed here. The bindless slot is
+/// reserved when the upload completes, written into every frame descriptor set, and released when the
+/// resource is destroyed. A packed texture is described by its KTX2 descriptor; a procedural texture
+/// is described by its <see cref="ProceduralTextureGpuUpload"/>. The public texture metadata is the
+/// descriptor's; the copies here are the validated values the upload used.
 /// </remarks>
 internal sealed class VulkanTextureAssetResource : VulkanAssetResource {
     /// <summary>
@@ -62,9 +64,44 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource {
     internal ImageView View { get; private set; }
 
     /// <summary>
-    /// Gets the sampler created from the descriptor filter, wrap, and anisotropy.
+    /// Gets the sampler for the descriptor filter, wrap, and anisotropy. The per-device sampler cache
+    /// owns it; destroying this resource must not destroy the sampler.
     /// </summary>
     internal Sampler Sampler { get; private set; }
+
+    /// <summary>
+    /// Gets the bindless table slot the upload reserved, or <c>0</c> when the upload has not completed
+    /// yet. Slot 0 is the renderer's white fallback, so zero also means "no slot".
+    /// </summary>
+    internal uint BindlessSlot { get; private set; }
+
+    /// <summary>
+    /// Stores the bindless slot reserved for the completed upload.
+    /// </summary>
+    /// <param name="slot">The reserved slot; it must be non-zero.</param>
+    internal void AssignBindlessSlot(uint slot) {
+        ArgumentOutOfRangeException.ThrowIfZero(slot);
+        BindlessSlot = slot;
+    }
+
+    /// <summary>
+    /// Releases the bindless slot to the current table and clears it.
+    /// </summary>
+    /// <remarks>
+    /// The worker calls it only after frame idleness has retired every frame that could reference the
+    /// texture, so a later allocation may reuse the slot immediately.
+    /// </remarks>
+    /// <param name="table">The current bindless texture table.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="table"/> is <c>null</c>.</exception>
+    internal void ReleaseBindlessSlot(VulkanBindlessTextureTable table) {
+        ArgumentNullException.ThrowIfNull(table);
+        if (BindlessSlot == 0) {
+            return;
+        }
+
+        table.Release(BindlessSlot);
+        BindlessSlot = 0;
+    }
 
     /// <summary>
     /// Gets the device memory bound to the image.
@@ -104,6 +141,7 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource {
         Image = texture.Image;
         View = texture.View;
         Sampler = texture.Sampler;
+        BindlessSlot = texture.BindlessSlot;
         Memory = texture.Memory;
         Format = texture.Format;
         Width = texture.Width;

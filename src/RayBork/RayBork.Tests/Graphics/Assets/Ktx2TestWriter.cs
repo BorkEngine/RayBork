@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using RayBork;
 
 namespace RayBork.Tests.Graphics.Assets;
 
@@ -141,6 +142,40 @@ internal static class Ktx2TestWriter {
     }
 
     /// <summary>
+    /// Writes a solid-color linear <c>Rgba8Unorm</c> KTX2 payload.
+    /// </summary>
+    /// <remarks>
+    /// Every mip level is filled with the same color, which is a valid box-filtered chain for a
+    /// uniform source. The GPU draw tests use this to make a sampled texel a known linear color.
+    /// </remarks>
+    /// <param name="color">The linear color; the components are clamped to <c>[0, 1]</c>.</param>
+    /// <param name="width">The base-level width in pixels.</param>
+    /// <param name="height">The base-level height in pixels.</param>
+    /// <param name="mipLevels">An optional level count; the default is the complete mip chain.</param>
+    /// <returns>The complete KTX2 2.0 file bytes.</returns>
+    internal static byte[] WriteRgba8Solid(Color color, int width = 1, int height = 1, int? mipLevels = null) {
+        byte[] payload = Write(TextureFormat.Rgba8Unorm, width, height, mipLevels: mipLevels);
+        byte[] rgba = [
+            ToByte(color.R),
+            ToByte(color.G),
+            ToByte(color.B),
+            ToByte(color.A),
+        ];
+        int levelCount = (int)BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(LEVEL_COUNT_OFFSET));
+        for (int level = 0; level < levelCount; level++) {
+            int entry = LevelEntryOffset(level);
+            int offset = (int)BinaryPrimitives.ReadUInt64LittleEndian(payload.AsSpan(entry));
+            int length = (int)BinaryPrimitives.ReadUInt64LittleEndian(payload.AsSpan(entry + 8));
+            Span<byte> data = payload.AsSpan(offset, length);
+            for (int index = 0; index < data.Length; index++) {
+                data[index] = rgba[index & 3];
+            }
+        }
+
+        return payload;
+    }
+
+    /// <summary>
     /// Gets the absolute data format descriptor offset of a well-formed payload.
     /// </summary>
     internal static int DfdOffset(byte[] payload) =>
@@ -265,6 +300,9 @@ internal static class Ktx2TestWriter {
     }
 
     private static int Align(int value, int alignment) => checked(((value + alignment - 1) / alignment) * alignment);
+
+    private static byte ToByte(float linear)
+        => (byte)Math.Clamp((int)MathF.Round(linear * 255f), 0, 255);
 
     private static void WriteUInt32(byte[] payload, int offset, uint value) =>
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(offset), value);

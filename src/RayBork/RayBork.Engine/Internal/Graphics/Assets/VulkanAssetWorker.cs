@@ -34,16 +34,27 @@ namespace RayBork.Internal;
 /// <para>
 /// <see cref="Destroy"/> destroys each native object exactly once and never throws: a failure while
 /// the backend is tearing down is logged and ignored. The worker tracks its live resources and its
-/// pending operations, so <see cref="DestroyAllResources"/> can cancel the pending uploads and destroy
-/// the live resources before the backend destroys the logical device; Vulkan requires every child
-/// object to be gone first, and the bridge recreates the resources from their retained uploads after
-/// the recovery. A payload that cannot be decoded is <c>RB1008</c>; a resource the device cannot create
-/// or support is <c>RB1010</c>.
+/// pending operations, so <see cref="DestroyAllResources"/> can cancel the pending uploads, destroy
+/// the live resources, and release the sampler cache before the backend destroys the logical device;
+/// Vulkan requires every child object to be gone first, and the bridge recreates the resources from
+/// their retained uploads after the recovery. A payload that cannot be decoded is <c>RB1008</c>; a
+/// resource the device cannot create or support, or a full bindless texture table, is <c>RB1010</c>.
+/// </para>
+/// <para>
+/// A texture upload that finishes reserves a bindless slot from the current table and writes the
+/// image view and cached sampler into every frame descriptor set; the slot is released when the
+/// texture resource is destroyed, which only happens once every frame that could reference it has
+/// completed. The worker resolves the bindless table through an accessor because the backend replaces
+/// it when the logical device is recreated.
 /// </para>
 /// </remarks>
 internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     private readonly Func<VulkanDevice> _deviceAccessor;
     private readonly Func<int> _deviceGenerationAccessor;
+    private readonly Func<VulkanBindlessTextureTable> _bindlessTextureTableAccessor;
+    private readonly Func<bool> _frameResourcesIdleAccessor;
+    private readonly Action _waitForFrameResourcesIdle;
+    private readonly VulkanSamplerCache _samplers;
     private readonly ILogger _logger;
     private readonly HashSet<VulkanAssetResource> _resources = [];
     private readonly HashSet<VulkanAssetUploadOperation> _pending = [];
@@ -53,20 +64,46 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// </summary>
     /// <param name="deviceAccessor">Returns the backend's current logical device.</param>
     /// <param name="deviceGenerationAccessor">Returns the backend's current device generation.</param>
+    /// <param name="bindlessTextureTableAccessor">Returns the backend's current bindless texture table.</param>
+    /// <param name="frameResourcesIdleAccessor">
+    /// Returns whether every submitted frame has completed and can no longer reference a GPU resource.
+    /// </param>
+    /// <param name="waitForFrameResourcesIdle">
+    /// Blocks until every submitted frame has completed. Used only before the bridge destroys live
+    /// resources at shutdown.
+    /// </param>
     /// <param name="logger">The renderer logger for best-effort destruction diagnostics.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal VulkanAssetWorker(
         Func<VulkanDevice> deviceAccessor,
         Func<int> deviceGenerationAccessor,
+        Func<VulkanBindlessTextureTable> bindlessTextureTableAccessor,
+        Func<bool> frameResourcesIdleAccessor,
+        Action waitForFrameResourcesIdle,
         ILogger logger) {
         ArgumentNullException.ThrowIfNull(deviceAccessor);
         ArgumentNullException.ThrowIfNull(deviceGenerationAccessor);
+        ArgumentNullException.ThrowIfNull(bindlessTextureTableAccessor);
+        ArgumentNullException.ThrowIfNull(frameResourcesIdleAccessor);
+        ArgumentNullException.ThrowIfNull(waitForFrameResourcesIdle);
         ArgumentNullException.ThrowIfNull(logger);
 
         _deviceAccessor = deviceAccessor;
         _deviceGenerationAccessor = deviceGenerationAccessor;
+        _bindlessTextureTableAccessor = bindlessTextureTableAccessor;
+        _frameResourcesIdleAccessor = frameResourcesIdleAccessor;
+        _waitForFrameResourcesIdle = waitForFrameResourcesIdle;
         _logger = logger;
+        _samplers = new VulkanSamplerCache(deviceAccessor, logger);
     }
+
+    /// <inheritdoc />
+    /// <remarks>Render-thread only; the property polls the backend's frame fences.</remarks>
+    public bool AreFrameResourcesIdle => _frameResourcesIdleAccessor();
+
+    /// <inheritdoc />
+    /// <remarks>Render-thread only; used by the render loop before it destroys live resources.</remarks>
+    public void WaitForFrameResourcesIdle() => _waitForFrameResourcesIdle();
 
     /// <summary>
     /// Gets the number of uploads that were started and not completed or canceled yet. Diagnostic, for
@@ -80,6 +117,12 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// </summary>
     internal int PendingStagingBufferCount
         => _pending.Count(operation => operation.StagingBuffer.Handle != 0);
+
+    /// <summary>
+    /// Gets the number of samplers the per-device cache owns. Diagnostic, for tests; textures with the
+    /// same filter, wrap, and anisotropy share one entry.
+    /// </summary>
+    internal int SamplerCount => _samplers.Count;
 
     /// <inheritdoc />
     public GpuAssetUploadOperation BeginUpload(AssetGpuUpload upload) {
@@ -238,8 +281,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     }
 
     /// <summary>
-    /// Adopts a finished upload: frees the staging and submission objects, registers the destination
-    /// resource as live, and marks the operation complete.
+    /// Adopts a finished upload: frees the staging and submission objects, reserves the texture's
+    /// bindless slot, registers the destination resource as live, and marks the operation complete.
     /// </summary>
     private void CompleteUpload(VulkanAssetUploadOperation upload) {
         VulkanAssetResource resource = upload.Resource ?? throw VulkanAssetErrors.UploadFailed(
@@ -247,9 +290,42 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             "the upload finished without a resource.");
 
         DestroyUploadTransients(upload);
+        if (resource is VulkanTextureAssetResource texture) {
+            AdoptBindlessSlot(texture);
+        }
+
         _resources.Add(resource);
         _pending.Remove(upload);
         upload.MarkFinished();
+    }
+
+    /// <summary>
+    /// Reserves a bindless slot for a finished texture upload and writes its descriptor into every
+    /// frame descriptor set.
+    /// </summary>
+    /// <param name="texture">The uploaded texture resource.</param>
+    /// <exception cref="AssetLoadException">
+    /// The table is full or the descriptor write failed. The diagnostic code is <c>RB1010</c> and the
+    /// message names the capacity and the texture path.
+    /// </exception>
+    private void AdoptBindlessSlot(VulkanTextureAssetResource texture) {
+        VulkanBindlessTextureTable table = _bindlessTextureTableAccessor();
+        if (!table.TryAllocate(out uint slot)) {
+            throw VulkanAssetErrors.UploadFailed(
+                texture.Upload.Path,
+                $"the bindless texture table is full ({table.Capacity} slots, including the reserved "
+                    + "white slot); dispose live textures or increase the device's update-after-bind "
+                    + "sampled-image limits");
+        }
+
+        try {
+            table.WriteTexture(slot, texture.View, texture.Sampler);
+        } catch {
+            table.Release(slot);
+            throw;
+        }
+
+        texture.AssignBindlessSlot(slot);
     }
 
     /// <summary>
@@ -310,11 +386,11 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     }
 
     /// <summary>
-    /// Cancels every pending upload and destroys every resource the worker still tracks. The backend
-    /// calls it immediately before it destroys the logical device, because Vulkan requires every child
-    /// object to be destroyed before its device and the validation layer reports a live asset object as
-    /// a leak. The bridge keeps the retained upload descriptions, so the resources are recreated by
-    /// <see cref="Restore"/> on the new device.
+    /// Cancels every pending upload, destroys every resource the worker still tracks, and destroys the
+    /// cached samplers. The backend calls it immediately before it destroys the logical device, because
+    /// Vulkan requires every child object to be destroyed before its device and the validation layer
+    /// reports a live asset object as a leak. The bridge keeps the retained upload descriptions, so the
+    /// resources are recreated by <see cref="Restore"/> on the new device.
     /// </summary>
     /// <remarks>
     /// Render-thread only, with the device idle. It never throws: a failed cancellation or destruction
@@ -339,6 +415,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         foreach (VulkanAssetResource resource in resources) {
             DestroyResource(resource);
         }
+
+        _samplers.DestroyAll();
     }
 
     private void DestroyResource(VulkanAssetResource resource) {
@@ -497,7 +575,6 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         Image image = default;
         DeviceMemory memory = default;
         ImageView view = default;
-        Sampler sampler = default;
         StagingAllocation staging = default;
         VulkanAssetUploadCommands.UploadSubmission submission = default;
         VulkanTextureAssetResource? resource = null;
@@ -540,14 +617,12 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 upload.Path,
                 "vkCreateImageView");
 
-            sampler = CreateSampler(
-                device,
-                upload.Path,
-                payloadPath,
+            Sampler sampler = _samplers.GetOrCreate(
                 filter,
                 wrap,
                 maxAnisotropy,
-                mipLevels);
+                upload.Path,
+                payloadPath);
             resource = new VulkanTextureAssetResource(
                 upload,
                 image,
@@ -588,7 +663,6 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         } catch {
             DestroyFailedUpload(device, upload, submission, staging, resource);
             if (resource is null) {
-                DestroySampler(vulkan, deviceHandle, sampler);
                 DestroyImageView(vulkan, deviceHandle, view);
                 DestroyImage(vulkan, deviceHandle, image);
                 DestroyMemory(vulkan, deviceHandle, memory);
@@ -852,69 +926,6 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         return buffer;
     }
 
-    private Sampler CreateSampler(
-        VulkanDevice device,
-        string canonicalPath,
-        string payloadPath,
-        TextureFilter filter,
-        TextureWrap wrap,
-        float maxAnisotropy,
-        int mipLevels) {
-        if (!Enum.IsDefined(filter)) {
-            throw VulkanAssetErrors.DecodeFailed(
-                payloadPath,
-                $"the sampler filter '{filter}' is not defined");
-        }
-
-        if (!Enum.IsDefined(wrap)) {
-            throw VulkanAssetErrors.DecodeFailed(
-                payloadPath,
-                $"the sampler wrap mode '{wrap}' is not defined");
-        }
-
-        if (filter == TextureFilter.Anisotropic) {
-            // VkSamplerCreateInfo-anisotropyEnable-01070 requires the logical device's
-            // samplerAnisotropy feature to be enabled. The backend's device enables no optional
-            // features, so anisotropic filtering is unavailable regardless of hardware support and
-            // the sampler falls back to linear filtering.
-            string reason = device.Capabilities.SamplerAnisotropy
-                ? "the renderer device does not enable the Vulkan samplerAnisotropy feature"
-                : "the device does not support anisotropic sampling";
-            _logger.LogWarning(
-                "The texture '{Path}' requested anisotropic filtering (maximum anisotropy {MaxAnisotropy}), but {Reason}; the sampler falls back to linear filtering.",
-                AssetPath.ToPublic(canonicalPath),
-                maxAnisotropy,
-                reason);
-        }
-
-        bool nearest = filter == TextureFilter.Nearest;
-        SamplerCreateInfo createInfo = new() {
-            SType = StructureType.SamplerCreateInfo,
-            MagFilter = nearest ? Filter.Nearest : Filter.Linear,
-            MinFilter = nearest ? Filter.Nearest : Filter.Linear,
-            MipmapMode = nearest ? SamplerMipmapMode.Nearest : SamplerMipmapMode.Linear,
-            AddressModeU = ToAddressMode(wrap),
-            AddressModeV = ToAddressMode(wrap),
-            AddressModeW = ToAddressMode(wrap),
-            MipLodBias = 0f,
-            AnisotropyEnable = false,
-            MaxAnisotropy = 1f,
-            CompareEnable = false,
-            CompareOp = CompareOp.Always,
-            MinLod = 0f,
-            MaxLod = mipLevels - 1,
-            BorderColor = BorderColor.FloatOpaqueBlack,
-            UnnormalizedCoordinates = false,
-        };
-        Result result = device.Vulkan.CreateSampler(device.Device, &createInfo, null, out Sampler sampler);
-        VulkanAssetErrors.ThrowIfFailed(result, canonicalPath, "vkCreateSampler");
-        if (sampler.Handle == 0) {
-            throw VulkanAssetErrors.UploadFailed(canonicalPath, "vkCreateSampler returned a zero sampler handle.");
-        }
-
-        return sampler;
-    }
-
     private static void RecordTextureUpload(
         Vk vulkan,
         CommandBuffer commandBuffer,
@@ -1161,9 +1172,11 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
         DestroyImageView(vulkan, deviceHandle, texture.View);
-        DestroySampler(vulkan, deviceHandle, texture.Sampler);
         DestroyImage(vulkan, deviceHandle, texture.Image);
         DestroyMemory(vulkan, deviceHandle, texture.Memory);
+        // The sampler belongs to the per-device cache, not to this resource. The slot is released only
+        // after the bridge has confirmed that no submitted frame can reference the texture.
+        texture.ReleaseBindlessSlot(_bindlessTextureTableAccessor());
     }
 
     private void DestroyMesh(VulkanMeshAssetResource mesh) {
@@ -1207,18 +1220,6 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             vulkan.DestroyImageView(device, view, null);
         } catch (Exception exception) {
             _logger.LogError(exception, "The Vulkan asset image view could not be destroyed.");
-        }
-    }
-
-    private void DestroySampler(Vk vulkan, Device device, Sampler sampler) {
-        if (sampler.Handle == 0) {
-            return;
-        }
-
-        try {
-            vulkan.DestroySampler(device, sampler, null);
-        } catch (Exception exception) {
-            _logger.LogError(exception, "The Vulkan asset sampler could not be destroyed.");
         }
     }
 
@@ -1269,16 +1270,6 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             _logger.LogError(exception, "The Vulkan asset shader module could not be destroyed.");
         }
     }
-
-    private static SamplerAddressMode ToAddressMode(TextureWrap wrap) => wrap switch {
-        TextureWrap.Repeat => SamplerAddressMode.Repeat,
-        TextureWrap.Clamp => SamplerAddressMode.ClampToEdge,
-        TextureWrap.Mirror => SamplerAddressMode.MirroredRepeat,
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(wrap),
-            wrap,
-            "The sampler wrap mode is not a defined texture wrap mode."),
-    };
 
     private static ulong Align(ulong value, ulong alignment) => ((value + alignment - 1) / alignment) * alignment;
 

@@ -15,8 +15,7 @@ namespace RayBork.Internal;
 /// </remarks>
 internal sealed class RendererBackendOptions {
     /// <summary>
-    /// Gets the requested present mode, sample count, tone mapping, exposure, validation, and scene
-    /// clear color.
+    /// Gets the requested present mode, sample count, tone mapping, exposure, and validation.
     /// </summary>
     public required RenderSettings Settings { get; init; }
 
