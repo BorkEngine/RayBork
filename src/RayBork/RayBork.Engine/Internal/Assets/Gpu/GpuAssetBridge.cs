@@ -532,6 +532,12 @@ internal sealed class GpuAssetBridge {
         GpuAssetResource? resource,
         Exception? error) {
         if (error is not null) {
+            if (resource is not null) {
+                // A worker that reports both a failure and a resource still owns a GPU object; never
+                // leak it because the caller cannot receive it.
+                DestroyResourceNow(worker, resource);
+            }
+
             request.Completion.TrySetException(CreateUploadFailure(request.Upload, error));
             return;
         }
