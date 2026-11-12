@@ -17,7 +17,6 @@ internal sealed class CastleGame : IGame {
     private const float MIN_DISTANCE = 5f;
     private const float MAX_DISTANCE = 500f;
     private const float MAX_PITCH_DEGREES = 89f;
-    private const float RADIANS_TO_DEGREES = 180f / MathF.PI;
 
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
@@ -42,8 +41,12 @@ internal sealed class CastleGame : IGame {
 
         Vector3 offset = _initialCameraPosition - _orbitCenter;
         _distance = offset.Length();
-        _yawDegrees = MathF.Atan2(offset.X, offset.Z) * RADIANS_TO_DEGREES;
-        _pitchDegrees = MathF.Asin(offset.Y / _distance) * RADIANS_TO_DEGREES;
+
+        // Start from the rotation that looks from the initial camera position at the orbit center,
+        // then store its degrees so the rest of the sample only deals in degrees.
+        Vector3 angles = Quaternion.LookRotation(-offset, Vector3.UnitY).EulerAngles;
+        _yawDegrees = angles.Y;
+        _pitchDegrees = -angles.X;
     }
 
     /// <inheritdoc/>
