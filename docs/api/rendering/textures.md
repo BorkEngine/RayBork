@@ -95,10 +95,21 @@ public enum TextureFormat {
   sampler passed to `CreateTextureBuilder`, defaulting to `Linear` + `Repeat` with anisotropy `1`.
 - `Rgba16Float` is the default HDR render-target format. Ordinary packed color textures are usually
   `Bc7Srgb`; linear data textures use `Bc7Unorm`, `Bc5Unorm`, or `R8Unorm`.
-- Bindless slots are allocated lazily on first use. The renderer queries the device's
-  `maxPerStageDescriptorUpdateAfterBindSampledImages` and targets a 4096-slot table. Exceeding the
-  table throws `GraphicsException`; the game must reduce live textures or wait for frame
-  retirement to free slots.
+- Bindless slots are allocated when a texture's GPU upload completes, not lazily at the first draw.
+  The renderer creates a table whose capacity is the smaller of 4096 slots and the device's
+  `maxPerStageDescriptorUpdateAfterBindSampledImages` and
+  `maxDescriptorSetUpdateAfterBindSampledImages` limits, and never less than one slot. Slot 0 is
+  always reserved for the renderer's built-in 1x1 white texture, so a `null` texture binding and a
+  texture binding that uses the bake default sample white.
+- If the table is full, the texture upload fails with `AssetLoadException` (diagnostic code
+  `RB1010`). The message names the table capacity and the failing texture path; the game must
+  reduce the number of live textures or dispose unused textures and wait for frame retirement before
+  retrying. A slot is released only when the texture's GPU resource is destroyed, which already
+  waits for every submitted frame that can reference it to complete.
+- Samplers are cached per device and keyed by `(TextureFilter, TextureWrap, MaxAnisotropy)`.
+  Every texture with the same sampler state shares one sampler; the cache is destroyed with the
+  logical device. Anisotropic filtering is enabled only when the device advertises and the renderer
+  enables `samplerAnisotropy`; otherwise the sampler falls back to linear filtering with a warning.
 - `Depth32Float` is used by render targets, not by ordinary packed textures.
 - A texture participating in a frame keeps its slot and GPU image alive until the frame fence
   signals, even if the game disposes its public reference earlier.

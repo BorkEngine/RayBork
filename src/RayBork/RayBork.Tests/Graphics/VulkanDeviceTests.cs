@@ -69,6 +69,23 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void CapabilitiesReportTheEnabledBindlessSubset() {
+        using GpuTestHost host = GpuTestHost.CreateOrSkip();
+
+        VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
+
+        Assert.True(capabilities.DescriptorIndexing);
+        Assert.True(capabilities.BindlessTextureCapacity >= 1);
+        Assert.True(capabilities.BindlessTextureCapacity <= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY);
+        Assert.True(capabilities.MaxPerStageDescriptorUpdateAfterBindSampledImages >= 1);
+        Assert.True(capabilities.MaxDescriptorSetUpdateAfterBindSampledImages >= 1);
+        Assert.True(capabilities.MaxPerStageDescriptorUpdateAfterBindSamplers >= 1);
+        Assert.True(capabilities.MaxStorageBufferRange > 0);
+        Assert.True(capabilities.MaxMemoryAllocationSize > 0);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void SurfaceReportsSwapchainFormatPairs() {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 

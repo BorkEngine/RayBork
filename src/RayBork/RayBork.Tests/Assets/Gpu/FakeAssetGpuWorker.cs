@@ -28,6 +28,17 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     private long _nextHandle = 1;
 
     /// <summary>
+    /// Gets or sets whether the fake worker reports that no frame can reference a resource. The
+    /// default lets destruction drain immediately, preserving the existing bridge test behavior.
+    /// </summary>
+    internal bool FrameResourcesIdle { get; set; } = true;
+
+    /// <summary>
+    /// Gets the number of <see cref="WaitForFrameResourcesIdle"/> calls.
+    /// </summary>
+    internal int WaitForFrameResourcesIdleCount { get; private set; }
+
+    /// <summary>
     /// Gets or sets an exception thrown by <see cref="BeginUpload"/>.
     /// </summary>
     internal Exception? UploadException { get; set; }
@@ -178,6 +189,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <param name="timeout">The maximum wait.</param>
     /// <returns>The started operation.</returns>
     internal FakeGpuAssetUploadOperation WaitForUpload(TimeSpan timeout) => WaitForUpload(0, timeout);
+
+    /// <inheritdoc />
+    public bool AreFrameResourcesIdle => FrameResourcesIdle;
+
+    /// <inheritdoc />
+    public void WaitForFrameResourcesIdle() => WaitForFrameResourcesIdleCount++;
 
     /// <inheritdoc />
     public GpuAssetUploadOperation BeginUpload(AssetGpuUpload upload) {
