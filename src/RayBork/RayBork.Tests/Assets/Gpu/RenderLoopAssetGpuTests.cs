@@ -62,6 +62,37 @@ public sealed class RenderLoopAssetGpuTests {
         Assert.Equal(1, harness.Bridge.LiveResourceCount);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task FrameIsPresentedWhileAnUploadIsInFlightAndCompletionIsPolledWithoutAFrame() {
+        using Harness harness = new();
+        harness.PublishFrame();
+        harness.WaitForFrameSubmit();
+
+        harness.Worker.DeferUploads = true;
+        Task<GpuAssetResource> uploadTask = harness.Bridge.UploadAsync(
+            CreateTextureUpload("/textures/test"),
+            CancellationToken.None);
+        FakeGpuAssetUploadOperation upload = harness.Worker.WaitForUpload(_timeout);
+
+        harness.PublishFrame();
+        harness.WaitForSecondPresent();
+
+        Assert.False(uploadTask.IsCompleted);
+        Assert.Equal(2, harness.PresentCount);
+        Assert.True(harness.Bridge.HasPendingWork);
+
+        // No frame is published after this point. The loop observes the finished copy through the
+        // bounded wait it uses while the bridge has pending work.
+        upload.Complete();
+        GpuAssetResource resource = await uploadTask.WaitAsync(_timeout, TestContext.Current.CancellationToken);
+
+        Assert.Same(upload.Upload, resource.Upload);
+        Assert.Equal(1, harness.Worker.UploadCallCount);
+        Assert.False(harness.Bridge.HasPendingWork);
+        Assert.Null(harness.Loop.Failure);
+    }
+
     private static RendererBackendOptions CreateOptions() => new() {
         Settings = new RenderSettings {
             PresentMode = PresentMode.Mailbox,
@@ -146,6 +177,8 @@ public sealed class RenderLoopAssetGpuTests {
         internal FrameRing Ring { get; } = new();
 
         internal RenderLoop Loop { get; }
+
+        internal int PresentCount => Volatile.Read(ref _presentCount);
 
         internal void PublishFrame() {
             Assert.True(Ring.TryAcquireWritable(out FrameLease lease));

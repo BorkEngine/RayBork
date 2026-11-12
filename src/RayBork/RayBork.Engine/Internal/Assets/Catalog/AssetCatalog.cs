@@ -25,11 +25,13 @@ namespace RayBork.Internal;
 /// custom data and <see cref="LoadData"/> payloads are never cached.
 /// </para>
 /// <para>
-/// The loader thread only reads and decompresses pack payloads and waits for the GPU upload bridge; it
-/// never calls SDL, Vulkan, or game code. <see cref="Stop"/> cancels and joins the loader, fails the
-/// pending loads with <see cref="ObjectDisposedException"/>, forces every cached asset to dispose, and
-/// releases the pack mappings. It runs before the frame ring completes so the render thread can still
-/// service the queued GPU destructions.
+/// The loader thread only reads and decompresses pack payloads, deserializes custom data, and starts
+/// GPU uploads; it never calls SDL, Vulkan, or game code and never waits for a GPU copy. An engine
+/// load is deferred: while its upload is in flight the loader keeps serving the next queued request,
+/// so custom data and <see cref="LoadData"/> do not wait behind a GPU upload. <see cref="Stop"/>
+/// cancels and joins the loader, fails the pending loads with <see cref="ObjectDisposedException"/>,
+/// forces every cached asset to dispose, and releases the pack mappings. It runs before the frame ring
+/// completes so the render thread can still service the queued GPU destructions.
 /// </para>
 /// </remarks>
 internal sealed class AssetCatalog : IAssetCatalog {
@@ -345,11 +347,13 @@ internal sealed class AssetCatalog : IAssetCatalog {
                 }
 
                 item.Execute(_stopSource.Token);
-
-                lock (_gate) {
-                    _pending.Remove(item);
-                }
             }
+        }
+    }
+
+    private void CompleteWorkItem(AssetLoaderWorkItem item) {
+        lock (_gate) {
+            _pending.Remove(item);
         }
     }
 
@@ -390,7 +394,8 @@ internal sealed class AssetCatalog : IAssetCatalog {
                 _engineCache.Add(key, entry);
                 Dictionary<string, VisibleAsset> visibleStack = _visible;
                 workItem = new AssetLoaderWorkItem(
-                    stopToken => LoadEngineObject(entry, visibleStack, visible, assetType, stopToken));
+                    stopToken => LoadEngineObjectAsync(entry, visibleStack, visible, assetType, stopToken),
+                    CompleteWorkItem);
                 entry.Completion = workItem.Completion;
                 if (!TryEnqueueLocked(workItem)) {
                     _engineCache.Remove(key);
@@ -456,7 +461,17 @@ internal sealed class AssetCatalog : IAssetCatalog {
         }
     }
 
-    private object LoadEngineObject(
+    /// <summary>
+    /// Decodes one engine asset on the loader thread, starts its GPU upload, and constructs the public
+    /// asset when the upload completes.
+    /// </summary>
+    /// <remarks>
+    /// The method returns an incomplete task while the GPU copy runs, so the loader can serve the next
+    /// queued request. The upload uses the catalog stop token, never a caller token, so one canceled
+    /// waiter never cancels the shared load. A stop or a failure removes the pending cache entry and
+    /// destroys the just-created resource before the task faults.
+    /// </remarks>
+    private async Task<object> LoadEngineObjectAsync(
         EngineCacheEntry entry,
         Dictionary<string, VisibleAsset> visibleStack,
         VisibleAsset descriptorEntry,
@@ -474,8 +489,7 @@ internal sealed class AssetCatalog : IAssetCatalog {
                 descriptorEntry.Entry.Path,
                 descriptorEntry,
                 visibleStack);
-            Task<GpuAssetResource> upload = _bridge.UploadAsync(decoded.Upload, stopToken);
-            resource = upload.GetAwaiter().GetResult();
+            resource = await _bridge.UploadAsync(decoded.Upload, stopToken).ConfigureAwait(false);
             stopToken.ThrowIfCancellationRequested();
 
             EngineAsset lifetime = new(
@@ -563,7 +577,8 @@ internal sealed class AssetCatalog : IAssetCatalog {
             }
 
             workItem = new AssetLoaderWorkItem(
-                _ => DeserializeCustom(visible, registration));
+                _ => Task.FromResult<object>(DeserializeCustom(visible, registration)),
+                CompleteWorkItem);
             if (!TryEnqueueLocked(workItem)) {
                 return Task.FromException<T>(CreateLoaderQueueFull(canonical));
             }
@@ -593,7 +608,9 @@ internal sealed class AssetCatalog : IAssetCatalog {
                 return Task.FromException<byte[]>(CreateNotFound(canonical));
             }
 
-            workItem = new AssetLoaderWorkItem(_ => visible.Archive.ReadPayload(visible.Entry));
+            workItem = new AssetLoaderWorkItem(
+                _ => Task.FromResult<object>(visible.Archive.ReadPayload(visible.Entry)),
+                CompleteWorkItem);
             if (!TryEnqueueLocked(workItem)) {
                 return Task.FromException<byte[]>(CreateLoaderQueueFull(canonical));
             }
@@ -956,25 +973,81 @@ internal sealed class AssetCatalog : IAssetCatalog {
     /// <summary>
     /// One queued loader request. The completion task never runs user code inline on the loader thread.
     /// </summary>
+    /// <remarks>
+    /// The work returns a task so a GPU upload can stay pending while the loader dequeues the next
+    /// request. A completed work task completes the item inline; an incomplete one stays in the
+    /// catalog's pending set until its continuation completes the item and removes it. That keeps the
+    /// queue bound and <see cref="Stop"/> correct for deferred loads while the loader thread continues.
+    /// </remarks>
     private sealed class AssetLoaderWorkItem {
-        private readonly Func<CancellationToken, object> _work;
+        private readonly Func<CancellationToken, Task<object>> _work;
+        private readonly Action<AssetLoaderWorkItem> _onCompleted;
         private readonly TaskCompletionSource<object> _completion =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        internal AssetLoaderWorkItem(Func<CancellationToken, object> work) => _work = work;
+        internal AssetLoaderWorkItem(
+            Func<CancellationToken, Task<object>> work,
+            Action<AssetLoaderWorkItem> onCompleted) {
+            ArgumentNullException.ThrowIfNull(work);
+            ArgumentNullException.ThrowIfNull(onCompleted);
+
+            _work = work;
+            _onCompleted = onCompleted;
+        }
 
         internal Task<object> Completion => _completion.Task;
 
         internal void Execute(CancellationToken stopToken) {
+            Task<object> work;
             try {
-                _completion.TrySetResult(_work(stopToken));
+                work = _work(stopToken);
             } catch (OperationCanceledException) when (stopToken.IsCancellationRequested) {
                 _completion.TrySetException(CreateStoppedException());
+                _onCompleted(this);
+                return;
             } catch (Exception exception) {
                 _completion.TrySetException(exception);
+                _onCompleted(this);
+                return;
             }
+
+            if (work.IsCompleted) {
+                CompleteFrom(work);
+                _onCompleted(this);
+                return;
+            }
+
+            work.ContinueWith(
+                static (completed, state) => {
+                    AssetLoaderWorkItem item = (AssetLoaderWorkItem)state!;
+                    item.CompleteFrom(completed);
+                    item._onCompleted(item);
+                },
+                this,
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
         }
 
         internal void Fail(Exception exception) => _completion.TrySetException(exception);
+
+        private void CompleteFrom(Task<object> work) {
+            if (work.IsCompletedSuccessfully) {
+                _completion.TrySetResult(work.Result);
+                return;
+            }
+
+            if (work.IsCanceled) {
+                // The loader work only observes the catalog stop token, whose cancellation is reported
+                // as ObjectDisposedException at the public caller.
+                _completion.TrySetException(CreateStoppedException());
+                return;
+            }
+
+            Exception exception = work.Exception?.InnerException
+                ?? (Exception?)work.Exception
+                ?? new InvalidOperationException("The asset loader work item failed.");
+            _completion.TrySetException(exception);
+        }
     }
 }

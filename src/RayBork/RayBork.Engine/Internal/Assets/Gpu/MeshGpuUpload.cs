@@ -33,4 +33,7 @@ internal sealed class MeshGpuUpload : AssetGpuUpload {
     /// Gets the vertex stream followed by the 32-bit indices.
     /// </summary>
     internal ReadOnlyMemory<byte> VertexAndIndexData { get; }
+
+    /// <inheritdoc/>
+    internal override long EstimatedBytes => VertexAndIndexData.Length;
 }

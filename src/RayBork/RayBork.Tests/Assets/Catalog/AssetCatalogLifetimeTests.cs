@@ -84,21 +84,15 @@ public sealed class AssetCatalogLifetimeTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task ConcurrentLoadsCoalesceToOneUploadAndEachAcquireAReference() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        using ManualResetEventSlim uploadStarted = new(false);
-        using ManualResetEventSlim releaseUpload = new(false);
-        harness.Worker.UploadHandler = upload => {
-            uploadStarted.Set();
-            Assert.True(
-                releaseUpload.Wait(_timeout),
-                "The test never released the coalesced upload.");
-            return new FakeGpuAssetResource(upload, harness.Worker.NextHandle());
-        };
+        harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         Task<Mesh> firstLoad = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
-        Assert.True(uploadStarted.Wait(_timeout, cancellationToken));
+        FakeGpuAssetUploadOperation upload = harness.Worker.WaitForUpload(_timeout);
         Task<Mesh> secondLoad = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
-        releaseUpload.Set();
+        Assert.False(firstLoad.IsCompleted);
+
+        upload.Complete();
 
         Mesh first = await firstLoad.WaitAsync(_timeout, cancellationToken);
         Mesh second = await secondLoad.WaitAsync(_timeout, cancellationToken);
@@ -120,24 +114,18 @@ public sealed class AssetCatalogLifetimeTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task CanceledWaiterAcquiresNoReferenceAndDoesNotBreakTheOtherWaiter() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        using ManualResetEventSlim uploadStarted = new(false);
-        using ManualResetEventSlim releaseUpload = new(false);
-        harness.Worker.UploadHandler = upload => {
-            uploadStarted.Set();
-            Assert.True(releaseUpload.Wait(_timeout), "The test never released the upload.");
-            return new FakeGpuAssetResource(upload, harness.Worker.NextHandle());
-        };
+        harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         using CancellationTokenSource cancellation = new();
 
         Task<Mesh> canceled = harness.Catalog.Load<Mesh>("/meshes/quad", cancellation.Token);
-        Assert.True(uploadStarted.Wait(_timeout, cancellationToken));
+        FakeGpuAssetUploadOperation upload = harness.Worker.WaitForUpload(_timeout);
         Task<Mesh> survivor = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
 
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceled);
 
-        releaseUpload.Set();
+        upload.Complete();
         Mesh mesh = await survivor.WaitAsync(_timeout, cancellationToken);
 
         Assert.Equal(1, harness.Worker.UploadCallCount);
@@ -150,29 +138,27 @@ public sealed class AssetCatalogLifetimeTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AllCanceledWaitersDestroyTheUnusedResourceAndLeaveNoCacheEntry() {
+    public async Task AllCanceledWaitersReleaseTheUnusedUploadAndLeaveNoCacheEntry() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        using ManualResetEventSlim uploadStarted = new(false);
-        using ManualResetEventSlim releaseUpload = new(false);
-        harness.Worker.UploadHandler = upload => {
-            uploadStarted.Set();
-            Assert.True(releaseUpload.Wait(_timeout), "The test never released the upload.");
-            return new FakeGpuAssetResource(upload, harness.Worker.NextHandle());
-        };
+        harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         using CancellationTokenSource cancellation = new();
 
         Task<Mesh> canceled = harness.Catalog.Load<Mesh>("/meshes/quad", cancellation.Token);
-        Assert.True(uploadStarted.Wait(_timeout, cancellationToken));
+        FakeGpuAssetUploadOperation upload = harness.Worker.WaitForUpload(_timeout);
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => canceled);
-        releaseUpload.Set();
+        upload.Complete();
 
         AssetCatalogLoadTests.WaitUntil(
-            () => harness.Worker.DestroyCalls.Count == 1,
-            "A load whose waiters all canceled must destroy the created resource.");
+            () => harness.Worker.CancelCalls.Count + harness.Worker.DestroyCalls.Count == 1,
+            "A load whose waiters all canceled must release the started upload.");
 
-        Mesh retry = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
+        Task<Mesh> retryTask = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
+        FakeGpuAssetUploadOperation retryUpload = harness.Worker.WaitForUpload(1, _timeout);
+        retryUpload.Complete();
+        Mesh retry = await retryTask.WaitAsync(_timeout, cancellationToken);
+        int destroysBefore = harness.Worker.DestroyCalls.Count;
 
         try {
             Assert.Equal(2, harness.Worker.UploadCallCount);
@@ -182,7 +168,7 @@ public sealed class AssetCatalogLifetimeTests {
         }
 
         AssetCatalogLoadTests.WaitUntil(
-            () => harness.Worker.DestroyCalls.Count == 2,
+            () => harness.Worker.DestroyCalls.Count == destroysBefore + 1,
             "The retry must be destroyed when its only owner disposes.");
     }
 
@@ -269,19 +255,13 @@ public sealed class AssetCatalogLifetimeTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task OneOwnerDisposeDoesNotBreakAnotherCoalescedWaiter() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        using ManualResetEventSlim uploadStarted = new(false);
-        using ManualResetEventSlim releaseUpload = new(false);
-        harness.Worker.UploadHandler = upload => {
-            uploadStarted.Set();
-            Assert.True(releaseUpload.Wait(_timeout), "The test never released the upload.");
-            return new FakeGpuAssetResource(upload, harness.Worker.NextHandle());
-        };
+        harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         Task<Mesh> firstLoad = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
-        Assert.True(uploadStarted.Wait(_timeout, cancellationToken));
+        FakeGpuAssetUploadOperation upload = harness.Worker.WaitForUpload(_timeout);
         Task<Mesh> secondLoad = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
-        releaseUpload.Set();
+        upload.Complete();
 
         Mesh first = await firstLoad.WaitAsync(_timeout, cancellationToken);
         first.Dispose();
@@ -397,26 +377,22 @@ public sealed class AssetCatalogLifetimeTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task StopFailsPendingLoadsAndStopsTheLoaderThread() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        using ManualResetEventSlim uploadStarted = new(false);
-        using ManualResetEventSlim releaseUpload = new(false);
-        harness.Worker.UploadHandler = upload => {
-            uploadStarted.Set();
-            Assert.True(releaseUpload.Wait(_timeout), "The test never released the upload.");
-            return new FakeGpuAssetResource(upload, harness.Worker.NextHandle());
-        };
+        harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         Assert.Equal("RayBork.Asset", harness.Catalog.LoaderThread!.Name);
         Assert.True(harness.Catalog.LoaderThread.IsAlive);
 
         Task<Mesh> pending = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
-        Assert.True(uploadStarted.Wait(_timeout, cancellationToken));
+        FakeGpuAssetUploadOperation upload = harness.Worker.WaitForUpload(_timeout);
+        Assert.False(pending.IsCompleted);
 
         harness.Catalog.Stop();
-        releaseUpload.Set();
+        upload.Complete();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => pending);
         Assert.False(harness.Catalog.LoaderThread.IsAlive);
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
         Assert.Throws<ObjectDisposedException>(() => harness.Catalog.Exists("/meshes/quad"));
         Assert.Throws<ObjectDisposedException>(
             () => {
