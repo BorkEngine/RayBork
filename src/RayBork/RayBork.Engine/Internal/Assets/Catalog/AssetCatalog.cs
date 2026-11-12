@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Numerics;
 using Microsoft.Extensions.Logging;
 
@@ -33,8 +34,13 @@ namespace RayBork.Internal;
 /// forces every cached asset to dispose, and releases the pack mappings. It runs before the frame ring
 /// completes so the render thread can still service the queued GPU destructions.
 /// </para>
+/// <para>
+/// The catalog also owns the app's <see cref="ProceduralAssetService"/>. Procedural assets are never
+/// cached or resolved by this catalog; the service only borrows the same GPU upload bridge. The
+/// reserved <c>_procedural</c> path prefix is reported as missing instead of resolving a pack entry.
+/// </para>
 /// </remarks>
-internal sealed class AssetCatalog : IAssetCatalog {
+internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     /// <summary>The loader thread name.</summary>
     internal const string LOADER_THREAD_NAME = "RayBork.Asset";
 
@@ -51,6 +57,7 @@ internal sealed class AssetCatalog : IAssetCatalog {
 
     private readonly ILogger _logger;
     private readonly GpuAssetBridge _bridge;
+    private readonly ProceduralAssetService _proceduralAssets;
     private readonly ReadOnlyMemory<byte> _builtInPack;
     private readonly string[] _userPackPaths;
     private readonly Dictionary<Type, AssetTypeRegistration> _customTypes;
@@ -93,6 +100,7 @@ internal sealed class AssetCatalog : IAssetCatalog {
 
         _logger = loggerFactory.CreateLogger(LOGGER_CATEGORY);
         _bridge = bridge;
+        _proceduralAssets = new ProceduralAssetService(bridge);
         _builtInPack = builtInPack;
         _userPackPaths = [.. userPackPaths];
         _customTypes = new Dictionary<Type, AssetTypeRegistration>(assetTypes.Count);
@@ -116,11 +124,18 @@ internal sealed class AssetCatalog : IAssetCatalog {
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The service shares the app's GPU upload bridge but never enters this catalog's cache, so a
+    /// procedural asset cannot shadow or be shadowed by a pack path.
+    /// </remarks>
+    ProceduralAssetService IProceduralAssetProvider.ProceduralAssets => _proceduralAssets;
+
+    /// <inheritdoc/>
     public bool Exists(string path) {
         string canonical = AssetPath.Normalize(path);
         lock (_gate) {
             ThrowIfUnavailableLocked();
-            return _visible.ContainsKey(canonical);
+            return !ProceduralAssetIds.IsReserved(canonical) && _visible.ContainsKey(canonical);
         }
     }
 
@@ -131,6 +146,14 @@ internal sealed class AssetCatalog : IAssetCatalog {
     /// </remarks>
     public Task<T> Load<T>(string path, CancellationToken cancellationToken = default) {
         string canonical = AssetPath.Normalize(path);
+        if (ProceduralAssetIds.IsReserved(canonical)) {
+            lock (_gate) {
+                ThrowIfUnavailableLocked();
+            }
+
+            return Task.FromException<T>(CreateNotFound(canonical));
+        }
+
         Type assetType = typeof(T);
         if (assetType == typeof(Mesh) || assetType == typeof(Texture) || assetType == typeof(Shader)) {
             return LoadEngineAsync<T>(canonical, assetType, cancellationToken);
@@ -155,6 +178,14 @@ internal sealed class AssetCatalog : IAssetCatalog {
     /// <inheritdoc/>
     public Task<byte[]> LoadData(string path, CancellationToken cancellationToken = default) {
         string canonical = AssetPath.Normalize(path);
+        if (ProceduralAssetIds.IsReserved(canonical)) {
+            lock (_gate) {
+                ThrowIfUnavailableLocked();
+            }
+
+            return Task.FromException<byte[]>(CreateNotFound(canonical));
+        }
+
         return LoadDataAsync(canonical, cancellationToken);
     }
 
@@ -267,6 +298,10 @@ internal sealed class AssetCatalog : IAssetCatalog {
 
         _stopSource.Cancel();
         _workAvailable.Set();
+
+        // The tick thread has returned, so no game callback can create or build a procedural asset any
+        // more. A build already waiting on an upload fails when the render thread closes the bridge.
+        _proceduralAssets.Stop();
 
         ObjectDisposedException stopped = CreateStoppedException();
         foreach (AssetLoaderWorkItem item in pending) {
@@ -647,10 +682,17 @@ internal sealed class AssetCatalog : IAssetCatalog {
             MeshAssetDescriptor descriptor = AssetSerialization.Deserialize<MeshAssetDescriptor>(descriptorPayload);
             byte[] payload = ReadRawPayload(visibleStack, descriptor.Payload, canonical, "mesh");
             ValidateMesh(descriptor, payload, canonical);
+            Vertex[] vertices = MeshPayloadCodec.DecodeVertices(
+                payload,
+                checked((int)descriptor.VertexCount));
+            uint[] indices = MeshPayloadCodec.DecodeIndices(
+                payload,
+                checked((int)descriptor.VertexCount),
+                checked((int)descriptor.IndexCount));
             MeshAssetDescriptor captured = descriptor;
             return new DecodedAsset(
                 new MeshGpuUpload(canonical, descriptor, payload),
-                lifetime => new Mesh(lifetime, captured));
+                lifetime => new Mesh(lifetime, captured, vertices, indices, isProcedural: false));
         }
 
         if (assetType == typeof(Texture)) {
@@ -753,6 +795,22 @@ internal sealed class AssetCatalog : IAssetCatalog {
                 $"the mesh payload is {payload.Length} bytes; the descriptor requires exactly "
                     + $"{expectedLength} bytes for {descriptor.VertexCount} vertices and "
                     + $"{descriptor.IndexCount} indices");
+        }
+
+        // The CPU indices are exposed on the loaded mesh, so an out-of-range index is a corrupt payload
+        // even though the GPU buffers would accept the raw bytes.
+        ReadOnlySpan<byte> payloadSpan = payload;
+        int indexCount = checked((int)descriptor.IndexCount);
+        int indexOffset = checked((int)descriptor.VertexCount) * MeshAssetDescriptor.VERTEX_STRIDE;
+        for (int index = 0; index < indexCount; index++) {
+            uint value = BinaryPrimitives.ReadUInt32LittleEndian(
+                payloadSpan[(indexOffset + (index * sizeof(uint)))..]);
+            if (value >= descriptor.VertexCount) {
+                throw CreateLoadFailure(
+                    canonical,
+                    $"the mesh index {value} at position {index} is outside the "
+                        + $"{descriptor.VertexCount} vertices");
+            }
         }
     }
 

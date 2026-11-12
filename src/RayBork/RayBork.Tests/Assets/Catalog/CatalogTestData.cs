@@ -45,6 +45,37 @@ internal static class CatalogTestData {
     internal static byte[] CreateMeshPayload()
         => new byte[(MESH_VERTEX_COUNT * MeshAssetDescriptor.VERTEX_STRIDE) + (MESH_INDEX_COUNT * sizeof(uint))];
 
+    /// <summary>
+    /// Writes an independent little-endian mesh payload for the given vertices and indices. The
+    /// writer mirrors the bake layout instead of reusing the runtime codec, so the round-trip test
+    /// exercises the decoder against a second encoder.
+    /// </summary>
+    internal static byte[] CreateMeshPayload(IReadOnlyList<Vertex> vertices, IReadOnlyList<uint> indices) {
+        ArgumentNullException.ThrowIfNull(vertices);
+        ArgumentNullException.ThrowIfNull(indices);
+
+        int byteCount = (vertices.Count * MeshAssetDescriptor.VERTEX_STRIDE) + (indices.Count * sizeof(uint));
+        using MemoryStream stream = new(byteCount);
+        using (BinaryWriter writer = new(stream, System.Text.Encoding.UTF8, leaveOpen: true)) {
+            foreach (Vertex vertex in vertices) {
+                WriteVector3(writer, vertex.Position);
+                WriteVector3(writer, vertex.Normal);
+                WriteVector2(writer, vertex.Uv);
+                WriteVector2(writer, vertex.Uv1);
+                WriteVector2(writer, vertex.Uv2);
+                WriteVector2(writer, vertex.Uv3);
+                WriteColor(writer, vertex.Color);
+                WriteVector4(writer, vertex.Tangent);
+            }
+
+            foreach (uint index in indices) {
+                writer.Write(index);
+            }
+        }
+
+        return stream.ToArray();
+    }
+
     internal static TextureAssetDescriptor CreateTextureDescriptor() => new() {
         Payload = TEXTURE_PAYLOAD_PATH,
         Width = 4,
@@ -119,6 +150,31 @@ internal static class CatalogTestData {
 
     internal static AssetTypeRegistration SettingsRegistration
         => AssetTypeRegistration.Create<CatalogTestSettings>();
+
+    private static void WriteVector2(BinaryWriter writer, System.Numerics.Vector2 value) {
+        writer.Write(value.X);
+        writer.Write(value.Y);
+    }
+
+    private static void WriteVector3(BinaryWriter writer, System.Numerics.Vector3 value) {
+        writer.Write(value.X);
+        writer.Write(value.Y);
+        writer.Write(value.Z);
+    }
+
+    private static void WriteVector4(BinaryWriter writer, System.Numerics.Vector4 value) {
+        writer.Write(value.X);
+        writer.Write(value.Y);
+        writer.Write(value.Z);
+        writer.Write(value.W);
+    }
+
+    private static void WriteColor(BinaryWriter writer, Color value) {
+        writer.Write(value.R);
+        writer.Write(value.G);
+        writer.Write(value.B);
+        writer.Write(value.A);
+    }
 }
 
 /// <summary>

@@ -10,6 +10,11 @@ internal enum AssetGpuUploadKind {
     Texture,
 
     /// <summary>
+    /// A texture image, view, and sampler created from the raw mip levels of a procedural texture.
+    /// </summary>
+    ProceduralTexture,
+
+    /// <summary>
     /// A vertex and index buffer pair decoded from a packed mesh payload.
     /// </summary>
     Mesh,

@@ -76,6 +76,8 @@ RayBork.DepthTest.Less = 3 -> RayBork.DepthTest
 RayBork.DepthTest.LessOrEqual = 4 -> RayBork.DepthTest
 RayBork.EngineContext
 RayBork.EngineContext.Assets.get -> RayBork.IAssetCatalog!
+RayBork.EngineContext.CreateMeshBuilder(RayBork.PrimitiveTopology topology = RayBork.PrimitiveTopology.TriangleList) -> RayBork.MeshBuilder!
+RayBork.EngineContext.CreateTextureBuilder(int width, int height, RayBork.TextureFormat format = RayBork.TextureFormat.Rgba8Srgb, bool generateMips = true, RayBork.SamplerState? sampler = null) -> RayBork.TextureBuilder!
 RayBork.EngineContext.DeltaTime.get -> double
 RayBork.EngineContext.Fps.get -> double
 RayBork.EngineContext.FrameCount.get -> long
@@ -480,10 +482,27 @@ RayBork.Mesh
 RayBork.Mesh.Bounds.get -> RayBork.BoundingBox
 RayBork.Mesh.Dispose() -> void
 RayBork.Mesh.IndexCount.get -> int
+RayBork.Mesh.Indices.get -> System.ReadOnlyMemory<uint>
 RayBork.Mesh.IsDisposed.get -> bool
+RayBork.Mesh.IsProcedural.get -> bool
 RayBork.Mesh.Path.get -> string!
 RayBork.Mesh.Topology.get -> RayBork.PrimitiveTopology
 RayBork.Mesh.VertexCount.get -> int
+RayBork.Mesh.Vertices.get -> System.ReadOnlyMemory<RayBork.Vertex>
+RayBork.MeshBuilder
+RayBork.MeshBuilder.BuildAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<RayBork.Mesh!>!
+RayBork.MeshBuilder.ComputeBounds() -> RayBork.BoundingBox
+RayBork.MeshBuilder.ComputeNormals(RayBork.MeshNormalMode mode = RayBork.MeshNormalMode.Smooth) -> void
+RayBork.MeshBuilder.ComputeTangents() -> void
+RayBork.MeshBuilder.Indices.get -> System.Collections.Generic.List<uint>!
+RayBork.MeshBuilder.SetIndices(System.ReadOnlySpan<uint> indices) -> void
+RayBork.MeshBuilder.SetVertices(System.ReadOnlySpan<RayBork.Vertex> vertices) -> void
+RayBork.MeshBuilder.Topology.get -> RayBork.PrimitiveTopology
+RayBork.MeshBuilder.Topology.set -> void
+RayBork.MeshBuilder.Vertices.get -> System.Collections.Generic.List<RayBork.Vertex>!
+RayBork.MeshNormalMode
+RayBork.MeshNormalMode.Flat = 1 -> RayBork.MeshNormalMode
+RayBork.MeshNormalMode.Smooth = 0 -> RayBork.MeshNormalMode
 RayBork.Monitor
 RayBork.Monitor.Bounds.get -> RayBork.Rect
 RayBork.Monitor.Bounds.init -> void
@@ -659,11 +678,17 @@ RayBork.Texture.Dispose() -> void
 RayBork.Texture.Format.get -> RayBork.TextureFormat
 RayBork.Texture.Height.get -> int
 RayBork.Texture.IsDisposed.get -> bool
+RayBork.Texture.IsProcedural.get -> bool
 RayBork.Texture.IsSrgb.get -> bool
 RayBork.Texture.MipLevels.get -> int
 RayBork.Texture.Path.get -> string!
 RayBork.Texture.Sampler.get -> RayBork.SamplerState
 RayBork.Texture.Width.get -> int
+RayBork.TextureBuilder
+RayBork.TextureBuilder.BuildAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<RayBork.Texture!>!
+RayBork.TextureBuilder.GenerateMips() -> void
+RayBork.TextureBuilder.SetPixels(System.ReadOnlySpan<byte> pixels) -> void
+RayBork.TextureBuilder.SetPixels(System.ReadOnlySpan<RayBork.Color> colors) -> void
 RayBork.TextureFilter
 RayBork.TextureFilter.Anisotropic = 2 -> RayBork.TextureFilter
 RayBork.TextureFilter.Linear = 1 -> RayBork.TextureFilter
@@ -721,6 +746,17 @@ RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithX(float x) -> S
 RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithY(float y) -> System.Numerics.Vector3
 RayBork.Vector3Extensions.extension(System.Numerics.Vector3).WithZ(float z) -> System.Numerics.Vector3
 RayBork.Vector3Extensions.extension(System.Numerics.Vector3).Xz.get -> System.Numerics.Vector3
+RayBork.Vertex
+RayBork.Vertex.Color -> RayBork.Color
+RayBork.Vertex.Normal -> System.Numerics.Vector3
+RayBork.Vertex.Position -> System.Numerics.Vector3
+RayBork.Vertex.Tangent -> System.Numerics.Vector4
+RayBork.Vertex.Uv -> System.Numerics.Vector2
+RayBork.Vertex.Uv1 -> System.Numerics.Vector2
+RayBork.Vertex.Uv2 -> System.Numerics.Vector2
+RayBork.Vertex.Uv3 -> System.Numerics.Vector2
+RayBork.Vertex.Vertex() -> void
+RayBork.Vertex.Vertex(System.Numerics.Vector3 position, System.Numerics.Vector3? normal = null, System.Numerics.Vector2? uv = null, System.Numerics.Vector2? uv1 = null, System.Numerics.Vector2? uv2 = null, System.Numerics.Vector2? uv3 = null, RayBork.Color? color = null, System.Numerics.Vector4? tangent = null) -> void
 RayBork.WindowException
 RayBork.WindowException.WindowException() -> void
 RayBork.WindowException.WindowException(string! message) -> void
