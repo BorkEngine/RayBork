@@ -255,6 +255,9 @@ public sealed class CameraTests {
         Camera camera = host.CreatePerspectiveCamera();
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader shader = RenderingTestAssets.CreateShader();
+        using Model model = RenderingTestAssets.CreateModel(
+            meshes: [RenderingTestAssets.CreateMesh("meshes/model")],
+            materials: [RenderingTestAssets.CreateShader("shaders/model")]);
         camera.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => _ = camera.Transform);
@@ -274,6 +277,10 @@ public sealed class CameraTests {
             () => camera.DrawMesh(mesh, Transform.Identity, shader));
         Assert.Throws<ObjectDisposedException>(
             () => camera.DrawInstanced(mesh, shader, [Transform.Identity]));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawModel(model, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawModelInstanced(model, [Transform.Identity]));
         Assert.Throws<ObjectDisposedException>(
             () => camera.ScreenToWorldRay(new Vector2(0f, 0f)));
         Assert.Throws<ObjectDisposedException>(
@@ -495,50 +502,85 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelUsesBakedDefaultsAndIgnoresTheCursor() {
+    public void DrawModelSnapshotsThePartMaterialCursorAtCallTime() {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
-        Shader shader = RenderingTestAssets.CreateShader(defaultValue: 0.5f);
+        Shader material = RenderingTestAssets.CreateShader(defaultValue: 0.5f);
         Mesh mesh = RenderingTestAssets.CreateMesh();
-        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], shader: shader);
+        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], materials: [material]);
+        Texture texture = RenderingTestAssets.CreateTexture();
         Camera camera = host.CreatePerspectiveCamera();
-        shader.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 9f);
+        material.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 9f);
+        material.SetUniform(RenderingTestAssets.TEXTURE_BINDING, texture);
 
         camera.DrawModel(model, Transform.Identity);
+        material.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 10f);
         camera.Dispose();
         host.EndFrame();
 
         RenderDrawRecord record = packet.Passes[0].Draws[0];
-        Assert.Equal(0.5f, RenderingTestAssets.ReadInstanceFloat(shader, record.InstanceTemplate, RenderingTestAssets.VALUE_UNIFORM));
-        Assert.Null(record.GetTextureBindings()[0]);
+        Assert.Equal(
+            9f,
+            RenderingTestAssets.ReadInstanceFloat(
+                material,
+                record.InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM));
+        Assert.Same(texture, record.GetTextureBindings()[0]);
         Assert.Equal(Color.White, record.Tint);
+        // One distinct mesh, the part material's internal program, and the bound texture.
         Assert.Equal(3, packet.Retention.Count);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelOverrideAppliesOneCursorSnapshotToEveryPart() {
+    public void DrawModelUsesEachPartMaterialProgramStateAndTexture() {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
-        Mesh first = RenderingTestAssets.CreateMesh("meshes/first");
-        Mesh second = RenderingTestAssets.CreateMesh("meshes/second");
-        using Model model = RenderingTestAssets.CreateModel(meshes: [first, second]);
-        Shader overrideShader = RenderingTestAssets.CreateShader("shaders/override", defaultValue: 0f);
+        Mesh firstMesh = RenderingTestAssets.CreateMesh("meshes/first");
+        Mesh secondMesh = RenderingTestAssets.CreateMesh("meshes/second");
+        Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/first", defaultValue: 0f);
+        Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/second", defaultValue: 0f);
+        using Model model = new(
+            new ModelPart("first", firstMesh, firstMaterial, RenderState.Additive),
+            new ModelPart("second", secondMesh, secondMaterial, RenderState.Multiply));
+        Texture firstTexture = RenderingTestAssets.CreateTexture("textures/first");
+        Texture secondTexture = RenderingTestAssets.CreateTexture("textures/second");
         Camera camera = host.CreatePerspectiveCamera();
         Color tint = new(0.5f, 0.25f, 0.125f, 1f);
-        overrideShader.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 7f);
+        firstMaterial.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 7f);
+        firstMaterial.SetUniform(RenderingTestAssets.TEXTURE_BINDING, firstTexture);
+        secondMaterial.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 8f);
+        secondMaterial.SetUniform(RenderingTestAssets.TEXTURE_BINDING, secondTexture);
 
-        camera.DrawModel(model, Transform.Identity, overrideShader, RenderState.Additive, tint);
-        overrideShader.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 8f);
+        camera.DrawModel(model, Transform.Identity, tint);
+        firstMaterial.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 9f);
+        secondMaterial.SetUniform(RenderingTestAssets.VALUE_UNIFORM, 10f);
         camera.Dispose();
         host.EndFrame();
 
         Assert.Equal(2, packet.Passes[0].DrawCount);
-        foreach (RenderDrawRecord record in packet.Passes[0].Draws) {
-            Assert.Equal(7f, RenderingTestAssets.ReadInstanceFloat(overrideShader, record.InstanceTemplate, RenderingTestAssets.VALUE_UNIFORM));
-            Assert.Equal(RenderState.Additive, record.RenderState);
-            Assert.Equal(tint, record.Tint);
-        }
+        RenderDrawRecord firstRecord = packet.Passes[0].Draws[0];
+        RenderDrawRecord secondRecord = packet.Passes[0].Draws[1];
+        Assert.Same(firstMaterial.Program.Lifetime, firstRecord.Program);
+        Assert.Same(secondMaterial.Program.Lifetime, secondRecord.Program);
+        Assert.Equal(
+            7f,
+            RenderingTestAssets.ReadInstanceFloat(
+                firstMaterial,
+                firstRecord.InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM));
+        Assert.Equal(
+            8f,
+            RenderingTestAssets.ReadInstanceFloat(
+                secondMaterial,
+                secondRecord.InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM));
+        Assert.Same(firstTexture, firstRecord.GetTextureBindings()[0]);
+        Assert.Same(secondTexture, secondRecord.GetTextureBindings()[0]);
+        Assert.Equal(RenderState.Additive, firstRecord.RenderState);
+        Assert.Equal(RenderState.Multiply, secondRecord.RenderState);
+        Assert.Equal(tint, firstRecord.Tint);
+        Assert.Equal(tint, secondRecord.Tint);
     }
 
     [Fact]
@@ -562,52 +604,187 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelInstancedRecordsEveryPartAndTransform() {
+    public void DrawModelInstancedSnapshotsEachPartMaterialAndTransform() {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh first = RenderingTestAssets.CreateMesh("meshes/first");
         Mesh second = RenderingTestAssets.CreateMesh("meshes/second");
+        Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/first", defaultValue: 0.25f);
+        Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/second", defaultValue: 0.5f);
         using Model model = RenderingTestAssets.CreateModel(
             meshes: [first, second],
+            materials: [firstMaterial, secondMaterial],
             localTransform: new Transform(new Vector3(0f, 1f, 0f)));
-        Shader shader = RenderingTestAssets.CreateShader(defaultValue: 0.25f);
         Camera camera = host.CreatePerspectiveCamera();
         Transform[] transforms = [
             new(new Vector3(0f, 0f, 0f)),
             new(new Vector3(10f, 0f, 0f)),
         ];
 
-        camera.DrawModelInstanced(model, shader, transforms);
+        camera.DrawModelInstanced(model, transforms);
         camera.Dispose();
         host.EndFrame();
 
         Assert.Equal(2, packet.Passes[0].DrawCount);
-        foreach (RenderDrawRecord record in packet.Passes[0].Draws) {
+        RenderDrawRecord[] records = [.. packet.Passes[0].Draws];
+        Assert.Same(firstMaterial.Program.Lifetime, records[0].Program);
+        Assert.Same(secondMaterial.Program.Lifetime, records[1].Program);
+        foreach (RenderDrawRecord record in records) {
             Assert.Equal(2, record.InstanceCount);
             Assert.Equal(new Vector3(0f, 1f, 0f), Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[0]));
             Assert.Equal(new Vector3(10f, 1f, 0f), Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[1]));
-            Assert.Equal(0.25f, RenderingTestAssets.ReadInstanceFloat(shader, record.InstanceTemplate, RenderingTestAssets.VALUE_UNIFORM));
         }
+
+        Assert.Equal(
+            0.25f,
+            RenderingTestAssets.ReadInstanceFloat(
+                firstMaterial,
+                records[0].InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM));
+        Assert.Equal(
+            0.5f,
+            RenderingTestAssets.ReadInstanceFloat(
+                secondMaterial,
+                records[1].InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelRetainsTheModelItsPartsAndTheShaderOnce() {
+    public void EmptyModelInstancedSpanRecordsNothing() {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
-        Shader shader = RenderingTestAssets.CreateShader();
         Mesh mesh = RenderingTestAssets.CreateMesh();
-        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh, mesh], shader: shader);
+        Shader material = RenderingTestAssets.CreateShader();
+        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], materials: [material]);
         Camera camera = host.CreatePerspectiveCamera();
-        Texture texture = RenderingTestAssets.CreateTexture();
-        shader.SetUniform(RenderingTestAssets.TEXTURE_BINDING, texture);
 
-        camera.DrawModel(model, Transform.Identity, shader);
+        camera.DrawModelInstanced(model, ReadOnlySpan<Transform>.Empty);
         camera.Dispose();
         host.EndFrame();
 
-        // Model + one distinct mesh + the override shader + the bound texture.
-        Assert.Equal(4, packet.Retention.Count);
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DrawModelRetainsPartMeshesProgramsAndTexturesOnly() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Shader material = RenderingTestAssets.CreateShader();
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh, mesh], materials: [material, material]);
+        Camera camera = host.CreatePerspectiveCamera();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        material.SetUniform(RenderingTestAssets.TEXTURE_BINDING, texture);
+
+        camera.DrawModel(model, Transform.Identity);
+        camera.Dispose();
+        host.EndFrame();
+
+        // One distinct part mesh, the internal program, and the bound texture. The model and the
+        // material are not engine assets and add no frame hold.
+        Assert.Equal(3, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ModelDrawsRejectDisposedModelAndPartAssets() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera();
+
+        Model disposedModel = RenderingTestAssets.CreateModel(
+            meshes: [RenderingTestAssets.CreateMesh("meshes/disposed-model")],
+            materials: [RenderingTestAssets.CreateShader("shaders/disposed-model")]);
+        disposedModel.Dispose();
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawModel(disposedModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawModelInstanced(disposedModel, [Transform.Identity]));
+
+        Mesh disposedMesh = RenderingTestAssets.CreateMesh("meshes/disposed-part");
+        Shader liveMaterial = RenderingTestAssets.CreateShader("shaders/live-part");
+        using Model meshModel = new(new ModelPart("part", disposedMesh, liveMaterial));
+        disposedMesh.Lifetime.ForceDispose();
+        Assert.Throws<ObjectDisposedException>(() => camera.DrawModel(meshModel, Transform.Identity));
+
+        Mesh liveMesh = RenderingTestAssets.CreateMesh("meshes/live-part");
+        Shader disposedMaterial = RenderingTestAssets.CreateShader("shaders/disposed-material");
+        using Model materialModel = new(new ModelPart("part", liveMesh, disposedMaterial));
+        disposedMaterial.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => camera.DrawModel(materialModel, Transform.Identity));
+
+        Mesh texturedMesh = RenderingTestAssets.CreateMesh("meshes/textured-part");
+        Shader texturedMaterial = RenderingTestAssets.CreateShader("shaders/textured-part");
+        using Model texturedModel = new(new ModelPart("part", texturedMesh, texturedMaterial));
+        Texture disposedTexture = RenderingTestAssets.CreateTexture("textures/disposed-part");
+        texturedMaterial.SetUniform(RenderingTestAssets.TEXTURE_BINDING, disposedTexture);
+        disposedTexture.Lifetime.ForceDispose();
+        Assert.Throws<ObjectDisposedException>(() => camera.DrawModel(texturedModel, Transform.Identity));
+
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void InvalidPartMaterialRecordsNothing() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Mesh firstMesh = RenderingTestAssets.CreateMesh("meshes/first");
+        Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/first");
+        Mesh secondMesh = RenderingTestAssets.CreateMesh("meshes/second");
+        Shader vertexOnly = RenderingTestAssets.CreateShader(
+            "shaders/vertex-only",
+            stages: ShaderStageMask.Vertex);
+        using Model model = new(
+            new ModelPart("first", firstMesh, firstMaterial),
+            new ModelPart("second", secondMesh, vertexOnly));
+        Camera camera = host.CreatePerspectiveCamera();
+
+        Assert.Throws<InvalidOperationException>(() => camera.DrawModel(model, Transform.Identity));
+        Assert.Throws<InvalidOperationException>(
+            () => camera.DrawModelInstanced(model, [Transform.Identity]));
+
+        // Validation runs before any part is recorded, so a bad part cannot leave frame holds behind.
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TwoPartMaterialsOverOneProgramShareOneModelBatch() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        ShaderProgram program = RenderingTestAssets.CreateProgram("shaders/shared");
+        Shader first = program.CreateMaterial();
+        Shader second = program.CreateMaterial();
+        Mesh sharedMesh = RenderingTestAssets.CreateMesh();
+        using Model model = new(
+            new ModelPart("first", sharedMesh, first),
+            new ModelPart("second", sharedMesh, second));
+        Camera camera = host.CreatePerspectiveCamera();
+
+        camera.DrawModel(model, Transform.Identity);
+        camera.Dispose();
+        host.EndFrame();
+
+        // The batch key is the internal program, so two distinct materials over it stay in one batch.
+        FramePlan plan = new BatchPlanner().Plan(packet);
+        PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
+        Assert.Equal(2, batch.InstanceCount);
+        Assert.Equal(1, plan.DrawCalls);
+        Assert.Same(program.Lifetime, batch.Program);
+
+        RenderingTestAssets.ReleaseProgram(program);
     }
 
     [Fact]
@@ -691,7 +868,8 @@ public sealed class CameraTests {
         Mesh mesh = RenderingTestAssets.CreateMesh();
 
         Assert.Throws<ArgumentNullException>(() => camera.DrawModel(null!, Transform.Identity));
-        Assert.Throws<ArgumentNullException>(() => camera.DrawModel(null!, Transform.Identity, shader));
+        Assert.Throws<ArgumentNullException>(
+            () => camera.DrawModelInstanced(null!, [Transform.Identity]));
         Assert.Throws<ArgumentNullException>(() => camera.DrawMesh(null!, Transform.Identity, shader));
         Assert.Throws<ArgumentNullException>(() => camera.DrawMesh(mesh, Transform.Identity, null!));
         Assert.Throws<ArgumentNullException>(() => camera.DrawInstanced(null!, shader, [Transform.Identity]));

@@ -1,34 +1,60 @@
 using System.Numerics;
 using RayBork.Internal;
+using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests.Assets.Catalog;
 
+/// <summary>
+/// Tests the M4 model loader: every <see cref="IAssetCatalog.Load{T}"/> call returns a new
+/// <see cref="Model"/> wrapper with its own materials over the shared cached part meshes and programs.
+/// </summary>
 public sealed class AssetCatalogModelTests {
+    private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadModelReturnsTheSameInstanceAndResolvesEveryPart() {
+    public async Task LoadModelReturnsANewWrapperWithItsOwnMaterials() {
         using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         Model first = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
         Model second = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
 
-        Assert.Same(first, second);
-        Assert.Equal("/models/castle", first.Path);
-        ModelPart part = Assert.Single(first.Parts);
-        Assert.Equal("body", part.Name);
-        Assert.Equal("/meshes/quad", part.Mesh.Path);
-        Assert.Equal("/shaders/basic", part.Shader.Path);
-        Assert.Equal(new BoundingBox(new Vector3(-1f, -2f, -3f), new Vector3(1f, 2f, 3f)), first.Bounds);
-        Assert.Equal(new Transform(new Vector3(1f, 2f, 3f)), part.LocalTransform);
+        try {
+            Assert.NotSame(first, second);
 
-        first.Dispose();
-        Assert.False(first.IsDisposed);
+            ModelPart firstPart = Assert.Single(first.Parts);
+            ModelPart secondPart = Assert.Single(second.Parts);
+            Assert.Equal("body", firstPart.Name);
+            Assert.Equal("/meshes/quad", firstPart.Mesh.Path);
+            Assert.Equal("/shaders/basic", firstPart.Shader.Path);
+            Assert.Same(firstPart.Mesh, secondPart.Mesh);
+            // Distinct materials over one cached program: two model loads never share a material.
+            Assert.NotSame(firstPart.Shader, secondPart.Shader);
+            Assert.Same(firstPart.Shader.Program, secondPart.Shader.Program);
 
-        second.Dispose();
+            // Bounds are computed from the mesh bounds transformed by the part-local transform, and
+            // the model bounds are the union of the part bounds.
+            Assert.Equal(
+                new BoundingBox(new Vector3(0f, 0f, 0f), new Vector3(2f, 4f, 6f)),
+                firstPart.Bounds);
+            Assert.Equal(firstPart.Bounds, first.Bounds);
+            Assert.Equal(new Transform(new Vector3(1f, 2f, 3f)), firstPart.LocalTransform);
+
+            // One mesh upload and one program upload are shared by both loads.
+            Assert.Equal(2, harness.Worker.UploadCallCount);
+            Assert.False(first.IsDisposed);
+            Assert.False(second.IsDisposed);
+        } finally {
+            first.Dispose();
+            second.Dispose();
+        }
+
+        AssetCatalogLoadTests.WaitUntil(
+            () => harness.Worker.DestroyCalls.Count == 2,
+            "Disposing both models releases the shared mesh and the shared program exactly once each.");
         Assert.True(first.IsDisposed);
-        Assert.True(part.Mesh.IsDisposed);
-        Assert.True(part.Shader.IsDisposed);
+        Assert.True(second.IsDisposed);
     }
 
     [Fact]
@@ -140,30 +166,6 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DisposingOneOwnerKeepsTheSharedModelAndItsPartsUsable() {
-        using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
-        CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-
-        Model first = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
-        Model second = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
-        Assert.Same(first, second);
-
-        first.Dispose();
-
-        Assert.False(second.IsDisposed);
-        Assert.False(second.Parts[0].Mesh.IsDisposed);
-        Assert.False(second.Parts[0].Shader.IsDisposed);
-        Assert.Empty(harness.Worker.DestroyCalls);
-
-        second.Dispose();
-
-        AssetCatalogLoadTests.WaitUntil(
-            () => harness.Worker.DestroyCalls.Count == 2,
-            "The last owner releases the distinct part references.");
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task AFailedModelLoadReleasesThePartReferencesItAlreadyAcquired() {
         using CatalogTestHarness harness = new(
             userPacks: [BuildModelPack(CreateDescriptor(shaderPath: "shaders/missing"))]);
@@ -187,18 +189,87 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ModelMetadataAndDisposeFollowTheEngineAssetContract() {
+    public async Task AnAlreadyCanceledModelLoadAcquiresNoPart() {
         using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
-        Model model = await harness.Catalog.Load<Model>(
+        using CancellationTokenSource cancellation = new();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => harness.Catalog.Load<Model>("/models/castle", cancellation.Token));
+
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+        Assert.Empty(harness.Worker.DestroyCalls);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CancellationAfterPartAcquisitionReleasesTheAcquiredParts() {
+        using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
+        harness.Worker.DeferUploads = true;
+        using CancellationTokenSource cancellation = new();
+
+        Task<Model> load = harness.Catalog.Load<Model>("/models/castle", cancellation.Token);
+
+        // The mesh upload starts first. Complete it so the model load acquires the mesh reference and
+        // moves on to the part material's program upload.
+        FakeGpuAssetUploadOperation meshUpload = harness.Worker.WaitForUpload(0, _timeout);
+        meshUpload.Complete();
+        FakeGpuAssetUploadOperation shaderUpload = harness.Worker.WaitForUpload(1, _timeout);
+
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => load);
+
+        // The canceled load released the mesh reference. The abandoned program upload destroys its
+        // resource when it completes, because its only waiter canceled.
+        shaderUpload.Complete();
+
+        AssetCatalogLoadTests.WaitUntil(
+            () => harness.Worker.DestroyCalls.Count == 2,
+            "Cancellation must release the acquired mesh and the material's program reference.");
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+
+        harness.Worker.DeferUploads = false;
+        Model retry = await harness.Catalog.Load<Model>(
             "/models/castle",
             TestContext.Current.CancellationToken);
-        model.Dispose();
+        try {
+            Assert.Single(retry.Parts);
+        } finally {
+            retry.Dispose();
+        }
+    }
 
-        Assert.Equal("/models/castle", model.Path);
-        Assert.True(model.IsDisposed);
-        Assert.Throws<ObjectDisposedException>(() => _ = model.Parts);
-        Assert.Throws<ObjectDisposedException>(() => _ = model.Bounds);
-        Assert.Throws<ObjectDisposedException>(model.Dispose);
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadModelOnAMeshEntryThrowsAssetTypeMismatch() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        AssetTypeMismatchException thrown = await Assert.ThrowsAsync<AssetTypeMismatchException>(
+            () => harness.Catalog.Load<Model>("/meshes/quad", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, thrown.DiagnosticCode);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AMissingModelPathThrowsAssetNotFound() {
+        using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
+
+        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(
+            () => harness.Catalog.Load<Model>("/models/absent", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, thrown.DiagnosticCode);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadModelAfterTheCatalogStoppedThrowsObjectDisposed() {
+        using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
+        harness.Catalog.Stop();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => harness.Catalog.Load<Model>("/models/castle", TestContext.Current.CancellationToken));
     }
 
     public static TheoryData<string> InvalidDescriptors => new() {

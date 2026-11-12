@@ -11,21 +11,23 @@ sealed frame.
 
 1. the camera pass and render target;
 2. the mesh (vertex/index buffers and topology);
-3. the shader program;
+3. the internal shader program;
 4. the effective `RenderState`.
 
-Uniform values and texture bindings are **not** part of the key. They are written per instance.
-Consequently:
+A material instance is not part of the key: two different `Shader` materials over the same internal
+program batch together. Uniform values and texture bindings are **not** part of the key either. They
+are written per instance. Consequently:
 
-- Repeated `DrawMesh` calls with the same mesh/shader/state become one instanced draw even when
-  every texture or uniform differs.
-- A different mesh, shader, or render state starts a new batch.
-- Different meshes with the same shader are separate draws in v1. A Vulkan instanced draw uses one
-  vertex/index buffer, so "same shader" alone cannot merge different geometry. Multi-draw indirect
+- Repeated `DrawMesh` calls with the same mesh/program/state become one instanced draw even when
+  every texture or uniform differs and each call uses a different material over that program.
+- A different mesh, internal program, or render state starts a new batch.
+- Different meshes with the same program are separate draws in v1. A Vulkan instanced draw uses one
+  vertex/index buffer, so "same program" alone cannot merge different geometry. Multi-draw indirect
   and GPU-driven batching are post-1.0.
 - Different cameras do not batch together.
-- Model parts are separate meshes; a model with three parts produces at most three batches per
-  shader/state, each with one instance per model draw.
+- Model parts are separate meshes and each part draws with its own material snapshot. A model with
+  three parts produces at most three batches per mesh/program/state, each with one instance per model
+  draw. Two parts whose materials share a program and whose mesh and state match still batch together.
 - The planner splits a batch when it would exceed `MaxInstancesPerBatch` (default `16384`) or
   `MaxInstanceBytesPerBatch` (default 1 MiB, including the 96-byte instance header). Splitting
   preserves instance order and counts as separate draw calls. A single instance larger than the byte
@@ -57,10 +59,11 @@ culled instances. Triangles count `indexCount / 3` per triangle-list instance, `
 triangle-strip instance, and `0` for line and point topologies. The renderer derives pipeline counts,
 not the planner.
 
-**Explicit instancing.** `DrawInstanced` records one snapshot of the current shader state and
-applies it to every transform in the span. It is one batch by construction, subject to the split
-limits. To vary a texture per instance, use separate `DrawMesh` calls; the automatic batcher will
-merge them.
+**Explicit instancing.** `DrawInstanced` records one snapshot of the material state and applies it to
+every transform in the span. `DrawModelInstanced` records one snapshot of each part material and
+applies it to every transform in the span. Each is one batch per part/mesh by construction, subject to
+the split limits. To vary a texture per instance, use separate `DrawMesh` calls; the automatic
+batcher will merge them.
 
 `DrawInstanced` and `DrawModelInstanced` take `ReadOnlySpan<Transform>`, so the span must remain
 valid for the duration of the call; the engine copies the transforms into the frame packet.

@@ -60,8 +60,10 @@ public sealed class MeshBuilder {
     public Task<Mesh> BuildAsync(CancellationToken cancellationToken = default);
 }
 
-public sealed class Model : IAsset {
-    public string Path { get; }
+public sealed class Model : IDisposable {
+    public Model(params ModelPart[] parts);
+    public Model(IEnumerable<ModelPart> parts);
+
     public IReadOnlyList<ModelPart> Parts { get; }
     public BoundingBox Bounds { get; }
     public bool IsDisposed { get; }
@@ -70,9 +72,17 @@ public sealed class Model : IAsset {
 }
 
 public readonly struct ModelPart {
+    public ModelPart(
+        string name,
+        Mesh mesh,
+        Shader shader,
+        RenderState? renderState = null,
+        Transform? localTransform = null);
+
     public string Name { get; }
     public Mesh Mesh { get; }
     public Shader Shader { get; }
+    public RenderState RenderState { get; }
     public Transform LocalTransform { get; }
     public BoundingBox Bounds { get; }
 }
@@ -86,13 +96,14 @@ public enum PrimitiveTopology {
 }
 ```
 
-> **M4 realized.** M4 ships `Model` and `ModelPart`: `IAssetCatalog.Load<Model>` loads a packed model
-> descriptor and every part's mesh and shader, and `Model` is a reference-counted engine asset. A part
-> with no `[model] shader` in its sidecar is baked with the built-in canonical shader path
-> `shaders/default`; an older descriptor with a `null` shader path falls back to `/shaders/default`
-> at load time. Each part also carries an internal bake-default shader-state snapshot:
-> `DrawModel(model, transform)` uses that snapshot, while `DrawModel(model, transform, shader, ...)`
-> overrides the shader for every part and snapshots the current cursor.
+> **M4 realized.** M4 ships `Model` and `ModelPart` as a composition API: `IAssetCatalog.Load<Model>`
+> loads a packed model descriptor and every part's mesh, creates one material per part over the cached
+> internal program, and returns a **new `Model` wrapper per call**. `Model` is not an `IAsset`: it has
+> no path, no catalog cache entry, and no shared identity. A part with no `[model] shader` in its
+> sidecar resolves to the built-in shader path `shaders/mesh`; an older descriptor with a `null` shader
+> path, or a legacy `shaders/default` path, resolves to `/shaders/mesh` at load time. A model draw uses
+> each part material's current uniform cursor and texture bindings; there is no shader-override draw
+> overload.
 
 - `Mesh` is one primitive: one vertex/index buffer pair and one topology. It is immutable after load
   or build. `Bounds` is in mesh space. The fixed 88-byte vertex layout is position, normal, uv,
@@ -142,7 +153,7 @@ Mesh mesh = await builder.BuildAsync();
 - Normal and tangent generation support triangle topologies only. Line and point meshes are valid
   for `BuildAsync` but have no generated normals or tangents.
 - `Model` is a flat list of parts. It has no node hierarchy in v1; glTF node transforms are baked
-  into each part's `LocalTransform`. `Bounds` is the union in model space. glTF 2.0 and OBJ are
+  into each part's `LocalTransform`. `Bounds` is the union of the part bounds. glTF 2.0 and OBJ are
   converted to this packed engine format by the bake; the runtime never parses them.
 - UVs use a top-left origin. glTF texture coordinates are used as authored; Wavefront OBJ authors V
   from the bottom of the texture, so the bake flips it (`v = 1 - v`) into the engine's top-left
@@ -151,22 +162,29 @@ Mesh mesh = await builder.BuildAsync();
 - `ModelPart.LocalTransform` is applied before the draw's instance transform:
   `world = part.LocalTransform.ToMatrix() * instanceTransform.ToMatrix()` under the row-vector
   convention. The engine deliberately does not compose it through `Transform.WithParent`, which can
-  throw when the composed matrix contains shear.
-- `ModelPart.Shader` is the baked shader for the part, or the built-in default shader when the bake
-  had none. `DrawModel(model, transform)` uses the shader's bake-default render state, uniform
-  template, and white texture fallbacks; mutating `part.Shader` with `SetUniform` does not change
-  the draw. To override, pass a shader to `DrawModel`.
-- `ModelPart.Bounds` is in model space after the part's local transform.
+  throw when the composed matrix contains shear. It defaults to `Transform.Identity`.
+- `ModelPart.Bounds` is in model space after the part's local transform. It is computed from
+  `Mesh.Bounds` as the axis-aligned box of the eight transformed corners; it is not passed in.
+- `ModelPart.Shader` is the part material and is never `null`. It starts from the program's bake
+  defaults, and `DrawModel`/`DrawModelInstanced` snapshot the material's **current** uniform cursor and
+  texture bindings at the call, so `SetUniform` before a draw changes it. `ModelPart.RenderState` is
+  the effective state: a `null` constructor argument uses `shader.DefaultRenderState`.
+- Each part gets its own material. Two parts that name the same program path share the internal
+  program but never a material, and two materials over one program batch together.
 - `Model` is not an animation asset. Skeletal and morph animation are post-1.0.
-- A model's parts may share meshes and shaders. The model owns one reference to every **distinct**
-  part mesh and shader object. `Model.Dispose` releases one owner reference for the model; the
-  distinct part references are released once, with the model's last owner. Two models that share a
-  part each release their own reference. Dispose the model rather than individual parts unless those
-  parts were loaded independently.
-- `Load<Model>` twice returns the same instance and acquires one owner reference per load; disposing
-  one reference keeps the model and its parts usable for the other owner. A failed model load releases
-  every part reference it already acquired and leaves no cache entry, so a retry starts a fresh load.
-- A part's mesh and shader become disposed when their last owner releases them, including a model
-  that was the last owner. A frame that recorded the model keeps the part assets alive through its
-  frame retention set.
+- Constructing a model over caller parts acquires one engine reference to every **distinct** part mesh
+  and transfers every **distinct** part material to the model; callers create one material per part.
+  `Model.Dispose` is idempotent, disposes each distinct material once, and releases each distinct mesh
+  reference once. Two models that share parts each release their own references. Dispose the model
+  rather than the transferred materials; a mesh the game also loaded directly keeps its own reference
+  and is disposed separately.
+- `IsDisposed` stays readable after disposal; `Parts` and `Bounds` throw `ObjectDisposedException`.
+- `Load<Model>` twice returns two distinct wrappers with distinct materials over the same cached part
+  meshes and programs. There is no model cache and no model lifetime: a failed or canceled load
+  releases every part mesh reference and material it already acquired, and a retry starts a fresh
+  wrapper.
+- A part's mesh becomes disposed when its last owner releases it, including a model that was the last
+  owner. A frame that recorded the model keeps the part meshes, internal programs, and bound textures
+  alive through its frame retention set; the model and material objects are not engine assets and add
+  no frame hold.
 - Meshes keep their CPU vertices for collision and bounds in v1. Textures do not keep CPU pixels.

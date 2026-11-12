@@ -406,9 +406,10 @@ seal slot, publish as newest ready
   draws one fullscreen triangle, which is not counted in `RenderStats.DrawCalls`.
 - The frame slot retains every engine asset recorded into it and releases the hold when the render
   thread releases the slot after present. The camera draw recorder calls the retention set for every
-  model, mesh, internal shader program, and bound texture; an asset disposed after recording a draw
-  stays alive until the consuming frame completes. Materials are value snapshots in the record, not
-  retained objects.
+  mesh, internal shader program, and bound texture; an asset disposed after recording a draw stays
+  alive until the consuming frame completes. A model and a material are not engine assets and add no
+  hold; materials are value snapshots in the record, and a model draw retains the internal program of
+  each part material.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
   starts in `Setup` completes without waiting for the first tick and does not stall frame
@@ -700,7 +701,7 @@ descriptor or MessagePack custom data, and never touches SDL or Vulkan. An engin
 deferred: the loader queues its GPU upload and immediately serves the next request, so custom data
 and `LoadData` do not wait behind a GPU copy.
 
-Engine assets (`Mesh`, `Texture`, the internal shader program, and `Model` in M4) are cached by
+Engine assets (`Mesh`, `Texture`, and the internal shader program) are cached by
 `(canonical path, engine asset type)` and reference-counted:
 
 - the first successful load creates the object and returns it with one reference;
@@ -728,19 +729,22 @@ and the bound textures, not the material object.
 
 ### Models
 
-`Load<Model>` decodes the model descriptor, resolves every part's mesh through the catalog, and
-creates one material per part from the part's shader program path. The model is constructed only after
-every part upload has completed. Shared part meshes are the same reference-counted objects as a direct
-load; each model owns one reference to every distinct part mesh. Every part gets its own material even
-when two parts name the same program path, so the model owns those materials and disposes them with its
-last owner. A part with no `[model] shader`, an older descriptor with a `null` shader path, or an older
-pack that baked `shaders/default` resolves to the built-in `/shaders/mesh` program. `Model.Parts` is a
-flat list in descriptor order, `Model.Bounds` is the union in model space, and each part keeps its
-baked local transform and shader-default state. A failed model load disposes every material and
-releases every mesh reference it already acquired, and leaves no cache entry, so a retry starts fresh.
-Disposing the model disposes its part materials and releases its mesh references with its last owner;
-a frame that recorded the model keeps the program and mesh assets alive through its retention set.
-`Model` is static: no skeletal or morph animation in v1.
+`Load<Model>` decodes the model descriptor, resolves every part's mesh and internal program through
+the catalog, and creates one material per part from the part's shader program path. The model is
+constructed only after every part upload has completed. Shared part meshes are the same
+reference-counted objects as a direct load; each model acquires one reference to every distinct part
+mesh and owns the per-part materials. Every part gets its own material even when two parts name the
+same program path. A part with no `[model] shader`, an older descriptor with a `null` shader path, or
+an older pack that baked `shaders/default` resolves to the built-in `/shaders/mesh` program.
+`Model.Parts` is a flat list in descriptor order, `Model.Bounds` is the union of the computed part
+bounds, and each part keeps its baked local transform and its material's default render state. A
+failed or canceled model load disposes every material and releases every mesh reference it already
+acquired. There is no model cache entry: every `Load<Model>` returns a new wrapper with its own
+materials over the shared cached meshes and programs, so a retry starts fresh and repeated loads
+never share the wrapper. Disposing the model disposes its part materials and releases its mesh
+references; a frame that recorded the model keeps the programs, meshes, and bound textures alive
+through its retention set. `Model` is not an `IAsset` and has no path or lifetime of its own. `Model`
+is static: no skeletal or morph animation in v1.
 
 ### GPU upload bridge and frame retention
 
@@ -767,8 +771,7 @@ which already waits for every submitted frame that can reference it, so a textur
 frame is in flight keeps its image and slot until that frame completes. Samplers are cached per
 device and keyed by `(filter, wrap, anisotropy)`; every texture with the same sampler state shares
 one sampler, and the cache is destroyed with the logical device. Mesh uploads create the
-vertex/index buffers; shader uploads create both modules; model uploads resolve through the same
-per-part upload path.
+vertex/index buffers; shader uploads create both modules.
 
 The bridge retains the CPU upload descriptor for every live GPU resource. After the backend recovers
 a lost device, the render loop asks the bridge to recreate the live resources from those
@@ -776,7 +779,7 @@ descriptors before frame submission resumes; the public asset objects stay valid
 are canceled before the old device is destroyed and their `Load` calls fail with `RB1010`; they can
 be retried after recovery.
 
-A frame slot owns an engine-asset retention set. The camera draw recorder retains every model, mesh,
+A frame slot owns an engine-asset retention set. The camera draw recorder retains every mesh,
 internal shader program, and bound texture it records; the frame ring releases the set after the
 render thread releases the slot following present. An asset disposed while a recorded frame still
 references it becomes pending, and its GPU destruction is queued only when the last frame hold is
@@ -815,7 +818,7 @@ registered `[GenerateShape]` shape; there is no reflection resolver and no runti
 M4 exposes the runtime `Model` loader. The model processor emits a `Model` descriptor plus one
 `Mesh` part per primitive; the font processor emits a `Font` descriptor plus the face payload.
 Font parsing and MSDF generation arrive in M6. M3 baked and validated both entry types before the
-runtime types existed; M4 adds the `Model` load path and model part lifetime described above.
+runtime types existed; M4 adds the `Model` load path and the model/part ownership described above.
 
 ### Bake tooling and the built-in pack
 
