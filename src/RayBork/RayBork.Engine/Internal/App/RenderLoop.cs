@@ -167,7 +167,10 @@ internal sealed class RenderLoop {
 
                 if (_frameRing.TryAcquireNewest(out FrameLease lease)) {
                     try {
-                        backend.Submit(new RenderFramePacket(lease.FrameIndex));
+                        RenderFramePacket packet = lease.Packet
+                            ?? throw new InvalidOperationException(
+                                "The frame ring returned a rendering lease without a frame packet.");
+                        backend.Submit(packet);
                         backend.Present();
                         _status.SetStats(backend.Stats);
                         int deviceGeneration = backend.DeviceGeneration;

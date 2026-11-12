@@ -9,7 +9,8 @@ namespace RayBork.Bake.Processors;
 /// <para>
 /// The property names are the canonical snake_case keys <c>scale</c>, <c>front</c>, and
 /// <c>shader</c>. Every member is optional, so a missing sidecar uses the defaults
-/// <c>scale = 1.0</c>, <c>front = "+z"</c>, and no shader. The bake never writes a sidecar.
+/// <c>scale = 1.0</c>, <c>front = "+z"</c>, and the built-in shader path <c>shaders/default</c>. The
+/// bake never writes a sidecar.
 /// </para>
 /// <para>
 /// <c>front</c> is bound as a string so an unknown axis is a semantic <c>RB4009</c> error rather
@@ -32,7 +33,8 @@ internal sealed partial class ModelSidecar {
 
     /// <summary>
     /// Gets or sets the optional canonical shader asset path, without a leading slash, stored on
-    /// every part. The bake does not load the shader.
+    /// every part. When it is <see langword="null"/> the bake stores <c>shaders/default</c>. The bake
+    /// does not load the shader.
     /// </summary>
     public string? Shader { get; set; }
 }

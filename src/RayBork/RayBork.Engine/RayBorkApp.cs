@@ -229,6 +229,7 @@ public sealed class RayBorkApp : IDisposable {
         try {
             platform = CreatePlatform(loggerFactory);
             platform.Initialize(CreatePlatformOptions(configuration), RequestExit);
+            CameraService cameraService = new(platform.Window);
 
             // The platform owns the window, so the instance extensions and the native surface must be
             // obtained and created on this thread. The render thread owns the instance and is waiting
@@ -270,7 +271,8 @@ public sealed class RayBorkApp : IDisposable {
                 CaptureInput(platform),
                 configuration.MaxDeltaTime,
                 () => clock.Time,
-                _renderStatus);
+                _renderStatus,
+                cameraService);
 
             tickRunner = new TickRunner(
                 platform,
@@ -279,7 +281,8 @@ public sealed class RayBorkApp : IDisposable {
                 clock,
                 _timeProvider,
                 new TickPacer(configuration.TargetFps),
-                frameRing);
+                frameRing,
+                cameraService);
 
             _tickRunner = tickRunner;
             tickRunner.Start();

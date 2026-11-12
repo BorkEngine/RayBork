@@ -22,13 +22,17 @@ namespace RayBork.Bake.Processors;
 /// <para>
 /// The scale and rotation correct the mesh geometry, normals, and tangents before bounds and payloads
 /// are written. Node-chain transforms remain on each part as ten floats (position, rotation
-/// quaternion, scale), so <c>world = part.LocalTransform.WithParent(instanceTransform)</c>
+/// quaternion, scale), so <c>world = part.LocalTransform.ToMatrix() * instanceTransform.ToMatrix()</c>
 /// reproduces the authored placement. Part and payload paths are canonical and deterministic;
-/// duplicate names receive numeric suffixes. Every error is <c>RB4009</c> and emits no outputs.
+/// duplicate names receive numeric suffixes. A part with no <c>[model] shader</c> defaults to the
+/// built-in canonical path <c>shaders/default</c>. Every error is <c>RB4009</c> and emits no outputs.
 /// </para>
 /// </remarks>
 internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
     private const float DEFAULT_SCALE = 1f;
+
+    /// <summary>The built-in shader path a part uses when the sidecar names no shader.</summary>
+    internal const string DEFAULT_SHADER_PATH = "shaders/default";
 
     private static readonly string[] _extensions = ["gltf", "glb", "obj"];
 
@@ -53,7 +57,7 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
         ArgumentNullException.ThrowIfNull(sidecar);
 
         if (!TryResolveSettings(context, sidecar, out float scale, out Quaternion orientation,
-                out string? shaderPath)) {
+                out string shaderPath)) {
             return;
         }
 
@@ -96,7 +100,7 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
         PartSlugResolver resolver,
         float scale,
         Quaternion orientation,
-        string? shaderPath) {
+        string shaderPath) {
         var partAssets = new List<ModelPartAsset>(parts.Count);
         var partBounds = new List<float[]>(parts.Count);
 
@@ -152,10 +156,10 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
         ModelSidecar sidecar,
         out float scale,
         out Quaternion orientation,
-        out string? shaderPath) {
+        out string shaderPath) {
         scale = sidecar.Scale ?? DEFAULT_SCALE;
         orientation = Quaternion.Identity;
-        shaderPath = sidecar.Shader;
+        shaderPath = sidecar.Shader ?? DEFAULT_SHADER_PATH;
 
         if (!float.IsFinite(scale) || scale <= 0f) {
             context.Diagnostics.Error(
@@ -175,15 +179,13 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
             return false;
         }
 
-        if (shaderPath is not null) {
-            if (!AssetPath.TryValidateCanonical(shaderPath, out string? shaderReason)) {
-                context.Diagnostics.Error(
-                    ModelDiagnosticCodes.MODEL_INVALID,
-                    $"Model source '{context.RelativePath}' declares the shader path "
-                        + $"'{shaderPath}', which is not a canonical asset path without a leading "
-                        + $"slash: {shaderReason}.");
-                return false;
-            }
+        if (!AssetPath.TryValidateCanonical(shaderPath, out string? shaderReason)) {
+            context.Diagnostics.Error(
+                ModelDiagnosticCodes.MODEL_INVALID,
+                $"Model source '{context.RelativePath}' declares the shader path "
+                    + $"'{shaderPath}', which is not a canonical asset path without a leading "
+                    + $"slash: {shaderReason}.");
+            return false;
         }
 
         return true;
