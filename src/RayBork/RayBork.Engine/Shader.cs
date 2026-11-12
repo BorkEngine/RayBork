@@ -182,9 +182,10 @@ public sealed class Shader : IAsset {
     /// </summary>
     /// <remarks>
     /// The span is exactly <see cref="InstanceDataSize"/> minus the 96-byte header. Uniform values are
-    /// stored at their layout offsets relative to the span; texture index slots stay zero because the
-    /// draw recorder resolves them from <see cref="TextureValues"/>. The data is valid until the next
-    /// cursor mutation (<see cref="SetUniform(string, float)"/> and its overloads or
+    /// stored at their layout offset minus the header, so copying the span to instance-record offset
+    /// 96 reproduces the record. The texture index slots at the start of the span stay zero because
+    /// the draw recorder resolves them from <see cref="TextureValues"/>. The data is valid until the
+    /// next cursor mutation (<see cref="SetUniform(string, float)"/> and its overloads or
     /// <see cref="ResetUniforms"/>) and is read synchronously by the draw recorder on the tick thread.
     /// The span does not allocate per call.
     /// </remarks>
@@ -207,8 +208,8 @@ public sealed class Shader : IAsset {
     /// <remarks>
     /// This is the same data shape as <see cref="InstanceData"/>, but it always holds the bake defaults
     /// and is never changed by the cursor. A draw path that must use the shader's baked defaults, such
-    /// as a model draw that has no per-draw override, copies this span. It is stable for the shader
-    /// lifetime and allocates nothing.
+    /// as a model draw that has no per-draw override, copies this span to instance-record offset 96.
+    /// It is stable for the shader lifetime and allocates nothing.
     /// </remarks>
     internal ReadOnlySpan<byte> DefaultInstanceData => _defaultInstanceData;
 
