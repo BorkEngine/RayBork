@@ -3,16 +3,17 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The Vulkan objects behind one uploaded packed texture: the device-local image and memory, the
-/// image view, and the sampler created from the baked descriptor.
+/// The Vulkan objects behind one uploaded texture: the device-local image and memory, the image view,
+/// and the sampler created from the texture's filter, wrap, and anisotropy.
 /// </summary>
 /// <remarks>
 /// Created on the render thread by <see cref="VulkanAssetWorker.BeginUpload"/> and recreated by
 /// <see cref="IAssetGpuWorker.Restore"/> after a device recovery. The image is the primary handle.
 /// The view, sampler, image, and memory are destroyed together by <see
 /// cref="VulkanAssetWorker.Destroy"/> after the last frame that references the texture has completed.
-/// The public texture metadata is the descriptor's; the copies here are the validated payload values
-/// the upload used.
+/// A packed texture is described by its KTX2 descriptor; a procedural texture is described by its
+/// <see cref="ProceduralTextureGpuUpload"/>. The public texture metadata is the descriptor's; the
+/// copies here are the validated values the upload used.
 /// </remarks>
 internal sealed class VulkanTextureAssetResource : VulkanAssetResource {
     /// <summary>
@@ -29,7 +30,7 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource {
     /// <param name="mipLevels">The number of mip levels.</param>
     /// <param name="deviceGeneration">The logical-device generation that owns the handles.</param>
     internal VulkanTextureAssetResource(
-        TextureGpuUpload upload,
+        AssetGpuUpload upload,
         Image image,
         ImageView view,
         Sampler sampler,

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using RayBork.Internal;
 using RayBork.Tests.Assets.Gpu;
 
@@ -206,6 +207,26 @@ public sealed class AssetCatalogFailureTests {
             () => harness.Catalog.LoadData("/data/absent", TestContext.Current.CancellationToken));
 
         Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, thrown.DiagnosticCode);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task MeshIndexOutsideTheVertexListFailsAsAssetLoad() {
+        byte[] payload = CatalogTestData.CreateMeshPayload();
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            payload.AsSpan((int)CatalogTestData.MESH_VERTEX_COUNT * MeshAssetDescriptor.VERTEX_STRIDE),
+            CatalogTestData.MESH_VERTEX_COUNT);
+        byte[] pack = CatalogTestData.BuildPack(
+            (CatalogTestData.MESH_PATH, AssetEntryType.Mesh, AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())),
+            (CatalogTestData.MESH_PAYLOAD_PATH, AssetEntryType.Raw, payload));
+        using CatalogTestHarness harness = new(userPacks: [pack]);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("outside", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
     private static (GpuAssetBridge Bridge, AssetCatalog Catalog) CreateUnstartedCatalog(string[] paths) {

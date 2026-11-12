@@ -80,6 +80,32 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
     }
 
     /// <summary>
+    /// Processes the bridge once, as the render loop does on every loop turn. Builder tests that start
+    /// a procedural build poll the bridge with this method.
+    /// </summary>
+    internal void Pump() => _bridge.ProcessPending(Worker);
+
+    /// <summary>
+    /// Pumps the bridge until <paramref name="task"/> completes and returns its result.
+    /// </summary>
+    /// <typeparam name="T">The task result type.</typeparam>
+    /// <param name="task">The pending build or upload task.</param>
+    /// <returns>The completed result.</returns>
+    /// <exception cref="AssetLoadException">The upload or the build failed.</exception>
+    internal T WaitFor<T>(Task<T> task) {
+        ArgumentNullException.ThrowIfNull(task);
+
+        bool completed = SpinWait.SpinUntil(
+            () => {
+                _bridge.ProcessPending(Worker);
+                return task.IsCompleted;
+            },
+            _timeout);
+        Assert.True(completed, "The GPU upload did not complete.");
+        return task.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
     /// Recreates every live resource on the backend's current device.
     /// </summary>
     internal void Restore() => _bridge.Restore(Worker);

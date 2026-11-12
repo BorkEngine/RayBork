@@ -15,8 +15,11 @@ public sealed class AssetCatalogLoadTests {
 
         try {
             Assert.Equal("/meshes/quad", mesh.Path);
+            Assert.False(mesh.IsProcedural);
             Assert.Equal(3, mesh.VertexCount);
             Assert.Equal(3, mesh.IndexCount);
+            Assert.Equal(3, mesh.Vertices.Length);
+            Assert.Equal(3, mesh.Indices.Length);
             Assert.Equal(PrimitiveTopology.TriangleList, mesh.Topology);
             Assert.Equal(new System.Numerics.Vector3(-1f, -2f, -3f), mesh.Bounds.Min);
             Assert.Equal(new System.Numerics.Vector3(1f, 2f, 3f), mesh.Bounds.Max);
@@ -27,6 +30,76 @@ public sealed class AssetCatalogLoadTests {
         } finally {
             mesh.Dispose();
         }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LoadedMeshRoundTripsThePackedCpuVerticesAndIndices() {
+        Vertex[] vertices = [
+            new(
+                new System.Numerics.Vector3(1.5f, -2.5f, 3.5f),
+                new System.Numerics.Vector3(0f, 0f, 1f),
+                new System.Numerics.Vector2(0.125f, 0.25f),
+                new System.Numerics.Vector2(0.375f, 0.5f),
+                new System.Numerics.Vector2(0.625f, 0.75f),
+                new System.Numerics.Vector2(0.875f, 1f),
+                new Color(0.2f, 0.4f, 0.6f, 0.8f),
+                new System.Numerics.Vector4(1f, 0f, 0f, -1f)),
+            new(new System.Numerics.Vector3(-1f, 2f, -3f)),
+            new(new System.Numerics.Vector3(0f, 0f, 0f), normal: new System.Numerics.Vector3(0f, 1f, 0f)),
+        ];
+        uint[] indices = [2, 1, 0];
+        MeshAssetDescriptor descriptor = new() {
+            Payload = "meshes/cpu-mesh",
+            VertexCount = 3,
+            IndexCount = 3,
+            Bounds = [-1f, -3f, -3f, 1.5f, 2f, 3.5f],
+            Topology = PrimitiveTopology.TriangleList,
+        };
+        byte[] pack = CatalogTestData.BuildPack(
+            ("meshes/cpu", AssetEntryType.Mesh, AssetSerialization.Serialize(descriptor)),
+            ("meshes/cpu-mesh", AssetEntryType.Raw, CatalogTestData.CreateMeshPayload(vertices, indices)));
+        using CatalogTestHarness harness = new(userPacks: [pack]);
+
+        Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/cpu", TestContext.Current.CancellationToken);
+
+        try {
+            Assert.False(mesh.IsProcedural);
+            Assert.Equal(3, mesh.Vertices.Length);
+            for (int index = 0; index < vertices.Length; index++) {
+                Vertex expected = vertices[index];
+                Vertex actual = mesh.Vertices.Span[index];
+                Assert.Equal(expected.Position, actual.Position);
+                Assert.Equal(expected.Normal, actual.Normal);
+                Assert.Equal(expected.Uv, actual.Uv);
+                Assert.Equal(expected.Uv1, actual.Uv1);
+                Assert.Equal(expected.Uv2, actual.Uv2);
+                Assert.Equal(expected.Uv3, actual.Uv3);
+                Assert.Equal(expected.Color, actual.Color);
+                Assert.Equal(expected.Tangent, actual.Tangent);
+            }
+
+            Assert.Equal(indices, mesh.Indices.ToArray());
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReservedProceduralPathIsNeverResolvedFromAPack() {
+        byte[] pack = CatalogTestData.BuildPack(
+            ("_procedural/mesh/7", AssetEntryType.Mesh, AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())),
+            ("_procedural/mesh/7-mesh", AssetEntryType.Raw, CatalogTestData.CreateMeshPayload()));
+        using CatalogTestHarness harness = new(userPacks: [pack]);
+
+        Assert.False(harness.Catalog.Exists("/_procedural/mesh/7"));
+        AssetNotFoundException loadFailure = await Assert.ThrowsAsync<AssetNotFoundException>(
+            () => harness.Catalog.Load<Mesh>("/_procedural/mesh/7", TestContext.Current.CancellationToken));
+        Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, loadFailure.DiagnosticCode);
+        await Assert.ThrowsAsync<AssetNotFoundException>(
+            () => harness.Catalog.LoadData("/_procedural/mesh/7", TestContext.Current.CancellationToken));
+        Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
     [Fact]

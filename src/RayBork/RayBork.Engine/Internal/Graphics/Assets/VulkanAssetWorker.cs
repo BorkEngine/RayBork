@@ -20,11 +20,12 @@ namespace RayBork.Internal;
 /// objects.
 /// </para>
 /// <para>
-/// A texture upload parses the packed KTX2 payload, validates the format against the device, creates a
-/// mip-mapped sampled image, stages it, records and submits the copy and barriers, and returns an
-/// operation without waiting. A mesh upload stages the fixed-layout vertex stream and 32-bit indices
-/// into device-local buffers that share one allocation in the same way. A shader upload creates the
-/// vertex and fragment shader modules immediately; pipelines are M4 work and are never created here.
+/// A texture upload parses the packed KTX2 payload or the raw levels of a procedural texture,
+/// validates the format against the device, creates a mip-mapped sampled image, stages it, records
+/// and submits the copy and barriers, and returns an operation without waiting. A mesh upload stages
+/// the fixed-layout vertex stream and 32-bit indices into device-local buffers that share one
+/// allocation in the same way. A shader upload creates the vertex and fragment shader modules
+/// immediately; pipelines are M4 work and are never created here.
 /// Each upload uses a one-shot command pool, command buffer, and fence, so it cannot collide with a
 /// frame. <see cref="TryComplete"/> polls the fence without blocking; the render loop keeps submitting
 /// frames while the copy runs. Only <see cref="Restore"/> and <see cref="Cancel"/> wait for a fence,
@@ -86,6 +87,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
 
         VulkanAssetUploadOperation operation = upload.Kind switch {
             AssetGpuUploadKind.Texture => BeginTexture((TextureGpuUpload)upload),
+            AssetGpuUploadKind.ProceduralTexture => BeginProceduralTexture((ProceduralTextureGpuUpload)upload),
             AssetGpuUploadKind.Mesh => BeginMesh((MeshGpuUpload)upload),
             AssetGpuUploadKind.Shader => BeginShader((ShaderGpuUpload)upload),
             _ => throw VulkanAssetErrors.UploadFailed(
@@ -381,11 +383,114 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
 
     private VulkanAssetUploadOperation BeginTexture(TextureGpuUpload upload) {
         VulkanDevice device = _deviceAccessor();
-        int deviceGeneration = _deviceGenerationAccessor();
         Ktx2Texture texture = Ktx2Reader.Read(upload.Ktx2Data.Span, upload.Texture);
-        Format format = VulkanTextureFormat.ToVkFormat(texture.Format);
-        ValidateTextureSupport(device, upload, texture, format);
+        TextureLevelRange[] levels = new TextureLevelRange[texture.MipLevels];
+        for (int level = 0; level < texture.MipLevels; level++) {
+            Ktx2Level levelData = texture.Levels[level];
+            levels[level] = new TextureLevelRange(levelData.ByteOffset, levelData.ByteLength);
+        }
 
+        return BeginTextureUpload(
+            device,
+            upload,
+            texture.Format,
+            texture.Width,
+            texture.Height,
+            levels,
+            upload.Ktx2Data,
+            upload.Texture.Filter,
+            upload.Texture.Wrap,
+            upload.Texture.MaxAnisotropy,
+            upload.Texture.Payload);
+    }
+
+    private VulkanAssetUploadOperation BeginProceduralTexture(ProceduralTextureGpuUpload upload) {
+        if (!Enum.IsDefined(upload.Format)
+            || upload.Format is not (TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb or TextureFormat.R8Unorm)) {
+            throw VulkanAssetErrors.DecodeFailed(
+                upload.Path,
+                $"the procedural texture format {upload.Format} is not an uncompressed procedural format");
+        }
+
+        if (!Enum.IsDefined(upload.Filter) || !Enum.IsDefined(upload.Wrap)) {
+            throw VulkanAssetErrors.DecodeFailed(
+                upload.Path,
+                "the procedural texture sampler state is not valid");
+        }
+
+        if (!float.IsFinite(upload.MaxAnisotropy) || upload.MaxAnisotropy < 1f) {
+            throw VulkanAssetErrors.DecodeFailed(
+                upload.Path,
+                "the procedural texture maximum anisotropy must be finite and at least 1");
+        }
+
+        uint fullMipCount = VulkanTextureFormat.FullMipCount((uint)upload.Width, (uint)upload.Height);
+        if (upload.MipLevels > checked((int)fullMipCount)) {
+            throw VulkanAssetErrors.DecodeFailed(
+                upload.Path,
+                $"the procedural texture has {upload.MipLevels} mip level(s); "
+                    + $"{upload.Width}x{upload.Height} supports at most {fullMipCount}");
+        }
+
+        TextureLevelRange[] levels = new TextureLevelRange[upload.MipLevels];
+        ReadOnlySpan<int> levelLengths = upload.LevelByteLengths.Span;
+        ulong offset = 0;
+        for (int level = 0; level < levels.Length; level++) {
+            int expectedLength = VulkanTextureFormat.GetLevelByteLength(
+                upload.Format,
+                VulkanTextureFormat.LevelExtent((uint)upload.Width, level),
+                VulkanTextureFormat.LevelExtent((uint)upload.Height, level));
+            int length = levelLengths[level];
+            if (length != expectedLength) {
+                throw VulkanAssetErrors.DecodeFailed(
+                    upload.Path,
+                    $"mip level {level} of the {upload.Width}x{upload.Height} {upload.Format} procedural "
+                        + $"texture is {length} byte(s); the level requires {expectedLength}");
+            }
+
+            levels[level] = new TextureLevelRange(offset, (ulong)length);
+            offset += (ulong)length;
+        }
+
+        if (offset != (ulong)upload.PixelData.Length) {
+            throw VulkanAssetErrors.DecodeFailed(
+                upload.Path,
+                $"the procedural mip levels describe {offset} byte(s), but the payload is "
+                    + $"{upload.PixelData.Length} byte(s)");
+        }
+
+        VulkanDevice device = _deviceAccessor();
+        return BeginTextureUpload(
+            device,
+            upload,
+            upload.Format,
+            (uint)upload.Width,
+            (uint)upload.Height,
+            levels,
+            upload.PixelData,
+            upload.Filter,
+            upload.Wrap,
+            upload.MaxAnisotropy,
+            upload.Path);
+    }
+
+    private VulkanAssetUploadOperation BeginTextureUpload(
+        VulkanDevice device,
+        AssetGpuUpload upload,
+        TextureFormat textureFormat,
+        uint width,
+        uint height,
+        TextureLevelRange[] levels,
+        ReadOnlyMemory<byte> levelData,
+        TextureFilter filter,
+        TextureWrap wrap,
+        float maxAnisotropy,
+        string payloadPath) {
+        int mipLevels = levels.Length;
+        Format format = VulkanTextureFormat.ToVkFormat(textureFormat);
+        ValidateTextureSupport(device, upload, textureFormat, format);
+
+        int deviceGeneration = _deviceGenerationAccessor();
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
         PhysicalDeviceMemoryProperties memoryProperties = vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
@@ -397,7 +502,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         VulkanAssetUploadCommands.UploadSubmission submission = default;
         VulkanTextureAssetResource? resource = null;
         try {
-            image = CreateImage(device, upload.Path, texture, format);
+            image = CreateImage(device, upload.Path, width, height, mipLevels, format);
             MemoryRequirements requirements = vulkan.GetImageMemoryRequirements(deviceHandle, image);
             memory = VulkanAssetMemory.Allocate(
                 device,
@@ -425,7 +530,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 SubresourceRange = new ImageSubresourceRange {
                     AspectMask = ImageAspectFlags.ColorBit,
                     BaseMipLevel = 0,
-                    LevelCount = (uint)texture.MipLevels,
+                    LevelCount = (uint)mipLevels,
                     BaseArrayLayer = 0,
                     LayerCount = 1,
                 },
@@ -435,7 +540,14 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 upload.Path,
                 "vkCreateImageView");
 
-            sampler = CreateSampler(device, upload, texture.MipLevels);
+            sampler = CreateSampler(
+                device,
+                upload.Path,
+                payloadPath,
+                filter,
+                wrap,
+                maxAnisotropy,
+                mipLevels);
             resource = new VulkanTextureAssetResource(
                 upload,
                 image,
@@ -443,15 +555,15 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 sampler,
                 memory,
                 format,
-                texture.Width,
-                texture.Height,
-                texture.MipLevels,
+                width,
+                height,
+                mipLevels,
                 deviceGeneration);
 
             staging = CreateStagingBuffer(
                 device,
                 memoryProperties,
-                upload.Ktx2Data.Span,
+                levelData.Span,
                 upload.Path,
                 "texture");
             submission = VulkanAssetUploadCommands.RecordAndSubmit(
@@ -463,7 +575,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                     commandBuffer,
                     staging.Buffer,
                     image,
-                    texture));
+                    width,
+                    height,
+                    levels));
             return new VulkanAssetUploadOperation(
                 upload,
                 device,
@@ -658,13 +772,13 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
 
     private void ValidateTextureSupport(
         VulkanDevice device,
-        TextureGpuUpload upload,
-        Ktx2Texture texture,
+        AssetGpuUpload upload,
+        TextureFormat textureFormat,
         Format format) {
-        if (VulkanTextureFormat.IsBlockCompressed(texture.Format) && !device.Capabilities.TextureCompressionBc) {
+        if (VulkanTextureFormat.IsBlockCompressed(textureFormat) && !device.Capabilities.TextureCompressionBc) {
             throw VulkanAssetErrors.UploadFailed(
                 upload.Path,
-                $"the texture is {texture.Format} but the device does not support textureCompressionBC.");
+                $"the texture is {textureFormat} but the device does not support textureCompressionBC.");
         }
 
         FormatProperties formatProperties = device.Vulkan.GetPhysicalDeviceFormatProperties(device.PhysicalDevice, format);
@@ -679,14 +793,16 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     private static Image CreateImage(
         VulkanDevice device,
         string canonicalPath,
-        Ktx2Texture texture,
+        uint width,
+        uint height,
+        int mipLevels,
         Format format) {
         PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice);
-        if (texture.Width > properties.Limits.MaxImageDimension2D
-            || texture.Height > properties.Limits.MaxImageDimension2D) {
+        if (width > properties.Limits.MaxImageDimension2D
+            || height > properties.Limits.MaxImageDimension2D) {
             throw VulkanAssetErrors.UploadFailed(
                 canonicalPath,
-                $"the {texture.Width}x{texture.Height} texture exceeds the device's maximum 2D image dimension {properties.Limits.MaxImageDimension2D}.");
+                $"the {width}x{height} texture exceeds the device's maximum 2D image dimension {properties.Limits.MaxImageDimension2D}.");
         }
 
         ImageCreateInfo createInfo = new() {
@@ -694,11 +810,11 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             ImageType = ImageType.Type2D,
             Format = format,
             Extent = new Extent3D {
-                Width = texture.Width,
-                Height = texture.Height,
+                Width = width,
+                Height = height,
                 Depth = 1,
             },
-            MipLevels = (uint)texture.MipLevels,
+            MipLevels = (uint)mipLevels,
             ArrayLayers = 1,
             Samples = SampleCountFlags.Count1Bit,
             Tiling = ImageTiling.Optimal,
@@ -736,21 +852,27 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         return buffer;
     }
 
-    private Sampler CreateSampler(VulkanDevice device, TextureGpuUpload upload, int mipLevels) {
-        TextureAssetDescriptor descriptor = upload.Texture;
-        if (!Enum.IsDefined(descriptor.Filter)) {
+    private Sampler CreateSampler(
+        VulkanDevice device,
+        string canonicalPath,
+        string payloadPath,
+        TextureFilter filter,
+        TextureWrap wrap,
+        float maxAnisotropy,
+        int mipLevels) {
+        if (!Enum.IsDefined(filter)) {
             throw VulkanAssetErrors.DecodeFailed(
-                descriptor.Payload,
-                $"the sampler filter '{descriptor.Filter}' is not defined");
+                payloadPath,
+                $"the sampler filter '{filter}' is not defined");
         }
 
-        if (!Enum.IsDefined(descriptor.Wrap)) {
+        if (!Enum.IsDefined(wrap)) {
             throw VulkanAssetErrors.DecodeFailed(
-                descriptor.Payload,
-                $"the sampler wrap mode '{descriptor.Wrap}' is not defined");
+                payloadPath,
+                $"the sampler wrap mode '{wrap}' is not defined");
         }
 
-        if (descriptor.Filter == TextureFilter.Anisotropic) {
+        if (filter == TextureFilter.Anisotropic) {
             // VkSamplerCreateInfo-anisotropyEnable-01070 requires the logical device's
             // samplerAnisotropy feature to be enabled. The backend's device enables no optional
             // features, so anisotropic filtering is unavailable regardless of hardware support and
@@ -759,20 +881,21 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 ? "the renderer device does not enable the Vulkan samplerAnisotropy feature"
                 : "the device does not support anisotropic sampling";
             _logger.LogWarning(
-                "The texture '{Path}' requested anisotropic filtering, but {Reason}; the sampler falls back to linear filtering.",
-                AssetPath.ToPublic(upload.Path),
+                "The texture '{Path}' requested anisotropic filtering (maximum anisotropy {MaxAnisotropy}), but {Reason}; the sampler falls back to linear filtering.",
+                AssetPath.ToPublic(canonicalPath),
+                maxAnisotropy,
                 reason);
         }
 
-        bool nearest = descriptor.Filter == TextureFilter.Nearest;
+        bool nearest = filter == TextureFilter.Nearest;
         SamplerCreateInfo createInfo = new() {
             SType = StructureType.SamplerCreateInfo,
             MagFilter = nearest ? Filter.Nearest : Filter.Linear,
             MinFilter = nearest ? Filter.Nearest : Filter.Linear,
             MipmapMode = nearest ? SamplerMipmapMode.Nearest : SamplerMipmapMode.Linear,
-            AddressModeU = ToAddressMode(descriptor.Wrap),
-            AddressModeV = ToAddressMode(descriptor.Wrap),
-            AddressModeW = ToAddressMode(descriptor.Wrap),
+            AddressModeU = ToAddressMode(wrap),
+            AddressModeV = ToAddressMode(wrap),
+            AddressModeW = ToAddressMode(wrap),
             MipLodBias = 0f,
             AnisotropyEnable = false,
             MaxAnisotropy = 1f,
@@ -784,9 +907,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             UnnormalizedCoordinates = false,
         };
         Result result = device.Vulkan.CreateSampler(device.Device, &createInfo, null, out Sampler sampler);
-        VulkanAssetErrors.ThrowIfFailed(result, upload.Path, "vkCreateSampler");
+        VulkanAssetErrors.ThrowIfFailed(result, canonicalPath, "vkCreateSampler");
         if (sampler.Handle == 0) {
-            throw VulkanAssetErrors.UploadFailed(upload.Path, "vkCreateSampler returned a zero sampler handle.");
+            throw VulkanAssetErrors.UploadFailed(canonicalPath, "vkCreateSampler returned a zero sampler handle.");
         }
 
         return sampler;
@@ -797,11 +920,13 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         CommandBuffer commandBuffer,
         Buffer stagingBuffer,
         Image image,
-        Ktx2Texture texture) {
+        uint width,
+        uint height,
+        ReadOnlySpan<TextureLevelRange> levels) {
         ImageSubresourceRange range = new() {
             AspectMask = ImageAspectFlags.ColorBit,
             BaseMipLevel = 0,
-            LevelCount = (uint)texture.MipLevels,
+            LevelCount = (uint)levels.Length,
             BaseArrayLayer = 0,
             LayerCount = 1,
         };
@@ -828,8 +953,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             1,
             &toTransfer);
 
-        for (int level = 0; level < texture.MipLevels; level++) {
-            Ktx2Level levelData = texture.Levels[level];
+        for (int level = 0; level < levels.Length; level++) {
+            TextureLevelRange levelData = levels[level];
             BufferImageCopy copy = new() {
                 BufferOffset = levelData.ByteOffset,
                 BufferRowLength = 0,
@@ -842,8 +967,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 },
                 ImageOffset = new Offset3D { X = 0, Y = 0, Z = 0 },
                 ImageExtent = new Extent3D {
-                    Width = (uint)VulkanTextureFormat.LevelExtent(texture.Width, level),
-                    Height = (uint)VulkanTextureFormat.LevelExtent(texture.Height, level),
+                    Width = (uint)VulkanTextureFormat.LevelExtent(width, level),
+                    Height = (uint)VulkanTextureFormat.LevelExtent(height, level),
                     Depth = 1,
                 },
             };
@@ -1162,4 +1287,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// signals.
     /// </summary>
     private readonly record struct StagingAllocation(Buffer Buffer, DeviceMemory Memory);
+
+    /// <summary>
+    /// One mip level's byte range inside the upload's retained payload. A KTX2 level offset includes
+    /// its container padding; a procedural level offset is the running offset of the packed chain.
+    /// </summary>
+    private readonly record struct TextureLevelRange(ulong ByteOffset, ulong ByteLength);
 }
