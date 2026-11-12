@@ -301,10 +301,28 @@ encode in the present shader), then `R16G16B16A16_SFLOAT` (linear clamp). HDR10
 format token is reported by `EngineInfo.SwapchainFormat`; `HdrOutput` is true only when the window
 reports HDR and the selected pair presents through the scRGB HDR path.
 
-**HDR output.** The scRGB present path scales display-linear color by the window's SDL SDR white
-level and does not clamp, so values above the SDR white point use the display headroom. The cached
-HDR state also carries the headroom for diagnostics. A window HDR state change, or a change to the
-SDR white level while HDR is active, recreates the presentation path.
+**HDR output and the AgX highlight extension.** On an HDR window the scRGB present path keeps AgX
+as the SDR-referred curve, then normalizes AgX's neutral-white response by
+`luma(AgX(white)) = 0.9829795037669735` so its white sits at display luminance `1.0`, and scales that
+to paper white: the window's reported `SDR_white_level`, for example `2.0`. The normalization makes
+the AgX white about 1.7% brighter than the raw M2 response; it is the same curve presented at the
+reported paper white.
+
+Above the AgX white point (`AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear
+luminance after exposure) the extension maps the remaining scene luminance into the reported HDR
+headroom at constant chromaticity. With `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
+`t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
+`yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom`
+(for example `12.5` in scRGB units), the output is the normalized AgX color scaled by
+`yOut / luma(normalized)`. Displayed luminance is therefore exactly `yOut` and the channel ratios
+are preserved. The mapping is continuous at the knee at paper white, reaches the reported peak at
+`r = headroom`, and clamps beyond it. It is disabled when the headroom is at most one or when
+`TonemappingMode.None` is selected; `None` remains the direct HDR authoring path and writes
+`scene * paperWhite` without the extension. HDR10/PQ output is still deferred.
+
+An SDR window uses a paper white and peak of `1` and disables the extension, so its image is
+unchanged from M2. The cached HDR state also carries the headroom for diagnostics. A window HDR state
+change, or a change to the SDR white level while HDR is active, recreates the presentation path.
 
 **MSAA.** The requested sample count comes from `WithMSAA` (default 4). The effective count is the
 highest device-supported count that does not exceed the request, or `1` when none is supported, and

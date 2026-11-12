@@ -81,6 +81,16 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
     internal IReadOnlyList<ImageView> ImageViews => _imageViews;
 
     /// <summary>
+    /// Gets the swapchain images, in image index order.
+    /// </summary>
+    /// <remarks>
+    /// Diagnostics only: <see cref="VulkanReadback.ReadPresentedColorPixel"/> uses this to probe the
+    /// image a submitted frame rendered. The renderer reaches the images through
+    /// <see cref="ImageViews"/> and the present pipeline's framebuffers.
+    /// </remarks>
+    internal IReadOnlyList<Image> Images => _images;
+
+    /// <summary>
     /// Creates a swapchain and its image views.
     /// </summary>
     /// <param name="device">The device that owns the swapchain.</param>

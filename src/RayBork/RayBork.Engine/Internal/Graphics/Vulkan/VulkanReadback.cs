@@ -4,8 +4,8 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Single-pixel readback probes for the scene target, used by GPU tests to assert clear and resolve
-/// values numerically.
+/// Single-pixel readback probes for the scene target and the presented swapchain image, used by GPU
+/// tests to assert clear and resolve values numerically.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -15,14 +15,17 @@ namespace RayBork.Internal;
 /// failed probe cannot leak.
 /// </para>
 /// <para>
-/// The caller passes a device and scene target from a single backend and runs on that backend's
-/// render thread. Nothing here is thread-safe.
+/// The caller passes a device and scene target or swapchain from a single backend and runs on that
+/// backend's render thread. Nothing here is thread-safe.
 /// </para>
 /// </remarks>
 internal static unsafe class VulkanReadback {
     private const ulong WAIT_TIMEOUT = ulong.MaxValue;
     private const uint COLOR_PIXEL_BYTES = 8;
     private const uint DEPTH_PIXEL_BYTES = 4;
+    private const uint PRESENTED_FLOAT_PIXEL_BYTES = 8;
+    private const uint PRESENTED_BYTE_PIXEL_BYTES = 4;
+    private const float SRGB_ENCODED_CUTOFF = 0.04045f;
 
     /// <summary>
     /// Reads one resolved linear scene color pixel.
@@ -107,11 +110,114 @@ internal static unsafe class VulkanReadback {
         depth = BitConverter.ToSingle(pixel, 0);
     }
 
+    /// <summary>
+    /// Reads one pixel from the swapchain image a submitted frame rendered, decoded to display-linear
+    /// values.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The probe waits for the device to idle, transitions the acquired image from
+    /// <c>PRESENT_SRC_KHR</c> to <c>TRANSFER_SRC_OPTIMAL</c>, copies one texel, transitions it back,
+    /// and leaves the image in the presentation layout. The all-commands stage masks make the
+    /// transition valid after the frame's render pass, whose final layout is <c>PRESENT_SRC_KHR</c>.
+    /// </para>
+    /// <para>
+    /// The caller must call the probe after <see cref="Vulkan12Backend.Submit"/> and before
+    /// <see cref="Vulkan12Backend.Present"/>, passing
+    /// <see cref="Vulkan12Backend.PendingPresentImageIndex"/>. Once <c>vkQueuePresentKHR</c> runs, the
+    /// presentation engine owns the image and a layout transition is no longer valid.
+    /// </para>
+    /// <para>
+    /// A half-float scRGB image returns scRGB-linear values without a transfer function. An
+    /// <c>_SRGB</c> image returns the hardware-decoded linear values. A <c>_UNORM</c> image returns
+    /// the manual sRGB encode the present shader wrote, decoded to linear, so both 8-bit paths
+    /// return the same display-linear value.
+    /// </para>
+    /// <para>
+    /// This is a diagnostic probe for GPU tests: it stalls the device and is never part of the frame
+    /// path.
+    /// </para>
+    /// </remarks>
+    /// <param name="device">The device that owns the swapchain.</param>
+    /// <param name="swapchain">The swapchain the backend renders to.</param>
+    /// <param name="imageIndex">The submitted frame's swapchain image index.</param>
+    /// <param name="x">The pixel column, in pixels from the left edge.</param>
+    /// <param name="y">The pixel row, in pixels from the top edge.</param>
+    /// <param name="r">The display-linear red component.</param>
+    /// <param name="g">The display-linear green component.</param>
+    /// <param name="b">The display-linear blue component.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The image index or the pixel lies outside the swapchain.
+    /// </exception>
+    /// <exception cref="GraphicsException">
+    /// The swapchain format is not a supported presented-color format, or a Vulkan object could not
+    /// be created or the copy failed. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    internal static void ReadPresentedColorPixel(
+        VulkanDevice device,
+        VulkanSwapchain swapchain,
+        uint imageIndex,
+        uint x,
+        uint y,
+        out float r,
+        out float g,
+        out float b) {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(swapchain);
+        if (imageIndex >= (uint)swapchain.ImageCount) {
+            throw new ArgumentOutOfRangeException(
+                nameof(imageIndex),
+                imageIndex,
+                $"The swapchain has {swapchain.ImageCount} image(s), so image index {imageIndex} is out of range.");
+        }
+
+        Extent2D extent = swapchain.Extent;
+        if (x >= extent.Width || y >= extent.Height) {
+            throw new ArgumentOutOfRangeException(
+                nameof(x),
+                $"The pixel ({x}, {y}) lies outside the {extent.Width}x{extent.Height} swapchain image.");
+        }
+
+        Format format = swapchain.Format;
+        uint pixelBytes = PresentedColorPixelBytes(format, out bool halfFloat);
+
+        // The submitted frame must have completed before the probe can transition the image out of
+        // the render pass' PRESENT_SRC_KHR final layout.
+        ThrowIfFailed(device.Vulkan.DeviceWaitIdle(device.Device), "vkDeviceWaitIdle");
+
+        byte[] pixel = ReadPixel(
+            device,
+            swapchain.Images[(int)imageIndex],
+            new PixelCopyBarrier(
+                ImageAspectFlags.ColorBit,
+                ImageLayout.PresentSrcKhr,
+                PipelineStageFlags.AllCommandsBit,
+                AccessFlags.None),
+            pixelBytes,
+            x,
+            y);
+        DecodePresentedColor(format, halfFloat, pixel, out r, out g, out b);
+    }
+
     private static byte[] ReadPixel(
         VulkanDevice device,
         Image image,
         ImageAspectFlags aspect,
         ImageLayout originalLayout,
+        uint byteCount,
+        uint x,
+        uint y) => ReadPixel(
+            device,
+            image,
+            CreateAttachmentBarrier(aspect, originalLayout),
+            byteCount,
+            x,
+            y);
+
+    private static byte[] ReadPixel(
+        VulkanDevice device,
+        Image image,
+        PixelCopyBarrier barrierInfo,
         uint byteCount,
         uint x,
         uint y) {
@@ -165,7 +271,7 @@ internal static unsafe class VulkanReadback {
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             ThrowIfFailed(vulkan.BeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
-            RecordCopy(vulkan, commandBuffer, image, aspect, originalLayout, stagingBuffer, x, y);
+            RecordCopy(vulkan, commandBuffer, image, barrierInfo, stagingBuffer, x, y);
             ThrowIfFailed(vulkan.EndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
             FenceCreateInfo fenceInfo = new() { SType = StructureType.FenceCreateInfo };
@@ -212,29 +318,21 @@ internal static unsafe class VulkanReadback {
         Vk vulkan,
         CommandBuffer commandBuffer,
         Image image,
-        ImageAspectFlags aspect,
-        ImageLayout originalLayout,
+        PixelCopyBarrier barrierInfo,
         Buffer stagingBuffer,
         uint x,
         uint y) {
-        bool depth = (aspect & ImageAspectFlags.DepthBit) != 0;
-        PipelineStageFlags attachmentStage = depth
-            ? PipelineStageFlags.LateFragmentTestsBit
-            : PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.FragmentShaderBit;
-        AccessFlags attachmentAccess = depth
-            ? AccessFlags.DepthStencilAttachmentWriteBit
-            : AccessFlags.ColorAttachmentWriteBit | AccessFlags.ShaderReadBit;
         ImageMemoryBarrier barrier = new() {
             SType = StructureType.ImageMemoryBarrier,
-            SrcAccessMask = attachmentAccess,
+            SrcAccessMask = barrierInfo.Access,
             DstAccessMask = AccessFlags.TransferReadBit,
-            OldLayout = originalLayout,
+            OldLayout = barrierInfo.OriginalLayout,
             NewLayout = ImageLayout.TransferSrcOptimal,
             SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
             DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
             Image = image,
             SubresourceRange = new ImageSubresourceRange {
-                AspectMask = aspect,
+                AspectMask = barrierInfo.Aspect,
                 BaseMipLevel = 0,
                 LevelCount = 1,
                 BaseArrayLayer = 0,
@@ -243,7 +341,7 @@ internal static unsafe class VulkanReadback {
         };
         vulkan.CmdPipelineBarrier(
             commandBuffer,
-            attachmentStage,
+            barrierInfo.Stage,
             PipelineStageFlags.TransferBit,
             0,
             0,
@@ -257,7 +355,7 @@ internal static unsafe class VulkanReadback {
             BufferRowLength = 0,
             BufferImageHeight = 0,
             ImageSubresource = new ImageSubresourceLayers {
-                AspectMask = aspect,
+                AspectMask = barrierInfo.Aspect,
                 MipLevel = 0,
                 BaseArrayLayer = 0,
                 LayerCount = 1,
@@ -275,13 +373,13 @@ internal static unsafe class VulkanReadback {
 
         ImageMemoryBarrier restore = barrier;
         restore.SrcAccessMask = AccessFlags.TransferReadBit;
-        restore.DstAccessMask = attachmentAccess;
+        restore.DstAccessMask = barrierInfo.Access;
         restore.OldLayout = ImageLayout.TransferSrcOptimal;
-        restore.NewLayout = originalLayout;
+        restore.NewLayout = barrierInfo.OriginalLayout;
         vulkan.CmdPipelineBarrier(
             commandBuffer,
             PipelineStageFlags.TransferBit,
-            attachmentStage,
+            barrierInfo.Stage,
             0,
             0,
             null,
@@ -290,6 +388,75 @@ internal static unsafe class VulkanReadback {
             1,
             &restore);
     }
+
+    private static PixelCopyBarrier CreateAttachmentBarrier(
+        ImageAspectFlags aspect,
+        ImageLayout originalLayout) {
+        bool depth = (aspect & ImageAspectFlags.DepthBit) != 0;
+        PipelineStageFlags stage = depth
+            ? PipelineStageFlags.LateFragmentTestsBit
+            : PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.FragmentShaderBit;
+        AccessFlags access = depth
+            ? AccessFlags.DepthStencilAttachmentWriteBit
+            : AccessFlags.ColorAttachmentWriteBit | AccessFlags.ShaderReadBit;
+        return new PixelCopyBarrier(aspect, originalLayout, stage, access);
+    }
+
+    private static uint PresentedColorPixelBytes(Format format, out bool halfFloat) {
+        switch (format) {
+            case Format.R16G16B16A16Sfloat:
+                halfFloat = true;
+                return PRESENTED_FLOAT_PIXEL_BYTES;
+            case Format.B8G8R8A8Srgb:
+            case Format.B8G8R8A8Unorm:
+            case Format.R8G8B8A8Srgb:
+            case Format.R8G8B8A8Unorm:
+                halfFloat = false;
+                return PRESENTED_BYTE_PIXEL_BYTES;
+            default:
+                throw new GraphicsException(
+                    $"The swapchain format {VulkanFormatInfo.Describe(format)} is not a supported presented-color probe format. " +
+                    "The probe supports R16G16B16A16_SFLOAT and the 8-bit B8G8R8A8/R8G8B8A8 SRGB and UNORM formats.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null);
+        }
+    }
+
+    private static void DecodePresentedColor(
+        Format format,
+        bool halfFloat,
+        byte[] pixel,
+        out float r,
+        out float g,
+        out float b) {
+        if (halfFloat) {
+            r = (float)BitConverter.ToHalf(pixel, 0);
+            g = (float)BitConverter.ToHalf(pixel, 2);
+            b = (float)BitConverter.ToHalf(pixel, 4);
+            return;
+        }
+
+        bool bgra = format is Format.B8G8R8A8Srgb or Format.B8G8R8A8Unorm;
+        int redIndex = bgra ? 2 : 0;
+        int greenIndex = 1;
+        int blueIndex = bgra ? 0 : 2;
+        r = SrgbDecode(pixel[redIndex]);
+        g = SrgbDecode(pixel[greenIndex]);
+        b = SrgbDecode(pixel[blueIndex]);
+    }
+
+    private static float SrgbDecode(byte encoded) {
+        float channel = encoded / 255f;
+        return channel <= SRGB_ENCODED_CUTOFF
+            ? channel / 12.92f
+            : MathF.Pow((channel + 0.055f) / 1.055f, 2.4f);
+    }
+
+    private readonly record struct PixelCopyBarrier(
+        ImageAspectFlags Aspect,
+        ImageLayout OriginalLayout,
+        PipelineStageFlags Stage,
+        AccessFlags Access);
 
     private static uint FindHostVisibleMemoryType(
         uint typeBits,

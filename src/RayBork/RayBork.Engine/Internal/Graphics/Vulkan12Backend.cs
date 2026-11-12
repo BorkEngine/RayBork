@@ -84,6 +84,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private uint _frameSlot;
     private bool _pendingPresent;
     private uint _pendingImageIndex;
+    private uint _lastPresentedImageIndex = uint.MaxValue;
     private Semaphore _pendingRenderFinished;
     private bool _swapchainOutOfDate;
     private bool _suboptimalRecoveryPending;
@@ -123,6 +124,38 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
     internal VulkanSceneTarget SceneTarget => _sceneTarget ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
+
+    /// <summary>
+    /// Gets the current swapchain, for GPU-test presented-pixel probes.
+    /// </summary>
+    /// <remarks>
+    /// This is diagnostic access, not part of the renderer seam. Render-thread only.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
+    internal VulkanSwapchain Swapchain => _swapchain ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
+
+    /// <summary>
+    /// Gets the swapchain image index of the most recent successful present, for GPU-test
+    /// presented-pixel probes.
+    /// </summary>
+    /// <remarks>
+    /// This is diagnostic access, not part of the renderer seam. Render-thread only. The value is
+    /// <see cref="uint.MaxValue"/> until the first successful present, and it may be stale after the
+    /// presentation path is recreated because a new swapchain can reuse the same indices.
+    /// </remarks>
+    internal uint LastPresentedImageIndex => _lastPresentedImageIndex;
+
+    /// <summary>
+    /// Gets the swapchain image index of the submitted frame that is waiting for presentation, for
+    /// GPU-test presented-pixel probes.
+    /// </summary>
+    /// <remarks>
+    /// This is diagnostic access, not part of the renderer seam. Render-thread only. The value is
+    /// <see cref="uint.MaxValue"/> when no frame is waiting for presentation. A probe must read the
+    /// image before <c>vkQueuePresentKHR</c> hands it to the presentation engine, so it uses this
+    /// index and then presents; <see cref="LastPresentedImageIndex"/> confirms the index afterwards.
+    /// </remarks>
+    internal uint PendingPresentImageIndex => _pendingPresent ? _pendingImageIndex : uint.MaxValue;
 
     /// <summary>
     /// Gets the Vulkan instance, for GPU-test validation checks.
@@ -310,11 +343,18 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             pipelines);
 
         RenderSettings settings = _options.Settings;
+        float paperWhite = state.Hdr.HdrEnabled ? state.Hdr.SdrWhiteLevel : 1f;
+        float peak = paperWhite * (state.Hdr.HdrEnabled ? state.Hdr.HdrHeadroom : 1f);
+        PresentEncoding encoding = _swapchainFormat.Encoding;
         PresentPushConstants pushConstants = new() {
             ExposureMultiplier = MathF.Pow(2f, settings.Exposure),
-            HdrWhiteScale = state.Hdr.HdrEnabled ? state.Hdr.SdrWhiteLevel : 1f,
+            HdrWhiteScale = paperWhite,
+            HdrPeakScale = peak,
+            AgxWhiteSceneLuminance = (float)AgxToneMap.AGX_WHITE_SCENE_LUMINANCE,
             Tonemapping = settings.Tonemapping == TonemappingMode.AgX ? 0 : 1,
-            Encoding = (int)_swapchainFormat.Encoding,
+            Encoding = (int)encoding,
+            HdrHighlight = AgxToneMap.IsHdrHighlightActive(encoding, settings.Tonemapping, state.Hdr) ? 1 : 0,
+            Reserved = 0,
         };
         _presentPipeline!.Record(vulkan, commandBuffer, imageIndex, pushConstants);
         ThrowIfFailed(vulkan.EndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
@@ -1503,12 +1543,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
 
         SwapchainResult result = _swapchain!.Present(_device!.PresentQueue, _pendingRenderFinished, _pendingImageIndex);
+        uint presentedImageIndex = _pendingImageIndex;
         _pendingPresent = false;
         _pendingRenderFinished = default;
         _instance!.ThrowIfValidationError("presenting a frame");
         if (result is SwapchainResult.Success or SwapchainResult.Suboptimal) {
             // The image reached the presentation engine, so a frame completed. A suboptimal hint is a
             // routine driver notification and must not count toward the recovery bound.
+            _lastPresentedImageIndex = presentedImageIndex;
             _consecutiveRecoveries = 0;
         }
 
