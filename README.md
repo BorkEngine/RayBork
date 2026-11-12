@@ -21,8 +21,8 @@ program with `SetUniform`/`ResetUniforms`, a fixed 2048-slot bindless texture ta
 pipeline caches, automatic batch planning with frustum culling and opaque/transparency sorting,
 per-instance uniforms and textures, and the AgX highlight extension that maps scene luminance above
 the AgX white point into the reported HDR headroom.
-`samples/Castle` is the M4 gate: a recreation of raylib's `models_loading` example that draws the
-raylib castle model and its diffuse texture with the built-in mesh material from a Native AOT publish.
+`samples/Castle` is the M4 gate: an orbitable castle scene that draws a castle model and its diffuse
+texture with the built-in mesh material from a Native AOT publish.
 The grid is deferred to M5. The Windows hardware path, the conformant lavapipe Linux path, and the
 WSLg Mesa dzn hardware path all pass. The host, window, input, time, and logging surface shipped in
 M1; the renderer foundation shipped in M2. The rest of the API reference remains the 1.0 contract
@@ -98,7 +98,7 @@ src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
-samples/Castle/               M4 sample and Native AOT gate (raylib models_loading recreation)
+samples/Castle/               M4 sample and Native AOT gate (orbitable castle scene)
   Castle.slnx                 sample-owned solution (sample + assets executable)
   Castle.Assets/              JIT assets executable (bakes castle.pck at sample build time)
 samples/HelloInterop/         M1-M3 diagnostic host (window/input/time/logging/assets; no draws)

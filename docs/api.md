@@ -214,10 +214,10 @@ is rejected during device selection, and the capacity is never reduced.
 `Castle.Assets` executable out of process, bakes `/models/obj/castle` and
 `/models/obj/castle_diffuse` into `castle.pck`, and copies the pack beside the sample executable, so
 the published `win-x64` and `linux-x64` hosts load it without a manual bake or an `--assets` argument.
-The model parts use the built-in mesh material; the hosts draw the raylib `models_loading` castle and
-exit `0`. The Windows hardware path, the conformant lavapipe Linux path, and the WSLg dzn hardware
-path all pass; the reference grid is deferred to M5. `samples/HelloInterop` remains the M1-M3
-diagnostic host; it is not the AOT gate.
+The model parts use the built-in mesh material; the hosts draw the castle and exit `0`. The Windows
+hardware path, the conformant lavapipe Linux path, and the WSLg dzn hardware path all pass; the
+reference grid is deferred to M5. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not
+the AOT gate.
 
 ## 2. Quick start
 

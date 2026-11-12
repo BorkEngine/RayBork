@@ -345,8 +345,8 @@ automatic instancing, and per-instance textures/uniforms.
 
 **Exit criteria.**
 
-- The Castle sample renders a textured model with correct depth and AgX output at 800x450 (the
-  raylib `models_loading` window size) on Windows hardware, native Linux, and WSLg dzn hardware.
+- The Castle sample renders a textured model with correct depth and AgX output at 800x450 on Windows
+  hardware, native Linux, and WSLg dzn hardware.
 - Two materials over the same internal program with different textures produce **one** draw call
   and two instances, as reported by `RenderStats.DrawCalls`.
 - One thousand cubes with the same mesh/program/state produce one instanced draw (or a documented
@@ -412,14 +412,14 @@ automatic instancing, and per-instance textures/uniforms.
   user-facing example and contains no test-only draw assertion.
   `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
   diagnostic host.
-- **Castle sample recreation scope.** The sample recreates raylib's `models_loading` behavior
-  without the features that need later milestones: the reference XZ grid (`DrawGrid` arrives in
-  M5), model/texture drag-and-drop (post-1.0 platform work), click selection and `DrawBoundingBox`
-  (ray/box collision and the wire-box helper arrive in M5), and the `DrawText`/`DrawFPS` overlay
-  (runtime text arrives in M6). The model and its diffuse texture are drawn with the built-in
-  `/shaders/mesh` material that the loaded model owns; there is no custom Castle shader. The sample
-  draws only the castle; render statistics are available to games but are not drawn. The raylib castle
-  model and texture are
+- **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
+  texture, and an orbital camera. It deliberately leaves out features that need later milestones:
+  the reference XZ grid (`DrawGrid` arrives in M5), model/texture drag-and-drop (post-1.0 platform
+  work), click selection and `DrawBoundingBox` (ray/box collision and the wire-box helper arrive in
+  M5), and the `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The model and its diffuse
+  texture are drawn with the built-in `/shaders/mesh` material that the loaded model owns; there is
+  no custom Castle shader. The sample draws only the castle; render statistics are available to
+  games but are not drawn. The castle model and texture are
   sample-only assets with their own notice under `samples/Castle/`; that notice is deliberately not
   duplicated in the repository-root notices.
 - **WSLg dzn compatibility.** On the WSL gate host WSLg selects

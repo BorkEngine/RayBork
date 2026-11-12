@@ -1,10 +1,9 @@
 # Castle
 
-`Castle` is a RayBork sample that recreates the essential behavior of raylib's
-[`models_loading`](https://github.com/raysan5/raylib/blob/master/examples/models/models_loading.c)
-example. It loads the raylib castle model and its diffuse texture, binds the texture on the model's
-built-in mesh material, and draws the castle with an orbital perspective camera. The source is kept
-small and commented so it can be read next to the raylib example.
+`Castle` is a small RayBork sample: an orbitable castle scene with a model, a diffuse texture, and
+an orbital perspective camera. It loads the model and texture, binds the texture on the model's
+materials, and draws the castle every tick. The source is kept small and commented so the scene can
+be read and adapted as a starting point.
 
 The sample is also a Native AOT gate, but it contains no test-only logic: it opens the window, draws
 the castle, and exits cleanly. Build and run it from the repository root:
@@ -37,8 +36,8 @@ are sample-only and are **not** covered by RayBork's MIT license; see
 | `--frames N` | Run `N` ticks, then request exit. `0` runs until the window closes. Default `0`. |
 | `--help` | Print usage and exit `0`. |
 
-The sample uses raylib's 800x450 window size, a 60 FPS target, and the engine's default renderer
-settings. A missing pack prints an error and exits `1`.
+The sample uses an 800x450 window, a 60 FPS target, and the engine's default renderer settings. A
+missing pack prints an error and exits `1`.
 
 ## Controls
 
@@ -48,9 +47,9 @@ settings. A missing pack prints an error and exits `1`.
 | Mouse wheel | Zoom the orbit distance, clamped to 5–500. |
 | Escape | Request exit. |
 
-The camera starts at raylib's position `(50, 50, 50)`, looks at `(0, 12, 0)`, and uses a 45 degree
-vertical field of view with a `0.01` near plane and an infinite far plane. The clear color is the
-linear equivalent of raylib's `RAYWHITE` (`#F5F5F5`, about `0.913` per channel).
+The camera starts at `(50, 50, 50)`, looks at `(0, 12, 0)`, and uses a 45 degree vertical field of
+view with a `0.01` near plane and an infinite far plane. The background is a warm off-white
+(`#F5F5F5`, about `0.913` per channel).
 
 ## Build and run
 
@@ -88,9 +87,9 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
 
-## What the recreation omits
+## What the sample omits
 
-The sample does not implement these raylib `models_loading` features yet:
+The sample does not implement these features yet:
 
 - **The reference XZ grid.** `DrawGrid(20, 10.0f)` arrives in M5; the sample draws the castle only.
 - **Drag-and-drop of a new model or texture.** Window file-drop events are post-1.0.
@@ -103,6 +102,5 @@ surface; run it on a desktop session or under WSLg.
 ## Notices and license
 
 The castle model and texture are by Alberto Cano (Medieval Assets Pack) under CC BY-NC 4.0 and are
-sample-only; they are not covered by RayBork's MIT license and may not be used commercially. The
-sample behavior follows raylib's zlib/libpng-licensed `models_loading` example. See
+sample-only; they are not covered by RayBork's MIT license and may not be used commercially. See
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for attribution and license links.

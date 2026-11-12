@@ -8,13 +8,13 @@ internal static class Program {
     private const int EXIT_INVALID_ARGUMENTS = 2;
     private const int DEFAULT_WIDTH = 800;
     private const int DEFAULT_HEIGHT = 450;
-    private const string WINDOW_TITLE = "RayBork [models] example - loading";
+    private const string WINDOW_TITLE = "RayBork Castle";
     private const string DEFAULT_PACK_FILE_NAME = "castle.pck";
 
     private const string USAGE_TEXT = """
-        Castle - a RayBork recreation of raylib's models_loading example
+        Castle - an orbitable castle scene
 
-        The castle OBJ and its diffuse texture are drawn with the built-in mesh material and an
+        A castle model and its diffuse texture, drawn with the built-in mesh material and an
         orbital perspective camera.
 
         Usage:
