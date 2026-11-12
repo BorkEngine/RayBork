@@ -172,6 +172,17 @@ public sealed class EngineContext {
         Rect? viewport = null);
 
     public Task<RenderTexture> CreateRenderTextureAsync(RenderTextureDescription description);
+
+    public MeshBuilder CreateMeshBuilder(
+        PrimitiveTopology topology = PrimitiveTopology.TriangleList);
+
+    public TextureBuilder CreateTextureBuilder(
+        int width,
+        int height,
+        TextureFormat format = TextureFormat.Rgba8Srgb,
+        bool generateMips = true,
+        SamplerState? sampler = null);
+
     public void RequestExit();
 }
 ```
@@ -179,8 +190,9 @@ public sealed class EngineContext {
 > **M1 subset.** M1 exposes only `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`,
 > `UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and
 > `RequestExit`. `Assets`, camera creation, and render-texture creation are the later contract;
-> their milestones are in §1.6. M2 adds `Info` and `Stats`. M3 adds `Assets`; camera creation and
-> render-texture creation remain later contract.
+> their milestones are in §1.6. M2 adds `Info` and `Stats`. M3 adds `Assets`,
+> `CreateMeshBuilder`, and `CreateTextureBuilder`; camera creation and render-texture creation
+> remain later contract.
 
 | Member | Thread | Notes |
 | --- | --- | --- |
@@ -201,6 +213,8 @@ public sealed class EngineContext {
 | `CreateCamera` | Tick | Perspective camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateOrthographicCamera` | Tick | Orthographic camera. `height` is the visible world-space height. |
 | `CreateRenderTextureAsync` | Tick | Creates an offscreen target and completes when the render thread has allocated it. Legal in `Setup` and `Tick`. |
+| `CreateMeshBuilder` | Any | Creates a procedural mesh builder. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |
+| `CreateTextureBuilder` | Any | Creates a procedural texture builder for an uncompressed format. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |
 | `RequestExit` | Tick | Requests a graceful stop. The current tick completes and the final frame is presented. |
 
 `EngineContext` is stable for the app lifetime, but its per-frame properties are only meaningful

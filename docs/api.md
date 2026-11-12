@@ -5,8 +5,9 @@ window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ship
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
 backend. M3 ships the asset pipeline: `IAsset`, `IAssetCatalog`, `Mesh`, `Texture`, `Shader`, the
-asset and shader metadata value types, the asset exceptions, pack mounting and lookup, custom TOML
-data through `WithAssetType<T>()`, `RayBork.Bake`, and the build-time built-in pack. The rest of
+procedural `MeshBuilder`/`TextureBuilder` API, the asset and shader metadata value types, the asset
+exceptions, pack mounting and lookup, custom TOML data through `WithAssetType<T>()`, `RayBork.Bake`,
+and the build-time built-in pack. The rest of
 the API reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
@@ -27,8 +28,8 @@ below. Section numbers are stable, so a `§7.3` reference names the same section
 | [Assets](api/assets.md) | §6 `IAsset`, `IAssetCatalog`, asset paths and types, lifetime, the load pipeline, and pack mounting. |
 | [Rendering: camera](api/rendering/camera.md) | §7, §7.1-7.2 `Camera`, projection, clear, HDR, and tone mapping. |
 | [Rendering: shaders](api/rendering/shaders.md) | §7.3-7.4 `Shader`/`SetUniform` and the shader ABI. |
-| [Rendering: meshes](api/rendering/meshes.md) | §7.5 `Mesh` and `Model`. |
-| [Rendering: textures](api/rendering/textures.md) | §7.6 `Texture`, samplers, and formats. |
+| [Rendering: meshes](api/rendering/meshes.md) | §7.5 `Mesh`, `Vertex`, `MeshBuilder`, and `Model`. |
+| [Rendering: textures](api/rendering/textures.md) | §7.6 `Texture`, `TextureBuilder`, samplers, and formats. |
 | [Rendering: render state](api/rendering/render-state.md) | §7.7 `RenderState`. |
 | [Rendering: draws](api/rendering/draws.md) | §7.8-7.9 draw calls, batching, primitives, lines, and billboards. |
 | [Rendering: text](api/rendering/text.md) | §7.10 fonts and text. |
@@ -148,8 +149,8 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `BoundingBox` | M3 |
 | `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
 | `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, `WithClearColor`) | M2 |
-| `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
-| `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, and `EngineContext.Assets` | M3 |
+| `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, `Vertex`, `MeshBuilder`, `MeshNormalMode`, `TextureBuilder`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
+| `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, `EngineContext.Assets`, `EngineContext.CreateMeshBuilder`, and `EngineContext.CreateTextureBuilder` | M3 |
 | `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
 | `Collision` and `RayCollision` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
@@ -171,13 +172,14 @@ count and present mode, whether the scRGB HDR path is active, and whether valida
 `WithClearColor`. M2 has no camera or draw API: a frame clears the linear scene target and presents
 it. `Assets`, cameras, render textures, and custom asset types remain later milestones.
 
-**M3 subset.** `EngineContext` additionally exposes `Assets`, which is valid from `Setup` and safe
-to call from any thread. `RayBorkAppBuilder` additionally exposes `WithAssetsPack`,
-`WithAssetsPacks`, and `WithAssetType<T>`. M3 ships the loading and metadata surface of `Mesh`,
-`Texture`, and `Shader`: `Path`, `IsDisposed`, `Dispose`, and the metadata getters documented in
-§7.3, §7.5, and §7.6. It does not ship `Model`, `Font`, cameras, render textures, `Shader.SetUniform`,
-`ResetUniforms`, or any `Draw*` member; those arrive in M4, M6, and M8. The M3 sample loads a texture,
-a mesh part, a shader, and registered custom data, and reads back their metadata without drawing.
+**M3 subset.** `EngineContext` additionally exposes `Assets`, `CreateMeshBuilder`, and
+`CreateTextureBuilder`. `RayBorkAppBuilder` additionally exposes `WithAssetsPack`, `WithAssetsPacks`,
+and `WithAssetType<T>`. M3 ships the loading, creation, and metadata surface of `Mesh`, `Texture`,
+and `Shader`: `Path`, `IsDisposed`, `Dispose`, the metadata getters in §7.3, §7.5, and §7.6, the
+procedural `MeshBuilder`/`TextureBuilder` API, and CPU mesh vertices/indices. It does not ship
+`Model`, `Font`, cameras, render textures, `Shader.SetUniform`, `ResetUniforms`, or any `Draw*`
+member; those arrive in M4, M6, and M8. The M3 sample loads a texture, a mesh part, a shader, and
+registered custom data, and reads back their metadata without drawing.
 
 ## 2. Quick start
 

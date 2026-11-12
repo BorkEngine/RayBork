@@ -653,6 +653,29 @@ disposed while a recorded frame still references it becomes pending, and its GPU
 queued only when the last frame hold is gone. M3 implements and tests this mechanism directly; M4
 calls it from the camera draw recorder.
 
+### Procedural assets
+
+`MeshBuilder` and `TextureBuilder` create assets without a pack. `EngineContext.CreateMeshBuilder`
+and `CreateTextureBuilder` resolve an app-lifetime `ProceduralAssetService` owned by the asset
+catalog. The service only queues uploads on the same `GpuAssetBridge` and destruction on the same
+render thread; it never caches an asset or resolves a path.
+
+- A builder owns mutable CPU data and the optional normal/tangent/bounds helpers.
+  `BuildAsync` snapshots that data, validates the topology/index ranges or pixel layout, queues the
+  upload, and returns an immutable `Mesh`/`Texture` only after the GPU copy finishes. One-shot
+  semantics keep frame retention simple; changing the builder does not mutate a built asset.
+- A procedural asset gets an `EngineAsset` only after a successful upload, with a reserved synthetic
+  canonical path under `_procedural/mesh/` or `_procedural/texture/`. The catalog never resolves
+  that prefix. The caller owns one reference; frame holds and deferred destruction use the same
+  engine-asset lifetime as loaded assets.
+- Loaded meshes decode and retain CPU vertices/indices in `Mesh.Vertices`/`Indices`; procedural
+  meshes expose the builder snapshot. Textures never expose CPU pixels; procedural texture pixels
+  stay in the builder. Procedural textures use uncompressed `Rgba8Unorm`, `Rgba8Srgb`, or
+  `R8Unorm` levels and optional box-filter mips; BC payloads stay a bake product.
+- The builders and `BuildAsync` are safe to call from any thread, including `Setup` and `Tick`.
+  A builder instance is not thread-safe. The GPU copy still runs on the render thread through the
+  bridge, and a build after app shutdown throws `ObjectDisposedException`.
+
 ### Custom data, Model, and Font
 
 A custom data source is a TOML file with a root `[raybork]` table naming a registered CLR type. The

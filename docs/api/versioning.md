@@ -97,8 +97,8 @@ disposed first.
 | `RayCollision`, `Collision` | §5.5 |
 | `Vector3Extensions`, `QuaternionExtensions` | §5.6 |
 | `IAsset`, `IAssetCatalog` | §6.1 |
-| `Mesh`, `Model`, `ModelPart`, `PrimitiveTopology` | §7.5 |
-| `Texture`, `TextureFormat`, `TextureFilter`, `TextureWrap`, `SamplerState` | §7.6 |
+| `Mesh`, `Model`, `ModelPart`, `PrimitiveTopology`, `Vertex`, `MeshBuilder`, `MeshNormalMode` | §7.5 |
+| `Texture`, `TextureBuilder`, `TextureFormat`, `TextureFilter`, `TextureWrap`, `SamplerState` | §7.6 |
 | `Shader`, `ShaderStageMask`, `ShaderUniform`, `ShaderUniformType`, `ShaderTextureBinding` | §7.3 |
 | `RenderState`, `BlendMode`, `CullMode`, `DepthTest` | §7.7 |
 | `Camera`, `CameraProjection`, `ClearMode`, `TonemappingMode` | §7.1, §7.2 |

@@ -33,6 +33,19 @@ draw API, so `Setup` only loads and logs metadata; the M2 renderer-only behavior
 [docs/api/assets.md](../../docs/api/assets.md) §6 and
 [docs/api/aot.md](../../docs/api/aot.md) §12.
 
+`Setup` also builds one procedural mesh and one procedural texture through the M3 builders, whether
+or not `--assets` is supplied:
+
+| Asset | Built from | Logged metadata |
+| --- | --- | --- |
+| `Mesh` | `ctx.CreateMeshBuilder()` with four vertices and two triangles; smooth normals and tangents computed | Synthetic `/_procedural/mesh/N` path, vertex/index counts, bounds, `IsProcedural`. |
+| `Texture` | `ctx.CreateTextureBuilder(2, 2, Rgba8Srgb)` from four `Color` pixels with mip generation | Synthetic `/_procedural/texture/N` path, size, mip count, format, sRGB, `IsProcedural`. |
+
+Both builds are awaited in `Setup`, so they exercise the non-blocking GPU upload path and the
+`BuildAsync` contract in the Native AOT gate. The assets are disposed in `Shutdown`. See
+[docs/api/rendering/meshes.md](../../docs/api/rendering/meshes.md) §7.5 and
+[docs/api/rendering/textures.md](../../docs/api/rendering/textures.md) §7.6.
+
 The host uses `RayBorkAppBuilder` with a resizable window, a 60 FPS tick cap, a 0.25 second maximum
 delta, and the renderer options on the command line. It is an `Exe` with `PublishAot=true`, so console
 logging is visible and the AOT gate can run it on Windows and Linux. HDR presentation is automatic
@@ -91,6 +104,8 @@ Texture /textures/circle: 64x64, 7 mip level(s), format Rgba8Srgb, sRGB True, sa
 Mesh /models/box/body: 24 vertex/vertices, 36 index/indices, topology TriangleList, bounds <-0.5, -0.5, -0.5>..<0.5, 0.5, 0.5>.
 Shader /shaders/simple: stages Vertex, Fragment, 0 uniform(s), 0 texture binding(s), default state Opaque/Back/GreaterOrEqual, depth write True.
 Custom data /data/hello: name 'RayBork M3 Sample', difficulty 2.
+Procedural mesh /_procedural/mesh/1: 4 vertex/vertices, 6 index/indices, bounds <-0.5, -0.5, 0>..<0.5, 0.5, 0>, procedural True.
+Procedural texture /_procedural/texture/1: 2x2, 2 mip level(s), format Rgba8Srgb, sRGB True, procedural True.
 ```
 
 - The device is the `Vulkan 1.2 renderer initialized` line; `EngineInfo.RendererName` reports the

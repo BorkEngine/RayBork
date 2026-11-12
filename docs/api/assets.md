@@ -88,12 +88,17 @@ A canonical path is an asset identity. Two different source files cannot produce
 one pack. Two packs may contain the same path; the later-mounted pack wins. The public `IAsset.Path`
 is the canonical path with a leading `/`; the pack index stores it without one.
 
+The `_procedural` first segment is reserved for assets created at runtime. A procedural `Mesh` or
+`Texture` has a synthetic path under `/_procedural/mesh/` or `/_procedural/texture/`, never appears
+in the catalog, and cannot be loaded with `Load<T>`. The bake must not publish an entry under that
+prefix.
+
 ### 6.3 Asset types
 
 | Type | Baked from | Runtime form | Milestone |
 | --- | --- | --- | --- |
-| `Mesh` | One primitive from glTF 2.0 or OBJ | GPU vertex/index buffers; CPU positions retained for collision | M3 |
-| `Texture` | PNG, JPEG, TGA, BMP | GPU-ready KTX2 payload, mips, sRGB flag, sampler state | M3 |
+| `Mesh` | One primitive from glTF 2.0 or OBJ, or a `MeshBuilder` | GPU vertex/index buffers; CPU vertices and indices retained for collision and inspection | M3 |
+| `Texture` | PNG, JPEG, TGA, BMP, or a `TextureBuilder` | GPU-ready KTX2 payload or procedural uncompressed levels, mips, sRGB flag, sampler state | M3 |
 | `Shader` | GLSL vertex + fragment pair | SPIR-V plus sidecar metadata, entry points, and a default render state | M3 |
 | `Model` | glTF 2.0, OBJ | Multi-part model with meshes, local transforms, shader references | M4 (baked in M3) |
 | `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs | M6 (baked in M3) |

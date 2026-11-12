@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork;
@@ -52,6 +53,8 @@ internal sealed class HelloGame : IGame {
     private Texture? _texture;
     private Mesh? _mesh;
     private Shader? _shader;
+    private Mesh? _proceduralMesh;
+    private Texture? _proceduralTexture;
     private bool _lastFocused;
     private bool _lastMinimized;
     private WindowState _lastWindowState;
@@ -166,6 +169,51 @@ internal sealed class HelloGame : IGame {
         _lastDpiScale = window.DpiScale;
 
         await LoadAssetsAsync(context);
+        await BuildProceduralAssetsAsync(context);
+    }
+
+    private async Task BuildProceduralAssetsAsync(EngineContext context) {
+        MeshBuilder meshBuilder = context.CreateMeshBuilder();
+        meshBuilder.SetVertices([
+            new Vertex(new Vector3(-0.5f, -0.5f, 0f), uv: new Vector2(0f, 1f)),
+            new Vertex(new Vector3(0.5f, -0.5f, 0f), uv: new Vector2(1f, 1f)),
+            new Vertex(new Vector3(0.5f, 0.5f, 0f), uv: new Vector2(1f, 0f)),
+            new Vertex(new Vector3(-0.5f, 0.5f, 0f), uv: new Vector2(0f, 0f)),
+        ]);
+        meshBuilder.SetIndices([0u, 1u, 2u, 0u, 2u, 3u]);
+        meshBuilder.ComputeNormals();
+        meshBuilder.ComputeTangents();
+        _proceduralMesh = await meshBuilder.BuildAsync();
+        _logger.LogInformation(
+            "Procedural mesh {Path}: {VertexCount} vertex/vertices, {IndexCount} index/indices, bounds {Min}..{Max}, procedural {IsProcedural}.",
+            _proceduralMesh.Path,
+            _proceduralMesh.VertexCount,
+            _proceduralMesh.IndexCount,
+            _proceduralMesh.Bounds.Min,
+            _proceduralMesh.Bounds.Max,
+            _proceduralMesh.IsProcedural);
+
+        TextureBuilder textureBuilder = context.CreateTextureBuilder(
+            2,
+            2,
+            TextureFormat.Rgba8Srgb,
+            generateMips: true);
+        textureBuilder.SetPixels([
+            Color.Red,
+            Color.Green,
+            Color.Blue,
+            Color.White,
+        ]);
+        _proceduralTexture = await textureBuilder.BuildAsync();
+        _logger.LogInformation(
+            "Procedural texture {Path}: {Width}x{Height}, {MipLevels} mip level(s), format {Format}, sRGB {IsSrgb}, procedural {IsProcedural}.",
+            _proceduralTexture.Path,
+            _proceduralTexture.Width,
+            _proceduralTexture.Height,
+            _proceduralTexture.MipLevels,
+            _proceduralTexture.Format,
+            _proceduralTexture.IsSrgb,
+            _proceduralTexture.IsProcedural);
     }
 
     private async Task LoadAssetsAsync(EngineContext context) {
@@ -349,6 +397,8 @@ internal sealed class HelloGame : IGame {
         _texture?.Dispose();
         _mesh?.Dispose();
         _shader?.Dispose();
+        _proceduralMesh?.Dispose();
+        _proceduralTexture?.Dispose();
 
         return Task.CompletedTask;
     }

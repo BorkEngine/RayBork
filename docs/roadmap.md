@@ -243,7 +243,8 @@ device policy is tested on both before M4 relies on bindless.
 ### M3 — Asset pipeline and custom data
 
 **Goal.** A game can configure an assets executable, bake sources into `assets.pck`, mount it, load
-engine assets and custom data, and rely on correct lifetime and GPU residency.
+engine assets and custom data, create procedural meshes and textures, and rely on correct lifetime
+and GPU residency.
 
 **Scope.**
 
@@ -267,6 +268,10 @@ engine assets and custom data, and rely on correct lifetime and GPU residency.
   engine assets, caller-owned custom data.
 - GPU upload handoff: texture images, mesh buffers, shader modules, frame retention, and re-upload
   after a device recovery.
+- Procedural assets: `MeshBuilder` and `TextureBuilder` own CPU data, expose vertices/indices,
+  compute normals/tangents/bounds, and upload with `BuildAsync` through the same bridge. Procedural
+  textures support uncompressed `Rgba8Unorm`, `Rgba8Srgb`, and `R8Unorm` with optional mips; assets
+  are immutable after build and use reserved `/_procedural/...` paths.
 - Per-source incremental manifest: unchanged sources reuse the previous pack's entry descriptors and
   payloads; changed, new, and deleted sources are reprocessed. A tool-version or configuration
   change invalidates the cache. Pack bytes are not deterministic; only the entry set and logical
@@ -279,6 +284,9 @@ engine assets and custom data, and rely on correct lifetime and GPU residency.
 - The M3 sample bakes a pack, loads a texture, mesh, shader, and custom TOML data, and reads back
   their metadata.
 - Loading the same engine path twice returns the same object and creates one GPU resource.
+- A procedural mesh and texture can be built from CPU data and are usable only after `BuildAsync`
+  completes. Loaded and procedural meshes expose CPU vertices/indices; normal, tangent, and bounds
+  helpers produce the documented results.
 - The frame packet retains every engine asset recorded into it and releases it after the frame
   completes. M3 tests the retention mechanism directly; the end-to-end "dispose after recording a
   draw" check lands with the M4 camera and draw API.
@@ -299,7 +307,7 @@ runtime `Model` and `Font` loaders land in M4 and M6; M3 bakes and validates the
 `watch` bake command is deferred to M10; M3 ships `bake`, `clean`, `inspect`, and `--help`.
 GPU uploads are submitted without a fence wait and polled on later render-loop turns, so the loader
 and renderer are not blocked by a copy; a dedicated transfer queue is a later optimization, not an
-M3 requirement.
+M3 requirement. Procedural assets are M3 creation primitives; drawing them is M4 work.
 
 ### M4 — Core 3D renderer, shader state, and instancing
 
@@ -639,7 +647,7 @@ The matrix is the scope contract.
 | Images | Partial | M3 | Bake decodes; no runtime image manipulation API. |
 | Models | Covered | M4 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes. |
 | Custom data | Covered | M3 | TOML data with `[GenerateShape]`; `WithAssetType<T>` then `Load<T>`. |
-| Meshes | Covered | M4, M5 | Loaded and primitive meshes; no runtime upload API. |
+| Meshes | Covered | M3, M4, M5 | Loaded meshes, procedural `MeshBuilder` creation, and primitive meshes; fixed vertex layout. |
 | Materials | Rethought | M4 | No `Material`; shader state + per-instance uniforms. |
 | Model animations | Post | — | Skeletal/morph post-1.0. |
 | 3D shapes | Covered | M5 | Lines, points, triangles, cube, sphere, cylinder, plane, grid, wires. |

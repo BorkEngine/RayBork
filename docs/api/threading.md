@@ -17,6 +17,7 @@
 | `IWindow` setters | Any thread | Queued to the main thread |
 | `IWindow` getters | Any thread | Last confirmed snapshot |
 | `IAssetCatalog` | Any thread | Thread-safe load/cache; custom data is caller-owned |
+| `MeshBuilder`/`TextureBuilder` | Any thread | The factory and build may run on any thread; one builder instance is not thread-safe |
 | `ILoggerFactory` | Any thread | App-owned; create category loggers |
 | `RenderStats` | Render thread writes | Any thread reads a snapshot |
 | Renderer backend objects | Render thread | Never exposed; the backend is replaceable internally |
@@ -31,6 +32,11 @@ is quiescent at the end of `Tick`.
 `IAssetCatalog` is the exception: background loads are safe, but the completed asset must not be
 used by a tick-affine object until the tick that observes completion. `Load<T>` returns a
 caller-owned value for custom data; it can be used on any thread after completion.
+
+Procedural builders are also thread-safe as a factory/build operation: `EngineContext.CreateMeshBuilder`,
+`EngineContext.CreateTextureBuilder`, and `BuildAsync` may be called on any thread, including `Setup`
+and `Tick`. A single builder instance is not thread-safe; create one per thread. The GPU copy still
+runs through the render thread and `BuildAsync` completes only after it is ready.
 
 Recoverable renderer failures are handled on the render thread. The render thread pauses, recreates
 the swapchain or device, recreates pipelines and GPU resources, increments `RenderStats.RecoveryCount`,

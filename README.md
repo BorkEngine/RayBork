@@ -12,18 +12,18 @@ game without adopting a scene graph or an ECS.
 linear HDR scene target, AgX tone mapping, scRGB HDR output when the window reports HDR, MSAA with
 color resolve, reverse-Z depth, bounded recovery, and a Native AOT gate. M3 adds the asset pipeline:
 the RAYBORKP v1 pack, canonical asset paths, a dedicated asset loader, reference-counted
-`Mesh`/`Texture`/`Shader` assets, custom TOML data through compiled shapes, a thread-safe GPU upload
-bridge with frame retention and device-recovery re-upload, the JIT `RayBork.Bake` tooling, and a
-build-time embedded built-in pack. The host, window, input, time, and logging surface shipped in M1;
-the renderer foundation shipped in M2. The rest of the API reference remains the 1.0 contract and is
-delivered by the milestones listed in
-[API reference §1.6](docs/api.md#16-milestone-availability).
+`Mesh`/`Texture`/`Shader` assets, procedural `MeshBuilder`/`TextureBuilder` creation, custom TOML
+data through compiled shapes, a non-blocking GPU upload bridge with frame retention and
+device-recovery re-upload, the JIT `RayBork.Bake` tooling, and a build-time embedded built-in pack.
+The host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in
+M2. The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed
+in [API reference §1.6](docs/api.md#16-milestone-availability).
 
 ## Documents
 
 | Document | Contents |
 | --- | --- |
-| [API reference](docs/api.md) | Public types, lifecycle, assets, rendering, shader ABI, input, threading, AOT, tooling. |
+| [API reference](docs/api.md) | Overview and document map for public types, lifecycle, assets, rendering, shader ABI, input, threading, AOT, and tooling. |
 | [Roadmap](docs/roadmap.md) | Milestones M0-M12, raylib parity matrix, cross-cutting gates, risks, post-1.0 work. |
 | [Architecture](docs/architecture.md) | Threads, frame handoff, renderer seam, HDR/AgX, shader state, asset pipeline, invariants. |
 | [Third-party notices](THIRD-PARTY-NOTICES.md) | Dependency inventory, licenses, and the runtime/test/tooling notice policy. |
@@ -52,6 +52,9 @@ delivered by the milestones listed in
   loads shader metadata; the cursor and draw API land in M4.)
 - Engine assets are reference-counted and loaded from one or more `RAYBORKP` packs produced by the
   bake. Custom TOML data uses `[GenerateShape]`, `WithAssetType<T>()`, and the same `Load<T>` API.
+- Games can create procedural meshes and textures with `ctx.CreateMeshBuilder()` and
+  `ctx.CreateTextureBuilder(...)`. Builders expose CPU vertices/indices, compute normals, tangents,
+  and bounds, and `BuildAsync` returns an immutable asset only after the GPU upload finishes.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly.
@@ -75,7 +78,7 @@ build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
 samples/HelloInterop/         M1 diagnostic host, M2 renderer/AOT gate, M3 assets gate host
 samples/HelloInterop.Assets/  M3 assets executable (bakes hello.pck)
 samples/                      Castle, Pong, Text, Instancing, RenderTarget (M11)
-docs/                         API, roadmap, architecture
+docs/                         API reference (overview + section pages), roadmap, architecture
 .github/                      GitHub Actions CI and PR template
 scripts/                      docs checks and shader compilation
 AGENTS.md                     agent workflow and code style
