@@ -4,7 +4,8 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// The engine context: the window, input, logging, renderer status, frame clock, and exit control.
+/// The engine context: the asset catalog, window, input, logging, renderer status, frame clock, and
+/// exit control.
 /// </summary>
 /// <remarks>
 /// The context is stable for the app lifetime, but its per-frame members are tick-thread snapshots.
@@ -16,12 +17,14 @@ public sealed class EngineContext {
     private readonly Func<double> _elapsedTime;
     private readonly IEnginePlatform _platform;
     private readonly RenderStatus _renderStatus;
+    private readonly ProceduralAssetService _proceduralAssets;
     private bool _hasFrame;
     private double _time;
 
     internal EngineContext(
         IEnginePlatform platform,
         ILoggerFactory loggerFactory,
+        IAssetCatalog assets,
         IAppControl appControl,
         IInput initialInput,
         double maxDeltaTime,
@@ -29,19 +32,96 @@ public sealed class EngineContext {
         RenderStatus renderStatus) {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
+        ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(appControl);
         ArgumentNullException.ThrowIfNull(initialInput);
         ArgumentNullException.ThrowIfNull(elapsedTime);
         ArgumentNullException.ThrowIfNull(renderStatus);
+        if (assets is not IProceduralAssetProvider proceduralProvider) {
+            throw new InvalidOperationException(
+                "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog.");
+        }
 
         _platform = platform;
         _appControl = appControl;
         _elapsedTime = elapsedTime;
         _renderStatus = renderStatus;
+        _proceduralAssets = proceduralProvider.ProceduralAssets;
+        Assets = assets;
         Input = initialInput;
         LoggerFactory = loggerFactory;
         MaxDeltaTime = maxDeltaTime;
     }
+
+    /// <summary>
+    /// Gets the app's asset catalog. It is valid from <see cref="IGame.Setup"/> and safe to call from
+    /// any thread.
+    /// </summary>
+    /// <remarks>
+    /// The catalog is mounted and its loader thread is running before <see cref="IGame.Setup"/> runs.
+    /// Engine assets are shared and reference-counted; custom data returns a fresh caller-owned
+    /// instance per call. After the app stops, every catalog member throws
+    /// <see cref="ObjectDisposedException"/>.
+    /// </remarks>
+    public IAssetCatalog Assets { get; }
+
+    /// <summary>
+    /// Creates a builder for one procedural <see cref="Mesh"/>.
+    /// </summary>
+    /// <param name="topology">The primitive topology of the mesh. The default is triangle list.</param>
+    /// <returns>The builder. Its <see cref="MeshBuilder.BuildAsync"/> creates one immutable mesh.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="topology"/> is not a defined value.</exception>
+    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <remarks>
+    /// <para>
+    /// The factory and the builder's CPU and build members are safe to call from any thread and do not
+    /// touch tick-affine engine state. Awaiting <see cref="MeshBuilder.BuildAsync"/> on the tick thread
+    /// suspends that tick's continuation like an asset load; a build may also be started on a worker
+    /// thread. A builder instance is not thread-safe, so create one per thread.
+    /// </para>
+    /// <para>
+    /// After the app stops, this member and every builder it created throw
+    /// <see cref="ObjectDisposedException"/>.
+    /// </para>
+    /// </remarks>
+    public MeshBuilder CreateMeshBuilder(PrimitiveTopology topology = PrimitiveTopology.TriangleList)
+        => _proceduralAssets.CreateMeshBuilder(topology);
+
+    /// <summary>
+    /// Creates a builder for one procedural <see cref="Texture"/>.
+    /// </summary>
+    /// <param name="width">The base-level width in pixels.</param>
+    /// <param name="height">The base-level height in pixels.</param>
+    /// <param name="format">
+    /// The uncompressed storage format: <see cref="TextureFormat.Rgba8Srgb"/> (the default),
+    /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.R8Unorm"/>.
+    /// </param>
+    /// <param name="generateMips">
+    /// Whether <see cref="TextureBuilder.BuildAsync"/> generates the full mip chain when no chain
+    /// exists. The default is <see langword="true"/>.
+    /// </param>
+    /// <param name="sampler">
+    /// The sampler state, or <see langword="null"/> for linear filtering with repeat wrapping.
+    /// </param>
+    /// <returns>The builder. Its <see cref="TextureBuilder.BuildAsync"/> creates one immutable texture.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive or exceeds 16384.</exception>
+    /// <exception cref="ArgumentException">
+    /// The format is not an uncompressed procedural format, or the sampler state is not valid.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <remarks>
+    /// The factory and the builder's CPU and build members are safe to call from any thread and do not
+    /// touch tick-affine engine state. A builder instance is not thread-safe, so create one per thread.
+    /// The CPU pixels stay owned by the builder and are never exposed on the built asset. After the app
+    /// stops, this member and every builder it created throw <see cref="ObjectDisposedException"/>.
+    /// </remarks>
+    public TextureBuilder CreateTextureBuilder(
+        int width,
+        int height,
+        TextureFormat format = TextureFormat.Rgba8Srgb,
+        bool generateMips = true,
+        SamplerState? sampler = null)
+        => _proceduralAssets.CreateTextureBuilder(width, height, format, generateMips, sampler);
 
     /// <summary>
     /// Gets the input snapshot for the current tick. Read it on the tick thread.

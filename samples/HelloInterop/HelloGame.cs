@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork;
@@ -44,10 +45,16 @@ internal sealed class HelloGame : IGame {
     private readonly TonemappingMode _tonemapping;
     private readonly float _exposure;
     private readonly Color _clearColor;
+    private readonly string? _assetsPackPath;
     private readonly Dictionary<int, string> _gamepads = [];
 
     private EngineContext? _context;
     private ILogger _logger = NullLogger.Instance;
+    private Texture? _texture;
+    private Mesh? _mesh;
+    private Shader? _shader;
+    private Mesh? _proceduralMesh;
+    private Texture? _proceduralTexture;
     private bool _lastFocused;
     private bool _lastMinimized;
     private WindowState _lastWindowState;
@@ -61,19 +68,25 @@ internal sealed class HelloGame : IGame {
     private float _lastDpiScale;
     private string _exitReason = "no ticks were run";
 
-    internal HelloGame(int frameLimit, TonemappingMode tonemapping, float exposure, Color clearColor) {
+    internal HelloGame(
+        int frameLimit,
+        TonemappingMode tonemapping,
+        float exposure,
+        Color clearColor,
+        string? assetsPackPath) {
         _frameLimit = frameLimit;
         _tonemapping = tonemapping;
         _exposure = exposure;
         _clearColor = clearColor;
+        _assetsPackPath = assetsPackPath;
     }
 
-    public Task Setup(EngineContext context) {
+    public async Task Setup(EngineContext context) {
         _context = context;
         _logger = context.LoggerFactory.CreateLogger("HelloInterop");
         IWindow window = context.Window;
 
-        _logger.LogInformation("RayBork {EngineVersion} M2 renderer diagnostic host starting.", EngineVersion.Current);
+        _logger.LogInformation("RayBork {EngineVersion} M3 asset pipeline diagnostic host starting.", EngineVersion.Current);
 
         int sdlVersion = SDL.GetVersion();
         int major = sdlVersion / 1_000_000;
@@ -155,7 +168,107 @@ internal sealed class HelloGame : IGame {
         _lastRenderHeight = window.RenderHeight;
         _lastDpiScale = window.DpiScale;
 
-        return Task.CompletedTask;
+        await LoadAssetsAsync(context);
+        await BuildProceduralAssetsAsync(context);
+    }
+
+    private async Task BuildProceduralAssetsAsync(EngineContext context) {
+        MeshBuilder meshBuilder = context.CreateMeshBuilder();
+        meshBuilder.SetVertices([
+            new Vertex(new Vector3(-0.5f, -0.5f, 0f), uv: new Vector2(0f, 1f)),
+            new Vertex(new Vector3(0.5f, -0.5f, 0f), uv: new Vector2(1f, 1f)),
+            new Vertex(new Vector3(0.5f, 0.5f, 0f), uv: new Vector2(1f, 0f)),
+            new Vertex(new Vector3(-0.5f, 0.5f, 0f), uv: new Vector2(0f, 0f)),
+        ]);
+        meshBuilder.SetIndices([0u, 1u, 2u, 0u, 2u, 3u]);
+        meshBuilder.ComputeNormals();
+        meshBuilder.ComputeTangents();
+        _proceduralMesh = await meshBuilder.BuildAsync();
+        _logger.LogInformation(
+            "Procedural mesh {Path}: {VertexCount} vertex/vertices, {IndexCount} index/indices, bounds {Min}..{Max}, procedural {IsProcedural}.",
+            _proceduralMesh.Path,
+            _proceduralMesh.VertexCount,
+            _proceduralMesh.IndexCount,
+            _proceduralMesh.Bounds.Min,
+            _proceduralMesh.Bounds.Max,
+            _proceduralMesh.IsProcedural);
+
+        TextureBuilder textureBuilder = context.CreateTextureBuilder(
+            2,
+            2,
+            TextureFormat.Rgba8Srgb,
+            generateMips: true);
+        textureBuilder.SetPixels([
+            Color.Red,
+            Color.Green,
+            Color.Blue,
+            Color.White,
+        ]);
+        _proceduralTexture = await textureBuilder.BuildAsync();
+        _logger.LogInformation(
+            "Procedural texture {Path}: {Width}x{Height}, {MipLevels} mip level(s), format {Format}, sRGB {IsSrgb}, procedural {IsProcedural}.",
+            _proceduralTexture.Path,
+            _proceduralTexture.Width,
+            _proceduralTexture.Height,
+            _proceduralTexture.MipLevels,
+            _proceduralTexture.Format,
+            _proceduralTexture.IsSrgb,
+            _proceduralTexture.IsProcedural);
+    }
+
+    private async Task LoadAssetsAsync(EngineContext context) {
+        if (_assetsPackPath is null) {
+            return;
+        }
+
+        _logger.LogInformation("Assets pack: {PackPath}.", _assetsPackPath);
+
+        _texture = await context.Assets.Load<Texture>("/textures/circle");
+        _mesh = await context.Assets.Load<Mesh>("/models/box/body");
+        _shader = await context.Assets.Load<Shader>("/shaders/simple");
+        HelloSettings settings = await context.Assets.Load<HelloSettings>("/data/hello");
+
+        Texture texture = _texture;
+        _logger.LogInformation(
+            "Texture {Path}: {Width}x{Height}, {MipLevels} mip level(s), format {Format}, sRGB {IsSrgb}, sampler {Filter}/{Wrap}, max anisotropy {MaxAnisotropy:0.###}.",
+            texture.Path,
+            texture.Width,
+            texture.Height,
+            texture.MipLevels,
+            texture.Format,
+            texture.IsSrgb,
+            texture.Sampler.Filter,
+            texture.Sampler.Wrap,
+            texture.Sampler.MaxAnisotropy);
+
+        Mesh mesh = _mesh;
+        _logger.LogInformation(
+            "Mesh {Path}: {VertexCount} vertex/vertices, {IndexCount} index/indices, topology {Topology}, bounds {Min}..{Max}.",
+            mesh.Path,
+            mesh.VertexCount,
+            mesh.IndexCount,
+            mesh.Topology,
+            mesh.Bounds.Min,
+            mesh.Bounds.Max);
+
+        Shader shader = _shader;
+        RenderState state = shader.DefaultRenderState;
+        _logger.LogInformation(
+            "Shader {Path}: stages {Stages}, {UniformCount} uniform(s), {TextureBindingCount} texture binding(s), default state {Blend}/{Cull}/{DepthTest}, depth write {DepthWrite}.",
+            shader.Path,
+            shader.Stages,
+            shader.Uniforms.Count,
+            shader.Textures.Count,
+            state.Blend,
+            state.Cull,
+            state.DepthTest,
+            state.DepthWrite);
+
+        _logger.LogInformation(
+            "Custom data {Path}: name '{Name}', difficulty {Difficulty}.",
+            "/data/hello",
+            settings.Name,
+            settings.Difficulty);
     }
 
     public void Tick(EngineContext context) {
@@ -278,6 +391,14 @@ internal sealed class HelloGame : IGame {
             _lastRenderHeight,
             _lastDpiScale,
             _exitReason);
+
+        // Shutdown runs on the tick thread, which owns the loaded engine assets. Dispose exactly once
+        // per successful load; the catalog releases the GPU resource on the render thread.
+        _texture?.Dispose();
+        _mesh?.Dispose();
+        _shader?.Dispose();
+        _proceduralMesh?.Dispose();
+        _proceduralTexture?.Dispose();
 
         return Task.CompletedTask;
     }

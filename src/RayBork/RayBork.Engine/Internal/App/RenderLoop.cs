@@ -3,8 +3,9 @@ using Microsoft.Extensions.Logging;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Owns the render thread: it creates and initializes the renderer backend, consumes the newest
-/// published frame, submits and presents it, and publishes the backend status.
+/// Owns the render thread: it creates and initializes the renderer backend, services the GPU asset
+/// bridge, consumes the newest published frame, submits and presents it, and publishes the backend
+/// status.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,13 +14,27 @@ namespace RayBork.Internal;
 /// marshalled to the main thread through <see cref="RendererBackendOptions.SurfaceProvider"/>.
 /// </para>
 /// <para>
-/// <see cref="IsReady"/> becomes <see langword="true"/> after the backend initialized and its
-/// <see cref="EngineInfo"/> was published, so the main thread can start the tick thread only after
-/// <see cref="EngineContext.Info"/> is valid. A failure before that point is an initialization
-/// failure; a failure after it is a run-time failure. Exceptions never escape the thread:
-/// <see cref="Failure"/> holds them and the backend is disposed in every case.
+/// The loop waits on the frame-ring ready signal and the GPU asset bridge signal together, so an
+/// upload queued during <c>Setup</c> starts without waiting for the first tick and no loop turn
+/// busy-spins. While the bridge still has a queued or in-flight upload the wait is bounded to a few
+/// milliseconds so the loop keeps polling the GPU copy even when no frame is being published; with no
+/// upload in flight it waits indefinitely. The bridge is serviced before each wait and after every
+/// wake. When the backend's <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the
+/// bridge to recreate the live resources before the next frame is submitted; presentation-only
+/// recoveries leave the generation unchanged and do not re-upload assets.
 /// </para>
 /// <para>
+/// <see cref="IsReady"/> becomes <see langword="true"/> after the backend initialized, its
+/// <see cref="EngineInfo"/> was published, and the GPU asset worker was attached, so the main thread
+/// can start the tick thread only after <see cref="EngineContext.Info"/> is valid and no asset upload
+/// can be queued without a worker. A failure before that point is an initialization failure; a
+/// failure after it is a run-time failure. Exceptions never escape the thread: <see cref="Failure"/>
+/// holds them and the backend is disposed in every case.
+/// </para>
+/// <para>
+/// Teardown order in the loop's final block: the frame ring is already complete and drained, so the
+/// bridge closes first (completing pending uploads with the failure or
+/// <see cref="ObjectDisposedException"/> and destroying live resources), then the backend is disposed.
 /// <see cref="Start"/> may be called once. Read <see cref="Failure"/> after <see cref="Join"/>
 /// returned or after <see cref="IsCompleted"/> became <see langword="true"/>.
 /// </para>
@@ -27,12 +42,22 @@ namespace RayBork.Internal;
 internal sealed class RenderLoop {
     private const string THREAD_NAME = "RayBork.Render";
 
+    /// <summary>
+    /// The bounded wait used while a GPU asset upload is queued or in flight. It is short enough that
+    /// an upload started during <c>Setup</c> completes promptly and long enough not to busy-spin the
+    /// render thread while no frame is ready.
+    /// </summary>
+    private const int UPLOAD_POLL_TIMEOUT_MILLISECONDS = 2;
+
     private readonly FrameRing _frameRing;
     private readonly RendererBackendFactory _backendFactory;
     private readonly RendererBackendOptions _options;
     private readonly RenderStatus _status;
+    private readonly GpuAssetBridge _gpuAssetBridge;
+    private readonly WaitHandle[] _waitHandles;
     private readonly Thread _thread;
 
+    private IAssetGpuWorker? _assetGpuWorker;
     private volatile Exception? _failure;
     private volatile bool _isReady;
     private volatile bool _isCompleted;
@@ -46,21 +71,29 @@ internal sealed class RenderLoop {
     /// <param name="options">The backend configuration and surface seams.</param>
     /// <param name="status">The status holder the loop publishes <see cref="EngineInfo"/> and
     /// <see cref="RenderStats"/> to.</param>
+    /// <param name="gpuAssetBridge">
+    /// The bridge that receives GPU asset uploads and destructions from any thread and is serviced by
+    /// this loop on the render thread.
+    /// </param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal RenderLoop(
         FrameRing frameRing,
         RendererBackendFactory backendFactory,
         RendererBackendOptions options,
-        RenderStatus status) {
+        RenderStatus status,
+        GpuAssetBridge gpuAssetBridge) {
         ArgumentNullException.ThrowIfNull(frameRing);
         ArgumentNullException.ThrowIfNull(backendFactory);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(status);
+        ArgumentNullException.ThrowIfNull(gpuAssetBridge);
 
         _frameRing = frameRing;
         _backendFactory = backendFactory;
         _options = options;
         _status = status;
+        _gpuAssetBridge = gpuAssetBridge;
+        _waitHandles = [frameRing.ReadySignal, gpuAssetBridge.Signal];
         _thread = new Thread(RunThread) {
             IsBackground = true,
             Name = THREAD_NAME,
@@ -85,13 +118,14 @@ internal sealed class RenderLoop {
     internal Exception? Failure => _failure;
 
     /// <summary>
-    /// Gets whether the backend initialized successfully and published its <see cref="EngineInfo"/>.
+    /// Gets whether the backend initialized successfully, published its <see cref="EngineInfo"/>, and
+    /// attached an asset GPU worker when the backend provides one.
     /// </summary>
     internal bool IsReady => _isReady;
 
     /// <summary>
-    /// Gets whether the render thread finished disposing the backend. Read it together with
-    /// <see cref="Failure"/> after a bounded join.
+    /// Gets whether the render thread finished closing the bridge and disposing the backend. Read it
+    /// together with <see cref="Failure"/> after a bounded join.
     /// </summary>
     internal bool IsCompleted => _isCompleted;
 
@@ -121,34 +155,63 @@ internal sealed class RenderLoop {
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
                 null);
             backend.Initialize(_options);
+            AttachAssetGpuWorker(backend);
 
             EngineInfo publishedInfo = backend.Info;
             _status.SetInfo(publishedInfo);
             _isReady = true;
 
+            int appliedDeviceGeneration = backend.DeviceGeneration;
             while (true) {
-                FrameLease? lease = _frameRing.AcquireNewest(CancellationToken.None);
-                if (lease is null) {
+                ProcessPendingAssets();
+
+                if (_frameRing.TryAcquireNewest(out FrameLease lease)) {
+                    try {
+                        backend.Submit(new RenderFramePacket(lease.FrameIndex));
+                        backend.Present();
+                        _status.SetStats(backend.Stats);
+                        int deviceGeneration = backend.DeviceGeneration;
+                        if (deviceGeneration != appliedDeviceGeneration) {
+                            appliedDeviceGeneration = deviceGeneration;
+                            RestoreAssets();
+                        }
+
+                        EngineInfo info = backend.Info;
+                        if (info != publishedInfo) {
+                            _status.SetInfo(info);
+                            publishedInfo = info;
+                        }
+                    } finally {
+                        _frameRing.Release(lease);
+                    }
+
+                    continue;
+                }
+
+                if (_frameRing.IsCompleted) {
                     return;
                 }
 
-                try {
-                    backend.Submit(new RenderFramePacket(lease.Value.FrameIndex));
-                    backend.Present();
-                    _status.SetStats(backend.Stats);
-
-                    EngineInfo info = backend.Info;
-                    if (info != publishedInfo) {
-                        _status.SetInfo(info);
-                        publishedInfo = info;
-                    }
-                } finally {
-                    _frameRing.Release(lease.Value);
-                }
+                // An upload in flight must be polled even when no frame is published; the bridge
+                // signal covers queues and destructions, but a GPU copy finishing does not signal.
+                int timeout = _gpuAssetBridge.HasPendingWork
+                    ? UPLOAD_POLL_TIMEOUT_MILLISECONDS
+                    : Timeout.Infinite;
+                WaitHandle.WaitAny(_waitHandles, timeout);
             }
         } catch (Exception exception) {
             _failure = exception;
         } finally {
+            try {
+                _gpuAssetBridge.Close(_failure);
+            } catch (Exception exception) {
+                if (_failure is null) {
+                    _failure = exception;
+                } else {
+                    _options.Logger.LogWarning(exception, "The GPU asset bridge failed to close after the render loop stopped.");
+                }
+            }
+
             try {
                 backend?.Dispose();
             } catch (Exception exception) {
@@ -161,5 +224,31 @@ internal sealed class RenderLoop {
 
             _isCompleted = true;
         }
+    }
+
+    private void ProcessPendingAssets() {
+        if (_assetGpuWorker is not null) {
+            _gpuAssetBridge.ProcessPending(_assetGpuWorker);
+        }
+    }
+
+    private void RestoreAssets() {
+        if (_assetGpuWorker is not null) {
+            _gpuAssetBridge.Restore(_assetGpuWorker);
+        }
+    }
+
+    private void AttachAssetGpuWorker(IRendererBackend backend) {
+        if (backend is not IAssetGpuWorkerProvider provider) {
+            return;
+        }
+
+        IAssetGpuWorker worker = provider.CreateAssetGpuWorker()
+            ?? throw new GraphicsException(
+                "The renderer backend returned no GPU asset worker.",
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                null);
+        _gpuAssetBridge.AttachWorker(worker);
+        _assetGpuWorker = worker;
     }
 }

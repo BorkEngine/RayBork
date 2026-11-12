@@ -8,7 +8,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <InternalsVisibleTo Include="RayBork.Bake" />
         <InternalsVisibleTo Include="RayBork.Tests" />
+        <!-- The build-only generator builds the internal asset descriptors in the built-in pack. -->
+        <InternalsVisibleTo Include="RayBork.BuiltInAssets" />
     </ItemGroup>
 
     <ItemGroup>
@@ -23,8 +26,14 @@
         <PackageReference Include="PolyType" />
         <PackageReference Include="Nerdbank.MessagePack" />
         <PackageReference Include="Microsoft.Extensions.Logging" />
+        <PackageReference Include="System.IO.Hashing" />
         <PackageReference Include="ZLogger" />
         <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" />
     </ItemGroup>
+
+    <!-- Build-time built-in asset pack -> embedded C#. The generator is JIT and build-only; the
+         generated pack is compiled into this assembly, so the engine needs no pack file, tooling,
+         shader compiler, or filesystem I/O at startup. -->
+    <Import Project="..\..\..\build\RayBork.BuiltInAssets.targets" />
 
 </Project>

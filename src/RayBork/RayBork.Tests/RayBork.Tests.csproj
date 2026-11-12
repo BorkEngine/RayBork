@@ -11,6 +11,7 @@
         <PackageReference Include="xunit.v3" />
         <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
         <PackageReference Include="Moq" />
+        <PackageReference Include="Silk.NET.Shaderc.Native" GeneratePathProperty="true" />
     </ItemGroup>
 
     <ItemGroup>
@@ -21,5 +22,7 @@
     <ItemGroup>
         <Using Include="Xunit" />
     </ItemGroup>
+
+    <Import Project="$(MSBuildThisFileDirectory)..\..\..\build\RayBork.Shaderc.targets" />
 
 </Project>

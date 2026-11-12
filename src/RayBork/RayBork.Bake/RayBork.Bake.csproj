@@ -1,7 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+    <PropertyGroup>
+        <!-- Shaderc returns raw pointers. The bake is build-time JIT tooling, so the unsafe surface
+             never enters a runtime project or its AOT publish graph. -->
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
     <ItemGroup>
         <ProjectReference Include="..\RayBork.Engine\RayBork.Engine.csproj" />
     </ItemGroup>
+
+    <ItemGroup>
+        <!-- Build-time tooling only. These packages are JIT and must never reach a runtime project
+             or an AOT publish graph. -->
+        <PackageReference Include="BCnEncoder.Net" />
+        <PackageReference Include="PolyType" />
+        <PackageReference Include="SharpGLTF.Core" />
+        <PackageReference Include="Silk.NET.Shaderc" />
+        <PackageReference Include="Silk.NET.Shaderc.Native" GeneratePathProperty="true" />
+        <PackageReference Include="StbImageSharp" />
+        <PackageReference Include="Tomlyn" />
+    </ItemGroup>
+
+    <Import Project="$(MSBuildThisFileDirectory)..\..\..\build\RayBork.Shaderc.targets" />
 
 </Project>

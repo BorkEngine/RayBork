@@ -1,0 +1,5 @@
+[raybork]
+type = "HelloInterop.HelloSettings"
+
+name = "RayBork M3 Sample"
+difficulty = 2

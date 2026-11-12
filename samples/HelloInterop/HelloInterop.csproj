@@ -6,6 +6,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="PolyType" />
         <PackageReference Include="SDL3-CS" />
         <PackageReference Include="SDL3-CS.Native" />
     </ItemGroup>

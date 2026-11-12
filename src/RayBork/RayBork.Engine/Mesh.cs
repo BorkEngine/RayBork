@@ -1,0 +1,179 @@
+using System.Numerics;
+using RayBork.Internal;
+
+namespace RayBork;
+
+/// <summary>
+/// One mesh primitive: an immutable vertex/index buffer pair with its topology and bounds.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A mesh is either a standalone baked mesh-part asset loaded from a pack or one procedural mesh built
+/// by a <see cref="MeshBuilder"/>. A multi-part model is the M4 entry point for a glTF or OBJ source.
+/// The GPU buffers are created during the load or build and are released when the last reference is
+/// disposed.
+/// </para>
+/// <para>
+/// The CPU vertices and indices are retained for both kinds: a loaded mesh decodes them from the
+/// packed payload and a procedural mesh keeps the builder's snapshot. Later M5 collision helpers read
+/// them. Textures do not retain CPU pixels.
+/// </para>
+/// <para>
+/// <see cref="Path"/> and <see cref="IsDisposed"/> stay readable after disposal. Every other member
+/// throws <see cref="ObjectDisposedException"/> once the asset is disposed.
+/// </para>
+/// </remarks>
+public sealed class Mesh : IAsset {
+    private readonly EngineAsset _asset;
+    private readonly ReadOnlyMemory<Vertex> _vertices;
+    private readonly ReadOnlyMemory<uint> _indices;
+    private readonly int _vertexCount;
+    private readonly int _indexCount;
+    private readonly BoundingBox _bounds;
+    private readonly PrimitiveTopology _topology;
+    private readonly bool _isProcedural;
+
+    /// <summary>
+    /// Initializes a mesh from its uploaded lifetime state, its descriptor, and its CPU geometry.
+    /// </summary>
+    /// <param name="asset">The shared lifetime state acquired by the catalog or the builder.</param>
+    /// <param name="descriptor">The packed or synthetic mesh descriptor.</param>
+    /// <param name="vertices">The CPU vertices the mesh retains.</param>
+    /// <param name="indices">The CPU 32-bit indices the mesh retains.</param>
+    /// <param name="isProcedural">Whether the mesh was built by a <see cref="MeshBuilder"/>.</param>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    internal Mesh(
+        EngineAsset asset,
+        MeshAssetDescriptor descriptor,
+        Vertex[] vertices,
+        uint[] indices,
+        bool isProcedural) {
+        ArgumentNullException.ThrowIfNull(asset);
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(vertices);
+        ArgumentNullException.ThrowIfNull(indices);
+
+        _asset = asset;
+        _vertices = vertices;
+        _indices = indices;
+        _vertexCount = vertices.Length;
+        _indexCount = indices.Length;
+        _bounds = new BoundingBox(
+            new Vector3(descriptor.Bounds[0], descriptor.Bounds[1], descriptor.Bounds[2]),
+            new Vector3(descriptor.Bounds[3], descriptor.Bounds[4], descriptor.Bounds[5]));
+        _topology = descriptor.Topology;
+        _isProcedural = isProcedural;
+    }
+
+    /// <inheritdoc/>
+    public string Path => _asset.Path;
+
+    /// <summary>
+    /// Gets whether the mesh was built by a <see cref="MeshBuilder"/> instead of loaded from a pack.
+    /// A procedural mesh has a reserved synthetic <see cref="Path"/> under <c>/_procedural/mesh/</c>.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public bool IsProcedural {
+        get {
+            ThrowIfDisposed();
+            return _isProcedural;
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of vertices in the vertex buffer.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public int VertexCount {
+        get {
+            ThrowIfDisposed();
+            return _vertexCount;
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of 32-bit indices in the index buffer.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public int IndexCount {
+        get {
+            ThrowIfDisposed();
+            return _indexCount;
+        }
+    }
+
+    /// <summary>
+    /// Gets the CPU vertices retained for collision and inspection.
+    /// </summary>
+    /// <remarks>
+    /// A loaded mesh decodes the vertices from the packed payload; a procedural mesh returns the
+    /// builder's snapshot. The memory is read-only and stays valid until the last reference is
+    /// disposed.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public ReadOnlyMemory<Vertex> Vertices {
+        get {
+            ThrowIfDisposed();
+            return _vertices;
+        }
+    }
+
+    /// <summary>
+    /// Gets the CPU 32-bit indices retained for collision and inspection.
+    /// </summary>
+    /// <remarks>
+    /// A loaded mesh decodes the indices from the packed payload; a procedural mesh returns the
+    /// builder's snapshot. The memory is read-only and stays valid until the last reference is
+    /// disposed.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public ReadOnlyMemory<uint> Indices {
+        get {
+            ThrowIfDisposed();
+            return _indices;
+        }
+    }
+
+    /// <summary>
+    /// Gets the mesh-space bounds.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public BoundingBox Bounds {
+        get {
+            ThrowIfDisposed();
+            return _bounds;
+        }
+    }
+
+    /// <summary>
+    /// Gets the primitive topology of the mesh.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public PrimitiveTopology Topology {
+        get {
+            ThrowIfDisposed();
+            return _topology;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool IsDisposed => _asset.IsDisposed;
+
+    /// <summary>
+    /// Gets the internal retention state the M4 draw recorder will retain per frame. The catalog or the
+    /// builder owns the asset and exposes the lifetime only inside the engine assembly.
+    /// </summary>
+    internal EngineAsset Lifetime => _asset;
+
+    /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
+    public void Dispose() {
+        if (_asset.IsDisposed) {
+            throw new ObjectDisposedException(nameof(Mesh));
+        }
+
+        _asset.ReleaseOwnerReference();
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
+}

@@ -37,6 +37,7 @@ internal sealed class VulkanDeviceCapabilities {
         bool descriptorIndexing,
         uint maxPerStageDescriptorSampledImages,
         bool samplerAnisotropy,
+        bool textureCompressionBc,
         bool swapchainColorSpaceExtensionEnabled,
         VulkanSwapchainSupport swapchain) {
         DeviceName = deviceName;
@@ -52,6 +53,7 @@ internal sealed class VulkanDeviceCapabilities {
         DescriptorIndexing = descriptorIndexing;
         MaxPerStageDescriptorSampledImages = maxPerStageDescriptorSampledImages;
         SamplerAnisotropy = samplerAnisotropy;
+        TextureCompressionBc = textureCompressionBc;
         SwapchainColorSpaceExtensionEnabled = swapchainColorSpaceExtensionEnabled;
         Swapchain = swapchain;
     }
@@ -121,6 +123,12 @@ internal sealed class VulkanDeviceCapabilities {
     /// Gets whether the device supports anisotropic sampling.
     /// </summary>
     internal bool SamplerAnisotropy { get; }
+
+    /// <summary>
+    /// Gets whether the device supports the BC block-compressed formats. A packed BC7 or BC5 texture
+    /// requires this capability; a device without it rejects the upload with <c>RB1010</c>.
+    /// </summary>
+    internal bool TextureCompressionBc { get; }
 
     /// <summary>
     /// Gets whether <c>VK_EXT_swapchain_colorspace</c> was enabled on the instance.
@@ -208,6 +216,7 @@ internal sealed class VulkanDeviceCapabilities {
             descriptorIndexing,
             properties.Limits.MaxPerStageDescriptorSampledImages,
             features.SamplerAnisotropy.Value != 0,
+            features.TextureCompressionBC.Value != 0,
             swapchainColorSpaceExtensionEnabled,
             swapchain);
     }

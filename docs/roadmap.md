@@ -1,7 +1,8 @@
 # RayBork Roadmap
 
-Status: **v0.1 design draft**, 2026-11-11. Milestones are ordered by dependency and exit criteria,
-not by calendar time. There are no dates or time estimates in this document.
+Status: **v0.1 M3 as-built**, 2026-11-11. M0-M3 are shipped. Milestones are ordered by
+dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
+document.
 
 The API these milestones implement is in [api.md](api.md). The runtime shape is in
 [architecture.md](architecture.md). No open design questions remain; resolved decisions are
@@ -30,7 +31,8 @@ RayBork 1.0 is done when all of the following are true:
    green on the release matrix. There is no golden-image suite.
 8. The renderer seam is internal and Vulkan is the only backend, but the public API exposes no
    Vulkan types and a second backend can be added without changing game code.
-9. The known-limitations list is honest and matches the out-of-scope table in [api.md](api.md).
+9. The known-limitations list is honest and matches the out-of-scope table in the
+   [API reference](api/versioning.md#15-out-of-scope-for-v1).
 
 Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 
@@ -241,7 +243,8 @@ device policy is tested on both before M4 relies on bindless.
 ### M3 — Asset pipeline and custom data
 
 **Goal.** A game can configure an assets executable, bake sources into `assets.pck`, mount it, load
-engine assets and custom data, and rely on correct lifetime and GPU residency.
+engine assets and custom data, create procedural meshes and textures, and rely on correct lifetime
+and GPU residency.
 
 **Scope.**
 
@@ -257,14 +260,22 @@ engine assets and custom data, and rely on correct lifetime and GPU residency.
   A1. Built-in assets are not special; the engine's built-in pack uses the same processors.
 - TOML data assets with `[raybork].type`, registered through `RegisterAsset<T>()` with
   `[GenerateShape]`; packed as MessagePack.
-- glTF 2.0 and OBJ processing into the engine's mesh/model format; KTX2/texture sources into the
-  engine texture format. The runtime never parses source formats.
+- glTF 2.0 and OBJ processing into the engine's mesh/model format; PNG/JPEG/TGA/BMP sources into a
+  KTX2 engine texture payload with an optional BC7/BC5/BC1/BC4 block-compressed variant. The
+  runtime never parses source formats. KTX2 source passthrough is a follow-up.
 - Runtime `IAssetCatalog`: one `Load<T>`, `LoadData`, `Exists`; `WithAssetType<T>()` registers
   custom data types for `Load<T>`. Coalesced async loads, cancellation, reference counting for
   engine assets, caller-owned custom data.
-- GPU upload handoff: texture images, mesh buffers, shader modules/pipelines, frame retention.
-- Incremental manifest. Pack bytes are not deterministic; only the entry set and logical layout are
-  ordered.
+- GPU upload handoff: texture images, mesh buffers, shader modules, frame retention, and re-upload
+  after a device recovery.
+- Procedural assets: `MeshBuilder` and `TextureBuilder` own CPU data, expose vertices/indices,
+  compute normals/tangents/bounds, and upload with `BuildAsync` through the same bridge. Procedural
+  textures support uncompressed `Rgba8Unorm`, `Rgba8Srgb`, and `R8Unorm` with optional mips; assets
+  are immutable after build and use reserved `/_procedural/...` paths.
+- Per-source incremental manifest: unchanged sources reuse the previous pack's entry descriptors and
+  payloads; changed, new, and deleted sources are reprocessed. A tool-version or configuration
+  change invalidates the cache. Pack bytes are not deterministic; only the entry set and logical
+  layout are ordered.
 - Reject missing references, duplicate/case-normalized paths, bad shader interfaces, TOML shape
   failures, and unsupported source formats before publishing.
 
@@ -273,20 +284,30 @@ engine assets and custom data, and rely on correct lifetime and GPU residency.
 - The M3 sample bakes a pack, loads a texture, mesh, shader, and custom TOML data, and reads back
   their metadata.
 - Loading the same engine path twice returns the same object and creates one GPU resource.
-- Disposing an engine asset after recording a draw does not crash; the frame keeps it alive.
+- A procedural mesh and texture can be built from CPU data and are usable only after `BuildAsync`
+  completes. Loaded and procedural meshes expose CPU vertices/indices; normal, tangent, and bounds
+  helpers produce the documented results.
+- The frame packet retains every engine asset recorded into it and releases it after the frame
+  completes. M3 tests the retention mechanism directly; the end-to-end "dispose after recording a
+  draw" check lands with the M4 camera and draw API.
 - `Load<T>` for a registered custom type returns a fresh instance per call; `LoadData` returns
   identical bytes. Engine assets still return the same reference-counted object.
 - A corrupt pack (bad magic, truncated index, bad hash, truncated payload) produces the documented
   diagnostic and a clean failure.
-- Incremental bake rebuilds only changed assets; a tool-version change invalidates the cache.
+- Incremental bake reprocesses only changed assets; a tool-version change invalidates the cache.
 - A second bake of unchanged inputs may produce different pack bytes; no test asserts byte identity.
 - Built-in processors and a custom processor produce entries through the same `IAssetProcessor`
-  path.
+  path; the engine's built-in pack is generated by the build-time bake tool and mounted first.
 - Native AOT publish loads the pack and custom data on Windows and Linux.
 - Fuzz tests cover the pack header, index, path normalization, and payload lengths.
 
 **Notes.** M3 owns the pack format. Once a sample pack is published, the format is versioned and
-changes require a migration note. M3 does not need to draw the loaded assets; M4 consumes them.
+changes require a migration note. M3 does not need to draw the loaded assets; M4 consumes them. The
+runtime `Model` and `Font` loaders land in M4 and M6; M3 bakes and validates their entries. The
+`watch` bake command is deferred to M10; M3 ships `bake`, `clean`, `inspect`, and `--help`.
+GPU uploads are submitted without a fence wait and polled on later render-loop turns, so the loader
+and renderer are not blocked by a copy; a dedicated transfer queue is a later optimization, not an
+M3 requirement. Procedural assets are M3 creation primitives; drawing them is M4 work.
 
 ### M4 — Core 3D renderer, shader state, and instancing
 
@@ -626,7 +647,7 @@ The matrix is the scope contract.
 | Images | Partial | M3 | Bake decodes; no runtime image manipulation API. |
 | Models | Covered | M4 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes. |
 | Custom data | Covered | M3 | TOML data with `[GenerateShape]`; `WithAssetType<T>` then `Load<T>`. |
-| Meshes | Covered | M4, M5 | Loaded and primitive meshes; no runtime upload API. |
+| Meshes | Covered | M3, M4, M5 | Loaded meshes, procedural `MeshBuilder` creation, and primitive meshes; fixed vertex layout. |
 | Materials | Rethought | M4 | No `Material`; shader state + per-instance uniforms. |
 | Model animations | Post | — | Skeletal/morph post-1.0. |
 | 3D shapes | Covered | M5 | Lines, points, triangles, cube, sphere, cylinder, plane, grid, wires. |

@@ -34,6 +34,19 @@ internal interface IRendererBackend : IDisposable {
     RenderStats Stats { get; }
 
     /// <summary>
+    /// Gets the logical-device generation. It is <c>0</c> before <see cref="Initialize"/> and <c>1</c>
+    /// for the first device; it is incremented only when the logical device is recreated after a
+    /// device loss. Presentation-only recoveries such as an out-of-date swapchain, a lost surface, or
+    /// a suboptimal swapchain leave it unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The render loop compares the value to decide when live GPU asset resources must be re-uploaded:
+    /// every GPU object created before an increment belongs to a destroyed device. Values are
+    /// monotonically increasing and never reused within one backend lifetime.
+    /// </remarks>
+    int DeviceGeneration { get; }
+
+    /// <summary>
     /// Creates the GPU device, swapchain, and fixed render state.
     /// </summary>
     /// <remarks>

@@ -29,15 +29,13 @@ request.
   review.
 - **Versions move deliberately.** A version bump is a dependency change and follows the rules above.
 
-M2 status: SDL3 and logging are exercised end to end by the M1 `samples/HelloInterop` AOT host,
-and the M2 milestone gate republishes that host with the renderer so Silk.NET.Vulkan is exercised
-end to end on `win-x64` and `linux-x64`. Both publishes must finish with zero AOT/trim warnings.
-The other runtime packages are pinned and remain in the AOT publish graph without AOT/trim
-warnings, but their feature-level gates land in M3 (PolyType and Nerdbank.MessagePack). No new
-package was added in M2: `Silk.NET.Core` is the pinned transitive dependency of `Silk.NET.Vulkan`,
-and the Vulkan loader is a system/GPU-driver component rather than a redistributed package. The
-architecture dependency matrix in
-[docs/architecture.md](docs/architecture.md#dependency-matrix) records the same status.
+M3 status: the asset pipeline is exercised end to end by the M3 `samples/HelloInterop` AOT gate,
+which mounts a baked pack, loads a KTX2 texture, a mesh, a shader, and MessagePack custom data, and
+uploads the engine assets through the render thread on `win-x64` and `linux-x64`. The runtime gains
+`System.IO.Hashing` for pack integrity. The bake gains the JIT-only TOML, image, block-encoding,
+shaderc, and glTF packages below; they never enter a runtime project or an AOT publish graph. The
+built-in pack generator uses the same bake packages at engine build time and emits only a generated
+byte array. Both AOT publishes must finish with zero AOT/trim warnings.
 
 ## Runtime dependencies
 
@@ -49,8 +47,9 @@ These packages are referenced by `RayBork.Engine` or deployed with it.
 | `SDL3-CS.Native` | 3.4.2 | Zlib | Per-RID native SDL3 binaries deployed alongside the engine | Loaded and run by the same hosts on both RIDs. |
 | SDL3 (native library) | bundled by `SDL3-CS.Native` 3.4.2 | Zlib | The native windowing, input, Vulkan surface, HDR property, and audio library itself | Proven by the M1 and M2 AOT hosts; upgraded only with the `SDL3-CS.Native` pin. |
 | `Silk.NET.Vulkan` | 2.23.0 | MIT | Vulkan 1.2 bindings for the M2 renderer backend; brings `Silk.NET.Core` 2.23.0 as a pinned transitive dependency | Exercised end to end by the M2 AOT gate: the published host creates the instance, device, swapchain, scene target, and present pass. |
-| `PolyType` | 1.4.1 | MIT | Compiled shapes for custom TOML data and AOT-safe serialization | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
-| `Nerdbank.MessagePack` | 1.4.104 | MIT | MessagePack serialization for custom data and pack entries | Pinned and in the AOT publish graph; feature-level AOT validation lands in M3. |
+| `PolyType` | 1.4.1 | MIT | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by the M3 AOT gate on both RIDs. |
+| `Nerdbank.MessagePack` | 1.4.104 | MIT | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the M3 AOT gate on both RIDs. |
+| `System.IO.Hashing` | 11.0.0 | MIT | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the M3 AOT gate on both RIDs. |
 | `Microsoft.Extensions.Logging` | 11.0.0 | MIT | Logging abstraction exposed as `EngineContext.LoggerFactory` | Exercised end to end by the M1 AOT host on both RIDs. |
 | `ZLogger` | 2.6.1 | MIT | Default console logging provider | Exercised end to end by the M1 AOT host on both RIDs. |
 
@@ -83,6 +82,12 @@ These packages are JIT-only and are not part of the runtime publish graph.
 | `xunit.runner.visualstudio` | 3.1.5 | Apache-2.0 | Test | VSTest adapter for xUnit v3 | JIT only; not in the runtime publish graph. |
 | `Microsoft.NET.Test.Sdk` | 18.11.1 | MIT | Test | Test host and MSBuild integration | JIT only; not in the runtime publish graph. |
 | `Moq` | 4.21.0 | BSD-3-Clause | Test | Mocking for unit tests | JIT only; not in the runtime publish graph. |
+| `Tomlyn` | 2.11.1 | BSD-2-Clause | Tooling | TOML parse and DOM binding for the bake | JIT only; not in the runtime publish graph. |
+| `StbImageSharp` | 2.30.16 | Unlicense OR MIT | Tooling | PNG/JPEG/TGA/BMP decoding for the texture processor | JIT only; not in the runtime publish graph. |
+| `BCnEncoder.Net` | 2.3.0 | MIT OR Unlicense | Tooling | BC1/BC4/BC5/BC7 block encoding for KTX2 payloads | JIT only; not in the runtime publish graph. |
+| `Silk.NET.Shaderc` | 2.23.0 | MIT | Tooling | Managed shaderc bindings for the GLSL compiler | JIT only; not in the runtime publish graph. |
+| `Silk.NET.Shaderc.Native` | 2.23.0 | Apache-2.0 | Tooling | Per-RID native libshaderc binaries for the bake | JIT only; not in the runtime publish graph. |
+| `SharpGLTF.Core` | 1.0.7 | MIT | Tooling | glTF 2.0/GLB reading for the model processor | JIT only; not in the runtime publish graph. |
 
 ## Maintaining this file
 
