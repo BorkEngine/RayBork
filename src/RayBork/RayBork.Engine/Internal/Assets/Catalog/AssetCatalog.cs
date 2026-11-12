@@ -55,6 +55,12 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     private const string BUILT_IN_DISPLAY_PATH = "<built-in>";
 
+    /// <summary>
+    /// The canonical shader path the runtime uses for a model part whose descriptor has no shader path.
+    /// The path is baked into the built-in pack as the default draw shader.
+    /// </summary>
+    private const string DEFAULT_MODEL_SHADER_PATH = "shaders/default";
+
     private readonly ILogger _logger;
     private readonly GpuAssetBridge _bridge;
     private readonly ProceduralAssetService _proceduralAssets;
@@ -155,7 +161,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         }
 
         Type assetType = typeof(T);
-        if (assetType == typeof(Mesh) || assetType == typeof(Texture) || assetType == typeof(Shader)) {
+        if (assetType == typeof(Mesh)
+            || assetType == typeof(Texture)
+            || assetType == typeof(Shader)
+            || assetType == typeof(Model)) {
             return LoadEngineAsync<T>(canonical, assetType, cancellationToken);
         }
 
@@ -170,9 +179,9 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         }
 
         throw new NotSupportedException(
-            $"The asset type '{assetType.FullName}' is not a built-in engine asset (Mesh, Texture, or "
-                + "Shader) and is not a registered custom data type. Register custom types with "
-                + "WithAssetType<T>() before Build.");
+            $"The asset type '{assetType.FullName}' is not a built-in engine asset (Mesh, Texture, "
+                + "Shader, or Model) and is not a registered custom data type. Register custom types "
+                + "with WithAssetType<T>() before Build.");
     }
 
     /// <inheritdoc/>
@@ -512,6 +521,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         VisibleAsset descriptorEntry,
         Type assetType,
         CancellationToken stopToken) {
+        if (assetType == typeof(Model)) {
+            return await LoadModelObjectAsync(entry, descriptorEntry, stopToken).ConfigureAwait(false);
+        }
+
         GpuAssetResource? resource = null;
         try {
             AssetEntryType expected = ExpectedEntryType(assetType);
@@ -546,6 +559,185 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             }
 
             throw WrapLoadFailure(descriptorEntry.Entry.Path, "could not be loaded", exception);
+        }
+    }
+
+    /// <summary>
+    /// Loads one model on the loader thread by resolving every part's mesh and shader through the public
+    /// <see cref="Load{T}"/> path.
+    /// </summary>
+    /// <remarks>
+    /// The method returns an incomplete task while the part loads run. <see cref="AssetLoaderWorkItem"/>
+    /// does not block the loader loop on an incomplete task: the loader continues serving the part
+    /// requests while the model task awaits them, so calling the public load path here cannot deadlock.
+    /// The model has no GPU upload of its own; it is committed with a CPU-only
+    /// <see cref="ModelAssetResource"/>. A failure releases every part reference acquired so far and
+    /// removes the model cache entry, so a retry starts a fresh load and no stale cache entry remains.
+    /// </remarks>
+    private async Task<object> LoadModelObjectAsync(
+        EngineCacheEntry entry,
+        VisibleAsset descriptorEntry,
+        CancellationToken stopToken) {
+        string canonical = descriptorEntry.Entry.Path;
+        List<Mesh> meshes = [];
+        List<Shader> shaders = [];
+        try {
+            if (descriptorEntry.Entry.Type != AssetEntryType.Model) {
+                throw CreateTypeMismatch(canonical, AssetEntryType.Model, descriptorEntry.Entry.Type);
+            }
+
+            ModelAssetDescriptor descriptor;
+            try {
+                byte[] descriptorPayload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
+                descriptor = AssetSerialization.Deserialize<ModelAssetDescriptor>(descriptorPayload);
+            } catch (Exception exception) when (exception is not OutOfMemoryException) {
+                throw CreateLoadFailure(
+                    canonical,
+                    $"the model descriptor could not be decoded: {exception.Message}");
+            }
+
+            ValidateModelDescriptor(descriptor, canonical);
+
+            ModelPart[] parts = new ModelPart[descriptor.Parts.Length];
+            Dictionary<string, Mesh> meshesByPath = new(StringComparer.Ordinal);
+            Dictionary<string, Shader> shadersByPath = new(StringComparer.Ordinal);
+            for (int index = 0; index < descriptor.Parts.Length; index++) {
+                ModelPartAsset part = descriptor.Parts[index];
+                string meshPath = AssetPath.Normalize(part.MeshPath);
+                if (!meshesByPath.TryGetValue(meshPath, out Mesh? mesh)) {
+                    mesh = await Load<Mesh>(meshPath, stopToken).ConfigureAwait(false);
+                    meshesByPath.Add(meshPath, mesh);
+                    meshes.Add(mesh);
+                }
+
+                string shaderPath = part.ShaderPath is null
+                    ? DEFAULT_MODEL_SHADER_PATH
+                    : AssetPath.Normalize(part.ShaderPath);
+                if (!shadersByPath.TryGetValue(shaderPath, out Shader? shader)) {
+                    shader = await Load<Shader>(shaderPath, stopToken).ConfigureAwait(false);
+                    shadersByPath.Add(shaderPath, shader);
+                    shaders.Add(shader);
+                }
+
+                float[] local = part.LocalTransform;
+                Transform localTransform = new(
+                    new Vector3(local[0], local[1], local[2]),
+                    new Quaternion(local[3], local[4], local[5], local[6]),
+                    new Vector3(local[7], local[8], local[9]));
+                float[] partBounds = part.Bounds;
+                BoundingBox bounds = new(
+                    new Vector3(partBounds[0], partBounds[1], partBounds[2]),
+                    new Vector3(partBounds[3], partBounds[4], partBounds[5]));
+                parts[index] = new ModelPart(part.Name, mesh, shader, localTransform, bounds);
+            }
+
+            stopToken.ThrowIfCancellationRequested();
+            ModelAssetResource resource = new(new ModelGpuUpload(canonical));
+            Model? model = null;
+            EngineAsset lifetime = new(
+                AssetPath.ToPublic(canonical),
+                resource,
+                // A model owns no GPU handles, so its destruction callback is a no-op. The distinct
+                // part references are released with the last owner, which is the same point at which
+                // an engine asset would queue its GPU destruction.
+                static _ => { },
+                () => {
+                    OnOwnersReleased(entry);
+                    model?.ReleasePartReferences();
+                });
+            model = new Model(lifetime, descriptor, parts);
+            CommitEngineAsset(entry, lifetime, model);
+            return model;
+        } catch (Exception exception) {
+            foreach (Mesh mesh in meshes) {
+                try {
+                    mesh.Lifetime.ReleaseOwnerReference();
+                } catch (ObjectDisposedException) {
+                    // Shutdown force-disposed the part after the load started.
+                }
+            }
+
+            foreach (Shader shader in shaders) {
+                try {
+                    shader.Lifetime.ReleaseOwnerReference();
+                } catch (ObjectDisposedException) {
+                    // Shutdown force-disposed the part after the load started.
+                }
+            }
+
+            RemoveEngineEntry(entry);
+            if (exception is OperationCanceledException && stopToken.IsCancellationRequested) {
+                throw;
+            }
+
+            throw WrapLoadFailure(canonical, "could not be loaded", exception);
+        }
+    }
+
+    private static void ValidateModelDescriptor(ModelAssetDescriptor descriptor, string canonical) {
+        if (descriptor.Parts is null || descriptor.Parts.Length == 0) {
+            throw CreateLoadFailure(canonical, "the model descriptor must carry at least one part");
+        }
+
+        ValidateBounds(descriptor.Bounds, canonical, "the model");
+        foreach (ModelPartAsset? part in descriptor.Parts) {
+            if (part is null) {
+                throw CreateLoadFailure(canonical, "the model descriptor contains a null part");
+            }
+
+            if (string.IsNullOrWhiteSpace(part.Name)) {
+                throw CreateLoadFailure(canonical, "a model part has an empty name");
+            }
+
+            if (!AssetPath.TryValidateCanonical(part.MeshPath, out string? meshReason)) {
+                throw CreateLoadFailure(
+                    canonical,
+                    $"the mesh path '{part.MeshPath}' of model part '{part.Name}' is not canonical: "
+                        + meshReason);
+            }
+
+            if (part.ShaderPath is not null
+                && !AssetPath.TryValidateCanonical(part.ShaderPath, out string? shaderReason)) {
+                throw CreateLoadFailure(
+                    canonical,
+                    $"the shader path '{part.ShaderPath}' of model part '{part.Name}' is not canonical: "
+                        + shaderReason);
+            }
+
+            if (part.LocalTransform is null || part.LocalTransform.Length != 10) {
+                throw CreateLoadFailure(
+                    canonical,
+                    $"model part '{part.Name}' must carry exactly ten local-transform floats "
+                        + "(position XYZ, rotation XYZW, and scale XYZ)");
+            }
+
+            foreach (float component in part.LocalTransform) {
+                if (!float.IsFinite(component)) {
+                    throw CreateLoadFailure(
+                        canonical,
+                        $"model part '{part.Name}' has a non-finite local-transform component");
+                }
+            }
+
+            ValidateBounds(part.Bounds, canonical, $"model part '{part.Name}'");
+        }
+    }
+
+    private static void ValidateBounds(float[]? bounds, string canonical, string owner) {
+        if (bounds is null || bounds.Length != 6) {
+            throw CreateLoadFailure(
+                canonical,
+                $"{owner} must carry exactly six bounds floats (minimum XYZ, maximum XYZ)");
+        }
+
+        for (int index = 0; index < bounds.Length; index++) {
+            if (!float.IsFinite(bounds[index])) {
+                throw CreateLoadFailure(canonical, $"{owner} has a non-finite bounds component");
+            }
+        }
+
+        if (bounds[0] > bounds[3] || bounds[1] > bounds[4] || bounds[2] > bounds[5]) {
+            throw CreateLoadFailure(canonical, $"{owner} bounds minimum must not exceed the maximum");
         }
     }
 
@@ -923,7 +1115,9 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             ? AssetEntryType.Mesh
             : assetType == typeof(Texture)
                 ? AssetEntryType.Texture
-                : AssetEntryType.Shader;
+                : assetType == typeof(Model)
+                    ? AssetEntryType.Model
+                    : AssetEntryType.Shader;
 
     private static AssetNotFoundException CreateNotFound(string canonical) => new(
         $"The asset '{AssetPath.ToPublic(canonical)}' is not in any mounted pack.",

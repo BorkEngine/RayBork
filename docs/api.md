@@ -148,10 +148,10 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `Transform`, `Color`, `Rect`, `Vector3Extensions`, `QuaternionExtensions` | M1 |
 | `BoundingBox` | M3 |
 | `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
-| `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, `WithClearColor`) | M2 |
+| `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`) | M2 |
 | `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, `Vertex`, `MeshBuilder`, `MeshNormalMode`, `TextureBuilder`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
 | `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, `EngineContext.Assets`, `EngineContext.CreateMeshBuilder`, and `EngineContext.CreateTextureBuilder` | M3 |
-| `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
+| `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
 | `Collision` and `RayCollision` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
@@ -168,9 +168,9 @@ In M1, `RayBorkAppBuilder` exposes **only** `WithGame`, `WithTitle`, `WithSize`,
 `Info` reports the selected GPU, the Vulkan API version, the swapchain format, the effective sample
 count and present mode, whether the scRGB HDR path is active, and whether validation is active;
 `Stats` describes the last completed frame. `RayBorkAppBuilder` additionally exposes
-`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`, and
-`WithClearColor`. M2 has no camera or draw API: a frame clears the linear scene target and presents
-it. `Assets`, cameras, render textures, and custom asset types remain later milestones.
+`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, and `WithValidation`. M2 has no
+camera or draw API: a frame clears the linear scene target and presents it. `Assets`, cameras, render
+textures, and custom asset types remain later milestones.
 
 **M3 subset.** `EngineContext` additionally exposes `Assets`, `CreateMeshBuilder`, and
 `CreateTextureBuilder`. `RayBorkAppBuilder` additionally exposes `WithAssetsPack`, `WithAssetsPacks`,
@@ -180,6 +180,18 @@ procedural `MeshBuilder`/`TextureBuilder` API, and CPU mesh vertices/indices. It
 `Model`, `Font`, cameras, render textures, `Shader.SetUniform`, `ResetUniforms`, or any `Draw*`
 member; those arrive in M4, M6, and M8. The M3 sample loads a texture, a mesh part, a shader, and
 registered custom data, and reads back their metadata without drawing.
+
+**M4 subset.** `EngineContext` additionally exposes `CreateCamera` and `CreateOrthographicCamera`,
+both legal only on the tick thread during `Tick`. `Camera` ships as a frame-scoped recorder with the
+`DrawModel`, `DrawMesh`, `DrawInstanced`, and `DrawModelInstanced` draw methods, `Viewport`,
+`ViewMatrix`, `ProjectionMatrix`, `ViewProjectionMatrix`, `Frustum`, `ScreenToWorldRay`, and
+`WorldToScreen`. `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, and
+`BoundingFrustum` ship in M4; `Model` is a reference-counted engine asset whose parts resolve through
+the catalog, and `Shader.SetUniform`/`ResetUniforms` are complete. M4 has no `Camera.Target` or
+`target` parameter (`RenderTexture` arrives in M8), no `Font`, and no primitive/line/billboard/text
+draw helpers. A camera left undisposed when `Tick` returns is an `InvalidOperationException` naming
+it, and the frame is not published. `RayBorkAppBuilder.WithClearColor` is removed; clear control is
+per camera pass.
 
 ## 2. Quick start
 

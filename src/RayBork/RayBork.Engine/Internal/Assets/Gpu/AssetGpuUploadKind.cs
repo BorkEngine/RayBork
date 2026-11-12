@@ -23,4 +23,10 @@ internal enum AssetGpuUploadKind {
     /// A vertex and fragment shader module pair compiled from packed SPIR-V payloads.
     /// </summary>
     Shader,
+
+    /// <summary>
+    /// A multi-part model with no GPU resource of its own. Its part meshes and shaders are uploaded
+    /// separately, so a model upload is never queued on the GPU asset bridge.
+    /// </summary>
+    Model,
 }

@@ -37,8 +37,6 @@ internal static class Program {
           --tonemapping NAME
                             Tone mapping: AgX or None, case-insensitive (default: AgX).
           --exposure EV     Exposure in stops before tone mapping; finite (default: 0).
-          --clear-color R,G,B[,A]
-                            Linear scene clear color with finite components (default: 0,0,0,1).
           --validation on|off
                             Request the Vulkan validation layer; defaults to the engine default
                             (on in Debug, off in Release).
@@ -72,7 +70,7 @@ internal static class Program {
           HelloInterop --frames 120
           HelloInterop --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
           HelloInterop --frames 120 --size 1920x1080 --msaa 8 --title "M3 AOT gate"
-          HelloInterop --tonemapping None --exposure 1.5 --clear-color 0.05,0.1,0.2,1
+          HelloInterop --tonemapping None --exposure 1.5
           HelloInterop --msaa 8 --present-mode Fifo --validation off --log-level Debug
         """;
 
@@ -94,7 +92,6 @@ internal static class Program {
                 options.Frames,
                 options.Tonemapping,
                 options.Exposure,
-                options.ClearColor,
                 options.Assets);
             RayBorkAppBuilder builder = new RayBorkAppBuilder()
                 .WithGame(game)
@@ -107,7 +104,6 @@ internal static class Program {
                 .WithPresentMode(options.PresentMode)
                 .WithTonemapping(options.Tonemapping)
                 .WithExposure(options.Exposure)
-                .WithClearColor(options.ClearColor)
                 .WithLogLevel(options.LogLevel);
 
             if (options.Validation is { } validationEnabled) {
@@ -143,7 +139,6 @@ internal static class Program {
         PresentMode presentMode = DEFAULT_PRESENT_MODE;
         TonemappingMode tonemapping = DEFAULT_TONEMAPPING;
         float exposure = DEFAULT_EXPOSURE;
-        Color clearColor = Color.Black;
         bool? validation = null;
         bool showHelp = false;
         error = string.Empty;
@@ -270,19 +265,6 @@ internal static class Program {
                     }
 
                     break;
-                case "--clear-color":
-                    if (!TryTakeValue(args, ref i, argument, out string clearColorValue, out error)) {
-                        options = default!;
-                        return false;
-                    }
-
-                    if (!TryParseClearColor(clearColorValue, out clearColor)) {
-                        error = $"Invalid value for --clear-color: '{clearColorValue}'. Expected R,G,B or R,G,B,A with finite numbers.";
-                        options = default!;
-                        return false;
-                    }
-
-                    break;
                 case "--validation":
                     if (!TryTakeValue(args, ref i, argument, out string validationValue, out error)) {
                         options = default!;
@@ -328,7 +310,6 @@ internal static class Program {
             presentMode,
             tonemapping,
             exposure,
-            clearColor,
             validation,
             showHelp);
         return true;
@@ -367,27 +348,6 @@ internal static class Program {
             && int.TryParse(value.AsSpan(separator + 1), NumberStyles.None, CultureInfo.InvariantCulture, out height)
             && width > 0
             && height > 0;
-    }
-
-    private static bool TryParseClearColor(string value, out Color color) {
-        color = Color.Black;
-        string[] components = value.Split(',');
-        if (components.Length is < 3 or > 4) {
-            return false;
-        }
-
-        float[] rgba = [0f, 0f, 0f, 1f];
-        for (int i = 0; i < components.Length; i++) {
-            if (!float.TryParse(components[i], NumberStyles.Float, CultureInfo.InvariantCulture, out float component)
-                || !float.IsFinite(component)) {
-                return false;
-            }
-
-            rgba[i] = component;
-        }
-
-        color = new Color(rgba[0], rgba[1], rgba[2], rgba[3]);
-        return true;
     }
 
     private static bool TryParsePresentMode(string value, out PresentMode mode) {
@@ -452,7 +412,6 @@ internal static class Program {
         PresentMode PresentMode,
         TonemappingMode Tonemapping,
         float Exposure,
-        Color ClearColor,
         bool? Validation,
         bool ShowHelp);
 }

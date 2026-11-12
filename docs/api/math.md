@@ -181,12 +181,43 @@ Screen rectangles use a top-left origin.
 ### 5.5 Rays, bounds, and collision
 
 RayBork uses `System.Numerics.Plane` and the engine's own `RayBork.BoundingBox` value type directly,
-and adds a small `Collision` helper plus a `RayCollision` result. The M5 collision milestone adds the
-ray and sphere helpers and any additional bounds types it needs.
+and adds a small `Collision` helper plus a `RayCollision` result. M4 ships `Ray` and
+`BoundingFrustum`; the M5 collision milestone adds the ray and sphere helpers and any additional
+bounds types it needs.
 
 ```csharp
 public readonly record struct BoundingBox(Vector3 Min, Vector3 Max);
 
+public readonly record struct Ray(Vector3 Origin, Vector3 Direction);
+
+public readonly struct BoundingFrustum {
+    public BoundingFrustum(Matrix4x4 viewProjection);
+    public Plane Left { get; }
+    public Plane Right { get; }
+    public Plane Top { get; }
+    public Plane Bottom { get; }
+    public Plane Near { get; }
+    public Plane Far { get; }
+    public bool Contains(Vector3 point);
+    public bool Intersects(BoundingBox bounds);
+}
+```
+
+- `Ray.Direction` is expected to be normalized. `Camera.ScreenToWorldRay` returns a normalized
+  direction.
+- `BoundingFrustum` extracts six inward-facing, normalized planes from a view-projection matrix in
+  the engine's row-vector convention. `Contains` requires every signed plane distance to be
+  non-negative. `Intersects` uses the positive-vertex test and is conservative: a box that only
+  touches a plane counts as intersecting.
+- The plane names follow the engine's Y-flipped NDC and reverse-Z `[0, 1]` depth range: `Near` is the
+  `z >= 0` plane, `Far` is the `z <= w` plane, and `Top`/`Bottom` are inverted relative to a
+  non-flipped clip space. See [Rendering: Camera](rendering/camera.md#72-projection-clear-hdr-and-tone-mapping).
+- A default `BoundingFrustum` has six zero planes and accepts every point; construct it from a real
+  projection before culling with it.
+
+The M5 collision contract adds the ray and sphere helpers. `Ray` is the shared ray value type.
+
+```csharp
 public readonly struct RayCollision {
     public bool Hit { get; }
     public float Distance { get; }

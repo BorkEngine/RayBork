@@ -1,0 +1,146 @@
+using RayBork.Internal;
+
+namespace RayBork;
+
+/// <summary>
+/// A loaded multi-part model: a flat list of <see cref="ModelPart"/> values and their combined bounds.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A model is a reference-counted engine asset. <see cref="IAssetCatalog.Load{T}"/> returns the same
+/// instance for repeated loads of the same path and acquires one owner reference per successful load;
+/// <see cref="Dispose"/> releases one owner reference. The object is disposed when the last owner
+/// releases it.
+/// </para>
+/// <para>
+/// The model owns one reference to every distinct part mesh and shader object. The references are
+/// released when the model's last owner releases it; one owner disposing a shared model does not
+/// invalidate the parts for the remaining owners. Two distinct models that share a part each release
+/// their own reference. M4 models are static: there is no skeletal or morph animation, and the part
+/// list is immutable.
+/// </para>
+/// <para>
+/// <see cref="Path"/> and <see cref="IsDisposed"/> stay readable after disposal. Every other member
+/// throws <see cref="ObjectDisposedException"/> once the asset is disposed.
+/// </para>
+/// </remarks>
+public sealed class Model : IAsset {
+    private readonly EngineAsset _asset;
+    private readonly IReadOnlyList<ModelPart> _parts;
+    private readonly BoundingBox _bounds;
+    private readonly Mesh[] _meshes;
+    private readonly Shader[] _shaders;
+    private bool _partsReleased;
+
+    /// <summary>
+    /// Initializes a model from its uploaded lifetime state, its descriptor, and its resolved parts.
+    /// </summary>
+    /// <param name="asset">The shared lifetime state acquired by the catalog.</param>
+    /// <param name="descriptor">The packed model descriptor.</param>
+    /// <param name="parts">The resolved parts in descriptor order.</param>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    internal Model(EngineAsset asset, ModelAssetDescriptor descriptor, ModelPart[] parts) {
+        ArgumentNullException.ThrowIfNull(asset);
+        ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(parts);
+
+        _asset = asset;
+        _parts = Array.AsReadOnly(parts);
+        _bounds = new BoundingBox(
+            new System.Numerics.Vector3(descriptor.Bounds[0], descriptor.Bounds[1], descriptor.Bounds[2]),
+            new System.Numerics.Vector3(descriptor.Bounds[3], descriptor.Bounds[4], descriptor.Bounds[5]));
+
+        HashSet<Mesh> meshes = new(ReferenceEqualityComparer.Instance);
+        HashSet<Shader> shaders = new(ReferenceEqualityComparer.Instance);
+        foreach (ModelPart part in parts) {
+            meshes.Add(part.Mesh);
+            shaders.Add(part.Shader);
+        }
+
+        _meshes = [.. meshes];
+        _shaders = [.. shaders];
+    }
+
+    /// <inheritdoc/>
+    public string Path => _asset.Path;
+
+    /// <summary>Gets the flat part list in model descriptor order.</summary>
+    /// <exception cref="ObjectDisposedException">The model is disposed.</exception>
+    public IReadOnlyList<ModelPart> Parts {
+        get {
+            ThrowIfDisposed();
+            return _parts;
+        }
+    }
+
+    /// <summary>Gets the combined model-space bounds of every part.</summary>
+    /// <exception cref="ObjectDisposedException">The model is disposed.</exception>
+    public BoundingBox Bounds {
+        get {
+            ThrowIfDisposed();
+            return _bounds;
+        }
+    }
+
+    /// <inheritdoc/>
+    public bool IsDisposed => _asset.IsDisposed;
+
+    /// <summary>
+    /// Gets the internal retention state the draw recorder holds per frame. The catalog owns the asset
+    /// and exposes the lifetime only inside the engine assembly.
+    /// </summary>
+    internal EngineAsset Lifetime => _asset;
+
+    /// <summary>
+    /// Releases one owner reference for the model. The distinct part references are released with the
+    /// last owner, through the catalog's owner-release callback; one owner disposing a shared model must
+    /// not invalidate the parts for the remaining owners.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
+    public void Dispose() {
+        if (_asset.IsDisposed) {
+            throw new ObjectDisposedException(nameof(Model));
+        }
+
+        _asset.ReleaseOwnerReference();
+    }
+
+    /// <summary>
+    /// Releases the distinct part references without releasing the model's own owner reference. The
+    /// catalog calls it when the model's last owner goes away, and when a load is disposed before any
+    /// waiter receives the model, so the part references acquired during the load cannot leak.
+    /// </summary>
+    /// <remarks>
+    /// The references are released through the shared <see cref="EngineAsset"/> lifetime, not through
+    /// the public <c>Dispose</c> of each part. A part mesh or shader may be shared by another model, and
+    /// a shared shader's public <c>Dispose</c> is one-shot for its uniform cursor; releasing the engine
+    /// reference is what "one reference per model" means. <see cref="Mesh.IsDisposed"/> and
+    /// <see cref="Shader.IsDisposed"/> still report the shared lifetime, so the part objects become
+    /// disposed when their last owner releases them. A part that the catalog already force-disposed
+    /// during shutdown is skipped; it has no reference left to release. Idempotent.
+    /// </remarks>
+    internal void ReleasePartReferences() {
+        if (_partsReleased) {
+            return;
+        }
+
+        _partsReleased = true;
+        foreach (Mesh mesh in _meshes) {
+            try {
+                mesh.Lifetime.ReleaseOwnerReference();
+            } catch (ObjectDisposedException) {
+                // The catalog force-disposed the part during shutdown.
+            }
+        }
+
+        foreach (Shader shader in _shaders) {
+            try {
+                shader.Lifetime.ReleaseOwnerReference();
+            } catch (ObjectDisposedException) {
+                // The catalog force-disposed the part during shutdown.
+            }
+        }
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
+}

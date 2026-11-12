@@ -43,7 +43,6 @@ public sealed class RayBorkAppBuilder {
     public RayBorkAppBuilder WithMSAA(int sampleCount = 4);
     public RayBorkAppBuilder WithTonemapping(TonemappingMode mode = TonemappingMode.AgX);
     public RayBorkAppBuilder WithExposure(float ev = 0f);
-    public RayBorkAppBuilder WithClearColor(Color color);
     public RayBorkAppBuilder WithTargetFps(int framesPerSecond);
     public RayBorkAppBuilder WithValidation(bool enabled = true);
     public RayBorkAppBuilder WithLoggerFactory(ILoggerFactory loggerFactory);
@@ -67,7 +66,6 @@ public sealed class RayBorkAppBuilder {
 | `WithMSAA` | `4` | Valid sample counts are 1, 2, 4, and 8, subject to device support. The renderer selects the highest supported sample count that does not exceed the request, and 1 if none is supported, logging a warning when the effective count differs. |
 | `WithTonemapping` | `AgX` | `AgX` maps linear HDR to the output; `None` is for custom output/presentation paths. |
 | `WithExposure` | `0` EV | Exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. |
-| `WithClearColor` | linear opaque black | Sets the scene-pass clear color. Until cameras arrive in M4 it is the only clear color; from M4 a camera's own clear color takes precedence. |
 | `WithTargetFps` | `0` (uncapped) | Caps the tick loop when vsync/mailbox is not throttling. `0` means no cap. |
 | `WithValidation` | `true` in Debug, `false` in Release | If the validation layer is unavailable, the app logs a warning and continues without it. |
 | `WithLoggerFactory` | default ZLogger console factory | A caller-supplied factory is not disposed by the app. `EngineContext.LoggerFactory` always returns a usable factory. |
@@ -88,6 +86,15 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > `T : IShapeable<T>` and a compiled `[GenerateShape]`; it registers a non-reflective loader delegate
 > and is idempotent for the same type. A conflicting registration is an `InvalidOperationException`
 > from the method call.
+
+> **M4 subset.** M4 removes `WithClearColor`; clear control belongs to each camera pass. The
+> renderer builder keeps only the presentation options (`WithPresentMode`, `WithMSAA`,
+> `WithTonemapping`, `WithExposure`, `WithValidation`). `EngineContext` additionally exposes
+> `CreateCamera` and `CreateOrthographicCamera`; the `target` parameter and `RenderTexture` targets
+> arrive with M8, so every M4 camera records into the app's linear HDR scene target. Camera creation,
+> draw recording, and camera disposal are legal only on the tick thread during `Tick`. A camera left
+> undisposed when `Tick` returns is an `InvalidOperationException` naming it, and the frame is not
+> published.
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -221,12 +228,20 @@ public sealed class EngineContext {
 for the callback that observes them. Re-read `Time`, `DeltaTime`, and `Stats` each tick instead of
 caching them; `Setup` sees a changing `Time` but `DeltaTime` is `0`.
 
-`clearColor` is `null` by default, which means linear opaque black. `near` must be positive and
+`clearColor` is `null` by default, which means linear opaque black (`Color.Black`); HDR components
+above `1` are allowed and a non-finite component is `ArgumentException`. `near` must be positive and
 finite. `far` must be greater than `near`; `float.PositiveInfinity` is valid only for perspective
 cameras. For an orthographic camera, `height` is the visible vertical extent; `far` must be finite.
+`CreateCamera` is the perspective entry point and rejects `CameraProjection.Orthographic` because it
+has no height parameter; use `CreateOrthographicCamera` for an orthographic camera.
 
-`CreateCamera` with `target: null` records into the app's HDR scene target. The present pass applies
-AgX and writes to the swapchain after the cameras finish. A camera with a `RenderTexture` target
+A `viewport` of `null` means the full window render size. A non-null viewport is clamped to the
+target; an invalid, non-finite, or empty result is `ArgumentException`. The camera's `Viewport`
+reports the clamped rectangle and the projection aspect uses it.
+
+In M4, `CreateCamera` and `CreateOrthographicCamera` have no `target` parameter and record into the
+app's HDR scene target. The present pass applies AgX and writes to the swapchain after the cameras
+finish. The `RenderTexture` target parameter arrives in M8; a camera with a `RenderTexture` target
 writes to that target and can be sampled by a later camera.
 
 ### 3.5 Startup and shutdown sequence
@@ -263,6 +278,9 @@ Failure behavior:
   `GraphicsException` with `RB3001` and the platform failure as its `InnerException`.
 - If `Setup` throws, `Shutdown` is **not** called; the engine releases what it owns and rethrows.
 - If `Tick` throws, the loop stops, `Shutdown` is called, the renderer drains, and `Run` rethrows.
+- If a camera is created during `Tick` and not disposed before the callback returns, the loop stops
+  with `InvalidOperationException` naming the camera; the frame is not published, and `Shutdown` is
+  still called.
 - If the renderer fails recoverably, it recreates the swapchain, surface, or device, logs, and
   continues. Recovery is bounded to three consecutive recoveries without a completed frame.
 - If recovery fails or the bound is reached, the tick loop is stopped, `Shutdown` is called, and

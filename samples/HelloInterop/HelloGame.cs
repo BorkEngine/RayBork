@@ -44,7 +44,6 @@ internal sealed class HelloGame : IGame {
     private readonly int _frameLimit;
     private readonly TonemappingMode _tonemapping;
     private readonly float _exposure;
-    private readonly Color _clearColor;
     private readonly string? _assetsPackPath;
     private readonly Dictionary<int, string> _gamepads = [];
 
@@ -72,12 +71,10 @@ internal sealed class HelloGame : IGame {
         int frameLimit,
         TonemappingMode tonemapping,
         float exposure,
-        Color clearColor,
         string? assetsPackPath) {
         _frameLimit = frameLimit;
         _tonemapping = tonemapping;
         _exposure = exposure;
-        _clearColor = clearColor;
         _assetsPackPath = assetsPackPath;
     }
 
@@ -147,8 +144,7 @@ internal sealed class HelloGame : IGame {
             info.SampleCount,
             info.PresentMode);
         _logger.LogInformation(
-            "Requested scene: clear color {ClearColor}, exposure {Exposure:0.###} EV, tone mapping {Tonemapping}.",
-            _clearColor.ToString("0.###", CultureInfo.InvariantCulture),
+            "Requested scene: exposure {Exposure:0.###} EV, tone mapping {Tonemapping}.",
             _exposure,
             _tonemapping);
 

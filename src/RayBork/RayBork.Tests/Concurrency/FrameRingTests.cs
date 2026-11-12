@@ -313,6 +313,85 @@ public sealed class FrameRingTests {
             () => blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WritableLeaseCarriesAResetPacketAndPublishSealsIt() {
+        FrameRing ring = new();
+
+        Assert.True(ring.TryAcquireWritable(out FrameLease lease));
+        RenderFramePacket packet = Assert.IsType<RenderFramePacket>(lease.Packet);
+        Assert.Equal(lease.FrameIndex, packet.FrameIndex);
+        Assert.Equal(0, packet.PassCount);
+        Assert.False(packet.IsSealed);
+
+        packet.BeginRecording(time: 1.5, deltaTime: 0.25);
+        packet.BeginPass();
+        packet.RentDrawRecord();
+        ring.Publish(lease);
+
+        Assert.True(packet.IsSealed);
+        Assert.True(ring.TryAcquireNewest(out FrameLease rendering));
+        Assert.Same(packet, rendering.Packet);
+        Assert.Equal(1, packet.PassCount);
+        Assert.Equal(1.5, packet.Time);
+        Assert.Equal(0.25, packet.DeltaTime);
+
+        ring.Release(rendering);
+        Assert.True(ring.TryAcquireWritable(out FrameLease reused));
+        Assert.Same(packet, reused.Packet);
+        Assert.Equal(0, packet.PassCount);
+        Assert.False(packet.IsSealed);
+        Assert.Equal(0.0, packet.Time);
+
+        ring.Abandon(reused);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void EachAcquisitionGetsAFreshRetentionSet() {
+        FrameRing ring = new();
+        Assert.True(ring.TryAcquireWritable(out FrameLease first));
+        FrameAssetRetention firstRetention = first.Packet!.Retention;
+        ring.AttachRetention(first, firstRetention);
+        ring.Abandon(first);
+        Assert.True(firstRetention.IsReleased);
+
+        Assert.True(ring.TryAcquireWritable(out FrameLease second));
+        FrameAssetRetention secondRetention = second.Packet!.Retention;
+        Assert.NotSame(firstRetention, secondRetention);
+        Assert.False(secondRetention.IsReleased);
+
+        ring.AttachRetention(second, secondRetention);
+        ring.Publish(second);
+        Assert.True(ring.TryAcquireNewest(out FrameLease rendering));
+        ring.Release(rendering);
+
+        Assert.True(secondRetention.IsReleased);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PacketResetClearsRecordedPassesAndDrawsButReusesTheBuffers() {
+        FrameRing ring = new();
+        Assert.True(ring.TryAcquireWritable(out FrameLease first));
+        RenderFramePacket packet = Assert.IsType<RenderFramePacket>(first.Packet);
+        CameraPass pass = packet.BeginPass();
+        RenderDrawRecord record = packet.RentDrawRecord();
+        pass.Add(record);
+        ring.Publish(first);
+        Assert.True(ring.TryAcquireNewest(out FrameLease rendering));
+        ring.Release(rendering);
+
+        Assert.True(ring.TryAcquireWritable(out FrameLease reused));
+        Assert.Same(packet, reused.Packet);
+        Assert.Equal(0, packet.PassCount);
+        Assert.Equal(0, pass.DrawCount);
+        Assert.Equal(0, pass.Draws.Length);
+        Assert.False(pass.IsSealed);
+
+        ring.Abandon(reused);
+    }
+
     private static FrameLease[] AcquireAllWritable(FrameRing ring) {
         FrameLease[] leases = new FrameLease[SLOT_COUNT];
         for (int i = 0; i < leases.Length; i++) {
