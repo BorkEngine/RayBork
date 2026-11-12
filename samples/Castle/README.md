@@ -3,10 +3,12 @@
 `Castle` is the RayBork M4 core 3D renderer sample and the M4 Native AOT gate. It recreates the
 essential behavior of raylib's
 [`models_loading`](https://github.com/raysan5/raylib/blob/master/examples/models/models_loading.c)
-example: a castle model and its diffuse texture are drawn unlit with a custom shader, the reference
-XZ grid is drawn with the built-in default shader, and an orbital camera looks at the castle from
-raylib's initial position. The sample has no drag-and-drop, click selection, or text overlay; those
-raylib features need input/platform and text work that arrives in M5, M6, and M9.
+example: a castle model and its diffuse texture are drawn unlit with the built-in `/shaders/mesh`
+material that the loaded model already owns, and an orbital camera looks at the castle from raylib's
+initial position. There is no custom shader asset. The raylib reference XZ grid moves to M5 with
+`Camera.DrawGrid`, so the M4 sample is the model, texture, and camera only. The sample has no
+drag-and-drop, click selection, or text overlay; those raylib features need input/platform and text
+work that arrives in M5, M6, and M9.
 
 The sample is the gate, not just a demo: it records whether any completed frame reported both draw
 calls and instances. When no completed frame ever draws, `Shutdown` throws `InvalidOperationException`
@@ -26,8 +28,7 @@ The checked-in sources live under `Castle.Assets/Assets/`. The sample build bake
 | --- | --- | --- |
 | `Assets/models/obj/castle.obj` | `/models/obj/castle` | raylib's `castle.obj` copied verbatim, including its header comments. One `castle` part with 12,150 vertices and 21,504 indices. |
 | `Assets/models/obj/castle_diffuse.png` | `/models/obj/castle_diffuse` | raylib's 1024x1024 sRGB diffuse texture, copied verbatim. |
-| `Assets/models/obj/castle.toml` | (sidecar) | `front = "-z"` keeps raylib's authored orientation; every part uses `shaders/castle`. |
-| `Assets/shaders/castle.toml`, `.vert`, `.frag` | `/shaders/castle` | Custom M4 shader pair: one `uTint` uniform with a white default, one bindless `mainTexture`, and `texture(mainTexture, vUv) * uTint * rbInstance.Color` for raylib's unlit default model shading. |
+| `Assets/models/obj/castle.toml` | (sidecar) | `front = "-z"` keeps raylib's authored orientation; no part shader is set, so the bake defaults every part to the built-in `shaders/mesh` program. |
 
 The pack is generated output under `bin/` and `obj/` and is gitignored. Only the sources are
 committed. The castle model and texture are sample-only and are **not** covered by RayBork's MIT
@@ -130,30 +131,31 @@ driver detail.
 ## Expected output
 
 The log at startup reports the engine, GPU, and presentation path, the model part, the texture and
-shader metadata, the generated grid mesh, and the camera. Values vary by GPU and display:
+built-in shader metadata, and the camera. Values vary by GPU and display:
 
 ```text
 Model /models/obj/castle: 1 part(s), bounds <-23.99, -0.02, -16.34>..<18.23, 30.9, 16.34>.
-Part castle: mesh /models/obj/castle/castle, 12150 vertex/vertices, 21504 index/indices, ... shader /shaders/castle.
+Part castle: mesh /models/obj/castle/castle, 12150 vertex/vertices, 21504 index/indices, ... shader /shaders/mesh.
 Texture /models/obj/castle_diffuse: 1024x1024, 11 mip level(s), format Rgba8Srgb, sRGB True, sampler Linear/Repeat.
-Shader /shaders/castle: stages Vertex, Fragment, 1 uniform(s), 1 texture binding(s), default state Opaque/Back/GreaterOrEqual, depth write True.
-Grid mesh /_procedural/mesh/1: 84 vertex/vertices, 84 index/indices, topology LineList, shader /shaders/default.
-Castle gate: completed frame 1 reported 2 draw call(s) and 2 instance(s).
-Final render stats: frame 29, 2 draw call(s), 2 instance(s), 7168 triangle(s), 0 culled instance(s), 2 pipeline(s), 2 texture(s), 4x MSAA, HDR True, ... 0 recoveries.
+Shader /shaders/mesh: stages Vertex, Fragment, 1 uniform(s), 1 texture binding(s), default state Opaque/Back/GreaterOrEqual, depth write True.
+Castle gate: completed frame 1 reported 1 draw call(s) and 1 instance(s).
+Final render stats: frame 29, 1 draw call(s), 1 instance(s), 7168 triangle(s), 0 culled instance(s), 1 pipeline(s), 4 texture(s), 4x MSAA, HDR True, ... 0 recoveries.
 Castle stopped after 30 tick(s): exit frame limit (30).
 ```
 
-The castle is one batch and the grid is a second batch, so a frame reports two draw calls. The grid
-is a single line-list mesh: 21 lines in each direction at 10-unit spacing over `-100..100` on the XZ
-plane at `y = 0` (42 lines, 84 line-list endpoints) with a linear gray vertex color, exactly what
-raylib's `DrawGrid(20, 10.0f)` draws. `TextureCount` includes the renderer's reserved white bindless
-slot.
+The castle is one batch, so a frame reports one draw call and one instance. `TextureCount` counts
+live bindless slots: the renderer's reserved white slot, the engine-owned white and error textures,
+and the castle diffuse texture. The built-in `/shaders/mesh` program is unlit and consumes the
+model's UVs and vertex color, so the sample only binds `mainTexture` on the part material before
+drawing.
 
 ## What the recreation omits
 
 The M4 sample does not implement these raylib `models_loading` features; each needs a later
 milestone:
 
+- **The reference XZ grid.** `DrawGrid(20, 10.0f)` and the built-in grid mesh arrive in M5. The M4
+  sample draws the castle model only; Castle uses `DrawGrid` for the raylib reference grid in M5.
 - **Drag-and-drop of a new model or texture.** Window file-drop events are post-1.0, and the host
   has no dropped-file API in M4/M5.
 - **Click selection and the bounding box.** `GetScreenToWorldRay` and `Model.Bounds` exist in M4, but

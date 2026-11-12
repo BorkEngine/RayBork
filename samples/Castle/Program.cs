@@ -23,8 +23,8 @@ internal static class Program {
         Castle - RayBork M4 core 3D renderer sample and Native AOT gate host
 
         A RayBork recreation of raylib's models_loading example: the castle OBJ and its diffuse
-        texture are drawn unlit with a custom shader and an orbital camera, and the reference XZ grid
-        is drawn with the built-in default shader.
+        texture are drawn unlit with the built-in mesh shader and an orbital camera. The raylib
+        reference XZ grid moves to M5 with Camera.DrawGrid.
 
         Usage:
           Castle [options]
@@ -46,11 +46,11 @@ internal static class Program {
                             Critical, or None (default: Information).
           --help            Show this help and exit.
 
-        The sample loads /models/obj/castle, /models/obj/castle_diffuse, and /shaders/castle from
-        the pack, applies the texture to the shader, and draws the model every tick with a
+        The sample loads /models/obj/castle and /models/obj/castle_diffuse from the pack, binds the
+        texture on the model's built-in /shaders/mesh material, and draws the model every tick with a
         perspective camera orbiting the castle. The camera target is (0, 12, 0), the initial position
-        is (50, 50, 50), and the field of view is 45 degrees. The custom shader uses the M4 ABI:
-        rbFrame.ViewProjection, rbInstance.Transform, rbInstance.Color, uTint, and a bindless
+        is (50, 50, 50), and the field of view is 45 degrees. The built-in mesh shader uses the M4
+        ABI: rbFrame.ViewProjection, rbInstance.Transform, rbInstance.Color, uTint, and a bindless
         mainTexture.
 
         The run is the M4 gate: the sample requires at least one completed frame that reported both
