@@ -19,13 +19,13 @@ internal static class Program {
     private const float DEFAULT_EXPOSURE = 0f;
 
     private const string USAGE_TEXT = """
-        HelloInterop - RayBork M3 asset pipeline diagnostic and Native AOT gate host
+        HelloInterop - RayBork M1-M4 diagnostic host
 
         Usage:
           HelloInterop [options]
 
         Options:
-          --assets PATH     Mount a baked asset pack and load the M3 sample assets. Relative paths
+          --assets PATH     Mount a baked asset pack and load the sample assets. Relative paths
                             resolve against the current directory; no pack is mounted by default.
           --frames N        Run N ticks, then exit; 0 runs until close (default: 0).
           --title TEXT      Window title (default: HelloInterop).
@@ -69,7 +69,7 @@ internal static class Program {
         Examples:
           HelloInterop --frames 120
           HelloInterop --assets samples/HelloInterop.Assets/bin/Release/net11.0/hello.pck --frames 30
-          HelloInterop --frames 120 --size 1920x1080 --msaa 8 --title "M3 AOT gate"
+          HelloInterop --frames 120 --size 1920x1080 --msaa 8 --title "M4 diagnostic"
           HelloInterop --tonemapping None --exposure 1.5
           HelloInterop --msaa 8 --present-mode Fifo --validation off --log-level Debug
         """;

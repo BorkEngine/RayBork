@@ -83,7 +83,7 @@ internal sealed class HelloGame : IGame {
         _logger = context.LoggerFactory.CreateLogger("HelloInterop");
         IWindow window = context.Window;
 
-        _logger.LogInformation("RayBork {EngineVersion} M3 asset pipeline diagnostic host starting.", EngineVersion.Current);
+        _logger.LogInformation("RayBork {EngineVersion} M1-M4 diagnostic host starting.", EngineVersion.Current);
 
         int sdlVersion = SDL.GetVersion();
         int major = sdlVersion / 1_000_000;
