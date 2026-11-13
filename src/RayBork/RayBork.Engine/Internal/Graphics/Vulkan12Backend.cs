@@ -344,16 +344,21 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         RenderSettings settings = _options.Settings;
         float paperWhite = state.Hdr.HdrEnabled ? state.Hdr.SdrWhiteLevel : 1f;
-        float peak = paperWhite * (state.Hdr.HdrEnabled ? state.Hdr.HdrHeadroom : 1f);
         PresentEncoding encoding = _swapchainFormat.Encoding;
+        float outputMax = encoding == PresentEncoding.ScRgbHdr && state.Hdr.HdrEnabled
+            ? state.Hdr.HdrHeadroom
+            : 1f;
+        AgxCurveParameters agx = AgxCurveParameters.Create(settings.AgxWhite, settings.AgxContrast, outputMax);
         PresentPushConstants pushConstants = new() {
             ExposureMultiplier = MathF.Pow(2f, settings.Exposure),
             HdrWhiteScale = paperWhite,
-            HdrPeakScale = peak,
-            AgxWhiteSceneLuminance = (float)AgxToneMap.AGX_WHITE_SCENE_LUMINANCE,
+            OutputMaxValue = (float)agx.OutputMax,
+            AwpContrast = (float)agx.Contrast,
+            AwpToeA = (float)agx.ToeA,
+            AwpSlope = (float)agx.Slope,
+            AwpW = (float)agx.W,
             Tonemapping = settings.Tonemapping == TonemappingMode.AgX ? 0 : 1,
             Encoding = (int)encoding,
-            HdrHighlight = AgxToneMap.IsHdrHighlightActive(encoding, settings.Tonemapping, state.Hdr) ? 1 : 0,
             Reserved = 0,
         };
         _presentPipeline!.Record(vulkan, commandBuffer, imageIndex, pushConstants);
