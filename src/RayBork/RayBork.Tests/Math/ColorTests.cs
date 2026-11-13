@@ -295,6 +295,129 @@ public sealed class ColorTests {
             ((IFormattable)color).ToString(null, CultureInfo.InvariantCulture));
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void FromSrgbDecodesKnownValues() {
+        Color middleGray = Color.FromSrgb(0.5f, 0.5f, 0.5f);
+
+        Assert.Equal(0.21404114f, middleGray.R, TOLERANCE);
+        Assert.Equal(0.21404114f, middleGray.G, TOLERANCE);
+        Assert.Equal(0.21404114f, middleGray.B, TOLERANCE);
+        Assert.Equal(1f, middleGray.A);
+
+        Assert.Equal(0f, Color.FromSrgb(0f, 0f, 0f).R);
+        Assert.Equal(1f, Color.FromSrgb(1f, 1f, 1f).R, TOLERANCE);
+        Assert.Equal(0.5f, new Color(0.21404114f, 0.21404114f, 0.21404114f).ToSrgb().X, TOLERANCE);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void FromSrgbUsesThePiecewiseEotfAtTheBoundary() {
+        float atThreshold = Color.FromSrgb(0.04045f, 0.04045f, 0.04045f).R;
+        float aboveThreshold = Color.FromSrgb(0.04045001f, 0.04045001f, 0.04045001f).R;
+
+        Assert.Equal(0.04045f / 12.92f, atThreshold);
+        Assert.Equal(0.0031308f, atThreshold, 1e-8f);
+        Assert.Equal(0.0031308f, aboveThreshold, 1e-6f);
+        Assert.True(aboveThreshold > atThreshold);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ToSrgbUsesThePiecewiseOetfAtTheBoundary() {
+        float atThreshold = new Color(0.0031308f, 0.0031308f, 0.0031308f).ToSrgb().X;
+        float aboveThreshold = new Color(0.0031309f, 0.0031309f, 0.0031309f).ToSrgb().X;
+
+        Assert.Equal(0.0031308f * 12.92f, atThreshold);
+        Assert.Equal(0.04045f, atThreshold, 1e-6f);
+        Assert.Equal(0.04045f, aboveThreshold, 1e-5f);
+        Assert.True(aboveThreshold > atThreshold);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void FromSrgbBytesDecodesDeterministicallyAndPassesAlpha() {
+        Color middleGray = Color.FromSrgbBytes((byte)128, (byte)128, (byte)128, (byte)51);
+
+        Assert.Equal(0.2158605f, middleGray.R, TOLERANCE);
+        Assert.Equal(0.2158605f, middleGray.G, TOLERANCE);
+        Assert.Equal(0.2158605f, middleGray.B, TOLERANCE);
+        Assert.Equal(51f / 255f, middleGray.A);
+        Assert.Equal(middleGray, Color.FromSrgbBytes((byte)128, (byte)128, (byte)128, (byte)51));
+
+        Assert.Equal(0f, Color.FromSrgbBytes((byte)0, (byte)0, (byte)0).R);
+        Assert.Equal(1f, Color.FromSrgbBytes((byte)255, (byte)255, (byte)255).R);
+        Assert.Equal(1f, Color.FromSrgbBytes((byte)10, (byte)10, (byte)10).A);
+        Assert.Equal((10f / 255f) / 12.92f, Color.FromSrgbBytes((byte)10, (byte)10, (byte)10).R);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SrgbRoundTripsInRangeColors() {
+        Color original = new(0.2f, 0.6f, 0.3f, 0.4f);
+
+        Vector4 encoded = original.ToSrgb();
+        Color roundTrip = Color.FromSrgb(encoded.X, encoded.Y, encoded.Z, encoded.W);
+
+        Assert.Equal(original.R, roundTrip.R, TOLERANCE);
+        Assert.Equal(original.G, roundTrip.G, TOLERANCE);
+        Assert.Equal(original.B, roundTrip.B, TOLERANCE);
+        Assert.Equal(original.A, roundTrip.A, TOLERANCE);
+
+        Vector4 display = Color.FromSrgb(0.25f, 0.5f, 0.75f).ToSrgb();
+
+        Assert.Equal(0.25f, display.X, TOLERANCE);
+        Assert.Equal(0.5f, display.Y, TOLERANCE);
+        Assert.Equal(0.75f, display.Z, TOLERANCE);
+        Assert.Equal(1f, display.W);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SrgbConversionPassesAlphaThrough() {
+        Vector4 encoded = new Color(0.1f, 0.2f, 0.3f, 0.25f).ToSrgb();
+
+        Assert.Equal(0.25f, encoded.W);
+        Assert.Equal(0.25f, Color.FromSrgb(0.1f, 0.2f, 0.3f, 0.25f).A);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ToSrgbExtrapolatesOutOfRangeComponentsWithoutClamping() {
+        Vector4 encoded = new Color(2f, -0.5f, 0.5f, 1f).ToSrgb();
+
+        Assert.Equal(1.353256f, encoded.X, 1e-4f);
+        Assert.Equal(-6.46f, encoded.Y, 1e-5f);
+        Assert.Equal(0.735357f, encoded.Z, 1e-4f);
+        Assert.Equal(1f, encoded.W);
+        Assert.True(encoded.X > 1f);
+        Assert.True(encoded.Y < 0f);
+    }
+
+    [Theory]
+    [InlineData(-0.01f, 0.5f, 0.5f, 1f)]
+    [InlineData(float.NegativeInfinity, 0.5f, 0.5f, 1f)]
+    [InlineData(0.5f, 1.01f, 0.5f, 1f)]
+    [InlineData(0.5f, 0.5f, float.NaN, 1f)]
+    [InlineData(0.5f, 0.5f, 0.5f, -0.25f)]
+    [InlineData(0.5f, 0.5f, 0.5f, float.PositiveInfinity)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void FromSrgbRejectsNonFiniteOrOutOfRangeComponents(float r, float g, float b, float a) {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Color.FromSrgb(r, g, b, a));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void FromSrgbReportsTheOutOfRangeParameter() {
+        ArgumentOutOfRangeException rgbException = Assert.Throws<ArgumentOutOfRangeException>(
+            () => Color.FromSrgb(-0.1f, 0.5f, 0.5f));
+        ArgumentOutOfRangeException alphaException = Assert.Throws<ArgumentOutOfRangeException>(
+            () => Color.FromSrgb(0.5f, 0.5f, 0.5f, 1.5f));
+
+        Assert.Equal("r", rgbException.ParamName);
+        Assert.Equal("a", alphaException.ParamName);
+    }
+
     private static void AssertColorEqual(Color expected, Color actual, float tolerance = TOLERANCE) {
         Assert.Equal(expected.R, actual.R, tolerance);
         Assert.Equal(expected.G, actual.G, tolerance);
