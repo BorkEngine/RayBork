@@ -229,6 +229,50 @@ public sealed class AssetCatalogFailureTests {
         Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AFailingValueLoaderReportsTheRegisteredFailureDescription() {
+        using CatalogTestHarness harness = new(
+            builtInPack: null,
+            userPacks: [CatalogTestData.BuildStandardPack()],
+            assetTypes: [new LoaderAssetTypeRegistration<CatalogTestSettings>(new ThrowingSettingsLoader())]);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => harness.Catalog.Load<CatalogTestSettings>(
+                "/data/settings",
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("could not be loaded", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("the loader failed on purpose", thrown.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION,
+            thrown.Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CustomDataDeserializationFailureReportsTheCustomDataDescription() {
+        byte[] pack = CatalogTestData.BuildPack(
+            (CatalogTestData.DATA_PATH, AssetEntryType.Data, [0xFF, 0xFF, 0xFF, 0xFF]));
+        using CatalogTestHarness harness = new(
+            builtInPack: null,
+            userPacks: [pack],
+            assetTypes: [CatalogTestData.SettingsRegistration]);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => harness.Catalog.Load<CatalogTestSettings>(
+                "/data/settings",
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains(
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION,
+            thrown.Message,
+            StringComparison.Ordinal);
+    }
+
     private static (GpuAssetBridge Bridge, AssetCatalog Catalog) CreateUnstartedCatalog(string[] paths) {
         GpuAssetBridge bridge = new();
         bridge.AttachWorker(new FakeAssetGpuWorker());
@@ -239,5 +283,12 @@ public sealed class AssetCatalogFailureTests {
             paths,
             []);
         return (bridge, catalog);
+    }
+
+    private sealed class ThrowingSettingsLoader : IAssetLoader<CatalogTestSettings> {
+        public AssetEntryType EntryType => AssetEntryType.Data;
+
+        public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context)
+            => throw new InvalidOperationException("the loader failed on purpose");
     }
 }

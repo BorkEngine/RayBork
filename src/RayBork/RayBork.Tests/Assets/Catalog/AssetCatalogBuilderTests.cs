@@ -56,7 +56,11 @@ public sealed class AssetCatalogBuilderTests {
         AssetTypeRegistration registration = Assert.Single(app.Configuration.AssetTypes);
         Assert.Equal(typeof(CatalogTestSettings), registration.AssetType);
         Assert.Equal(AssetEntryType.Data, registration.EntryType);
-        Assert.IsType<LoaderAssetTypeRegistration<CatalogTestSettings>>(registration);
+        LoaderAssetTypeRegistration<CatalogTestSettings> loaderRegistration =
+            Assert.IsType<LoaderAssetTypeRegistration<CatalogTestSettings>>(registration);
+        Assert.Equal(
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION,
+            loaderRegistration.FailureDescription);
     }
 
     [Fact]

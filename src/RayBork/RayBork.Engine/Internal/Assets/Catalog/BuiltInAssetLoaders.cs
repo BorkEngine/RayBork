@@ -1,7 +1,8 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The engine asset formats every catalog has built in.
+/// The asset type registrations every catalog has built in: the engine asset formats and the shader
+/// material and model loaders.
 /// </summary>
 /// <remarks>
 /// The catalog combines these registrations with the user registrations when it builds its registry.
@@ -10,12 +11,14 @@ namespace RayBork.Internal;
 /// </remarks>
 internal static class BuiltInAssetLoaders {
     /// <summary>
-    /// Creates the built-in engine asset registrations in registration order.
+    /// Creates the built-in asset registrations in registration order.
     /// </summary>
     /// <returns>The built-in registrations.</returns>
     internal static IReadOnlyList<AssetTypeRegistration> CreateDefault() => [
         new EngineAssetTypeRegistration<Mesh>(MeshAssetFormat.Instance),
         new EngineAssetTypeRegistration<Texture>(TextureAssetFormat.Instance),
         new EngineAssetTypeRegistration<ShaderProgram>(ShaderProgramAssetFormat.Instance),
+        new LoaderAssetTypeRegistration<Shader>(ShaderMaterialLoader.Instance),
+        new LoaderAssetTypeRegistration<Model>(ModelAssetLoader.Instance),
     ];
 }

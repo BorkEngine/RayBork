@@ -40,6 +40,27 @@ public sealed class AssetTypeRegistryTests {
         Assert.Contains("WithAssetType<T>()", thrown.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void LoaderRegistrationCarriesTheConfiguredFailureDescription() {
+        MessagePackAssetLoader<CatalogTestSettings> loader = new();
+
+        LoaderAssetTypeRegistration<CatalogTestSettings> defaulted = new(loader);
+        Assert.Equal("could not be loaded", defaulted.FailureDescription);
+
+        LoaderAssetTypeRegistration<CatalogTestSettings> customData = new(
+            loader,
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION);
+        Assert.Equal(CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION, customData.FailureDescription);
+
+        Assert.Throws<ArgumentNullException>(
+            () => new LoaderAssetTypeRegistration<CatalogTestSettings>(loader, null!));
+        Assert.Throws<ArgumentException>(
+            () => new LoaderAssetTypeRegistration<CatalogTestSettings>(loader, " "));
+    }
+
     private static LoaderAssetTypeRegistration<CatalogTestSettings> CreateRegistration()
-        => new(new MessagePackAssetLoader<CatalogTestSettings>());
+        => new(
+            new MessagePackAssetLoader<CatalogTestSettings>(),
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION);
 }
