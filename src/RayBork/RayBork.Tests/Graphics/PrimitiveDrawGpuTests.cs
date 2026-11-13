@@ -249,6 +249,36 @@ public sealed class PrimitiveDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void TranslatedPerspectiveCameraKeepsTheScreenQuadUnculled() {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+        Color textureColor = new(0.25f, 0.5f, 0.75f, 1f);
+        Texture texture = harness.CreateTexture(1, 1, textureColor);
+        Rect destination = new(16f, 16f, 64f, 48f);
+
+        // The reported repro: a camera translated back from the origin with a destination rectangle
+        // near the top-left. The old projective instance matrix was frustum-culled behind the camera,
+        // so this pass planned no draw at all.
+        harness.SubmitPerspective(
+            camera => camera.DrawTexture(texture, destination),
+            transform: new Transform(new Vector3(0f, 0f, 8f)),
+            clearColor: _clearColor);
+
+        RenderStats stats = harness.Host.Backend.Stats;
+        Assert.Equal(0, stats.CulledInstances);
+        Assert.Equal(1, stats.DrawCalls);
+        Assert.Equal(1, stats.Instances);
+        Assert.Equal(2, stats.Triangles);
+        AssertColorNear(
+            Unorm(textureColor),
+            harness.ReadColor(
+                Pixel(destination.X + (destination.Width * 0.5f)),
+                Pixel(destination.Y + (destination.Height * 0.5f))));
+        AssertColorNear(_clearColor, harness.ReadColor(Pixel(destination.X * 0.5f), harness.Height / 2));
+        Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void OverlayTextureCoversGeometryWhileBillboardBehindACubeIsOccluded() {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
         Color cubeColor = new(0.8f, 0.4f, 0.1f, 1f);
