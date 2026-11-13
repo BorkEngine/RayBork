@@ -6,19 +6,28 @@ namespace RayBork.Tests;
 
 /// <summary>
 /// Numeric presented-pixel probes for the AgX present path: the SDR image at the default white and
-/// contrast, neutral gray under scRGB HDR, paper white and the display peak at two headrooms, the
-/// frame's tone-mapping snapshot, and the direct <see cref="TonemappingMode.None"/> path.
+/// contrast and under the runtime exposure and AgX snapshots, neutral gray under scRGB HDR at the
+/// default settings and a custom white and contrast, paper white and the display peak at two
+/// headrooms, the frame's tone-mapping snapshot, and the direct <see cref="TonemappingMode.None"/>
+/// path.
 /// </summary>
 /// <remarks>
 /// The probes read the swapchain image the backend presented, so they assert the complete present
-/// path, not only the CPU reference. The HDR cases need the scRGB half-float swapchain path; when the
-/// host surface cannot advertise it the test skips with the actual selected format.
+/// path, not only the CPU reference. Every runtime-setting probe sets the frame's
+/// <see cref="RenderFramePacket.Tonemapping"/> snapshot, which is the path the tick thread seals into
+/// the packet. The HDR cases need the scRGB half-float swapchain path; when the host surface cannot
+/// advertise it the test skips with the actual selected format.
 /// </remarks>
 [Collection("SDL")]
 public sealed class HdrPresentGpuTests {
     private const float PAPER_WHITE = 2f;
     private const float PEAK_HEADROOM = 6.25f;
     private const float PEAK = PAPER_WHITE * PEAK_HEADROOM;
+    // The shader evaluates the curve in 32-bit floats against the double CPU reference. The
+    // R16G16B16A16_SFLOAT swapchain readback quantizes the result again, so the SDR path is stable to
+    // 1e-3 and the scRGB path to 2e-3 (one half-float step at the two-unit paper-white range).
+    private const float SDR_FLOAT_PATH_TOLERANCE = 1e-3f;
+    private const float HDR_FLOAT_PATH_TOLERANCE = 2e-3f;
     private static readonly WindowHdrState _hdr = new(true, PAPER_WHITE, PEAK_HEADROOM);
     private static readonly WindowHdrState _hdrHeadroomTwo = new(true, PAPER_WHITE, 2f);
 
@@ -142,16 +151,7 @@ public sealed class HdrPresentGpuTests {
         _output.WriteLine(FormattableString.Invariant(
             $"SDR {host.Backend.Swapchain.Format}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
 
-        if (IsEightBit(host.Backend.Swapchain.Format)) {
-            AssertEightBitSrgbNear(expected.X, presented.R);
-            AssertEightBitSrgbNear(expected.Y, presented.G);
-            AssertEightBitSrgbNear(expected.Z, presented.B);
-        } else {
-            Assert.Equal(expected.X, presented.R, 1e-3);
-            Assert.Equal(expected.Y, presented.G, 1e-3);
-            Assert.Equal(expected.Z, presented.B, 1e-3);
-        }
-
+        AssertSdrPresentationMatches(expected, presented, host.Backend.Swapchain.Format);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -191,16 +191,217 @@ public sealed class HdrPresentGpuTests {
         _output.WriteLine(FormattableString.Invariant(
             $"Frame snapshot exposure={exposure} white={agxWhite} contrast={agxContrast}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
 
-        if (IsEightBit(host.Backend.Swapchain.Format)) {
-            AssertEightBitSrgbNear(expected.X, presented.R);
-            AssertEightBitSrgbNear(expected.Y, presented.G);
-            AssertEightBitSrgbNear(expected.Z, presented.B);
-        } else {
-            Assert.Equal(expected.X, presented.R, 1e-3);
-            Assert.Equal(expected.Y, presented.G, 1e-3);
-            Assert.Equal(expected.Z, presented.B, 1e-3);
-        }
+        AssertSdrPresentationMatches(expected, presented, host.Backend.Swapchain.Format);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void SdrDefaultSnapshotPresentsMidGray() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        const float scene = 0.5f;
+        RenderFramePacket packet = BackendPacketTestHelper.CreateClearingPacket(
+            host,
+            1,
+            new Color(scene, scene, scene, 1f));
+        packet.Tonemapping = TonemappingSnapshot.Default;
+
+        Vector3 expected = AgxToneMap.Present(
+            new Vector3(scene),
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr);
+
+        (float R, float G, float B) presented = PresentAndProbe(host.Backend, packet);
+        _output.WriteLine(FormattableString.Invariant(
+            $"SDR default snapshot scene={scene}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
+
+        AssertSdrPresentationMatches(expected, presented, host.Backend.Swapchain.Format);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void SdrExposureSnapshotRaisesThePresentedValue() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        const float exposure = 1f;
+        const float scene = 0.5f;
+        RenderFramePacket packet = BackendPacketTestHelper.CreateClearingPacket(
+            host,
+            1,
+            new Color(scene, scene, scene, 1f));
+        packet.Tonemapping = new TonemappingSnapshot(
+            exposure,
+            AgxToneMap.DEFAULT_AGX_WHITE,
+            AgxToneMap.DEFAULT_AGX_CONTRAST);
+
+        Vector3 expected = AgxToneMap.Present(
+            new Vector3(scene),
+            MathF.Pow(2f, exposure),
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr);
+        Vector3 unexposed = AgxToneMap.Present(
+            new Vector3(scene),
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr);
+        Assert.True(
+            MathF.Abs(expected.X - unexposed.X) > 0.1f,
+            "The exposure probe must differ from the neutral exposure for the readback to prove that "
+                + "the packet snapshot reached the present pass.");
+
+        (float R, float G, float B) presented = PresentAndProbe(host.Backend, packet);
+        _output.WriteLine(FormattableString.Invariant(
+            $"SDR snapshot exposure={exposure} scene={scene}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
+
+        AssertSdrPresentationMatches(expected, presented, host.Backend.Swapchain.Format);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void SdrContrastSnapshotChangesThePresentedCurve() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        const float agxContrast = 2f;
+        const float scene = 0.5f;
+        RenderFramePacket packet = BackendPacketTestHelper.CreateClearingPacket(
+            host,
+            1,
+            new Color(scene, scene, scene, 1f));
+        packet.Tonemapping = new TonemappingSnapshot(
+            0f,
+            AgxToneMap.DEFAULT_AGX_WHITE,
+            agxContrast);
+
+        Vector3 expected = AgxToneMap.Present(
+            new Vector3(scene),
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr,
+            agxContrast: agxContrast);
+        Vector3 defaultContrast = AgxToneMap.Present(
+            new Vector3(scene),
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr);
+        Assert.True(
+            MathF.Abs(expected.X - defaultContrast.X) > 0.05f,
+            "The contrast probe must differ from the default contrast for the readback to prove that "
+                + "the packet snapshot reached the present pass.");
+
+        (float R, float G, float B) presented = PresentAndProbe(host.Backend, packet);
+        _output.WriteLine(FormattableString.Invariant(
+            $"SDR snapshot contrast={agxContrast} scene={scene}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
+
+        AssertSdrPresentationMatches(expected, presented, host.Backend.Swapchain.Format);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void SdrAgxWhiteSnapshotChangesThePresentedCurve() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        const float agxWhite = 2f;
+        const float scene = 1f;
+        RenderFramePacket packet = BackendPacketTestHelper.CreateClearingPacket(
+            host,
+            1,
+            new Color(scene, scene, scene, 1f));
+        packet.Tonemapping = new TonemappingSnapshot(
+            0f,
+            agxWhite,
+            AgxToneMap.DEFAULT_AGX_CONTRAST);
+
+        Vector3 expected = AgxToneMap.Present(
+            new Vector3(scene),
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr,
+            agxWhite: agxWhite);
+        Vector3 defaultWhite = AgxToneMap.Present(
+            new Vector3(scene),
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr);
+        Assert.True(
+            MathF.Abs(expected.X - defaultWhite.X) > 0.05f,
+            "The white probe must differ from the default AgX white for the readback to prove that "
+                + "the packet snapshot reached the present pass.");
+
+        (float R, float G, float B) presented = PresentAndProbe(host.Backend, packet);
+        _output.WriteLine(FormattableString.Invariant(
+            $"SDR snapshot white={agxWhite} scene={scene}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
+
+        AssertSdrPresentationMatches(expected, presented, host.Backend.Swapchain.Format);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void HdrSnapshotWithCustomWhiteAndContrastPresentsTheCpuReference() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: _hdr);
+        RequireScRgbHdr(host.Backend.Info);
+        const float agxWhite = 8f;
+        const float agxContrast = 1.6f;
+        RenderFramePacket packet = BackendPacketTestHelper.CreateClearingPacket(
+            host,
+            1,
+            new Color(1f, 1f, 1f, 1f));
+        packet.Tonemapping = new TonemappingSnapshot(0f, agxWhite, agxContrast);
+
+        Vector3 expected = AgxToneMap.Present(
+            Vector3.One,
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.ScRgbHdr,
+            _hdr,
+            agxWhite: agxWhite,
+            agxContrast: agxContrast);
+        Vector3 defaultSettings = AgxToneMap.Present(
+            Vector3.One,
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.ScRgbHdr,
+            _hdr);
+        Assert.True(
+            MathF.Abs(expected.X - defaultSettings.X) > 0.1f,
+            "The HDR probe must differ from the default AgX white and contrast for the readback to "
+                + "prove that the packet snapshot reached the present pass.");
+
+        (float R, float G, float B) presented = PresentAndProbe(host.Backend, packet);
+        _output.WriteLine(FormattableString.Invariant(
+            $"HDR snapshot white={agxWhite} contrast={agxContrast}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
+
+        AssertHdrPresentationMatches(expected, presented);
+
+        // The custom white is the scene value the curve maps to the display peak.
+        float peakScene = agxWhite * PEAK_HEADROOM;
+        RenderFramePacket peakPacket = BackendPacketTestHelper.CreateClearingPacket(
+            host,
+            2,
+            new Color(peakScene, peakScene, peakScene, 1f));
+        peakPacket.Tonemapping = packet.Tonemapping;
+        Vector3 expectedPeak = AgxToneMap.Present(
+            new Vector3(peakScene),
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.ScRgbHdr,
+            _hdr,
+            agxWhite: agxWhite,
+            agxContrast: agxContrast);
+
+        (float R, float G, float B) peak = PresentAndProbe(host.Backend, peakPacket);
+        _output.WriteLine(FormattableString.Invariant(
+            $"HDR snapshot white={agxWhite} peak scene={peakScene}: presented=({peak.R}, {peak.G}, {peak.B}) expected=({expectedPeak.X}, {expectedPeak.Y}, {expectedPeak.Z})"));
+
+        AssertHdrPresentationMatches(expectedPeak, peak);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -230,6 +431,27 @@ public sealed class HdrPresentGpuTests {
         backend.Present();
         Assert.Equal(imageIndex, backend.LastPresentedImageIndex);
         return (r, g, b);
+    }
+
+    private static void AssertSdrPresentationMatches(
+        Vector3 expected,
+        (float R, float G, float B) presented,
+        Format format) {
+        if (IsEightBit(format)) {
+            AssertEightBitSrgbNear(expected.X, presented.R);
+            AssertEightBitSrgbNear(expected.Y, presented.G);
+            AssertEightBitSrgbNear(expected.Z, presented.B);
+        } else {
+            Assert.Equal(expected.X, presented.R, SDR_FLOAT_PATH_TOLERANCE);
+            Assert.Equal(expected.Y, presented.G, SDR_FLOAT_PATH_TOLERANCE);
+            Assert.Equal(expected.Z, presented.B, SDR_FLOAT_PATH_TOLERANCE);
+        }
+    }
+
+    private static void AssertHdrPresentationMatches(Vector3 expected, (float R, float G, float B) presented) {
+        Assert.Equal(expected.X, presented.R, HDR_FLOAT_PATH_TOLERANCE);
+        Assert.Equal(expected.Y, presented.G, HDR_FLOAT_PATH_TOLERANCE);
+        Assert.Equal(expected.Z, presented.B, HDR_FLOAT_PATH_TOLERANCE);
     }
 
     private static void RequireScRgbHdr(EngineInfo info) {
