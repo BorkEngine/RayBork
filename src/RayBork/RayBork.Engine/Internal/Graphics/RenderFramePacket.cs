@@ -8,8 +8,9 @@ namespace RayBork.Internal;
 /// The tick thread records camera passes into a packet owned by its frame-ring slot, seals it, and
 /// publishes it. The render thread consumes the packet and then releases the slot; the ring reuses the
 /// same packet, pass records, and pooled draw buffers for a later frame. A packet never references a
-/// live game object: it carries value snapshots of the camera matrices, clear state, viewport, and the
-/// draw records, plus engine-asset references held by <see cref="Retention"/> until the frame ends.
+/// live game object: it carries value snapshots of the camera matrices, clear state, viewport, the
+/// frame's tone-mapping settings, and the draw records, plus engine-asset references held by
+/// <see cref="Retention"/> until the frame ends.
 /// </para>
 /// <para>
 /// <see cref="BeginRecording"/>, <see cref="BeginPass"/>, and <see cref="RentDrawRecord"/> are
@@ -65,6 +66,14 @@ internal sealed class RenderFramePacket {
     /// </summary>
     internal FrameAssetRetention Retention { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the frame's tone-mapping snapshot. The tick thread copies the live
+    /// <see cref="TonemappingSettings"/> here before it seals the frame; the render thread reads only
+    /// this value. It stays at <see cref="TonemappingSnapshot.Default"/> until a recording sets it and
+    /// returns to the default on <see cref="Reset"/>.
+    /// </summary>
+    internal TonemappingSnapshot Tonemapping { get; set; } = TonemappingSnapshot.Default;
+
     /// <summary>Gets the camera passes in creation order.</summary>
     internal ReadOnlySpan<CameraPass> Passes => _passes.AsSpan(0, _passCount);
 
@@ -92,6 +101,7 @@ internal sealed class RenderFramePacket {
         FrameIndex = frameIndex;
         Time = 0.0;
         DeltaTime = 0.0;
+        Tonemapping = TonemappingSnapshot.Default;
         _passCount = 0;
         _recordCount = 0;
         _sealed = false;

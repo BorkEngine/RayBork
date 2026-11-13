@@ -19,7 +19,8 @@ internal sealed class AppTestHost : IDisposable {
         LogLevel logLevel = LogLevel.Information,
         int targetFps = FAST_TARGET_FPS,
         double maxDeltaTime = 0.25,
-        FakeRendererBackend? rendererBackend = null) {
+        FakeRendererBackend? rendererBackend = null,
+        Action<RayBorkAppBuilder>? configure = null) {
         ArgumentNullException.ThrowIfNull(game);
 
         Game = game;
@@ -37,6 +38,7 @@ internal sealed class AppTestHost : IDisposable {
             builder = builder.WithLoggerFactory(NullLoggerFactory.Instance);
         }
 
+        configure?.Invoke(builder);
         FakeEnginePlatform platform = Platform;
         FakeRendererBackend renderer = FakeRenderer;
         App = builder.Build(_ => platform, () => renderer, TimeProvider.System);

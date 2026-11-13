@@ -236,6 +236,12 @@ public enum TonemappingMode {
     AgX,
     None,
 }
+
+public sealed class TonemappingSettings {
+    public float Exposure { get; set; }
+    public float AgxWhite { get; set; }
+    public float AgxContrast { get; set; }
+}
 ```
 
 - Default camera clear is `ClearMode.ColorAndDepth`. A 3D frame that uses only `ClearMode.Color`
@@ -307,7 +313,8 @@ same Y-flip. `BoundingFrustum` extracts its planes from the engine's Y-flipped N
 **HDR chain.** The scene target is linear `R16G16B16A16_SFLOAT` color with a `D32_SFLOAT` depth
 attachment. The present pass applies exposure, `TonemappingMode`, and the output encoding. The
 default is `AgX` at `0` EV. `TonemappingMode.None` skips the tone curve and still writes through the
-selected output encoding. Exposure is applied as `2^EV` before tone mapping.
+selected output encoding. Exposure is applied as `2^EV` before tone mapping. The runtime controls
+are described under **Runtime tone mapping** below.
 
 **Swapchain selection.** The cached SDL3 window HDR state drives the choice. When the window has HDR
 enabled, the renderer selects `R16G16B16A16_SFLOAT` with
@@ -344,6 +351,36 @@ are preserved. The mapping is continuous at the knee at paper white, reaches the
 An SDR window uses a paper white and peak of `1` and disables the extension, so its image is
 unchanged from M2. The cached HDR state also carries the headroom for diagnostics. A window HDR state
 change, or a change to the SDR white level while HDR is active, recreates the presentation path.
+
+**Runtime tone mapping.** `WithExposure`, `WithAgxWhite`, and `WithAgxContrast` set the startup
+defaults for `EngineContext.Tonemapping`, one app-lifetime settings object that a game can change
+while it runs:
+
+```csharp
+public void Tick(EngineContext ctx) {
+    ctx.Tonemapping.Exposure = 0f;       // stops; the present pass applies 2^EV before AgX
+    ctx.Tonemapping.AgxWhite = 16.29f;   // scene-linear white before the display-max scaling
+    ctx.Tonemapping.AgxContrast = 1.25f; // AgX curve contrast
+}
+```
+
+| Member | Default | Contract |
+| --- | --- | --- |
+| `Exposure` | `0` EV | Finite. The present pass multiplies the scene by `2^Exposure` before the curve. |
+| `AgxWhite` | `16.29` | Finite and at least `2`. The scene-linear white AgX maps to the display maximum, before the display headroom scaling on an HDR window. |
+| `AgxContrast` | `1.25` | Finite and at least `1`. The AgX curve contrast. |
+
+- `TonemappingMode` is fixed at startup by `WithTonemapping`; only the exposure, white, and contrast
+  are runtime-mutable.
+- The settings are tick-thread only. A valid write from another thread is
+  `InvalidOperationException`; an out-of-range value is `ArgumentOutOfRangeException` and is rejected
+  before the thread check. Reads are tick-thread reads too.
+- The present pass is frame-global: every camera pass in a frame shares one configuration. The tick
+  thread copies the values into the frame packet when it seals the frame after `Tick` returns, so a
+  write during `Tick` applies to that frame's present. A frame that was already published keeps the
+  snapshot it was sealed with, and the render thread never reads the live settings object.
+- The object lives for the app lifetime and is not disposable. Values written in `Setup` are in
+  effect for the first frame.
 
 **MSAA.** The requested sample count comes from `WithMSAA` (default 4). The effective count is the
 highest device-supported count that does not exceed the request, or `1` when none is supported, and

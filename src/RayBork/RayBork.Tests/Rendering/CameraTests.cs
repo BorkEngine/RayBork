@@ -292,6 +292,41 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void EndFrameCopiesTheAttachedRuntimeToneMappingIntoThePacket() {
+        using CameraTestHost host = new();
+        TonemappingSettings tonemapping = new(1f, 4f, 2f);
+        host.AttachTonemapping(tonemapping);
+        RenderFramePacket packet = host.BeginFrame();
+
+        // The tick thread owns the settings during the frame; the seal sees the final values.
+        tonemapping.Exposure = 2f;
+        tonemapping.AgxContrast = 3f;
+        host.EndFrame();
+
+        Assert.Equal(new TonemappingSnapshot(2f, 4f, 3f), packet.Tonemapping);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void EndFrameUsesTheDefaultSnapshotWithoutAttachedRuntimeSettings() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+
+        host.EndFrame();
+
+        Assert.Equal(TonemappingSnapshot.Default, packet.Tonemapping);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AttachTonemappingRejectsNull() {
+        using CameraTestHost host = new();
+
+        Assert.Throws<ArgumentNullException>(() => host.AttachTonemapping(null!));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ACameraLeftUndisposedMakesEndFrameThrowAndNamesIt() {
         using CameraTestHost host = new();
         _ = host.BeginFrame();

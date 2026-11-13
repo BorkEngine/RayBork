@@ -240,6 +240,15 @@ public sealed class RayBorkApp : IDisposable {
             platform = CreatePlatform(loggerFactory);
             platform.Initialize(CreatePlatformOptions(configuration), RequestExit);
             cameraService = new CameraService(platform.Window);
+
+            // One app-lifetime settings object is shared by the tick thread (live values) and the
+            // camera service (per-frame snapshot). It is created and attached on this thread before
+            // the tick thread exists, so neither side races the constructor.
+            TonemappingSettings tonemapping = new(
+                configuration.RenderSettings.Exposure,
+                configuration.RenderSettings.AgxWhite,
+                configuration.RenderSettings.AgxContrast);
+            cameraService.AttachTonemapping(tonemapping);
             _cameraService = cameraService;
 
             // The platform owns the window, so the instance extensions and the native surface must be
@@ -294,7 +303,8 @@ public sealed class RayBorkApp : IDisposable {
                 configuration.MaxDeltaTime,
                 () => clock.Time,
                 _renderStatus,
-                cameraService);
+                cameraService,
+                tonemapping);
 
             tickRunner = new TickRunner(
                 platform,

@@ -14,8 +14,9 @@ instanced batches, pipeline and sampler caches, and the AgX HDR highlight extens
 primitive surface and the collision queries: the 13 `Camera` helpers, the engine-owned primitive
 meshes and the built-in `/shaders/primitive` program, `Collision`, `RayCollision`,
 `MeshBuilder.GenerateCollisions`, `Mesh.HasCollisionAcceleration`, and the baked `RBVC` collision
-payload. The rest of the API reference remains the 1.0 contract, not a description of shipped
-behavior.
+payload. M5 also ships the runtime tone-mapping surface: `TonemappingSettings` behind
+`EngineContext.Tonemapping`, with `WithAgxWhite` and `WithAgxContrast` as startup defaults. The rest
+of the API reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -162,6 +163,7 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `Camera` primitive, line, billboard, and screen-space texture helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`, `DrawTexture`) | M5 |
 | `Collision` and `RayCollision` | M5 |
 | `MeshBuilder.GenerateCollisions` and `Mesh.HasCollisionAcceleration` | M5 |
+| `TonemappingSettings`, `EngineContext.Tonemapping`, `WithAgxWhite`, and `WithAgxContrast` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
 
@@ -222,8 +224,12 @@ procedural mesh into that structure before `BuildAsync`, and `Mesh.HasCollisionA
 whether a mesh has one. A mesh loaded from a pack gets one when the bake wrote the `RBVC` v1
 collision payload that its descriptor names; a pack baked before the descriptor member existed loads
 with no structure and brute-forces the retained triangles. `DrawTexture` takes render pixels relative
-to the camera viewport and is an alpha-blended overlay with no depth write. `Camera.Target` and
-`DrawText` remain later milestones (M8 and M6).
+to the camera viewport and is an alpha-blended overlay with no depth write. `EngineContext.Tonemapping`
+exposes the app-lifetime `TonemappingSettings`: `Exposure` in stops, `AgxWhite` (default `16.29`),
+and `AgxContrast` (default `1.25`), all initialized from the builder and mutable from `Setup`,
+`Tick`, and `Shutdown` on the tick thread. The present pass is frame-global, and the tick thread
+snapshots the values into the frame packet when it seals the frame, so a write during `Tick` applies
+to that frame's present. `Camera.Target` and `DrawText` remain later milestones (M8 and M6).
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and

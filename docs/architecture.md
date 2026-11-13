@@ -209,13 +209,15 @@ The backend owns:
 | `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
 
 `Submit` takes a **sealed frame packet**, not a live game object or a draw command. The packet
-carries the frame index, the camera passes, and the recorded draws as value snapshots; the backend
-never sees `Camera`, `Shader`, `Mesh`, or any other game-facing type. `Resize` and the frame call are
-the only inputs. There is no `Draw`, `SetUniform`, or per-object method on the seam, so a backend
-cannot add a virtual call per draw. The backend plans the batches, culls and sorts the instances,
-looks up pipelines and descriptors, writes the frame block and instance storage buffer, and records
-the draw commands behind the frame boundary. The plan itself is produced inside `Submit`; the tick
-thread only records immutable draw records.
+carries the frame index, the camera passes, the frame's tone-mapping snapshot, and the recorded draws
+as value snapshots; the backend never sees `Camera`, `Shader`, `Mesh`, or any other game-facing type.
+The backend reads the snapshot for the present push constants and the scene shader's exposure, never
+the live `EngineContext.Tonemapping` settings object. `Resize` and the frame call are the only inputs.
+There is no `Draw`, `SetUniform`, or per-object method on the seam, so a backend cannot add a virtual
+call per draw. The backend plans the batches, culls and sorts the instances, looks up pipelines and
+descriptors, writes the frame block and instance storage buffer, and records the draw commands
+behind the frame boundary. The plan itself is produced inside `Submit`; the tick thread only records
+immutable draw records.
 
 ### Ownership and threading
 
@@ -422,6 +424,11 @@ seal slot, publish as newest ready
   references. Primitive helpers record the same kind of draw record with an engine mesh. A tick with
   no camera pass still clears the linear HDR target; the present pass always
   draws one fullscreen triangle, which is not counted in `RenderStats.DrawCalls`.
+- A frame also carries the tone-mapping snapshot: exposure in stops, AgX white, and AgX contrast,
+  copied from `EngineContext.Tonemapping` when the tick seals the frame. The present push constants
+  and the scene shader's frame block read the snapshot, so the render thread never reads the live
+  settings object. A write during `Tick` is in effect for that frame, and a published frame keeps
+  the values it was sealed with.
 - The frame slot retains every engine asset recorded into it and releases the hold when the render
   thread releases the slot after present. The camera draw recorder calls the retention set for every
   mesh, internal shader program, and bound texture; an asset disposed after recording a draw stays

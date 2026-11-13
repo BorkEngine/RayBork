@@ -39,6 +39,12 @@ opt-in, and `Mesh.HasCollisionAcceleration` exposes whether a mesh carries the s
 changing `Mesh`, `MeshBuilder.BuildAsync`, or `Load<T>` semantics. A mesh without a structure keeps
 working through the brute-force ray/mesh path.
 
+The runtime tone-mapping surface is additive too: `TonemappingSettings` and
+`EngineContext.Tonemapping` expose the exposure, AgX white, and AgX contrast for the app lifetime, and
+`WithAgxWhite` and `WithAgxContrast` add their startup defaults. `WithExposure` and `WithTonemapping`
+keep their meaning, so a game that configures tone mapping only at startup continues to work
+unchanged.
+
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a
 best-effort read.
@@ -124,6 +130,7 @@ disposed first.
 | `Shader`, `ShaderStageMask`, `ShaderUniform`, `ShaderUniformType`, `ShaderTextureBinding` | §7.3 |
 | `RenderState`, `BlendMode`, `CullMode`, `DepthTest` | §7.7 |
 | `Camera`, `CameraProjection`, `ClearMode`, `TonemappingMode` | §7.1, §7.2 |
+| `TonemappingSettings` | §3.4, §7.2 |
 | `Shader`, `ShaderUniform`, `ShaderTextureBinding` | §7.3 |
 | `Font`, `Glyph`, `TextAlignment`, `TextWrapping` | §7.10 |
 | `RenderTexture`, `RenderTextureDescription` | §7.11 |

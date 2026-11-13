@@ -199,6 +199,50 @@ public sealed class BuilderTests {
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithExposure(ev));
     }
 
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    [InlineData(1.99f)]
+    [InlineData(0f)]
+    [InlineData(-16.29f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAgxWhiteRejectsNonFiniteValuesBelowTwo(float white) {
+        RayBorkAppBuilder builder = new RayBorkAppBuilder();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithAgxWhite(white));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAgxWhiteAcceptsTheBoundary() {
+        RayBorkAppBuilder builder = new RayBorkAppBuilder();
+
+        Assert.Same(builder, builder.WithAgxWhite(2f));
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    [InlineData(0.99f)]
+    [InlineData(0f)]
+    [InlineData(-1.25f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAgxContrastRejectsNonFiniteValuesBelowOne(float contrast) {
+        RayBorkAppBuilder builder = new RayBorkAppBuilder();
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithAgxContrast(contrast));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAgxContrastAcceptsTheBoundary() {
+        RayBorkAppBuilder builder = new RayBorkAppBuilder();
+
+        Assert.Same(builder, builder.WithAgxContrast(1f));
+    }
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void BuildWithoutGameThrows() {
@@ -229,6 +273,8 @@ public sealed class BuilderTests {
         Assert.Equal(4, settings.SampleCount);
         Assert.Equal(TonemappingMode.AgX, settings.Tonemapping);
         Assert.Equal(0f, settings.Exposure);
+        Assert.Equal(16.29f, settings.AgxWhite);
+        Assert.Equal(1.25f, settings.AgxContrast);
 
 #if DEBUG
         bool expectedValidation = true;
@@ -247,6 +293,8 @@ public sealed class BuilderTests {
             .WithMSAA(8)
             .WithTonemapping(TonemappingMode.None)
             .WithExposure(2.5f)
+            .WithAgxWhite(4f)
+            .WithAgxContrast(2f)
             .WithValidation(false);
 
         using RayBorkApp app = BuildWithFakePlatform(builder, out _);
@@ -256,6 +304,8 @@ public sealed class BuilderTests {
         Assert.Equal(8, settings.SampleCount);
         Assert.Equal(TonemappingMode.None, settings.Tonemapping);
         Assert.Equal(2.5f, settings.Exposure);
+        Assert.Equal(4f, settings.AgxWhite);
+        Assert.Equal(2f, settings.AgxContrast);
         Assert.False(settings.ValidationEnabled);
     }
 
@@ -276,6 +326,8 @@ public sealed class BuilderTests {
         Assert.Throws<InvalidOperationException>(() => builder.WithMSAA(8));
         Assert.Throws<InvalidOperationException>(() => builder.WithTonemapping(TonemappingMode.None));
         Assert.Throws<InvalidOperationException>(() => builder.WithExposure(1f));
+        Assert.Throws<InvalidOperationException>(() => builder.WithAgxWhite(4f));
+        Assert.Throws<InvalidOperationException>(() => builder.WithAgxContrast(2f));
         Assert.Throws<InvalidOperationException>(() => builder.WithValidation(false));
         Assert.Throws<InvalidOperationException>(() => builder.WithTargetFps(60));
         Assert.Throws<InvalidOperationException>(() => builder.WithWindowState(WindowState.Maximized));
