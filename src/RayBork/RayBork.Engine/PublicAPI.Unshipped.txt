@@ -1014,3 +1014,18 @@ RayBork.RayBorkAppBuilder.WithWindowState(RayBork.WindowState state) -> RayBork.
 ~override RayBork.ShaderTextureBinding.ToString() -> string
 ~override RayBork.ShaderUniform.Equals(object obj) -> bool
 ~override RayBork.ShaderUniform.ToString() -> string
+RayBork.Collision
+static RayBork.Collision.CheckBoxes(RayBork.BoundingBox a, RayBork.BoundingBox b) -> bool
+static RayBork.Collision.CheckBoxSphere(RayBork.BoundingBox box, System.Numerics.Vector3 center, float radius) -> bool
+static RayBork.Collision.CheckSpheres(System.Numerics.Vector3 centerA, float radiusA, System.Numerics.Vector3 centerB, float radiusB) -> bool
+static RayBork.Collision.GetRayBox(RayBork.Ray ray, RayBork.BoundingBox box) -> RayBork.RayCollision
+static RayBork.Collision.GetRayMesh(RayBork.Ray ray, RayBork.Mesh! mesh, System.Numerics.Matrix4x4 transform) -> RayBork.RayCollision
+static RayBork.Collision.GetRayPlane(RayBork.Ray ray, System.Numerics.Plane plane) -> RayBork.RayCollision
+static RayBork.Collision.GetRaySphere(RayBork.Ray ray, System.Numerics.Vector3 center, float radius) -> RayBork.RayCollision
+static RayBork.Collision.GetRayTriangle(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c) -> RayBork.RayCollision
+RayBork.RayCollision
+RayBork.RayCollision.Distance.get -> float
+RayBork.RayCollision.Hit.get -> bool
+RayBork.RayCollision.Normal.get -> System.Numerics.Vector3
+RayBork.RayCollision.Point.get -> System.Numerics.Vector3
+RayBork.RayCollision.RayCollision() -> void
