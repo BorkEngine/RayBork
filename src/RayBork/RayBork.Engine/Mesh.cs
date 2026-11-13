@@ -15,8 +15,8 @@ namespace RayBork;
 /// </para>
 /// <para>
 /// The CPU vertices and indices are retained for both kinds: a loaded mesh decodes them from the
-/// packed payload and a procedural mesh keeps the builder's snapshot. Later M5 collision helpers read
-/// them. Textures do not retain CPU pixels.
+/// packed payload and a procedural mesh keeps the builder's snapshot. The M5 collision queries and
+/// the ray-mesh acceleration structure read them. Textures do not retain CPU pixels.
 /// </para>
 /// <para>
 /// <see cref="Path"/> and <see cref="IsDisposed"/> stay readable after disposal. Every other member

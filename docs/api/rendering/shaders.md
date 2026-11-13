@@ -59,7 +59,7 @@ public readonly record struct ShaderUniform(string Name, ShaderUniformType Type)
 public readonly record struct ShaderTextureBinding(string Name, int Index);
 ```
 
-> **M4 realized.** A `Shader` is a **material instance**, not a loaded program asset. The GPU program is
+> **As built.** A `Shader` is a **material instance**, not a loaded program asset. The GPU program is
 > an internal engine asset (there is no public shader-program type). `Load<Shader>(path)` returns a new
 > independent material on every call, all backed by one cached program for that path; materials are not
 > reference-counted engine assets. `Stages`, `Uniforms`, and `Textures` come from the bake sidecar
@@ -164,6 +164,13 @@ exposes them through `EngineContext.Defaults`:
 - The `EngineDefaults` owner references are released during shutdown, after the game callbacks
   return. After that, every `EngineDefaults` member throws `ObjectDisposedException`.
 
+The app also preloads the built-in `/shaders/primitive` program for the engine's primitive meshes and
+the `Camera` primitive helpers, but that program is not exposed through `EngineDefaults`; the type
+still offers only `CreateMeshShader`, `White`, and `Error`. `/shaders/primitive` is an ordinary
+built-in shader entry, so `Load<Shader>("/shaders/primitive")` returns a caller-owned material over
+it for a game's own vertex-color meshes. It reflects no uniforms and no textures, so every
+`SetUniform` name is rejected and its material cursor stays empty.
+
 ### 7.4 Shader ABI
 
 The bake generates a prologue for every shader so user GLSL does not declare the engine plumbing.
@@ -180,8 +187,9 @@ with the draw recorder, so the tables below are normative.
 | 2 | storage buffer, std430 | `RayBorkInstances[]`, one record per instance, plus reflected user uniforms |
 
 The texture binding is a fixed-size descriptor array of 2048 combined image samplers, not a runtime
-descriptor array: the prologue always emits `RayBorkTextures[2048]` and the descriptor set layout
-declares exactly 2048 descriptors. The renderer requires three Vulkan 1.2 descriptor-indexing
+descriptor array: the prologue emits `RayBorkTextures[2048]` for a program that reflects at least
+one texture binding, and the descriptor set layout declares exactly 2048 descriptors. The renderer
+requires three Vulkan 1.2 descriptor-indexing
 features: `descriptorBindingPartiallyBound`, `descriptorBindingSampledImageUpdateAfterBind`, and
 `shaderSampledImageArrayNonUniformIndexing`. A physical device that lacks any of them, or whose
 `maxPerStageDescriptorUpdateAfterBindSampledImages` or
@@ -276,9 +284,20 @@ layout as vertex attribute descriptions, so a custom shader may omit normals, UV
 tangents and the unconsumed attributes are ignored; the Vulkan validation layer reports that case
 as a performance warning, not an error, because the layout itself remains fixed. The built-in
 `/shaders/mesh` program declares only position (location 0), uv (location 2), and color (location 6);
-it has no normal input and no lighting. Custom vertex layouts are post-1.0.
+it has no normal input and no lighting. The built-in `/shaders/primitive` program declares only
+position (location 0) and color (location 6), and its fragment stage never reads `rbInstance`, so the
+compiled fragment interface does not consume the vertex stage's
+`layout(location = 15) flat out uint rbInstanceIndexOut`. The validation layer reports that case as a
+performance warning too; it is not an error. Custom vertex layouts are post-1.0.
 
 **Generated accessors**
+
+A program with no reflected texture bindings has no bindless texture array in its prologue and needs
+no texture index slot, so only the frame block and the fixed 96-byte instance header apply to it.
+`/shaders/primitive` is such a program: it has no uniforms and no textures, reads vertex position
+and color, and the engine records only the transform, the tint, and the UV rectangle for it. Its
+vertex stage multiplies the vertex color by `rbInstance.Color` and its fragment stage writes that
+color. `EngineDefaults` does not expose it; the engine loads it as an ordinary built-in shader entry.
 
 The prologue defines the frame block and a stage-specific `rbInstance` expression:
 

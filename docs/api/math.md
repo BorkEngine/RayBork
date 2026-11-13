@@ -181,9 +181,7 @@ Screen rectangles use a top-left origin.
 ### 5.5 Rays, bounds, and collision
 
 RayBork uses `System.Numerics.Plane` and the engine's own `RayBork.BoundingBox` value type directly,
-and adds a small `Collision` helper plus a `RayCollision` result. M4 ships `Ray` and
-`BoundingFrustum`; the M5 collision milestone adds the ray and sphere helpers and any additional
-bounds types it needs.
+and adds a `Collision` helper plus a `RayCollision` result. `Ray` is the shared ray value type.
 
 ```csharp
 public readonly record struct BoundingBox(Vector3 Min, Vector3 Max);
@@ -215,7 +213,7 @@ public readonly struct BoundingFrustum {
 - A default `BoundingFrustum` has six zero planes and accepts every point; construct it from a real
   projection before culling with it.
 
-The M5 collision contract adds the ray and sphere helpers. `Ray` is the shared ray value type.
+`Collision` adds the checks and ray casts:
 
 ```csharp
 public readonly struct RayCollision {
@@ -238,11 +236,36 @@ public static class Collision {
 }
 ```
 
-`GetRayMesh` requires the mesh's CPU positions. v1 retains CPU positions for loaded meshes;
-procedural primitives may expose bounds only until their CPU data is wired in. If a mesh has no CPU
-positions, `GetRayMesh` throws `NotSupportedException` rather than returning a false miss.
-
-Collision helpers are pure math and thread-safe. They do not query the renderer or the scene.
+- `CheckSpheres`, `CheckBoxes`, and `CheckBoxSphere` are inclusive: touching counts as a collision,
+  and a zero radius is a point. A negative radius or a NaN input reports `false`. A center inside the
+  box always collides.
+- Every ray query returns the nearest hit with `t >= 0`. An origin inside a sphere or a box returns
+  the exit point with the outward normal. `GetRayTriangle` is double-sided and reports the normalized
+  geometric normal `cross(b - a, c - a)`, which is not flipped toward the ray; a degenerate triangle
+  is a miss. `GetRayPlane` normalizes `Plane.Normal` and misses when the ray is parallel to the plane,
+  including when it lies in the plane. Tangency and touching a face at `t = 0` count as hits.
+- `RayCollision.Distance` is the ray parameter `t` in `origin + direction * t`: a world distance when
+  the direction is normalized. `Ray.Direction` is expected to be normalized and
+  `Camera.ScreenToWorldRay` returns a normalized direction, but the queries accept any non-zero
+  direction and then report `t` in that direction's units.
+- A miss is `default(RayCollision)`: `Hit` is false and every other member is zero.
+- The `Check*` helpers and the primitive ray casts never throw for numeric input, including negative
+  and non-finite values; a NaN input reports no collision or a miss. They are pure math,
+  allocation-free, and safe on any thread. They do not query the renderer or the scene. `GetRayMesh`
+  validates its mesh and transform as described below and throws for those contract violations.
+- `GetRayMesh` supports triangle-list and triangle-strip meshes. It throws `NotSupportedException` for
+  a line, line-strip, or point topology, `ArgumentException` for a singular transform, and
+  `ArgumentNullException`/`ObjectDisposedException` for the mesh. The transform is mesh-to-world under
+  the row-vector convention: the query transforms the ray into mesh space, keeps the nearest triangle,
+  and maps the point back with `Vector3.Transform(point, transform)` and the normal with the
+  inverse-transpose (`Vector3.TransformNormal(normal, Matrix4x4.Transpose(inverse))`). `Distance` is
+  the mesh-space ray parameter, which equals the world parameter along the given world direction.
+- `GetRayMesh` traverses the mesh's immutable collision acceleration structure when it has one and
+  tests every retained triangle otherwise; both paths return the same nearest hit. A mesh built with
+  `MeshBuilder.GenerateCollisions()` and a mesh loaded from a pack whose descriptor names a baked
+  `RBVC` v1 collision payload have one; `Mesh.HasCollisionAcceleration` reports it, and a mesh
+  without one still supports `GetRayMesh` through the brute-force path. The structure is CPU-only,
+  immutable, and safe to query from any thread.
 
 ### 5.6 Vector and quaternion extensions
 

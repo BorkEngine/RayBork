@@ -24,9 +24,20 @@ A model descriptor requires a canonical shader path on every part. The pre-relea
 retired default model shader and the runtime null-path default are removed, so repack older model
 packs; the bake writes `shaders/mesh` for a part with no authored `[model] shader`.
 
+The ray-mesh collision payload is additive to pack v1. A mesh descriptor may carry the optional
+`CollisionPayload` member naming a sibling `<mesh>-collision` raw entry in the `RBVC` v1 format;
+both the member and the entry are optional, and the entry is an ordinary raw payload, so v1 remains
+the only pack format. A pack baked without the member loads normally: its meshes have no collision
+acceleration structure, and `Collision.GetRayMesh` brute-forces the retained CPU triangles.
+
 The custom loader registration API is additive: `IAssetLoader<T>`, `AssetLoadContext`,
 `AssetEntryType`, and `RayBorkAppBuilder.WithAssetLoader<T>` extend the asset surface without
 changing `Load<T>`, and `WithAssetType<T>()` remains the MessagePack custom-data sugar.
+
+The M5 collision surface is additive as well: `MeshBuilder.GenerateCollisions` adds the procedural
+opt-in, and `Mesh.HasCollisionAcceleration` exposes whether a mesh carries the structure, without
+changing `Mesh`, `MeshBuilder.BuildAsync`, or `Load<T>` semantics. A mesh without a structure keeps
+working through the brute-force ray/mesh path.
 
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a

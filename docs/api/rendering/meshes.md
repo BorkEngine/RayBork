@@ -14,6 +14,7 @@ public sealed class Mesh : IAsset {
     public int VertexCount { get; }
     public int IndexCount { get; }
     public BoundingBox Bounds { get; }
+    public bool HasCollisionAcceleration { get; }
     public bool IsDisposed { get; }
 
     public void Dispose();
@@ -56,6 +57,7 @@ public sealed class MeshBuilder {
     public void ComputeNormals(MeshNormalMode mode = MeshNormalMode.Smooth);
     public void ComputeTangents();
     public BoundingBox ComputeBounds();
+    public void GenerateCollisions();
 
     public Task<Mesh> BuildAsync(CancellationToken cancellationToken = default);
 }
@@ -96,7 +98,7 @@ public enum PrimitiveTopology {
 }
 ```
 
-> **M4 realized.** M4 ships `Model` and `ModelPart` as a composition API: `IAssetCatalog.Load<Model>`
+> **As built.** `Model` and `ModelPart` are a composition API: `IAssetCatalog.Load<Model>`
 > loads a packed model descriptor and every part's mesh, creates one material per part over the cached
 > internal program, and returns a **new `Model` wrapper per call**. `Model` is not an `IAsset`: it has
 > no path, no catalog cache entry, and no shared identity. A part with no `[model] shader` in its
@@ -104,6 +106,11 @@ public enum PrimitiveTopology {
 > descriptor to carry a canonical shader path and has no runtime default, so a descriptor with a
 > missing or stale path fails to load. A model draw uses each part material's current uniform cursor
 > and texture bindings; there is no shader-override draw overload.
+>
+> A mesh's descriptor may also name a baked ray-mesh collision payload. The loader decodes and
+> validates it before the GPU upload and fails the load when it is missing or corrupt; a mesh whose
+> descriptor has no such member loads without an acceleration structure and brute-forces its
+> retained triangles.
 
 - `Mesh` is one primitive: one vertex/index buffer pair and one topology. It is immutable after load
   or build. `Bounds` is in mesh space. The fixed 88-byte vertex layout is position, normal, uv,
@@ -113,6 +120,14 @@ public enum PrimitiveTopology {
 - `Vertices` and `Indices` expose a read-only CPU copy for both loaded and procedural meshes. A
   loaded mesh decodes the arrays from the packed payload; a procedural mesh returns the builder's
   snapshot. The arrays stay valid until the mesh is disposed. Textures do not keep CPU pixels.
+- `HasCollisionAcceleration` reports whether the mesh carries an immutable ray-mesh acceleration
+  structure. A procedural mesh has one only when `GenerateCollisions` was called before the build
+  that produced it. A loaded mesh has one when its descriptor names a baked `RBVC` v1 collision
+  payload; the loader decodes and validates that payload before the GPU upload, and a missing,
+  corrupt, or mismatched payload fails the load with `AssetLoadException` `ASSET_LOAD_FAILED` naming
+  the mesh. A descriptor baked before the member existed loads with no structure and brute-forces.
+  The structure is immutable, is not disposed with the mesh, and is safe to query from any thread.
+  The property throws `ObjectDisposedException` after disposal.
 - `Mesh` is one-shot. Changing a `MeshBuilder` after `BuildAsync` does not change any mesh already
   built from it; the builder can be reused to build another mesh.
 
@@ -152,6 +167,15 @@ Mesh mesh = await builder.BuildAsync();
   again after editing positions.
 - Normal and tangent generation support triangle topologies only. Line and point meshes are valid
   for `BuildAsync` but have no generated normals or tangents.
+- `GenerateCollisions()` opts a procedural build into a ray-mesh acceleration structure. It is an
+  imperative builder step like `ComputeNormals`: it changes no geometry, is idempotent, and the
+  selection persists for every later `BuildAsync` from that builder. `BuildAsync` builds the
+  structure from the same snapshot it validates and uploads, before the GPU upload, and returns a
+  mesh whose `HasCollisionAcceleration` is `true`. A snapshot with no non-degenerate triangle builds
+  without a structure. A failed or canceled build creates no asset, keeps the builder reusable, and
+  never lets a later geometry change affect a structure already attached to a mesh. Only
+  triangle-list and triangle-strip builders accept it; any other topology throws
+  `NotSupportedException`.
 - `Model` is a flat list of parts. It has no node hierarchy in v1; glTF node transforms are baked
   into each part's `LocalTransform`. `Bounds` is the union of the part bounds. glTF 2.0 and OBJ are
   converted to this packed engine format by the bake; the runtime never parses them.
@@ -187,4 +211,7 @@ Mesh mesh = await builder.BuildAsync();
   owner. A frame that recorded the model keeps the part meshes, internal programs, and bound textures
   alive through its frame retention set; the model and material objects are not engine assets and add
   no frame hold.
-- Meshes keep their CPU vertices for collision and bounds in v1. Textures do not keep CPU pixels.
+- Meshes keep their CPU vertices and indices for collision and bounds in v1;
+  `Collision.GetRayMesh` reads them directly when the mesh has no acceleration structure. The
+  collision structure and its baked payload are CPU-only: they add no GPU resource, frame hold, or
+  device-recovery work. Textures do not keep CPU pixels.

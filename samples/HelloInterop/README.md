@@ -4,8 +4,9 @@
 and `Shutdown` on the tick thread, and exercises the Vulkan 1.2 renderer end to end: the renderer
 clears the linear HDR scene target, the present pass applies `--tonemapping` and `--exposure`, MSAA
 is resolved before presentation, and the swapchain prefers an HDR (scRGB) format when the OS/window
-HDR state is enabled and falls back to the SDR path otherwise. The M4 AOT gate is
-[samples/Castle](../Castle/README.md); this host intentionally has no camera or draw calls.
+HDR state is enabled and falls back to the SDR path otherwise. The milestone AOT gate is
+[samples/PrimitiveGallery](../PrimitiveGallery/README.md); `samples/Castle` was the M4 gate and
+remains a buildable and publishable sample. This host intentionally has no camera or draw calls.
 
 The host logs the renderer, GPU, and presentation state selected at startup, the effective MSAA
 sample count and present mode after fallback, per-second `RenderStats` lines, one final statistics
@@ -33,11 +34,12 @@ registered custom data:
 | `HelloSettings` | `/data/hello` | `Name` and `Difficulty` from the registered TOML data type. |
 
 The host stores the three engine assets and disposes them in `Shutdown` on the tick thread. This
-diagnostic host does not draw even though M4 ships the camera and draw API; the draw gate is
-[samples/Castle](../Castle/README.md). The M2 renderer-only behavior is unchanged when no pack is
-mounted. The custom data type is registered with `WithAssetType<HelloSettings>()`, which is backed
-by the compiled `[GenerateShape]` in `HelloSettings.cs`, so the load path stays reflection-free and
-Native AOT compatible. See [docs/api/assets.md](../../docs/api/assets.md) §6 and
+diagnostic host does not draw even though the M4 camera and draw API and the M5 primitive helpers
+exist; the current draw gate is [samples/PrimitiveGallery](../PrimitiveGallery/README.md). The M2
+renderer-only behavior is unchanged when no pack is mounted. The custom data type is registered with
+`WithAssetType<HelloSettings>()`, which is backed by the compiled `[GenerateShape]` in
+`HelloSettings.cs`, so the load path stays reflection-free and Native AOT compatible. See
+[docs/api/assets.md](../../docs/api/assets.md) §6 and
 [docs/api/aot.md](../../docs/api/aot.md) §12.
 
 `Setup` also builds one procedural mesh and one procedural texture through the M3 builders, whether
@@ -201,7 +203,7 @@ samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --fram
 The publish must finish with zero AOT/trim warnings, its directory must contain `hello.pck` beside
 the executable, and the published host must exit `0` after mounting the adjacent pack, loading the
 texture, mesh, shader, and custom data, and presenting 30 frames. This is the diagnostic-host
-publish; the M4 per-milestone AOT gate is `samples/Castle`.
+publish; the per-milestone AOT gate is `samples/PrimitiveGallery`.
 
 ## WSL Linux Native AOT
 
@@ -226,5 +228,5 @@ a desktop session or under WSLg instead.
 
 Publish output is generated under `samples/HelloInterop/bin/` and is gitignored. Both publishes must
 finish with zero AOT/trim warnings. This host remains the M1-M3 diagnostic host; the per-milestone
-gate is [samples/Castle](../Castle/README.md) and the gate commands are in
+gate is [samples/PrimitiveGallery](../PrimitiveGallery/README.md) and the gate process is in
 [AGENTS.md](../../AGENTS.md) §4.

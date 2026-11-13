@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M4 as-built**, 2026-11-12. M0-M4 are shipped. Milestones are ordered by
+Status: **v0.1 M5 as-built**, 2026-11-13. M0-M5 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -401,25 +401,27 @@ automatic instancing, and per-instance textures/uniforms.
   peak. It is disabled when the headroom is at most one or when `TonemappingMode.None` is selected.
   SDR windows keep paper white and peak at `1`, so their image is unchanged from M2, and `None`
   remains the direct HDR authoring path.
-- **Castle AOT gate.** `samples/Castle` and `samples/Castle/Castle.Assets` are the per-milestone AOT
-  gate. The sample owns `samples/Castle/Castle.slnx`; it is not part of `src/RayBork/RayBork.slnx`.
-  The sample build invokes the JIT assets executable out of process without the sample's publish
-  settings, bakes `castle.pck` from the checked-in raylib castle OBJ, its diffuse texture, and the
-  model sidecar, and copies the pack beside the sample executable; the publish also copies it into
-  the publish directory. The published `win-x64` and `linux-x64` hosts load the adjacent pack with no
-  `--assets` argument, draw the unlit castle model with the built-in mesh shader, and must exit `0`
-  on the Windows hardware driver, native Linux, and the WSLg dzn hardware path. The sample is a plain
-  user-facing example and contains no test-only draw assertion.
+- **Castle AOT gate.** `samples/Castle` and `samples/Castle/Castle.Assets` were the M4
+  per-milestone AOT gate. The sample owns `samples/Castle/Castle.slnx`; it is not part of
+  `src/RayBork/RayBork.slnx`. The sample build invokes the JIT assets executable out of process
+  without the sample's publish settings, bakes `castle.pck` from the checked-in raylib castle OBJ,
+  its diffuse texture, and the model sidecar, and copies the pack beside the sample executable; the
+  publish also copies it into the publish directory. The published `win-x64` and `linux-x64` hosts
+  load the adjacent pack with no `--assets` argument, draw the unlit castle model with the built-in
+  mesh shader, and must exit `0` on the Windows hardware driver, native Linux, and the WSLg dzn
+  hardware path. The sample is a plain user-facing example and contains no test-only draw assertion.
   `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
   diagnostic host.
 - **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
-  texture, and an orbital camera. It deliberately leaves out features that need later milestones:
-  the reference XZ grid (`DrawGrid` arrives in M5), model/texture drag-and-drop (post-1.0 platform
-  work), click selection and `DrawBoundingBox` (ray/box collision and the wire-box helper arrive in
-  M5), and the `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The model and its diffuse
-  texture are drawn with the built-in `/shaders/mesh` material that the loaded model owns; there is
-  no custom Castle shader. The sample draws only the castle; render statistics are available to
-  games but are not drawn. The castle model and texture are
+  texture, an orbital camera, and the reference XZ grid. It deliberately leaves out features that
+  need later milestones: model/texture drag-and-drop (post-1.0 platform work), click selection and a
+  wire-box overlay (the engine ships `Collision.GetRayBox` and `Camera.DrawWireCube`; there is no
+  public `DrawBoundingBox`, and the sample does not implement selection), and the
+  `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The grid is
+  `DrawGrid(20, 10f, Color.Gray)` in the same opaque, depth-tested pass as the castle. The model and
+  its diffuse texture are drawn with the built-in `/shaders/mesh` material that the loaded model
+  owns; there is no custom Castle shader. The sample draws only the castle and its grid; render
+  statistics are available to games but are not drawn. The castle model and texture are
   sample-only assets with their own notice under `samples/Castle/`; that notice is deliberately not
   duplicated in the repository-root notices.
 - **WSLg dzn compatibility.** On the WSL gate host WSLg selects
@@ -473,6 +475,139 @@ device selection instead of clamping silently.
 - All helpers batch with the same rules as user draws; stats reflect it.
 - Castle uses `DrawGrid` for the raylib reference grid.
 - Native AOT publish runs the gallery on Windows and Linux.
+
+**As-built notes.** M5 shipped the planned scope plus one approved addition, the ray-mesh
+acceleration structure and its baked payload:
+
+- **Primitive helpers and representation.** `Camera` ships 13 helpers. `DrawLine` maps the engine's
+  unit line mesh from `(0,0,0)`–`(1,0,0)` to the segment. `DrawLines` records one instance per
+  non-zero consecutive point pair, so a polyline of `N` points records `N - 1` segments. `DrawPoint`
+  is a camera-facing quad of `size` world units, which avoids Vulkan point-size limits.
+  `DrawTriangle` maps the unit reference triangle under the affine map that preserves orientation,
+  so a triangle that is counter-clockwise as seen by the camera keeps its front face and a clockwise
+  one is culled. `DrawCube` and `DrawWireCube` scale the unit cube by `size` around `position`;
+  `DrawSphere` scales the unit UV sphere (`32` slices by `16` rings, no LOD); `DrawCylinder` records
+  `sides` side quads plus `2 * sides` cap triangles with the base cap at `position` and the axis
+  along world `+Y`; `DrawPlane` scales the `XZ` unit plane, whose front faces world `+Y`.
+  `DrawWireSphere` is three great circles of line geometry. `DrawBillboard` is a centered quad that
+  faces the camera, or keeps world up and the camera yaw when `faceCamera` is `false`. Every helper
+  but `DrawTexture` works in world space; each mesh is a unit reference so the instance transform
+  carries the shape. The eight meshes are engine-owned, built once before `IGame.Setup` through the
+  procedural GPU bridge from deterministic CPU geometry, and are not public assets.
+- **Programs and render states.** Shapes and lines record against the built-in
+  `/shaders/primitive` program, which consumes vertex position and linear color only and has no
+  uniforms or textures; its vertex stage multiplies the vertex color by the per-instance tint and
+  its fragment stage writes that color. Its default state is opaque, back-face culling,
+  `greater_equal`, depth write. Billboards and textured quads use the built-in `/shaders/mesh`
+  program with state overrides: billboards use `RenderState.AlphaBlend`, and `DrawTexture` uses alpha
+  blending with `Cull.None`, `DepthTest.Always`, and no depth write. The engine material's texture
+  binding is set only around the recorded call and cleared immediately afterwards, and the frame
+  record retains the texture. `EngineDefaults` is unchanged: it still exposes only
+  `CreateMeshShader`, `White`, and `Error`. `/shaders/primitive` is an ordinary built-in shader
+  entry, so a game can load a material over it by path for its own vertex-color meshes; the primitive
+  meshes have no public accessor.
+- **Validation.** A non-finite numeric argument throws `ArgumentException`; a negative extent,
+  radius, height, width, or point size throws `ArgumentOutOfRangeException`; an exactly zero extent,
+  radius, height, segment length, or destination width/height records nothing. `sides < 3`,
+  `slices < 1`, and `spacing <= 0` throw `ArgumentOutOfRangeException`, and no helper substitutes a
+  default tessellation. A null texture is `ArgumentNullException`; a disposed texture, camera, or
+  primitive asset is `ObjectDisposedException`. A missing primitive-asset set is
+  `InvalidOperationException`, and every helper is tick-thread only. Colors are linear `Color`
+  values; the per-instance tint is `rbInstance.Color`, and the shader multiplies it into the vertex
+  color. Validation runs before any retention or record mutation, so a rejected call leaves the
+  frame packet untouched.
+- **Batching and statistics.** Helpers record ordinary draw records, so they batch under the existing
+  `(mesh, program, effective render state)` key and follow the same culling, sorting, and stats.
+  Line topology contributes zero triangles; `DrawPoint` is a camera-facing quad, so it contributes
+  the quad's two triangles. `DrawCylinder` is two instanced draws (side quads and cap triangles)
+  because the two shapes are different meshes. `DrawLines` and `DrawGrid` are one instanced line draw
+  each. Billboard and overlay render states differ from each other and from the primitive program's
+  state, so they never merge with one another or with shape draws; reusing the same program does not
+  merge different meshes.
+- **Collision contract.** `Collision.CheckSpheres`, `CheckBoxes`, and `CheckBoxSphere` are inclusive
+  and allocation-free: touching counts, a zero radius is a point, and a negative radius or a NaN
+  input reports no collision. Ray queries return the nearest `t >= 0`; an origin inside a sphere or
+  box returns the exit point with the outward normal. Triangle queries are double-sided and report
+  the normalized geometric normal, which is not flipped toward the ray; a degenerate triangle is a
+  miss. A ray/plane query normalizes the plane normal and misses when the ray is parallel, including
+  when it lies in the plane. `RayCollision.Distance` is the ray parameter, which is a world distance
+  only for a normalized direction, and a miss is `default(RayCollision)`. `GetRayMesh` supports
+  triangle lists and strips, throws `NotSupportedException` for line and point topologies,
+  `ArgumentException` for a singular transform, and `ArgumentNullException`/`ObjectDisposedException`
+  for the mesh; it maps the hit through the row-vector mesh-to-world transform, uses the
+  inverse-transpose for the normal, and keeps the nearest hit. The collision helpers never throw for
+  numeric input and are safe on any thread.
+- **Ray-mesh acceleration (the approved scope addition).** The milestone scope retained CPU triangles
+  for raycasts; the shipped implementation also builds a deterministic binary AABB BVH with a binned
+  surface-area heuristic (12 bins), leaves of at most four triangles, 32-byte nodes, and a maximum
+  depth of 64. The structure is built from the retained CPU triangles only and is immutable and
+  thread-safe: a query uses an iterative near-first traversal with a `t` early-out and allocates
+  nothing beyond a `stackalloc` traversal stack. `Collision.GetRayMesh` traverses the structure when
+  the mesh has one and brute-forces the retained triangles otherwise; both paths select and report
+  the same nearest triangle. `Mesh.HasCollisionAcceleration` reports whether a mesh has one and
+  throws after disposal; there is no public BVH type and no query API beyond `GetRayMesh`.
+- **Baked collision payloads.** The model processor writes a sibling raw entry
+  `<mesh path>-collision` for every triangle part by default and records it in the optional
+  `MeshAssetDescriptor.CollisionPayload` member of that mesh's descriptor. A `[model]` sidecar with
+  `collisions = false` opts the whole source out; line and point parts and parts with no
+  non-degenerate triangle get no entry. A payload above 4 MiB emits an `RB4009` warning that names
+  the part and the opt-out. The payload is the `RBVC` format v1: a 24-byte little-endian header
+  (magic `RBVC`, format version, topology, node count, triangle-id count, canonical triangle count),
+  then 32-byte node entries (six floats and two 32-bit integers) and 32-bit triangle ids, written
+  with 16-byte alignment as a raw entry. The loader decodes the descriptor, decodes and validates the
+  payload, and only then queues the GPU upload; a missing entry, a corrupt payload, a topology
+  mismatch, or a canonical-count mismatch fails the mesh load with `AssetLoadException`
+  `ASSET_LOAD_FAILED` naming the mesh. A descriptor baked before the member existed has no
+  `CollisionPayload`, loads with no structure, and brute-forces. The incremental cache is invalidated
+  by the built-in processor configuration marker, so an old bake cache is not reused for output that
+  gained collision payloads. The payload is CPU-only: it does not affect GPU resources, frame
+  retention, device recovery, or the batching path.
+- **Procedural opt-in.** `MeshBuilder.GenerateCollisions()` is the procedural opt-in. It is an
+  imperative builder step like `ComputeNormals`, does not mutate geometry, is idempotent, and
+  persists for every later build from that builder. `BuildAsync` builds the structure from the same
+  snapshot it validates and uploads, before the GPU upload, and exposes it through
+  `Mesh.HasCollisionAcceleration`. The method and the build accept triangle topologies only and
+  throw `NotSupportedException` otherwise. A snapshot with no non-degenerate triangle builds without
+  a structure, and a failed or canceled build creates no asset and leaves the builder reusable.
+- **Overlay matrix and screen-space contract.** `DrawTexture` takes its destination rectangle in
+  render pixels relative to the camera viewport, with a top-left origin and Y increasing downward.
+  The helper computes the destination rectangle's NDC corners at depth `0.5`, unprojects each
+  through the inverse view-projection matrix with the homogeneous divide, and builds an affine
+  world-space matrix that maps the engine unit quad onto that unprojected parallelogram: the
+  translation is the quad's world center, the axes are the unprojected edges, and the third axis is
+  their cross-product normal. The matrix has a zero projective column (`M14 = M24 = M34 = 0`,
+  `M44 = 1`), which matters because the batcher's `Vector3.Transform` bounds and its raw
+  translation depth assume an affine instance matrix: the overlay's AABB is the real world-space
+  quad in front of the camera, so the instance is not frustum-culled for a translated or rotated
+  perspective camera. The projected rectangle is pixel-exact for perspective and orthographic
+  cameras, and the quad's top-left UV lands on the destination top-left corner. The recorded state
+  is an overlay: alpha blended, no depth write, `DepthTest.Always`, and `Cull.None`, so it covers
+  scene geometry and is not covered by it. The helper retains the texture for the frame and leaves
+  the engine material's binding empty.
+- **Primitive gallery AOT gate.** `samples/PrimitiveGallery` is a single-project self-contained
+  solution, `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It
+  has no assets executable and no pack; `Setup` builds its one `128x128` `Rgba8Srgb` checker texture
+  with `CreateTextureBuilder`. It draws every M5 helper in one perspective pass at 800x450, uses
+  orbit controls, and accepts `--frames` and `--help`. The published `win-x64` and `linux-x64` hosts
+  run from the publish directory with zero AOT/trim warnings, and the publish directory contains no
+  bake tooling. The sample is a plain user-facing example and contains no test-only draw assertion.
+- **Expected validation warnings.** The validation layer reports two performance warnings on the
+  gate path; neither is an error and neither fails the gate. The fixed vertex layout declares
+  attributes a shader does not consume, and the primitive program's vertex stage writes the engine
+  instance-index varying that its fragment stage never reads, because that stage needs no
+  per-instance data. The draw tests assert that no validation *errors* are recorded.
+- **Castle and the M4 forward references.** `samples/Castle` keeps its orbitable scene and adds
+  `DrawGrid(20, 10f, Color.Gray)` under the model in the same opaque, depth-tested pass, so the
+  reference XZ grid is no longer deferred. Two M4 forward references are corrected: the grid ships
+  in M5, and the planned click-selection/`DrawBoundingBox` work does not — the engine ships
+  `Collision.GetRayBox` and `Camera.DrawWireCube`, but there is no public `DrawBoundingBox`, and the
+  sample does not implement selection. Castle remains a buildable and publishable sample; the M5 AOT
+  gate is the gallery. The M4 limitation of one `rbFrame` block per frame slot is unchanged by M5.
+
+**Risks.** The collision structure is CPU memory retained for the mesh lifetime, about 20 bytes per
+non-degenerate triangle at a leaf size of four (32-byte nodes plus the canonical triangle ids). The
+`collisions = false` sidecar opt-out avoids that bake cost, and a mesh without a structure still
+queries correctly by brute-forcing the retained triangles.
 
 ### M6 — Text and runtime MSDF
 
@@ -731,7 +866,7 @@ The matrix is the scope contract.
 | Gamepad | Covered | M1, M9 | Basic in M1; hotplug/rumble in M9. |
 | Touch | Post | — | Post-1.0. |
 | Text/fonts | Covered | M6 | Runtime MSDF; Latin-style shaping; no bidi/complex scripts. |
-| Textures | Covered | M3, M8 | Loaded textures and HDR/MSAA render targets. |
+| Textures | Covered | M3, M5, M8 | Loaded textures, screen-space `DrawTexture` quads, and HDR/MSAA render targets. |
 | Images | Partial | M3 | Bake decodes; no runtime image manipulation API. |
 | Models | Covered | M4 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes. |
 | Custom data | Covered | M3 | TOML data with `[GenerateShape]`; `WithAssetType<T>` then `Load<T>`. |
@@ -783,6 +918,14 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
 - **No golden-image suite.** Renderer tests assert validation-layer cleanliness, draw/instance
   counts, readback values with explicit tolerances, and crash/leak behavior. Stable numeric probes
   may read a small region, but there is no committed reference-image corpus.
+- M5 adds the primitive draw GPU suite (`PrimitiveDrawGpuTests`), which records the production
+  `Camera` helpers over the real built-in primitive assets and submits them through the Vulkan
+  backend. It asserts validation-layer cleanliness, draw/instance/triangle statistics and the plan's
+  topology, and single-pixel linear scene-target probes for a one-pixel line row, solid-shape tint,
+  plane back-face culling, triangle winding versus culling, billboard and screen-space quad
+  orientation for perspective and orthographic cameras, and overlay-versus-depth ordering. The
+  collision queries and the BVH are covered by deterministic unit tests, including
+  accelerated-versus-brute-force equivalence, and the baked payload by codec and loader tests.
 - The architecture tests enforce the dependency rules, the no-native/backend-types-in-public-API
   rule, and the absence of a public `Material`.
 - CI runs on Windows and WSL/Linux. The WSL job uses the hardware Vulkan path when available and
@@ -795,7 +938,8 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
 - XML docs on every public member; warnings-as-errors for missing docs on public API.
 - The API reference is updated in the same PR as a public API change.
 - Each sample has a README with build/bake/run/publish steps.
-- The shader ABI has a standalone guide once M4 stabilizes the generated identifiers.
+- The shader ABI has a standalone guide in [Rendering: Shaders](api/rendering/shaders.md#74-shader-abi);
+  the generated identifiers are stable for v1.
 - Release notes include a migration section for breaking changes.
 
 ### 7.4 Performance
@@ -842,7 +986,7 @@ removed from the release notes rather than weakened silently.
 | Managed font/MSDF library | Quality or performance miss; AOT/packaging surprises | Benchmark early; keep native fallback scoped; fuzz parser | M6 |
 | SDL3-CS maturity | Missing binding, packaging gap, AOT issue | Pin and test per RID in M0; thin hand-written fallback for used functions | M0/M1 |
 | Renderer seam abstraction cost | Over-abstraction slows the Vulkan path | Keep the seam at frame/resource granularity; no per-draw virtual calls | M2/M10 |
-| Threading/lifetime bugs | Races, use-after-free, intermittent crashes | Frame retention, tick-affinity rules, stress suite, validation, deterministic shutdown order | M1-M4 |
+| Threading/lifetime bugs | Races, use-after-free, intermittent crashes | Frame retention, tick-affinity rules, stress suite, validation, deterministic shutdown order | M1-M5 |
 | Reverse-Z custom projections | Depth bugs in user code | One engine projection path, tests, documentation; no public OpenGL-style helper | M2/M4 |
 | Asset refcount/double dispose | Leaks or premature destruction | Exactly-once contract, debug checks, frame retention | M3 |
 | GPU CI availability | Renderer changes untested | Offscreen tests, lavapipe fallback, numeric probes, explicit skip policy | M0/M2 |

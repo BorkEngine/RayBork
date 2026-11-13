@@ -250,8 +250,8 @@ A `viewport` of `null` means the full window render size. A non-null viewport is
 target; an invalid, non-finite, or empty result is `ArgumentException`. The camera's `Viewport`
 reports the clamped rectangle and the projection aspect uses it.
 
-In M4, `CreateCamera` and `CreateOrthographicCamera` have no `target` parameter and record into the
-app's HDR scene target. The present pass applies AgX and writes to the swapchain after the cameras
+`CreateCamera` and `CreateOrthographicCamera` have no `target` parameter and record into the app's
+HDR scene target. The present pass applies AgX and writes to the swapchain after the cameras
 finish. The `RenderTexture` target parameter arrives in M8; a camera with a `RenderTexture` target
 writes to that target and can be sampled by a later camera.
 
