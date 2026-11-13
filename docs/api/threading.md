@@ -13,6 +13,7 @@
 | `Shader` uniform cursor | Tick thread | `SetUniform`/`ResetUniforms` |
 | `Font` glyph cache | Tick thread | `Preload`, lazy glyph generation |
 | `RenderTexture` handle | Tick thread | Create/dispose/resize; GPU work is deferred |
+| `EngineContext.Tonemapping` | Tick thread | Read/write during `Setup`, `Tick`, or `Shutdown`; the values are sealed into each frame |
 | `IInput` | Tick thread | Read the current snapshot |
 | `IWindow` setters | Any thread | Queued to the main thread |
 | `IWindow` getters | Any thread | Last confirmed snapshot |

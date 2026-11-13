@@ -153,6 +153,7 @@ RayBork.EngineContext.MaxDeltaTime.get -> double
 RayBork.EngineContext.RequestExit() -> void
 RayBork.EngineContext.Stats.get -> RayBork.RenderStats
 RayBork.EngineContext.Time.get -> double
+RayBork.EngineContext.Tonemapping.get -> RayBork.TonemappingSettings!
 RayBork.EngineContext.UnscaledDeltaTime.get -> double
 RayBork.EngineContext.Window.get -> RayBork.IWindow!
 RayBork.EngineDefaults
@@ -643,6 +644,8 @@ RayBork.Ray.Origin.get -> System.Numerics.Vector3
 RayBork.Ray.Origin.init -> void
 RayBork.Ray.Ray() -> void
 RayBork.Ray.Ray(System.Numerics.Vector3 Origin, System.Numerics.Vector3 Direction) -> void
+RayBork.RayBorkAppBuilder.WithAgxContrast(float contrast = 1.25) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithAgxWhite(float white = 16.29) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetsPack(string! path) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetsPacks(params string![]! paths) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetLoader<T>(RayBork.IAssetLoader<T>! loader) -> RayBork.RayBorkAppBuilder!
@@ -809,6 +812,13 @@ RayBork.TextureWrap.Repeat = 0 -> RayBork.TextureWrap
 RayBork.TonemappingMode
 RayBork.TonemappingMode.AgX = 0 -> RayBork.TonemappingMode
 RayBork.TonemappingMode.None = 1 -> RayBork.TonemappingMode
+RayBork.TonemappingSettings
+RayBork.TonemappingSettings.AgxContrast.get -> float
+RayBork.TonemappingSettings.AgxContrast.set -> void
+RayBork.TonemappingSettings.AgxWhite.get -> float
+RayBork.TonemappingSettings.AgxWhite.set -> void
+RayBork.TonemappingSettings.Exposure.get -> float
+RayBork.TonemappingSettings.Exposure.set -> void
 RayBork.Transform
 RayBork.Transform.Forward.get -> System.Numerics.Vector3
 RayBork.Transform.Inverse() -> RayBork.Transform

@@ -44,6 +44,8 @@ public sealed class RayBorkAppBuilder {
     private int _sampleCount = DEFAULT_SAMPLE_COUNT;
     private TonemappingMode _tonemapping = DEFAULT_TONEMAPPING;
     private float _exposure = DEFAULT_EXPOSURE;
+    private float _agxWhite = AgxToneMap.DEFAULT_AGX_WHITE;
+    private float _agxContrast = AgxToneMap.DEFAULT_AGX_CONTRAST;
     private bool _validationEnabled = DEFAULT_VALIDATION_ENABLED;
     private int _targetFps = DEFAULT_TARGET_FPS;
     private WindowState _windowState = DEFAULT_WINDOW_STATE;
@@ -300,7 +302,9 @@ public sealed class RayBorkAppBuilder {
     }
 
     /// <summary>
-    /// Sets the tone mapping applied by the present pass.
+    /// Sets the startup tone mapping applied by the present pass. The mode is fixed for the app
+    /// lifetime; <see cref="EngineContext.Tonemapping"/> changes the exposure, AgX white, and AgX
+    /// contrast at runtime.
     /// </summary>
     /// <param name="mode">A defined <see cref="TonemappingMode"/> value. The default is
     /// <see cref="TonemappingMode.AgX"/>.</param>
@@ -318,7 +322,8 @@ public sealed class RayBorkAppBuilder {
     }
 
     /// <summary>
-    /// Sets the exposure applied before tone mapping.
+    /// Sets the initial runtime exposure applied before tone mapping. The game can change it while it
+    /// runs through <see cref="EngineContext.Tonemapping"/>.
     /// </summary>
     /// <param name="ev">The exposure in stops. It must be finite; <c>0</c> is neutral and <c>+1</c>
     /// doubles linear exposure.</param>
@@ -332,6 +337,56 @@ public sealed class RayBorkAppBuilder {
         }
 
         _exposure = ev;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the initial AgX white that the runtime tone mapping maps to the display maximum. The game
+    /// can change it while it runs through <see cref="EngineContext.Tonemapping"/>.
+    /// </summary>
+    /// <param name="white">
+    /// The scene-linear white before the display headroom scaling. It must be finite and at least
+    /// <c>2</c>. The default is <c>16.29</c>.
+    /// </param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="white"/> is not finite or is less than <c>2</c>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    public RayBorkAppBuilder WithAgxWhite(float white = AgxToneMap.DEFAULT_AGX_WHITE) {
+        ThrowIfBuilt();
+        if (!float.IsFinite(white) || white < AgxCurveParameters.MIN_WHITE) {
+            throw new ArgumentOutOfRangeException(
+                nameof(white),
+                white,
+                "The AgX white must be finite and at least 2.");
+        }
+
+        _agxWhite = white;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the initial AgX curve contrast used by the runtime tone mapping. The game can change it
+    /// while it runs through <see cref="EngineContext.Tonemapping"/>.
+    /// </summary>
+    /// <param name="contrast">The curve contrast. It must be finite and at least <c>1</c>. The default
+    /// is <c>1.25</c>.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="contrast"/> is not finite or is less than <c>1</c>.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    public RayBorkAppBuilder WithAgxContrast(float contrast = AgxToneMap.DEFAULT_AGX_CONTRAST) {
+        ThrowIfBuilt();
+        if (!float.IsFinite(contrast) || contrast < 1f) {
+            throw new ArgumentOutOfRangeException(
+                nameof(contrast),
+                contrast,
+                "The AgX contrast must be finite and at least 1.");
+        }
+
+        _agxContrast = contrast;
         return this;
     }
 
@@ -467,6 +522,8 @@ public sealed class RayBorkAppBuilder {
                 SampleCount = _sampleCount,
                 Tonemapping = _tonemapping,
                 Exposure = _exposure,
+                AgxWhite = _agxWhite,
+                AgxContrast = _agxContrast,
                 ValidationEnabled = _validationEnabled,
             },
             LoggerFactory = _loggerFactory,

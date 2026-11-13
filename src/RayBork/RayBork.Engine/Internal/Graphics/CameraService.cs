@@ -15,8 +15,8 @@ namespace RayBork.Internal;
 /// abandons the frame in both cases.
 /// </para>
 /// <para>
-/// Every member is tick-thread only. The service holds no GPU state; it only builds camera snapshots
-/// and forwards them into the frame packet.
+/// Every member is tick-thread only. The service holds no GPU state; it only builds camera and
+/// tone-mapping snapshots and forwards them into the frame packet.
 /// </para>
 /// </remarks>
 internal sealed class CameraService {
@@ -24,6 +24,7 @@ internal sealed class CameraService {
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
     private PrimitiveAssets? _primitives;
+    private TonemappingSettings? _tonemapping;
     private int _nextCameraNumber;
 
     /// <summary>
@@ -68,6 +69,24 @@ internal sealed class CameraService {
     internal void DetachPrimitives() => _primitives = null;
 
     /// <summary>
+    /// Attaches the app-lifetime runtime tone-mapping settings whose values every sealed frame
+    /// snapshots.
+    /// </summary>
+    /// <param name="tonemapping">The app's tone-mapping settings.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tonemapping"/> is <c>null</c>.</exception>
+    /// <remarks>
+    /// Called by the app on the main thread before the tick thread starts. The service never mutates
+    /// the settings; it reads <see cref="TonemappingSettings.Snapshot"/> when
+    /// <see cref="EndFrame"/> seals a frame. Without an attach, a frame keeps
+    /// <see cref="TonemappingSnapshot.Default"/>, which is the path used by tests and GPU harnesses
+    /// that construct packets directly.
+    /// </remarks>
+    internal void AttachTonemapping(TonemappingSettings tonemapping) {
+        ArgumentNullException.ThrowIfNull(tonemapping);
+        _tonemapping = tonemapping;
+    }
+
+    /// <summary>
     /// Starts recording a frame into <paramref name="packet"/>.
     /// </summary>
     /// <param name="packet">The writable packet acquired from the frame ring.</param>
@@ -88,7 +107,8 @@ internal sealed class CameraService {
     }
 
     /// <summary>
-    /// Ends the recording phase and seals the packet.
+    /// Ends the recording phase and seals the packet. The frame snapshot of the attached runtime
+    /// tone-mapping settings is copied into the packet before it seals.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// A camera created during the frame was not disposed before the tick returned. The exception names
@@ -110,6 +130,9 @@ internal sealed class CameraService {
                     + "returns; the frame was not published.");
         }
 
+        // The frame-wide tone mapping is sealed with the frame: writes made anywhere in Tick are in
+        // effect here, so they apply to this frame's present pass.
+        packet.Tonemapping = _tonemapping?.Snapshot() ?? TonemappingSnapshot.Default;
         packet.Seal();
     }
 

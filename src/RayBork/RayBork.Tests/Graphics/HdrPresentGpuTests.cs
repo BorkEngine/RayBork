@@ -6,8 +6,8 @@ namespace RayBork.Tests;
 
 /// <summary>
 /// Numeric presented-pixel probes for the AgX present path: the SDR image at the default white and
-/// contrast, neutral gray under scRGB HDR, paper white and the display peak at two headrooms, and the
-/// direct <see cref="TonemappingMode.None"/> path.
+/// contrast, neutral gray under scRGB HDR, paper white and the display peak at two headrooms, the
+/// frame's tone-mapping snapshot, and the direct <see cref="TonemappingMode.None"/> path.
 /// </summary>
 /// <remarks>
 /// The probes read the swapchain image the backend presented, so they assert the complete present
@@ -141,6 +141,55 @@ public sealed class HdrPresentGpuTests {
         (float R, float G, float B) presented = PresentAndProbe(host, new Color(1f, 1f, 1f, 1f));
         _output.WriteLine(FormattableString.Invariant(
             $"SDR {host.Backend.Swapchain.Format}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
+
+        if (IsEightBit(host.Backend.Swapchain.Format)) {
+            AssertEightBitSrgbNear(expected.X, presented.R);
+            AssertEightBitSrgbNear(expected.Y, presented.G);
+            AssertEightBitSrgbNear(expected.Z, presented.B);
+        } else {
+            Assert.Equal(expected.X, presented.R, 1e-3);
+            Assert.Equal(expected.Y, presented.G, 1e-3);
+            Assert.Equal(expected.Z, presented.B, 1e-3);
+        }
+
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void FrameSnapshotDrivesThePresentPass() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        const float exposure = 1f;
+        const float agxWhite = 4f;
+        const float agxContrast = 2f;
+        RenderFramePacket packet = BackendPacketTestHelper.CreateClearingPacket(
+            host,
+            1,
+            new Color(1f, 1f, 1f, 1f));
+        packet.Tonemapping = new TonemappingSnapshot(exposure, agxWhite, agxContrast);
+
+        Vector3 expected = AgxToneMap.Present(
+            Vector3.One,
+            MathF.Pow(2f, exposure),
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr,
+            agxWhite: agxWhite,
+            agxContrast: agxContrast);
+        Vector3 startupDefaults = AgxToneMap.Present(
+            Vector3.One,
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr);
+        Assert.True(
+            MathF.Abs(expected.X - startupDefaults.X) > 0.05f,
+            "The frame snapshot must differ from the startup render settings for this probe to prove "
+                + "that the backend reads the packet.");
+
+        (float R, float G, float B) presented = PresentAndProbe(host.Backend, packet);
+        _output.WriteLine(FormattableString.Invariant(
+            $"Frame snapshot exposure={exposure} white={agxWhite} contrast={agxContrast}: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
 
         if (IsEightBit(host.Backend.Swapchain.Format)) {
             AssertEightBitSrgbNear(expected.X, presented.R);
