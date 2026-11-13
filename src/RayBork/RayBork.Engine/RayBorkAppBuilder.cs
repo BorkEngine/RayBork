@@ -198,7 +198,9 @@ public sealed class RayBorkAppBuilder {
         ThrowIfBuilt();
         Type assetType = typeof(T);
         if (!_assetTypes.ContainsKey(assetType)) {
-            _assetTypes.Add(assetType, AssetTypeRegistration.Create<T>());
+            _assetTypes.Add(
+                assetType,
+                new LoaderAssetTypeRegistration<T>(new MessagePackAssetLoader<T>()));
         }
 
         return this;
