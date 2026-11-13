@@ -82,7 +82,7 @@ internal sealed class BakeOutputSink : IAssetOutputSink {
 
         _outputs.Add(new BakedEntry(
             path,
-            RayBork.Internal.AssetEntryType.Raw,
+            AssetEntryType.Raw,
             payload.ToArray(),
             alignment,
             _sourceId));

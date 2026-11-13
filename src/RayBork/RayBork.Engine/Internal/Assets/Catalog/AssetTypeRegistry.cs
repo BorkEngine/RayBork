@@ -68,7 +68,7 @@ internal sealed class AssetTypeRegistry {
     /// <returns>The matching registration.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="assetType"/> is <c>null</c>.</exception>
     /// <exception cref="NotSupportedException">
-    /// The type is not a built-in engine asset, a Shader material, or a registered custom data type.
+    /// The type is not registered for loading.
     /// </exception>
     internal AssetTypeRegistration Get(Type assetType) {
         if (TryGet(assetType, out AssetTypeRegistration? registration)) {
@@ -76,8 +76,8 @@ internal sealed class AssetTypeRegistry {
         }
 
         throw new NotSupportedException(
-            $"The asset type '{assetType.FullName}' is not a built-in engine asset (Mesh, Texture, or "
-                + "Model), a Shader material, or a registered custom data type. Register custom types "
-                + "with WithAssetType<T>() before Build.");
+            $"The asset type '{assetType.FullName}' is not registered for loading. Built-in engine "
+                + "assets are registered by the engine; register a data type with WithAssetType<T>() "
+                + "or a custom loader with WithAssetLoader<T>() before Build.");
     }
 }

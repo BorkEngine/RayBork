@@ -159,6 +159,9 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
 
+`IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
+current asset surface after M4; see §6.
+
 In M1, `EngineContext` exposes **only** `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`,
 `UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and
 `RequestExit`. It has no `Assets`, `Info`, `Stats`, camera, or render-texture members.
@@ -198,6 +201,10 @@ no `Font`, and no primitive/line/billboard/text draw helpers. Clear control is p
 `RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
 `ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
 `InvalidOperationException` naming it, and the frame is not published.
+
+**Current asset surface.** The generic loader registration is a current-surface addition after M4,
+not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
+`RayBorkAppBuilder.WithAssetLoader<T>`. See [Assets §6.7](api/assets.md#67-custom-asset-loaders).
 
 M4 `RenderStats` describes the draw path. `DrawCalls` counts scene submissions after batch splitting
 and excludes the present triangle; `Instances` counts instances that survived culling;

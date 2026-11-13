@@ -305,7 +305,7 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnregisteredTypeThrowsNotSupportedNamingWithAssetType() {
+    public void UnregisteredTypeThrowsNotSupportedNamingBothRegistrationMethods() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
         NotSupportedException thrown = Assert.Throws<NotSupportedException>(
@@ -316,6 +316,7 @@ public sealed class AssetCatalogLoadTests {
             });
 
         Assert.Contains("WithAssetType<T>()", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("WithAssetLoader<T>()", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]

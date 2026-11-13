@@ -273,6 +273,23 @@ public sealed class AssetCatalogFailureTests {
             StringComparison.Ordinal);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ALoaderThatReturnsNullFailsAsAssetLoad() {
+        using CatalogTestHarness harness = new(
+            builtInPack: null,
+            userPacks: [CatalogTestData.BuildStandardPack()],
+            assetTypes: [new LoaderAssetTypeRegistration<CatalogTestSettings>(new NullResultLoader())]);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => harness.Catalog.Load<CatalogTestSettings>(
+                "/data/settings",
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("the registered loader returned no value", thrown.Message, StringComparison.Ordinal);
+    }
+
     private static (GpuAssetBridge Bridge, AssetCatalog Catalog) CreateUnstartedCatalog(string[] paths) {
         GpuAssetBridge bridge = new();
         bridge.AttachWorker(new FakeAssetGpuWorker());
@@ -290,5 +307,12 @@ public sealed class AssetCatalogFailureTests {
 
         public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context)
             => throw new InvalidOperationException("the loader failed on purpose");
+    }
+
+    private sealed class NullResultLoader : IAssetLoader<CatalogTestSettings> {
+        public AssetEntryType EntryType => AssetEntryType.Data;
+
+        public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context)
+            => Task.FromResult<CatalogTestSettings>(null!);
     }
 }

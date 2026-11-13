@@ -136,8 +136,11 @@ public interface IAssetProcessor {
   an error. The bake never creates or rewrites a source sidecar.
 - `Process` runs on the bake thread. It must not retain per-source state between calls.
 - Outputs go through `AssetProcessorContext.Outputs`: `AddAsset<T>` for shaped data and `AddData`
-  for raw payloads. `AddData` takes an alignment of `1`, `16`, `64`, or `256`; GPU payloads use
-  `16` or greater. A processor never writes MessagePack or pack bytes directly.
+  for raw payloads. `AddData` writes a `Raw` entry; `AddAsset<T>` writes an engine descriptor entry
+  for the built-in descriptor types or a MessagePack `Data` entry for any other shaped type.
+  `AddData` takes an alignment of `1`, `16`, `64`, or `256`; GPU payloads use `16` or greater. A
+  custom runtime loader registered with `WithAssetLoader<T>` declares the matching `AssetEntryType`.
+  A processor never writes MessagePack or pack bytes directly.
 - `AssetProcessorContext` exposes the source paths, the canonical base asset path, the output sink,
   the diagnostic sink, and `AddInput(path)`. `AddInput` records a referenced source file, such as a
   shader's GLSL stages, as a tracked input for the incremental manifest; the path is resolved
