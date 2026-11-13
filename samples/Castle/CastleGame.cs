@@ -17,6 +17,8 @@ internal sealed class CastleGame : IGame {
     private const float MIN_DISTANCE = 5f;
     private const float MAX_DISTANCE = 500f;
     private const float MAX_PITCH_DEGREES = 89f;
+    private const int GRID_SLICES = 20;
+    private const float GRID_SPACING = 10f;
 
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
@@ -89,6 +91,10 @@ internal sealed class CastleGame : IGame {
             far: float.PositiveInfinity);
 
         camera.DrawModel(_model!, Transform.Identity, Color.White);
+
+        // raylib's reference grid: 20 slices 10 units apart, centered on the origin where the castle
+        // stands, drawn after the model in the same opaque, depth-tested pass.
+        camera.DrawGrid(GRID_SLICES, GRID_SPACING, Color.Gray);
 
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
