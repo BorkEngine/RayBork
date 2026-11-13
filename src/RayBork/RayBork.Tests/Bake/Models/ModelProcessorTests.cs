@@ -1,6 +1,8 @@
 using System.Numerics;
+using System.Text;
 using RayBork.Bake;
 using RayBork.Bake.Incremental;
+using RayBork.Bake.Processors;
 using RayBork.Internal;
 using RayBork.Tests.Bake.TestInfrastructure;
 
@@ -462,6 +464,243 @@ public sealed class ModelProcessorTests {
         Assert.Equal(1, second.ExitCode);
         Assert.Contains("RB4009", second.Error);
         Assert.Contains("triangle.bin", second.Error);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DefaultCollisionsBakeACollisionPayloadForEveryTrianglePart() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/shapes.obj", ModelTestData.TWO_GROUP_OBJ);
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/shapes");
+        Assert.Equal(2, model.Parts.Length);
+        int[] expectedTriangles = [1, 2];
+        for (int index = 0; index < model.Parts.Length; index++) {
+            ModelPartAsset part = model.Parts[index];
+            MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
+            Assert.Equal(part.MeshPath + "-collision", mesh.CollisionPayload);
+            Assert.True(archive.TryGetEntry(mesh.CollisionPayload!, out PackEntry? entry));
+            Assert.NotNull(entry);
+            Assert.Equal(AssetEntryType.Raw, entry.Type);
+            Assert.Equal(16u, entry.Alignment);
+
+            MeshCollisionData collision = ModelTestData.ReadCollision(
+                archive,
+                part.MeshPath,
+                mesh);
+            Assert.Equal(PrimitiveTopology.TriangleList, collision.Topology);
+            Assert.Equal(expectedTriangles[index], collision.TriangleCount);
+            Assert.Equal(expectedTriangles[index], collision.TriangleIds.Length);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CollisionsOptOutEmitsNoCollisionPayload() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/plaincollision.obj", ModelTestData.SINGLE_TRIANGLE_OBJ);
+        workspace.WriteAsset("models/plaincollision.toml", """
+            [model]
+            collisions = false
+            """);
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/plaincollision");
+        ModelPartAsset part = Assert.Single(model.Parts);
+        MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
+        Assert.Null(mesh.CollisionPayload);
+        Assert.False(archive.TryGetEntry(part.MeshPath + "-collision", out _));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void APartNamedWithTheCollisionSuffixGetsAUniquePath() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/reserved.obj", """
+            o foo
+            v 0 0 0
+            v 1 0 0
+            v 0 1 0
+            f 1 2 3
+            o foo-collision
+            v 2 0 0
+            v 3 0 0
+            v 2 1 0
+            f 4 5 6
+            """);
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/reserved");
+        Assert.Equal(new[] { "foo", "foo-collision-2" }, model.Parts.Select(part => part.Name));
+        Assert.Equal("models/reserved/foo", model.Parts[0].MeshPath);
+        Assert.Equal("models/reserved/foo-collision-2", model.Parts[1].MeshPath);
+
+        MeshAssetDescriptor first = ModelTestData.ReadMesh(archive, model.Parts[0].MeshPath);
+        Assert.Equal("models/reserved/foo-collision", first.CollisionPayload);
+        Assert.True(archive.TryGetEntry("models/reserved/foo-collision", out PackEntry? collisionEntry));
+        Assert.NotNull(collisionEntry);
+        Assert.Equal(AssetEntryType.Raw, collisionEntry.Type);
+
+        MeshAssetDescriptor second = ModelTestData.ReadMesh(archive, model.Parts[1].MeshPath);
+        Assert.Equal("models/reserved/foo-collision-2-mesh", second.Payload);
+        Assert.Equal("models/reserved/foo-collision-2-collision", second.CollisionPayload);
+        Assert.True(archive.TryGetEntry(second.CollisionPayload!, out _));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ADegenerateTrianglePartHasNoCollisionPayload() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/flat.obj", """
+            o flat
+            v 0 0 0
+            v 1 0 0
+            v 2 0 0
+            vn 0 0 1
+            f 1//1 2//1 3//1
+            """);
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/flat");
+        ModelPartAsset part = Assert.Single(model.Parts);
+        MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
+        Assert.Null(mesh.CollisionPayload);
+        Assert.False(archive.TryGetEntry(part.MeshPath + "-collision", out _));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ALinePartHasNoCollisionPayload() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/line.gltf", ModelTestData.LineGltf());
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/line");
+        ModelPartAsset part = Assert.Single(model.Parts);
+        MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
+        Assert.Equal(PrimitiveTopology.LineList, mesh.Topology);
+        Assert.Null(mesh.CollisionPayload);
+        Assert.False(archive.TryGetEntry(part.MeshPath + "-collision", out _));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ChangingTheCollisionsSidecarRebuildsTheCachedPart() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/toggled.obj", ModelTestData.SINGLE_TRIANGLE_OBJ);
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+        Assert.Equal(0, workspace.Run(application).ExitCode);
+
+        string meshPath;
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+            ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/toggled");
+            ModelPartAsset part = Assert.Single(model.Parts);
+            meshPath = part.MeshPath;
+            MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
+            Assert.NotNull(mesh.CollisionPayload);
+        }
+
+        workspace.WriteAsset("models/toggled.toml", """
+            [model]
+            collisions = false
+            """);
+        BakeRunResult optedOut = workspace.Run(application);
+
+        Assert.True(optedOut.ExitCode == 0, optedOut.Error + optedOut.Output);
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+            MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, meshPath);
+            Assert.Null(mesh.CollisionPayload);
+            Assert.False(archive.TryGetEntry(meshPath + "-collision", out _));
+        }
+
+        workspace.WriteAsset("models/toggled.toml", """
+            [model]
+            collisions = true
+            """);
+        BakeRunResult optedIn = workspace.Run(application);
+
+        Assert.True(optedIn.ExitCode == 0, optedIn.Error + optedIn.Output);
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+            MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, meshPath);
+            Assert.Equal(meshPath + "-collision", mesh.CollisionPayload);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ALargeCollisionPayloadWarnsAboutTheSidecarOptOut() {
+        using var workspace = new TempBakeWorkspace();
+        workspace.WriteAsset("models/big.obj", CreateGridObj(340));
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
+
+        BakeRunResult result = workspace.Run(application);
+
+        Assert.True(result.ExitCode == 0, result.Error + result.Output);
+        Assert.Contains("RB4009", result.Error);
+        Assert.Contains("'big'", result.Error, StringComparison.Ordinal);
+        Assert.Contains("collisions = false", result.Error, StringComparison.Ordinal);
+
+        using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
+        ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/big");
+        ModelPartAsset part = Assert.Single(model.Parts);
+        MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
+        Assert.NotNull(mesh.CollisionPayload);
+        byte[] collisionPayload = ModelTestData.ReadPayload(archive, mesh.CollisionPayload!);
+        Assert.True(
+            collisionPayload.Length > ModelProcessor.COLLISION_PAYLOAD_WARNING_BYTES,
+            $"The collision payload is {collisionPayload.Length} bytes.");
+        MeshCollisionData collision = ModelTestData.ReadCollision(archive, part.MeshPath, mesh);
+        Assert.Equal(PrimitiveTopology.TriangleList, collision.Topology);
+        Assert.Equal(2 * 340 * 340, collision.TriangleCount);
+    }
+
+    private static string CreateGridObj(int size) {
+        var builder = new StringBuilder(16 * 1024 * 1024);
+        builder.Append("o big\n");
+        for (int y = 0; y <= size; y++) {
+            for (int x = 0; x <= size; x++) {
+                builder.Append("v ").Append(x).Append(' ').Append(y).Append(" 0\n");
+            }
+        }
+
+        builder.Append("vn 0 0 1\n");
+        for (int y = 0; y < size; y++) {
+            int row = y * (size + 1);
+            int nextRow = row + size + 1;
+            for (int x = 0; x < size; x++) {
+                int a = row + x + 1;
+                int b = a + 1;
+                int c = nextRow + x + 1;
+                int d = c + 1;
+                builder.Append("f ").Append(a).Append("//1 ").Append(b).Append("//1 ")
+                    .Append(c).Append("//1\n");
+                builder.Append("f ").Append(b).Append("//1 ").Append(d).Append("//1 ")
+                    .Append(c).Append("//1\n");
+            }
+        }
+
+        return builder.ToString();
     }
 
     private static void AssertIndices(uint[] expected, byte[] payload, int vertexCount) {

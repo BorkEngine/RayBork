@@ -13,7 +13,7 @@ namespace RayBork.Bake.Processors;
 /// </remarks>
 internal static class BuiltInProcessors {
     /// <summary>Identifies the current built-in processor implementation.</summary>
-    internal const string CONFIGURATION_MARKER = "raybork-bake/m3/texture-shader-model-font-1";
+    internal const string CONFIGURATION_MARKER = "raybork-bake/m5/texture-shader-model-font-collision-1";
 
     /// <summary>Adds the built-in processors to a definition.</summary>
     /// <param name="definition">The definition being configured.</param>
