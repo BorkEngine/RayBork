@@ -758,9 +758,9 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
 - Every runtime project enables `IsAotCompatible`, `EnableTrimAnalyzer`, and `EnableAotAnalyzer`.
 - Every milestone publishes a sample for `win-x64` and `linux-x64` with `PublishAot=true`.
 - No reflection serialization, no runtime shader compilation, no `Assembly.Load` for assets.
-- Generic engine asset loading is a closed type switch. Custom data is registered with
-  `WithAssetType<T>()` and loaded through the same `Load<T>` using PolyType `[GenerateShape]` and
-  Nerdbank.MessagePack; `LoadData` covers bytes.
+- Engine asset loading is a registry: the built-in engine formats plus loaders registered with
+  `WithAssetLoader<T>()`. Custom data is registered with `WithAssetType<T>()` and loaded through the
+  same `Load<T>` using PolyType `[GenerateShape]` and Nerdbank.MessagePack; `LoadData` covers bytes.
 - `Microsoft.Extensions.Logging` and ZLogger are AOT-gated runtime dependencies; M1 is their first
   feature-level gate.
 - Native dependencies (SDL3, Vulkan loader) are deployed per RID and validated on a clean machine.

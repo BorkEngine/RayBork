@@ -336,10 +336,10 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 - The engine's built-in pack is mounted first, below every user pack. It contains the white and
   error textures, the present shader pair, and the built-in mesh draw shader program at
   `/shaders/mesh`, produced by the same `IAssetProcessor` pipeline as game content. The app preloads
-  the mesh program and the two textures into `EngineContext.Defaults` before `IGame.Setup`; the
-  built-in pack replaces the old `/shaders/default` program, and model packs baked against that path
-  resolve to `/shaders/mesh` at load time. Primitive meshes arrive with M5 and the missing-glyph
-  error glyph with M6.
+  the mesh program and the two textures into `EngineContext.Defaults` before `IGame.Setup`. The bake
+  writes `shaders/mesh` when a model part has no authored `[model] shader`, and the model loader
+  requires every part to carry a canonical shader path. Primitive meshes arrive with M5 and the
+  missing-glyph error glyph with M6.
 - `WithAssetsPack` mounts user packs in call order after the built-in pack. Later packs shadow
   earlier packs for the same canonical path.
 - The winning entry is the last mounted pack that contains the path. A shadowed entry is never
