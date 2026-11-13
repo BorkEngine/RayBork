@@ -37,7 +37,7 @@ internal sealed class BakedPackResult {
         PackPath = packPath;
         PackWritten = packWritten;
         Entries = [.. entries];
-        AssetCount = entries.Count(static entry => entry.Type != RayBork.Internal.AssetEntryType.Raw);
+        AssetCount = entries.Count(static entry => entry.Type != AssetEntryType.Raw);
         RawCount = entries.Count - AssetCount;
     }
 
@@ -80,7 +80,7 @@ internal sealed class BakeResult {
         Packs = [.. packs];
         Entries = [.. entries];
         Diagnostics = [.. diagnostics];
-        AssetCount = entries.Count(static entry => entry.Type != RayBork.Internal.AssetEntryType.Raw);
+        AssetCount = entries.Count(static entry => entry.Type != AssetEntryType.Raw);
         RawCount = entries.Count - AssetCount;
     }
 

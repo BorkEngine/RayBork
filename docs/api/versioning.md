@@ -20,6 +20,10 @@ Before 1.0, breaking changes are allowed when they improve the API. Each breakin
 migration note in the release notes and an update to this reference. After 1.0, obsolete members
 are marked `[Obsolete]` for at least one minor release before removal.
 
+The custom loader registration API is additive: `IAssetLoader<T>`, `AssetLoadContext`,
+`AssetEntryType`, and `RayBorkAppBuilder.WithAssetLoader<T>` extend the asset surface without
+changing `Load<T>`, and `WithAssetType<T>()` remains the MessagePack custom-data sugar.
+
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a
 best-effort read.
@@ -73,7 +77,7 @@ The following are deliberate exclusions, not forgotten features. The roadmap pla
 | `MaxDeltaTime = 0.25` | unchanged | Seconds. |
 | `Quaternion.CreateFromAxisAngle` | `Quaternion.Euler` / `Quaternion.AngleAxis` | User-facing rotations use degrees. |
 | `Color` from sRGB bytes | linear `Color` | HDR rendering and AgX output; `Color` components are linear floats. |
-| Custom data via ad-hoc files | `Load<T>` / `LoadData` | Compiled `[GenerateShape]` data and raw bytes; register with `WithAssetType<T>()`. |
+| Custom data via ad-hoc files | `Load<T>` / `LoadData` | Compiled `[GenerateShape]` data, custom loaders, and raw bytes; register with `WithAssetType<T>()` or `WithAssetLoader<T>()`. |
 | Logger injected as a custom interface | `ctx.LoggerFactory` | `Microsoft.Extensions.Logging` + ZLogger. |
 
 The seed's `Shutdown` order remains correct: the model first, then the shader, then the texture.
@@ -99,6 +103,7 @@ disposed first.
 | `RayCollision`, `Collision` | §5.5 |
 | `Vector3Extensions`, `QuaternionExtensions` | §5.6 |
 | `IAsset`, `IAssetCatalog` | §6.1 |
+| `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, `WithAssetLoader<T>` | §6.1, §6.7 |
 | `Mesh`, `Model`, `ModelPart`, `PrimitiveTopology`, `Vertex`, `MeshBuilder`, `MeshNormalMode` | §7.5 |
 | `Texture`, `TextureBuilder`, `TextureFormat`, `TextureFilter`, `TextureWrap`, `SamplerState` | §7.6 |
 | `Shader`, `ShaderStageMask`, `ShaderUniform`, `ShaderUniformType`, `ShaderTextureBinding` | §7.3 |

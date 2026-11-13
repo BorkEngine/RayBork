@@ -686,7 +686,13 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 payload,
                 new LoadChain(typeof(T), descriptorEntry.Entry.Path, chain));
             T value = await loader.LoadAsync(context).ConfigureAwait(false);
-            return value!;
+            if (value is null) {
+                throw AssetLoadErrors.CreateLoadFailure(
+                    descriptorEntry.Entry.Path,
+                    "the registered loader returned no value");
+            }
+
+            return value;
         } catch (Exception exception) {
             if (stopToken.IsCancellationRequested) {
                 throw AssetLoadErrors.CreateStoppedException();

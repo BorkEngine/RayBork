@@ -10,9 +10,11 @@ RayBork's runtime is designed for Native AOT:
 - No runtime reflection-based serialization. Pack metadata and custom data use compiled
   `PolyType` shapes with `Nerdbank.MessagePack`; pack metadata is read with explicit binary readers.
 - No runtime shader compilation. Shader reflection is bake-generated metadata.
-- `Load<T>` maps built-in engine asset types with a closed type switch. Custom data types are
-  registered at build time with `WithAssetType<T>()`, which stores a compiled `IShapeable<T>`
-  loader delegate; `LoadData` covers opaque bytes without reflection.
+- `Load<T>` resolves the registered strategy from the merged registry built at `Build`: engine asset
+  formats are built-in registrations, `WithAssetType<T>()` stores a compiled `IShapeable<T>` shape
+  delegate, and `WithAssetLoader<T>()` stores the caller's loader. Every strategy is a compiled
+  generic type, and the runtime never scans assemblies or uses reflection. `LoadData` covers opaque
+  bytes without reflection.
 - Logging uses `Microsoft.Extensions.Logging`; ZLogger is the default provider and is AOT-tested.
 - P/Invoke is direct. SDL3 native libraries are deployed per RID; the Vulkan loader is resolved from
   the system/GPU driver with `NativeLibrary` and a custom `INativeContext`.
@@ -23,8 +25,8 @@ RayBork's runtime is designed for Native AOT:
   bake tool. Its generated C# byte array is compiled into `RayBork.Engine`; the generator, its
   packages, and shaderc are not part of the runtime publish graph.
 - Pack descriptors and custom data use `[GenerateShape]` and `Nerdbank.MessagePack`; the runtime
-  never uses reflection serialization. `Load<T>` maps engine asset types with a closed type switch
-  and custom data through the registered shape delegate.
+  never uses reflection serialization. `Load<T>` maps engine asset types through the built-in
+  registrations and registered types through the compiled shape delegate or the caller's loader.
 
 A game project uses `WinExe` for release. Samples and diagnostic hosts use `Exe` so console logging
 is visible.

@@ -17,9 +17,49 @@ public interface IAssetCatalog {
     Task<byte[]> LoadData(string path, CancellationToken cancellationToken = default);
     bool Exists(string path);
 }
+
+public enum AssetEntryType : ushort {
+    Raw = 0,
+    Mesh = 1,
+    Model = 2,
+    Texture = 3,
+    Shader = 4,
+    Font = 5,
+    Data = 6,
+}
+
+public interface IAssetLoader<T> {
+    AssetEntryType EntryType { get; }
+    Task<T> LoadAsync(AssetLoadContext context);
+}
+
+public sealed class AssetLoadContext {
+    public string Path { get; }
+    public CancellationToken CancellationToken { get; }
+    public Task<byte[]> LoadPayloadAsync();
+    public Task<byte[]> LoadDataAsync(string path, CancellationToken cancellationToken = default);
+    public Task<T> LoadAsync<T>(string path, CancellationToken cancellationToken = default);
+    public bool Exists(string path);
+}
 ```
 
-There is one typed loader. `Load<T>` handles both engine assets and registered custom data:
+`AssetEntryType` is the asset type stored in a pack index entry. The numeric values are part of the
+RAYBORKP v1 wire format:
+
+| Value | Entry |
+| --- | --- |
+| `Raw` | An opaque payload with no descriptor, written by `AddData` or an unclaimed raw source. Read it with `LoadData`. |
+| `Data` | A MessagePack custom-data payload written by `AddAsset<T>` for a type that is not an engine descriptor. |
+| `Mesh`, `Model`, `Texture`, `Shader`, `Font` | The baked descriptor for the matching built-in engine asset format. |
+
+`IAssetLoader<T>` is the custom loader contract registered with `WithAssetLoader<T>`. `EntryType` is
+the pack entry type the loader accepts; the catalog rejects a different type with
+`AssetTypeMismatchException` before it invokes the loader. Every `Load<T>` call invokes the loader and
+returns a fresh caller-owned value; the catalog never caches the result. `AssetLoadContext` carries
+the canonical path, the linked caller/catalog cancellation token, the entry payload, and the nested
+load methods. The loader contract, threading rules, and error behavior are in §6.7.
+
+There is one typed loader. `Load<T>` handles both engine assets and registered custom assets:
 
 | `T` | Behavior |
 | --- | --- |
@@ -27,8 +67,9 @@ There is one typed loader. `Load<T>` handles both engine assets and registered c
 | `Shader` (M4) | Returns a **new independent material instance** every call, backed by one cached internal shader program for the path. `Shader` is not an `IAsset` and is never reference-counted. Dispose every material exactly once. |
 | `Model` (M4) | Returns a **new `Model` wrapper** every call over the shared cached part meshes and programs, with one new material per part. `Model` is not an `IAsset`, is never reference-counted, and owns its part materials. Dispose every returned model exactly once. |
 | `Font` (M6), later `AudioClip` | The shared, reference-counted engine-asset contract; the types arrive with their milestones. |
-| A custom type registered with `WithAssetType<T>()` | Deserializes a MessagePack data entry through the compiled `[GenerateShape]`. Returns a fresh caller-owned instance per call; no reference counting and no `Dispose`. |
-| Any other type | `NotSupportedException` naming the type and asking for `WithAssetType<T>()`. |
+| A custom type registered with `WithAssetType<T>()` | Deserializes a MessagePack `Data` entry through the compiled `[GenerateShape]`. Returns a fresh caller-owned instance per call; no reference counting and no `Dispose`. |
+| A custom type registered with `WithAssetLoader<T>` | Invokes the registered loader with the entry payload and returns its fresh caller-owned value. The loader declares the entry type it accepts, so the entry kind is not limited to `Data`. |
+| Any other type | `NotSupportedException` naming the type and asking for `WithAssetType<T>()` or `WithAssetLoader<T>()`. |
 
 > **M4 shader semantics.** The GPU program is an internal engine asset: there is no public
 > shader-program type and no public program handle. `Load<Shader>` caches the internal program by
@@ -63,12 +104,16 @@ LevelConfig level = await ctx.Assets.Load<LevelConfig>("/data/level");
 ReadOnlySpan<byte> raw = await ctx.Assets.LoadData("/data/level-raw");
 ```
 
-`WithAssetType<T>()` requires `T : IShapeable<T>` and registers a non-reflective loader delegate. The
-same type must be registered in the bake with `RegisterAsset<T>()`; the two registrations are
-independent because the runtime never scans assemblies.
+`WithAssetType<T>()` requires `T : IShapeable<T>` and registers a non-reflective shape for a
+MessagePack `Data` entry. The same type must be registered in the bake with `RegisterAsset<T>()`; the
+two registrations are independent because the runtime never scans assemblies. `WithAssetLoader<T>()`
+registers an arbitrary `IAssetLoader<T>` for a type without a compiled shape; the loader decides how
+to decode the payload, and the bake writes the matching entry with `AddData` or `AddAsset<T>`. A type
+can have one registration only: registering the same type through both methods is an
+`InvalidOperationException` from the second call.
 
-`Load<T>` is not cached for custom data; every call returns a new instance. Engine assets remain
-cached and reference-counted by `(canonical path, engine asset type)`. `Load<Shader>` is the
+`Load<T>` is not cached for a registered custom type; every call returns a new instance. Engine assets
+remain cached and reference-counted by `(canonical path, engine asset type)`. `Load<Shader>` is the
 exception to the reference-counted return shape: it caches the internal program and returns a new
 material per call, because a material carries a mutable cursor and must never be shared implicitly.
 
@@ -113,6 +158,7 @@ prefix.
 | `Model` | glTF 2.0, OBJ | Multi-part wrapper with per-part materials over shared cached meshes and programs; not an engine asset | M4 (baked in M3) |
 | `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs | M6 (baked in M3) |
 | Custom data | TOML source | MessagePack payload deserialized through `Load<T>` after `WithAssetType<T>()` | M3 |
+| Custom asset | Any entry kind | Decoded by an `IAssetLoader<T>` after `WithAssetLoader<T>()`; `Load<T>` returns a fresh caller-owned value | M3 |
 | Raw data | Any processor output or raw source | Opaque bytes through `LoadData` | M3 |
 
 glTF and OBJ are **source formats only**. The bake converts them to the engine's packed mesh/model
@@ -197,16 +243,20 @@ once for each successful engine-asset load**. The engine cannot distinguish a do
 second owner's release; a second `Dispose` after the count reaches zero throws. A debug build also
 checks the count under the catalog lock.
 
-A custom data type loaded with `Load<T>` is not an `IAsset`. It is a caller-owned value, has no
-cache, and has no `Dispose`. It never keeps a GPU resource alive.
+A custom data type loaded through `WithAssetType<T>()` is not an `IAsset`. It is a caller-owned
+value, has no cache, and has no `Dispose`. It never keeps a GPU resource alive.
+
+A value produced by a `WithAssetLoader<T>` loader is also caller-owned, uncached, and not an
+`IAsset`. Any engine asset the loader loaded through its context belongs to the returned value; the
+value must release those references when it is disposed or discarded.
 
 Loading the same engine path concurrently is coalesced: one load runs, all callers receive the same
 result and each caller owns one reference. `Load<Shader>` coalesces the program load the same way but
 returns one new material per caller. `Load<Model>` coalesces the shared part mesh and program loads
 but never coalesces the model itself: every caller gets its own wrapper and materials. If the load
 fails, every caller observes the failure and no reference is created. A caller that cancels its wait
-does not acquire a reference, even if the shared load later succeeds. Custom data loads are
-independent; each call produces a new instance.
+does not acquire a reference, even if the shared load later succeeds. Loads through a registered
+loader are independent; each call produces a new instance.
 
 `LoadData` returns the decompressed bytes of the winning entry. For a typed engine asset entry that
 is the serialized descriptor, not the GPU payload; tooling that needs a raw texture or mesh payload
@@ -218,15 +268,18 @@ bytes.
 ```text
 Load<T>(path)
   -> resolve winning entry in the mounted pack stack
-  -> engine asset?  -> read/decompress -> descriptor -> queue GPU upload
+  -> resolve the registration for T in the merged registry
+  -> Mesh, Texture  -> read/decompress -> descriptor -> queue GPU upload
                     -> loader continues with the next request
                     -> on upload completion -> construct -> refcount -> complete Load
-  -> Shader?        -> load the internal program through the engine-asset path
+  -> Shader         -> load the internal program through the engine-asset path
                     -> acquire one program reference for the new material -> return a new material
-  -> Model?         -> resolve every part mesh and internal program through the engine-asset path
+  -> Model          -> resolve every part mesh and internal program through the engine-asset path
                     -> create one material per part -> return a new model wrapper
-  -> registered?    -> read/decompress -> MessagePack shape -> fresh instance -> return
-  -> otherwise      -> NotSupportedException
+  -> registered     -> read/decompress -> check the entry type
+                    -> IAssetLoader<T>.LoadAsync(context) -> reject a null result
+                    -> return a fresh caller-owned value
+  -> otherwise      -> NotSupportedException naming both registration methods
 ```
 
 Consequences:
@@ -245,6 +298,9 @@ Consequences:
   `LoadData` while engine uploads are pending.
 - Custom data is CPU-only and can complete without the renderer; it is still a `Task` because pack
   I/O runs on the loader.
+- A `WithAssetLoader<T>` value runs its loader's synchronous part on the `RayBork.Asset` thread; a
+  continuation after an `await` may resume on the thread pool. The value is caller-owned and never
+  cached. The loader must not block and must not call SDL, Vulkan, or tick-thread APIs. See §6.7.
 - `Load` may be called from any thread, but awaiting it from the tick thread blocks that tick's
   continuation, not the loader or render thread. Load in `Setup` unless a hitch is acceptable.
 - Cancellation before completion releases all partial resources and throws
@@ -264,11 +320,11 @@ Consequences:
 | `AssetException` | Base type for every asset pipeline failure with a diagnostic code. |
 | `AssetPackException` | The pack is missing, truncated, has a bad magic/version, fails a hash, or has an invalid index. |
 | `AssetNotFoundException` | The path is not in any mounted pack. |
-| `AssetTypeMismatchException` | The path exists but was baked as a different engine asset type. |
-| `AssetLoadException` | The payload is corrupt, decode fails, a custom-data shape fails, or GPU upload fails. |
+| `AssetTypeMismatchException` | The path exists but was baked with a different `AssetEntryType`. |
+| `AssetLoadException` | The payload is corrupt, decode fails, a custom-data shape fails, a registered loader fails or returns no value, or GPU upload fails. |
 | `OperationCanceledException` | The caller's token was canceled before completion. |
 | `ObjectDisposedException` | The catalog or a required dependency is already disposed. |
-| `NotSupportedException` | `T` is neither an engine asset nor registered with `WithAssetType<T>()`. |
+| `NotSupportedException` | `T` is neither a built-in engine asset nor registered with `WithAssetType<T>()` or `WithAssetLoader<T>()`. |
 
 `AssetPackException` is a startup failure for a pack passed to `WithAssetsPack`. A corrupt entry
 inside an otherwise valid pack is an `AssetLoadException` for that path.
@@ -298,3 +354,87 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
   committed.
 - Mounting validates every pack before it becomes visible. A failed mount leaves the previous pack
   stack unchanged, and startup fails with `AssetPackException`.
+
+### 6.7 Custom asset loaders
+
+`WithAssetLoader<T>` registers an `IAssetLoader<T>` when a type needs decoding that is not a
+MessagePack custom-data shape. The loader declares the pack entry type it accepts and returns one
+caller-owned value per load:
+
+```csharp
+using System.Text;
+using RayBork;
+
+public sealed class LevelLoader : IAssetLoader<LevelConfig> {
+    public AssetEntryType EntryType => AssetEntryType.Raw;
+
+    public async Task<LevelConfig> LoadAsync(AssetLoadContext context) {
+        byte[] payload = await context.LoadPayloadAsync().ConfigureAwait(false);
+        context.CancellationToken.ThrowIfCancellationRequested();
+        return new LevelConfig { Name = Encoding.UTF8.GetString(payload) };
+    }
+}
+```
+
+```csharp
+using var app = new RayBorkAppBuilder()
+    .WithGame(game)
+    .WithAssetLoader(new LevelLoader())
+    .WithAssetsPack(packPath)
+    .Build();
+
+LevelConfig level = await ctx.Assets.Load<LevelConfig>("/data/level");
+ReadOnlySpan<byte> raw = await ctx.Assets.LoadData("/data/level");
+```
+
+The registration maps `typeof(T)` to the loader. `EntryType` must match the packed entry; the catalog
+rejects a different type with `AssetTypeMismatchException` before the loader runs. Each type may be
+registered only once, and built-in engine asset types (`Mesh`, `Texture`, `Shader`, `Model`) are
+already registered, so registering one fails at `Build`. `WithAssetType<T>` and
+`WithAssetLoader<T>` are mutually exclusive for one type: there is no override.
+
+`AssetLoadContext` is valid only during the `LoadAsync` call that received it:
+
+| Member | Contract |
+| --- | --- |
+| `Path` | The canonical public path with a leading `/`. |
+| `CancellationToken` | The caller token linked with the catalog stop token. |
+| `LoadPayloadAsync()` | The entry's decompressed payload. It returns the same read-only array on every call. |
+| `LoadDataAsync(path, cancellationToken = default)` | Another entry's decompressed bytes. The context token is used when the argument cannot be canceled. |
+| `LoadAsync<T>(path, cancellationToken = default)` | A nested load. The context token is used when the argument cannot be canceled; the loader must not block on it. |
+| `Exists(path)` | Whether another path resolves in the mounted packs. |
+
+The entry kind a loader accepts is written by the bake:
+
+| Entry | Written by | Loader |
+| --- | --- | --- |
+| `Raw` | `AddData`, or an unclaimed source through the raw processor | Declare `AssetEntryType.Raw`; the loader parses the bytes itself. |
+| `Data` | `AddAsset<T>` for a shaped type that is not an engine descriptor | Declare `AssetEntryType.Data`; `WithAssetType<T>` is the MessagePack shortcut. |
+| `Mesh`, `Model`, `Texture`, `Shader`, `Font` | An engine descriptor processor | Owned by the built-in engine registrations; a user registration for these types fails at `Build`. |
+
+Execution and threading:
+
+- The synchronous part of `LoadAsync` runs on the dedicated `RayBork.Asset` loader thread. A
+  continuation after an `await` may resume on the thread pool.
+- A loader must not block (no `.Result`, `.Wait()`, or synchronous wait) and must not call SDL,
+  Vulkan, or tick-thread APIs.
+- One loader instance serves concurrent loads, so it must be stateless or thread-safe.
+- A nested load is queued on the same loader thread, and the loader keeps serving the queue while
+  the returned task is incomplete. The load chain rejects a loader that requests the asset type and
+  path it is currently loading instead of queueing it forever.
+
+Ownership and cancellation:
+
+- Every `Load<T>` call invokes the loader. Results are never cached and are caller-owned.
+- Any asset the loader loads through the context stays owned by the returned value. The loader must
+  release what it acquired when the load fails or is canceled; the catalog does not track it.
+- `AssetLoadContext.CancellationToken` fires when the caller cancels or the catalog stops.
+  Cancellation is cooperative: check the token, and release everything acquired before rethrowing.
+
+Errors:
+
+- An entry type mismatch is `AssetTypeMismatchException` before the loader is invoked.
+- A loader exception is wrapped as `AssetLoadException` unless it is already an `AssetException`.
+- A `null` result is a load failure (`AssetLoadException`, `RB1008`).
+- A canceled caller observes `OperationCanceledException`; a catalog stop observes
+  `ObjectDisposedException`.

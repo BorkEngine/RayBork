@@ -163,7 +163,7 @@ internal static class BakeDataBinder {
 
         entry = new BakedEntry(
             source.BaseAssetPath,
-            RayBork.Internal.AssetEntryType.Data,
+            AssetEntryType.Data,
             payload,
             alignment: 1,
             source.SourceId);

@@ -38,6 +38,7 @@ public sealed class AssetTypeRegistryTests {
 
         Assert.Contains(typeof(CatalogTestSettings).FullName!, thrown.Message, StringComparison.Ordinal);
         Assert.Contains("WithAssetType<T>()", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("WithAssetLoader<T>()", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]

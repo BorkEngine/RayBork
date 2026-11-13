@@ -12,10 +12,25 @@ override RayBork.RenderStats.GetHashCode() -> int
 override RayBork.SamplerState.GetHashCode() -> int
 override RayBork.ShaderTextureBinding.GetHashCode() -> int
 override RayBork.ShaderUniform.GetHashCode() -> int
+RayBork.AssetEntryType
+RayBork.AssetEntryType.Data = 6 -> RayBork.AssetEntryType
+RayBork.AssetEntryType.Font = 5 -> RayBork.AssetEntryType
+RayBork.AssetEntryType.Mesh = 1 -> RayBork.AssetEntryType
+RayBork.AssetEntryType.Model = 2 -> RayBork.AssetEntryType
+RayBork.AssetEntryType.Raw = 0 -> RayBork.AssetEntryType
+RayBork.AssetEntryType.Shader = 4 -> RayBork.AssetEntryType
+RayBork.AssetEntryType.Texture = 3 -> RayBork.AssetEntryType
 RayBork.AssetException
 RayBork.AssetException.AssetException() -> void
 RayBork.AssetException.AssetException(string! message) -> void
 RayBork.AssetException.AssetException(string! message, System.Exception? innerException) -> void
+RayBork.AssetLoadContext
+RayBork.AssetLoadContext.CancellationToken.get -> System.Threading.CancellationToken
+RayBork.AssetLoadContext.Exists(string! path) -> bool
+RayBork.AssetLoadContext.LoadAsync<T>(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
+RayBork.AssetLoadContext.LoadDataAsync(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+RayBork.AssetLoadContext.LoadPayloadAsync() -> System.Threading.Tasks.Task<byte[]!>!
+RayBork.AssetLoadContext.Path.get -> string!
 RayBork.AssetLoadException
 RayBork.AssetLoadException.AssetLoadException() -> void
 RayBork.AssetLoadException.AssetLoadException(string! message) -> void
@@ -216,6 +231,9 @@ RayBork.IAssetCatalog
 RayBork.IAssetCatalog.Exists(string! path) -> bool
 RayBork.IAssetCatalog.Load<T>(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<T>!
 RayBork.IAssetCatalog.LoadData(string! path, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+RayBork.IAssetLoader<T>
+RayBork.IAssetLoader<T>.EntryType.get -> RayBork.AssetEntryType
+RayBork.IAssetLoader<T>.LoadAsync(RayBork.AssetLoadContext! context) -> System.Threading.Tasks.Task<T>!
 RayBork.IGame
 RayBork.IGame.Setup(RayBork.EngineContext! context) -> System.Threading.Tasks.Task!
 RayBork.IGame.Shutdown() -> System.Threading.Tasks.Task!
@@ -626,6 +644,7 @@ RayBork.Ray.Ray() -> void
 RayBork.Ray.Ray(System.Numerics.Vector3 Origin, System.Numerics.Vector3 Direction) -> void
 RayBork.RayBorkAppBuilder.WithAssetsPack(string! path) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetsPacks(params string![]! paths) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithAssetLoader<T>(RayBork.IAssetLoader<T>! loader) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetType<T>() -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithExposure(float ev = 0) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithMSAA(int sampleCount = 4) -> RayBork.RayBorkAppBuilder!
