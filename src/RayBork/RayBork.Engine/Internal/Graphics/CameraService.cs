@@ -23,6 +23,7 @@ internal sealed class CameraService {
     private readonly IWindow _window;
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
+    private PrimitiveAssets? _primitives;
     private int _nextCameraNumber;
 
     /// <summary>
@@ -37,6 +38,34 @@ internal sealed class CameraService {
 
     /// <summary>Gets whether a frame is currently accepting cameras and draws.</summary>
     internal bool IsRecording => _packet is not null;
+
+    /// <summary>
+    /// Gets the app's engine primitive meshes and materials, or <see langword="null"/> before the app
+    /// attaches them and after it detaches them during shutdown.
+    /// </summary>
+    /// <remarks>
+    /// The app attaches the assets before <see cref="IGame.Setup"/> runs and detaches them after
+    /// <see cref="IGame.Shutdown"/> returned, so the primitive draw helpers may read them only while a
+    /// frame records. The service does not own the assets and never disposes them.
+    /// </remarks>
+    internal PrimitiveAssets? Primitives => _primitives;
+
+    /// <summary>
+    /// Attaches the app-lifetime primitive assets for the later camera draw helpers.
+    /// </summary>
+    /// <param name="primitives">The app's primitive assets.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="primitives"/> is <c>null</c>.</exception>
+    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    internal void AttachPrimitives(PrimitiveAssets primitives) {
+        ArgumentNullException.ThrowIfNull(primitives);
+        _primitives = primitives;
+    }
+
+    /// <summary>
+    /// Detaches the primitive assets before the app disposes them. Called on the main thread after the
+    /// tick thread joined.
+    /// </summary>
+    internal void DetachPrimitives() => _primitives = null;
 
     /// <summary>
     /// Starts recording a frame into <paramref name="packet"/>.
