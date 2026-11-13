@@ -112,8 +112,13 @@ M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowEx
 `GraphicsDeviceLostException` derives from it. M3 ships `AssetException` and its four sealed
 subtypes. M4 ships the camera and draw path without a new exception type: shader interface
 mismatches that escape the bake surface as `AssetLoadException` `RB1008` at load, and draw
-misuse uses the standard exceptions in the table below. `ShaderException` remains a contract for a
-later milestone.
+misuse uses the standard exceptions in the table below. M5 ships the primitive helpers and the
+collision queries without a new exception type either: helper argument and lifecycle misuse uses the
+standard exceptions in the table below (including `NotSupportedException`), a corrupt, missing, or
+mismatched baked collision payload fails the mesh load as `AssetLoadException` `RB1008`, and
+`Collision.GetRayMesh` throws `NotSupportedException` for a line or point topology and
+`ArgumentException` for a singular transform. `ShaderException` remains a contract for a later
+milestone.
 
 Game and platform diagnostic codes (M1, M2):
 
@@ -212,6 +217,6 @@ semantics:
 - `TextureCount` counts live bindless slots including the reserved white slot at slot 0. A texture
   allocates its slot when its GPU upload completes and releases it only when its GPU resource is
   destroyed, after every frame that can reference it has completed.
-- `GpuFrameMilliseconds` is `0` in M4 because GPU timestamps are not collected.
+- `GpuFrameMilliseconds` is `0` because GPU timestamps are not collected in v1.
 - A frame that idles on a minimized or zero-extent surface reports zero for the draw counters and
   `TextureCount`, with zero CPU and GPU time.

@@ -188,7 +188,7 @@ a retry starts a fresh wrapper. See [Rendering: Meshes](rendering/meshes.md#75-m
 `Load<Mesh>` is for a standalone mesh-part asset. Loading a multi-part model path as `Mesh` throws
 `AssetTypeMismatchException`.
 
-Texture formats in M4 are `Rgba8Unorm`, `Rgba8Srgb`, `Bc7Unorm`, `Bc7Srgb`, `Bc5Unorm`, and
+The runtime texture formats are `Rgba8Unorm`, `Rgba8Srgb`, `Bc7Unorm`, `Bc7Srgb`, `Bc5Unorm`, and
 `R8Unorm`. `Rgba16Float` and `Depth32Float` are render-target formats and are not accepted in a
 packed texture. The bake writes an sRGB transfer function into the KTX2 data format descriptor for
 the sRGB formats; the runtime creates the matching Vulkan format.

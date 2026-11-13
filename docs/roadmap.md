@@ -986,7 +986,7 @@ removed from the release notes rather than weakened silently.
 | Managed font/MSDF library | Quality or performance miss; AOT/packaging surprises | Benchmark early; keep native fallback scoped; fuzz parser | M6 |
 | SDL3-CS maturity | Missing binding, packaging gap, AOT issue | Pin and test per RID in M0; thin hand-written fallback for used functions | M0/M1 |
 | Renderer seam abstraction cost | Over-abstraction slows the Vulkan path | Keep the seam at frame/resource granularity; no per-draw virtual calls | M2/M10 |
-| Threading/lifetime bugs | Races, use-after-free, intermittent crashes | Frame retention, tick-affinity rules, stress suite, validation, deterministic shutdown order | M1-M4 |
+| Threading/lifetime bugs | Races, use-after-free, intermittent crashes | Frame retention, tick-affinity rules, stress suite, validation, deterministic shutdown order | M1-M5 |
 | Reverse-Z custom projections | Depth bugs in user code | One engine projection path, tests, documentation; no public OpenGL-style helper | M2/M4 |
 | Asset refcount/double dispose | Leaks or premature destruction | Exactly-once contract, debug checks, frame retention | M3 |
 | GPU CI availability | Renderer changes untested | Offscreen tests, lavapipe fallback, numeric probes, explicit skip policy | M0/M2 |
