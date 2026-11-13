@@ -25,7 +25,7 @@ retired default model shader and the runtime null-path default are removed, so r
 packs; the bake writes `shaders/mesh` for a part with no authored `[model] shader`.
 
 The ray-mesh collision payload is additive to pack v1. A mesh descriptor may carry the optional
-`collision_payload` member naming a sibling `<mesh>-collision` raw entry in the `RBVC` v1 format;
+`CollisionPayload` member naming a sibling `<mesh>-collision` raw entry in the `RBVC` v1 format;
 both the member and the entry are optional, and the entry is an ordinary raw payload, so v1 remains
 the only pack format. A pack baked without the member loads normally: its meshes have no collision
 acceleration structure, and `Collision.GetRayMesh` brute-forces the retained CPU triangles.

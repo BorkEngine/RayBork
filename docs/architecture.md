@@ -603,13 +603,14 @@ and `/shaders/mesh` programs and creates one engine-owned material over each, th
 meshes (cube, sphere, plane, quad, triangle, line, wire cube, wire sphere) from deterministic
 `PrimitiveMeshFactory` CPU geometry through the catalog's procedural GPU bridge. The app builds this
 set on the main thread after the asset catalog starts and before the tick thread starts, attaches it
-to `CameraService`, and holds one owner reference per program, material, and mesh. Primitive draw
-records are ordinary draw records, so frame retention keeps the engine mesh, the program, and a bound
-texture alive exactly like a user draw. `PrimitiveAssets.Dispose` is idempotent, disposes both
-materials, and releases every mesh and program owner reference; it runs on the main thread after the
-tick thread has joined. A startup failure releases everything already created and surfaces as
-`AssetLoadException` `ASSET_LOAD_FAILED`. The meshes and the two primitive materials have no public
-accessor, and `EngineDefaults` is unchanged.
+to `CameraService`, and holds the two materials, one owner reference per program, and one owner
+reference per mesh. Primitive draw records are ordinary draw records, so frame retention keeps the
+engine mesh, the program, and a bound texture alive exactly like a user draw.
+`PrimitiveAssets.Dispose` is idempotent, disposes both materials, and releases every mesh and
+program owner reference; it runs on the main thread after the tick thread has joined. A startup
+failure releases everything already created and surfaces as `AssetLoadException`
+`ASSET_LOAD_FAILED`. The meshes and the two primitive materials have no public accessor, and
+`EngineDefaults` is unchanged.
 
 ## Shader state, batching, and instancing
 

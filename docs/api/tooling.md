@@ -204,7 +204,7 @@ shader = "shaders/castle"
 - `collisions` defaults to enabled. With it enabled, the bake builds a ray-mesh collision structure
   from the same finalized geometry it writes to the mesh payload, writes it as one sibling raw entry
   `<mesh path>-collision` with 16-byte alignment, and records the entry's canonical path in the mesh
-  descriptor's optional `collision_payload` member. Line and point parts, and parts whose triangles
+  descriptor's optional `CollisionPayload` member. Line and point parts, and parts whose triangles
   are all degenerate, get no entry. `collisions = false` in the `[model]` sidecar opts the whole
   source out and emits no collision entry for any of its parts. A payload above 4 MiB emits an
   `RB4009` warning that names the part and the opt-out.
@@ -344,7 +344,7 @@ more or fewer bytes is corruption.
 
 Engine asset entries are MessagePack descriptors that reference sibling raw payload entries
 (`<base>-ktx2`, `<base>-mesh`, `<base>-vert`, `<base>-frag`, `<base>-face`, `<base>-collision`). The
-collision entry is additive: a mesh descriptor may carry the optional `collision_payload` member,
+collision entry is additive: a mesh descriptor may carry the optional `CollisionPayload` member,
 and a descriptor without it is valid and loads without a collision structure. A `Data` entry holds
 the MessagePack bytes of one registered custom type; `Load<T>` deserializes it with the compiled shape
 and returns a fresh instance.

@@ -571,15 +571,19 @@ acceleration structure and its baked payload:
   a structure, and a failed or canceled build creates no asset and leaves the builder reusable.
 - **Overlay matrix and screen-space contract.** `DrawTexture` takes its destination rectangle in
   render pixels relative to the camera viewport, with a top-left origin and Y increasing downward.
-  The quad is built from an NDC rectangle at depth `0.5` multiplied by the inverse view-projection
-  matrix; the resulting matrix has a constant homogeneous `w`, so it is affine in world space. The
-  quad's corners are the destination rectangle's clip positions at that depth, so an on-screen
-  overlay lies inside the camera frustum and is not culled, including for translated or rotated
-  perspective cameras; this makes the quad pixel-exact for perspective and orthographic cameras. The
-  recorded state is an overlay: alpha blended, no depth write, `DepthTest.Always`, and `Cull.None`,
-  so it covers scene geometry and is not covered by it. The quad's top-left UV lands on the
-  destination top-left corner. The helper retains the texture for the frame and leaves the engine
-  material's binding empty.
+  The helper computes the destination rectangle's NDC corners at depth `0.5`, unprojects each
+  through the inverse view-projection matrix with the homogeneous divide, and builds an affine
+  world-space matrix that maps the engine unit quad onto that unprojected parallelogram: the
+  translation is the quad's world center, the axes are the unprojected edges, and the third axis is
+  their cross-product normal. The matrix has a zero projective column (`M14 = M24 = M34 = 0`,
+  `M44 = 1`), which matters because the batcher's `Vector3.Transform` bounds and its raw
+  translation depth assume an affine instance matrix: the overlay's AABB is the real world-space
+  quad in front of the camera, so the instance is not frustum-culled for a translated or rotated
+  perspective camera. The projected rectangle is pixel-exact for perspective and orthographic
+  cameras, and the quad's top-left UV lands on the destination top-left corner. The recorded state
+  is an overlay: alpha blended, no depth write, `DepthTest.Always`, and `Cull.None`, so it covers
+  scene geometry and is not covered by it. The helper retains the texture for the frame and leaves
+  the engine material's binding empty.
 - **Primitive gallery AOT gate.** `samples/PrimitiveGallery` is a single-project self-contained
   solution, `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It
   has no assets executable and no pack; `Setup` builds its one `128x128` `Rgba8Srgb` checker texture
@@ -600,10 +604,10 @@ acceleration structure and its baked payload:
   sample does not implement selection. Castle remains a buildable and publishable sample; the M5 AOT
   gate is the gallery. The M4 limitation of one `rbFrame` block per frame slot is unchanged by M5.
 
-**Risks.** The collision payload is CPU memory: it duplicates triangle ids and bounds per triangle
-mesh, which is why a payload above 4 MiB warns. The mitigation is the sidecar opt-out and the
-procedural opt-in, not an automatic fallback to brute force, so a game that wants no collision
-structure must say so at bake time.
+**Risks.** The collision structure is CPU memory retained for the mesh lifetime, about 20 bytes per
+non-degenerate triangle at a leaf size of four (32-byte nodes plus the canonical triangle ids). The
+`collisions = false` sidecar opt-out avoids that bake cost, and a mesh without a structure still
+queries correctly by brute-forcing the retained triangles.
 
 ### M6 — Text and runtime MSDF
 

@@ -129,6 +129,9 @@ culling.
 - A `null` texture throws `ArgumentNullException`; a disposed texture is `ObjectDisposedException`.
 - A camera whose app has no primitive assets attached throws `InvalidOperationException`. Game code
   does not hit this case: the app attaches the primitive assets before `IGame.Setup`.
+- For `DrawTexture` only, a singular camera view-projection matrix, a destination corner that cannot
+  be unprojected, or a non-finite or degenerate world-space quad also throws
+  `InvalidOperationException`.
 
 Validation runs before anything is retained or recorded, so a rejected call leaves the frame packet
 and its retention set untouched.
@@ -157,12 +160,16 @@ recorded frame. To shade a quad with a custom material, draw a quad mesh instead
 viewport, with a top-left origin and Y increasing downward: the same space as
 `Camera.WorldToScreen` and `ScreenToWorldRay`, not window coordinates. The quad's top-left UV lands
 on the destination top-left corner, the destination size maps to the quad size, and the result is
-pixel-exact for perspective and orthographic cameras. The overlay matrix is built from an NDC
-rectangle at depth `0.5` multiplied by the inverse view-projection matrix. Its homogeneous `w` is
-constant, so it is affine in world space, and the quad's corners are the destination rectangle's
-clip positions at that depth: an on-screen overlay lies inside the camera frustum and is not culled,
-including for a translated or rotated perspective camera. The recorded state is an overlay:
-`DepthTest.Always`, no depth write, and `Cull.None`, so it draws over scene geometry regardless of
-depth. A destination width or height of zero records nothing.
+pixel-exact for perspective and orthographic cameras. The helper unprojects the destination
+rectangle's NDC corners at depth `0.5` through the inverse view-projection matrix with the
+homogeneous divide, then builds an affine world-space matrix that maps the engine unit quad onto
+that unprojected parallelogram: the translation is the quad's world center, the axes are the
+unprojected edges, and the third axis is their cross-product normal. The matrix has a zero
+projective column (`M14 = M24 = M34 = 0`, `M44 = 1`), so the batcher's `Vector3.Transform` bounds and
+raw translation depth are the quad's real world-space bounds and center. The overlay's AABB
+therefore lies in front of the camera, and the instance is not frustum-culled for a translated or
+rotated perspective camera. The recorded state is an overlay: `DepthTest.Always`, no depth write,
+and `Cull.None`, so it draws over scene geometry regardless of depth. A destination width or height
+of zero records nothing.
 
 `DrawText` and `DrawTextBillboard` are M6 and are not part of this surface.

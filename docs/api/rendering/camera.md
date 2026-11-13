@@ -191,11 +191,16 @@ helper writes its color as the per-instance tint. Lines are one pixel wide, wire
 geometry, and `DrawCylinder` records two instanced draws.
 
 `DrawTexture` takes its destination in render pixels relative to the camera viewport, top-left
-origin, Y downward — the `WorldToScreen`/`ScreenToWorldRay` space. It is an alpha-blended overlay
-with `DepthTest.Always`, no depth write, and `Cull.None`, so it draws over scene geometry. It is
-pixel-exact for perspective and orthographic cameras, and its matrix is affine in world space with
-constant homogeneous `w`, so an on-screen overlay lies inside the camera frustum and is not
-frustum-culled for a translated or rotated perspective camera.
+origin, Y downward — the `WorldToScreen`/`ScreenToWorldRay` space. The helper unprojects the
+destination rectangle's corners at NDC depth `0.5` and maps the engine unit quad onto the resulting
+world-space parallelogram with an affine matrix (zero projective column, `M44 = 1`), so the
+batcher's transformed bounds and its translation depth are the quad's real ones. The projected
+rectangle is pixel-exact for perspective and orthographic cameras, the quad's top-left UV lands on
+the destination top-left, and the overlay is not frustum-culled for a translated or rotated
+perspective camera. It is an alpha-blended overlay with `DepthTest.Always`, no depth write, and
+`Cull.None`, so it draws over scene geometry. A singular view-projection matrix, a corner that
+cannot be unprojected, or a non-finite or degenerate world-space quad is
+`InvalidOperationException`.
 
 **Error model.**
 
