@@ -4,18 +4,20 @@ using RayBork.Internal;
 namespace RayBork.Tests.Assets.Catalog;
 
 /// <summary>
-/// Tests the built-in engine asset formats and their registration in the catalog registry.
+/// Tests the built-in asset formats and loaders and their registration in the catalog registry.
 /// </summary>
 public sealed class BuiltInAssetLoaderTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateDefaultRegistersTheEngineFormats() {
+    public void CreateDefaultRegistersTheEngineFormatsAndLoaders() {
         AssetTypeRegistry registry = new(BuiltInAssetLoaders.CreateDefault());
 
-        Assert.Equal(3, registry.Count);
+        Assert.Equal(5, registry.Count);
         Assert.True(registry.Contains(typeof(Mesh)));
         Assert.True(registry.Contains(typeof(Texture)));
         Assert.True(registry.Contains(typeof(ShaderProgram)));
+        Assert.True(registry.Contains(typeof(Shader)));
+        Assert.True(registry.Contains(typeof(Model)));
 
         EngineAssetTypeRegistration<Mesh> mesh = Assert.IsType<EngineAssetTypeRegistration<Mesh>>(
             registry.Get(typeof(Mesh)));
@@ -31,6 +33,16 @@ public sealed class BuiltInAssetLoaderTests {
             Assert.IsType<EngineAssetTypeRegistration<ShaderProgram>>(registry.Get(typeof(ShaderProgram)));
         Assert.Equal(AssetEntryType.Shader, program.EntryType);
         Assert.Same(ShaderProgramAssetFormat.Instance, program.Format);
+
+        LoaderAssetTypeRegistration<Shader> shader = Assert.IsType<LoaderAssetTypeRegistration<Shader>>(
+            registry.Get(typeof(Shader)));
+        Assert.Equal(AssetEntryType.Shader, shader.EntryType);
+        Assert.Same(ShaderMaterialLoader.Instance, shader.Loader);
+
+        LoaderAssetTypeRegistration<Model> model = Assert.IsType<LoaderAssetTypeRegistration<Model>>(
+            registry.Get(typeof(Model)));
+        Assert.Equal(AssetEntryType.Model, model.EntryType);
+        Assert.Same(ModelAssetLoader.Instance, model.Loader);
     }
 
     [Fact]
