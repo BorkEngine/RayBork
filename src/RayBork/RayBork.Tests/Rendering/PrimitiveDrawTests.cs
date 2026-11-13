@@ -600,6 +600,73 @@ public sealed class PrimitiveDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawTextureWithATranslatedPerspectiveCameraStaysAffineAndIsNotCulled() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect destination = new(16f, 16f, 64f, 48f);
+        using (Camera camera = harness.Host.CreatePerspectiveCamera(
+            transform: new Transform(new Vector3(0f, 0f, 8f)))) {
+            camera.DrawTexture(texture, destination);
+        }
+
+        harness.Host.EndFrame();
+
+        CameraPass pass = packet.Passes[0];
+        Assert.Equal(1, pass.DrawCount);
+        RenderDrawRecord record = pass.Draws[0];
+        Matrix4x4 matrix = record.GetWorldMatrices()[0];
+        AssertAffineOverlayMatrix(matrix);
+        // NDC depth 0.5 is 2 * near in front of the camera, so the affine center is the true world
+        // point instead of a projective matrix's raw W column.
+        Assert.Equal(7.8f, matrix.M43, 1e-3f);
+        AssertTextureQuadMapping(harness.Primitives, record, pass, destination);
+
+        FramePlan plan = new BatchPlanner().Plan(packet);
+        Assert.Equal(0, plan.CulledInstances);
+        Assert.Equal(1, plan.DrawCalls);
+        Assert.Equal(1, plan.Instances);
+        Assert.Equal(2, plan.Triangles);
+        PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
+        Assert.Same(harness.Primitives.Quad.Lifetime, batch.Mesh);
+        Assert.Equal(1, batch.InstanceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawTextureWithARotatedTranslatedPerspectiveCameraStaysAffineAndIsNotCulled() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect destination = new(700f, 120f, 420f, 260f);
+        Vector3 position = new(4f, 3f, 8f);
+        Quaternion orientation = Quaternion.LookRotation(-position, Vector3.UnitY);
+        using (Camera camera = harness.Host.CreatePerspectiveCamera(
+            transform: new Transform(position, orientation, Vector3.One))) {
+            camera.DrawTexture(texture, destination);
+        }
+
+        harness.Host.EndFrame();
+
+        CameraPass pass = packet.Passes[0];
+        Assert.Equal(1, pass.DrawCount);
+        RenderDrawRecord record = pass.Draws[0];
+        Matrix4x4 matrix = record.GetWorldMatrices()[0];
+        AssertAffineOverlayMatrix(matrix);
+        AssertTextureQuadMapping(harness.Primitives, record, pass, destination);
+
+        FramePlan plan = new BatchPlanner().Plan(packet);
+        Assert.Equal(0, plan.CulledInstances);
+        Assert.Equal(1, plan.DrawCalls);
+        Assert.Equal(1, plan.Instances);
+        Assert.Equal(2, plan.Triangles);
+        PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
+        Assert.Same(harness.Primitives.Quad.Lifetime, batch.Mesh);
+        Assert.Equal(1, batch.InstanceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task ZeroExtentsRecordNothing() {
         using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
         RenderFramePacket packet = harness.Host.BeginFrame();
@@ -1017,6 +1084,15 @@ public sealed class PrimitiveDrawTests {
                 Assert.Equal(destination.Y, pixel.Y, PIXEL_TOLERANCE);
             }
         }
+    }
+
+    private static void AssertAffineOverlayMatrix(Matrix4x4 matrix) {
+        // A projective overlay matrix has a non-trivial W column; the batcher's affine bounds and
+        // depth math ignore it, so the transform must keep the last column at (0, 0, 0, 1).
+        Assert.Equal(0f, matrix.M14);
+        Assert.Equal(0f, matrix.M24);
+        Assert.Equal(0f, matrix.M34);
+        Assert.Equal(1f, matrix.M44);
     }
 
     private static void AssertWorldBounds(

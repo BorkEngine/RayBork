@@ -1027,9 +1027,12 @@ public sealed class Camera : IDisposable {
     /// <param name="tint">The linear tint multiplied into the sampled texture, or <see langword="null"/>
     /// for opaque white.</param>
     /// <remarks>
-    /// The quad is built from the inverse view-projection matrix and an NDC mapping with a depth of
-    /// <c>0.5</c>, so the projected rectangle is pixel-exact for perspective and orthographic cameras
-    /// and stays inside the clip volume. It is an overlay: alpha blending, no depth write,
+    /// The destination rectangle's corners are unprojected through the inverse view-projection matrix
+    /// at an NDC depth of <c>0.5</c>, and the engine unit quad is mapped affinely onto that world-space
+    /// parallelogram, so the projected rectangle is pixel-exact for perspective and orthographic
+    /// cameras. The recorded instance transform stays affine, so batching, frustum culling, and depth
+    /// sorting see the quad's real world bounds and center, and the quad is never culled for a
+    /// translated or rotated perspective camera. It is an overlay: alpha blending, no depth write,
     /// <see cref="DepthTest.Always"/>, and no face culling, so it ignores scene depth. The quad's
     /// top-left UV lands at the destination top-left. The engine material's texture binding is set
     /// immediately before the draw is recorded and cleared immediately afterwards, so the shared
@@ -1045,8 +1048,9 @@ public sealed class Camera : IDisposable {
     /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
     /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The camera service has no primitive assets, the camera view-projection matrix is singular, or
-    /// the caller is not the tick thread.
+    /// The camera service has no primitive assets, the camera view-projection matrix is singular, a
+    /// destination corner cannot be unprojected, the resulting world-space quad is non-finite or
+    /// degenerate, or the caller is not the tick thread.
     /// </exception>
     public void DrawTexture(Texture texture, Rect destination, Color? tint = null) {
         EnsureDrawable(nameof(DrawTexture));
@@ -1338,19 +1342,79 @@ public sealed class Camera : IDisposable {
         float right = (((destination.X + destination.Width) / _viewport.Width) * 2f) - 1f;
         float top = ((destination.Y / _viewport.Height) * 2f) - 1f;
         float bottom = (((destination.Y + destination.Height) / _viewport.Height) * 2f) - 1f;
-        Matrix4x4 ndcQuad = new(
-            right - left, 0f, 0f, 0f,
-            0f, top - bottom, 0f, 0f,
-            0f, 0f, 0f, 0f,
-            (left + right) * 0.5f, (top + bottom) * 0.5f, OVERLAY_NDC_DEPTH, 1f);
         if (!Matrix4x4.Invert(_viewProjectionMatrix, out Matrix4x4 inverse)) {
             throw new InvalidOperationException(
                 "The camera view-projection matrix is singular; the screen-space quad cannot be "
                     + "unprojected.");
         }
 
-        return ndcQuad * inverse;
+        Vector3 topLeft = UnprojectOverlayCorner(inverse, left, top);
+        Vector3 topRight = UnprojectOverlayCorner(inverse, right, top);
+        Vector3 bottomLeft = UnprojectOverlayCorner(inverse, left, bottom);
+        Vector3 bottomRight = UnprojectOverlayCorner(inverse, right, bottom);
+        // The destination rectangle at a constant NDC depth unprojects to a world-space
+        // parallelogram parallel to the camera's image plane, so an affine map from the local unit
+        // quad to that parallelogram projects to exactly the same NDC rectangle. Keeping the
+        // instance matrix affine is what makes the batcher's Vector3.Transform bounds and raw
+        // translation depth correct; a projective matrix has a non-trivial W column that those
+        // affine consumers ignore, which culls a translated camera's overlay behind the camera.
+        Vector3 x = topRight - topLeft;
+        Vector3 y = topLeft - bottomLeft;
+        Vector3 z = NormalizeOr(Vector3.Cross(x, y), Vector3.UnitZ);
+        Vector3 center = (topLeft + topRight + bottomLeft + bottomRight) * 0.25f;
+        Matrix4x4 matrix = new(
+            x.X, x.Y, x.Z, 0f,
+            y.X, y.Y, y.Z, 0f,
+            z.X, z.Y, z.Z, 0f,
+            center.X, center.Y, center.Z, 1f);
+        ValidateOverlayMatrix(matrix);
+        return matrix;
     }
+
+    private static Vector3 UnprojectOverlayCorner(Matrix4x4 inverse, float ndcX, float ndcY) {
+        Vector4 world = Vector4.Transform(
+            new Vector4(ndcX, ndcY, OVERLAY_NDC_DEPTH, 1f),
+            inverse);
+        if (!float.IsFinite(world.W) || world.W == 0f) {
+            throw new InvalidOperationException(
+                "The screen-space quad cannot be unprojected: a destination corner has a zero or "
+                    + "non-finite homogeneous coordinate.");
+        }
+
+        return new Vector3(world.X / world.W, world.Y / world.W, world.Z / world.W);
+    }
+
+    private static void ValidateOverlayMatrix(Matrix4x4 matrix) {
+        if (!IsFinite(matrix)) {
+            throw new InvalidOperationException(
+                "The screen-space quad maps to a world-space matrix with a non-finite component.");
+        }
+
+        // The three basis rows are the quad's edges and plane normal, so a non-positive determinant
+        // means the unprojected corners collapsed to a line or point and the quad cannot be drawn.
+        if (!(matrix.GetDeterminant() > 0f)) {
+            throw new InvalidOperationException(
+                "The screen-space quad maps to a degenerate world-space matrix.");
+        }
+    }
+
+    private static bool IsFinite(Matrix4x4 matrix) =>
+        float.IsFinite(matrix.M11)
+        && float.IsFinite(matrix.M12)
+        && float.IsFinite(matrix.M13)
+        && float.IsFinite(matrix.M14)
+        && float.IsFinite(matrix.M21)
+        && float.IsFinite(matrix.M22)
+        && float.IsFinite(matrix.M23)
+        && float.IsFinite(matrix.M24)
+        && float.IsFinite(matrix.M31)
+        && float.IsFinite(matrix.M32)
+        && float.IsFinite(matrix.M33)
+        && float.IsFinite(matrix.M34)
+        && float.IsFinite(matrix.M41)
+        && float.IsFinite(matrix.M42)
+        && float.IsFinite(matrix.M43)
+        && float.IsFinite(matrix.M44);
 
     private static Vector3 NormalizeOr(Vector3 value, Vector3 fallback) {
         float length = value.Length();
