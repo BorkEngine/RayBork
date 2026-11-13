@@ -563,6 +563,160 @@ public sealed class MeshBuilderTests {
         }
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GenerateCollisionsMarksTheBuiltMesh() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        CreateTriangle(builder);
+
+        builder.GenerateCollisions();
+        Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
+
+        try {
+            Assert.True(mesh.HasCollisionAcceleration);
+        } finally {
+            mesh.Dispose();
+        }
+
+        Assert.Throws<ObjectDisposedException>(() => _ = mesh.HasCollisionAcceleration);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task MeshWithoutGenerateCollisionsHasNoAccelerationStructure() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        CreateTriangle(builder);
+
+        Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        try {
+            Assert.False(mesh.HasCollisionAcceleration);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Theory]
+    [InlineData(PrimitiveTopology.LineList)]
+    [InlineData(PrimitiveTopology.LineStrip)]
+    [InlineData(PrimitiveTopology.PointList)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateCollisionsRejectsLineAndPointTopologies(PrimitiveTopology topology) {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        builder.Topology = topology;
+        builder.SetVertices(CreateTrianglePositions());
+        builder.SetIndices([0u, 1u, 2u]);
+
+        Assert.Throws<NotSupportedException>(() => builder.GenerateCollisions());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GenerateCollisionsIsIdempotentAndDoesNotMutateTheGeometry() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        CreateQuad(builder);
+        Vertex[] vertices = [.. builder.Vertices];
+        uint[] indices = [.. builder.Indices];
+
+        builder.GenerateCollisions();
+        builder.GenerateCollisions();
+
+        AssertVerticesEqual(vertices, builder.Vertices.ToArray());
+        Assert.Equal(indices, builder.Indices.ToArray());
+        Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        try {
+            Assert.True(mesh.HasCollisionAcceleration);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GenerateCollisionsPersistsForLaterBuildsFromTheSameBuilder() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        CreateTriangle(builder);
+        builder.GenerateCollisions();
+
+        Mesh first = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        Mesh second;
+        try {
+            builder.Vertices[0] = new Vertex(new Vector3(-1f, 0f, 0f));
+            second = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        } catch {
+            first.Dispose();
+            throw;
+        }
+
+        try {
+            Assert.True(first.HasCollisionAcceleration);
+            Assert.True(second.HasCollisionAcceleration);
+            Ray ray = new(new Vector3(-0.25f, 0.25f, 1f), -Vector3.UnitZ);
+            Assert.False(Collision.GetRayMesh(ray, first, Matrix4x4.Identity).Hit);
+            Assert.True(Collision.GetRayMesh(ray, second, Matrix4x4.Identity).Hit);
+        } finally {
+            first.Dispose();
+            second.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task FullyDegenerateGeometryBuildsWithoutAnAccelerationStructure() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        builder.SetVertices([
+            new Vertex(Vector3.Zero),
+            new Vertex(new Vector3(1f, 0f, 0f)),
+            new Vertex(new Vector3(2f, 0f, 0f)),
+        ]);
+        builder.SetIndices([0u, 1u, 2u]);
+        builder.GenerateCollisions();
+
+        Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        try {
+            Assert.False(mesh.HasCollisionAcceleration);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CanceledCollisionBuildLeavesNoAssetAndTheBuilderReusable() {
+        using ProceduralTestHarness harness = new();
+        harness.Worker.DeferUploads = true;
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        CreateTriangle(builder);
+        builder.GenerateCollisions();
+        using CancellationTokenSource cancellation = new();
+
+        Task<Mesh> build = builder.BuildAsync(cancellation.Token);
+        FakeGpuAssetUploadOperation operation = harness.Worker.WaitForUpload(_timeout);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => build.WaitAsync(_timeout, TestContext.Current.CancellationToken));
+        Assert.True(
+            SpinWait.SpinUntil(() => harness.Worker.CancelCalls.Count == 1, _timeout),
+            "The bridge did not cancel the upload operation.");
+        Assert.True(
+            SpinWait.SpinUntil(() => harness.Bridge.LiveResourceCount == 0, _timeout),
+            "The canceled upload left a live resource.");
+
+        harness.Worker.DeferUploads = false;
+        Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        try {
+            Assert.True(mesh.HasCollisionAcceleration);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
     private static Vertex[] CreateQuadPositions() => [
         new Vertex(Vector3.Zero),
         new Vertex(new Vector3(1f, 0f, 0f)),

@@ -523,10 +523,134 @@ public sealed class CollisionTests {
                 Matrix4x4.Identity);
 
             Assert.False(mesh.IsProcedural);
+            Assert.False(mesh.HasCollisionAcceleration);
             AssertHit(hit, 1f, new Vector3(0.25f, 0.25f, 0f), Vector3.UnitZ);
         } finally {
             mesh.Dispose();
         }
+    }
+
+    [Theory]
+    [InlineData("cube")]
+    [InlineData("sphere")]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GetRayMeshAcceleratedAndBruteForceAgreeOnPrimitiveHitsAndMisses(string shape) {
+        PrimitiveMeshData geometry = shape switch {
+            "cube" => PrimitiveMeshFactory.CreateCube(),
+            "sphere" => PrimitiveMeshFactory.CreateSphere(),
+            _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, "Unknown test shape."),
+        };
+        using ProceduralTestHarness harness = new();
+        Mesh bruteForce = await BuildMeshAsync(
+            harness,
+            geometry.Topology,
+            geometry.Vertices,
+            geometry.Indices);
+        Mesh accelerated = await BuildMeshAsync(
+            harness,
+            geometry.Topology,
+            geometry.Vertices,
+            geometry.Indices,
+            collisions: true);
+        try {
+            Assert.False(bruteForce.HasCollisionAcceleration);
+            Assert.True(accelerated.HasCollisionAcceleration);
+            Ray[] rays = [
+                new(new Vector3(0f, 0f, 5f), -Vector3.UnitZ),
+                new(new Vector3(0.25f, 0.25f, 5f), -Vector3.UnitZ),
+                new(new Vector3(2f, 2f, 5f), -Vector3.UnitZ),
+                new(Vector3.Zero, Vector3.UnitX),
+                new(new Vector3(0f, 0f, 5f), Vector3.UnitZ),
+                new(new Vector3(0.5f, 0f, -5f), Vector3.UnitZ),
+            ];
+            foreach (Ray ray in rays) {
+                AssertSameCollision(
+                    Collision.GetRayMesh(ray, bruteForce, Matrix4x4.Identity),
+                    Collision.GetRayMesh(ray, accelerated, Matrix4x4.Identity));
+            }
+        } finally {
+            bruteForce.Dispose();
+            accelerated.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GetRayMeshAcceleratedPathReturnsTheNearestTriangle() {
+        using ProceduralTestHarness harness = new();
+        Mesh mesh = await BuildMeshAsync(
+            harness,
+            PrimitiveTopology.TriangleList,
+            [
+                new Vertex(Vector3.Zero),
+                new Vertex(Vector3.UnitX),
+                new Vertex(Vector3.UnitY),
+                new Vertex(Vector3.UnitZ),
+                new Vertex(Vector3.UnitX + Vector3.UnitZ),
+                new Vertex(Vector3.UnitY + Vector3.UnitZ),
+            ],
+            [3u, 4u, 5u, 0u, 1u, 2u],
+            collisions: true);
+        try {
+            Assert.True(mesh.HasCollisionAcceleration);
+            RayCollision hit = Collision.GetRayMesh(
+                new Ray(new Vector3(0.25f, 0.25f, 2f), -Vector3.UnitZ),
+                mesh,
+                Matrix4x4.Identity);
+
+            AssertHit(hit, 1f, new Vector3(0.25f, 0.25f, 1f), Vector3.UnitZ);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GetRayMeshMapsAnAcceleratedHitThroughANonUniformTransform() {
+        using ProceduralTestHarness harness = new();
+        Vertex[] vertices = [
+            new Vertex(Vector3.Zero),
+            new Vertex(Vector3.UnitX),
+            new Vertex(Vector3.UnitY),
+        ];
+        uint[] indices = [0u, 1u, 2u];
+        Mesh bruteForce = await BuildMeshAsync(
+            harness,
+            PrimitiveTopology.TriangleList,
+            vertices,
+            indices);
+        Mesh accelerated = await BuildMeshAsync(
+            harness,
+            PrimitiveTopology.TriangleList,
+            vertices,
+            indices,
+            collisions: true);
+        Matrix4x4 transform = new Transform(
+            new Vector3(10f, 0f, 0f),
+            Quaternion.Euler(0f, 90f, 0f),
+            new Vector3(2f, 1f, 0.5f)).ToMatrix();
+        try {
+            Ray ray = new(new Vector3(11f, 0.25f, -1f), -Vector3.UnitX);
+            RayCollision expected = Collision.GetRayMesh(ray, bruteForce, transform);
+            RayCollision actual = Collision.GetRayMesh(ray, accelerated, transform);
+
+            AssertHit(expected, 1f, new Vector3(10f, 0.25f, -1f), Vector3.UnitX);
+            AssertSameCollision(expected, actual);
+        } finally {
+            bruteForce.Dispose();
+            accelerated.Dispose();
+        }
+    }
+
+    private static void AssertSameCollision(RayCollision expected, RayCollision actual) {
+        Assert.Equal(expected.Hit, actual.Hit);
+        if (!expected.Hit) {
+            return;
+        }
+
+        Assert.Equal(expected.Distance, actual.Distance, 4);
+        AssertVector(expected.Point, actual.Point);
+        AssertVector(expected.Normal, actual.Normal);
     }
 
     private static void AssertBoxFaceHit(
@@ -574,10 +698,15 @@ public sealed class CollisionTests {
         ProceduralTestHarness harness,
         PrimitiveTopology topology,
         Vertex[] vertices,
-        uint[] indices) {
+        uint[] indices,
+        bool collisions = false) {
         MeshBuilder builder = harness.Service.CreateMeshBuilder(topology);
         builder.SetVertices(vertices);
         builder.SetIndices(indices);
+        if (collisions) {
+            builder.GenerateCollisions();
+        }
+
         return await builder.BuildAsync(TestContext.Current.CancellationToken);
     }
 }

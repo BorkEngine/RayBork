@@ -33,6 +33,7 @@ public sealed class MeshBuilder {
     private readonly List<uint> _indices = [];
     private PrimitiveTopology _topology;
     private BoundingBox? _bounds;
+    private bool _generateCollisions;
 
     /// <summary>
     /// Initializes a builder. Game code uses <see cref="EngineContext.CreateMeshBuilder"/> so the
@@ -225,6 +226,40 @@ public sealed class MeshBuilder {
     }
 
     /// <summary>
+    /// Selects that <see cref="BuildAsync"/> builds a collision acceleration structure from the same
+    /// geometry snapshot it validates and uploads.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is an imperative builder step like <see cref="ComputeNormals"/> and
+    /// <see cref="ComputeTangents"/>: it does not change the builder geometry. The structure is built
+    /// by the next <see cref="BuildAsync"/> from that build's snapshot and is exposed on the returned
+    /// mesh as <see cref="Mesh.HasCollisionAcceleration"/>. The selection persists for every later
+    /// build from this builder, and calling this method more than once has no additional effect.
+    /// </para>
+    /// <para>
+    /// <see cref="Collision.GetRayMesh"/> traverses the structure when the mesh has one and tests every
+    /// triangle otherwise; both paths return the same nearest hit. A snapshot with no non-degenerate
+    /// triangle builds without a structure. A failed or canceled build creates no asset, leaves the
+    /// builder reusable, and does not let a later geometry change affect the structure.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">
+    /// The topology is not <see cref="PrimitiveTopology.TriangleList"/> or
+    /// <see cref="PrimitiveTopology.TriangleStrip"/>.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    public void GenerateCollisions() {
+        _service.ThrowIfStopped();
+        if (_topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip)) {
+            throw new NotSupportedException(
+                $"Collision generation supports only triangle topologies; the builder topology is {_topology}.");
+        }
+
+        _generateCollisions = true;
+    }
+
+    /// <summary>
     /// Computes the mesh-space bounds of the current vertices and stores them for the next build.
     /// </summary>
     /// <returns>The bounds of every vertex position.</returns>
@@ -259,7 +294,9 @@ public sealed class MeshBuilder {
     /// The builder snapshots its vertices and indices before the upload, so it is reusable whether the
     /// build succeeds, fails, or is canceled. A failed or canceled build destroys any GPU resource it
     /// created. The returned mesh has <see cref="Mesh.IsProcedural"/> set, a reserved synthetic
-    /// <see cref="Mesh.Path"/>, and its CPU vertices and indices exposed on the asset.
+    /// <see cref="Mesh.Path"/>, and its CPU vertices and indices exposed on the asset. When
+    /// <see cref="GenerateCollisions"/> was called, the build also creates the collision acceleration
+    /// structure from the same snapshot and exposes it through <see cref="Mesh.HasCollisionAcceleration"/>.
     /// </remarks>
     public async Task<Mesh> BuildAsync(CancellationToken cancellationToken = default) {
         _service.ThrowIfStopped();
@@ -269,6 +306,20 @@ public sealed class MeshBuilder {
         uint[] indices = [.. _indices];
         BoundingBox bounds = _bounds ?? ComputeBoundsCore(vertices);
         PrimitiveTopology topology = _topology;
+        MeshCollisionData? collision = null;
+        if (_generateCollisions) {
+            if (topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip)) {
+                throw new NotSupportedException(
+                    $"Collision generation supports only triangle topologies; the builder topology is {topology}.");
+            }
+
+            Vector3[] positions = new Vector3[vertices.Length];
+            for (int index = 0; index < vertices.Length; index++) {
+                positions[index] = vertices[index].Position;
+            }
+
+            collision = MeshCollisionBuilder.Build(positions, indices, topology);
+        }
 
         int id = ProceduralAssetIds.NextMeshId();
         string canonicalPath = ProceduralAssetIds.MeshPath(id);
@@ -291,7 +342,7 @@ public sealed class MeshBuilder {
         try {
             EngineAsset lifetime = new(canonicalPath, resource, _service.QueueDestruction, static () => { });
             lifetime.AddOwnerReference();
-            return new Mesh(lifetime, descriptor, vertices, indices, isProcedural: true);
+            return new Mesh(lifetime, descriptor, vertices, indices, isProcedural: true, collision);
         } catch {
             _service.QueueDestruction(resource);
             throw;

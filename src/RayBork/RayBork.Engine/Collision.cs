@@ -1,4 +1,5 @@
 using System.Numerics;
+using RayBork.Internal;
 
 namespace RayBork;
 
@@ -250,45 +251,76 @@ public static class Collision {
     /// reports a miss. The direction is not required to be normalized.
     /// </remarks>
     public static RayCollision GetRayTriangle(Ray ray, Vector3 a, Vector3 b, Vector3 c) {
-        if (!IsFinite(ray) || !IsFinite(a) || !IsFinite(b) || !IsFinite(c)) {
+        if (!TryGetTriangleIntersection(ray, a, b, c, out float distance, out Vector3 normal)) {
             return default;
+        }
+
+        return new RayCollision(distance, ray.Origin + (ray.Direction * distance), normal);
+    }
+
+    /// <summary>
+    /// Tests the double-sided Möller–Trumbore ray/triangle intersection the public queries share.
+    /// </summary>
+    /// <param name="ray">The ray.</param>
+    /// <param name="a">The first triangle corner.</param>
+    /// <param name="b">The second triangle corner.</param>
+    /// <param name="c">The third triangle corner.</param>
+    /// <param name="distance">The ray parameter of the hit, or zero on a miss.</param>
+    /// <param name="normal">The normalized geometric normal, or zero on a miss.</param>
+    /// <returns><c>true</c> when the ray hits the triangle in front of its origin.</returns>
+    /// <remarks>
+    /// The validation and numeric behavior match <see cref="GetRayTriangle"/> exactly so the
+    /// brute-force and accelerated mesh paths select and report the same triangle.
+    /// </remarks>
+    internal static bool TryGetTriangleIntersection(
+        Ray ray,
+        Vector3 a,
+        Vector3 b,
+        Vector3 c,
+        out float distance,
+        out Vector3 normal) {
+        distance = 0f;
+        normal = Vector3.Zero;
+        if (!IsFinite(ray) || !IsFinite(a) || !IsFinite(b) || !IsFinite(c)) {
+            return false;
         }
 
         Vector3 edge1 = b - a;
         Vector3 edge2 = c - a;
-        Vector3 normal = Vector3.Cross(edge1, edge2);
-        float normalLengthSquared = normal.LengthSquared();
+        Vector3 faceNormal = Vector3.Cross(edge1, edge2);
+        float normalLengthSquared = faceNormal.LengthSquared();
         if (!(normalLengthSquared > 0f)) {
-            return default;
+            return false;
         }
 
         Vector3 pvec = Vector3.Cross(ray.Direction, edge2);
         float determinant = Vector3.Dot(edge1, pvec);
         float scale = PARALLEL_EPSILON_SQUARED * normalLengthSquared * ray.Direction.LengthSquared();
         if (!((determinant * determinant) > scale)) {
-            return default;
+            return false;
         }
 
         float inverse = 1f / determinant;
         Vector3 tvec = ray.Origin - a;
         float u = Vector3.Dot(tvec, pvec) * inverse;
         if (!(u >= 0f && u <= 1f)) {
-            return default;
+            return false;
         }
 
         Vector3 qvec = Vector3.Cross(tvec, edge1);
         float v = Vector3.Dot(ray.Direction, qvec) * inverse;
         if (!(v >= 0f && (u + v) <= 1f)) {
-            return default;
+            return false;
         }
 
-        float distance = Vector3.Dot(edge2, qvec) * inverse;
-        if (!(distance >= 0f)) {
-            return default;
+        float hitDistance = Vector3.Dot(edge2, qvec) * inverse;
+        if (!(hitDistance >= 0f)) {
+            return false;
         }
 
-        Vector3 point = ray.Origin + (ray.Direction * distance);
-        return new RayCollision(distance, point, Vector3.Normalize(normal));
+        distance = hitDistance;
+        normal = Vector3.Normalize(faceNormal);
+        return true;
     }
 
     /// <summary>
@@ -351,6 +383,11 @@ public static class Collision {
     /// indices swapped on odd triangles, matching <see cref="MeshBuilder"/>. Degenerate triangles are
     /// skipped.
     /// </para>
+    /// <para>
+    /// When the mesh carries a collision acceleration structure (see
+    /// <see cref="MeshBuilder.GenerateCollisions"/>), the query traverses it; otherwise it tests every
+    /// triangle. Both paths return the same nearest hit.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException"><paramref name="mesh"/> is disposed.</exception>
@@ -379,8 +416,32 @@ public static class Collision {
 
         ReadOnlySpan<Vertex> vertices = mesh.Vertices.Span;
         ReadOnlySpan<uint> indices = mesh.Indices.Span;
+        MeshCollisionData? collision = mesh.Collision;
         RayCollision nearest = default;
-        if (topology == PrimitiveTopology.TriangleList) {
+        if (collision is not null
+            && collision.Topology == topology
+            && collision.TriangleCount == MeshCollisionData.GetTriangleCount(topology, indices.Length)) {
+            if (collision.TryFindNearest(meshRay, vertices, indices, out int triangleId, out _)
+                && MeshCollisionData.TryGetTriangleIndices(
+                    topology,
+                    indices,
+                    triangleId,
+                    out uint index0,
+                    out uint index1,
+                    out uint index2)
+                && TryGetTriangleIntersection(
+                    meshRay,
+                    vertices[(int)index0].Position,
+                    vertices[(int)index1].Position,
+                    vertices[(int)index2].Position,
+                    out float distance,
+                    out Vector3 triangleNormal)) {
+                nearest = new RayCollision(
+                    distance,
+                    meshRay.Origin + (meshRay.Direction * distance),
+                    triangleNormal);
+            }
+        } else if (topology == PrimitiveTopology.TriangleList) {
             for (int offset = 0; offset + 2 < indices.Length; offset += 3) {
                 ConsiderTriangle(
                     meshRay,

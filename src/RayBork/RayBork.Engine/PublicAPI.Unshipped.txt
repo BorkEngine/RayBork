@@ -1029,3 +1029,5 @@ RayBork.RayCollision.Hit.get -> bool
 RayBork.RayCollision.Normal.get -> System.Numerics.Vector3
 RayBork.RayCollision.Point.get -> System.Numerics.Vector3
 RayBork.RayCollision.RayCollision() -> void
+RayBork.Mesh.HasCollisionAcceleration.get -> bool
+RayBork.MeshBuilder.GenerateCollisions() -> void

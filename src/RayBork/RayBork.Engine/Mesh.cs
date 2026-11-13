@@ -32,6 +32,7 @@ public sealed class Mesh : IAsset {
     private readonly BoundingBox _bounds;
     private readonly PrimitiveTopology _topology;
     private readonly bool _isProcedural;
+    private readonly MeshCollisionData? _collision;
 
     /// <summary>
     /// Initializes a mesh from its uploaded lifetime state, its descriptor, and its CPU geometry.
@@ -41,13 +42,18 @@ public sealed class Mesh : IAsset {
     /// <param name="vertices">The CPU vertices the mesh retains.</param>
     /// <param name="indices">The CPU 32-bit indices the mesh retains.</param>
     /// <param name="isProcedural">Whether the mesh was built by a <see cref="MeshBuilder"/>.</param>
+    /// <param name="collision">
+    /// The collision acceleration structure that describes the same snapshot, or <c>null</c> when the
+    /// mesh has none. The mesh does not dispose it; its arrays are managed.
+    /// </param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal Mesh(
         EngineAsset asset,
         MeshAssetDescriptor descriptor,
         Vertex[] vertices,
         uint[] indices,
-        bool isProcedural) {
+        bool isProcedural,
+        MeshCollisionData? collision = null) {
         ArgumentNullException.ThrowIfNull(asset);
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(vertices);
@@ -63,6 +69,7 @@ public sealed class Mesh : IAsset {
             new Vector3(descriptor.Bounds[3], descriptor.Bounds[4], descriptor.Bounds[5]));
         _topology = descriptor.Topology;
         _isProcedural = isProcedural;
+        _collision = collision;
     }
 
     /// <inheritdoc/>
@@ -146,6 +153,28 @@ public sealed class Mesh : IAsset {
     }
 
     /// <summary>
+    /// Gets whether the mesh carries a collision acceleration structure for ray/mesh queries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A procedural mesh gets one only when <see cref="MeshBuilder.GenerateCollisions"/> was called
+    /// before <see cref="MeshBuilder.BuildAsync"/>. A mesh loaded from a pack has none.
+    /// <see cref="Collision.GetRayMesh"/> traverses the structure when it is present and tests every
+    /// triangle otherwise; both paths return the same nearest hit.
+    /// </para>
+    /// <para>
+    /// The structure is immutable and is not disposed with the mesh.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    public bool HasCollisionAcceleration {
+        get {
+            ThrowIfDisposed();
+            return _collision is not null;
+        }
+    }
+
+    /// <summary>
     /// Gets the primitive topology of the mesh.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
@@ -164,6 +193,21 @@ public sealed class Mesh : IAsset {
     /// builder owns the asset and exposes the lifetime only inside the engine assembly.
     /// </summary>
     internal EngineAsset Lifetime => _asset;
+
+    /// <summary>
+    /// Gets the collision acceleration structure, or <c>null</c> when the mesh has none.
+    /// </summary>
+    /// <remarks>
+    /// The structure is immutable and describes the same CPU snapshot that <see cref="Vertices"/> and
+    /// <see cref="Indices"/> expose.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
+    internal MeshCollisionData? Collision {
+        get {
+            ThrowIfDisposed();
+            return _collision;
+        }
+    }
 
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
