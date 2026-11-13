@@ -122,46 +122,18 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task PartWithoutAShaderPathFallsBackToTheBuiltInMeshShader() {
-        PackBuilder builder = CatalogTestData.CreateStandardBuilder();
-        builder.Add("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor()));
-        builder.Add(
-            "models/castle",
-            AssetEntryType.Model,
-            AssetSerialization.Serialize(CreateDescriptor(shaderPath: null)));
-        using CatalogTestHarness harness = new(userPacks: [builder.Build()]);
+    public async Task PartWithAnEmptyShaderPathFailsTheLoadWithoutAPartUpload() {
+        using CatalogTestHarness harness = new(
+            userPacks: [BuildModelPack(CreateDescriptor(shaderPath: ""))]);
 
-        Model model = await harness.Catalog.Load<Model>(
-            "/models/castle",
-            TestContext.Current.CancellationToken);
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => harness.Catalog.Load<Model>(
+                "/models/castle",
+                TestContext.Current.CancellationToken));
 
-        try {
-            Assert.Equal("/shaders/mesh", model.Parts[0].Shader.Path);
-        } finally {
-            model.Dispose();
-        }
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LegacyDefaultShaderPathResolvesToTheBuiltInMeshShader() {
-        PackBuilder builder = CatalogTestData.CreateStandardBuilder();
-        builder.Add("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor()));
-        builder.Add(
-            "models/castle",
-            AssetEntryType.Model,
-            AssetSerialization.Serialize(CreateDescriptor(shaderPath: "shaders/default")));
-        using CatalogTestHarness harness = new(userPacks: [builder.Build()]);
-
-        Model model = await harness.Catalog.Load<Model>(
-            "/models/castle",
-            TestContext.Current.CancellationToken);
-
-        try {
-            Assert.Equal("/shaders/mesh", model.Parts[0].Shader.Path);
-        } finally {
-            model.Dispose();
-        }
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("has no shader path", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
     [Fact]
@@ -277,6 +249,7 @@ public sealed class AssetCatalogModelTests {
         "null-parts",
         "empty-name",
         "non-canonical-mesh",
+        "empty-shader",
         "non-canonical-shader",
         "short-transform",
         "non-finite-transform",
@@ -302,7 +275,7 @@ public sealed class AssetCatalogModelTests {
     private static ModelAssetDescriptor CreateDescriptor(
         int partCount = 1,
         bool shareParts = true,
-        string? shaderPath = CatalogTestData.SHADER_PATH) {
+        string shaderPath = CatalogTestData.SHADER_PATH) {
         ModelPartAsset[] parts = new ModelPartAsset[partCount];
         for (int index = 0; index < partCount; index++) {
             parts[index] = CreatePart(
@@ -320,7 +293,7 @@ public sealed class AssetCatalogModelTests {
     private static ModelPartAsset CreatePart(
         string name = "body",
         string meshPath = CatalogTestData.MESH_PATH,
-        string? shaderPath = CatalogTestData.SHADER_PATH)
+        string shaderPath = CatalogTestData.SHADER_PATH)
         => new() {
             Name = name,
             MeshPath = meshPath,
@@ -340,6 +313,10 @@ public sealed class AssetCatalogModelTests {
             },
             "non-canonical-mesh" => new ModelAssetDescriptor {
                 Parts = [CreatePart(meshPath: "/meshes/quad")],
+                Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
+            },
+            "empty-shader" => new ModelAssetDescriptor {
+                Parts = [CreatePart(shaderPath: "")],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
             "non-canonical-shader" => new ModelAssetDescriptor {

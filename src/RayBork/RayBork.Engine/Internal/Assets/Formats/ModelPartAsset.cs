@@ -17,8 +17,8 @@ internal sealed partial class ModelPartAsset {
     /// <summary>Gets the canonical path of the part mesh asset.</summary>
     public required string MeshPath { get; init; }
 
-    /// <summary>Gets the canonical path of the part shader asset, or <see langword="null"/> when unset.</summary>
-    public string? ShaderPath { get; init; }
+    /// <summary>Gets the canonical path of the part shader asset.</summary>
+    public required string ShaderPath { get; init; }
 
     /// <summary>Gets the part-local transform as position, rotation, and scale floats.</summary>
     public required float[] LocalTransform { get; init; }

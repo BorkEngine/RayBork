@@ -19,20 +19,13 @@ namespace RayBork.Internal;
 /// thread keeps serving the part loads while this load is incomplete. A failed or canceled load
 /// releases every part mesh reference and material it already acquired.
 /// </para>
+/// <para>
+/// Every part names a canonical shader path. The bake supplies the built-in <c>shaders/mesh</c>
+/// default when the sidecar omits one; the runtime has no default and no legacy mapping, so a pack
+/// with a null or stale path fails to load.
+/// </para>
 /// </remarks>
 internal sealed class ModelAssetLoader : IAssetLoader<Model> {
-    /// <summary>
-    /// The canonical shader path the runtime uses for a model part whose descriptor has no shader path.
-    /// The path is baked into the built-in pack as the default mesh draw shader.
-    /// </summary>
-    private const string DEFAULT_MODEL_SHADER_PATH = "shaders/mesh";
-
-    /// <summary>
-    /// The shader path older model packs baked when a part had no authored shader. It resolves to
-    /// <see cref="DEFAULT_MODEL_SHADER_PATH"/> because the built-in pack no longer publishes it.
-    /// </summary>
-    private const string LEGACY_MODEL_SHADER_PATH = "shaders/default";
-
     /// <summary>
     /// The shared loader instance.
     /// </summary>
@@ -84,7 +77,7 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
                 cancellationToken.ThrowIfCancellationRequested();
                 // Every part gets its own material even when two parts share a program path. The
                 // program is cached and reference-counted, so the parts still share one GPU program.
-                string shaderPath = ResolveModelPartShaderPath(part.ShaderPath);
+                string shaderPath = part.ShaderPath;
                 Shader material = await context
                     .LoadAsync<Shader>(shaderPath, cancellationToken)
                     .ConfigureAwait(false);
@@ -149,20 +142,6 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
         materials.Clear();
     }
 
-    private static string ResolveModelPartShaderPath(string? shaderPath) {
-        if (shaderPath is null) {
-            return DEFAULT_MODEL_SHADER_PATH;
-        }
-
-        string normalized = AssetPath.Normalize(shaderPath);
-        // Packs baked before the mesh shader replaced the old default still name `shaders/default`.
-        // They did not commit that program, so resolve the legacy path to the same built-in mesh
-        // shader instead of failing the model load with AssetNotFoundException.
-        return string.Equals(normalized, LEGACY_MODEL_SHADER_PATH, StringComparison.Ordinal)
-            ? DEFAULT_MODEL_SHADER_PATH
-            : normalized;
-    }
-
     private static void ValidateModelDescriptor(ModelAssetDescriptor descriptor, string canonical) {
         if (descriptor.Parts is null || descriptor.Parts.Length == 0) {
             throw AssetLoadErrors.CreateLoadFailure(canonical, "the model descriptor must carry at least one part");
@@ -185,8 +164,11 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
                         + meshReason);
             }
 
-            if (part.ShaderPath is not null
-                && !AssetPath.TryValidateCanonical(part.ShaderPath, out string? shaderReason)) {
+            if (string.IsNullOrWhiteSpace(part.ShaderPath)) {
+                throw AssetLoadErrors.CreateLoadFailure(canonical, $"model part '{part.Name}' has no shader path");
+            }
+
+            if (!AssetPath.TryValidateCanonical(part.ShaderPath, out string? shaderReason)) {
                 throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the shader path '{part.ShaderPath}' of model part '{part.Name}' is not canonical: "

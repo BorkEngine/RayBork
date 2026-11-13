@@ -20,6 +20,10 @@ Before 1.0, breaking changes are allowed when they improve the API. Each breakin
 migration note in the release notes and an update to this reference. After 1.0, obsolete members
 are marked `[Obsolete]` for at least one minor release before removal.
 
+A model descriptor requires a canonical shader path on every part. The pre-release alias for the
+retired default model shader and the runtime null-path default are removed, so repack older model
+packs; the bake writes `shaders/mesh` for a part with no authored `[model] shader`.
+
 The custom loader registration API is additive: `IAssetLoader<T>`, `AssetLoadContext`,
 `AssetEntryType`, and `RayBorkAppBuilder.WithAssetLoader<T>` extend the asset surface without
 changing `Load<T>`, and `WithAssetType<T>()` remains the MessagePack custom-data sugar.
