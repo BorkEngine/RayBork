@@ -336,19 +336,19 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FromSrgbByteOverloadDecodesDeterministicallyAndPassesAlpha() {
-        Color middleGray = Color.FromSrgb((byte)128, (byte)128, (byte)128, (byte)51);
+    public void FromSrgbBytesDecodesDeterministicallyAndPassesAlpha() {
+        Color middleGray = Color.FromSrgbBytes((byte)128, (byte)128, (byte)128, (byte)51);
 
         Assert.Equal(0.2158605f, middleGray.R, TOLERANCE);
         Assert.Equal(0.2158605f, middleGray.G, TOLERANCE);
         Assert.Equal(0.2158605f, middleGray.B, TOLERANCE);
         Assert.Equal(51f / 255f, middleGray.A);
-        Assert.Equal(middleGray, Color.FromSrgb((byte)128, (byte)128, (byte)128, (byte)51));
+        Assert.Equal(middleGray, Color.FromSrgbBytes((byte)128, (byte)128, (byte)128, (byte)51));
 
-        Assert.Equal(0f, Color.FromSrgb((byte)0, (byte)0, (byte)0).R);
-        Assert.Equal(1f, Color.FromSrgb((byte)255, (byte)255, (byte)255).R);
-        Assert.Equal(1f, Color.FromSrgb((byte)10, (byte)10, (byte)10).A);
-        Assert.Equal((10f / 255f) / 12.92f, Color.FromSrgb((byte)10, (byte)10, (byte)10).R);
+        Assert.Equal(0f, Color.FromSrgbBytes((byte)0, (byte)0, (byte)0).R);
+        Assert.Equal(1f, Color.FromSrgbBytes((byte)255, (byte)255, (byte)255).R);
+        Assert.Equal(1f, Color.FromSrgbBytes((byte)10, (byte)10, (byte)10).A);
+        Assert.Equal((10f / 255f) / 12.92f, Color.FromSrgbBytes((byte)10, (byte)10, (byte)10).R);
     }
 
     [Fact]

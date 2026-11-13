@@ -259,9 +259,6 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
             _rgba.W);
     }
 
-    // RS0026 flags multiple overloads with optional parameters. The float and byte forms must both be
-    // callable without alpha, so the shared default is deliberate rather than an overload ambiguity.
-#pragma warning disable RS0026
     /// <summary>
     /// Creates a linear color from sRGB-encoded red, green, blue, and alpha components.
     /// </summary>
@@ -299,14 +296,13 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// piecewise sRGB transfer function. Alpha is converted the same way without the transfer
     /// function. The conversion is exact and deterministic for a given byte quadruple.
     /// </remarks>
-    public static Color FromSrgb(byte r, byte g, byte b, byte a = 255) {
+    public static Color FromSrgbBytes(byte r, byte g, byte b, byte a = 255) {
         return new Color(
             DecodeSrgbComponent(r / 255f),
             DecodeSrgbComponent(g / 255f),
             DecodeSrgbComponent(b / 255f),
             a / 255f);
     }
-#pragma warning restore RS0026
 
     /// <summary>
     /// Interpolates two colors in OkLab space, clamping the interpolation factor.
