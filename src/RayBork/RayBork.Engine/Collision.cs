@@ -35,14 +35,14 @@ public static class Collision {
     /// <paramref name="radiusA"/> + <paramref name="radiusB"/>; touching spheres count as a hit.
     /// </returns>
     /// <remarks>
-    /// A negative radius sum or a NaN input reports <c>false</c>.
+    /// A negative radius on either sphere or a NaN input reports <c>false</c>.
     /// </remarks>
     public static bool CheckSpheres(Vector3 centerA, float radiusA, Vector3 centerB, float radiusB) {
-        float radiusSum = radiusA + radiusB;
-        if (!(radiusSum >= 0f)) {
+        if (!(radiusA >= 0f) || !(radiusB >= 0f)) {
             return false;
         }
 
+        float radiusSum = radiusA + radiusB;
         return Vector3.DistanceSquared(centerA, centerB) <= radiusSum * radiusSum;
     }
 
@@ -79,13 +79,13 @@ public static class Collision {
     /// </returns>
     /// <remarks>
     /// The test clamps the center to the box, so a center inside the box always collides. It is
-    /// inclusive: a sphere that only touches the box counts as overlapping. A NaN input reports
-    /// <c>false</c>.
+    /// inclusive: a sphere that only touches the box counts as overlapping. A zero radius is a
+    /// point sphere. A negative radius or a NaN input reports <c>false</c>.
     /// </remarks>
     public static bool CheckBoxSphere(BoundingBox box, Vector3 center, float radius) {
-        // Reject NaN up front: the min/max result of a NaN bound depends on the operand order and the
-        // hardware path, and a NaN input must report no collision.
-        if (IsNaN(center) || IsNaN(box.Min) || IsNaN(box.Max) || float.IsNaN(radius)) {
+        // Reject NaN bounds up front: the min/max result of a NaN bound depends on the operand order
+        // and the hardware path, and a NaN input must report no collision.
+        if (!(radius >= 0f) || IsNaN(center) || IsNaN(box.Min) || IsNaN(box.Max)) {
             return false;
         }
 

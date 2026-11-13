@@ -19,6 +19,15 @@ public sealed class CollisionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CheckSpheresRejectsNegativeRadiiAndAcceptsZeroRadius() {
+        Assert.False(Collision.CheckSpheres(Vector3.Zero, -1f, new Vector3(0.5f, 0f, 0f), 2f));
+        Assert.False(Collision.CheckSpheres(Vector3.Zero, -1f, new Vector3(0.5f, 0f, 0f), -1f));
+        Assert.True(Collision.CheckSpheres(Vector3.Zero, 0f, Vector3.Zero, 0f));
+        Assert.False(Collision.CheckSpheres(Vector3.Zero, 0f, new Vector3(1f, 0f, 0f), 0f));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void CheckBoxesDetectsOverlapSeparationTouchingAndContainment() {
         Assert.True(Collision.CheckBoxes(_unitBox, new BoundingBox(Vector3.Zero, new Vector3(2f))));
         Assert.False(Collision.CheckBoxes(_unitBox, new BoundingBox(new Vector3(2f, -1f, -1f), new Vector3(3f, 1f, 1f))));
@@ -35,6 +44,18 @@ public sealed class CollisionTests {
         Assert.True(Collision.CheckBoxSphere(box, new Vector3(2f, 0.5f, 0.5f), 1.5f));
         Assert.False(Collision.CheckBoxSphere(box, new Vector3(3f, 0.5f, 0.5f), 1f));
         Assert.True(Collision.CheckBoxSphere(box, new Vector3(2f, 0.5f, 0.5f), 1f));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CheckBoxSphereRejectsANegativeRadiusAndTreatsZeroRadiusAsAPoint() {
+        BoundingBox box = new(Vector3.Zero, Vector3.One);
+
+        Assert.False(Collision.CheckBoxSphere(box, new Vector3(2f, 0.5f, 0.5f), -1f));
+        Assert.False(Collision.CheckBoxSphere(box, new Vector3(0.5f, 0.5f, 0.5f), -5f));
+        Assert.True(Collision.CheckBoxSphere(box, new Vector3(0.5f, 0.5f, 0.5f), 0f));
+        Assert.True(Collision.CheckBoxSphere(box, Vector3.Zero, 0f));
+        Assert.False(Collision.CheckBoxSphere(box, new Vector3(2f, 0.5f, 0.5f), 0f));
     }
 
     [Fact]
