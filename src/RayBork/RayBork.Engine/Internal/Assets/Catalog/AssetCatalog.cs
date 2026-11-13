@@ -28,15 +28,15 @@ namespace RayBork.Internal;
 /// meshes and programs and returns a new model wrapper with its own materials per call.
 /// </para>
 /// <para>
-/// The loader thread only reads and decompresses pack payloads, runs the registered loaders, and starts
-/// GPU uploads; it never calls SDL, Vulkan, or game code and never waits for a GPU copy. An engine load
-/// is deferred: while its upload is in flight the loader keeps serving the next queued request, so
-/// custom data and <see cref="LoadData"/> do not wait behind a GPU upload. A loader that needs another
-/// asset requests it through its <see cref="AssetLoadContext"/>; the nested request is queued on the
-/// same loader thread, so the loader must return an incomplete task instead of blocking. <see cref="Stop"/>
-/// cancels and joins the loader, fails the pending loads with <see cref="ObjectDisposedException"/>,
-/// forces every cached asset to dispose, and releases the pack mappings. It runs before the frame ring
-/// completes so the render thread can still service the queued GPU destructions.
+/// The loader thread only reads and decompresses pack payloads, runs the synchronous part of the
+/// registered loaders, and starts GPU uploads; it never calls SDL, Vulkan, or a tick-thread API and
+/// never waits for a GPU copy. An engine load is deferred: while its upload is in flight the loader
+/// keeps serving the next queued request, so custom data and <see cref="LoadData"/> do not wait behind
+/// a GPU upload. A registered loader must not block: a nested load it requests through its
+/// <see cref="AssetLoadContext"/> is queued on the same loader thread. <see cref="Stop"/> cancels and
+/// joins the loader, fails the pending loads with <see cref="ObjectDisposedException"/>, forces every
+/// cached asset to dispose, and releases the pack mappings. It runs before the frame ring completes so
+/// the render thread can still service the queued GPU destructions.
 /// </para>
 /// <para>
 /// The catalog also owns the app's <see cref="ProceduralAssetService"/>. Procedural assets are never
@@ -644,6 +644,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 stopToken => LoadCustomObjectAsync(
                     visible,
                     registration.Loader,
+                    registration.FailureDescription,
                     stopToken,
                     cancellationToken,
                     chain),
@@ -669,6 +670,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     private async Task<object> LoadCustomObjectAsync<T>(
         VisibleAsset descriptorEntry,
         IAssetLoader<T> loader,
+        string failureDescription,
         CancellationToken stopToken,
         CancellationToken cancellationToken,
         LoadChain? chain) {
@@ -696,7 +698,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
             throw AssetLoadErrors.WrapLoadFailure(
                 descriptorEntry.Entry.Path,
-                "custom data could not be deserialized",
+                failureDescription,
                 exception);
         }
     }

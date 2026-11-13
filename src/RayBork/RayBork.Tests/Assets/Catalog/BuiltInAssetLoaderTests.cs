@@ -38,11 +38,13 @@ public sealed class BuiltInAssetLoaderTests {
             registry.Get(typeof(Shader)));
         Assert.Equal(AssetEntryType.Shader, shader.EntryType);
         Assert.Same(ShaderMaterialLoader.Instance, shader.Loader);
+        Assert.Equal("could not be loaded", shader.FailureDescription);
 
         LoaderAssetTypeRegistration<Model> model = Assert.IsType<LoaderAssetTypeRegistration<Model>>(
             registry.Get(typeof(Model)));
         Assert.Equal(AssetEntryType.Model, model.EntryType);
         Assert.Same(ModelAssetLoader.Instance, model.Loader);
+        Assert.Equal("could not be loaded", model.FailureDescription);
     }
 
     [Fact]

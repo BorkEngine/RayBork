@@ -200,7 +200,9 @@ public sealed class RayBorkAppBuilder {
         if (!_assetTypes.ContainsKey(assetType)) {
             _assetTypes.Add(
                 assetType,
-                new LoaderAssetTypeRegistration<T>(new MessagePackAssetLoader<T>()));
+                new LoaderAssetTypeRegistration<T>(
+                    new MessagePackAssetLoader<T>(),
+                    "custom data could not be deserialized"));
         }
 
         return this;
