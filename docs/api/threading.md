@@ -23,6 +23,10 @@
 | `RenderStats` | Render thread writes | Any thread reads a snapshot |
 | Renderer backend objects | Render thread | Never exposed; the backend is replaceable internally |
 
+The render thread never reads a live tick-thread object. `EngineContext.Tonemapping` is copied into a
+`TonemappingSnapshot` in the sealed frame packet; the present push constants and the scene frame
+block's exposure come from that snapshot, not from the app-lifetime settings object.
+
 ### 11.2 The "join before Tick returns" rule
 
 If user code starts a thread that touches game-owned objects, it must join that thread before

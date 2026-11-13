@@ -9,24 +9,31 @@ game without adopting a scene graph or an ECS.
 
 **Status: M5 shipped.** The engine opens an SDL3 window, runs
 `Setup`/`Tick`/`Shutdown` on a dedicated tick thread, and presents through a Vulkan 1.2 backend: a
-linear HDR scene target, AgX tone mapping, scRGB HDR output when the window reports HDR, MSAA with
-color resolve, reverse-Z depth, bounded recovery, and a Native AOT gate. M3 added the asset pipeline:
-the RAYBORKP v1 pack, canonical asset paths, a dedicated asset loader, reference-counted
-`Mesh`/`Texture` assets, procedural `MeshBuilder`/`TextureBuilder` creation, custom TOML data through
-compiled shapes, a non-blocking GPU upload bridge with frame retention and device-recovery re-upload,
-the JIT `RayBork.Bake` tooling, and a build-time embedded built-in pack. M4 adds the core 3D renderer:
-the frame-scoped camera and draw API (`DrawModel`, `DrawMesh`, `DrawInstanced`, `DrawModelInstanced`),
-`Model` as a user-owned composition of parts, `Shader` as a material instance over an internal
-program with `SetUniform`/`ResetUniforms`, a fixed 2048-slot bindless texture table with sampler and
-pipeline caches, automatic batch planning with frustum culling and opaque/transparency sorting,
-per-instance uniforms and textures, and the AgX highlight extension that maps scene luminance above
-the AgX white point into the reported HDR headroom.
+linear HDR scene target, Godot 4.7's HDR-aware AgX tone mapping, scRGB HDR output when the window
+reports HDR, MSAA with color resolve, reverse-Z depth, bounded recovery, and a Native AOT gate. M3
+added the asset pipeline: the RAYBORKP v1 pack, canonical asset paths, a dedicated asset loader,
+reference-counted `Mesh`/`Texture` assets, procedural `MeshBuilder`/`TextureBuilder` creation, custom
+TOML data through compiled shapes, a non-blocking GPU upload bridge with frame retention and
+device-recovery re-upload, the JIT `RayBork.Bake` tooling, and a build-time embedded built-in pack.
+M4 adds the core 3D renderer: the frame-scoped camera and draw API (`DrawModel`, `DrawMesh`,
+`DrawInstanced`, `DrawModelInstanced`), `Model` as a user-owned composition of parts, `Shader` as a
+material instance over an internal program with `SetUniform`/`ResetUniforms`, a fixed 2048-slot
+bindless texture table with sampler and pipeline caches, automatic batch planning with frustum
+culling and opaque/transparency sorting, per-instance uniforms and textures, and the HDR AgX present
+path.
 M5 adds the raylib-style primitive surface and the collision queries: the 13 `Camera` helpers
 (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`,
 `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`, and the screen-space
 `DrawTexture`), engine-owned primitive meshes drawn by the built-in `/shaders/primitive` program,
 `Collision`/`RayCollision` with a deterministic ray-mesh BVH that is either generated procedurally or
-baked into the pack, and the reference XZ grid in the castle scene.
+baked into the pack, and the reference XZ grid in the castle scene. M5 also reworks the tone mapper
+to Godot 4.7's HDR-aware AgX: the combined Rec.709 to Rec.2020 and AgX inset matrix, the `allenwp`
+curve with CPU-derived parameters, a clamp to the output maximum, and the combined inverse outset and
+Rec.2020 to Rec.709 matrix. SDR uses an output maximum of `1`; the scRGB path uses the reported
+display headroom as the curve's output maximum and then scales by paper white, so the curve itself
+reaches the reported peak. M5 additionally ships runtime tone mapping through `ctx.Tonemapping`
+(`Exposure`, `AgxWhite`, `AgxContrast`, snapshotted into the sealed frame) and the
+`Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` helpers.
 `samples/PrimitiveGallery` is the M5 gate: it draws every primitive helper in one perspective pass
 with a runtime procedural texture, needs no asset pack, and publishes with Native AOT.
 `samples/Castle` keeps its orbitable castle scene and now draws `DrawGrid` under the model.
@@ -50,7 +57,8 @@ milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability
 - Windows x64 and Linux x64 (including WSL), Native AOT.
 - Vulkan 1.2 with descriptor indexing and bindless textures; the renderer is replaceable behind an
   internal seam for future mobile/web backends.
-- Linear HDR rendering with AgX tone mapping, MSAA (4x default), and reverse-Z depth.
+- Linear HDR rendering with Godot 4.7's HDR-aware AgX tone mapping, MSAA (4x default), and reverse-Z
+  depth.
 - SDL3 for windowing, input, and (post-1.0) audio.
 - `Microsoft.Extensions.Logging` with ZLogger; `EngineContext` exposes `ILoggerFactory`.
 - One runtime assembly, `RayBork.Engine`; JIT-only build tooling in `RayBork.Bake`.
@@ -71,6 +79,11 @@ milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability
   `DrawModel`/`DrawMesh`/`DrawInstanced`/`DrawModelInstanced` and the primitive, line, billboard, and
   texture helpers, and dispose it before `Tick` returns. Draws batch by
   `(mesh, program, effective render state)`.
+- Rendering is linear HDR with MSAA and reverse-Z. The present pass applies Godot 4.7's HDR-aware
+  AgX; `TonemappingMode.None` is the direct path. Tone mapping is frame-global: `ctx.Tonemapping`
+  carries the runtime exposure, AgX white, and AgX contrast, and the tick thread snapshots it when
+  the frame is sealed, so the render thread never reads the live object. `Color` is linear; use
+  `Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` for display-encoded values.
 - The primitive helpers draw engine-owned unit meshes through two built-in programs. Shapes and lines
   use `/shaders/primitive`, which reads vertex position and color and has no uniforms or textures;
   billboards and textured quads use `/shaders/mesh` with alpha render-state overrides. The eight

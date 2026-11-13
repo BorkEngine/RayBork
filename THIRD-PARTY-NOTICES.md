@@ -34,11 +34,13 @@ M5 status: the M5 primitive and collision surface is exercised end to end by the
 draws every M5 draw helper through the built-in `/shaders/primitive` and `/shaders/mesh` programs on
 `win-x64` and `linux-x64`. The gate mounts the engine's built-in pack and decodes its texture and
 shader descriptors; it does not load a user pack or custom data, so that coverage remains with the
-M3 and M4 gates and in the unit and GPU suites. The M4 `samples/Castle` gate remains a buildable and
-publishable sample: it mounts a baked pack, loads a multi-part `Model` with a KTX2 texture and the
-built-in mesh shader, and draws the scene through the bindless instanced path. `samples/HelloInterop`
-remains the M1-M3 diagnostic host for the host, input, time, logging, renderer, and asset-loading
-surface. `Silk.NET.Vulkan`, `SDL3-CS`, `PolyType`, `Nerdbank.MessagePack`, `System.IO.Hashing`, and
+M3 and M4 gates and in the unit and GPU suites. The M5 present pass also carries the HDR-aware AgX
+rework; its derived source is recorded under [Derived shader source](#derived-shader-source). The
+M4 `samples/Castle` gate remains a buildable and publishable sample: it mounts a baked pack, loads a
+multi-part `Model` with a KTX2 texture and the built-in mesh shader, and draws the scene through the
+bindless instanced path. `samples/HelloInterop` remains the M1-M3 diagnostic host for the host,
+input, time, logging, renderer, and asset-loading surface. `Silk.NET.Vulkan`, `SDL3-CS`, `PolyType`,
+`Nerdbank.MessagePack`, `System.IO.Hashing`, and
 the logging packages are exercised by the M5 gate or its built-in pack and descriptor path. The bake
 gains the JIT-only TOML, image, block-encoding, shaderc, and glTF packages below; they never enter a
 runtime project or an AOT publish graph. The built-in pack generator uses the same bake packages at
@@ -78,6 +80,55 @@ RayBork does not redistribute a standalone Zstandard package: the in-box
 and their notices are included with that runtime. The Zstandard format and reference
 implementation are by Meta Platforms, Inc. and affiliates and are available under the BSD-3-Clause
 License; the .NET runtime's third-party notices carry the full zstd text.
+
+## Derived shader source
+
+`src/RayBork/RayBork.Engine/Shaders/Present.frag.glsl`,
+`src/RayBork/RayBork.Engine/Internal/Graphics/AgxToneMap.cs`, and
+`src/RayBork/RayBork.Engine/Internal/Graphics/AgxCurveParameters.cs` contain a port of the AgX tone
+mapper and the allenwp tonemapping curve. These sources are not vendored; the following attribution
+and licenses apply.
+
+- **[Godot Engine](https://github.com/godotengine/godot) 4.7** —
+  `servers/rendering/renderer_rd/shaders/effects/tonemap.glsl` and
+  `servers/rendering/storage/environment_storage.cpp`, MIT. The combined Rec.709 to Rec.2020 and
+  AgX inset matrix, the combined inverse AgX outset and Rec.2020 to Rec.709 matrix, the allenwp-curve
+  use, and the AgX curve-parameter derivation are ported from Godot 4.7. Copyright (c) 2014-present
+  Godot Engine contributors. Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur.
+- **EaryChow's AgX LUT generator** — [EaryChow/AgX_LUT_Gen](https://github.com/EaryChow/AgX_LUT_Gen),
+  referenced by Godot as the source of the AgX base transform that Blender uses
+  (`AgXBasesRGB.py`). RayBork references the transform through the Godot port and does not
+  redistribute the LUT generator or its generated LUT data.
+- **allenwp tonemapping curve** — Allen Pestaluky, 2025,
+  [An Adjustable Tonemapping Curve for Variable / Extended Dynamic Range](https://allenwp.com/blog/2025/05/29/allenwp-tonemapping-curve/),
+  MIT. RayBork adapts the curve with Godot's `0.18` crossover and the CPU-derived `toe_a`, `slope`,
+  and `w` parameters. Copyright (c) 2025 Allen Pestaluky.
+
+### MIT license text (Godot Engine and allenwp tonemapping curve)
+
+```text
+Copyright (c) 2014-present Godot Engine contributors
+Copyright (c) 2007-2014 Juan Linietsky, Ariel Manzur
+Copyright (c) 2025 Allen Pestaluky
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Test and tooling dependencies
 

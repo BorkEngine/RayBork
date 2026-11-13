@@ -103,9 +103,10 @@ billboards record `RenderState.AlphaBlend`, and `DrawTexture` records alpha blen
 `Cull.None`, `DepthTest.Always`, and no depth write. The batch key includes the effective render
 state, so a billboard record and an overlay record never merge with a shape draw or with each other.
 
-**Colors and tint.** `color` is a linear `Color`; no conversion is applied at draw time. The engine
-meshes carry opaque white vertex colors, so the helper color is the output color, recorded as the
-per-instance tint `rbInstance.Color`. `DrawBillboard` takes it as its `color` argument and
+**Colors and tint.** `color` is a linear `Color`; no conversion is applied at draw time. A
+display-encoded authoring color converts once with `Color.FromSrgb` or `Color.FromSrgbBytes`. The
+engine meshes carry opaque white vertex colors, so the helper color is the output color, recorded as
+the per-instance tint `rbInstance.Color`. `DrawBillboard` takes it as its `color` argument and
 `DrawTexture` takes it as the optional `tint`, which defaults to opaque white. A custom shader sees
 the same field and must apply it itself.
 

@@ -71,7 +71,7 @@ public sealed class RayBorkAppBuilder {
 | `WithAssetLoader<T>` | none | Registers an `IAssetLoader<T>` for `Load<T>`. `T` needs no `[GenerateShape]`. The loader's synchronous part runs on the `RayBork.Asset` loader thread, returns a fresh caller-owned value per load, and must not block or call SDL, Vulkan, or tick-thread APIs. One registration per type; a built-in engine type fails at `Build`. See §6.7. |
 | `WithPresentMode` | `Mailbox` | `Mailbox` is preferred; if unavailable, the engine falls back to `Fifo`. `Immediate` is available when the user explicitly chooses it. |
 | `WithMSAA` | `4` | Valid sample counts are 1, 2, 4, and 8, subject to device support. The renderer selects the highest supported sample count that does not exceed the request, and 1 if none is supported, logging a warning when the effective count differs. |
-| `WithTonemapping` | `AgX` | The startup tone-mapping mode. `AgX` maps linear HDR to the output; `None` is for custom output/presentation paths. The mode is fixed for the app lifetime. |
+| `WithTonemapping` | `AgX` | The startup tone-mapping mode. `AgX` applies Godot 4.7's HDR-aware AgX curve to the linear HDR scene; `None` is for custom output/presentation paths. The mode is fixed for the app lifetime. |
 | `WithExposure` | `0` EV | The startup exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. The game can change it at runtime through `ctx.Tonemapping.Exposure`. |
 | `WithAgxWhite` | `16.29` | The startup scene-linear AgX white, before the display headroom scaling. Finite and at least `2`. The game can change it at runtime through `ctx.Tonemapping.AgxWhite`. |
 | `WithAgxContrast` | `1.25` | The startup AgX curve contrast. Finite and at least `1`. The game can change it at runtime through `ctx.Tonemapping.AgxContrast`. |
@@ -112,7 +112,9 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > **M5 subset.** M5 adds the runtime tone-mapping surface: `WithAgxWhite` and `WithAgxContrast` set
 > the startup AgX defaults, and `EngineContext.Tonemapping` exposes the app-lifetime settings that a
 > game changes during `Setup`, `Tick`, or `Shutdown`. The values are frame-global and are snapshotted
-> into the frame packet when the frame is sealed.
+> into the frame packet when the frame is sealed. M5 also replaces the M4 AgX and its separate HDR
+> highlight path with Godot 4.7's HDR-aware AgX curve; `WithTonemapping` still fixes the
+> mode at startup, and `WithExposure` keeps its meaning.
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -254,8 +256,8 @@ caching them; `Setup` sees a changing `Time` but `DeltaTime` is `0`.
 `Tonemapping` is the exception: it is one app-lifetime settings object, not a per-frame snapshot.
 It starts from `WithExposure`, `WithAgxWhite`, and `WithAgxContrast` and can be changed from
 `Setup`, `Tick`, or `Shutdown`. `Exposure` is in stops, `AgxWhite` is the scene-linear AgX white
-before the display-max scaling, and `AgxContrast` is the curve contrast. Each write validates first:
-a non-finite exposure is `ArgumentOutOfRangeException`, and so is an AgX white below `2` or a
+before the display-headroom scaling, and `AgxContrast` is the curve contrast. Each write validates
+first: a non-finite exposure is `ArgumentOutOfRangeException`, and so is an AgX white below `2` or a
 contrast below `1`. A valid write from a thread other than the tick thread is
 `InvalidOperationException`. The values are read when the camera service seals the frame after
 `Tick` returns, so a write during `Tick` applies to that frame's present pass; a frame that was

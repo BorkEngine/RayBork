@@ -311,10 +311,10 @@ same Y-flip. `BoundingFrustum` extracts its planes from the engine's Y-flipped N
 `Bottom` follow the flipped screen convention rather than the mathematical world axes.
 
 **HDR chain.** The scene target is linear `R16G16B16A16_SFLOAT` color with a `D32_SFLOAT` depth
-attachment. The present pass applies exposure, `TonemappingMode`, and the output encoding. The
-default is `AgX` at `0` EV. `TonemappingMode.None` skips the tone curve and still writes through the
-selected output encoding. Exposure is applied as `2^EV` before tone mapping. The runtime controls
-are described under **Runtime tone mapping** below.
+attachment. The present pass applies exposure, `TonemappingMode`, the HDR-aware AgX curve, and the
+output encoding. The default is `AgX` at `0` EV. `TonemappingMode.None` skips the tone curve and
+still writes through the selected output encoding. Exposure is applied as `2^EV` before tone mapping.
+The runtime controls are described under **Runtime tone mapping** below.
 
 **Swapchain selection.** The cached SDL3 window HDR state drives the choice. When the window has HDR
 enabled, the renderer selects `R16G16B16A16_SFLOAT` with
@@ -329,28 +329,51 @@ encode in the present shader), then `R16G16B16A16_SFLOAT` (linear clamp). HDR10
 format token is reported by `EngineInfo.SwapchainFormat`; `HdrOutput` is true only when the window
 reports HDR and the selected pair presents through the scRGB HDR path.
 
-**HDR output and the AgX highlight extension.** On an HDR window the scRGB present path keeps AgX
-as the SDR-referred curve, then normalizes AgX's neutral-white response by
-`luma(AgX(white)) = 0.9829795037669735` so its white sits at display luminance `1.0`, and scales that
-to paper white: the window's reported `SDR_white_level`, for example `2.0`. The normalization makes
-the AgX white about 1.7% brighter than the raw M2 response; it is the same curve presented at the
-reported paper white.
+**HDR output and AgX.** The present pass applies Godot 4.7's HDR-aware AgX tone mapper. The curve
+itself has an output maximum: SDR uses `1`, and the scRGB HDR path uses the reported display headroom
+(`peak / paper white`), so the curve alone sets the HDR peak.
 
-Above the AgX white point (`AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear
-luminance after exposure) the extension maps the remaining scene luminance into the reported HDR
-headroom at constant chromaticity. With `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
-`t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
-`yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom`
-(for example `12.5` in scRGB units), the output is the normalized AgX color scaled by
-`yOut / luma(normalized)`. Displayed luminance is therefore exactly `yOut` and the channel ratios
-are preserved. The mapping is continuous at the knee at paper white, reaches the reported peak at
-`r = headroom`, and clamps beyond it. It is disabled when the headroom is at most one or when
-`TonemappingMode.None` is selected; `None` remains the direct HDR authoring path and writes
-`scene * paperWhite` without the extension. HDR10/PQ output is still deferred.
+The tone map starts from the exposed scene-linear Rec.709 color:
 
-An SDR window uses a paper white and peak of `1` and disables the extension, so its image is
-unchanged from M2. The cached HDR state also carries the headroom for diagnostics. A window HDR state
-change, or a change to the SDR white level while HDR is active, recreates the presentation path.
+1. The combined Rec.709 to Rec.2020 and AgX inset matrix transforms the exposed color into the AgX
+   working space. All coefficients are positive, so a non-negative scene color stays non-negative,
+   and the combined matrices preserve neutral gray: a neutral input stays neutral through the inset,
+   curve, and outset.
+2. Each channel goes through the allenwp curve. Its crossover is `0.18` (18% middle gray): a
+   power-function toe below the crossover and a Reinhard-like shoulder above it, with matching value
+   and slope at the crossover. The curve maps the AgX white to the output maximum.
+3. The curve result is clamped to the output maximum; the clamp is required for a very bright cyan
+   response.
+4. The combined inverse AgX outset and Rec.2020 to Rec.709 matrix returns the display-linear color.
+   Saturated colors may have small negative channels; the SDR path clamps the final result to
+   `[0, 1]`, and the scRGB path clamps the scaled result to zero.
+
+The curve parameters are derived on the CPU from `AgxWhite` and `AgxContrast` and passed to the
+shader, so the shader and the CPU reference use the same formula:
+
+```text
+toe_a  = (1 / 0.18 - 1) * 0.18^contrast
+slope  = contrast * 0.18^(contrast - 1) * toe_a / (0.18^contrast + toe_a)^2
+white  = max(2, AgxWhite) * outputMax
+w      = (white - 0.18)^2 / (outputMax - 0.18) * slope
+```
+
+`AgxWhite` defaults to `16.29` and `AgxContrast` to `1.25`. On SDR, `outputMax` is `1`: the curve
+maps the AgX white to display white, and the present pass then applies the optional manual sRGB
+encode and clamps to `[0, 1]`. On scRGB HDR, `outputMax` is the reported display headroom, so the
+curve output is in paper-white units up to the display peak; the present pass multiplies it by paper
+white (the window's reported SDR white level, for example `2.0`) and keeps the headroom unclamped,
+so the curve, not the encoder, sets the peak. Because the curve's white scales with the output
+maximum, a scene value of `AgxWhite` maps to display white on SDR, and `AgxWhite * headroom` maps to
+the reported display peak on HDR. The toe and the `0.18` crossover do not depend on the output
+maximum, so the dark-to-mid response is the same on both paths and neutral gray stays neutral.
+
+`TonemappingMode.None` bypasses the curve: the scRGB path writes `scene * paperWhite` with no upper
+clamp, and the SDR paths write the exposed scene through the encoding and clamp. `None` remains the
+direct HDR authoring path. HDR10/PQ output is still deferred. An SDR window uses paper white `1`, so
+its image is the SDR AgX output. The cached HDR state also carries the headroom for diagnostics. A
+window HDR state change, or a change to the SDR white level while HDR is active, recreates the
+presentation path.
 
 **Runtime tone mapping.** `WithExposure`, `WithAgxWhite`, and `WithAgxContrast` set the startup
 defaults for `EngineContext.Tonemapping`, one app-lifetime settings object that a game can change
@@ -359,7 +382,7 @@ while it runs:
 ```csharp
 public void Tick(EngineContext ctx) {
     ctx.Tonemapping.Exposure = 0f;       // stops; the present pass applies 2^EV before AgX
-    ctx.Tonemapping.AgxWhite = 16.29f;   // scene-linear white before the display-max scaling
+    ctx.Tonemapping.AgxWhite = 16.29f;   // scene-linear white; the curve's white scales with the HDR headroom
     ctx.Tonemapping.AgxContrast = 1.25f; // AgX curve contrast
 }
 ```
@@ -367,7 +390,7 @@ public void Tick(EngineContext ctx) {
 | Member | Default | Contract |
 | --- | --- | --- |
 | `Exposure` | `0` EV | Finite. The present pass multiplies the scene by `2^Exposure` before the curve. |
-| `AgxWhite` | `16.29` | Finite and at least `2`. The scene-linear white AgX maps to the display maximum, before the display headroom scaling on an HDR window. |
+| `AgxWhite` | `16.29` | Finite and at least `2`. The scene-linear white the curve maps to the output maximum. On the scRGB HDR path the curve's white is this value multiplied by the display headroom, so it maps to the reported display peak; on SDR it maps to `1.0`. |
 | `AgxContrast` | `1.25` | Finite and at least `1`. The AgX curve contrast. |
 
 - `TonemappingMode` is fixed at startup by `WithTonemapping`; only the exposure, white, and contrast

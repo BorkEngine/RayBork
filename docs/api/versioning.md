@@ -45,6 +45,19 @@ The runtime tone-mapping surface is additive too: `TonemappingSettings` and
 keep their meaning, so a game that configures tone mapping only at startup continues to work
 unchanged.
 
+The sRGB color conversion helpers are additive as well: `Color.FromSrgb`, `Color.FromSrgbBytes`, and
+`Color.ToSrgb` convert between linear `Color` values and display-encoded components without changing
+`Color` or its named constants. `Color` remains linear, `Color.Gray` is still linear `0.5`, and the
+palette is unchanged.
+
+The M5 AgX rework is a behavior change, not a new option. At the same exposure, SDR output differs
+from the M4 curve, the separate HDR highlight path is gone, and the scRGB path uses
+the reported display headroom as the AgX curve's output maximum. `TonemappingMode` and
+`WithExposure` keep their names and meanings, so a game that configures tone mapping at startup
+still builds and runs; re-check exposure and AgX white if it tuned against the M4 image. This is a
+0.x preview change and this paragraph is its migration note; after 1.0 the same change would need the
+obsolete/migration cycle above.
+
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a
 best-effort read.
@@ -97,7 +110,7 @@ The following are deliberate exclusions, not forgotten features. The roadmap pla
 | `WithAssetsPack(packPath)` | unchanged | Relative paths resolve next to the executable. |
 | `MaxDeltaTime = 0.25` | unchanged | Seconds. |
 | `Quaternion.CreateFromAxisAngle` | `Quaternion.Euler` / `Quaternion.AngleAxis` | User-facing rotations use degrees. |
-| `Color` from sRGB bytes | linear `Color` | HDR rendering and AgX output; `Color` components are linear floats. |
+| `Color` from sRGB bytes | linear `Color`, with `Color.FromSrgbBytes` for encoded byte input | HDR rendering and AgX output; `Color` components are linear floats. |
 | Custom data via ad-hoc files | `Load<T>` / `LoadData` | Compiled `[GenerateShape]` data, custom loaders, and raw bytes; register with `WithAssetType<T>()` or `WithAssetLoader<T>()`. |
 | Logger injected as a custom interface | `ctx.LoggerFactory` | `Microsoft.Extensions.Logging` + ZLogger. |
 

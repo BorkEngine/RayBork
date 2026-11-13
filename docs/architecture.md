@@ -12,18 +12,19 @@ reference counting, the render-thread GPU upload bridge, the custom-data pipelin
 and the build-time built-in pack. M4 adds the frame-scoped camera and draw API, `Model` loading and
 parts, the shader ABI and uniform cursor, the bindless texture table, the geometry pipeline, sampler
 and batch caches, the batch planner with frustum culling and sorting, the geometry draw stats, the
-AgX highlight extension, and the Castle AOT gate. M5 adds the 13 `Camera` primitive helpers, the
+HDR AgX present path, and the Castle AOT gate. M5 adds the 13 `Camera` primitive helpers, the
 engine-owned primitive meshes and the built-in `/shaders/primitive` program, `Collision` and
 `RayCollision` with the ray-mesh BVH, the procedural collision opt-in, the baked `RBVC` collision
-payloads, and the Primitive Gallery AOT gate.
+payloads, the HDR-aware AgX rework with runtime tone mapping, the sRGB color helpers, and the
+Primitive Gallery AOT gate.
 
 ## Goals
 
 RayBork is a small, raylib-shaped 3D game framework for C#:
 
 - a window, input, time, assets, and enough drawing to make a game without a scene framework;
-- linear HDR rendering with AgX tone mapping, reverse-Z, MSAA, bindless textures, and automatic
-  instancing;
+- linear HDR rendering with Godot 4.7's HDR-aware AgX tone mapping, reverse-Z, MSAA, bindless
+  textures, and automatic instancing;
 - SDL3 for windowing, input, and (later) sound;
 - Windows x64 and Linux x64 first, Native AOT for game assemblies;
 - a renderer seam that keeps the public API independent of Vulkan so future mobile/web backends can
@@ -470,6 +471,8 @@ seal slot, publish as newest ready
 - User-facing angles are degrees. `System.Numerics` math stays radians; RayBork extension methods
   convert at the boundary.
 - Color is linear float RGBA with HDR values allowed. There is no 8-bit `Color` in the public API.
+  `Color.FromSrgb`, `Color.FromSrgbBytes`, and `Color.ToSrgb` are the explicit sRGB conversions;
+  `Color` and its named constants stay linear.
 - The scene target uses `R16G16B16A16_SFLOAT` color and `D32_SFLOAT` depth. The present pass
   samples the resolved color and applies exposure, `TonemappingMode`, and the output encoding.
 - MSAA defaults to 4x; scene color is resolved to a single-sample image before presentation, and
@@ -497,38 +500,36 @@ deliberately deferred and are never selected.
 **HDR state and output.** The platform caches `SDL.window.HDR_enabled`,
 `SDL.window.SDR_white_level`, and `SDL.window.HDR_headroom`, and refreshes the cache on
 `SDL_EVENT_WINDOW_HDR_STATE_CHANGED` and display changes. A change to the HDR flag, or to the SDR
-white level while HDR is enabled, recreates the presentation path. The scRGB present path scales
-display-linear color by the SDR white level and does not clamp.
+white level while HDR is enabled, recreates the presentation path.
 
-AgX remains the SDR-referred curve. On an HDR window the scRGB path first normalizes AgX's neutral
-white by `luma(AgX(white)) = 0.9829795037669735` so its white sits at display luminance `1.0`, then
-scales that to the reported paper white (the window's SDR white level, for example `2.0`). The
-normalization makes the AgX white about 1.7% brighter than the raw M2 response; it is the same curve
-presented at the reported paper white. Above the AgX white point
-(`AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear luminance after exposure) the
-highlight extension maps the remaining scene luminance into the reported HDR headroom at constant
-chromaticity. With `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
-`t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
-`yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom` and
-`paperWhite` is the reported SDR white level, the output is the normalized AgX color scaled by
-`yOut / luma(normalized)`. Displayed luminance is exactly `yOut` and the channel ratios are
-preserved. The mapping is continuous at the knee at paper white, reaches the reported peak at
-`r = headroom`, and clamps beyond it. It is disabled when the headroom is at most one or when
-`TonemappingMode.None` is selected; `None` remains the direct HDR authoring path and writes
-`scene * paperWhite` without the extension. An SDR window uses a paper white and peak of `1` and
-disables the extension, so its image is unchanged from M2. HDR10/PQ output is still deferred.
-`EngineInfo.HdrOutput` is true only when the presented path is scRGB HDR.
+The present pass applies Godot 4.7's HDR-aware AgX. The exposed scene-linear color goes through the
+combined Rec.709 to Rec.2020 and AgX inset matrix, the allenwp curve (crossover `0.18`; `toe_a`,
+`slope`, and `w` derived on the CPU), a clamp to the curve's output maximum, and the combined inverse
+outset and Rec.2020 to Rec.709 matrix. The combined matrices preserve neutral gray. SDR uses an
+output maximum of `1.0` and clamps the display-linear result to `[0, 1]` after the optional manual
+sRGB encode. The scRGB path uses the reported display headroom as the output maximum, so the curve
+output is in paper-white units up to the display peak; the pass multiplies it by the reported SDR
+white level (paper white) and does not clamp it, so the curve, not the encoder, sets the peak. The
+curve's white is `max(2, AgxWhite) * outputMax` in scene-linear units, so a scene value of `AgxWhite`
+maps to display white on SDR and to the display peak on HDR; the toe and the `0.18` crossover are
+independent of the output maximum, so the dark-to-mid response is the same on both paths.
+`TonemappingMode.None` remains the direct authoring path: the scRGB path writes
+`scene * paperWhite` without an upper clamp, and the SDR paths write the exposed scene through the
+encoding and clamp. HDR10/PQ output is deferred. `EngineInfo.HdrOutput` is true only when the
+presented path is scRGB HDR.
 
 **Present pass.** A fullscreen triangle generated from `gl_VertexIndex` writes the swapchain image
 and samples the resolved scene color through one combined image sampler. Its push-constant block is
-16 bytes: `{ float exposureMultiplier; float hdrWhiteScale; int tonemapping; int encoding; }`.
-`exposureMultiplier` is `2^exposureEV` computed on the CPU; `tonemapping` is `0` for AgX and `1`
-for none; `encoding` is `0` for linear clamp, `1` for manual sRGB encode, and `2` for scRGB HDR
-(scaled by the SDR white level, not clamped). AgX applies the inset matrix, log2 range clamp,
-contrast polynomial, and outset matrix, with no look transform. Scene clear control belongs to the
-camera pass: each camera clears its clamped viewport with its own `ClearMode` and `ClearColor`, and
-there is no builder-level clear color. The present triangle is not a scene draw and is not
-counted in `RenderStats.DrawCalls`.
+40 bytes: seven `float` members at offsets 0 through 24 (`exposureMultiplier`, `hdrWhiteScale`,
+`outputMaxValue`, `awpContrast`, `awpToeA`, `awpSlope`, `awpW`) followed by three 32-bit integers at
+offsets 28, 32, and 36 (`tonemapping`, `encoding`, `reserved`). `exposureMultiplier` is
+`2^exposureEV` computed on the CPU; `tonemapping` is `0` for AgX and `1` for none; `encoding` is `0`
+for linear clamp, `1` for manual sRGB encode, and `2` for scRGB HDR (scaled by the SDR white level,
+not clamped). The `awp*` fields are the CPU-derived allenwp curve parameters; the shader has no
+separate HDR highlight stage, no AgX white-point constant, and no log-range clamp. Scene clear
+control belongs to the camera pass: each camera clears its clamped viewport with its own `ClearMode`
+and `ClearColor`, and there is no builder-level clear color. The present triangle is not a scene draw
+and is not counted in `RenderStats.DrawCalls`.
 
 **MSAA and depth.** The requested sample count comes from `WithMSAA` (default 4); the effective
 count is the highest device-supported count that does not exceed the request, or `1` when none is
@@ -553,7 +554,8 @@ applied separately by the viewport/projection path.
 
 ## Built-in shader assets
 
-The M2 present pass is the engine's first built-in shader:
+The present pass is the engine's first built-in shader; M5 reworked its fragment stage for Godot 4.7's
+HDR-aware AgX:
 
 ```text
 src/RayBork/RayBork.Engine/Shaders/Present.vert.glsl   committed source
@@ -577,6 +579,12 @@ src/RayBork/RayBork.Engine/Shaders/Present.frag.spv    committed SPIR-V build in
 - The fragment shader owns the encoding branch and the AgX transform. The numeric `encoding`
   values are the shader ABI: changing one requires recompiling the committed blob in the same
   change.
+
+The AgX curve has two implementations that must stay in step: the GLSL in `Present.frag.glsl`, and
+the CPU reference `AgxToneMap` with `AgxCurveParameters`. The renderer never calls the CPU reference
+per frame; it exists for the pinned unit tests, the GPU probes, and this documentation, and the
+present pipeline derives the push-constant parameters with the same formulas. A change to the
+transform updates the shader, the CPU reference, and the pinned test values in the same change.
 
 M3 bakes the present vertex/fragment pair into the built-in pack through the shared shaderc compiler,
 so the pack contains the same program as ordinary content. The runtime present pipeline continues to
