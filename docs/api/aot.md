@@ -12,9 +12,9 @@ RayBork's runtime is designed for Native AOT:
 - No runtime shader compilation. Shader reflection is bake-generated metadata.
 - `Load<T>` resolves the registered strategy from the merged registry built at `Build`: engine asset
   formats are built-in registrations, `WithAssetType<T>()` stores a compiled `IShapeable<T>` shape
-  delegate, and `WithAssetLoader<T>()` stores the caller's loader. Every strategy is a compiled
-  generic type, and the runtime never scans assemblies or uses reflection. `LoadData` covers opaque
-  bytes without reflection.
+  delegate, and `WithAssetLoader<T>()` stores the caller's loader. Every strategy is a statically
+  referenced type or delegate, and the runtime never scans assemblies or uses reflection. `LoadData`
+  covers opaque bytes without reflection.
 - Logging uses `Microsoft.Extensions.Logging`; ZLogger is the default provider and is AOT-tested.
 - P/Invoke is direct. SDL3 native libraries are deployed per RID; the Vulkan loader is resolved from
   the system/GPU driver with `NativeLibrary` and a custom `INativeContext`.

@@ -85,14 +85,16 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > `Build`. The remaining methods in the block above are the 1.0 contract; their milestones are in
 > §1.6.
 
-> **M3 subset.** M3 additionally ships `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, and
-> `WithAssetLoader<T>`. Pack paths are not opened by `Build`; a missing or corrupt pack is an
-> `AssetPackException` from `Run`, because the bake may produce the pack as part of the build.
-> `WithAssetType<T>()` requires `T : IShapeable<T>` and a compiled `[GenerateShape]`; it registers a
-> non-reflective loader delegate and is idempotent for the same type. `WithAssetLoader<T>` registers
-> an arbitrary `IAssetLoader<T>` and needs no shape. Both follow one registration per type: a
-> conflicting registration is an `InvalidOperationException` from the method call, and a built-in
-> engine type fails at `Build`.
+> **M3 subset.** M3 additionally ships `WithAssetsPack`, `WithAssetsPacks`, and `WithAssetType<T>`.
+> Pack paths are not opened by `Build`; a missing or corrupt pack is an `AssetPackException` from
+> `Run`, because the bake may produce the pack as part of the build. `WithAssetType<T>()` requires
+> `T : IShapeable<T>` and a compiled `[GenerateShape]`; it registers a non-reflective loader delegate
+> and is idempotent for the same type. A conflicting registration is an `InvalidOperationException`
+> from the method call.
+
+> **Current asset surface.** The generic loader registration (`WithAssetLoader<T>`,
+> `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`) is a current-surface addition after M4,
+> not part of the M3 subset.
 
 > **M4 subset.** M4 removes `WithClearColor`; clear control belongs to each camera pass. The
 > renderer builder keeps only the presentation options (`WithPresentMode`, `WithMSAA`,

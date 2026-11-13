@@ -79,6 +79,14 @@ public sealed class AssetLoadContext {
     /// An optional token for this nested load; the context token is used when it cannot be canceled.
     /// </param>
     /// <returns>The nested load. The loader must not block waiting for it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
+    /// <exception cref="NotSupportedException"><typeparamref name="T"/> is not registered.</exception>
+    /// <exception cref="AssetNotFoundException">The path is not in any mounted pack.</exception>
+    /// <exception cref="AssetTypeMismatchException">The entry type differs from the registered type.</exception>
+    /// <exception cref="AssetLoadException">The payload is corrupt or a nested load fails.</exception>
+    /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
+    /// <exception cref="OperationCanceledException">The context token is canceled.</exception>
     public Task<T> LoadAsync<T>(string path, CancellationToken cancellationToken = default) {
         CancellationToken token = cancellationToken.CanBeCanceled ? cancellationToken : CancellationToken;
         return _catalog.LoadCore<T>(path, token, _chain);
@@ -92,6 +100,13 @@ public sealed class AssetLoadContext {
     /// An optional token for this nested load; the context token is used when it cannot be canceled.
     /// </param>
     /// <returns>The nested payload load. The loader must not block waiting for it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
+    /// <exception cref="AssetNotFoundException">The path is not in any mounted pack.</exception>
+    /// <exception cref="AssetPackException">A mounted pack is corrupt or cannot be read.</exception>
+    /// <exception cref="AssetLoadException">The payload is corrupt or exceeds the supported size.</exception>
+    /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
+    /// <exception cref="OperationCanceledException">The context token is canceled.</exception>
     public Task<byte[]> LoadDataAsync(string path, CancellationToken cancellationToken = default) {
         CancellationToken token = cancellationToken.CanBeCanceled ? cancellationToken : CancellationToken;
         return _catalog.LoadData(path, token);
@@ -102,6 +117,9 @@ public sealed class AssetLoadContext {
     /// </summary>
     /// <param name="path">The asset path.</param>
     /// <returns><see langword="true"/> when the canonical path resolves to a pack entry.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
+    /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
     public bool Exists(string path) => _catalog.Exists(path);
 
     /// <summary>

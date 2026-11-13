@@ -6,9 +6,8 @@ foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the r
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
 backend. M3 ships the asset pipeline: `IAsset`, `IAssetCatalog`, `Mesh`, `Texture`, `Shader`, the
 procedural `MeshBuilder`/`TextureBuilder` API, the asset and shader metadata value types, the asset
-exceptions, pack mounting and lookup, custom TOML data through `WithAssetType<T>()`, custom asset
-loaders through `WithAssetLoader<T>()`, `RayBork.Bake`, and the build-time built-in pack. M4 ships the
-core 3D renderer: `Camera`, `CameraProjection`,
+exceptions, pack mounting and lookup, custom TOML data through `WithAssetType<T>()`, `RayBork.Bake`,
+and the build-time built-in pack. M4 ships the core 3D renderer: `Camera`, `CameraProjection`,
 `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, the camera draw methods,
 `Shader.SetUniform`/`ResetUniforms`, and the shader ABI, backed by the bindless texture table,
 instanced batches, pipeline and sampler caches, and the AgX HDR highlight extension. The rest of
@@ -154,11 +153,14 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `RayBorkException`, `GameException`, `PlatformException`, `WindowException` | M1 |
 | `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, and the renderer builder options (`WithPresentMode`, `WithMSAA`, `WithTonemapping`, `WithExposure`, `WithValidation`) | M2 |
 | `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, `Vertex`, `MeshBuilder`, `MeshNormalMode`, `TextureBuilder`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
-| `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, `WithAssetLoader<T>`, `EngineContext.Assets`, `EngineContext.CreateMeshBuilder`, and `EngineContext.CreateTextureBuilder` | M3 |
+| `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, `EngineContext.Assets`, `EngineContext.CreateMeshBuilder`, and `EngineContext.CreateTextureBuilder` | M3 |
 | `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
 | `Collision` and `RayCollision` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
+
+`IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
+current asset surface after M4; see §6.
 
 In M1, `EngineContext` exposes **only** `Input`, `Window`, `LoggerFactory`, `Time`, `DeltaTime`,
 `UnscaledDeltaTime`, `FrameCount`, `Fps`, `IsFirstTick`, `IsExiting`, `MaxDeltaTime`, and
@@ -178,11 +180,9 @@ textures, and custom asset types remain later milestones.
 
 **M3 subset.** `EngineContext` additionally exposes `Assets`, `CreateMeshBuilder`, and
 `CreateTextureBuilder`. `RayBorkAppBuilder` additionally exposes `WithAssetsPack`, `WithAssetsPacks`,
-`WithAssetType<T>`, and `WithAssetLoader<T>`. M3 ships the loading, creation, and metadata surface of
-`Mesh`, `Texture`, and `Shader`: `Path`, `IsDisposed`, `Dispose`, the metadata getters in §7.3, §7.5,
-and §7.6, the procedural `MeshBuilder`/`TextureBuilder` API, and CPU mesh vertices/indices. Custom
-asset loaders implement `IAssetLoader<T>` and receive an `AssetLoadContext`; `AssetEntryType` names
-the packed entry kind they accept. It does not ship
+and `WithAssetType<T>`. M3 ships the loading, creation, and metadata surface of `Mesh`, `Texture`,
+and `Shader`: `Path`, `IsDisposed`, `Dispose`, the metadata getters in §7.3, §7.5, and §7.6, the
+procedural `MeshBuilder`/`TextureBuilder` API, and CPU mesh vertices/indices. It does not ship
 `Model`, `Font`, cameras, render textures, `Shader.SetUniform`, `ResetUniforms`, or any `Draw*`
 member; those arrive in M4, M6, and M8. The M3 sample loads a texture, a mesh part, a shader, and
 registered custom data, and reads back their metadata without drawing.
@@ -201,6 +201,10 @@ no `Font`, and no primitive/line/billboard/text draw helpers. Clear control is p
 `RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
 `ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
 `InvalidOperationException` naming it, and the frame is not published.
+
+**Current asset surface.** The generic loader registration is a current-surface addition after M4,
+not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
+`RayBorkAppBuilder.WithAssetLoader<T>`. See [Assets §6.7](api/assets.md#67-custom-asset-loaders).
 
 M4 `RenderStats` describes the draw path. `DrawCalls` counts scene submissions after batch splitting
 and excludes the present triangle; `Instances` counts instances that survived culling;

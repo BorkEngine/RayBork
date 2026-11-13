@@ -43,8 +43,10 @@ public sealed class AssetLoadContext {
 }
 ```
 
-`AssetEntryType` is the asset type stored in a pack index entry. The numeric values are part of the
-RAYBORKP v1 wire format:
+`AssetEntryType` is the asset type stored in a pack index entry. The loader is selected by its
+registered CLR type, and the catalog validates that the entry was baked with the type the loader
+accepts; a mismatch is an `AssetTypeMismatchException`. The numeric values are part of the RAYBORKP
+v1 wire format:
 
 | Value | Entry |
 | --- | --- |
@@ -158,7 +160,7 @@ prefix.
 | `Model` | glTF 2.0, OBJ | Multi-part wrapper with per-part materials over shared cached meshes and programs; not an engine asset | M4 (baked in M3) |
 | `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs | M6 (baked in M3) |
 | Custom data | TOML source | MessagePack payload deserialized through `Load<T>` after `WithAssetType<T>()` | M3 |
-| Custom asset | Any entry kind | Decoded by an `IAssetLoader<T>` after `WithAssetLoader<T>()`; `Load<T>` returns a fresh caller-owned value | M3 |
+| Custom asset | Any entry kind | Decoded by an `IAssetLoader<T>` after `WithAssetLoader<T>()`; `Load<T>` returns a fresh caller-owned value | Current |
 | Raw data | Any processor output or raw source | Opaque bytes through `LoadData` | M3 |
 
 glTF and OBJ are **source formats only**. The bake converts them to the engine's packed mesh/model
@@ -294,10 +296,10 @@ Consequences:
 - Engine assets do not return half-uploaded, so the first draw never triggers a hidden upload.
 - At most eight GPU uploads and 256 MiB of estimated upload payload are in flight at once. A single
   upload larger than the byte budget may start when nothing is in flight so a load always makes
-  progress. Further requests wait in the loader queue; the loader keeps serving custom data and
+  progress. Further requests wait in the loader queue; the loader keeps serving custom loads and
   `LoadData` while engine uploads are pending.
-- Custom data is CPU-only and can complete without the renderer; it is still a `Task` because pack
-  I/O runs on the loader.
+- Custom data and loader values are CPU-only and can complete without the renderer; they are still a
+  `Task` because pack I/O runs on the loader.
 - A `WithAssetLoader<T>` value runs its loader's synchronous part on the `RayBork.Asset` thread; a
   continuation after an `await` may resume on the thread pool. The value is caller-owned and never
   cached. The loader must not block and must not call SDL, Vulkan, or tick-thread APIs. See §6.7.
@@ -365,13 +367,17 @@ caller-owned value per load:
 using System.Text;
 using RayBork;
 
-public sealed class LevelLoader : IAssetLoader<LevelConfig> {
+public sealed class LevelText {
+    public required string Text { get; init; }
+}
+
+public sealed class LevelTextLoader : IAssetLoader<LevelText> {
     public AssetEntryType EntryType => AssetEntryType.Raw;
 
-    public async Task<LevelConfig> LoadAsync(AssetLoadContext context) {
+    public async Task<LevelText> LoadAsync(AssetLoadContext context) {
         byte[] payload = await context.LoadPayloadAsync().ConfigureAwait(false);
         context.CancellationToken.ThrowIfCancellationRequested();
-        return new LevelConfig { Name = Encoding.UTF8.GetString(payload) };
+        return new LevelText { Text = Encoding.UTF8.GetString(payload) };
     }
 }
 ```
@@ -379,12 +385,11 @@ public sealed class LevelLoader : IAssetLoader<LevelConfig> {
 ```csharp
 using var app = new RayBorkAppBuilder()
     .WithGame(game)
-    .WithAssetLoader(new LevelLoader())
+    .WithAssetLoader(new LevelTextLoader())
     .WithAssetsPack(packPath)
     .Build();
 
-LevelConfig level = await ctx.Assets.Load<LevelConfig>("/data/level");
-ReadOnlySpan<byte> raw = await ctx.Assets.LoadData("/data/level");
+LevelText levelText = await ctx.Assets.Load<LevelText>("/data/level-text");
 ```
 
 The registration maps `typeof(T)` to the loader. `EntryType` must match the packed entry; the catalog

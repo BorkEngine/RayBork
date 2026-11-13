@@ -5,9 +5,10 @@ namespace RayBork;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The catalog uses the identifier to select the loader for a path. <see cref="Raw"/> entries are
-/// opaque payloads read through <see cref="IAssetCatalog.LoadData"/>; <see cref="Data"/> entries
-/// carry MessagePack custom data for a type registered with
+/// A loader is selected by its registered CLR type, and the catalog validates that the entry was
+/// baked with the entry type the loader accepts; the entry type is the compatibility check.
+/// <see cref="Raw"/> entries are opaque payloads read through <see cref="IAssetCatalog.LoadData"/>;
+/// <see cref="Data"/> entries carry MessagePack custom data for a type registered with
 /// <see cref="RayBorkAppBuilder.WithAssetType{T}"/>; every other value carries the descriptor for
 /// the matching built-in engine asset format.
 /// </para>
