@@ -33,6 +33,17 @@ internal sealed class RenderSettings {
     public required float Exposure { get; init; }
 
     /// <summary>
+    /// Gets the AgX white in scene-linear units before the display headroom is applied.
+    /// <c>16.29</c> is Godot's default.
+    /// </summary>
+    public float AgxWhite { get; init; } = AgxToneMap.DEFAULT_AGX_WHITE;
+
+    /// <summary>
+    /// Gets the AgX contrast. <c>1.25</c> is Godot's default.
+    /// </summary>
+    public float AgxContrast { get; init; } = AgxToneMap.DEFAULT_AGX_CONTRAST;
+
+    /// <summary>
     /// Gets whether the graphics validation layer is requested. It is enabled by default in Debug
     /// builds and disabled by default in Release builds.
     /// </summary>

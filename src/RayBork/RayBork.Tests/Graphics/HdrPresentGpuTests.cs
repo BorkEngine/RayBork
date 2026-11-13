@@ -5,9 +5,9 @@ using Silk.NET.Vulkan;
 namespace RayBork.Tests;
 
 /// <summary>
-/// Numeric presented-pixel probes for the M4 AgX HDR highlight extension: paper white at the AgX
-/// knee, the reported peak above the knee, the normalized AgX response below the knee, the direct
-/// <see cref="TonemappingMode.None"/> path, and the unchanged M2 image on an SDR window.
+/// Numeric presented-pixel probes for the AgX present path: the SDR image at the default white and
+/// contrast, neutral gray under scRGB HDR, paper white and the display peak at two headrooms, and the
+/// direct <see cref="TonemappingMode.None"/> path.
 /// </summary>
 /// <remarks>
 /// The probes read the swapchain image the backend presented, so they assert the complete present
@@ -17,8 +17,10 @@ namespace RayBork.Tests;
 [Collection("SDL")]
 public sealed class HdrPresentGpuTests {
     private const float PAPER_WHITE = 2f;
-    private const float PEAK = 12.5f;
-    private static readonly WindowHdrState _hdr = new(true, PAPER_WHITE, PEAK / PAPER_WHITE);
+    private const float PEAK_HEADROOM = 6.25f;
+    private const float PEAK = PAPER_WHITE * PEAK_HEADROOM;
+    private static readonly WindowHdrState _hdr = new(true, PAPER_WHITE, PEAK_HEADROOM);
+    private static readonly WindowHdrState _hdrHeadroomTwo = new(true, PAPER_WHITE, 2f);
 
     private readonly ITestOutputHelper _output;
 
@@ -28,45 +30,7 @@ public sealed class HdrPresentGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void AgxWhiteKneePresentsAtPaperWhite() {
-        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: _hdr);
-        RequireScRgbHdr(host.Backend.Info);
-        float knee = (float)AgxToneMap.AGX_WHITE_SCENE_LUMINANCE;
-
-        (float R, float G, float B) presented = PresentAndProbe(
-            host,
-            new Color(knee, knee, knee, 1f));
-        _output.WriteLine(FormattableString.Invariant(
-            $"AgX knee {knee}: rgb=({presented.R}, {presented.G}, {presented.B}) luminance={Luminance(presented)}"));
-
-        Assert.Equal(PAPER_WHITE, Luminance(presented), PAPER_WHITE * 0.01);
-        Vector3 expected = AgxToneMap.Agx(new Vector3(knee)) / (float)AgxToneMap.AGX_OUTPUT_WHITE_LUMINANCE;
-        AssertChannelRatios(expected, presented);
-        Assert.Empty(host.Instance.ConsumeValidationErrors());
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void AboveWhiteSceneReachesTheReportedPeak() {
-        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: _hdr);
-        RequireScRgbHdr(host.Backend.Info);
-        float scene = (float)AgxToneMap.AGX_WHITE_SCENE_LUMINANCE * (PEAK / PAPER_WHITE);
-
-        (float R, float G, float B) presented = PresentAndProbe(
-            host,
-            new Color(scene, scene, scene, 1f));
-        _output.WriteLine(FormattableString.Invariant(
-            $"Above-white scene {scene}: rgb=({presented.R}, {presented.G}, {presented.B}) luminance={Luminance(presented)}"));
-
-        double luminance = Luminance(presented);
-        Assert.Equal(PEAK, luminance, PEAK * 0.01);
-        Assert.True(luminance > PAPER_WHITE, $"The peak probe stayed at or below paper white ({luminance}).");
-        Assert.Empty(host.Instance.ConsumeValidationErrors());
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void HdrNeutralBelowTheKneeMatchesTheCpuReference() {
+    public void HdrNeutralMatchesTheCpuReference() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: _hdr);
         RequireScRgbHdr(host.Backend.Info);
 
@@ -78,11 +42,65 @@ public sealed class HdrPresentGpuTests {
             PresentEncoding.ScRgbHdr,
             _hdr);
         _output.WriteLine(FormattableString.Invariant(
-            $"Neutral 1: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
+            $"HDR neutral 1: presented=({presented.R}, {presented.G}, {presented.B}) expected=({expected.X}, {expected.Y}, {expected.Z})"));
 
         Assert.Equal(expected.X, presented.R, expected.X * 0.01);
         Assert.Equal(expected.Y, presented.G, expected.Y * 0.01);
         Assert.Equal(expected.Z, presented.B, expected.Z * 0.01);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void HdrMidScenePresentsNearPaperWhite() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: _hdr);
+        RequireScRgbHdr(host.Backend.Info);
+
+        (float R, float G, float B) presented = PresentAndProbe(host, new Color(1f, 1f, 1f, 1f));
+        double luminance = Luminance(presented);
+        _output.WriteLine(FormattableString.Invariant(
+            $"HDR scene 1.0: rgb=({presented.R}, {presented.G}, {presented.B}) luminance={luminance}"));
+
+        // Scene 1.0 is near paper white in paper-white units (about 0.92 of it).
+        Assert.InRange(luminance, PAPER_WHITE * 0.85, PAPER_WHITE * 1.05);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void HdrAgxWhiteReachesTheReportedPeak() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: _hdr);
+        RequireScRgbHdr(host.Backend.Info);
+        float scene = AgxToneMap.DEFAULT_AGX_WHITE * PEAK_HEADROOM;
+
+        (float R, float G, float B) presented = PresentAndProbe(
+            host,
+            new Color(scene, scene, scene, 1f));
+        double luminance = Luminance(presented);
+        _output.WriteLine(FormattableString.Invariant(
+            $"HDR AgX white scene {scene}: rgb=({presented.R}, {presented.G}, {presented.B}) luminance={luminance}"));
+
+        Assert.Equal(PEAK, luminance, PEAK * 0.01);
+        Assert.True(luminance > PAPER_WHITE, $"The peak probe stayed at or below paper white ({luminance}).");
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void HdrHeadroomTwoReachesItsOwnPeak() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: _hdrHeadroomTwo);
+        RequireScRgbHdr(host.Backend.Info);
+        float scene = AgxToneMap.DEFAULT_AGX_WHITE * 2f;
+
+        (float R, float G, float B) presented = PresentAndProbe(
+            host,
+            new Color(scene, scene, scene, 1f));
+        double luminance = Luminance(presented);
+        _output.WriteLine(FormattableString.Invariant(
+            $"HDR headroom 2 AgX white scene {scene}: rgb=({presented.R}, {presented.G}, {presented.B}) luminance={luminance}"));
+
+        // The headroom is the curve output maximum, so the peak is paper white * 2.
+        Assert.Equal(PAPER_WHITE * 2f, luminance, PAPER_WHITE * 2f * 0.01);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -111,9 +129,14 @@ public sealed class HdrPresentGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SdrWindowKeepsTheM2AgxImage() {
+    public void SdrWindowPresentsTheAgxDefaultImage() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
-        Vector3 expected = Vector3.Clamp(AgxToneMap.Agx(Vector3.One), Vector3.Zero, Vector3.One);
+        Vector3 expected = AgxToneMap.Present(
+            Vector3.One,
+            1f,
+            TonemappingMode.AgX,
+            PresentEncoding.LinearClamp,
+            WindowHdrState.Sdr);
 
         (float R, float G, float B) presented = PresentAndProbe(host, new Color(1f, 1f, 1f, 1f));
         _output.WriteLine(FormattableString.Invariant(
@@ -170,14 +193,6 @@ public sealed class HdrPresentGpuTests {
 
     private static double Luminance((float R, float G, float B) color) =>
         (0.2126 * color.R) + (0.7152 * color.G) + (0.0722 * color.B);
-
-    private static void AssertChannelRatios(Vector3 expected, (float R, float G, float B) actual) {
-        double expectedSum = expected.X + expected.Y + expected.Z;
-        double actualSum = actual.R + actual.G + actual.B;
-        Assert.Equal(expected.X / expectedSum, actual.R / actualSum, (expected.X / expectedSum) * 0.01);
-        Assert.Equal(expected.Y / expectedSum, actual.G / actualSum, (expected.Y / expectedSum) * 0.01);
-        Assert.Equal(expected.Z / expectedSum, actual.B / actualSum, (expected.Z / expectedSum) * 0.01);
-    }
 
     private static bool IsEightBit(Format format) =>
         format is Format.B8G8R8A8Srgb
