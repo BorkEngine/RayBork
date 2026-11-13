@@ -158,7 +158,9 @@ public sealed class Mesh : IAsset {
     /// <remarks>
     /// <para>
     /// A procedural mesh gets one only when <see cref="MeshBuilder.GenerateCollisions"/> was called
-    /// before <see cref="MeshBuilder.BuildAsync"/>. A mesh loaded from a pack has none.
+    /// before <see cref="MeshBuilder.BuildAsync"/>. A mesh loaded from a pack gets one when its
+    /// descriptor names a baked collision payload; the bake writes that payload for every triangle
+    /// mesh unless the source sidecar opts out with <c>collisions = false</c>.
     /// <see cref="Collision.GetRayMesh"/> traverses the structure when it is present and tests every
     /// triangle otherwise; both paths return the same nearest hit.
     /// </para>

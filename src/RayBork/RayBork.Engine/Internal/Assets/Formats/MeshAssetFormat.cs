@@ -30,6 +30,7 @@ internal sealed class MeshAssetFormat : IEngineAssetFormat<Mesh> {
             context.DescriptorPayload);
         byte[] payload = context.ReadRawPayload(descriptor.Payload, "mesh");
         ValidateMesh(descriptor, payload, context.CanonicalPath);
+        MeshCollisionData? collision = DecodeCollision(descriptor, context);
         Vertex[] vertices = MeshPayloadCodec.DecodeVertices(
             payload,
             checked((int)descriptor.VertexCount));
@@ -40,7 +41,30 @@ internal sealed class MeshAssetFormat : IEngineAssetFormat<Mesh> {
         MeshAssetDescriptor captured = descriptor;
         return new DecodedAsset<Mesh>(
             new MeshGpuUpload(context.CanonicalPath, descriptor, payload),
-            lifetime => new Mesh(lifetime, captured, vertices, indices, isProcedural: false));
+            lifetime => new Mesh(
+                lifetime,
+                captured,
+                vertices,
+                indices,
+                isProcedural: false,
+                collision));
+    }
+
+    private static MeshCollisionData? DecodeCollision(
+        MeshAssetDescriptor descriptor,
+        AssetFormatContext context) {
+        if (descriptor.CollisionPayload is null) {
+            return null;
+        }
+
+        byte[] collisionPayload = context.ReadRawPayload(
+            descriptor.CollisionPayload,
+            "mesh collision");
+        return MeshCollisionCodec.Decode(
+            collisionPayload,
+            descriptor.Topology,
+            checked((int)descriptor.IndexCount),
+            context.CanonicalPath);
     }
 
     private static void ValidateMesh(MeshAssetDescriptor descriptor, byte[] payload, string canonical) {

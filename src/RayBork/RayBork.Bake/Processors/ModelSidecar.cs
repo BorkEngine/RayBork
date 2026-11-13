@@ -7,10 +7,10 @@ namespace RayBork.Bake.Processors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The property names are the canonical snake_case keys <c>scale</c>, <c>front</c>, and
-/// <c>shader</c>. Every member is optional, so a missing sidecar uses the defaults
-/// <c>scale = 1.0</c>, <c>front = "+z"</c>, and the built-in shader path <c>shaders/mesh</c>. The
-/// bake never writes a sidecar.
+/// The property names are the canonical snake_case keys <c>scale</c>, <c>front</c>, <c>shader</c>, and
+/// <c>collisions</c>. Every member is optional, so a missing sidecar uses the defaults
+/// <c>scale = 1.0</c>, <c>front = "+z"</c>, the built-in shader path <c>shaders/mesh</c>, and
+/// <c>collisions = true</c>. The bake never writes a sidecar.
 /// </para>
 /// <para>
 /// <c>front</c> is bound as a string so an unknown axis is a semantic <c>RB4009</c> error rather
@@ -37,4 +37,10 @@ internal sealed partial class ModelSidecar {
     /// does not load the shader.
     /// </summary>
     public string? Shader { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the bake writes a ray-mesh collision payload for each triangle part.
+    /// <see langword="null"/> means enabled; <c>false</c> opts the whole source out.
+    /// </summary>
+    public bool? Collisions { get; set; }
 }
