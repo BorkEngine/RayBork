@@ -8,12 +8,21 @@ namespace RayBork;
 /// </summary>
 /// <remarks>
 /// Components are normally in <c>[0, 1]</c>, but HDR rendering allows values above <c>1</c>.
-/// Colors are authored in linear space; there is no implicit gamma conversion.
+/// Colors are authored in linear space; there is no implicit gamma conversion. Use
+/// <see cref="FromSrgb(float, float, float, float)"/> and <see cref="ToSrgb"/> to convert
+/// explicitly between linear and sRGB-encoded values.
 /// </remarks>
 public readonly struct Color : IEquatable<Color>, IFormattable {
     private const float GRAYSCALE_RED_WEIGHT = 0.299f;
     private const float GRAYSCALE_GREEN_WEIGHT = 0.587f;
     private const float GRAYSCALE_BLUE_WEIGHT = 0.114f;
+    private const float SRGB_DECODE_THRESHOLD = 0.04045f;
+    private const float SRGB_ENCODE_THRESHOLD = 0.0031308f;
+    private const float SRGB_SLOPE = 12.92f;
+    private const float SRGB_OFFSET = 0.055f;
+    private const float SRGB_SCALE = 1.055f;
+    private const float SRGB_GAMMA = 2.4f;
+    private const float SRGB_INVERSE_GAMMA = 1f / 2.4f;
 
     private readonly Vector4 _rgba;
 
@@ -229,6 +238,75 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
 
         return new Color(red, green, blue, alpha);
     }
+
+    /// <summary>
+    /// Encodes the linear red, green, and blue components with the piecewise sRGB transfer function.
+    /// Alpha is passed through unchanged.
+    /// </summary>
+    /// <returns>
+    /// The sRGB-encoded RGBA components. The result is display-encoded, so it is a
+    /// <see cref="Vector4"/> rather than a linear <see cref="Color"/>.
+    /// </returns>
+    /// <remarks>
+    /// The result is not clamped. Components above <c>1</c> and below <c>0</c> extrapolate through
+    /// the same piecewise formula; callers that write to a display or an 8-bit target must clamp.
+    /// </remarks>
+    public Vector4 ToSrgb() {
+        return new Vector4(
+            EncodeSrgbComponent(_rgba.X),
+            EncodeSrgbComponent(_rgba.Y),
+            EncodeSrgbComponent(_rgba.Z),
+            _rgba.W);
+    }
+
+    // RS0026 flags multiple overloads with optional parameters. The float and byte forms must both be
+    // callable without alpha, so the shared default is deliberate rather than an overload ambiguity.
+#pragma warning disable RS0026
+    /// <summary>
+    /// Creates a linear color from sRGB-encoded red, green, blue, and alpha components.
+    /// </summary>
+    /// <param name="r">The sRGB-encoded red component in <c>[0, 1]</c>.</param>
+    /// <param name="g">The sRGB-encoded green component in <c>[0, 1]</c>.</param>
+    /// <param name="b">The sRGB-encoded blue component in <c>[0, 1]</c>.</param>
+    /// <param name="a">The linear alpha component in <c>[0, 1]</c>; alpha is not gamma-encoded.</param>
+    /// <returns>The linear color.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A component is not finite or lies outside <c>[0, 1]</c>.
+    /// </exception>
+    public static Color FromSrgb(float r, float g, float b, float a = 1f) {
+        ValidateSrgbComponent(r, nameof(r));
+        ValidateSrgbComponent(g, nameof(g));
+        ValidateSrgbComponent(b, nameof(b));
+        ValidateSrgbComponent(a, nameof(a));
+
+        return new Color(
+            DecodeSrgbComponent(r),
+            DecodeSrgbComponent(g),
+            DecodeSrgbComponent(b),
+            a);
+    }
+
+    /// <summary>
+    /// Creates a linear color from 8-bit sRGB-encoded red, green, blue, and alpha components.
+    /// </summary>
+    /// <param name="r">The sRGB-encoded red byte.</param>
+    /// <param name="g">The sRGB-encoded green byte.</param>
+    /// <param name="b">The sRGB-encoded blue byte.</param>
+    /// <param name="a">The linear alpha byte; alpha is not gamma-encoded.</param>
+    /// <returns>The linear color.</returns>
+    /// <remarks>
+    /// Each red, green, and blue byte is converted as <c>value / 255</c> and decoded through the
+    /// piecewise sRGB transfer function. Alpha is converted the same way without the transfer
+    /// function. The conversion is exact and deterministic for a given byte quadruple.
+    /// </remarks>
+    public static Color FromSrgb(byte r, byte g, byte b, byte a = 255) {
+        return new Color(
+            DecodeSrgbComponent(r / 255f),
+            DecodeSrgbComponent(g / 255f),
+            DecodeSrgbComponent(b / 255f),
+            a / 255f);
+    }
+#pragma warning restore RS0026
 
     /// <summary>
     /// Interpolates two colors in OkLab space, clamping the interpolation factor.
@@ -447,5 +525,24 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
             _rgba.Y,
             _rgba.Z,
             _rgba.W);
+    }
+
+    private static float DecodeSrgbComponent(float value) =>
+        value <= SRGB_DECODE_THRESHOLD
+            ? value / SRGB_SLOPE
+            : MathF.Pow((value + SRGB_OFFSET) / SRGB_SCALE, SRGB_GAMMA);
+
+    private static float EncodeSrgbComponent(float value) =>
+        value <= SRGB_ENCODE_THRESHOLD
+            ? SRGB_SLOPE * value
+            : (SRGB_SCALE * MathF.Pow(value, SRGB_INVERSE_GAMMA)) - SRGB_OFFSET;
+
+    private static void ValidateSrgbComponent(float value, string paramName) {
+        if (!float.IsFinite(value) || value < 0f || value > 1f) {
+            throw new ArgumentOutOfRangeException(
+                paramName,
+                value,
+                "sRGB components must be finite and between 0 and 1.");
+        }
     }
 }

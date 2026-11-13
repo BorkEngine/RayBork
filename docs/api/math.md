@@ -99,8 +99,9 @@ Transform world = local.WithParent(parent); // Position == (1, 1, 0)
 `Color` is RayBork's port of the linear `Color` type from
 `Bork2d.Engine/Rendering/Color.cs`. It is an immutable linear RGBA value stored as a `Vector4`.
 Components are normally in `[0, 1]`, but HDR rendering deliberately allows values above `1`.
-There is no 8-bit sRGB `Color` and no implicit gamma conversion; the present pass applies AgX and
-the output transfer function.
+There is no 8-bit sRGB `Color` and no implicit gamma conversion; use the explicit `FromSrgb` and
+`ToSrgb` helpers when a display-encoded value crosses the API boundary. The present pass applies AgX
+and the output transfer function.
 
 ```csharp
 public readonly struct Color : IEquatable<Color>, IFormattable {
@@ -127,6 +128,10 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     public static Color HSVToRGB(float h, float s, float v);
     public static Color HSVToRGB(float h, float s, float v, bool hdr = true);
     public static void RGBToHSV(Color rgb, out float h, out float s, out float v);
+
+    public static Color FromSrgb(float r, float g, float b, float a = 1f);
+    public static Color FromSrgb(byte r, byte g, byte b, byte a = 255);
+    public Vector4 ToSrgb();
 
     public static Color operator +(Color a, Color b);
     public static Color operator -(Color a, Color b);
@@ -156,8 +161,23 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
 - `HSVToRGB` uses Unity-style HSV components with `h`, `s`, and `v` in `[0, 1]`. Hue wraps around
   the color wheel, saturation is clamped to `[0, 1]`, and `v` is clamped to `[0, 1]` only when
   `hdr` is false. With `hdr: true`, values above `1` are preserved for HDR colors.
-- `Color` values are **authored in linear space**; every preset field is a linear value. For example
-  `Color.DarkCyan` is `(0, 0.5, 0.5, 1)`, not an sRGB byte triple.
+- `Color` is **linear**: its components are light intensities, not display-encoded values, and every
+  named constant is linear as well. `Color.Gray` is linear `0.5` and therefore appears light, not as
+  mid-gray; `Color.FromSrgb(0.5f, 0.5f, 0.5f)` decodes the display mid-gray to linear `0.21404114`,
+  which appears as mid-gray. `Color.DarkCyan` is `(0, 0.5, 0.5, 1)`, not an sRGB byte triple.
+- `FromSrgb(float r, float g, float b, float a = 1f)` treats red, green, and blue as sRGB-encoded
+  components in `[0, 1]` and decodes each with the standard piecewise sRGB EOTF
+  (`c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055)^2.4`). Alpha is passed through unchanged
+  because it is not gamma-encoded. Components must be finite and in `[0, 1]`; otherwise the method
+  throws `ArgumentOutOfRangeException`.
+- `FromSrgb(byte r, byte g, byte b, byte a = 255)` divides each channel by `255` and decodes red,
+  green, and blue with the same EOTF; alpha is stored as `a / 255`. The conversion is exact and
+  deterministic for a given byte quadruple.
+- `ToSrgb()` encodes each linear channel with the standard piecewise sRGB OETF
+  (`c <= 0.0031308 ? 12.92 * c : 1.055 * c^(1/2.4) - 0.055`) and returns `(r, g, b, a)` as a
+  `Vector4`, not a `Color`, because the result is display-encoded rather than linear. It does not
+  clamp: values above `1` and negative values extrapolate through the same formula, so callers that
+  write to a display or an 8-bit target must clamp.
 - The final output path applies AgX tone mapping and then the swapchain transfer function. Sampling
   an sRGB texture decodes to linear before lighting. Sampling a linear texture stays linear.
 

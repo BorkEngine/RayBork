@@ -117,6 +117,7 @@ RayBork.Color.MaxColorComponent.get -> float
 RayBork.Color.R.get -> float
 RayBork.Color.this[int index].get -> float
 RayBork.Color.ToOkLab(out float l, out float a, out float b) -> void
+RayBork.Color.ToSrgb() -> System.Numerics.Vector4
 RayBork.Color.ToString(string? format, System.IFormatProvider? formatProvider) -> string!
 RayBork.CullMode
 RayBork.CullMode.Back = 2 -> RayBork.CullMode
@@ -870,6 +871,8 @@ RayBork.WindowState.Normal = 0 -> RayBork.WindowState
 static RayBork.BoundingBox.operator !=(RayBork.BoundingBox left, RayBork.BoundingBox right) -> bool
 static RayBork.BoundingBox.operator ==(RayBork.BoundingBox left, RayBork.BoundingBox right) -> bool
 static RayBork.Color.FromOkLab(float l, float a, float b, float alpha = 1) -> RayBork.Color
+static RayBork.Color.FromSrgb(byte r, byte g, byte b, byte a = 255) -> RayBork.Color
+static RayBork.Color.FromSrgb(float r, float g, float b, float a = 1) -> RayBork.Color
 static RayBork.Color.HSVToRGB(float h, float s, float v) -> RayBork.Color
 static RayBork.Color.HSVToRGB(float h, float s, float v, bool hdr) -> RayBork.Color
 static RayBork.Color.implicit operator RayBork.Color(System.Numerics.Vector4 value) -> RayBork.Color
