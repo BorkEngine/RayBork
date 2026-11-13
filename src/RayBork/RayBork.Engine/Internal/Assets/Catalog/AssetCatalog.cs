@@ -1,13 +1,11 @@
-using System.Buffers.Binary;
-using System.Numerics;
 using Microsoft.Extensions.Logging;
 
 namespace RayBork.Internal;
 
 /// <summary>
 /// The app's runtime asset catalog: it mounts the built-in pack and the configured user packs,
-/// resolves the visible entry for a path, and loads engine assets and custom data on one dedicated
-/// loader thread.
+/// resolves the visible entry for a path, and loads engine assets and registered values on one
+/// dedicated loader thread.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -22,21 +20,23 @@ namespace RayBork.Internal;
 /// in flight, and reference-counted. The shared load uses the catalog stop token, never a caller
 /// token, so one canceled waiter leaves the other waiters and the created resource intact. When every
 /// waiter cancels before acquiring a reference the created asset is destroyed and removed from the
-/// cache. Custom data is deserialized on the loader and returned as a fresh caller-owned instance;
-/// custom data and <see cref="LoadData"/> payloads are never cached. <see cref="Shader"/> is a
-/// material, not an engine asset: <c>Load&lt;Shader&gt;</c> loads or reuses the internal
-/// <see cref="ShaderProgram"/> and returns a new material over it for every call. <see cref="Model"/>
-/// is a caller-owned composition, not an engine asset: <c>Load&lt;Model&gt;</c> resolves the shared
-/// cached part meshes and programs and returns a new model wrapper with its own materials per call.
+/// cache. Every other registered type is loaded by an <see cref="IAssetLoader{T}"/> and returned as a
+/// fresh caller-owned value; custom values and <see cref="LoadData"/> payloads are never cached.
+/// <see cref="Shader"/> and <see cref="Model"/> are registered loaders, not catalog special cases:
+/// <c>Load&lt;Shader&gt;</c> resolves the cached internal <see cref="ShaderProgram"/> and returns a
+/// new material over it for every call, and <c>Load&lt;Model&gt;</c> resolves the shared cached part
+/// meshes and programs and returns a new model wrapper with its own materials per call.
 /// </para>
 /// <para>
-/// The loader thread only reads and decompresses pack payloads, deserializes custom data, and starts
-/// GPU uploads; it never calls SDL, Vulkan, or game code and never waits for a GPU copy. An engine
-/// load is deferred: while its upload is in flight the loader keeps serving the next queued request,
-/// so custom data and <see cref="LoadData"/> do not wait behind a GPU upload. <see cref="Stop"/>
-/// cancels and joins the loader, fails the pending loads with <see cref="ObjectDisposedException"/>,
-/// forces every cached asset to dispose, and releases the pack mappings. It runs before the frame ring
-/// completes so the render thread can still service the queued GPU destructions.
+/// The loader thread only reads and decompresses pack payloads, runs the synchronous part of the
+/// registered loaders, and starts GPU uploads; it never calls SDL, Vulkan, or a tick-thread API and
+/// never waits for a GPU copy. An engine load is deferred: while its upload is in flight the loader
+/// keeps serving the next queued request, so custom data and <see cref="LoadData"/> do not wait behind
+/// a GPU upload. A registered loader must not block: a nested load it requests through its
+/// <see cref="AssetLoadContext"/> is queued on the same loader thread. <see cref="Stop"/> cancels and
+/// joins the loader, fails the pending loads with <see cref="ObjectDisposedException"/>, forces every
+/// cached asset to dispose, and releases the pack mappings. It runs before the frame ring completes so
+/// the render thread can still service the queued GPU destructions.
 /// </para>
 /// <para>
 /// The catalog also owns the app's <see cref="ProceduralAssetService"/>. Procedural assets are never
@@ -59,24 +59,12 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     private const string BUILT_IN_DISPLAY_PATH = "<built-in>";
 
-    /// <summary>
-    /// The canonical shader path the runtime uses for a model part whose descriptor has no shader path.
-    /// The path is baked into the built-in pack as the default mesh draw shader.
-    /// </summary>
-    private const string DEFAULT_MODEL_SHADER_PATH = "shaders/mesh";
-
-    /// <summary>
-    /// The shader path older model packs baked when a part had no authored shader. It resolves to
-    /// <see cref="DEFAULT_MODEL_SHADER_PATH"/> because the built-in pack no longer publishes it.
-    /// </summary>
-    private const string LEGACY_MODEL_SHADER_PATH = "shaders/default";
-
     private readonly ILogger _logger;
     private readonly GpuAssetBridge _bridge;
     private readonly ProceduralAssetService _proceduralAssets;
     private readonly ReadOnlyMemory<byte> _builtInPack;
     private readonly string[] _userPackPaths;
-    private readonly Dictionary<Type, AssetTypeRegistration> _customTypes;
+    private readonly AssetTypeRegistry _registry;
     private readonly Lock _gate = new();
     private readonly Queue<AssetLoaderWorkItem> _queue = new();
     private readonly HashSet<AssetLoaderWorkItem> _pending = [];
@@ -101,7 +89,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     /// The user pack paths in mount order. Relative paths resolve against
     /// <see cref="AppContext.BaseDirectory"/> when the catalog starts.
     /// </param>
-    /// <param name="assetTypes">The custom data type registrations.</param>
+    /// <param name="assetTypes">The user asset type registrations; the built-in registrations are added by the catalog.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal AssetCatalog(
         ILoggerFactory loggerFactory,
@@ -119,13 +107,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         _proceduralAssets = new ProceduralAssetService(bridge);
         _builtInPack = builtInPack;
         _userPackPaths = [.. userPackPaths];
-        _customTypes = new Dictionary<Type, AssetTypeRegistration>(assetTypes.Count);
-        foreach (AssetTypeRegistration registration in assetTypes) {
-            if (!_customTypes.TryAdd(registration.AssetType, registration)) {
-                throw new InvalidOperationException(
-                    $"The asset type '{registration.AssetType.FullName}' is registered more than once.");
-            }
-        }
+        _registry = new AssetTypeRegistry([.. BuiltInAssetLoaders.CreateDefault(), .. assetTypes]);
     }
 
     /// <summary>
@@ -160,45 +142,48 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     /// Path and type validation happen synchronously; pack lookup, descriptor decoding, and the GPU
     /// upload complete asynchronously on the loader thread.
     /// </remarks>
-    public Task<T> Load<T>(string path, CancellationToken cancellationToken = default) {
+    public Task<T> Load<T>(string path, CancellationToken cancellationToken = default)
+        => LoadCore<T>(path, cancellationToken, chain: null);
+
+    /// <summary>
+    /// Normalizes the path, resolves the registered strategy for <typeparamref name="T"/>, and starts
+    /// the load. A nested load carries the chain that requested it.
+    /// </summary>
+    /// <typeparam name="T">The requested asset type.</typeparam>
+    /// <param name="path">The caller-supplied path.</param>
+    /// <param name="cancellationToken">The caller cancellation token.</param>
+    /// <param name="chain">
+    /// The chain of loads that requested this load, or <see langword="null"/> for a top-level load.
+    /// </param>
+    /// <returns>The load task.</returns>
+    internal Task<T> LoadCore<T>(string path, CancellationToken cancellationToken, LoadChain? chain) {
         string canonical = AssetPath.Normalize(path);
         if (ProceduralAssetIds.IsReserved(canonical)) {
             lock (_gate) {
                 ThrowIfUnavailableLocked();
             }
 
-            return Task.FromException<T>(CreateNotFound(canonical));
+            return Task.FromException<T>(AssetLoadErrors.CreateNotFound(canonical));
         }
 
         Type assetType = typeof(T);
-        if (assetType == typeof(Shader)) {
-            return LoadShaderMaterialAsync<T>(canonical, cancellationToken);
-        }
-
-        if (assetType == typeof(Model)) {
-            return LoadModelAsync<T>(canonical, cancellationToken);
-        }
-
-        if (assetType == typeof(Mesh)
-            || assetType == typeof(Texture)
-            || assetType == typeof(ShaderProgram)) {
-            return LoadEngineAsync<T>(canonical, assetType, cancellationToken);
-        }
-
-        AssetTypeRegistration? registration;
+        AssetTypeRegistration registration;
         lock (_gate) {
             ThrowIfUnavailableLocked();
-            _customTypes.TryGetValue(assetType, out registration);
+            registration = _registry.Get(assetType);
         }
 
-        if (registration is not null) {
-            return LoadCustomAsync<T>(canonical, registration, cancellationToken);
+        if (registration is EngineAssetTypeRegistration<T> engineRegistration) {
+            return LoadEngineAsync(canonical, engineRegistration, cancellationToken);
         }
 
-        throw new NotSupportedException(
-            $"The asset type '{assetType.FullName}' is not a built-in engine asset (Mesh, Texture, or "
-                + "Model), a Shader material, or a registered custom data type. Register custom types "
-                + "with WithAssetType<T>() before Build.");
+        if (registration is not LoaderAssetTypeRegistration<T> loaderRegistration) {
+            throw new InvalidOperationException(
+                $"The asset type '{assetType.FullName}' is registered with a loader for a different "
+                    + "asset type.");
+        }
+
+        return LoadCustomAsync(canonical, loaderRegistration, cancellationToken, chain);
     }
 
     /// <inheritdoc/>
@@ -209,7 +194,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 ThrowIfUnavailableLocked();
             }
 
-            return Task.FromException<byte[]>(CreateNotFound(canonical));
+            return Task.FromException<byte[]>(AssetLoadErrors.CreateNotFound(canonical));
         }
 
         return LoadDataAsync(canonical, cancellationToken);
@@ -260,7 +245,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             Dictionary<string, VisibleAsset> visible = BuildVisibleStack(mounted);
             lock (_gate) {
                 if (_disposed) {
-                    throw CreateStoppedException();
+                    throw AssetLoadErrors.CreateStoppedException();
                 }
 
                 _packs = [.. mounted];
@@ -329,7 +314,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         // more. A build already waiting on an upload fails when the render thread closes the bridge.
         _proceduralAssets.Stop();
 
-        ObjectDisposedException stopped = CreateStoppedException();
+        ObjectDisposedException stopped = AssetLoadErrors.CreateStoppedException();
         foreach (AssetLoaderWorkItem item in pending) {
             item.Fail(stopped);
         }
@@ -418,16 +403,19 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         }
     }
 
-    private Task<T> LoadEngineAsync<T>(string canonical, Type assetType, CancellationToken cancellationToken) {
+    private Task<T> LoadEngineAsync<T>(
+        string canonical,
+        EngineAssetTypeRegistration<T> registration,
+        CancellationToken cancellationToken) {
         EngineCacheEntry entry;
         AssetLoaderWorkItem? workItem = null;
         lock (_gate) {
             ThrowIfUnavailableLocked();
             if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<T>(CreateNotFound(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateNotFound(canonical));
             }
 
-            AssetKey key = new(canonical, assetType);
+            AssetKey key = new(canonical, registration.AssetType);
             if (_engineCache.TryGetValue(key, out EngineCacheEntry? cached)) {
                 if (cached.Asset is not null) {
                     try {
@@ -455,12 +443,12 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 _engineCache.Add(key, entry);
                 Dictionary<string, VisibleAsset> visibleStack = _visible;
                 workItem = new AssetLoaderWorkItem(
-                    stopToken => LoadEngineObjectAsync(entry, visibleStack, visible, assetType, stopToken),
+                    stopToken => LoadEngineObjectAsync(entry, visibleStack, visible, registration, stopToken),
                     CompleteWorkItem);
                 entry.Completion = workItem.Completion;
                 if (!TryEnqueueLocked(workItem)) {
                     _engineCache.Remove(key);
-                    return Task.FromException<T>(CreateLoaderQueueFull(canonical));
+                    return Task.FromException<T>(AssetLoadErrors.CreateLoaderQueueFull(canonical));
                 }
             }
         }
@@ -497,7 +485,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             ReleaseAcquiredReference(release);
         }
 
-        throw CreateStoppedException();
+        throw AssetLoadErrors.CreateStoppedException();
     }
 
     private void ReleaseCanceledWaiter(EngineCacheEntry entry) {
@@ -523,31 +511,6 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     }
 
     /// <summary>
-    /// Loads the internal shader program through the engine cache and returns a new material over it.
-    /// </summary>
-    /// <remarks>
-    /// Every successful call returns a distinct caller-owned <see cref="Shader"/>. The program load is
-    /// coalesced and cached by <c>(canonical path, typeof(ShaderProgram))</c>, so materials over the
-    /// same path share one GPU program and batch together. The load's own program reference is
-    /// released as soon as the material acquired its own, whether the material was created or the
-    /// caller canceled first.
-    /// </remarks>
-    private async Task<T> LoadShaderMaterialAsync<T>(string canonical, CancellationToken cancellationToken) {
-        ShaderProgram program = await LoadEngineAsync<ShaderProgram>(
-            canonical,
-            typeof(ShaderProgram),
-            cancellationToken).ConfigureAwait(false);
-        try {
-            // The caller owns the returned material, never the load's program reference. An
-            // already-canceled caller must not acquire a material even when the program was cached.
-            cancellationToken.ThrowIfCancellationRequested();
-            return (T)(object)program.CreateMaterial();
-        } finally {
-            ReleaseAcquiredReference(program.Lifetime);
-        }
-    }
-
-    /// <summary>
     /// Decodes one engine asset on the loader thread, starts its GPU upload, and constructs the public
     /// asset when the upload completes.
     /// </summary>
@@ -557,24 +520,24 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     /// waiter never cancels the shared load. A stop or a failure removes the pending cache entry and
     /// destroys the just-created resource before the task faults.
     /// </remarks>
-    private async Task<object> LoadEngineObjectAsync(
+    private async Task<object> LoadEngineObjectAsync<T>(
         EngineCacheEntry entry,
         Dictionary<string, VisibleAsset> visibleStack,
         VisibleAsset descriptorEntry,
-        Type assetType,
+        EngineAssetTypeRegistration<T> registration,
         CancellationToken stopToken) {
         GpuAssetResource? resource = null;
         try {
-            AssetEntryType expected = ExpectedEntryType(assetType);
-            if (descriptorEntry.Entry.Type != expected) {
-                throw CreateTypeMismatch(descriptorEntry.Entry.Path, expected, descriptorEntry.Entry.Type);
+            if (descriptorEntry.Entry.Type != registration.EntryType) {
+                throw AssetLoadErrors.CreateTypeMismatch(
+                    descriptorEntry.Entry.Path,
+                    registration.EntryType,
+                    descriptorEntry.Entry.Type);
             }
 
-            DecodedAsset decoded = DecodeAsset(
-                assetType,
-                descriptorEntry.Entry.Path,
-                descriptorEntry,
-                visibleStack);
+            byte[] descriptorPayload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
+            AssetFormatContext context = new(descriptorEntry.Entry.Path, descriptorPayload, visibleStack);
+            DecodedAsset<T> decoded = registration.Format.Decode(context);
             resource = await _bridge.UploadAsync(decoded.Upload, stopToken).ConfigureAwait(false);
             stopToken.ThrowIfCancellationRequested();
 
@@ -583,7 +546,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 resource,
                 QueueDestruction,
                 () => OnOwnersReleased(entry));
-            object asset = decoded.Create(lifetime);
+            object asset = decoded.Create(lifetime)!;
             CommitEngineAsset(entry, lifetime, asset);
             return asset;
         } catch (Exception exception) {
@@ -596,254 +559,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 throw;
             }
 
-            throw WrapLoadFailure(descriptorEntry.Entry.Path, "could not be loaded", exception);
-        }
-    }
-
-    /// <summary>
-    /// Loads a new model wrapper over the shared cached part meshes and programs.
-    /// </summary>
-    /// <remarks>
-    /// A model is not an engine asset: it has no cache entry, no shared identity, and no lifetime of
-    /// its own. Every successful call resolves the packed descriptor and returns a new
-    /// <see cref="Model"/> that owns one material per part and one mesh reference per distinct part
-    /// mesh. The part loads themselves still use the shared engine cache, so repeated model loads share
-    /// the underlying meshes and programs without sharing the model or its materials.
-    /// </remarks>
-    private Task<T> LoadModelAsync<T>(string canonical, CancellationToken cancellationToken) {
-        AssetLoaderWorkItem workItem;
-        lock (_gate) {
-            ThrowIfUnavailableLocked();
-            if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<T>(CreateNotFound(canonical));
-            }
-
-            if (visible.Entry.Type != AssetEntryType.Model) {
-                return Task.FromException<T>(
-                    CreateTypeMismatch(canonical, AssetEntryType.Model, visible.Entry.Type));
-            }
-
-            workItem = new AssetLoaderWorkItem(
-                stopToken => LoadModelObjectAsync(visible, stopToken, cancellationToken),
-                CompleteWorkItem,
-                mapCancellationToStopped: false);
-            if (!TryEnqueueLocked(workItem)) {
-                return Task.FromException<T>(CreateLoaderQueueFull(canonical));
-            }
-        }
-
-        // The work item observes the caller token through its linked token, so cancellation releases
-        // every partly acquired part reference and material before the caller sees the exception. The
-        // wait itself must not cancel independently: that could abandon an already constructed model.
-        return AwaitModelWorkAsync<T>(workItem);
-    }
-
-    /// <summary>
-    /// Builds one model on the loader thread by resolving every part's mesh and material through the
-    /// public <see cref="Load{T}"/> path.
-    /// </summary>
-    /// <remarks>
-    /// The method returns an incomplete task while the part loads run. <see cref="AssetLoaderWorkItem"/>
-    /// does not block the loader loop on an incomplete task: the loader continues serving the part
-    /// requests while the model task awaits them, so calling the public load path here cannot deadlock.
-    /// A failed or canceled load releases every part mesh reference and material it already acquired,
-    /// and no model cache entry exists to clean up, so a retry starts a fresh load. The caller token is
-    /// linked to the catalog stop token for the duration of the load.
-    /// </remarks>
-    private async Task<object> LoadModelObjectAsync(
-        VisibleAsset descriptorEntry,
-        CancellationToken stopToken,
-        CancellationToken cancellationToken) {
-        string canonical = descriptorEntry.Entry.Path;
-        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
-            stopToken,
-            cancellationToken);
-        List<Mesh> meshes = [];
-        List<Shader> materials = [];
-        try {
-            linked.Token.ThrowIfCancellationRequested();
-
-            ModelAssetDescriptor descriptor;
-            try {
-                byte[] descriptorPayload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
-                descriptor = AssetSerialization.Deserialize<ModelAssetDescriptor>(descriptorPayload);
-            } catch (Exception exception) when (exception is not OutOfMemoryException) {
-                throw CreateLoadFailure(
-                    canonical,
-                    $"the model descriptor could not be decoded: {exception.Message}");
-            }
-
-            ValidateModelDescriptor(descriptor, canonical);
-
-            ModelPart[] parts = new ModelPart[descriptor.Parts.Length];
-            Dictionary<string, Mesh> meshesByPath = new(StringComparer.Ordinal);
-            for (int index = 0; index < descriptor.Parts.Length; index++) {
-                linked.Token.ThrowIfCancellationRequested();
-                ModelPartAsset part = descriptor.Parts[index];
-                string meshPath = AssetPath.Normalize(part.MeshPath);
-                if (!meshesByPath.TryGetValue(meshPath, out Mesh? mesh)) {
-                    mesh = await Load<Mesh>(meshPath, linked.Token).ConfigureAwait(false);
-                    meshesByPath.Add(meshPath, mesh);
-                    meshes.Add(mesh);
-                }
-
-                linked.Token.ThrowIfCancellationRequested();
-                // Every part gets its own material even when two parts share a program path. The
-                // program is cached and reference-counted, so the parts still share one GPU program.
-                string shaderPath = ResolveModelPartShaderPath(part.ShaderPath);
-                Shader material = await Load<Shader>(shaderPath, linked.Token).ConfigureAwait(false);
-                materials.Add(material);
-
-                parts[index] = new ModelPart(
-                    part.Name,
-                    mesh,
-                    material,
-                    renderState: null,
-                    localTransform: CreateLocalTransform(part.LocalTransform));
-            }
-
-            linked.Token.ThrowIfCancellationRequested();
-            Model model = new(parts);
-            if (linked.Token.IsCancellationRequested) {
-                // The catalog stopped or the caller canceled while the model was being constructed.
-                // The model already owns its part references, so dispose it before reporting the
-                // cancellation instead of abandoning a fully constructed model.
-                model.Dispose();
-                linked.Token.ThrowIfCancellationRequested();
-            }
-
-            // The model constructor acquired its own mesh references. This load's references are the
-            // transfer mechanism and are released now, so the model remains the only owner.
-            ReleaseMeshReferences(meshes);
-            materials.Clear();
-            return model;
-        } catch (Exception exception) {
-            ReleaseMeshReferences(meshes);
-            DisposeMaterials(materials);
-            if (stopToken.IsCancellationRequested) {
-                throw CreateStoppedException();
-            }
-
-            if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested) {
-                throw;
-            }
-
-            throw WrapLoadFailure(canonical, "could not be loaded", exception);
-        }
-    }
-
-    private static Transform CreateLocalTransform(float[] local) => new(
-        new Vector3(local[0], local[1], local[2]),
-        new Quaternion(local[3], local[4], local[5], local[6]),
-        new Vector3(local[7], local[8], local[9]));
-
-    private static void ReleaseMeshReferences(List<Mesh> meshes) {
-        foreach (Mesh mesh in meshes) {
-            try {
-                mesh.Lifetime.ReleaseOwnerReference();
-            } catch (ObjectDisposedException) {
-                // Shutdown force-disposed the part after the load started.
-            }
-        }
-
-        meshes.Clear();
-    }
-
-    private static void DisposeMaterials(List<Shader> materials) {
-        foreach (Shader material in materials) {
-            try {
-                material.Dispose();
-            } catch (ObjectDisposedException) {
-                // Shutdown force-disposed the program or material after the load started.
-            }
-        }
-
-        materials.Clear();
-    }
-
-    private static async Task<T> AwaitModelWorkAsync<T>(AssetLoaderWorkItem workItem) {
-        object result = await workItem.Completion.ConfigureAwait(false);
-        return (T)result;
-    }
-
-    private static string ResolveModelPartShaderPath(string? shaderPath) {
-        if (shaderPath is null) {
-            return DEFAULT_MODEL_SHADER_PATH;
-        }
-
-        string normalized = AssetPath.Normalize(shaderPath);
-        // Packs baked before the mesh shader replaced the old default still name `shaders/default`.
-        // They did not commit that program, so resolve the legacy path to the same built-in mesh
-        // shader instead of failing the model load with AssetNotFoundException.
-        return string.Equals(normalized, LEGACY_MODEL_SHADER_PATH, StringComparison.Ordinal)
-            ? DEFAULT_MODEL_SHADER_PATH
-            : normalized;
-    }
-
-    private static void ValidateModelDescriptor(ModelAssetDescriptor descriptor, string canonical) {
-        if (descriptor.Parts is null || descriptor.Parts.Length == 0) {
-            throw CreateLoadFailure(canonical, "the model descriptor must carry at least one part");
-        }
-
-        ValidateBounds(descriptor.Bounds, canonical, "the model");
-        foreach (ModelPartAsset? part in descriptor.Parts) {
-            if (part is null) {
-                throw CreateLoadFailure(canonical, "the model descriptor contains a null part");
-            }
-
-            if (string.IsNullOrWhiteSpace(part.Name)) {
-                throw CreateLoadFailure(canonical, "a model part has an empty name");
-            }
-
-            if (!AssetPath.TryValidateCanonical(part.MeshPath, out string? meshReason)) {
-                throw CreateLoadFailure(
-                    canonical,
-                    $"the mesh path '{part.MeshPath}' of model part '{part.Name}' is not canonical: "
-                        + meshReason);
-            }
-
-            if (part.ShaderPath is not null
-                && !AssetPath.TryValidateCanonical(part.ShaderPath, out string? shaderReason)) {
-                throw CreateLoadFailure(
-                    canonical,
-                    $"the shader path '{part.ShaderPath}' of model part '{part.Name}' is not canonical: "
-                        + shaderReason);
-            }
-
-            if (part.LocalTransform is null || part.LocalTransform.Length != 10) {
-                throw CreateLoadFailure(
-                    canonical,
-                    $"model part '{part.Name}' must carry exactly ten local-transform floats "
-                        + "(position XYZ, rotation XYZW, and scale XYZ)");
-            }
-
-            foreach (float component in part.LocalTransform) {
-                if (!float.IsFinite(component)) {
-                    throw CreateLoadFailure(
-                        canonical,
-                        $"model part '{part.Name}' has a non-finite local-transform component");
-                }
-            }
-
-            ValidateBounds(part.Bounds, canonical, $"model part '{part.Name}'");
-        }
-    }
-
-    private static void ValidateBounds(float[]? bounds, string canonical, string owner) {
-        if (bounds is null || bounds.Length != 6) {
-            throw CreateLoadFailure(
-                canonical,
-                $"{owner} must carry exactly six bounds floats (minimum XYZ, maximum XYZ)");
-        }
-
-        for (int index = 0; index < bounds.Length; index++) {
-            if (!float.IsFinite(bounds[index])) {
-                throw CreateLoadFailure(canonical, $"{owner} has a non-finite bounds component");
-            }
-        }
-
-        if (bounds[0] > bounds[3] || bounds[1] > bounds[4] || bounds[2] > bounds[5]) {
-            throw CreateLoadFailure(canonical, $"{owner} bounds minimum must not exceed the maximum");
+            throw AssetLoadErrors.WrapLoadFailure(descriptorEntry.Entry.Path, "could not be loaded", exception);
         }
     }
 
@@ -900,36 +616,96 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     private Task<T> LoadCustomAsync<T>(
         string canonical,
-        AssetTypeRegistration registration,
-        CancellationToken cancellationToken) {
+        LoaderAssetTypeRegistration<T> registration,
+        CancellationToken cancellationToken,
+        LoadChain? chain) {
         AssetLoaderWorkItem workItem;
         lock (_gate) {
             ThrowIfUnavailableLocked();
             if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<T>(CreateNotFound(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateNotFound(canonical));
+            }
+
+            if (visible.Entry.Type != registration.EntryType) {
+                return Task.FromException<T>(
+                    AssetLoadErrors.CreateTypeMismatch(
+                        canonical,
+                        registration.EntryType,
+                        visible.Entry.Type));
+            }
+
+            if (chain is not null && chain.Contains(typeof(T), canonical)) {
+                return Task.FromException<T>(AssetLoadErrors.CreateLoadFailure(
+                    canonical,
+                    "the loader requested the same asset type and path it is currently loading"));
             }
 
             workItem = new AssetLoaderWorkItem(
-                _ => Task.FromResult<object>(DeserializeCustom(visible, registration)),
-                CompleteWorkItem);
+                stopToken => LoadCustomObjectAsync(
+                    visible,
+                    registration.Loader,
+                    registration.FailureDescription,
+                    stopToken,
+                    cancellationToken,
+                    chain),
+                CompleteWorkItem,
+                mapCancellationToStopped: false);
             if (!TryEnqueueLocked(workItem)) {
-                return Task.FromException<T>(CreateLoaderQueueFull(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateLoaderQueueFull(canonical));
             }
         }
 
         return AwaitWorkAsync<T>(workItem, cancellationToken);
     }
 
-    private object DeserializeCustom(VisibleAsset entry, AssetTypeRegistration registration) {
-        if (entry.Entry.Type != AssetEntryType.Data) {
-            throw CreateTypeMismatch(entry.Entry.Path, AssetEntryType.Data, entry.Entry.Type);
-        }
-
+    /// <summary>
+    /// Loads one registered value asset on the loader thread through its loader.
+    /// </summary>
+    /// <remarks>
+    /// The caller token is linked to the catalog stop token for the duration of the load. Stop
+    /// cancellation is reported as <see cref="ObjectDisposedException"/>, while caller cancellation
+    /// stays an <see cref="OperationCanceledException"/> so the work item completes as canceled
+    /// instead of faulted.
+    /// </remarks>
+    private async Task<object> LoadCustomObjectAsync<T>(
+        VisibleAsset descriptorEntry,
+        IAssetLoader<T> loader,
+        string failureDescription,
+        CancellationToken stopToken,
+        CancellationToken cancellationToken,
+        LoadChain? chain) {
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+            stopToken,
+            cancellationToken);
         try {
-            byte[] payload = entry.Archive.ReadPayload(entry.Entry);
-            return registration.Deserialize(payload);
+            byte[] payload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
+            AssetLoadContext context = new(
+                this,
+                descriptorEntry.Entry.Path,
+                linked.Token,
+                payload,
+                new LoadChain(typeof(T), descriptorEntry.Entry.Path, chain));
+            T value = await loader.LoadAsync(context).ConfigureAwait(false);
+            if (value is null) {
+                throw AssetLoadErrors.CreateLoadFailure(
+                    descriptorEntry.Entry.Path,
+                    "the registered loader returned no value");
+            }
+
+            return value;
         } catch (Exception exception) {
-            throw WrapLoadFailure(entry.Entry.Path, "custom data could not be deserialized", exception);
+            if (stopToken.IsCancellationRequested) {
+                throw AssetLoadErrors.CreateStoppedException();
+            }
+
+            if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested) {
+                throw;
+            }
+
+            throw AssetLoadErrors.WrapLoadFailure(
+                descriptorEntry.Entry.Path,
+                failureDescription,
+                exception);
         }
     }
 
@@ -938,14 +714,14 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         lock (_gate) {
             ThrowIfUnavailableLocked();
             if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<byte[]>(CreateNotFound(canonical));
+                return Task.FromException<byte[]>(AssetLoadErrors.CreateNotFound(canonical));
             }
 
             workItem = new AssetLoaderWorkItem(
                 _ => Task.FromResult<object>(visible.Archive.ReadPayload(visible.Entry)),
                 CompleteWorkItem);
             if (!TryEnqueueLocked(workItem)) {
-                return Task.FromException<byte[]>(CreateLoaderQueueFull(canonical));
+                return Task.FromException<byte[]>(AssetLoadErrors.CreateLoaderQueueFull(canonical));
             }
         }
 
@@ -970,309 +746,6 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         return true;
     }
 
-    private static DecodedAsset DecodeAsset(
-        Type assetType,
-        string canonical,
-        VisibleAsset descriptorEntry,
-        Dictionary<string, VisibleAsset> visibleStack) {
-        byte[] descriptorPayload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
-        if (assetType == typeof(Mesh)) {
-            MeshAssetDescriptor descriptor = AssetSerialization.Deserialize<MeshAssetDescriptor>(descriptorPayload);
-            byte[] payload = ReadRawPayload(visibleStack, descriptor.Payload, canonical, "mesh");
-            ValidateMesh(descriptor, payload, canonical);
-            Vertex[] vertices = MeshPayloadCodec.DecodeVertices(
-                payload,
-                checked((int)descriptor.VertexCount));
-            uint[] indices = MeshPayloadCodec.DecodeIndices(
-                payload,
-                checked((int)descriptor.VertexCount),
-                checked((int)descriptor.IndexCount));
-            MeshAssetDescriptor captured = descriptor;
-            return new DecodedAsset(
-                new MeshGpuUpload(canonical, descriptor, payload),
-                lifetime => new Mesh(lifetime, captured, vertices, indices, isProcedural: false));
-        }
-
-        if (assetType == typeof(Texture)) {
-            TextureAssetDescriptor descriptor = AssetSerialization.Deserialize<TextureAssetDescriptor>(descriptorPayload);
-            byte[] payload = ReadRawPayload(visibleStack, descriptor.Payload, canonical, "KTX2");
-            ValidateTexture(descriptor, payload, canonical);
-            TextureAssetDescriptor captured = descriptor;
-            return new DecodedAsset(
-                new TextureGpuUpload(canonical, descriptor, payload),
-                lifetime => new Texture(lifetime, captured));
-        }
-
-        if (assetType == typeof(ShaderProgram)) {
-            ShaderAssetDescriptor descriptor = AssetSerialization.Deserialize<ShaderAssetDescriptor>(descriptorPayload);
-            byte[] vertexPayload = ReadRawPayload(
-                visibleStack,
-                descriptor.VertexPayload,
-                canonical,
-                "vertex SPIR-V");
-            byte[] fragmentPayload = ReadRawPayload(
-                visibleStack,
-                descriptor.FragmentPayload,
-                canonical,
-                "fragment SPIR-V");
-            ValidateShader(descriptor, vertexPayload, fragmentPayload, canonical);
-            ShaderAssetDescriptor captured = descriptor;
-            return new DecodedAsset(
-                new ShaderGpuUpload(canonical, descriptor, vertexPayload, fragmentPayload),
-                lifetime => new ShaderProgram(lifetime, captured));
-        }
-
-        throw new NotSupportedException(
-            $"The asset type '{assetType.FullName}' is not a built-in engine asset.");
-    }
-
-    private static byte[] ReadRawPayload(
-        Dictionary<string, VisibleAsset> visibleStack,
-        string payloadPath,
-        string assetPath,
-        string payloadKind) {
-        if (!AssetPath.TryValidateCanonical(payloadPath, out string? reason)) {
-            throw CreateLoadFailure(
-                assetPath,
-                $"the {payloadKind} payload path '{payloadPath}' is not canonical: {reason}");
-        }
-
-        if (!visibleStack.TryGetValue(payloadPath, out VisibleAsset payload)) {
-            throw CreateLoadFailure(
-                assetPath,
-                $"the {payloadKind} payload '{payloadPath}' is not in the visible pack stack");
-        }
-
-        if (payload.Entry.Type != AssetEntryType.Raw) {
-            throw CreateLoadFailure(
-                assetPath,
-                $"the {payloadKind} payload '{payloadPath}' is a {payload.Entry.Type} entry, not raw");
-        }
-
-        return payload.Archive.ReadPayload(payload.Entry);
-    }
-
-    private static void ValidateMesh(MeshAssetDescriptor descriptor, byte[] payload, string canonical) {
-        if (descriptor.Bounds is null || descriptor.Bounds.Length != 6) {
-            throw CreateLoadFailure(
-                canonical,
-                "the mesh descriptor must carry six bounds floats (minimum XYZ, maximum XYZ)");
-        }
-
-        for (int i = 0; i < descriptor.Bounds.Length; i++) {
-            if (!float.IsFinite(descriptor.Bounds[i])) {
-                throw CreateLoadFailure(canonical, "the mesh descriptor bounds must be finite");
-            }
-        }
-
-        if (descriptor.Bounds[0] > descriptor.Bounds[3]
-            || descriptor.Bounds[1] > descriptor.Bounds[4]
-            || descriptor.Bounds[2] > descriptor.Bounds[5]) {
-            throw CreateLoadFailure(
-                canonical,
-                "the mesh descriptor bounds minimum must not exceed the maximum");
-        }
-
-        if (descriptor.VertexCount == 0 || descriptor.IndexCount == 0) {
-            throw CreateLoadFailure(
-                canonical,
-                "the mesh descriptor must declare at least one vertex and one index");
-        }
-
-        if (!Enum.IsDefined(descriptor.Topology)) {
-            throw CreateLoadFailure(
-                canonical,
-                $"the mesh descriptor topology {(int)descriptor.Topology} is not a defined value");
-        }
-
-        long expectedLength = (long)descriptor.VertexCount * MeshAssetDescriptor.VERTEX_STRIDE
-            + (long)descriptor.IndexCount * sizeof(uint);
-        if (payload.Length != expectedLength) {
-            throw CreateLoadFailure(
-                canonical,
-                $"the mesh payload is {payload.Length} bytes; the descriptor requires exactly "
-                    + $"{expectedLength} bytes for {descriptor.VertexCount} vertices and "
-                    + $"{descriptor.IndexCount} indices");
-        }
-
-        // The CPU indices are exposed on the loaded mesh, so an out-of-range index is a corrupt payload
-        // even though the GPU buffers would accept the raw bytes.
-        ReadOnlySpan<byte> payloadSpan = payload;
-        int indexCount = checked((int)descriptor.IndexCount);
-        int indexOffset = checked((int)descriptor.VertexCount) * MeshAssetDescriptor.VERTEX_STRIDE;
-        for (int index = 0; index < indexCount; index++) {
-            uint value = BinaryPrimitives.ReadUInt32LittleEndian(
-                payloadSpan[(indexOffset + (index * sizeof(uint)))..]);
-            if (value >= descriptor.VertexCount) {
-                throw CreateLoadFailure(
-                    canonical,
-                    $"the mesh index {value} at position {index} is outside the "
-                        + $"{descriptor.VertexCount} vertices");
-            }
-        }
-    }
-
-    private static void ValidateTexture(
-        TextureAssetDescriptor descriptor,
-        byte[] payload,
-        string canonical) {
-        if (descriptor.Width == 0 || descriptor.Height == 0) {
-            throw CreateLoadFailure(canonical, "the texture descriptor must declare a non-zero size");
-        }
-
-        if (descriptor.MipLevels == 0) {
-            throw CreateLoadFailure(canonical, "the texture descriptor must declare at least one mip level");
-        }
-
-        uint maxMipLevels = (uint)BitOperations.Log2(Math.Max(descriptor.Width, descriptor.Height)) + 1u;
-        if (descriptor.MipLevels > maxMipLevels) {
-            throw CreateLoadFailure(
-                canonical,
-                $"the texture descriptor declares {descriptor.MipLevels} mip levels; "
-                    + $"{descriptor.Width}x{descriptor.Height} supports at most {maxMipLevels}");
-        }
-
-        if (!Enum.IsDefined(descriptor.Format)
-            || descriptor.Format is TextureFormat.Rgba16Float or TextureFormat.Depth32Float) {
-            throw CreateLoadFailure(
-                canonical,
-                $"the texture descriptor format {(int)descriptor.Format} is not a packed texture format");
-        }
-
-        bool srgbFormat = descriptor.Format is TextureFormat.Rgba8Srgb or TextureFormat.Bc7Srgb;
-        if (descriptor.IsSrgb != srgbFormat) {
-            throw CreateLoadFailure(
-                canonical,
-                $"the texture descriptor sRGB flag {descriptor.IsSrgb} does not match format "
-                    + $"{descriptor.Format}");
-        }
-
-        if (!Enum.IsDefined(descriptor.Filter) || !Enum.IsDefined(descriptor.Wrap)) {
-            throw CreateLoadFailure(canonical, "the texture descriptor sampler state is not valid");
-        }
-
-        if (!float.IsFinite(descriptor.MaxAnisotropy) || descriptor.MaxAnisotropy < 1f) {
-            throw CreateLoadFailure(
-                canonical,
-                "the texture descriptor maximum anisotropy must be finite and at least 1");
-        }
-
-        if (payload.Length == 0) {
-            throw CreateLoadFailure(canonical, "the texture KTX2 payload is empty");
-        }
-    }
-
-    private static void ValidateShader(
-        ShaderAssetDescriptor descriptor,
-        byte[] vertexPayload,
-        byte[] fragmentPayload,
-        string canonical) {
-        const ShaderStageMask requiredStages = ShaderStageMask.Vertex | ShaderStageMask.Fragment;
-        if (descriptor.Stages != requiredStages) {
-            throw CreateLoadFailure(
-                canonical,
-                $"the shader descriptor stages 0x{(int)descriptor.Stages:x} do not describe a complete "
-                    + "vertex+fragment program");
-        }
-
-        if (string.IsNullOrWhiteSpace(descriptor.VertexEntry)
-            || string.IsNullOrWhiteSpace(descriptor.FragmentEntry)) {
-            throw CreateLoadFailure(canonical, "the shader descriptor must name both entry points");
-        }
-
-        if (!IsSpirvModule(vertexPayload) || !IsSpirvModule(fragmentPayload)) {
-            throw CreateLoadFailure(
-                canonical,
-                "the shader SPIR-V payloads must be non-empty, 4-byte aligned modules");
-        }
-
-        if (descriptor.Uniforms is null || descriptor.Textures is null) {
-            throw CreateLoadFailure(canonical, "the shader descriptor metadata arrays must not be null");
-        }
-
-        HashSet<string> textureNames = new(StringComparer.Ordinal);
-        foreach (string? texture in descriptor.Textures) {
-            if (string.IsNullOrWhiteSpace(texture)) {
-                throw CreateLoadFailure(canonical, "the shader descriptor has an empty texture name");
-            }
-
-            if (!textureNames.Add(texture)) {
-                throw CreateLoadFailure(
-                    canonical,
-                    $"the shader descriptor repeats the texture name '{texture}'");
-            }
-        }
-
-        foreach (ShaderUniformAsset? uniform in descriptor.Uniforms) {
-            if (uniform is null
-                || string.IsNullOrWhiteSpace(uniform.Name)
-                || !Enum.IsDefined(uniform.Type)
-                || uniform.Default is null) {
-                throw CreateLoadFailure(canonical, "the shader descriptor has invalid uniform metadata");
-            }
-        }
-    }
-
-    private static bool IsSpirvModule(byte[] payload)
-        => payload.Length >= 20 && payload.Length % sizeof(uint) == 0;
-
-    private static AssetEntryType ExpectedEntryType(Type assetType)
-        => assetType == typeof(Mesh)
-            ? AssetEntryType.Mesh
-            : assetType == typeof(Texture)
-                ? AssetEntryType.Texture
-                : AssetEntryType.Shader;
-
-    private static AssetNotFoundException CreateNotFound(string canonical) => new(
-        $"The asset '{AssetPath.ToPublic(canonical)}' is not in any mounted pack.",
-        DiagnosticCodes.ASSET_NOT_FOUND,
-        null);
-
-    private static AssetTypeMismatchException CreateTypeMismatch(
-        string canonical,
-        AssetEntryType expected,
-        AssetEntryType actual) => new(
-            $"The asset '{AssetPath.ToPublic(canonical)}' was baked as {actual}, but it was requested as "
-                + $"{expected}.",
-            DiagnosticCodes.ASSET_TYPE_MISMATCH,
-            null);
-
-    private static AssetLoadException CreateLoadFailure(string canonical, string reason) => new(
-        $"The asset '{AssetPath.ToPublic(canonical)}' could not be loaded: {reason}.",
-        DiagnosticCodes.ASSET_LOAD_FAILED,
-        null);
-
-    private static AssetLoadException CreateLoaderQueueFull(string canonical) => new(
-        $"The asset '{AssetPath.ToPublic(canonical)}' could not be queued: the asset loader has "
-            + $"{MAX_PENDING_LOADS} pending requests.",
-        DiagnosticCodes.ASSET_LOAD_FAILED,
-        null);
-
-    private static Exception WrapLoadFailure(string canonical, string what, Exception exception) {
-        if (exception is AssetPackException
-            or AssetTypeMismatchException
-            or AssetNotFoundException) {
-            return exception;
-        }
-
-        if (exception is AssetLoadException loadFailure
-            && (string.Equals(
-                    loadFailure.DiagnosticCode,
-                    DiagnosticCodes.ASSET_LOAD_FAILED,
-                    StringComparison.Ordinal)
-                || string.Equals(
-                    loadFailure.DiagnosticCode,
-                    DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-                    StringComparison.Ordinal))) {
-            return loadFailure;
-        }
-
-        return new AssetLoadException(
-            $"The asset '{AssetPath.ToPublic(canonical)}' {what}: {exception.Message}",
-            DiagnosticCodes.ASSET_LOAD_FAILED,
-            exception);
-    }
-
     private void QueueDestruction(GpuAssetResource resource) {
         try {
             _bridge.Destroy(resource);
@@ -1291,17 +764,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         }
     }
 
-    private static ObjectDisposedException CreateStoppedException() => new(
-        nameof(AssetCatalog),
-        "The asset catalog is stopped.");
-
     private readonly record struct AssetKey(string Path, Type AssetType);
-
-    private readonly record struct VisibleAsset(PackArchive Archive, PackEntry Entry);
-
-    private readonly record struct DecodedAsset(
-        AssetGpuUpload Upload,
-        Func<EngineAsset, object> Create);
 
     /// <summary>
     /// One cached engine asset, its pending coalesced load, and its owner-reference bookkeeping. A
@@ -1361,7 +824,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             try {
                 work = _work(stopToken);
             } catch (OperationCanceledException) when (stopToken.IsCancellationRequested) {
-                _completion.TrySetException(CreateStoppedException());
+                _completion.TrySetException(AssetLoadErrors.CreateStoppedException());
                 _onCompleted(this);
                 return;
             } catch (Exception exception) {
@@ -1400,10 +863,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 if (_mapCancellationToStopped) {
                     // Shared engine-asset work only observes the catalog stop token, whose
                     // cancellation is reported as ObjectDisposedException at the public caller.
-                    _completion.TrySetException(CreateStoppedException());
+                    _completion.TrySetException(AssetLoadErrors.CreateStoppedException());
                 } else {
-                    // A model load observes its caller token through a linked token. It reports
-                    // OperationCanceledException after releasing every partly acquired part.
+                    // A value load observes its caller token through a linked token. It reports
+                    // OperationCanceledException after releasing every partly acquired asset.
                     _completion.TrySetCanceled();
                 }
 

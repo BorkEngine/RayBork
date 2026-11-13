@@ -1,3 +1,5 @@
+using RayBork.Internal;
+
 namespace RayBork.Bake.Baking;
 
 /// <summary>One asset entry produced by a source, before pack composition.</summary>
@@ -10,7 +12,7 @@ internal sealed class BakedEntry {
     /// <param name="sourceId">The producing source identifier.</param>
     internal BakedEntry(
         string path,
-        RayBork.Internal.AssetEntryType type,
+        AssetEntryType type,
         byte[] payload,
         uint alignment,
         string sourceId) {
@@ -28,7 +30,7 @@ internal sealed class BakedEntry {
     internal string Path { get; }
 
     /// <summary>Gets the pack entry type.</summary>
-    internal RayBork.Internal.AssetEntryType Type { get; }
+    internal AssetEntryType Type { get; }
 
     /// <summary>Gets the uncompressed payload bytes.</summary>
     internal byte[] Payload { get; }
@@ -42,33 +44,23 @@ internal sealed class BakedEntry {
 
 /// <summary>Maps shaped output types to pack entry types.</summary>
 internal static class BakeEntryTypes {
+    private static readonly Dictionary<Type, AssetEntryType> _shapeTypes = new() {
+        [typeof(TextureAssetDescriptor)] = AssetEntryType.Texture,
+        [typeof(MeshAssetDescriptor)] = AssetEntryType.Mesh,
+        [typeof(ShaderAssetDescriptor)] = AssetEntryType.Shader,
+        [typeof(ModelAssetDescriptor)] = AssetEntryType.Model,
+        [typeof(FontAssetDescriptor)] = AssetEntryType.Font,
+    };
+
     /// <summary>Maps an engine descriptor type to its pack type; every other shapeable type is data.</summary>
     /// <param name="shapeType">The shaped output's CLR type.</param>
     /// <returns>The pack entry type.</returns>
-    internal static RayBork.Internal.AssetEntryType FromShapeType(Type shapeType) {
+    internal static AssetEntryType FromShapeType(Type shapeType) {
         ArgumentNullException.ThrowIfNull(shapeType);
 
-        if (shapeType == typeof(RayBork.Internal.TextureAssetDescriptor)) {
-            return RayBork.Internal.AssetEntryType.Texture;
-        }
-
-        if (shapeType == typeof(RayBork.Internal.MeshAssetDescriptor)) {
-            return RayBork.Internal.AssetEntryType.Mesh;
-        }
-
-        if (shapeType == typeof(RayBork.Internal.ShaderAssetDescriptor)) {
-            return RayBork.Internal.AssetEntryType.Shader;
-        }
-
-        if (shapeType == typeof(RayBork.Internal.ModelAssetDescriptor)) {
-            return RayBork.Internal.AssetEntryType.Model;
-        }
-
-        if (shapeType == typeof(RayBork.Internal.FontAssetDescriptor)) {
-            return RayBork.Internal.AssetEntryType.Font;
-        }
-
-        return RayBork.Internal.AssetEntryType.Data;
+        return _shapeTypes.TryGetValue(shapeType, out AssetEntryType entryType)
+            ? entryType
+            : AssetEntryType.Data;
     }
 
     /// <summary>Gets whether an alignment is one the RAYBORKP v1 writer accepts.</summary>

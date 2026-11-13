@@ -100,10 +100,10 @@ public enum PrimitiveTopology {
 > loads a packed model descriptor and every part's mesh, creates one material per part over the cached
 > internal program, and returns a **new `Model` wrapper per call**. `Model` is not an `IAsset`: it has
 > no path, no catalog cache entry, and no shared identity. A part with no `[model] shader` in its
-> sidecar resolves to the built-in shader path `shaders/mesh`; an older descriptor with a `null` shader
-> path, or a legacy `shaders/default` path, resolves to `/shaders/mesh` at load time. A model draw uses
-> each part material's current uniform cursor and texture bindings; there is no shader-override draw
-> overload.
+> sidecar is baked with the built-in shader path `shaders/mesh`; the model loader requires every part
+> descriptor to carry a canonical shader path and has no runtime default, so a descriptor with a
+> missing or stale path fails to load. A model draw uses each part material's current uniform cursor
+> and texture bindings; there is no shader-override draw overload.
 
 - `Mesh` is one primitive: one vertex/index buffer pair and one topology. It is immutable after load
   or build. `Bounds` is in mesh space. The fixed 88-byte vertex layout is position, normal, uv,

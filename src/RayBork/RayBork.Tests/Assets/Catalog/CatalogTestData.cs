@@ -7,7 +7,7 @@ namespace RayBork.Tests.Assets.Catalog;
 
 /// <summary>
 /// A custom data type shaped for the catalog tests. It is registered through
-/// <see cref="AssetTypeRegistration.Create{T}"/>, exactly like the builder registers a game type.
+/// <see cref="LoaderAssetTypeRegistration{T}"/>, exactly like the builder registers a game type.
 /// </summary>
 [GenerateShape]
 internal sealed partial class CatalogTestSettings {
@@ -20,6 +20,8 @@ internal sealed partial class CatalogTestSettings {
 /// Deterministic descriptors and pack inputs shared by the catalog tests.
 /// </summary>
 internal static class CatalogTestData {
+    internal const string CUSTOM_DATA_FAILURE_DESCRIPTION = "custom data could not be deserialized";
+
     internal const string MESH_PATH = "meshes/quad";
     internal const string MESH_PAYLOAD_PATH = "meshes/quad-mesh";
     internal const string TEXTURE_PATH = "textures/albedo";
@@ -149,7 +151,9 @@ internal static class CatalogTestData {
     }
 
     internal static AssetTypeRegistration SettingsRegistration
-        => AssetTypeRegistration.Create<CatalogTestSettings>();
+        => new LoaderAssetTypeRegistration<CatalogTestSettings>(
+            new MessagePackAssetLoader<CatalogTestSettings>(),
+            CUSTOM_DATA_FAILURE_DESCRIPTION);
 
     private static void WriteVector2(BinaryWriter writer, System.Numerics.Vector2 value) {
         writer.Write(value.X);

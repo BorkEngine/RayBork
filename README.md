@@ -66,7 +66,9 @@ and is delivered by the milestones listed in
   returns. Draws batch by `(mesh, program, effective render state)`.
 - `Mesh` and `Texture` are reference-counted engine assets loaded from one or more `RAYBORKP` packs
   produced by the bake. Custom TOML data uses `[GenerateShape]`, `WithAssetType<T>()`, and the same
-  `Load<T>` API. `Shader` materials and `Model` objects are caller-owned, not engine assets.
+  `Load<T>` API; a custom format registers an `IAssetLoader<T>` with `WithAssetLoader<T>()` and
+  decodes its own payload. `Shader` materials and `Model` objects are caller-owned, not engine
+  assets.
 - A `Model` is a user-owned flat list of parts. Each part has a mesh, a material, a render state,
   a local transform, and computed bounds; constructing a model acquires its meshes and transfers
   its part materials to the model. A part with no authored shader uses the built-in `/shaders/mesh`

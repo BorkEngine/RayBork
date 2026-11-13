@@ -136,8 +136,11 @@ public interface IAssetProcessor {
   an error. The bake never creates or rewrites a source sidecar.
 - `Process` runs on the bake thread. It must not retain per-source state between calls.
 - Outputs go through `AssetProcessorContext.Outputs`: `AddAsset<T>` for shaped data and `AddData`
-  for raw payloads. `AddData` takes an alignment of `1`, `16`, `64`, or `256`; GPU payloads use
-  `16` or greater. A processor never writes MessagePack or pack bytes directly.
+  for raw payloads. `AddData` writes a `Raw` entry; `AddAsset<T>` writes an engine descriptor entry
+  for the built-in descriptor types or a MessagePack `Data` entry for any other shaped type.
+  `AddData` takes an alignment of `1`, `16`, `64`, or `256`; GPU payloads use `16` or greater. A
+  custom runtime loader registered with `WithAssetLoader<T>` declares the matching `AssetEntryType`.
+  A processor never writes MessagePack or pack bytes directly.
 - `AssetProcessorContext` exposes the source paths, the canonical base asset path, the output sink,
   the diagnostic sink, and `AddInput(path)`. `AddInput` records a referenced source file, such as a
   shader's GLSL stages, as a tracked input for the incremental manifest; the path is resolved
@@ -201,8 +204,8 @@ shader = "shaders/castle"
 - glTF materials and images are not imported in M4. The bake validates that referenced images exist
   and warns that they are not imported; every part uses the sidecar shader (or the built-in
   `shaders/mesh`), and the game supplies textures and uniforms with `SetUniform`. The model loader
-  maps an older pack's `shaders/default` part path to the built-in `/shaders/mesh` program, so packs
-  baked before the mesh shader replaced the old default still load.
+  requires every part descriptor to carry a canonical shader path and has no runtime default, so a
+  descriptor with a missing or stale path fails to load.
 - UVs use the engine's top-left origin. glTF `TEXCOORD_0`-`TEXCOORD_3` are used as authored. Every
   OBJ `vt` is flipped on V at bake (`v = 1 - v`), so an authored V of 0 maps to the bottom of the
   texture and an authored V of 1 maps to the top, matching raylib's OBJ loader; U is unchanged.
@@ -396,8 +399,9 @@ is set.
 
 Primitive meshes and the error glyph are added by later milestones (M5 and M6). Pack v1 is unchanged
 by M4: the mesh shader is an ordinary shader entry at a reserved built-in path, not a format change.
-The app preloads it into `EngineContext.Defaults` before `IGame.Setup`; there is no longer a built-in
-`/shaders/default` entry.
+The app preloads it into `EngineContext.Defaults` before `IGame.Setup`. A model part whose sidecar
+names no shader is baked with `shaders/mesh`, and the runtime requires every part descriptor to name
+a canonical shader path.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
 that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by

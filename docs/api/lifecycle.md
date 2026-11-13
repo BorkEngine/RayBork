@@ -42,6 +42,7 @@ public sealed class RayBorkAppBuilder {
     public RayBorkAppBuilder WithAssetsPack(string path);
     public RayBorkAppBuilder WithAssetsPacks(params string[] paths);
     public RayBorkAppBuilder WithAssetType<T>() where T : IShapeable<T>;
+    public RayBorkAppBuilder WithAssetLoader<T>(IAssetLoader<T> loader);
     public RayBorkAppBuilder WithPresentMode(PresentMode mode = PresentMode.Mailbox);
     public RayBorkAppBuilder WithMSAA(int sampleCount = 4);
     public RayBorkAppBuilder WithTonemapping(TonemappingMode mode = TonemappingMode.AgX);
@@ -64,7 +65,8 @@ public sealed class RayBorkAppBuilder {
 | `WithMaxDeltaTime` | `0.25` seconds | Finite, positive. Values above `1.0` are allowed but discouraged. |
 | `WithAssetsPack` | none | Pack path. Relative paths resolve against `AppContext.BaseDirectory`. May be called more than once; later packs shadow earlier ones. |
 | `WithAssetsPacks` | none | Same, in order. |
-| `WithAssetType<T>` | none | Registers a custom TOML data type for `Load<T>`. `T` must carry a compiled `[GenerateShape]`. Idempotent for the same type; a conflicting registration is an `InvalidOperationException`. |
+| `WithAssetType<T>` | none | Registers a custom TOML data type for `Load<T>` as a MessagePack `Data` entry through the built-in data loader. `T` must carry a compiled `[GenerateShape]`. Idempotent for the same type; a registration that conflicts with `WithAssetLoader<T>` is an `InvalidOperationException`. |
+| `WithAssetLoader<T>` | none | Registers an `IAssetLoader<T>` for `Load<T>`. `T` needs no `[GenerateShape]`. The loader's synchronous part runs on the `RayBork.Asset` loader thread, returns a fresh caller-owned value per load, and must not block or call SDL, Vulkan, or tick-thread APIs. One registration per type; a built-in engine type fails at `Build`. See §6.7. |
 | `WithPresentMode` | `Mailbox` | `Mailbox` is preferred; if unavailable, the engine falls back to `Fifo`. `Immediate` is available when the user explicitly chooses it. |
 | `WithMSAA` | `4` | Valid sample counts are 1, 2, 4, and 8, subject to device support. The renderer selects the highest supported sample count that does not exceed the request, and 1 if none is supported, logging a warning when the effective count differs. |
 | `WithTonemapping` | `AgX` | `AgX` maps linear HDR to the output; `None` is for custom output/presentation paths. |
@@ -89,6 +91,10 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > `T : IShapeable<T>` and a compiled `[GenerateShape]`; it registers a non-reflective loader delegate
 > and is idempotent for the same type. A conflicting registration is an `InvalidOperationException`
 > from the method call.
+
+> **Current asset surface.** The generic loader registration (`WithAssetLoader<T>`,
+> `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`) is a current-surface addition after M4,
+> not part of the M3 subset.
 
 > **M4 subset.** M4 removes `WithClearColor`; clear control belongs to each camera pass. The
 > renderer builder keeps only the presentation options (`WithPresentMode`, `WithMSAA`,

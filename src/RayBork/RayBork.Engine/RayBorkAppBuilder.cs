@@ -39,6 +39,7 @@ public sealed class RayBorkAppBuilder {
     private double _maxDeltaTime = DEFAULT_MAX_DELTA_TIME;
     private readonly List<string> _assetPackPaths = [];
     private readonly Dictionary<Type, AssetTypeRegistration> _assetTypes = [];
+    private readonly HashSet<Type> _dataTypes = [];
     private PresentMode _presentMode = DEFAULT_PRESENT_MODE;
     private int _sampleCount = DEFAULT_SAMPLE_COUNT;
     private TonemappingMode _tonemapping = DEFAULT_TONEMAPPING;
@@ -187,20 +188,76 @@ public sealed class RayBorkAppBuilder {
     /// <summary>
     /// Registers a custom data type for <see cref="IAssetCatalog.Load{T}"/>. The type must carry a
     /// compiled <c>[GenerateShape]</c>; the runtime never scans assemblies or uses reflection. The
-    /// same type must be registered with the bake independently. Registering the same type again is a
-    /// no-op.
+    /// payload is a MessagePack <see cref="AssetEntryType.Data"/> entry, deserialized through the
+    /// compiled shape. The same type must be registered with the bake independently.
     /// </summary>
+    /// <remarks>
+    /// The type is idempotent: registering it again is a no-op. Registering it with
+    /// <see cref="WithAssetLoader{T}"/> as well is an <see cref="InvalidOperationException"/> because
+    /// a type may have only one registration. Use <see cref="WithAssetLoader{T}"/> instead when the
+    /// payload is not a MessagePack custom-data entry.
+    /// </remarks>
     /// <typeparam name="T">The custom data type to register.</typeparam>
     /// <returns>This builder.</returns>
-    /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The builder already built an app, or the type already has a different registration.
+    /// </exception>
     public RayBorkAppBuilder WithAssetType<T>()
         where T : IShapeable<T> {
         ThrowIfBuilt();
         Type assetType = typeof(T);
-        if (!_assetTypes.ContainsKey(assetType)) {
-            _assetTypes.Add(assetType, AssetTypeRegistration.Create<T>());
+        if (_dataTypes.Contains(assetType)) {
+            return this;
         }
 
+        if (_assetTypes.ContainsKey(assetType)) {
+            throw new InvalidOperationException(
+                $"The asset type '{assetType.FullName}' is registered more than once.");
+        }
+
+        _dataTypes.Add(assetType);
+        _assetTypes.Add(
+            assetType,
+            new LoaderAssetTypeRegistration<T>(
+                new MessagePackAssetLoader<T>(),
+                "custom data could not be deserialized"));
+        return this;
+    }
+
+    /// <summary>
+    /// Registers a custom asset type and the loader that creates its instances for
+    /// <see cref="IAssetCatalog.Load{T}"/>. The type does not need a compiled <c>[GenerateShape]</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The loader produces a fresh caller-owned value for every load; the catalog does not cache the
+    /// result. The synchronous part of the loader runs on the dedicated <c>RayBork.Asset</c> loader
+    /// thread, so it must not block (no <c>.Result</c> or <c>.Wait()</c>) and must not call SDL,
+    /// Vulkan, or tick-thread APIs. One instance serves concurrent loads, so it must be stateless or
+    /// thread-safe.
+    /// </para>
+    /// <para>
+    /// Each type may be registered only once; a second registration of the same type is an
+    /// <see cref="InvalidOperationException"/>. Built-in engine asset types are already registered by
+    /// the engine, so registering one fails at <see cref="Build()"/>.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="T">The custom asset type to register.</typeparam>
+    /// <param name="loader">The loader that creates instances of <typeparamref name="T"/>.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="loader"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The builder already built an app, or <typeparamref name="T"/> is already registered.
+    /// </exception>
+    public RayBorkAppBuilder WithAssetLoader<T>(IAssetLoader<T> loader) {
+        ThrowIfBuilt();
+        ArgumentNullException.ThrowIfNull(loader);
+        if (_assetTypes.ContainsKey(typeof(T))) {
+            throw new InvalidOperationException(
+                $"The asset type '{typeof(T).FullName}' is registered more than once.");
+        }
+
+        _assetTypes.Add(typeof(T), new LoaderAssetTypeRegistration<T>(loader));
         return this;
     }
 
@@ -391,6 +448,10 @@ public sealed class RayBorkAppBuilder {
         if (_game is null) {
             throw new InvalidOperationException("A game is required. Call WithGame before Build.");
         }
+
+        // Validate the merged registry before the app exists: a user registration that collides with
+        // a built-in engine asset type fails the duplicate-registration check here.
+        _ = new AssetTypeRegistry([.. BuiltInAssetLoaders.CreateDefault(), .. _assetTypes.Values]);
 
         AppConfiguration configuration = new() {
             Game = _game,

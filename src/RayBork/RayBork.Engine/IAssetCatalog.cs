@@ -6,8 +6,8 @@ namespace RayBork;
 /// <remarks>
 /// <para>
 /// All members are thread-safe and may be called from any thread, including a user background
-/// thread. Engine asset loads are coalesced by canonical path and asset type; custom data loads are
-/// independent and return a fresh instance per call.
+/// thread. Engine asset loads are coalesced by canonical path and asset type; loads through a
+/// registered loader are independent and return a fresh caller-owned instance per call.
 /// </para>
 /// <para>
 /// Asset paths are case-insensitive on input and canonicalized to lowercase. An optional leading
@@ -21,16 +21,17 @@ namespace RayBork;
 /// </remarks>
 public interface IAssetCatalog {
     /// <summary>
-    /// Loads an engine asset or a registered custom data type.
+    /// Loads a built-in engine asset or a registered custom asset.
     /// </summary>
     /// <typeparam name="T">
-    /// An engine asset type (<c>Mesh</c>, <c>Texture</c>, <c>Shader</c>) or a type registered with
-    /// <c>RayBorkAppBuilder.WithAssetType&lt;T&gt;()</c>.
+    /// A built-in engine asset type (<c>Mesh</c>, <c>Texture</c>, <c>Shader</c>, <c>Model</c>), a type
+    /// registered with <c>RayBorkAppBuilder.WithAssetLoader&lt;T&gt;</c>, or a custom data type
+    /// registered with <c>RayBorkAppBuilder.WithAssetType&lt;T&gt;()</c>.
     /// </typeparam>
     /// <param name="path">The asset path. It is normalized and validated before the lookup.</param>
     /// <param name="cancellationToken">Cancels the caller's wait. The shared load may continue for other callers.</param>
     /// <returns>
-    /// The shared engine asset, or a fresh caller-owned instance for registered custom data.
+    /// The shared engine asset, or a fresh caller-owned instance for a registered custom load.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
@@ -41,7 +42,8 @@ public interface IAssetCatalog {
     /// <exception cref="ObjectDisposedException">The catalog or an engine asset was disposed.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
     /// <exception cref="NotSupportedException">
-    /// <typeparamref name="T"/> is neither an engine asset type nor registered with
+    /// <typeparamref name="T"/> is not a built-in engine asset, a type registered with
+    /// <c>RayBorkAppBuilder.WithAssetLoader&lt;T&gt;</c>, or a custom data type registered with
     /// <c>RayBorkAppBuilder.WithAssetType&lt;T&gt;()</c>.
     /// </exception>
     Task<T> Load<T>(string path, CancellationToken cancellationToken = default);

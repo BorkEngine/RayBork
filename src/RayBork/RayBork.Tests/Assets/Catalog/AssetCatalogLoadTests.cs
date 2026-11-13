@@ -212,6 +212,27 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CustomDataLoadInvokesTheRegisteredLoaderWithTheCanonicalContext() {
+        RecordingAssetLoader loader = new();
+        AssetTypeRegistration registration = new LoaderAssetTypeRegistration<CatalogTestSettings>(loader);
+        using CatalogTestHarness harness = new(
+            builtInPack: null,
+            userPacks: [CatalogTestData.BuildStandardPack()],
+            assetTypes: [registration]);
+
+        CatalogTestSettings settings = await harness.Catalog.Load<CatalogTestSettings>(
+            "/data/settings",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("catalog", settings.Name);
+        Assert.Equal(7, settings.Difficulty);
+        Assert.Equal("/data/settings", loader.Path);
+        Assert.Equal(CatalogTestData.CreateDataPayload(), loader.Payload);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task EngineLoadWaitsForTheDeferredGpuUploadWhileOtherLoadsComplete() {
         using CatalogTestHarness harness = new(
             builtInPack: null,
@@ -284,7 +305,7 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnregisteredTypeThrowsNotSupportedNamingWithAssetType() {
+    public void UnregisteredTypeThrowsNotSupportedNamingBothRegistrationMethods() {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
         NotSupportedException thrown = Assert.Throws<NotSupportedException>(
@@ -295,6 +316,7 @@ public sealed class AssetCatalogLoadTests {
             });
 
         Assert.Contains("WithAssetType<T>()", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("WithAssetLoader<T>()", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -442,4 +464,19 @@ public sealed class AssetCatalogLoadTests {
     internal static void WaitUntil(Func<bool> condition, string message) => Assert.True(
         SpinWait.SpinUntil(condition, _timeout),
         message);
+
+    private sealed class RecordingAssetLoader : IAssetLoader<CatalogTestSettings> {
+        internal string? Path { get; private set; }
+
+        internal byte[]? Payload { get; private set; }
+
+        public AssetEntryType EntryType => AssetEntryType.Data;
+
+        public async Task<CatalogTestSettings> LoadAsync(AssetLoadContext context) {
+            Path = context.Path;
+            byte[] payload = await context.LoadPayloadAsync().ConfigureAwait(false);
+            Payload = payload;
+            return AssetSerialization.Deserialize<CatalogTestSettings>(payload);
+        }
+    }
 }

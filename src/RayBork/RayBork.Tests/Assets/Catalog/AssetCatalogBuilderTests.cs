@@ -55,6 +55,89 @@ public sealed class AssetCatalogBuilderTests {
 
         AssetTypeRegistration registration = Assert.Single(app.Configuration.AssetTypes);
         Assert.Equal(typeof(CatalogTestSettings), registration.AssetType);
+        Assert.Equal(AssetEntryType.Data, registration.EntryType);
+        LoaderAssetTypeRegistration<CatalogTestSettings> loaderRegistration =
+            Assert.IsType<LoaderAssetTypeRegistration<CatalogTestSettings>>(registration);
+        Assert.Equal(
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION,
+            loaderRegistration.FailureDescription);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAssetLoaderIsSnapshottedForAPlainType() {
+        PlainAssetLoader loader = new();
+
+        RayBorkAppBuilder builder = CreateBuilder().WithAssetLoader(loader);
+
+        using RayBorkApp app = Build(builder);
+        AssetTypeRegistration registration = Assert.Single(app.Configuration.AssetTypes);
+        Assert.Equal(typeof(PlainAsset), registration.AssetType);
+        Assert.Equal(AssetEntryType.Data, registration.EntryType);
+        LoaderAssetTypeRegistration<PlainAsset> loaderRegistration =
+            Assert.IsType<LoaderAssetTypeRegistration<PlainAsset>>(registration);
+        Assert.Same(loader, loaderRegistration.Loader);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAssetLoaderRejectsANullLoader() {
+        RayBorkAppBuilder builder = CreateBuilder();
+
+        Assert.Throws<ArgumentNullException>(() => builder.WithAssetLoader<PlainAsset>(null!));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAssetLoaderRejectsTheSameTypeTwice() {
+        RayBorkAppBuilder builder = CreateBuilder().WithAssetLoader(new PlainAssetLoader());
+
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+            () => builder.WithAssetLoader(new PlainAssetLoader()));
+
+        Assert.Equal(
+            $"The asset type '{typeof(PlainAsset).FullName}' is registered more than once.",
+            thrown.Message);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAssetTypeThenWithAssetLoaderRejectsTheConflict() {
+        RayBorkAppBuilder builder = CreateBuilder().WithAssetType<CatalogTestSettings>();
+
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+            () => builder.WithAssetLoader(new CategoriesLoader()));
+
+        Assert.Equal(
+            $"The asset type '{typeof(CatalogTestSettings).FullName}' is registered more than once.",
+            thrown.Message);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAssetLoaderThenWithAssetTypeRejectsTheConflict() {
+        RayBorkAppBuilder builder = CreateBuilder()
+            .WithAssetLoader(new CategoriesLoader());
+
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+            builder.WithAssetType<CatalogTestSettings>);
+
+        Assert.Equal(
+            $"The asset type '{typeof(CatalogTestSettings).FullName}' is registered more than once.",
+            thrown.Message);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WithAssetLoaderForABuiltInEngineTypeFailsFromBuild() {
+        RayBorkAppBuilder builder = CreateBuilder()
+            .WithAssetLoader<Mesh>(new MeshLoader());
+
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() => Build(builder));
+
+        Assert.Equal(
+            $"The asset type '{typeof(Mesh).FullName}' is registered more than once.",
+            thrown.Message);
     }
 
     [Fact]
@@ -78,6 +161,8 @@ public sealed class AssetCatalogBuilderTests {
         Assert.Throws<InvalidOperationException>(() => builder.WithAssetsPack("later.pck"));
         Assert.Throws<InvalidOperationException>(() => builder.WithAssetsPacks("later.pck"));
         Assert.Throws<InvalidOperationException>(() => builder.WithAssetType<CatalogTestSettings>());
+        Assert.Throws<InvalidOperationException>(
+            () => builder.WithAssetLoader(new PlainAssetLoader()));
     }
 
     private static RayBorkAppBuilder CreateBuilder()
@@ -89,5 +174,32 @@ public sealed class AssetCatalogBuilderTests {
         FakeEnginePlatform platform = new();
         FakeRendererBackend renderer = new();
         return builder.Build(_ => platform, () => renderer, TimeProvider.System);
+    }
+
+    private sealed class PlainAsset {
+        internal PlainAsset(string path) => Path = path;
+
+        internal string Path { get; }
+    }
+
+    private sealed class PlainAssetLoader : IAssetLoader<PlainAsset> {
+        public AssetEntryType EntryType => AssetEntryType.Data;
+
+        public Task<PlainAsset> LoadAsync(AssetLoadContext context)
+            => Task.FromResult(new PlainAsset(context.Path));
+    }
+
+    private sealed class CategoriesLoader : IAssetLoader<CatalogTestSettings> {
+        public AssetEntryType EntryType => AssetEntryType.Data;
+
+        public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context)
+            => Task.FromResult(CatalogTestData.CreateSettings());
+    }
+
+    private sealed class MeshLoader : IAssetLoader<Mesh> {
+        public AssetEntryType EntryType => AssetEntryType.Mesh;
+
+        public Task<Mesh> LoadAsync(AssetLoadContext context)
+            => throw new InvalidOperationException("a built-in engine type must fail before any load runs");
     }
 }
