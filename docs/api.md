@@ -1,6 +1,6 @@
 # RayBork API Reference
 
-Status: **v0.1 M4**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M5**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
@@ -10,8 +10,12 @@ exceptions, pack mounting and lookup, custom TOML data through `WithAssetType<T>
 and the build-time built-in pack. M4 ships the core 3D renderer: `Camera`, `CameraProjection`,
 `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, the camera draw methods,
 `Shader.SetUniform`/`ResetUniforms`, and the shader ABI, backed by the bindless texture table,
-instanced batches, pipeline and sampler caches, and the AgX HDR highlight extension. The rest of
-the API reference remains the 1.0 contract, not a description of shipped behavior.
+instanced batches, pipeline and sampler caches, and the AgX HDR highlight extension. M5 ships the
+primitive surface and the collision queries: the 13 `Camera` helpers, the engine-owned primitive
+meshes and the built-in `/shaders/primitive` program, `Collision`, `RayCollision`,
+`MeshBuilder.GenerateCollisions`, `Mesh.HasCollisionAcceleration`, and the baked `RBVC` collision
+payload. The rest of the API reference remains the 1.0 contract, not a description of shipped
+behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -155,7 +159,9 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, `Vertex`, `MeshBuilder`, `MeshNormalMode`, `TextureBuilder`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
 | `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, `EngineContext.Assets`, `EngineContext.CreateMeshBuilder`, and `EngineContext.CreateTextureBuilder` | M3 |
 | `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
+| `Camera` primitive, line, billboard, and screen-space texture helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`, `DrawTexture`) | M5 |
 | `Collision` and `RayCollision` | M5 |
+| `MeshBuilder.GenerateCollisions` and `Mesh.HasCollisionAcceleration` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
 
@@ -197,16 +203,33 @@ shader program and white/error textures. `Camera` ships as a frame-scoped record
 engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
 write that material's cursor. `Load<Shader>` returns a new independent material over a cached
 internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
-no `Font`, and no primitive/line/billboard/text draw helpers. Clear control is per camera:
+no `Font`, and no text draw helpers (`DrawText` arrives in M6); the primitive, line, billboard, and
+screen-space texture helpers ship in M5. Clear control is per camera:
 `RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
 `ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
 `InvalidOperationException` naming it, and the frame is not published.
+
+**M5 subset.** `Camera` ships the 13 primitive helpers listed in §7.9: the world-space shape, line,
+and billboard draws plus the screen-space `DrawTexture`. They draw engine-owned primitive meshes
+through the built-in `/shaders/primitive` program (vertex position and color, no uniforms or
+textures) and through the built-in `/shaders/mesh` program with alpha/overlay render states for
+billboards and textured quads. The meshes and the primitive program are internal engine assets, and
+`EngineDefaults` still exposes only `CreateMeshShader`, `White`, and `Error`. `Collision` and
+`RayCollision` ship as allocation-free, thread-safe queries over `Ray`, `BoundingBox`, and `Plane`;
+`GetRayMesh` accepts triangle-list and triangle-strip meshes, maps the hit through a world transform,
+and traverses an immutable structure when the mesh has one. `MeshBuilder.GenerateCollisions()` opts a
+procedural mesh into that structure before `BuildAsync`, and `Mesh.HasCollisionAcceleration` reports
+whether a mesh has one. A mesh loaded from a pack gets one when the bake wrote the `RBVC` v1
+collision payload that its descriptor names; a pack baked before the descriptor member existed loads
+with no structure and brute-forces the retained triangles. `DrawTexture` takes render pixels relative
+to the camera viewport and is an alpha-blended overlay with no depth write. `Camera.Target` and
+`DrawText` remain later milestones (M8 and M6).
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
 `RayBorkAppBuilder.WithAssetLoader<T>`. See [Assets §6.7](api/assets.md#67-custom-asset-loaders).
 
-M4 `RenderStats` describes the draw path. `DrawCalls` counts scene submissions after batch splitting
+`RenderStats` describes the draw path. `DrawCalls` counts scene submissions after batch splitting
 and excludes the present triangle; `Instances` counts instances that survived culling;
 `Triangles` counts submitted triangles after instancing; `CulledInstances` counts frustum
 rejections; `PipelineCount` counts distinct scene pipelines; `TextureCount` counts live bindless
@@ -217,14 +240,20 @@ zero for the draw counters. Textures allocate a bindless slot when their GPU upl
 `RayBorkTextures[2048]` array; a device whose update-after-bind sampled-image limits are below 2048
 is rejected during device selection, and the capacity is never reduced.
 
-`samples/Castle` is the M4 AOT gate: the sample solution `samples/Castle/Castle.slnx` builds its
-`Castle.Assets` executable out of process, bakes `/models/obj/castle` and
-`/models/obj/castle_diffuse` into `castle.pck`, and copies the pack beside the sample executable, so
-the published `win-x64` and `linux-x64` hosts load it without a manual bake or an `--assets` argument.
-The model parts use the built-in mesh material; the hosts draw the castle and exit `0`. The Windows
-hardware path, the conformant lavapipe Linux path, and the WSLg dzn hardware path all pass; the
-reference grid is deferred to M5. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not
-the AOT gate.
+`samples/PrimitiveGallery` is the M5 AOT gate. It is one project in its own solution,
+`samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It has no
+assets executable and no pack: `Setup` builds its only texture with `CreateTextureBuilder`, and the
+sample draws every M5 helper in one perspective pass at 800x450 with orbit controls and the
+`--frames` and `--help` options. The published `win-x64` and `linux-x64` hosts run from the publish
+directory with zero AOT/trim warnings, and the publish directory contains no bake tooling.
+
+`samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
+executable out of process, bakes `/models/obj/castle` and `/models/obj/castle_diffuse` into
+`castle.pck`, and copies the pack beside the sample executable, so the published hosts load it
+without a manual bake or an `--assets` argument. The model parts use the built-in mesh material, the
+pass draws the castle and `DrawGrid(20, 10f, Color.Gray)`, and the hosts exit `0`. It is not the M5
+gate. The Windows hardware path, the conformant lavapipe Linux path, and the WSLg dzn hardware path
+all pass. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not the AOT gate.
 
 ## 2. Quick start
 

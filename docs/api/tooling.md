@@ -154,7 +154,7 @@ Built-in processors:
 | Processor | Sources | Outputs |
 | --- | --- | --- |
 | Texture | PNG, JPEG, TGA, BMP | `Texture` descriptor plus its KTX2 payload |
-| Model | glTF 2.0 (`.gltf`, `.glb`), OBJ | `Model` descriptor, one `Mesh` descriptor per part, vertex/index payloads |
+| Model | glTF 2.0 (`.gltf`, `.glb`), OBJ | `Model` descriptor, one `Mesh` descriptor per part, vertex/index payloads, and a `<mesh>-collision` payload per triangle part |
 | Shader | GLSL vertex + fragment pair named by a `[shader]` TOML | `Shader` descriptor plus vertex and fragment SPIR-V payloads |
 | Font | TTF, OTF | `Font` descriptor plus the face payload |
 | Raw | Any unclaimed source | Opaque bytes for `LoadData` |
@@ -201,7 +201,23 @@ shader = "shaders/castle"
   the sidecar is baked with the built-in canonical path `shaders/mesh`, so every part always names
   a shader program.
 - `scale` and `front` apply the authoring correction before bounds and payloads are written.
-- glTF materials and images are not imported in M4. The bake validates that referenced images exist
+- `collisions` defaults to enabled. With it enabled, the bake builds a ray-mesh collision structure
+  from the same finalized geometry it writes to the mesh payload, writes it as one sibling raw entry
+  `<mesh path>-collision` with 16-byte alignment, and records the entry's canonical path in the mesh
+  descriptor's optional `collision_payload` member. Line and point parts, and parts whose triangles
+  are all degenerate, get no entry. `collisions = false` in the `[model]` sidecar opts the whole
+  source out and emits no collision entry for any of its parts. A payload above 4 MiB emits an
+  `RB4009` warning that names the part and the opt-out.
+
+- The collision payload is the engine's `RBVC` format v1: a 24-byte little-endian header (magic
+  `RBVC`, format version, topology, node count, triangle-id count, canonical triangle count)
+  followed by 32-byte BVH nodes and 32-bit triangle ids. It is CPU-only data: it adds no GPU
+  resource and does not change the mesh payload. The runtime loader decodes and validates it before
+  the GPU upload, and a missing entry, a corrupt payload, a topology mismatch, or a canonical-count
+  mismatch fails the mesh load with `AssetLoadException` `ASSET_LOAD_FAILED` naming the mesh. A
+  descriptor without the member, as in a pack baked before collision payloads existed, loads with no
+  acceleration structure and brute-forces the retained triangles.
+- glTF materials and images are not imported. The bake validates that referenced images exist
   and warns that they are not imported; every part uses the sidecar shader (or the built-in
   `shaders/mesh`), and the game supplies textures and uniforms with `SetUniform`. The model loader
   requires every part descriptor to carry a canonical shader path and has no runtime default, so a
@@ -259,15 +275,16 @@ depth_write = true
 - The bake inserts the generated shader prologue after the first `#version` directive line. When a
   stage has no `#version` directive, the bake prepends `#version 450` before the prologue, so the
   version line always stays first.
-- The prologue declares the frame block, the fixed-size 2048-element bindless texture array, the
-  per-instance record and storage buffer, the `rbFrame`/`rbInstance` accessors, one macro per
-  reflected uniform and texture, and the stage wrapper. User GLSL must not declare the generated
-  identifiers (`main`, `RayBorkFrame`, `RayBorkFrameBlock`, `rbFrameBlock`, `RayBorkTextures`,
-  `RayBorkInstance`, `RayBorkInstanceBuffer`, `RayBorkInstances`, `rbFrame`, `rbInstance`,
-  `rbInstanceIndex`, `rbInstanceIndexOut`, `rbUserVertexMain`, `rbUserFragmentMain`) or any
-  uniform/texture name from its sidecar. It must not declare a `layout(set = ...)` binding or use
-  varying location 15, which is reserved for the engine instance index. Declarations are detected on
-  the comment-stripped source, and a violation is `RB4008` with the source line and no outputs.
+- The prologue declares the frame block, the fixed-size 2048-element bindless texture array when the
+  shader declares a texture binding, the per-instance record and storage buffer, the
+  `rbFrame`/`rbInstance` accessors, one macro per reflected uniform and texture, and the stage
+  wrapper. User GLSL must not declare the generated identifiers (`main`, `RayBorkFrame`,
+  `RayBorkFrameBlock`, `rbFrameBlock`, `RayBorkTextures`, `RayBorkInstance`, `RayBorkInstanceBuffer`,
+  `RayBorkInstances`, `rbFrame`, `rbInstance`, `rbInstanceIndex`, `rbInstanceIndexOut`,
+  `rbUserVertexMain`, `rbUserFragmentMain`) or any uniform/texture name from its sidecar. It must not
+  declare a `layout(set = ...)` binding or use varying location 15, which is reserved for the engine
+  instance index. Declarations are detected on the comment-stripped source, and a violation is
+  `RB4008` with the source line and no outputs.
 - Supported uniform types are `float`, `int`, `uint`, `bool`, `vec2`, `vec3`, `vec4`, `mat4`, and
   `sampler2D`. `default` is a scalar for `float`/`int`/`uint`/`bool`, and an array whose length
   matches the component count for the vector and matrix types. Arrays, structs, and extra uniform
@@ -286,7 +303,7 @@ The built-in processors use `RB4007`-`RB4010`; the shared TOML and discovery fai
 
 ### 13.4 Pack v1 (as built)
 
-M4 did not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
+M5 does not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
 starts with a fixed 40-byte header:
 
 | Field | Size | Notes |
@@ -326,8 +343,10 @@ smaller. The decompressor is bounded to the declared uncompressed size, and a st
 more or fewer bytes is corruption.
 
 Engine asset entries are MessagePack descriptors that reference sibling raw payload entries
-(`<base>-ktx2`, `<base>-mesh`, `<base>-vert`, `<base>-frag`, `<base>-face`). A `Data` entry holds the
-MessagePack bytes of one registered custom type; `Load<T>` deserializes it with the compiled shape
+(`<base>-ktx2`, `<base>-mesh`, `<base>-vert`, `<base>-frag`, `<base>-face`, `<base>-collision`). The
+collision entry is additive: a mesh descriptor may carry the optional `collision_payload` member,
+and a descriptor without it is valid and loads without a collision structure. A `Data` entry holds
+the MessagePack bytes of one registered custom type; `Load<T>` deserializes it with the compiled shape
 and returns a fresh instance.
 
 Pack bytes are **not deterministic**. The entry set and canonical paths are ordered, but the
@@ -355,6 +374,10 @@ processor identity, tool version, and configuration are unchanged. It reruns the
 changed and new sources, drops deleted sources, and composes a new pack from the reused and fresh
 entries. A tool-version or configuration change invalidates the cache and reprocesses every source.
 `--force` bypasses the cache. A missing, corrupt, or incompatible previous pack is a full bake.
+
+The built-in processor configuration marker is part of the configuration hash, so a change to the
+built-in processor implementation (for example, its collision-payload output) invalidates the cache
+and reprocesses every source. An old cache is never reused for output that gained new entries.
 
 The manifest is not part of the runtime pack. It never promises byte-identical pack output; it only
 avoids redundant processing. Tests assert the processor invocation count for an unchanged source,
@@ -395,13 +418,19 @@ is set.
   through the generated prologue with one `uTint` uniform, one `mainTexture` binding, and an
   opaque/back/`greater_equal`/depth-write render state. It is the unlit raylib default model shader:
   position, uv, and color only, `texture(mainTexture, vUv) * vColor * uTint * rbInstance.Color`, with
-  no normals or lighting.
+  no normals or lighting;
+- the built-in primitive program at `/shaders/primitive`, baked by the same shader processor with no
+  reflected uniforms and no texture bindings, and an opaque/back/`greater_equal`/depth-write render
+  state. Its vertex stage reads position and color and multiplies the color by `rbInstance.Color`;
+  its fragment stage writes that color.
 
-Primitive meshes and the error glyph are added by later milestones (M5 and M6). Pack v1 is unchanged
-by M4: the mesh shader is an ordinary shader entry at a reserved built-in path, not a format change.
-The app preloads it into `EngineContext.Defaults` before `IGame.Setup`. A model part whose sidecar
-names no shader is baked with `shaders/mesh`, and the runtime requires every part descriptor to name
-a canonical shader path.
+The engine's primitive meshes are procedural assets built at engine startup, not pack entries, so
+the pack carries no primitive geometry. The error glyph is added with the runtime font work in M6.
+Pack v1 is unchanged by the M5 additions: the primitive program is an ordinary shader entry at a
+reserved built-in path, not a format change. The app preloads the mesh program into
+`EngineContext.Defaults` before `IGame.Setup` and keeps the primitive program for the engine's
+primitive assets. A model part whose sidecar names no shader is baked with `shaders/mesh`, and the
+runtime requires every part descriptor to name a canonical shader path.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
 that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by

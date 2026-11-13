@@ -1,12 +1,13 @@
 # Castle
 
-`Castle` is a small RayBork sample: an orbitable castle scene with a model, a diffuse texture, and
-an orbital perspective camera. It loads the model and texture, binds the texture on the model's
-materials, and draws the castle every tick. The source is kept small and commented so the scene can
-be read and adapted as a starting point.
+`Castle` is a small RayBork sample: an orbitable castle scene with a model, a diffuse texture, an
+orbital perspective camera, and the reference XZ grid. It loads the model and texture, binds the
+texture on the model's materials, and draws the castle and its grid every tick. The source is kept
+small and commented so the scene can be read and adapted as a starting point.
 
-The sample is also a Native AOT gate, but it contains no test-only logic: it opens the window, draws
-the castle, and exits cleanly. Build and run it from the repository root:
+`samples/PrimitiveGallery` is the M5 Native AOT gate. This sample remains a buildable and publishable
+example, and it contains no test-only logic: it opens the window, draws the scene, and exits cleanly.
+Build and run it from the repository root:
 
 ```powershell
 dotnet build samples/Castle/Castle.slnx -c Debug
@@ -51,6 +52,21 @@ The camera starts at `(50, 50, 50)`, looks at `(0, 12, 0)`, and uses a 45 degree
 view with a `0.01` near plane and an infinite far plane. The background is a warm off-white
 (`#F5F5F5`, about `0.913` per channel).
 
+## Scene
+
+Each tick records one perspective pass: the castle model with its built-in mesh material, then the
+reference grid under it:
+
+```csharp
+camera.DrawModel(_model!, Transform.Identity, Color.White);
+camera.DrawGrid(GRID_SLICES, GRID_SPACING, Color.Gray);
+```
+
+`GRID_SLICES` is `20` and `GRID_SPACING` is `10f`, so the grid spans 200 world units per axis in 20
+cells, centered on the world origin where the castle stands. It is raylib's reference grid, drawn in
+the same opaque, depth-tested pass as the model, so the castle occludes the lines behind it. The
+grid is one instanced line draw and contributes no triangles.
+
 ## Build and run
 
 The sample is a self-contained solution, `samples/Castle/Castle.slnx`, containing `Castle.csproj` and
@@ -91,9 +107,11 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
 
 The sample does not implement these features yet:
 
-- **The reference XZ grid.** `DrawGrid(20, 10.0f)` arrives in M5; the sample draws the castle only.
 - **Drag-and-drop of a new model or texture.** Window file-drop events are post-1.0.
-- **Click selection and the bounding box.** Ray/box collision and `DrawBoundingBox` arrive in M5.
+- **Click selection.** The engine ships `Collision.GetRayBox` and `Camera.DrawWireCube`, but there is
+  no public `DrawBoundingBox`, and the sample does not pick the castle from the mouse. Adding
+  selection would mean converting the pointer to a world ray with `ScreenToWorldRay`, testing the
+  castle's bounds, and drawing a wire box for the hit.
 - **`DrawText` and `DrawFPS`.** Runtime text and font/MSDF support arrive in M6.
 
 The sample cannot run with SDL's dummy video driver because the Vulkan backend needs a real window

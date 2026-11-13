@@ -106,15 +106,16 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
   view-projection matrices, and the camera position. Every recorded frame retains the mesh, internal
   shader program, and bound textures it recorded until the render thread releases the frame slot; a
   model or material object is not an engine asset and adds no hold.
-- MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. M4 has
-  no `RenderTexture`: every camera records into the app's linear HDR scene target.
+- MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
+  is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
-> **M4 subset.** `Camera` ships without a render target: the `Target` property and the `target`
-> parameter arrive with `RenderTexture` in M8. `Viewport`, `Rect? viewport`, `ScreenToWorldRay`,
-> `WorldToScreen`, `Ray`, and `BoundingFrustum` ship in M4. The camera always records into the app's
-> linear HDR scene target, and the present pass applies AgX after all cameras finish. The primitive,
-> line, billboard, texture, and text draw helpers in §7.9 and §7.10 are later milestones; M4 ships
-> `DrawModel`, `DrawMesh`, `DrawInstanced`, and `DrawModelInstanced`.
+> **M5 subset.** `Camera` ships all 13 primitive helpers: `DrawLine`, `DrawLines`, `DrawPoint`,
+> `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`,
+> `DrawWireSphere`, `DrawBillboard`, and the screen-space `DrawTexture`. Their geometry, programs,
+> render states, validation, and batching are specified in §7.9. The `Target` property and the
+> `target` parameter arrive with `RenderTexture` in M8; `DrawText` and `DrawTextBillboard` arrive with
+> runtime text in M6. The camera always records into the app's linear HDR scene target, and the
+> present pass applies AgX after all cameras finish.
 
 Properties:
 
@@ -170,12 +171,31 @@ retained.
 
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
-The UV rectangle is `(0, 0, 1, 1)` for every draw in M4.
+The draw API does not expose a UV rectangle override, so it is `(0, 0, 1, 1)` for every draw.
 
 For `DrawMesh` and `DrawInstanced`, `renderState` overrides the material's default render state for
 this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of the batching key.
 `DrawModel` and `DrawModelInstanced` have no per-draw state override; they use each part's
 `ModelPart.RenderState`.
+
+**Primitive helpers.** `DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`,
+`DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`, and
+`DrawTexture` record engine primitive meshes through the built-in `/shaders/primitive` and
+`/shaders/mesh` programs; §7.9 has the exact geometry, program, render-state, and batching contract.
+All 13 are tick-thread only and validate before recording: a non-finite argument is
+`ArgumentException`, a negative extent, radius, height, width, or point size is
+`ArgumentOutOfRangeException`, an exactly zero one records nothing, `sides < 3`, `slices < 1`, and
+`spacing <= 0` are `ArgumentOutOfRangeException`, a null texture is `ArgumentNullException`, and a
+disposed camera, texture, or primitive asset is `ObjectDisposedException`. Colors are linear; each
+helper writes its color as the per-instance tint. Lines are one pixel wide, wire shapes are line
+geometry, and `DrawCylinder` records two instanced draws.
+
+`DrawTexture` takes its destination in render pixels relative to the camera viewport, top-left
+origin, Y downward — the `WorldToScreen`/`ScreenToWorldRay` space. It is an alpha-blended overlay
+with `DepthTest.Always`, no depth write, and `Cull.None`, so it draws over scene geometry. It is
+pixel-exact for perspective and orthographic cameras, and its matrix is affine in world space with
+constant homogeneous `w`, so an on-screen overlay lies inside the camera frustum and is not
+frustum-culled for a translated or rotated perspective camera.
 
 **Error model.**
 
@@ -218,8 +238,8 @@ public enum TonemappingMode {
 - Clears are scoped to the camera viewport, not the whole target. The renderer clears the clamped
   viewport rectangle with the camera's clear state; a pass with a smaller viewport leaves the pixels
   outside it untouched.
-- Depth clears to `0.0`. Color clears to `ClearColor`. `ClearMode.Stencil` is a no-op in M4 because
-  the scene target has no stencil attachment; the flag is accepted and does not fail.
+- Depth clears to `0.0`. Color clears to `ClearColor`. `ClearMode.Stencil` is a no-op because the
+  scene target has no stencil attachment; the flag is accepted and does not fail.
 - The scene target's render pass starts with undefined color and depth content. A first camera that
   wants defined content must clear; a first camera with `ClearMode.None` leaves undefined content,
   and later cameras see the previous pass' pixels.
@@ -230,16 +250,16 @@ public enum TonemappingMode {
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
 - Multiple cameras can clear different passes sequentially in one tick. The first camera usually
-  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. M4 shares one
-  frame uniform block per frame slot across every camera pass: a frame with more than one camera
+  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. The engine shares
+  one frame uniform block per frame slot across every camera pass: a frame with more than one camera
   pass submits the same `rbFrame` values (the last recorded pass') to every pass. Split-screen
-  cameras in one frame are therefore a known M4 limitation rather than a supported layout.
+  cameras in one frame are therefore a known limitation rather than a supported layout.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
   target inside the same pass that writes it is invalid and is reported as a validation error. This
-  applies from M8; M4 has no render target.
+  applies from M8; the current renderer has no render target.
 
-M4 has no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
+There is no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
 the scene clear control for its pass. A camera that does not clear color leaves the previous pass'
 color in place, which is the documented overlay behavior.
 
@@ -293,7 +313,7 @@ order and reports `HdrOutput = false`.
 
 The SDR order is `B8G8R8A8_SRGB`, `R8G8B8A8_SRGB`, `B8G8R8A8_UNORM`, `R8G8B8A8_UNORM` (manual sRGB
 encode in the present shader), then `R16G16B16A16_SFLOAT` (linear clamp). HDR10
-(`A2B10G10R10_UNORM_PACK32`, PQ) is deliberately deferred and is never selected in M4. The selected
+(`A2B10G10R10_UNORM_PACK32`, PQ) is deliberately deferred and is never selected. The selected
 format token is reported by `EngineInfo.SwapchainFormat`; `HdrOutput` is true only when the window
 reports HDR and the selected pair presents through the scRGB HDR path.
 
@@ -325,7 +345,7 @@ highest device-supported count that does not exceed the request, or `1` when non
 a fallback logs a warning. The scene target color and depth attachments use the effective count;
 the swapchain images are single-sample. Scene color is resolved into a single-sample sampled image
 before the present pass. Depth is cleared to `0.0` and the reverse-Z state is defined; multisampled
-depth is not resolved in M4 because nothing samples depth until M8. A `RenderTexture` uses its
+depth is not resolved because nothing samples depth until M8. A `RenderTexture` uses its
 own `SampleCount` (M8).
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
