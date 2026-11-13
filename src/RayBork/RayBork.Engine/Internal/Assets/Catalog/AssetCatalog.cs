@@ -76,7 +76,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     private readonly ProceduralAssetService _proceduralAssets;
     private readonly ReadOnlyMemory<byte> _builtInPack;
     private readonly string[] _userPackPaths;
-    private readonly Dictionary<Type, AssetTypeRegistration> _customTypes;
+    private readonly AssetTypeRegistry _registry;
     private readonly Lock _gate = new();
     private readonly Queue<AssetLoaderWorkItem> _queue = new();
     private readonly HashSet<AssetLoaderWorkItem> _pending = [];
@@ -119,13 +119,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         _proceduralAssets = new ProceduralAssetService(bridge);
         _builtInPack = builtInPack;
         _userPackPaths = [.. userPackPaths];
-        _customTypes = new Dictionary<Type, AssetTypeRegistration>(assetTypes.Count);
-        foreach (AssetTypeRegistration registration in assetTypes) {
-            if (!_customTypes.TryAdd(registration.AssetType, registration)) {
-                throw new InvalidOperationException(
-                    $"The asset type '{registration.AssetType.FullName}' is registered more than once.");
-            }
-        }
+        _registry = new AssetTypeRegistry(assetTypes);
     }
 
     /// <summary>
@@ -167,7 +161,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 ThrowIfUnavailableLocked();
             }
 
-            return Task.FromException<T>(CreateNotFound(canonical));
+            return Task.FromException<T>(AssetLoadErrors.CreateNotFound(canonical));
         }
 
         Type assetType = typeof(T);
@@ -185,20 +179,19 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             return LoadEngineAsync<T>(canonical, assetType, cancellationToken);
         }
 
-        AssetTypeRegistration? registration;
+        AssetTypeRegistration registration;
         lock (_gate) {
             ThrowIfUnavailableLocked();
-            _customTypes.TryGetValue(assetType, out registration);
+            registration = _registry.Get(assetType);
         }
 
-        if (registration is not null) {
-            return LoadCustomAsync<T>(canonical, registration, cancellationToken);
+        if (registration is not LoaderAssetTypeRegistration<T> loaderRegistration) {
+            throw new InvalidOperationException(
+                $"The asset type '{assetType.FullName}' is registered with a loader for a different "
+                    + "asset type.");
         }
 
-        throw new NotSupportedException(
-            $"The asset type '{assetType.FullName}' is not a built-in engine asset (Mesh, Texture, or "
-                + "Model), a Shader material, or a registered custom data type. Register custom types "
-                + "with WithAssetType<T>() before Build.");
+        return LoadCustomAsync(canonical, loaderRegistration, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -209,7 +202,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 ThrowIfUnavailableLocked();
             }
 
-            return Task.FromException<byte[]>(CreateNotFound(canonical));
+            return Task.FromException<byte[]>(AssetLoadErrors.CreateNotFound(canonical));
         }
 
         return LoadDataAsync(canonical, cancellationToken);
@@ -260,7 +253,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             Dictionary<string, VisibleAsset> visible = BuildVisibleStack(mounted);
             lock (_gate) {
                 if (_disposed) {
-                    throw CreateStoppedException();
+                    throw AssetLoadErrors.CreateStoppedException();
                 }
 
                 _packs = [.. mounted];
@@ -329,7 +322,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         // more. A build already waiting on an upload fails when the render thread closes the bridge.
         _proceduralAssets.Stop();
 
-        ObjectDisposedException stopped = CreateStoppedException();
+        ObjectDisposedException stopped = AssetLoadErrors.CreateStoppedException();
         foreach (AssetLoaderWorkItem item in pending) {
             item.Fail(stopped);
         }
@@ -424,7 +417,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         lock (_gate) {
             ThrowIfUnavailableLocked();
             if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<T>(CreateNotFound(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateNotFound(canonical));
             }
 
             AssetKey key = new(canonical, assetType);
@@ -460,7 +453,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 entry.Completion = workItem.Completion;
                 if (!TryEnqueueLocked(workItem)) {
                     _engineCache.Remove(key);
-                    return Task.FromException<T>(CreateLoaderQueueFull(canonical));
+                    return Task.FromException<T>(AssetLoadErrors.CreateLoaderQueueFull(canonical));
                 }
             }
         }
@@ -497,7 +490,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             ReleaseAcquiredReference(release);
         }
 
-        throw CreateStoppedException();
+        throw AssetLoadErrors.CreateStoppedException();
     }
 
     private void ReleaseCanceledWaiter(EngineCacheEntry entry) {
@@ -567,7 +560,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         try {
             AssetEntryType expected = ExpectedEntryType(assetType);
             if (descriptorEntry.Entry.Type != expected) {
-                throw CreateTypeMismatch(descriptorEntry.Entry.Path, expected, descriptorEntry.Entry.Type);
+                throw AssetLoadErrors.CreateTypeMismatch(descriptorEntry.Entry.Path, expected, descriptorEntry.Entry.Type);
             }
 
             DecodedAsset decoded = DecodeAsset(
@@ -596,7 +589,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 throw;
             }
 
-            throw WrapLoadFailure(descriptorEntry.Entry.Path, "could not be loaded", exception);
+            throw AssetLoadErrors.WrapLoadFailure(descriptorEntry.Entry.Path, "could not be loaded", exception);
         }
     }
 
@@ -615,12 +608,12 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         lock (_gate) {
             ThrowIfUnavailableLocked();
             if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<T>(CreateNotFound(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateNotFound(canonical));
             }
 
             if (visible.Entry.Type != AssetEntryType.Model) {
                 return Task.FromException<T>(
-                    CreateTypeMismatch(canonical, AssetEntryType.Model, visible.Entry.Type));
+                    AssetLoadErrors.CreateTypeMismatch(canonical, AssetEntryType.Model, visible.Entry.Type));
             }
 
             workItem = new AssetLoaderWorkItem(
@@ -628,7 +621,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 CompleteWorkItem,
                 mapCancellationToStopped: false);
             if (!TryEnqueueLocked(workItem)) {
-                return Task.FromException<T>(CreateLoaderQueueFull(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateLoaderQueueFull(canonical));
             }
         }
 
@@ -668,7 +661,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 byte[] descriptorPayload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
                 descriptor = AssetSerialization.Deserialize<ModelAssetDescriptor>(descriptorPayload);
             } catch (Exception exception) when (exception is not OutOfMemoryException) {
-                throw CreateLoadFailure(
+                throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the model descriptor could not be decoded: {exception.Message}");
             }
@@ -721,14 +714,14 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             ReleaseMeshReferences(meshes);
             DisposeMaterials(materials);
             if (stopToken.IsCancellationRequested) {
-                throw CreateStoppedException();
+                throw AssetLoadErrors.CreateStoppedException();
             }
 
             if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested) {
                 throw;
             }
 
-            throw WrapLoadFailure(canonical, "could not be loaded", exception);
+            throw AssetLoadErrors.WrapLoadFailure(canonical, "could not be loaded", exception);
         }
     }
 
@@ -782,21 +775,21 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     private static void ValidateModelDescriptor(ModelAssetDescriptor descriptor, string canonical) {
         if (descriptor.Parts is null || descriptor.Parts.Length == 0) {
-            throw CreateLoadFailure(canonical, "the model descriptor must carry at least one part");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, "the model descriptor must carry at least one part");
         }
 
         ValidateBounds(descriptor.Bounds, canonical, "the model");
         foreach (ModelPartAsset? part in descriptor.Parts) {
             if (part is null) {
-                throw CreateLoadFailure(canonical, "the model descriptor contains a null part");
+                throw AssetLoadErrors.CreateLoadFailure(canonical, "the model descriptor contains a null part");
             }
 
             if (string.IsNullOrWhiteSpace(part.Name)) {
-                throw CreateLoadFailure(canonical, "a model part has an empty name");
+                throw AssetLoadErrors.CreateLoadFailure(canonical, "a model part has an empty name");
             }
 
             if (!AssetPath.TryValidateCanonical(part.MeshPath, out string? meshReason)) {
-                throw CreateLoadFailure(
+                throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the mesh path '{part.MeshPath}' of model part '{part.Name}' is not canonical: "
                         + meshReason);
@@ -804,14 +797,14 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
             if (part.ShaderPath is not null
                 && !AssetPath.TryValidateCanonical(part.ShaderPath, out string? shaderReason)) {
-                throw CreateLoadFailure(
+                throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the shader path '{part.ShaderPath}' of model part '{part.Name}' is not canonical: "
                         + shaderReason);
             }
 
             if (part.LocalTransform is null || part.LocalTransform.Length != 10) {
-                throw CreateLoadFailure(
+                throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"model part '{part.Name}' must carry exactly ten local-transform floats "
                         + "(position XYZ, rotation XYZW, and scale XYZ)");
@@ -819,7 +812,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
             foreach (float component in part.LocalTransform) {
                 if (!float.IsFinite(component)) {
-                    throw CreateLoadFailure(
+                    throw AssetLoadErrors.CreateLoadFailure(
                         canonical,
                         $"model part '{part.Name}' has a non-finite local-transform component");
                 }
@@ -831,19 +824,19 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     private static void ValidateBounds(float[]? bounds, string canonical, string owner) {
         if (bounds is null || bounds.Length != 6) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 $"{owner} must carry exactly six bounds floats (minimum XYZ, maximum XYZ)");
         }
 
         for (int index = 0; index < bounds.Length; index++) {
             if (!float.IsFinite(bounds[index])) {
-                throw CreateLoadFailure(canonical, $"{owner} has a non-finite bounds component");
+                throw AssetLoadErrors.CreateLoadFailure(canonical, $"{owner} has a non-finite bounds component");
             }
         }
 
         if (bounds[0] > bounds[3] || bounds[1] > bounds[4] || bounds[2] > bounds[5]) {
-            throw CreateLoadFailure(canonical, $"{owner} bounds minimum must not exceed the maximum");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, $"{owner} bounds minimum must not exceed the maximum");
         }
     }
 
@@ -900,36 +893,74 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     private Task<T> LoadCustomAsync<T>(
         string canonical,
-        AssetTypeRegistration registration,
+        LoaderAssetTypeRegistration<T> registration,
         CancellationToken cancellationToken) {
         AssetLoaderWorkItem workItem;
         lock (_gate) {
             ThrowIfUnavailableLocked();
             if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<T>(CreateNotFound(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateNotFound(canonical));
+            }
+
+            if (visible.Entry.Type != registration.EntryType) {
+                return Task.FromException<T>(
+                    AssetLoadErrors.CreateTypeMismatch(
+                        canonical,
+                        registration.EntryType,
+                        visible.Entry.Type));
             }
 
             workItem = new AssetLoaderWorkItem(
-                _ => Task.FromResult<object>(DeserializeCustom(visible, registration)),
-                CompleteWorkItem);
+                stopToken => LoadCustomObjectAsync(
+                    visible,
+                    registration.Loader,
+                    stopToken,
+                    cancellationToken),
+                CompleteWorkItem,
+                mapCancellationToStopped: false);
             if (!TryEnqueueLocked(workItem)) {
-                return Task.FromException<T>(CreateLoaderQueueFull(canonical));
+                return Task.FromException<T>(AssetLoadErrors.CreateLoaderQueueFull(canonical));
             }
         }
 
         return AwaitWorkAsync<T>(workItem, cancellationToken);
     }
 
-    private object DeserializeCustom(VisibleAsset entry, AssetTypeRegistration registration) {
-        if (entry.Entry.Type != AssetEntryType.Data) {
-            throw CreateTypeMismatch(entry.Entry.Path, AssetEntryType.Data, entry.Entry.Type);
-        }
-
+    /// <summary>
+    /// Loads one custom data asset on the loader thread through its registered loader.
+    /// </summary>
+    /// <remarks>
+    /// The caller token is linked to the catalog stop token for the duration of the load. Stop
+    /// cancellation is reported as <see cref="ObjectDisposedException"/>, while caller cancellation
+    /// stays an <see cref="OperationCanceledException"/> so the work item completes as canceled
+    /// instead of faulted.
+    /// </remarks>
+    private static async Task<object> LoadCustomObjectAsync<T>(
+        VisibleAsset descriptorEntry,
+        IAssetLoader<T> loader,
+        CancellationToken stopToken,
+        CancellationToken cancellationToken) {
+        using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+            stopToken,
+            cancellationToken);
         try {
-            byte[] payload = entry.Archive.ReadPayload(entry.Entry);
-            return registration.Deserialize(payload);
+            byte[] payload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
+            AssetLoadContext context = new(descriptorEntry.Entry.Path, linked.Token, payload);
+            T value = await loader.LoadAsync(context).ConfigureAwait(false);
+            return value!;
         } catch (Exception exception) {
-            throw WrapLoadFailure(entry.Entry.Path, "custom data could not be deserialized", exception);
+            if (stopToken.IsCancellationRequested) {
+                throw AssetLoadErrors.CreateStoppedException();
+            }
+
+            if (exception is OperationCanceledException && cancellationToken.IsCancellationRequested) {
+                throw;
+            }
+
+            throw AssetLoadErrors.WrapLoadFailure(
+                descriptorEntry.Entry.Path,
+                "custom data could not be deserialized",
+                exception);
         }
     }
 
@@ -938,14 +969,14 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         lock (_gate) {
             ThrowIfUnavailableLocked();
             if (!_visible.TryGetValue(canonical, out VisibleAsset visible)) {
-                return Task.FromException<byte[]>(CreateNotFound(canonical));
+                return Task.FromException<byte[]>(AssetLoadErrors.CreateNotFound(canonical));
             }
 
             workItem = new AssetLoaderWorkItem(
                 _ => Task.FromResult<object>(visible.Archive.ReadPayload(visible.Entry)),
                 CompleteWorkItem);
             if (!TryEnqueueLocked(workItem)) {
-                return Task.FromException<byte[]>(CreateLoaderQueueFull(canonical));
+                return Task.FromException<byte[]>(AssetLoadErrors.CreateLoaderQueueFull(canonical));
             }
         }
 
@@ -1032,19 +1063,19 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         string assetPath,
         string payloadKind) {
         if (!AssetPath.TryValidateCanonical(payloadPath, out string? reason)) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 assetPath,
                 $"the {payloadKind} payload path '{payloadPath}' is not canonical: {reason}");
         }
 
         if (!visibleStack.TryGetValue(payloadPath, out VisibleAsset payload)) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 assetPath,
                 $"the {payloadKind} payload '{payloadPath}' is not in the visible pack stack");
         }
 
         if (payload.Entry.Type != AssetEntryType.Raw) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 assetPath,
                 $"the {payloadKind} payload '{payloadPath}' is a {payload.Entry.Type} entry, not raw");
         }
@@ -1054,33 +1085,33 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
     private static void ValidateMesh(MeshAssetDescriptor descriptor, byte[] payload, string canonical) {
         if (descriptor.Bounds is null || descriptor.Bounds.Length != 6) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 "the mesh descriptor must carry six bounds floats (minimum XYZ, maximum XYZ)");
         }
 
         for (int i = 0; i < descriptor.Bounds.Length; i++) {
             if (!float.IsFinite(descriptor.Bounds[i])) {
-                throw CreateLoadFailure(canonical, "the mesh descriptor bounds must be finite");
+                throw AssetLoadErrors.CreateLoadFailure(canonical, "the mesh descriptor bounds must be finite");
             }
         }
 
         if (descriptor.Bounds[0] > descriptor.Bounds[3]
             || descriptor.Bounds[1] > descriptor.Bounds[4]
             || descriptor.Bounds[2] > descriptor.Bounds[5]) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 "the mesh descriptor bounds minimum must not exceed the maximum");
         }
 
         if (descriptor.VertexCount == 0 || descriptor.IndexCount == 0) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 "the mesh descriptor must declare at least one vertex and one index");
         }
 
         if (!Enum.IsDefined(descriptor.Topology)) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 $"the mesh descriptor topology {(int)descriptor.Topology} is not a defined value");
         }
@@ -1088,7 +1119,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         long expectedLength = (long)descriptor.VertexCount * MeshAssetDescriptor.VERTEX_STRIDE
             + (long)descriptor.IndexCount * sizeof(uint);
         if (payload.Length != expectedLength) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 $"the mesh payload is {payload.Length} bytes; the descriptor requires exactly "
                     + $"{expectedLength} bytes for {descriptor.VertexCount} vertices and "
@@ -1104,7 +1135,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             uint value = BinaryPrimitives.ReadUInt32LittleEndian(
                 payloadSpan[(indexOffset + (index * sizeof(uint)))..]);
             if (value >= descriptor.VertexCount) {
-                throw CreateLoadFailure(
+                throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the mesh index {value} at position {index} is outside the "
                         + $"{descriptor.VertexCount} vertices");
@@ -1117,16 +1148,16 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         byte[] payload,
         string canonical) {
         if (descriptor.Width == 0 || descriptor.Height == 0) {
-            throw CreateLoadFailure(canonical, "the texture descriptor must declare a non-zero size");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, "the texture descriptor must declare a non-zero size");
         }
 
         if (descriptor.MipLevels == 0) {
-            throw CreateLoadFailure(canonical, "the texture descriptor must declare at least one mip level");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, "the texture descriptor must declare at least one mip level");
         }
 
         uint maxMipLevels = (uint)BitOperations.Log2(Math.Max(descriptor.Width, descriptor.Height)) + 1u;
         if (descriptor.MipLevels > maxMipLevels) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 $"the texture descriptor declares {descriptor.MipLevels} mip levels; "
                     + $"{descriptor.Width}x{descriptor.Height} supports at most {maxMipLevels}");
@@ -1134,31 +1165,31 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
         if (!Enum.IsDefined(descriptor.Format)
             || descriptor.Format is TextureFormat.Rgba16Float or TextureFormat.Depth32Float) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 $"the texture descriptor format {(int)descriptor.Format} is not a packed texture format");
         }
 
         bool srgbFormat = descriptor.Format is TextureFormat.Rgba8Srgb or TextureFormat.Bc7Srgb;
         if (descriptor.IsSrgb != srgbFormat) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 $"the texture descriptor sRGB flag {descriptor.IsSrgb} does not match format "
                     + $"{descriptor.Format}");
         }
 
         if (!Enum.IsDefined(descriptor.Filter) || !Enum.IsDefined(descriptor.Wrap)) {
-            throw CreateLoadFailure(canonical, "the texture descriptor sampler state is not valid");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, "the texture descriptor sampler state is not valid");
         }
 
         if (!float.IsFinite(descriptor.MaxAnisotropy) || descriptor.MaxAnisotropy < 1f) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 "the texture descriptor maximum anisotropy must be finite and at least 1");
         }
 
         if (payload.Length == 0) {
-            throw CreateLoadFailure(canonical, "the texture KTX2 payload is empty");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, "the texture KTX2 payload is empty");
         }
     }
 
@@ -1169,7 +1200,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         string canonical) {
         const ShaderStageMask requiredStages = ShaderStageMask.Vertex | ShaderStageMask.Fragment;
         if (descriptor.Stages != requiredStages) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 $"the shader descriptor stages 0x{(int)descriptor.Stages:x} do not describe a complete "
                     + "vertex+fragment program");
@@ -1177,27 +1208,27 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
         if (string.IsNullOrWhiteSpace(descriptor.VertexEntry)
             || string.IsNullOrWhiteSpace(descriptor.FragmentEntry)) {
-            throw CreateLoadFailure(canonical, "the shader descriptor must name both entry points");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, "the shader descriptor must name both entry points");
         }
 
         if (!IsSpirvModule(vertexPayload) || !IsSpirvModule(fragmentPayload)) {
-            throw CreateLoadFailure(
+            throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
                 "the shader SPIR-V payloads must be non-empty, 4-byte aligned modules");
         }
 
         if (descriptor.Uniforms is null || descriptor.Textures is null) {
-            throw CreateLoadFailure(canonical, "the shader descriptor metadata arrays must not be null");
+            throw AssetLoadErrors.CreateLoadFailure(canonical, "the shader descriptor metadata arrays must not be null");
         }
 
         HashSet<string> textureNames = new(StringComparer.Ordinal);
         foreach (string? texture in descriptor.Textures) {
             if (string.IsNullOrWhiteSpace(texture)) {
-                throw CreateLoadFailure(canonical, "the shader descriptor has an empty texture name");
+                throw AssetLoadErrors.CreateLoadFailure(canonical, "the shader descriptor has an empty texture name");
             }
 
             if (!textureNames.Add(texture)) {
-                throw CreateLoadFailure(
+                throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the shader descriptor repeats the texture name '{texture}'");
             }
@@ -1208,7 +1239,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 || string.IsNullOrWhiteSpace(uniform.Name)
                 || !Enum.IsDefined(uniform.Type)
                 || uniform.Default is null) {
-                throw CreateLoadFailure(canonical, "the shader descriptor has invalid uniform metadata");
+                throw AssetLoadErrors.CreateLoadFailure(canonical, "the shader descriptor has invalid uniform metadata");
             }
         }
     }
@@ -1222,56 +1253,6 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             : assetType == typeof(Texture)
                 ? AssetEntryType.Texture
                 : AssetEntryType.Shader;
-
-    private static AssetNotFoundException CreateNotFound(string canonical) => new(
-        $"The asset '{AssetPath.ToPublic(canonical)}' is not in any mounted pack.",
-        DiagnosticCodes.ASSET_NOT_FOUND,
-        null);
-
-    private static AssetTypeMismatchException CreateTypeMismatch(
-        string canonical,
-        AssetEntryType expected,
-        AssetEntryType actual) => new(
-            $"The asset '{AssetPath.ToPublic(canonical)}' was baked as {actual}, but it was requested as "
-                + $"{expected}.",
-            DiagnosticCodes.ASSET_TYPE_MISMATCH,
-            null);
-
-    private static AssetLoadException CreateLoadFailure(string canonical, string reason) => new(
-        $"The asset '{AssetPath.ToPublic(canonical)}' could not be loaded: {reason}.",
-        DiagnosticCodes.ASSET_LOAD_FAILED,
-        null);
-
-    private static AssetLoadException CreateLoaderQueueFull(string canonical) => new(
-        $"The asset '{AssetPath.ToPublic(canonical)}' could not be queued: the asset loader has "
-            + $"{MAX_PENDING_LOADS} pending requests.",
-        DiagnosticCodes.ASSET_LOAD_FAILED,
-        null);
-
-    private static Exception WrapLoadFailure(string canonical, string what, Exception exception) {
-        if (exception is AssetPackException
-            or AssetTypeMismatchException
-            or AssetNotFoundException) {
-            return exception;
-        }
-
-        if (exception is AssetLoadException loadFailure
-            && (string.Equals(
-                    loadFailure.DiagnosticCode,
-                    DiagnosticCodes.ASSET_LOAD_FAILED,
-                    StringComparison.Ordinal)
-                || string.Equals(
-                    loadFailure.DiagnosticCode,
-                    DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-                    StringComparison.Ordinal))) {
-            return loadFailure;
-        }
-
-        return new AssetLoadException(
-            $"The asset '{AssetPath.ToPublic(canonical)}' {what}: {exception.Message}",
-            DiagnosticCodes.ASSET_LOAD_FAILED,
-            exception);
-    }
 
     private void QueueDestruction(GpuAssetResource resource) {
         try {
@@ -1290,10 +1271,6 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 "The asset catalog is not started; RayBorkApp starts it before calling the game.");
         }
     }
-
-    private static ObjectDisposedException CreateStoppedException() => new(
-        nameof(AssetCatalog),
-        "The asset catalog is stopped.");
 
     private readonly record struct AssetKey(string Path, Type AssetType);
 
@@ -1361,7 +1338,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             try {
                 work = _work(stopToken);
             } catch (OperationCanceledException) when (stopToken.IsCancellationRequested) {
-                _completion.TrySetException(CreateStoppedException());
+                _completion.TrySetException(AssetLoadErrors.CreateStoppedException());
                 _onCompleted(this);
                 return;
             } catch (Exception exception) {
@@ -1400,7 +1377,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 if (_mapCancellationToStopped) {
                     // Shared engine-asset work only observes the catalog stop token, whose
                     // cancellation is reported as ObjectDisposedException at the public caller.
-                    _completion.TrySetException(CreateStoppedException());
+                    _completion.TrySetException(AssetLoadErrors.CreateStoppedException());
                 } else {
                     // A model load observes its caller token through a linked token. It reports
                     // OperationCanceledException after releasing every partly acquired part.

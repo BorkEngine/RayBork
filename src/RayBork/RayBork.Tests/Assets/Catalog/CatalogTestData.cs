@@ -7,7 +7,7 @@ namespace RayBork.Tests.Assets.Catalog;
 
 /// <summary>
 /// A custom data type shaped for the catalog tests. It is registered through
-/// <see cref="AssetTypeRegistration.Create{T}"/>, exactly like the builder registers a game type.
+/// <see cref="LoaderAssetTypeRegistration{T}"/>, exactly like the builder registers a game type.
 /// </summary>
 [GenerateShape]
 internal sealed partial class CatalogTestSettings {
@@ -149,7 +149,8 @@ internal static class CatalogTestData {
     }
 
     internal static AssetTypeRegistration SettingsRegistration
-        => AssetTypeRegistration.Create<CatalogTestSettings>();
+        => new LoaderAssetTypeRegistration<CatalogTestSettings>(
+            new MessagePackAssetLoader<CatalogTestSettings>());
 
     private static void WriteVector2(BinaryWriter writer, System.Numerics.Vector2 value) {
         writer.Write(value.X);
