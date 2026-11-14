@@ -22,11 +22,11 @@ runtime tone-mapping surface: `TonemappingSettings` behind `EngineContext.Tonema
 its separate HDR highlight path with Godot 4.7's HDR-aware AgX curve: SDR uses an output maximum of
 `1`, scRGB HDR uses the reported display headroom, and the curve output is scaled by paper white.
 `DrawTexture` is not part of M5; it moves to M7 with the orthographic sprite contract. M6 ships the
-font surface: `Font` and `Glyph`, `Load<Font>`, `TryGetGlyph`, `Measure`, on-demand asynchronous MSDF
-glyph generation, and the built-in Fira Sans Regular default font exposed as
-`EngineDefaults.DefaultFont`. The text alignment and wrapping enums and the text draw contract are
-described in §7.10. The rest of
-the API reference remains the 1.0 contract, not a description of shipped behavior.
+font and text surface: `Font` and `Glyph`, `Load<Font>`, `TryGetGlyph`, `Measure`, on-demand
+asynchronous MSDF glyph generation, the built-in Fira Sans Regular default font exposed as
+`EngineDefaults.DefaultFont`, and the world-space `Camera.DrawText` and `Camera.DrawTextBillboard`
+draws. The text alignment and wrapping enums and the text draw contract are described in §7.10.
+The rest of the API reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -255,8 +255,8 @@ output maximum of `1`, and scRGB HDR uses the reported display headroom and then
 white. `Color` remains a linear value; its full 158-color Bork2d/Unity preset set is authored as sRGB
 and stored linear through the same explicit conversion, so `Color.Gray` is the display mid-gray
 (linear `0.214041`) and `Color.WhiteSmoke` is `0.913099`. `Color.FromSrgb`, `Color.FromSrgbBytes`,
-and `Color.ToSrgb` add the explicit display-encoded conversions. `Camera.Target` and `DrawText`
-remain later milestones (M8 and M6), and `DrawTexture` is M7.
+and `Color.ToSrgb` add the explicit display-encoded conversions. `Camera.Target` remains a later
+milestone (M8), and `DrawTexture` is M7.
 
 The M5 limitations are deliberate: lines are one pixel wide and never request `wideLines`; wire
 shapes are line geometry rather than polygon-mode rasterization; `DrawWireModel` needs
@@ -272,10 +272,13 @@ the shared object, whose cache reflects earlier draws). `TryGetGlyph` returns on
 texture is already generated, and `Measure` reads face metrics and kerning without generating a
 texture. An unmapped rune falls back to glyph id zero (`.notdef`). Glyph generation runs
 asynchronously on the app-lifetime `RayBork.Font` thread that the asset catalog starts before
-`Setup`; a draw never blocks on it. The font descriptor no longer carries a preload range: the bake
-packs the whole face and any mapped glyph can be generated at runtime. A font pack baked before M6
-still loads because its removed `Ranges` member is just an unknown descriptor member; only an old TOML
-sidecar that still declares `ranges` fails the bake (`RB4002`).
+`Setup`; a draw never blocks on it. `Camera.DrawText` lays a block out in a transform's local XY plane
+and `Camera.DrawTextBillboard` centers a block in a camera-facing plane; both record world-space text
+through the built-in `/shaders/msdf` program with one instance per ready glyph and skip a glyph whose
+texture is not ready yet, as described in §7.1 and §7.10. The font descriptor no longer carries a
+preload range: the bake packs the whole face and any mapped glyph can be generated at runtime. A font
+pack baked before M6 still loads because its removed `Ranges` member is just an unknown descriptor
+member; only an old TOML sidecar that still declares `ranges` fails the bake (`RB4002`).
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and

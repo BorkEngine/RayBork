@@ -128,14 +128,20 @@ engine assets with no public accessor, built once before `IGame.Setup`.
 | `DrawCircle` | Engine line mesh | A closed 36-segment circle. The axis-angle form starts from the local `XZ` plane with local `+Y` as its normal, rotates it by `rotationAngle` degrees around `rotationAxis`, and translates it to `center`. The `Transform` form uses the local `XZ` plane and the transform rotation and scale. A zero rotation axis is `ArgumentException`; zero radius records nothing. |
 | `DrawGrid` | Engine line mesh | `XZ` grid centered at the world origin with `slices` cells per axis, one uniform color, and `spacing` world units between lines. It has `slices + 1` lines per axis, so it is one instanced draw with `2 * (slices + 1)` instances spanning `slices * spacing` per axis. |
 | `DrawBillboard` | Engine quad | One textured, alpha-blended quad. The four-argument form is camera-facing, centered, and samples the full texture. A `source` rectangle samples a normalized sub-rectangle, `origin` pins a normalized pivot to the transform position, and a `Transform` supplies position/rotation/scale. |
+| `DrawText` | Engine quad | One instance per ready glyph of the engine text layout, through the built-in `/shaders/msdf` program. The block lies in the transform's local XY plane with the origin at the first line's ascent-box top-left; each glyph quad is the layout `Position`/`Size` composed as `glyphQuad * transform.ToMatrix()`. A glyph whose texture is not ready is skipped while its advance stays. |
+| `DrawTextBillboard` | Engine quad | The same layout (`wrapping: None`, no width limit) through the same program, centered on a world position in a camera-facing plane: the block `BoundsMin`/`BoundsMax` union is centered, the plane uses the camera's right/up axes, and `alignment` positions the lines inside the block width. |
 
 **Programs and render states.** Shapes and lines record against the built-in `/shaders/primitive`
 program: vertex position at location 0, linear vertex color at location 6, no uniforms and no
 textures, opaque blending, back-face culling, `greater_equal` depth test, depth write. Its vertex
 stage multiplies the vertex color by the per-instance tint and its fragment stage writes that color.
 The billboard uses the built-in `/shaders/mesh` program with the `RenderState.AlphaBlend` state
-override. The batch key includes the effective render state, so a billboard record never merges with
-a shape draw.
+override. Text records against the built-in `/shaders/msdf` program: one `mainTexture` binding
+resolved per instance, vertex position at location 0, vertex UV at location 2, and the per-instance
+linear color. Its render state is `{ Blend = Alpha, Cull = None, DepthTest = GreaterOrEqual, DepthWrite
+= false }`, which is the program's declared state. The batch key includes the effective render state,
+so a billboard record never merges with a shape draw, and a text record never merges with a billboard
+or a shape draw even though all three instance the engine quad.
 
 **Colors and tint.** `color` is a linear `Color`; no conversion is applied at draw time. A
 display-encoded authoring color converts once with `Color.FromSrgb` or `Color.FromSrgbBytes`. The
@@ -210,7 +216,12 @@ helpers are one instanced line draw each. `DrawCylinder` is two instanced draws 
 radii because its sides and caps use different meshes; a tapered cylinder is one triangle draw.
 `DrawCapsule` is two instanced draws: side quads and cap triangles. Equal records merge: two
 `DrawCube` calls are one instanced draw with two instances, and every triangle- or line-based helper
-merges into the shared engine mesh batch for its program and render state.
+merges into the shared engine mesh batch for its program and render state. Text follows the same rule
+with one addition: a text record carries one per-instance glyph texture per instance, so glyphs with
+different textures still form one instanced batch. All text over the quad, MSDF program, and text
+render state merges across calls, fonts, sizes, and strings. `Instances` counts the submitted glyph
+instances after frustum culling and `Triangles` is two per submitted instance; a call with no ready
+glyph records nothing and adds no draw call.
 
 **Lines and wire shapes.** Lines are one pixel wide. The engine draws them as `LineList` geometry
 and never requests the `wideLines` device feature, so v1 has no thick-line option and no per-line
@@ -243,4 +254,13 @@ world-space quad in the local XY plane facing world `+Z`; this is intentionally 
 `Vector3` overloads' vertical orientation. The source rectangle is per-instance data, so billboards
 with different source rectangles still share one batch.
 
-`DrawText` and `DrawTextBillboard` are M6 and are not part of this surface.
+**Text batches.** A text record uses the per-instance texture form instead of a shared material
+binding: each glyph instance carries its one bindless glyph texture, so `mainTexture` resolves to that
+instance's padded MSDF texture and glyphs with different textures still share one instanced draw. The
+record leaves `rbInstance.UvRect` at the full-texture `(0, 0, 1, 1)` rectangle, because one glyph is
+one whole texture: the MSDF shader reads the quad's authored UVs directly and has no per-instance
+sub-rectangle. The engine MSDF material's texture binding is never set, so the shared material does not
+hold a game texture at all; the recorder retains each glyph texture it acquired for the frame until the
+renderer releases the slot. The text draws use the same quad, batch key, sorting, and statistics rules
+as the other helpers; their world-space layout, billboard centering, and validation are specified in
+§7.1 **Text**.
