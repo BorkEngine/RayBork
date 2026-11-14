@@ -2,9 +2,8 @@
 
 `Primitive Gallery` is a small RayBork sample that draws every M5 primitive helper in one perspective
 camera pass with the built-in primitive shader: lines, a polyline, a point, a triangle, a cube, a
-sphere, a cylinder, a plane, a reference grid, a wire cube, a wire sphere, a billboard, and a
-screen-space texture. It builds its only texture at runtime, so it needs no asset pack, no manual
-bake, and no `--assets` argument.
+sphere, a cylinder, a plane, a reference grid, a wire cube, a wire sphere, and a billboard. It builds
+its only texture at runtime, so it needs no asset pack, no manual bake, and no `--assets` argument.
 
 The sample is also a Native AOT gate, but it contains no test-only logic: it opens a window, draws the
 gallery, and exits cleanly. Build and run it from the repository root:
@@ -36,18 +35,17 @@ color converted to linear.
 | `DrawLine` | `Color.SoftRed` | Upper row, center-left. One diagonal line segment. |
 | `DrawLines` | `Color.DarkOrange` | Upper row, center. A four-point zigzag; three segments. |
 | `DrawBillboard` | `Color.Beige` tint | Upper row, right. A world-space textured quad that faces the camera. |
-| `DrawTexture` | unmodified texture | A `160 x 90` screen-space overlay in the bottom-left corner, in render pixels. |
 
-The billboard and the overlay sample the same procedural texture. The triangle is single-sided, like
-the engine's primitive material, so it is culled when the camera orbits behind it.
+The billboard samples the procedural texture. The triangle is single-sided, like the engine's
+primitive material, so it is culled when the camera orbits behind it.
 
 ## Texture
 
 `Setup` creates one `128 x 128` `Rgba8Srgb` texture with `EngineContext.CreateTextureBuilder`. A warm
 left half, a cool right half, and a 16-pixel checkerboard make the texture's orientation visible on
-both the billboard and the screen-space quad. The warm checker colors are `Color.GoldenRod` and
-`Color.SaddleBrown`; the cool pair is `Color.CornflowerBlue` and `Color.MidnightBlue`. The texture is
-uploaded with `BuildAsync` and disposed in `Shutdown`. It is the only asset the sample owns.
+the billboard. The warm checker colors are `Color.GoldenRod` and `Color.SaddleBrown`; the cool pair is
+`Color.CornflowerBlue` and `Color.MidnightBlue`. The texture is uploaded with `BuildAsync` and
+disposed in `Shutdown`. It is the only asset the sample owns.
 
 ## Options
 
@@ -70,8 +68,7 @@ engine's default renderer settings. An unknown option prints the usage text and 
 The camera starts at `(8, 6.2, 12.5)`, looks at `(0, 2.4, 0)`, and uses a 45 degree vertical field of
 view with a `0.05` near plane and an infinite far plane. The background is `Color.Gray3` (sRGB
 `#4D4D4D`, stored linear as `0.073239`) and the grid is `Color.Gray5` (sRGB `#808080`, stored linear
-as `0.214041`). The same camera pass draws the whole scene and the screen-space overlay; the
-overlay's `DrawTexture` call maps its destination rectangle to render pixels and ignores scene depth.
+as `0.214041`). The camera pass draws the whole scene.
 
 ## Build and run
 

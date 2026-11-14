@@ -5,7 +5,7 @@ namespace PrimitiveGallery;
 
 /// <summary>
 /// A small orbitable gallery that draws every M5 primitive helper in one camera pass: a reference
-/// grid, two rows of solid and wire shapes, a billboard, and a screen-space texture overlay.
+/// grid, two rows of solid and wire shapes, and a billboard.
 /// </summary>
 /// <remarks>
 /// The world helpers run along the initial view's horizontal axis, so the two rows read left to right
@@ -23,9 +23,6 @@ internal sealed class GalleryGame : IGame {
 
     private const int TEXTURE_SIZE = 128;
     private const int CHECKER_SIZE = 16;
-    private const float OVERLAY_WIDTH = 160f;
-    private const float OVERLAY_HEIGHT = 90f;
-    private const float OVERLAY_MARGIN = 16f;
 
     private static readonly Vector3 _orbitCenter = new(0f, 2.4f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(8f, 6.2f, 12.5f);
@@ -65,8 +62,8 @@ internal sealed class GalleryGame : IGame {
     /// <inheritdoc/>
     public async Task Setup(EngineContext context) {
         // The sample has no pack, so the one texture it shows is built here. A warm left half, a cool
-        // right half, and a checkerboard make the billboard and the overlay visibly textured and
-        // let their orientation read at a glance.
+        // right half, and a checkerboard make the billboard visibly textured and let its orientation
+        // read at a glance.
         TextureBuilder builder = context.CreateTextureBuilder(TEXTURE_SIZE, TEXTURE_SIZE);
         Color[] pixels = new Color[TEXTURE_SIZE * TEXTURE_SIZE];
         for (int y = 0; y < TEXTURE_SIZE; y++) {
@@ -114,7 +111,6 @@ internal sealed class GalleryGame : IGame {
             far: float.PositiveInfinity);
 
         DrawGallery(camera);
-        DrawOverlay(camera, context);
 
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
@@ -167,17 +163,6 @@ internal sealed class GalleryGame : IGame {
             ],
             Color.DarkOrange);
         camera.DrawBillboard(_texture!, Station(5.1f, 4.7f), new Vector2(2.2f), Color.Beige);
-    }
-
-    private void DrawOverlay(Camera camera, EngineContext context) {
-        // DrawTexture takes render pixels with a top-left origin, so anchor the quad to the
-        // bottom-left corner of the current framebuffer. It is an overlay and ignores scene depth.
-        Rect destination = new(
-            OVERLAY_MARGIN,
-            context.Window.RenderHeight - OVERLAY_HEIGHT - OVERLAY_MARGIN,
-            OVERLAY_WIDTH,
-            OVERLAY_HEIGHT);
-        camera.DrawTexture(_texture!, destination);
     }
 
     private Vector3 Station(float offset, float height) =>

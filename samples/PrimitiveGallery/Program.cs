@@ -14,8 +14,8 @@ internal static class Program {
         Primitive Gallery - every M5 primitive helper in one camera pass
 
         Draws a line, a polyline, a point, a triangle, a cube, a sphere, a cylinder, a plane,
-        a reference grid, a wire cube, a wire sphere, a billboard, and a screen-space texture
-        with the built-in primitive shader and an orbital perspective camera.
+        a reference grid, a wire cube, a wire sphere, and a billboard with the built-in primitive
+        shader and an orbital perspective camera.
 
         Usage:
           PrimitiveGallery [options]

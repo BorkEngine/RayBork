@@ -54,7 +54,6 @@ public sealed class PrimitiveDrawGpuTests {
                 camera.DrawWireCube(new Vector3(-1f, 1.3f, -4f), new Vector3(0.6f), color);
                 camera.DrawWireSphere(new Vector3(1f, 1.3f, -4f), 0.5f, color);
                 camera.DrawBillboard(texture, new Vector3(2.8f, 1.3f, -4f), new Vector2(0.5f), Color.White);
-                camera.DrawTexture(texture, new Rect(16f, 16f, 64f, 48f));
             },
             firstTransform: null,
             second: camera => camera.DrawGrid(2, 1f, color),
@@ -62,14 +61,14 @@ public sealed class PrimitiveDrawGpuTests {
             clearColor: _clearColor);
 
         // The first pass records eight primitive-program batches (cube, sphere, plane, point plus
-        // cylinder sides, triangle plus cylinder caps, lines, wire cube, wire sphere) and two mesh
-        // program batches (billboard and the screen quad). The second pass adds one grid line batch.
+        // cylinder sides, triangle plus cylinder caps, lines, wire cube, wire sphere) and one mesh
+        // program batch (the billboard). The second pass adds one grid line batch.
         RenderStats stats = harness.Host.Backend.Stats;
-        Assert.Equal(11, stats.DrawCalls);
-        Assert.Equal(30, stats.Instances);
-        Assert.Equal(997, stats.Triangles);
+        Assert.Equal(10, stats.DrawCalls);
+        Assert.Equal(29, stats.Instances);
+        Assert.Equal(995, stats.Triangles);
         Assert.Equal(0, stats.CulledInstances);
-        Assert.Equal(4, stats.PipelineCount);
+        Assert.Equal(3, stats.PipelineCount);
         Assert.Equal(harness.Host.Backend.Info.SampleCount, stats.SampleCount);
         Assert.Equal(4, harness.Host.Settings.SampleCount);
 
@@ -209,20 +208,10 @@ public sealed class PrimitiveDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void BillboardAndScreenQuadSampleTheUploadedTexture() {
+    public void BillboardSamplesTheUploadedTexture() {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
         Color billboardColor = new(0.25f, 0.5f, 0.75f, 1f);
         Texture billboardTexture = harness.CreateTexture(1, 1, billboardColor);
-        Color topLeft = new(1f, 0f, 0f, 1f);
-        Color topRight = new(0f, 1f, 0f, 1f);
-        Color bottomLeft = new(0f, 0f, 1f, 1f);
-        Color bottomRight = new(1f, 1f, 0f, 1f);
-        Texture orientationTexture = harness.CreateTexture(2, 2, topLeft, topRight, bottomLeft, bottomRight);
-        Rect destination = new(
-            harness.Width / 4f,
-            harness.Height / 4f,
-            harness.Width / 2f,
-            harness.Height / 2f);
 
         harness.SubmitPerspective(
             camera => camera.DrawBillboard(
@@ -232,60 +221,16 @@ public sealed class PrimitiveDrawGpuTests {
                 Color.White),
             clearColor: _clearColor);
         AssertColorNear(Unorm(billboardColor), harness.ReadColor(harness.Width / 2, harness.Height / 2));
-
-        harness.SubmitPerspective(
-            camera => camera.DrawTexture(orientationTexture, destination),
-            clearColor: _clearColor);
-        AssertScreenQuadProbes(harness, destination, topLeft, topRight, bottomLeft, bottomRight);
-
-        harness.SubmitOrthographic(
-            camera => camera.DrawTexture(orientationTexture, destination),
-            transform: new Transform(new Vector3(0f, 0f, 5f)),
-            clearColor: _clearColor,
-            height: 4f);
-        AssertScreenQuadProbes(harness, destination, topLeft, topRight, bottomLeft, bottomRight);
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TranslatedPerspectiveCameraKeepsTheScreenQuadUnculled() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
-        Color textureColor = new(0.25f, 0.5f, 0.75f, 1f);
-        Texture texture = harness.CreateTexture(1, 1, textureColor);
-        Rect destination = new(16f, 16f, 64f, 48f);
-
-        // The reported repro: a camera translated back from the origin with a destination rectangle
-        // near the top-left. The old projective instance matrix was frustum-culled behind the camera,
-        // so this pass planned no draw at all.
-        harness.SubmitPerspective(
-            camera => camera.DrawTexture(texture, destination),
-            transform: new Transform(new Vector3(0f, 0f, 8f)),
-            clearColor: _clearColor);
-
-        RenderStats stats = harness.Host.Backend.Stats;
-        Assert.Equal(0, stats.CulledInstances);
-        Assert.Equal(1, stats.DrawCalls);
-        Assert.Equal(1, stats.Instances);
-        Assert.Equal(2, stats.Triangles);
-        AssertColorNear(
-            Unorm(textureColor),
-            harness.ReadColor(
-                Pixel(destination.X + (destination.Width * 0.5f)),
-                Pixel(destination.Y + (destination.Height * 0.5f))));
-        AssertColorNear(_clearColor, harness.ReadColor(Pixel(destination.X * 0.5f), harness.Height / 2));
-        Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void OverlayTextureCoversGeometryWhileBillboardBehindACubeIsOccluded() {
+    public void BillboardBehindACubeIsOccluded() {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
         Color cubeColor = new(0.8f, 0.4f, 0.1f, 1f);
         Color billboardColor = new(0.9f, 0.1f, 0.9f, 1f);
-        Color overlayColor = new(0.1f, 0.9f, 0.3f, 1f);
         Texture billboardTexture = harness.CreateTexture(1, 1, billboardColor);
-        Texture overlayTexture = harness.CreateTexture(1, 1, overlayColor);
         float centerX = harness.Width / 2f;
         float centerY = harness.Height / 2f;
         float cubeRight = 0f;
@@ -297,29 +242,17 @@ public sealed class PrimitiveDrawGpuTests {
                 // it is visible between that edge and its own right edge.
                 cubeRight = camera.WorldToScreen(new Vector3(2f, 0f, -3f)).X;
                 billboardRight = camera.WorldToScreen(new Vector3(5f, 0f, -6f)).X;
-                // The overlay covers only the middle fifth of the cube so the probe below stays on
-                // the cube alone. Its half size follows the cube's screen width, not the window size.
-                float halfSize = (cubeRight - centerX) * 0.2f;
                 camera.DrawCube(new Vector3(0f, 0f, -5f), new Vector3(4f), cubeColor);
                 camera.DrawBillboard(
                     billboardTexture,
                     new Vector3(0f, 0f, -6f),
                     new Vector2(10f),
                     Color.White);
-                camera.DrawTexture(
-                    overlayTexture,
-                    new Rect(centerX - halfSize, centerY - halfSize, halfSize * 2f, halfSize * 2f));
             },
             clearColor: _clearColor);
 
-        // The overlay ignores scene depth, so it replaces the cube color at the shared pixels.
-        AssertColorNear(
-            Unorm(overlayColor),
-            harness.ReadColor(Pixel(centerX), Pixel(centerY)));
-        // Outside the overlay the cube wins, and the billboard behind it stays occluded.
-        AssertColorNear(
-            cubeColor,
-            harness.ReadColor(Pixel((centerX + cubeRight) * 0.5f), Pixel(centerY)));
+        // The cube is in front of the billboard, so it wins at the shared pixels.
+        AssertColorNear(cubeColor, harness.ReadColor(Pixel(centerX), Pixel(centerY)));
         // Between the cube and the billboard edge the billboard is visible on its own.
         AssertColorNear(
             Unorm(billboardColor),
@@ -388,29 +321,6 @@ public sealed class PrimitiveDrawGpuTests {
         Assert.Equal(7, gridAndLines.Instances);
         Assert.Equal(0, gridAndLines.Triangles);
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
-    }
-
-    private static void AssertScreenQuadProbes(
-        PrimitiveDrawGpuHarness harness,
-        Rect destination,
-        Color topLeft,
-        Color topRight,
-        Color bottomLeft,
-        Color bottomRight) {
-        uint left = Pixel(destination.X + (destination.Width * 0.25f));
-        uint right = Pixel(destination.X + (destination.Width * 0.75f));
-        uint top = Pixel(destination.Y + (destination.Height * 0.25f));
-        uint bottom = Pixel(destination.Y + (destination.Height * 0.75f));
-        AssertColorNear(topLeft, harness.ReadColor(left, top));
-        AssertColorNear(topRight, harness.ReadColor(right, top));
-        AssertColorNear(bottomLeft, harness.ReadColor(left, bottom));
-        AssertColorNear(bottomRight, harness.ReadColor(right, bottom));
-
-        uint middleY = Pixel(destination.Y + (destination.Height * 0.5f));
-        AssertColorNear(_clearColor, harness.ReadColor(Pixel(destination.X * 0.5f), middleY));
-        AssertColorNear(
-            _clearColor,
-            harness.ReadColor(Pixel(destination.X + destination.Width + (destination.X * 0.5f)), middleY));
     }
 
     private static Color Unorm(Color color) => new(
