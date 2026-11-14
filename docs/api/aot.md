@@ -77,7 +77,7 @@ the shaderc native libraries, or the glTF packages.
 
 Both gate publishes must start, load the assets the sample needs, draw, and shut down. AOT publish
 is a per-milestone gate, not a release-only check. The M5 gate is `samples/PrimitiveGallery`: the
-published hosts open a window, build their procedural texture, draw all 13 primitive helpers through
+published hosts open a window, build their procedural texture, draw all 12 primitive helpers through
 the built-in `/shaders/primitive` and `/shaders/mesh` programs, and must exit `0`. The gate path
 exercises the zero-uniform primitive program, which has no texture binding at all. The sample is a
 plain user-facing example and contains no test-only draw assertion. Both publishes must finish with

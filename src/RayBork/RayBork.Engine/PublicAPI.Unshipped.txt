@@ -1198,7 +1198,6 @@ RayBork.Camera.DrawLines(System.ReadOnlySpan<System.Numerics.Vector3> points, Ra
 RayBork.Camera.DrawPlane(System.Numerics.Vector3 center, System.Numerics.Vector2 size, RayBork.Color color) -> void
 RayBork.Camera.DrawPoint(System.Numerics.Vector3 position, RayBork.Color color, float size = 1) -> void
 RayBork.Camera.DrawSphere(System.Numerics.Vector3 center, float radius, RayBork.Color color) -> void
-RayBork.Camera.DrawTexture(RayBork.Texture! texture, RayBork.Rect destination, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawTriangle(System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, RayBork.Color color) -> void
 RayBork.Camera.DrawWireCube(System.Numerics.Vector3 position, System.Numerics.Vector3 size, RayBork.Color color) -> void
 RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, RayBork.Color color) -> void

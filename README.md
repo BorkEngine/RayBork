@@ -21,12 +21,12 @@ material instance over an internal program with `SetUniform`/`ResetUniforms`, a 
 bindless texture table with sampler and pipeline caches, automatic batch planning with frustum
 culling and opaque/transparency sorting, per-instance uniforms and textures, and the HDR AgX present
 path.
-M5 adds the raylib-style primitive surface and the collision queries: the 13 `Camera` helpers
+M5 adds the raylib-style primitive surface and the collision queries: the 12 `Camera` helpers
 (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`,
-`DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`, and the screen-space
-`DrawTexture`), engine-owned primitive meshes drawn by the built-in `/shaders/primitive` program,
-`Collision`/`RayCollision` with a deterministic ray-mesh BVH that is either generated procedurally or
-baked into the pack, and the reference XZ grid in the castle scene. M5 also reworks the tone mapper
+`DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, and `DrawBillboard`), engine-owned primitive
+meshes drawn by the built-in `/shaders/primitive` program, `Collision`/`RayCollision` with a
+deterministic ray-mesh BVH that is either generated procedurally or baked into the pack, and the
+reference XZ grid in the castle scene. M5 also reworks the tone mapper
 to Godot 4.7's HDR-aware AgX: the combined Rec.709 to Rec.2020 and AgX inset matrix, the `allenwp`
 curve with CPU-derived parameters, a clamp to the output maximum, and the combined inverse outset and
 Rec.2020 to Rec.709 matrix. SDR uses an output maximum of `1`; the scRGB path uses the reported
@@ -78,8 +78,8 @@ milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability
   material every call; every draw captures an immutable snapshot, so later cursor changes affect
   later draws only. Per-instance uniforms and textures let different materials over one program
   batch together. A `Camera` is a frame-scoped recorder: create it in `Tick`, record
-  `DrawModel`/`DrawMesh`/`DrawInstanced`/`DrawModelInstanced` and the primitive, line, billboard, and
-  texture helpers, and dispose it before `Tick` returns. Draws batch by
+  `DrawModel`/`DrawMesh`/`DrawInstanced`/`DrawModelInstanced` and the primitive, line, and billboard
+  helpers, and dispose it before `Tick` returns. Draws batch by
   `(mesh, program, effective render state)`.
 - Rendering is linear HDR with MSAA and reverse-Z. The present pass applies Godot 4.7's HDR-aware
   AgX; `TonemappingMode.None` is the direct path. Tone mapping is frame-global: `ctx.Tonemapping`
@@ -88,7 +88,7 @@ milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability
   `Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` for display-encoded values.
 - The primitive helpers draw engine-owned unit meshes through two built-in programs. Shapes and lines
   use `/shaders/primitive`, which reads vertex position and color and has no uniforms or textures;
-  billboards and textured quads use `/shaders/mesh` with alpha render-state overrides. The eight
+  billboards use `/shaders/mesh` with an alpha render-state override. The eight
   primitive meshes (cube, sphere, plane, quad, triangle, line, wire cube, wire sphere) are built once
   before `IGame.Setup` through the procedural GPU bridge, are internal, and are not exposed as public
   assets. `EngineDefaults` still exposes only `CreateMeshShader`, `White`, and `Error`; a game can

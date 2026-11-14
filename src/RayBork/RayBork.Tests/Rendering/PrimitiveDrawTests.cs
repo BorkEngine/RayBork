@@ -5,7 +5,7 @@ using RayBork.Tests.Assets.Catalog;
 namespace RayBork.Tests.Rendering;
 
 /// <summary>
-/// Tests the <see cref="Camera"/> primitive, line, billboard, and texture helpers.
+/// Tests the <see cref="Camera"/> primitive, line, and billboard helpers.
 /// </summary>
 /// <remarks>
 /// The helpers are tick-thread recorder calls, so every test drives a real <see cref="CameraService"/>
@@ -15,16 +15,8 @@ namespace RayBork.Tests.Rendering;
 /// </remarks>
 public sealed class PrimitiveDrawTests {
     private const float TOLERANCE = 1e-5f;
-    private const float PIXEL_TOLERANCE = 1e-2f;
 
     private static readonly Color _color = new(0.25f, 0.5f, 0.75f, 0.5f);
-
-    private static readonly RenderState _overlayState = new() {
-        Blend = BlendMode.Alpha,
-        Cull = CullMode.None,
-        DepthTest = DepthTest.Always,
-        DepthWrite = false,
-    };
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
@@ -554,119 +546,6 @@ public sealed class PrimitiveDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DrawTextureMapsTheQuadToTheDestinationRectangleForAPerspectiveCamera() {
-        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
-        RenderFramePacket packet = harness.Host.BeginFrame();
-        Texture texture = RenderingTestAssets.CreateTexture();
-        Rect destination = new(100f, 50f, 320f, 180f);
-        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
-            camera.DrawTexture(texture, destination);
-        }
-
-        harness.Host.EndFrame();
-
-        CameraPass pass = packet.Passes[0];
-        RenderDrawRecord record = pass.Draws[0];
-        Assert.Same(harness.Primitives.Quad.Lifetime, record.Mesh);
-        Assert.Same(harness.Primitives.MeshMaterial.Program.Lifetime, record.Program);
-        Assert.Equal(PrimitiveTopology.TriangleList, record.Topology);
-        Assert.Equal(_overlayState, record.RenderState);
-        Assert.Equal(Color.White, record.Tint);
-        Assert.Equal(1, record.InstanceCount);
-        Assert.Same(texture, record.GetTextureBindings()[0]);
-        Assert.Null(harness.Primitives.MeshMaterial.TextureValues[0]);
-        AssertTextureQuadMapping(harness.Primitives, record, pass, destination);
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DrawTextureMapsTheQuadToTheDestinationRectangleForAnOrthographicCamera() {
-        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
-        RenderFramePacket packet = harness.Host.BeginFrame();
-        Texture texture = RenderingTestAssets.CreateTexture();
-        Rect destination = new(240f, 90f, 400f, 220f);
-        using (Camera camera = harness.Host.CreateOrthographicCamera()) {
-            camera.DrawTexture(texture, destination, _color);
-        }
-
-        harness.Host.EndFrame();
-
-        CameraPass pass = packet.Passes[0];
-        RenderDrawRecord record = pass.Draws[0];
-        Assert.Equal(_overlayState, record.RenderState);
-        Assert.Equal(_color, record.Tint);
-        AssertTextureQuadMapping(harness.Primitives, record, pass, destination);
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DrawTextureWithATranslatedPerspectiveCameraStaysAffineAndIsNotCulled() {
-        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
-        RenderFramePacket packet = harness.Host.BeginFrame();
-        Texture texture = RenderingTestAssets.CreateTexture();
-        Rect destination = new(16f, 16f, 64f, 48f);
-        using (Camera camera = harness.Host.CreatePerspectiveCamera(
-            transform: new Transform(new Vector3(0f, 0f, 8f)))) {
-            camera.DrawTexture(texture, destination);
-        }
-
-        harness.Host.EndFrame();
-
-        CameraPass pass = packet.Passes[0];
-        Assert.Equal(1, pass.DrawCount);
-        RenderDrawRecord record = pass.Draws[0];
-        Matrix4x4 matrix = record.GetWorldMatrices()[0];
-        AssertAffineOverlayMatrix(matrix);
-        // NDC depth 0.5 is 2 * near in front of the camera, so the affine center is the true world
-        // point instead of a projective matrix's raw W column.
-        Assert.Equal(7.8f, matrix.M43, 1e-3f);
-        AssertTextureQuadMapping(harness.Primitives, record, pass, destination);
-
-        FramePlan plan = new BatchPlanner().Plan(packet);
-        Assert.Equal(0, plan.CulledInstances);
-        Assert.Equal(1, plan.DrawCalls);
-        Assert.Equal(1, plan.Instances);
-        Assert.Equal(2, plan.Triangles);
-        PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
-        Assert.Same(harness.Primitives.Quad.Lifetime, batch.Mesh);
-        Assert.Equal(1, batch.InstanceCount);
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DrawTextureWithARotatedTranslatedPerspectiveCameraStaysAffineAndIsNotCulled() {
-        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
-        RenderFramePacket packet = harness.Host.BeginFrame();
-        Texture texture = RenderingTestAssets.CreateTexture();
-        Rect destination = new(700f, 120f, 420f, 260f);
-        Vector3 position = new(4f, 3f, 8f);
-        Quaternion orientation = Quaternion.LookRotation(-position, Vector3.UnitY);
-        using (Camera camera = harness.Host.CreatePerspectiveCamera(
-            transform: new Transform(position, orientation, Vector3.One))) {
-            camera.DrawTexture(texture, destination);
-        }
-
-        harness.Host.EndFrame();
-
-        CameraPass pass = packet.Passes[0];
-        Assert.Equal(1, pass.DrawCount);
-        RenderDrawRecord record = pass.Draws[0];
-        Matrix4x4 matrix = record.GetWorldMatrices()[0];
-        AssertAffineOverlayMatrix(matrix);
-        AssertTextureQuadMapping(harness.Primitives, record, pass, destination);
-
-        FramePlan plan = new BatchPlanner().Plan(packet);
-        Assert.Equal(0, plan.CulledInstances);
-        Assert.Equal(1, plan.DrawCalls);
-        Assert.Equal(1, plan.Instances);
-        Assert.Equal(2, plan.Triangles);
-        PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
-        Assert.Same(harness.Primitives.Quad.Lifetime, batch.Mesh);
-        Assert.Equal(1, batch.InstanceCount);
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task ZeroExtentsRecordNothing() {
         using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
         RenderFramePacket packet = harness.Host.BeginFrame();
@@ -688,8 +567,6 @@ public sealed class PrimitiveDrawTests {
             camera.DrawWireCube(Vector3.Zero, new Vector3(1f, 1f, 0f), _color);
             camera.DrawWireSphere(Vector3.Zero, 0f, _color);
             camera.DrawBillboard(texture, Vector3.Zero, new Vector2(0f, 1f), _color);
-            camera.DrawTexture(texture, new Rect(0f, 0f, 0f, 10f));
-            camera.DrawTexture(texture, new Rect(0f, 0f, 10f, 0f));
         }
 
         harness.Host.EndFrame();
@@ -722,10 +599,6 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawWireSphere(Vector3.Zero, -1f, _color));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => camera.DrawBillboard(texture, Vector3.Zero, new Vector2(-1f, 1f), _color));
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => camera.DrawTexture(texture, new Rect(0f, 0f, -10f, 10f)));
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => camera.DrawTexture(texture, new Rect(0f, 0f, 10f, -10f)));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -805,10 +678,6 @@ public sealed class PrimitiveDrawTests {
                 Vector3.Zero,
                 new Vector2(float.NaN, 1f),
                 _color));
-        Assert.Throws<ArgumentException>(
-            () => camera.DrawTexture(texture, new Rect(float.NaN, 0f, 1f, 1f)));
-        Assert.Throws<ArgumentException>(
-            () => camera.DrawTexture(texture, new Rect(0f, 0f, float.PositiveInfinity, 1f)));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -825,15 +694,11 @@ public sealed class PrimitiveDrawTests {
 
         Assert.Throws<ArgumentNullException>(
             () => camera.DrawBillboard(null!, Vector3.Zero, Vector2.One, _color));
-        Assert.Throws<ArgumentNullException>(
-            () => camera.DrawTexture(null!, new Rect(0f, 0f, 1f, 1f)));
 
         Texture disposedTexture = RenderingTestAssets.CreateTexture();
         disposedTexture.Dispose();
         Assert.Throws<ObjectDisposedException>(
             () => camera.DrawBillboard(disposedTexture, Vector3.Zero, Vector2.One, _color));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawTexture(disposedTexture, new Rect(0f, 0f, 1f, 1f)));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -862,7 +727,6 @@ public sealed class PrimitiveDrawTests {
     public async Task MissingPrimitiveAssetsThrowInvalidOperationException() {
         using CameraTestHost host = new();
         host.BeginFrame();
-        Texture texture = RenderingTestAssets.CreateTexture();
         using Camera camera = host.CreatePerspectiveCamera();
 
         InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
@@ -870,8 +734,6 @@ public sealed class PrimitiveDrawTests {
         Assert.Contains("PrimitiveAssets", thrown.Message, StringComparison.Ordinal);
         Assert.Throws<InvalidOperationException>(
             () => camera.DrawLine(Vector3.Zero, Vector3.UnitX, _color));
-        Assert.Throws<InvalidOperationException>(
-            () => camera.DrawTexture(texture, new Rect(0f, 0f, 1f, 1f)));
 
         camera.Dispose();
         host.EndFrame();
@@ -902,8 +764,6 @@ public sealed class PrimitiveDrawTests {
         Assert.Throws<ObjectDisposedException>(() => camera.DrawWireSphere(Vector3.Zero, 1f, _color));
         Assert.Throws<ObjectDisposedException>(
             () => camera.DrawBillboard(texture, Vector3.Zero, Vector2.One, _color));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawTexture(texture, new Rect(0f, 0f, 1f, 1f)));
 
         harness.Host.EndFrame();
     }
@@ -1021,79 +881,11 @@ public sealed class PrimitiveDrawTests {
         Assert.Equal(8, plan.Passes[0].Batches[1].InstanceCount);
     }
 
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BillboardAndTextureOverlaysDoNotBatchTogether() {
-        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
-        RenderFramePacket packet = harness.Host.BeginFrame();
-        Texture texture = RenderingTestAssets.CreateTexture();
-        Rect destination = new(100f, 50f, 320f, 180f);
-        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
-            camera.DrawBillboard(texture, new Vector3(0f, 0f, -5f), new Vector2(2f, 2f), _color);
-            camera.DrawTexture(texture, destination);
-        }
-
-        harness.Host.EndFrame();
-
-        FramePlan plan = new BatchPlanner().Plan(packet);
-        Assert.Equal(2, plan.DrawCalls);
-        Assert.Equal(2, plan.Instances);
-        Assert.Equal(2, plan.Passes[0].Batches.Count);
-        Assert.Contains(plan.Passes[0].Batches, batch => batch.RenderState == RenderState.AlphaBlend);
-        Assert.Contains(plan.Passes[0].Batches, batch => batch.RenderState == _overlayState);
-        foreach (PlannedBatch batch in plan.Passes[0].Batches) {
-            Assert.Same(harness.Primitives.Quad.Lifetime, batch.Mesh);
-            Assert.Equal(1, batch.InstanceCount);
-        }
-    }
-
     private static Vector3 Axis(Matrix4x4 matrix, int index) => index switch {
         0 => new Vector3(matrix.M11, matrix.M12, matrix.M13),
         1 => new Vector3(matrix.M21, matrix.M22, matrix.M23),
         _ => new Vector3(matrix.M31, matrix.M32, matrix.M33),
     };
-
-    private static Vector3 ProjectToNdc(Matrix4x4 world, Matrix4x4 viewProjection, Vector3 local) {
-        Vector4 clip = Vector4.Transform(
-            Vector4.Transform(new Vector4(local, 1f), world),
-            viewProjection);
-        Assert.True(clip.W > 0f);
-        return new Vector3(clip.X / clip.W, clip.Y / clip.W, clip.Z / clip.W);
-    }
-
-    private static void AssertTextureQuadMapping(
-        PrimitiveAssets primitives,
-        RenderDrawRecord record,
-        CameraPass pass,
-        Rect destination) {
-        Matrix4x4 matrix = record.GetWorldMatrices()[0];
-        ReadOnlySpan<Vertex> vertices = primitives.Quad.Vertices.Span;
-        foreach (Vertex vertex in vertices) {
-            Vector3 ndc = ProjectToNdc(matrix, pass.ViewProjection, vertex.Position);
-            Assert.Equal(0.5f, ndc.Z, 1e-3f);
-            Vector2 pixel = new(
-                ((ndc.X * 0.5f) + 0.5f) * pass.ViewportWidth,
-                ((ndc.Y * 0.5f) + 0.5f) * pass.ViewportHeight);
-            Vector2 expected = new(
-                destination.X + (vertex.Uv.X * destination.Width),
-                destination.Y + (vertex.Uv.Y * destination.Height));
-            AssertVector2(expected, pixel, PIXEL_TOLERANCE);
-            if (vertex.Uv == Vector2.Zero) {
-                // The quad's top-left UV must land on the destination top-left corner.
-                Assert.Equal(destination.X, pixel.X, PIXEL_TOLERANCE);
-                Assert.Equal(destination.Y, pixel.Y, PIXEL_TOLERANCE);
-            }
-        }
-    }
-
-    private static void AssertAffineOverlayMatrix(Matrix4x4 matrix) {
-        // A projective overlay matrix has a non-trivial W column; the batcher's affine bounds and
-        // depth math ignore it, so the transform must keep the last column at (0, 0, 0, 1).
-        Assert.Equal(0f, matrix.M14);
-        Assert.Equal(0f, matrix.M24);
-        Assert.Equal(0f, matrix.M34);
-        Assert.Equal(1f, matrix.M44);
-    }
 
     private static void AssertWorldBounds(
         BoundingBox meshBounds,
@@ -1126,11 +918,6 @@ public sealed class PrimitiveDrawTests {
         Assert.Equal(expected.X, actual.X, tolerance);
         Assert.Equal(expected.Y, actual.Y, tolerance);
         Assert.Equal(expected.Z, actual.Z, tolerance);
-    }
-
-    private static void AssertVector2(Vector2 expected, Vector2 actual, float tolerance) {
-        Assert.Equal(expected.X, actual.X, tolerance);
-        Assert.Equal(expected.Y, actual.Y, tolerance);
     }
 
     /// <summary>

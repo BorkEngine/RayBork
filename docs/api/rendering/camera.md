@@ -62,7 +62,6 @@ public sealed class Camera : IDisposable {
         Vector2 size,
         Color color,
         bool faceCamera = true);
-    public void DrawTexture(Texture texture, Rect destination, Color? tint = null);
     public void DrawText(
         Font font,
         ReadOnlySpan<char> text,
@@ -109,13 +108,13 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
   is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
-> **M5 subset.** `Camera` ships all 13 primitive helpers: `DrawLine`, `DrawLines`, `DrawPoint`,
+> **M5 subset.** `Camera` ships all 12 primitive helpers: `DrawLine`, `DrawLines`, `DrawPoint`,
 > `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`,
-> `DrawWireSphere`, `DrawBillboard`, and the screen-space `DrawTexture`. Their geometry, programs,
-> render states, validation, and batching are specified in §7.9. The `Target` property and the
-> `target` parameter arrive with `RenderTexture` in M8; `DrawText` and `DrawTextBillboard` arrive with
-> runtime text in M6. The camera always records into the app's linear HDR scene target, and the
-> present pass applies AgX after all cameras finish.
+> `DrawWireSphere`, and `DrawBillboard`. Their geometry, programs, render states, validation, and
+> batching are specified in §7.9. The `Target` property and the `target` parameter arrive with
+> `RenderTexture` in M8; `DrawText` and `DrawTextBillboard` arrive with runtime text in M6. The camera
+> always records into the app's linear HDR scene target, and the present pass applies AgX after all
+> cameras finish.
 
 Properties:
 
@@ -179,28 +178,16 @@ this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of
 `ModelPart.RenderState`.
 
 **Primitive helpers.** `DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`,
-`DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`, and
-`DrawTexture` record engine primitive meshes through the built-in `/shaders/primitive` and
-`/shaders/mesh` programs; §7.9 has the exact geometry, program, render-state, and batching contract.
-All 13 are tick-thread only and validate before recording: a non-finite argument is
-`ArgumentException`, a negative extent, radius, height, width, or point size is
-`ArgumentOutOfRangeException`, an exactly zero one records nothing, `sides < 3`, `slices < 1`, and
-`spacing <= 0` are `ArgumentOutOfRangeException`, a null texture is `ArgumentNullException`, and a
-disposed camera, texture, or primitive asset is `ObjectDisposedException`. Colors are linear; each
-helper writes its color as the per-instance tint. Lines are one pixel wide, wire shapes are line
-geometry, and `DrawCylinder` records two instanced draws.
-
-`DrawTexture` takes its destination in render pixels relative to the camera viewport, top-left
-origin, Y downward — the `WorldToScreen`/`ScreenToWorldRay` space. The helper unprojects the
-destination rectangle's corners at NDC depth `0.5` and maps the engine unit quad onto the resulting
-world-space parallelogram with an affine matrix (zero projective column, `M44 = 1`), so the
-batcher's transformed bounds and its translation depth are the quad's real ones. The projected
-rectangle is pixel-exact for perspective and orthographic cameras, the quad's top-left UV lands on
-the destination top-left, and the overlay is not frustum-culled for a translated or rotated
-perspective camera. It is an alpha-blended overlay with `DepthTest.Always`, no depth write, and
-`Cull.None`, so it draws over scene geometry. A singular view-projection matrix, a corner that
-cannot be unprojected, or a non-finite or degenerate world-space quad is
-`InvalidOperationException`.
+`DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, and `DrawBillboard` record
+engine primitive meshes through the built-in `/shaders/primitive` and `/shaders/mesh` programs; §7.9
+has the exact geometry, program, render-state, and batching contract. All 12 are tick-thread only and
+validate before recording: a non-finite argument is `ArgumentException`, a negative extent, radius,
+height, width, or point size is `ArgumentOutOfRangeException`, an exactly zero one records nothing,
+`sides < 3`, `slices < 1`, and `spacing <= 0` are `ArgumentOutOfRangeException`, a null texture is
+`ArgumentNullException`, and a disposed camera, texture, or primitive asset is
+`ObjectDisposedException`. Colors are linear; each helper writes its color as the per-instance tint.
+Lines are one pixel wide, wire shapes are line geometry, and `DrawCylinder` records two instanced
+draws.
 
 **Error model.**
 

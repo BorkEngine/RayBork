@@ -479,7 +479,7 @@ device selection instead of clamping silently.
 acceleration structure with its baked payload, the combined HDR AgX rework with runtime tone mapping
 and sRGB color helpers, and the restored Bork2d/Unity color preset set:
 
-- **Primitive helpers and representation.** `Camera` ships 13 helpers. `DrawLine` maps the engine's
+- **Primitive helpers and representation.** `Camera` ships 12 helpers. `DrawLine` maps the engine's
   unit line mesh from `(0,0,0)`–`(1,0,0)` to the segment. `DrawLines` records one instance per
   non-zero consecutive point pair, so a polyline of `N` points records `N - 1` segments. `DrawPoint`
   is a camera-facing quad of `size` world units, which avoids Vulkan point-size limits.
@@ -491,24 +491,23 @@ and sRGB color helpers, and the restored Bork2d/Unity color preset set:
   along world `+Y`; `DrawPlane` scales the `XZ` unit plane, whose front faces world `+Y`.
   `DrawWireSphere` is three great circles of line geometry. `DrawBillboard` is a centered quad that
   faces the camera, or keeps world up and the camera yaw when `faceCamera` is `false`. Every helper
-  but `DrawTexture` works in world space; each mesh is a unit reference so the instance transform
-  carries the shape. The eight meshes are engine-owned, built once before `IGame.Setup` through the
+  works in world space; each mesh is a unit reference so the instance transform carries the shape.
+  The eight meshes are engine-owned, built once before `IGame.Setup` through the
   procedural GPU bridge from deterministic CPU geometry, and are not public assets.
 - **Programs and render states.** Shapes and lines record against the built-in
   `/shaders/primitive` program, which consumes vertex position and linear color only and has no
   uniforms or textures; its vertex stage multiplies the vertex color by the per-instance tint and
   its fragment stage writes that color. Its default state is opaque, back-face culling,
-  `greater_equal`, depth write. Billboards and textured quads use the built-in `/shaders/mesh`
-  program with state overrides: billboards use `RenderState.AlphaBlend`, and `DrawTexture` uses alpha
-  blending with `Cull.None`, `DepthTest.Always`, and no depth write. The engine material's texture
-  binding is set only around the recorded call and cleared immediately afterwards, and the frame
+  `greater_equal`, depth write. The billboard uses the built-in `/shaders/mesh` program with the
+  `RenderState.AlphaBlend` state override. The engine material's texture binding is set only around
+  the recorded call and cleared immediately afterwards, and the frame
   record retains the texture. `EngineDefaults` is unchanged: it still exposes only
   `CreateMeshShader`, `White`, and `Error`. `/shaders/primitive` is an ordinary built-in shader
   entry, so a game can load a material over it by path for its own vertex-color meshes; the primitive
   meshes have no public accessor.
 - **Validation.** A non-finite numeric argument throws `ArgumentException`; a negative extent,
   radius, height, width, or point size throws `ArgumentOutOfRangeException`; an exactly zero extent,
-  radius, height, segment length, or destination width/height records nothing. `sides < 3`,
+  radius, height, or segment length records nothing. `sides < 3`,
   `slices < 1`, and `spacing <= 0` throw `ArgumentOutOfRangeException`, and no helper substitutes a
   default tessellation. A null texture is `ArgumentNullException`; a disposed texture, camera, or
   primitive asset is `ObjectDisposedException`. A missing primitive-asset set is
@@ -521,9 +520,8 @@ and sRGB color helpers, and the restored Bork2d/Unity color preset set:
   Line topology contributes zero triangles; `DrawPoint` is a camera-facing quad, so it contributes
   the quad's two triangles. `DrawCylinder` is two instanced draws (side quads and cap triangles)
   because the two shapes are different meshes. `DrawLines` and `DrawGrid` are one instanced line draw
-  each. Billboard and overlay render states differ from each other and from the primitive program's
-  state, so they never merge with one another or with shape draws; reusing the same program does not
-  merge different meshes.
+  each. The billboard's render state differs from the primitive program's state, so it never merges
+  with shape draws; reusing the same program does not merge different meshes.
 - **Collision contract.** `Collision.CheckSpheres`, `CheckBoxes`, and `CheckBoxSphere` are inclusive
   and allocation-free: touching counts, a zero radius is a point, and a negative radius or a NaN
   input reports no collision. Ray queries return the nearest `t >= 0`; an origin inside a sphere or
@@ -569,21 +567,6 @@ and sRGB color helpers, and the restored Bork2d/Unity color preset set:
   `Mesh.HasCollisionAcceleration`. The method and the build accept triangle topologies only and
   throw `NotSupportedException` otherwise. A snapshot with no non-degenerate triangle builds without
   a structure, and a failed or canceled build creates no asset and leaves the builder reusable.
-- **Overlay matrix and screen-space contract.** `DrawTexture` takes its destination rectangle in
-  render pixels relative to the camera viewport, with a top-left origin and Y increasing downward.
-  The helper computes the destination rectangle's NDC corners at depth `0.5`, unprojects each
-  through the inverse view-projection matrix with the homogeneous divide, and builds an affine
-  world-space matrix that maps the engine unit quad onto that unprojected parallelogram: the
-  translation is the quad's world center, the axes are the unprojected edges, and the third axis is
-  their cross-product normal. The matrix has a zero projective column (`M14 = M24 = M34 = 0`,
-  `M44 = 1`), which matters because the batcher's `Vector3.Transform` bounds and its raw
-  translation depth assume an affine instance matrix: the overlay's AABB is the real world-space
-  quad in front of the camera, so the instance is not frustum-culled for a translated or rotated
-  perspective camera. The projected rectangle is pixel-exact for perspective and orthographic
-  cameras, and the quad's top-left UV lands on the destination top-left corner. The recorded state
-  is an overlay: alpha blended, no depth write, `DepthTest.Always`, and `Cull.None`, so it covers
-  scene geometry and is not covered by it. The helper retains the texture for the frame and leaves
-  the engine material's binding empty.
 - **HDR AgX rework (merged into M5).** M5 replaces the M2/M4 AgX and its separate paper-white
   highlight stage with Godot 4.7's HDR-aware AgX. The present fragment shader applies the combined
   Rec.709 to Rec.2020 and AgX inset matrix, the allenwp curve (crossover `0.18`; `toe_a`, `slope`,
@@ -896,7 +879,7 @@ The matrix is the scope contract.
 | Gamepad | Covered | M1, M9 | Basic in M1; hotplug/rumble in M9. |
 | Touch | Post | — | Post-1.0. |
 | Text/fonts | Covered | M6 | Runtime MSDF; Latin-style shaping; no bidi/complex scripts. |
-| Textures | Covered | M3, M5, M8 | Loaded textures, screen-space `DrawTexture` quads, and HDR/MSAA render targets. |
+| Textures | Covered | M3, M5, M8 | Loaded textures, billboard texture sampling, and HDR/MSAA render targets. |
 | Images | Partial | M3 | Bake decodes; no runtime image manipulation API. |
 | Models | Covered | M4 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes. |
 | Custom data | Covered | M3 | TOML data with `[GenerateShape]`; `WithAssetType<T>` then `Load<T>`. |
@@ -952,9 +935,9 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   `Camera` helpers over the real built-in primitive assets and submits them through the Vulkan
   backend. It asserts validation-layer cleanliness, draw/instance/triangle statistics and the plan's
   topology, and single-pixel linear scene-target probes for a one-pixel line row, solid-shape tint,
-  plane back-face culling, triangle winding versus culling, billboard and screen-space quad
-  orientation for perspective and orthographic cameras, and overlay-versus-depth ordering. The
-  collision queries and the BVH are covered by deterministic unit tests, including
+  plane back-face culling, triangle winding versus culling, billboard texture sampling, and billboard
+  occlusion behind opaque geometry. The collision queries and the BVH are covered by deterministic
+  unit tests, including
   accelerated-versus-brute-force equivalence, and the baked payload by codec and loader tests.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

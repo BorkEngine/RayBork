@@ -92,23 +92,20 @@ engine assets with no public accessor, built once before `IGame.Setup`.
 | `DrawWireCube` | Engine wire cube | The twelve edges as line geometry; no polygon mode. |
 | `DrawWireSphere` | Engine wire sphere | Three great circles as line geometry. |
 | `DrawBillboard` | Engine quad | Centered textured quad. `faceCamera` true faces along the camera's view direction; false keeps world up and applies only the camera's yaw. |
-| `DrawTexture` | Engine quad | Screen-space quad over the camera viewport, in render pixels. |
 
 **Programs and render states.** Shapes and lines record against the built-in `/shaders/primitive`
 program: vertex position at location 0, linear vertex color at location 6, no uniforms and no
 textures, opaque blending, back-face culling, `greater_equal` depth test, depth write. Its vertex
 stage multiplies the vertex color by the per-instance tint and its fragment stage writes that color.
-Billboards and textured quads use the built-in `/shaders/mesh` program with a state override:
-billboards record `RenderState.AlphaBlend`, and `DrawTexture` records alpha blending with
-`Cull.None`, `DepthTest.Always`, and no depth write. The batch key includes the effective render
-state, so a billboard record and an overlay record never merge with a shape draw or with each other.
+The billboard uses the built-in `/shaders/mesh` program with the `RenderState.AlphaBlend` state
+override. The batch key includes the effective render state, so a billboard record never merges with
+a shape draw.
 
 **Colors and tint.** `color` is a linear `Color`; no conversion is applied at draw time. A
 display-encoded authoring color converts once with `Color.FromSrgb` or `Color.FromSrgbBytes`. The
 engine meshes carry opaque white vertex colors, so the helper color is the output color, recorded as
-the per-instance tint `rbInstance.Color`. `DrawBillboard` takes it as its `color` argument and
-`DrawTexture` takes it as the optional `tint`, which defaults to opaque white. A custom shader sees
-the same field and must apply it itself.
+the per-instance tint `rbInstance.Color`. `DrawBillboard` takes it as its `color` argument. A custom
+shader sees the same field and must apply it itself.
 
 **Instance composition.** Each helper records one world matrix per instance that maps the unit mesh
 into world space: scale and translation for the cube, sphere, plane, wire cube, and wire sphere; a
@@ -123,16 +120,12 @@ culling.
 
 - A non-finite numeric argument throws `ArgumentException`.
 - A negative extent, radius, height, width, or point size throws `ArgumentOutOfRangeException`.
-- An exactly zero extent, radius, height, segment length, or destination width/height records
-  nothing.
+- An exactly zero extent, radius, height, or segment length records nothing.
 - `sides < 3`, `slices < 1`, and `spacing <= 0` throw `ArgumentOutOfRangeException`; no helper
   substitutes a default tessellation.
 - A `null` texture throws `ArgumentNullException`; a disposed texture is `ObjectDisposedException`.
 - A camera whose app has no primitive assets attached throws `InvalidOperationException`. Game code
   does not hit this case: the app attaches the primitive assets before `IGame.Setup`.
-- For `DrawTexture` only, a singular camera view-projection matrix, a destination corner that cannot
-  be unprojected, or a non-finite or degenerate world-space quad also throws
-  `InvalidOperationException`.
 
 Validation runs before anything is retained or recorded, so a rejected call leaves the frame packet
 and its retention set untouched.
@@ -150,27 +143,11 @@ and never requests the `wideLines` device feature, so v1 has no thick-line optio
 width argument. Wire shapes are line geometry, not polygon-mode rasterization; the engine never
 changes the polygon mode.
 
-**Textured quads.** `DrawBillboard` and `DrawTexture` sample the texture through the engine
-material's `mainTexture` binding. That material is shared by every billboard and textured quad, so
-the binding is set immediately before the draw is recorded and cleared immediately afterwards. The
-recorded frame retains the texture until the render thread releases the slot, so the shared
-material never keeps a game texture and a texture disposed after the call stays alive for the
-recorded frame. To shade a quad with a custom material, draw a quad mesh instead.
-
-**`DrawTexture` coordinate space.** `destination` is in render pixels relative to the camera
-viewport, with a top-left origin and Y increasing downward: the same space as
-`Camera.WorldToScreen` and `ScreenToWorldRay`, not window coordinates. The quad's top-left UV lands
-on the destination top-left corner, the destination size maps to the quad size, and the result is
-pixel-exact for perspective and orthographic cameras. The helper unprojects the destination
-rectangle's NDC corners at depth `0.5` through the inverse view-projection matrix with the
-homogeneous divide, then builds an affine world-space matrix that maps the engine unit quad onto
-that unprojected parallelogram: the translation is the quad's world center, the axes are the
-unprojected edges, and the third axis is their cross-product normal. The matrix has a zero
-projective column (`M14 = M24 = M34 = 0`, `M44 = 1`), so the batcher's `Vector3.Transform` bounds and
-raw translation depth are the quad's real world-space bounds and center. The overlay's AABB
-therefore lies in front of the camera, and the instance is not frustum-culled for a translated or
-rotated perspective camera. The recorded state is an overlay: `DepthTest.Always`, no depth write,
-and `Cull.None`, so it draws over scene geometry regardless of depth. A destination width or height
-of zero records nothing.
+**Textured quads.** `DrawBillboard` samples the texture through the engine material's `mainTexture`
+binding. That material is shared by every billboard, so the binding is set immediately before the
+draw is recorded and cleared immediately afterwards. The recorded frame retains the texture until
+the render thread releases the slot, so the shared material never keeps a game texture and a
+texture disposed after the call stays alive for the recorded frame. To shade a quad with a custom
+material, draw a quad mesh instead.
 
 `DrawText` and `DrawTextBillboard` are M6 and are not part of this surface.

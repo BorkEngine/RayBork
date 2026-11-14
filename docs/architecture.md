@@ -12,7 +12,7 @@ reference counting, the render-thread GPU upload bridge, the custom-data pipelin
 and the build-time built-in pack. M4 adds the frame-scoped camera and draw API, `Model` loading and
 parts, the shader ABI and uniform cursor, the bindless texture table, the geometry pipeline, sampler
 and batch caches, the batch planner with frustum culling and sorting, the geometry draw stats, the
-HDR AgX present path, and the Castle AOT gate. M5 adds the 13 `Camera` primitive helpers, the
+HDR AgX present path, and the Castle AOT gate. M5 adds the 12 `Camera` primitive helpers, the
 engine-owned primitive meshes and the built-in `/shaders/primitive` program, `Collision` and
 `RayCollision` with the ray-mesh BVH, the procedural collision opt-in, the baked `RBVC` collision
 payloads, the HDR-aware AgX rework with runtime tone mapping, the sRGB color helpers, and the
@@ -1024,11 +1024,11 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   over the real built-in primitive assets and submit through the Vulkan backend, and the tests
   assert validation cleanliness, draw/instance/triangle statistics and plan topology, and
   single-pixel linear scene-target probes for a one-pixel line row, a solid-shape tint, plane
-  back-face culling, triangle winding versus culling, billboard and screen-space quad orientation
-  for perspective and orthographic cameras, and overlay-versus-depth ordering. The helpers are also
-  covered by unit tests for recorded matrices, validation, batching, and retention, and the
-  collision surface by deterministic unit tests for the checks, ray queries, BVH invariants, and
-  accelerated-versus-brute-force equivalence, plus pack/codec and loader tests for the baked payload.
+  back-face culling, triangle winding versus culling, billboard texture sampling, and billboard
+  occlusion behind opaque geometry. The helpers are also covered by unit tests for recorded matrices,
+  validation, batching, and retention, and the collision surface by deterministic unit tests for the
+  checks, ray queries, BVH invariants, and accelerated-versus-brute-force equivalence, plus
+  pack/codec and loader tests for the baked payload.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

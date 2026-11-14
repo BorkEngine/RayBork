@@ -11,7 +11,7 @@ and the build-time built-in pack. M4 ships the core 3D renderer: `Camera`, `Came
 `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, the camera draw methods,
 `Shader.SetUniform`/`ResetUniforms`, and the shader ABI, backed by the bindless texture table,
 instanced batches, pipeline and sampler caches, and the HDR AgX present path. M5 ships the
-primitive surface and the collision queries: the 13 `Camera` helpers, the engine-owned primitive
+primitive surface and the collision queries: the 12 `Camera` helpers, the engine-owned primitive
 meshes and the built-in `/shaders/primitive` program, `Collision`, `RayCollision`,
 `MeshBuilder.GenerateCollisions`, `Mesh.HasCollisionAcceleration`, and the baked `RBVC` collision
 payload. M5 also ships the runtime tone-mapping surface: `TonemappingSettings` behind
@@ -164,7 +164,7 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `IAssetCatalog`, `IAsset`, `Mesh`, `Texture`, `Shader`, `Vertex`, `MeshBuilder`, `MeshNormalMode`, `TextureBuilder`, the texture/mesh enums, `RenderState` and the shader metadata types, and the asset exceptions | M3 |
 | `WithAssetsPack`, `WithAssetsPacks`, `WithAssetType<T>`, `EngineContext.Assets`, `EngineContext.CreateMeshBuilder`, and `EngineContext.CreateTextureBuilder` | M3 |
 | `Camera`, `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, `Shader.SetUniform`, `ResetUniforms`, and the draw API | M4 |
-| `Camera` primitive, line, billboard, and screen-space texture helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`, `DrawTexture`) | M5 |
+| `Camera` primitive, line, and billboard helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, `DrawBillboard`) | M5 |
 | `Collision` and `RayCollision` | M5 |
 | `MeshBuilder.GenerateCollisions` and `Mesh.HasCollisionAcceleration` | M5 |
 | `TonemappingSettings`, `EngineContext.Tonemapping`, `WithAgxWhite`, and `WithAgxContrast` | M5 |
@@ -210,26 +210,25 @@ shader program and white/error textures. `Camera` ships as a frame-scoped record
 engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
 write that material's cursor. `Load<Shader>` returns a new independent material over a cached
 internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
-no `Font`, and no text draw helpers (`DrawText` arrives in M6); the primitive, line, billboard, and
-screen-space texture helpers ship in M5. Clear control is per camera:
+no `Font`, and no text draw helpers (`DrawText` arrives in M6); the primitive, line, and billboard
+helpers ship in M5. Clear control is per camera:
 `RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
 `ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
 `InvalidOperationException` naming it, and the frame is not published.
 
-**M5 subset.** `Camera` ships the 13 primitive helpers listed in §7.9: the world-space shape, line,
-and billboard draws plus the screen-space `DrawTexture`. They draw engine-owned primitive meshes
-through the built-in `/shaders/primitive` program (vertex position and color, no uniforms or
-textures) and through the built-in `/shaders/mesh` program with alpha/overlay render states for
-billboards and textured quads. The meshes and the primitive program are internal engine assets, and
-`EngineDefaults` still exposes only `CreateMeshShader`, `White`, and `Error`. `Collision` and
+**M5 subset.** `Camera` ships the 12 primitive helpers listed in §7.9: the world-space shape, line,
+and billboard draws. They draw engine-owned primitive meshes through the built-in
+`/shaders/primitive` program (vertex position and color, no uniforms or textures), and the billboard
+draws through the built-in `/shaders/mesh` program with an alpha render state. The meshes and the
+primitive program are internal engine assets, and `EngineDefaults` still exposes only
+`CreateMeshShader`, `White`, and `Error`. `Collision` and
 `RayCollision` ship as allocation-free, thread-safe queries over `Ray`, `BoundingBox`, and `Plane`;
 `GetRayMesh` accepts triangle-list and triangle-strip meshes, maps the hit through a world transform,
 and traverses an immutable structure when the mesh has one. `MeshBuilder.GenerateCollisions()` opts a
 procedural mesh into that structure before `BuildAsync`, and `Mesh.HasCollisionAcceleration` reports
 whether a mesh has one. A mesh loaded from a pack gets one when the bake wrote the `RBVC` v1
 collision payload that its descriptor names; a pack baked before the descriptor member existed loads
-with no structure and brute-forces the retained triangles. `DrawTexture` takes render pixels relative
-to the camera viewport and is an alpha-blended overlay with no depth write. `EngineContext.Tonemapping`
+with no structure and brute-forces the retained triangles. `EngineContext.Tonemapping`
 exposes the app-lifetime `TonemappingSettings`: `Exposure` in stops, `AgxWhite` (default `16.29`),
 and `AgxContrast` (default `1.25`), all initialized from the builder and mutable from `Setup`,
 `Tick`, and `Shutdown` on the tick thread. The present pass is frame-global, and the tick thread
