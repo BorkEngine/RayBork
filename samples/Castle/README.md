@@ -2,9 +2,10 @@
 
 `Castle` is a small RayBork sample: an orbitable castle scene with a model, a diffuse texture, an
 orbital perspective camera, and the reference XZ grid. It loads the model and texture, binds the
-texture on the model's materials, draws the castle solid and the grid every tick, and outlines the
-castle with a surface hit point when the pointer is over it. The source is kept small and commented so
-the scene can be read and adapted as a starting point.
+texture on the model's materials, draws the castle solid and the grid every tick, outlines the castle
+with a surface hit point when the pointer is over it, and draws a small FPS and render-statistics line
+at the top-left of the view. The source is kept small and commented so the scene can be read and
+adapted as a starting point.
 
 `samples/PrimitiveGallery` is the M5 Native AOT gate. This sample remains a buildable and publishable
 example, and it contains no test-only logic: it opens the window, draws the scene, and exits cleanly.
@@ -62,12 +63,14 @@ preset: the Bork2d/Unity sRGB `#F5F5F5`, stored linear as `0.913099` per channel
 ## Scene
 
 Each tick records one perspective pass: the castle model with its built-in mesh material, the
-reference grid under it, then the hover overlays when the pointer is over the castle:
+reference grid under it, the hover overlays when the pointer is over the castle, then the status
+overlay:
 
 ```csharp
 camera.DrawModel(_model!, Transform.Identity, Color.White);
 camera.DrawGrid(GRID_SLICES, GRID_SPACING, Color.Gray);
 DrawHoverOverlay(camera, context);
+DrawStatusOverlay(camera, context);
 ```
 
 `GRID_SLICES` is `20` and `GRID_SPACING` is `10f`, so the grid spans 200 world units per axis in 20
@@ -113,11 +116,25 @@ above the battlements or the open courtyard. The triangle cast reports no hit th
 draws only the box. Both overlays are ordinary depth-tested draws in the same opaque pass as the
 model, so geometry in front of them occludes them.
 
-The sample's own per-frame code does not allocate: the bounds are computed once, the box and mesh
-queries are allocation-free static math, and the part loop is indexed so the `IReadOnlyList<ModelPart>`
-enumerator is not allocated. The camera's draw helpers add the engine's draw records, and the bundled
-pack's castle mesh carries the `RBVC` collision structure, so `GetRayMesh` traverses it instead of
-testing every triangle.
+### Status overlay
+
+`DrawStatusOverlay` records one more world-space draw: a `14`-pixel line in the built-in Fira Sans font
+showing FPS, frame time, draw calls, and instances. Screen-space text arrives in M7, so the line is
+text on a camera-facing plane one unit in front of the camera rather than an orthographic HUD. At that
+distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so the text's em size is
+`14 * worldPerPixel`. The camera's right and up axes place the layout origin at the top-left corner,
+inset by an 8-pixel margin, and the transform reuses the camera rotation: the line stays upright,
+faces the camera, and remains fixed to the view as the camera orbits or the window resizes.
+
+This is the `DrawFPS`-style overlay the sample deferred since M4, when runtime text did not exist. The
+line is `Color.Black` against the `Color.WhiteSmoke` background. It is still depth-tested world-space
+text, so geometry closer than one unit to the camera can occlude it.
+
+The sample's hover math does not allocate: the bounds are computed once, the box and mesh queries are
+allocation-free static math, and the part loop is indexed so the `IReadOnlyList<ModelPart>` enumerator
+is not allocated. The camera's draw helpers add the engine's draw records, and the bundled pack's
+castle mesh carries the `RBVC` collision structure, so `GetRayMesh` traverses it instead of testing
+every triangle. The status line formats one small invariant string per tick.
 
 ## Build and run
 
@@ -162,7 +179,9 @@ The sample does not implement these features yet:
 - **Drag-and-drop of a new model or texture.** Window file-drop events are post-1.0.
 - **Click selection.** Hover reports the nearest surface point, but a click has no action and the
   sample keeps no selection state.
-- **`DrawText` and `DrawFPS`.** Runtime text and font/MSDF support arrive in M6.
+- **Screen-space HUD text.** The status overlay is world-space text pinned one unit in front of the
+  camera. M7 adds the orthographic screen-space path and the real `DrawFPS`-style HUD; runtime text
+  and MSDF arrived in M6, which is what makes the current overlay possible.
 
 The sample cannot run with SDL's dummy video driver because the Vulkan backend needs a real window
 surface; run it on a desktop session or under WSLg.
