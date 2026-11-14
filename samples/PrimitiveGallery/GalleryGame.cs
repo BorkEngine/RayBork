@@ -5,12 +5,15 @@ namespace PrimitiveGallery;
 
 /// <summary>
 /// A small orbitable gallery that draws every M5 primitive helper in one camera pass: a reference
-/// grid, two rows of solid and wire shapes, and a billboard.
+/// grid, two rows of solid, wire, line, and textured shapes, and the family pairs that show the
+/// completed M5 overloads.
 /// </summary>
 /// <remarks>
 /// The world helpers run along the initial view's horizontal axis, so the two rows read left to right
-/// before the first orbit. The scene is procedural: the only texture is built in <see cref="Setup"/>
-/// and disposed in <see cref="Shutdown"/>, so the sample needs no assets executable or pack.
+/// before the first orbit. The lower row pairs each solid shape with its wire or tessellated family
+/// form, and the upper row groups the wire, line, curve, and billboard helpers. The scene is
+/// procedural: the only texture is built in <see cref="Setup"/> and disposed in <see cref="Shutdown"/>,
+/// so the sample needs no assets executable or pack.
 /// </remarks>
 internal sealed class GalleryGame : IGame {
     private const float FIELD_OF_VIEW_DEGREES = 45f;
@@ -29,6 +32,7 @@ internal sealed class GalleryGame : IGame {
 
     private readonly int _frameLimit;
     private readonly Vector3 _galleryRight;
+    private readonly Vector3 _galleryView;
 
     private Texture? _texture;
     private float _yawDegrees;
@@ -53,9 +57,11 @@ internal sealed class GalleryGame : IGame {
         _yawDegrees = MathF.IEEERemainder(angles.Y, 360f);
         _pitchDegrees = MathF.IEEERemainder(-angles.X, 360f);
 
-        // The helpers are laid out along the initial view's horizontal axis. Deriving the axis from
-        // the starting camera keeps the two rows reading left to right before the first orbit.
+        // The helpers are laid out along the initial view's horizontal axis. Deriving the axes from
+        // the starting camera keeps the two rows reading left to right before the first orbit; the
+        // view axis also rolls the one transformed shape so its placement is visible.
         Vector3 viewDirection = Vector3.Normalize(_orbitCenter - _initialCameraPosition);
+        _galleryView = viewDirection;
         _galleryRight = Vector3.Normalize(Vector3.Cross(viewDirection, Vector3.UnitY));
     }
 
@@ -131,38 +137,119 @@ internal sealed class GalleryGame : IGame {
         // reference. It is always centered on the world origin.
         camera.DrawGrid(slices: 20, spacing: 1f, Color.Gray5);
 
-        // The lower row holds the solid helpers. Each one starts on or just above the grid.
-        camera.DrawCube(Station(-8.5f, 0.8f), new Vector3(1.6f), Color.LightSeaGreen);
-        camera.DrawSphere(Station(-5.1f, 0.8f), 0.8f, Color.RoyalBlue);
-        camera.DrawCylinder(Station(-1.7f, 0f), 0.7f, 1.8f, Color.Purple);
+        // The lower row is six stations: the first five pair a solid helper with the wire,
+        // tessellated, or strip form of the same family, and the last puts the point above the
+        // plane.
+        camera.DrawCube(Station(-9.1f, 0.55f), 1.1f, 1.1f, 1.1f, Color.LightSeaGreen);
+        camera.DrawWireCube(Station(-7.9f, 0.55f), 1.1f, 1.1f, 1.1f, Color.Orange);
 
-        // The triangle is built in the row's vertical plane and faces the initial camera, so its
-        // front face and counter-clockwise winding are visible from the starting view.
-        Vector3 triangleCenter = Station(1.7f, 0.95f);
-        Vector3 triangleHalfWidth = _galleryRight * 0.9f;
+        camera.DrawSphere(Station(-5.8f, 0.55f), 0.55f, Color.RoyalBlue);
+        camera.DrawSphere(Station(-4.4f, 0.55f), 0.55f, rings: 5, slices: 10, Color.CadetBlue);
+
+        camera.DrawCylinder(Station(-2.4f, 0f), 0.5f, 1.6f, Color.Purple);
+        // The cone is the gallery's one Transform overload: the transform position is its
+        // bottom-cap center, the roll around the view axis leans it, and the unit scale keeps the
+        // authored radii and height, so the placement contract is visible instead of hidden behind
+        // an identity transform.
+        camera.DrawCylinder(
+            new Transform(
+                Station(-1f, 0f),
+                Quaternion.CreateFromAxisAngle(_galleryView, 0.3f),
+                Vector3.One),
+            radiusTop: 0f,
+            radiusBottom: 0.5f,
+            height: 1.6f,
+            sides: 16,
+            Color.MediumOrchid);
+
+        camera.DrawCapsule(
+            Station(1.25f, 0.3f),
+            Station(1.25f, 1.5f),
+            0.3f,
+            rings: 4,
+            slices: 10,
+            Color.IndianRed);
+        camera.DrawWireCapsule(
+            Station(2.15f, 0.3f),
+            Station(2.15f, 1.5f),
+            0.3f,
+            rings: 4,
+            slices: 10,
+            Color.LightCoral);
+
+        // The triangle and the strip are built in the row's vertical plane and face the initial
+        // camera, so their front faces and counter-clockwise winding are visible from the start.
+        Vector3 triangleCenter = Station(4.45f, 0.95f);
+        Vector3 triangleHalfWidth = _galleryRight * 0.55f;
         camera.DrawTriangle(
-            triangleCenter - triangleHalfWidth - (Vector3.UnitY * 0.9f),
-            triangleCenter + triangleHalfWidth - (Vector3.UnitY * 0.9f),
-            triangleCenter + (Vector3.UnitY * 0.9f),
+            triangleCenter - triangleHalfWidth - (Vector3.UnitY * 0.75f),
+            triangleCenter + triangleHalfWidth - (Vector3.UnitY * 0.75f),
+            triangleCenter + (Vector3.UnitY * 0.75f),
             Color.LimeGreen);
 
-        camera.DrawPoint(Station(5.1f, 1f), Color.Yellow, size: 0.7f);
-        camera.DrawPlane(Station(8.5f, 0.05f), new Vector2(2.6f, 2.6f), Color.MediumVioletRed);
+        // The strip alternates its corners above and below the row axis, which is the sliding window
+        // of a triangle strip with the same winding as the single triangle.
+        Vector3 stripCenter = Station(5.75f, 0.95f);
+        camera.DrawTriangleStrip(
+            [
+                stripCenter - (_galleryRight * 0.55f) + (Vector3.UnitY * 0.75f),
+                stripCenter - (_galleryRight * 0.55f) - (Vector3.UnitY * 0.75f),
+                stripCenter - (_galleryRight * 0.18f) + (Vector3.UnitY * 0.6f),
+                stripCenter - (_galleryRight * 0.18f) - (Vector3.UnitY * 0.6f),
+                stripCenter + (_galleryRight * 0.55f) + (Vector3.UnitY * 0.75f),
+                stripCenter + (_galleryRight * 0.55f) - (Vector3.UnitY * 0.75f),
+            ],
+            Color.YellowGreen);
 
-        // The upper row floats above the solids: the two wire helpers, the line helpers, and the
-        // world-space textured billboard that faces the orbiting camera.
-        camera.DrawWireCube(Station(-8.5f, 4.7f), new Vector3(1.8f), Color.Orange);
-        camera.DrawWireSphere(Station(-5.1f, 4.7f), 1f, Color.Turquoise);
-        camera.DrawLine(Station(-2.6f, 3.7f), Station(-0.8f, 5.5f), Color.SoftRed);
+        camera.DrawPoint(Station(8.5f, 1.2f), Color.Yellow, size: 0.55f);
+        camera.DrawPlane(Station(8.5f, 0.05f), new Vector2(2.2f, 2.2f), Color.MediumVioletRed);
+
+        // The upper row floats above the solids: the wire shape family, the line and curve helpers,
+        // the ray and bounding box, and the two billboards that sample the texture.
+        camera.DrawWireCube(Station(-8.5f, 4.7f), new Vector3(1.5f), Color.Orange);
+
+        camera.DrawWireSphere(Station(-5.8f, 4.7f), 0.65f, Color.Turquoise);
+        camera.DrawWireSphere(Station(-4.4f, 4.7f), 0.65f, rings: 4, slices: 10, Color.SkyBlue);
+
+        camera.DrawWireCylinder(
+            Station(-2.5f, 3.8f),
+            radiusTop: 0.5f,
+            radiusBottom: 0.5f,
+            height: 1.6f,
+            sides: 12,
+            Color.DarkCyan);
+        // A circle lies in its local XZ plane; rotating it 90 degrees around the row axis stands it
+        // up to face the initial camera.
+        camera.DrawCircle(Station(-1f, 4.7f), 0.85f, _galleryRight, 90f, Color.MediumSlateBlue);
+
+        camera.DrawLine(Station(0.5f, 3.8f), Station(1.4f, 5.4f), Color.SoftRed);
         camera.DrawLines(
             [
-                Station(0.4f, 4.1f),
-                Station(1.1f, 5.3f),
-                Station(1.8f, 4.1f),
-                Station(2.5f, 5.3f),
+                Station(1.7f, 4.1f),
+                Station(2.1f, 5.3f),
+                Station(2.5f, 4.1f),
+                Station(2.9f, 5.3f),
             ],
             Color.DarkOrange);
-        camera.DrawBillboard(_texture!, Station(5.1f, 4.7f), new Vector2(2.2f), Color.Beige);
+
+        // The ray starts below the box and ends at its center, so the collision pair reads as one
+        // shape: the box is the helper's axis-aligned bounds and the ray is one line segment.
+        Vector3 boxCenter = Station(5.1f, 4.7f);
+        Vector3 rayOrigin = boxCenter - (_galleryRight * 1.6f) - (Vector3.UnitY * 0.8f);
+        camera.DrawBoundingBox(
+            new BoundingBox(boxCenter - new Vector3(0.7f), boxCenter + new Vector3(0.7f)),
+            Color.Silver);
+        camera.DrawRay(new Ray(rayOrigin, boxCenter - rayOrigin), Color.Gold);
+
+        // The right billboard samples only the warm left half of the texture, so the source
+        // rectangle reads against the full-texture quad beside it.
+        camera.DrawBillboard(_texture!, Station(7.75f, 4.7f), new Vector2(1.2f), Color.Beige);
+        camera.DrawBillboard(
+            _texture!,
+            new Rect(0f, 0f, 0.5f, 1f),
+            Station(9.25f, 4.7f),
+            new Vector2(1.2f),
+            Color.Beige);
     }
 
     private Vector3 Station(float offset, float height) =>

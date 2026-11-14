@@ -13,9 +13,10 @@ internal static class Program {
     private const string USAGE_TEXT = """
         Primitive Gallery - every M5 primitive helper in one camera pass
 
-        Draws a line, a polyline, a point, a triangle, a cube, a sphere, a cylinder, a plane,
-        a reference grid, a wire cube, a wire sphere, and a billboard with the built-in primitive
-        shader and an orbital perspective camera.
+        Draws the solid and wire shape families (cube, sphere, cylinder, cone, capsule, plane,
+        circle, triangle, triangle strip, point, line, polyline, ray, and bounding box), a
+        reference grid, and two textured billboards with the built-in primitive shader and an
+        orbital perspective camera.
 
         Usage:
           PrimitiveGallery [options]

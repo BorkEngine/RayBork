@@ -5,7 +5,8 @@ namespace Castle;
 
 /// <summary>
 /// A small orbitable castle scene: load a model and its texture, bind the texture to the model's
-/// materials, and draw the model with a camera that orbits a fixed point.
+/// materials, and draw the model solid and as a wireframe overlay with a camera that orbits a fixed
+/// point.
 /// </summary>
 internal sealed class CastleGame : IGame {
     private const string MODEL_PATH = "/models/obj/castle";
@@ -19,6 +20,7 @@ internal sealed class CastleGame : IGame {
     private const float MAX_PITCH_DEGREES = 89f;
     private const int GRID_SLICES = 20;
     private const float GRID_SPACING = 10f;
+    private const float WIREFRAME_OVERLAY_SCALE = 1.002f;
 
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
@@ -89,7 +91,17 @@ internal sealed class CastleGame : IGame {
             near: NEAR_PLANE,
             far: float.PositiveInfinity);
 
+        // The castle is drawn solid and then again as a wireframe overlay. The overlay is scaled a
+        // hair past the solid so its edges sit just outside the surface and never fight the depth
+        // test; the 0.2 percent offset is invisible at this distance. DrawWireModel needs the
+        // device's fillModeNonSolid feature: a device without it reports GraphicsException RB3001
+        // instead of drawing nothing, so Castle is the sample that demonstrates the feature on
+        // hardware that supports it.
         camera.DrawModel(_model!, Transform.Identity, Color.White);
+        camera.DrawWireModel(
+            _model!,
+            new Transform(Vector3.Zero, Quaternion.Identity, new Vector3(WIREFRAME_OVERLAY_SCALE)),
+            Color.Black);
 
         // raylib's reference grid: 20 slices 10 units apart, centered on the origin where the castle
         // stands, drawn after the model in the same opaque, depth-tested pass.
