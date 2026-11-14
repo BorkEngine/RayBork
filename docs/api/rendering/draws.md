@@ -84,13 +84,20 @@ engine assets with no public accessor, built once before `IGame.Setup`.
 | `DrawLines` | Engine line mesh | One instance per non-zero consecutive point pair, so a polyline of `N` points is `N - 1` segments. Fewer than two points, or no non-zero pair, records nothing. |
 | `DrawPoint` | Engine quad | Camera-facing square whose `size` is its world-space width and height. Zero size records nothing. |
 | `DrawTriangle` | Engine triangle | One triangle under the orientation-preserving affine map from the unit reference triangle. Counter-clockwise as seen by the camera is front; clockwise is culled. A degenerate or collinear triangle records nothing. |
-| `DrawCube` | Engine cube | Box centered at `position` with `size` extents. A zero size component records nothing. |
-| `DrawSphere` | Engine UV sphere | Unit sphere scaled by `radius`; 32 slices by 16 rings, no LOD. Zero radius records nothing. |
-| `DrawCylinder` | Engine quad and triangle | Capped cylinder with its base cap at `position`, its axis along world `+Y`, and its height upward: `sides` side quads plus `2 * sides` cap triangles, recorded as two instanced draws. The side quads use the exact ring positions, so the silhouette is exact for any `sides`. Zero radius or height records nothing. |
-| `DrawPlane` | Engine plane | `XZ` plane centered at `center`, front face toward world `+Y`, `size` is width along `X` and depth along `Z`. |
+| `DrawTriangleStrip` | Engine triangle | One instance per non-degenerate triangle from the `points.Length - 2` triangle strip; every odd triangle swaps its first two corners, so the strip keeps the `DrawTriangle` winding and back-face behavior. Fewer than three points records nothing. |
+| `DrawRay` | Engine line mesh | One segment from `ray.Origin` to `ray.Origin + ray.Direction`. The direction is not normalized, so the segment has the direction's length. A zero direction records nothing. |
+| `DrawBoundingBox` | Engine line mesh | The twelve axis-aligned edges of the box, one line instance each; coincident edges of a zero-extent box are skipped. |
+| `DrawCube` | Engine cube | Box centered at `position` with `size` extents, or with explicit width/height/length, or under a `Transform`. A zero size component records nothing. |
+| `DrawWireCube` | Engine wire cube | The twelve edges as line geometry; no polygon mode. Same size, scalar, and `Transform` forms as `DrawCube`. |
+| `DrawSphere` | Engine UV sphere or engine triangle | The simple forms instance the unit UV sphere scaled by `radius` with 32 slices by 16 rings and no LOD. The `rings`/`slices` forms instead compose `2 * slices * (rings - 1)` triangles with pole fans and a closed seam; `rings >= 2` and `slices >= 3`. A `Transform` overload exists for both. Zero radius records nothing. |
+| `DrawWireSphere` | Engine wire sphere or engine line | The simple forms instance three great circles. The `rings`/`slices` forms compose `slices` meridians of `rings` segments plus `rings - 1` latitude circles, for `slices * (2 * rings - 1)` line instances. A `Transform` overload exists for both. Zero radius records nothing. |
+| `DrawCylinder` | Engine quad and triangle | The simple form is a capped equal-radius cylinder with its base cap at `position`, its axis along world `+Y`, and its height upward: `sides` side quads plus `2 * sides` cap triangles in two instanced draws. The four-argument convenience overload uses 16 sides; the five-argument form takes `sides` explicitly. The full form takes unequal `radiusTop`/`radiusBottom`; equal positive radii use the same two draws, while a tapered cylinder uses one triangle draw with `4 * sides` triangles (two per side segment and one per cap). A zero radius at one end is a cone: one triangle draw with `2 * sides` triangles and no cap at the apex. The start/end form treats `start` and `end` as cap centers with `startRadius`/`endRadius` and orients the local `+Y` axis between them. The `Transform` form puts the bottom cap at the transform origin along local `+Y`. Zero height or two zero radii records nothing. |
+| `DrawWireCylinder` | Engine line mesh | One vertical edge per side plus one closed ring per non-zero radius, so `sides * (1 + nonZeroRadiusCount)` line instances. The position, start/end, and `Transform` forms follow `DrawCylinder`. Zero height or two zero radii records nothing. |
+| `DrawCapsule` | Engine quad and triangle | The start/end form treats `start` and `end` as the spherical cap centers; the `Transform` form takes the cap-center distance as `height` and centers the capsule at the transform origin along local `+Y`. It is `slices` side quads plus `2 * slices * (2 * rings - 1)` cap triangles in two instanced draws; the total height is `height + 2 * radius`. `rings >= 2` and `slices >= 3`. Zero radius, zero height, or a zero-length start/end segment records nothing. |
+| `DrawWireCapsule` | Engine line mesh | One body edge per slice, one equator ring per end, and per hemispherical cap `slices` meridians of `rings` segments plus `rings - 1` interior latitude rings, for `slices * (4 * rings + 1)` line instances. The start/end and `Transform` anchors match `DrawCapsule`. Zero radius, zero height, or a zero-length start/end segment records nothing. |
+| `DrawPlane` | Engine plane | `XZ` plane centered at `center`, front face toward world `+Y`, `size` is width along `X` and depth along `Z`; the `Transform` form centers it at the transform origin and local `+Y` is its normal. |
+| `DrawCircle` | Engine line mesh | A closed 36-segment circle. The axis-angle form starts from the local `XZ` plane with local `+Y` as its normal, rotates it by `rotationAngle` degrees around `rotationAxis`, and translates it to `center`. The `Transform` form uses the local `XZ` plane and the transform rotation and scale. A zero rotation axis is `ArgumentException`; zero radius records nothing. |
 | `DrawGrid` | Engine line mesh | `XZ` grid centered at the world origin with `slices` cells per axis, one uniform color, and `spacing` world units between lines. It has `slices + 1` lines per axis, so it is one instanced draw with `2 * (slices + 1)` instances spanning `slices * spacing` per axis. |
-| `DrawWireCube` | Engine wire cube | The twelve edges as line geometry; no polygon mode. |
-| `DrawWireSphere` | Engine wire sphere | Three great circles as line geometry. |
 | `DrawBillboard` | Engine quad | Centered textured quad. `faceCamera` true faces along the camera's view direction; false keeps world up and applies only the camera's yaw. |
 
 **Programs and render states.** Shapes and lines record against the built-in `/shaders/primitive`
@@ -109,20 +116,45 @@ shader sees the same field and must apply it itself.
 
 **Instance composition.** Each helper records one world matrix per instance that maps the unit mesh
 into world space: scale and translation for the cube, sphere, plane, wire cube, and wire sphere; a
-line basis built from the segment endpoints for `DrawLine` and for every `DrawLines` pair; a
-camera-facing basis for `DrawPoint` and `DrawBillboard`; the affine reference-triangle map for
-`DrawTriangle` and the cylinder caps; a side-quad basis for the cylinder sides; and one line matrix
-per grid line for `DrawGrid`. The mesh bounds are transformed by the same matrix for frustum
-culling.
+line basis built from the segment endpoints for `DrawLine`, every `DrawLines` pair, and every circle
+or wire segment; a camera-facing basis for `DrawPoint` and `DrawBillboard`; the affine
+reference-triangle map for `DrawTriangle`, `DrawTriangleStrip`, the tessellated sphere, and the
+cylinder and capsule caps; a side-quad basis for equal-radius cylinder sides and capsule sides; two
+reference-triangle maps per tapered cylinder side segment; and one line matrix per grid, wire, ray,
+or bounding-box segment. A transformed overload applies the same `local * transform.ToMatrix()`
+composition to every one of those matrices. The mesh bounds are transformed by the same matrix for
+frustum culling.
+
+**No suffix names.** The primitive families use ordinary C# overloads. The engine has no `Ex`, `Rec`,
+`Pro`, or `V` suffix variants: `DrawCube`, `DrawWireCube`, `DrawSphere`, `DrawWireSphere`,
+`DrawCylinder`, `DrawWireCylinder`, `DrawCapsule`, `DrawWireCapsule`, `DrawPlane`, and `DrawCircle`
+each cover their scalar, tessellation, start/end, and `Transform` forms by overload.
+
+**Transform composition.** Every world shape has a `Transform` overload in addition to the simple
+and shape/position forms. The transform supplies the world position, rotation, and scale, and the
+shape dimensions stay explicit. The instance matrix is `local * transform.ToMatrix()` under the
+row-vector convention, where `local` builds the shape dimensions in local space:
+`CreateScale(size)`, `CreateScale(radius)`, or `CreateScale(size.X, 1, size.Y)` for the box, sphere,
+or plane; the local cylinder or capsule basis for those shapes. The transform scale therefore
+multiplies the shape dimensions, and an identity rotation with unit scale reproduces the matching
+simple overload at `Transform.Position`. A transformed cube, wire cube, sphere, wire sphere, plane,
+or circle is centered at the transform origin; a transformed cylinder or wire cylinder puts its
+bottom cap/ring at the transform origin along local `+Y`; a transformed capsule or wire capsule is
+centered at the transform origin along local `+Y` with its cap centers at `±height/2`.
 
 **Validation.** All helpers are tick-thread only, and a disposed camera or primitive asset is
 `ObjectDisposedException`.
 
-- A non-finite numeric argument throws `ArgumentException`.
-- A negative extent, radius, height, width, or point size throws `ArgumentOutOfRangeException`.
-- An exactly zero extent, radius, height, or segment length records nothing.
-- `sides < 3`, `slices < 1`, and `spacing <= 0` throw `ArgumentOutOfRangeException`; no helper
-  substitutes a default tessellation.
+- A non-finite numeric argument throws `ArgumentException`. A `Transform` overload requires finite
+  position, rotation, and scale; a non-finite component is `ArgumentException`.
+- A negative extent, radius, height, width, or point size throws `ArgumentOutOfRangeException`. A
+  negative transform scale component is also `ArgumentOutOfRangeException`.
+- An exactly zero extent, radius, height, start/end segment, or transform scale component records
+  nothing.
+- `sides < 3`, `rings < 2`, `slices < 3`, `slices < 1` for `DrawGrid`, and `spacing <= 0` throw
+  `ArgumentOutOfRangeException`; no helper substitutes a default tessellation.
+- A zero `rotationAxis` on `DrawCircle` throws `ArgumentException`; the axis-angle form has no plane
+  without it.
 - A `null` texture throws `ArgumentNullException`; a disposed texture is `ObjectDisposedException`.
 - A camera whose app has no primitive assets attached throws `InvalidOperationException`. Game code
   does not hit this case: the app attaches the primitive assets before `IGame.Setup`.
@@ -134,9 +166,12 @@ and its retention set untouched.
 the engine mesh, internal program, and effective render state, so it batches by
 `(mesh, program, effective render state)` and follows the normal culling, sorting, splitting, and
 statistics rules. Line-topology draws contribute zero triangles; `DrawPoint` draws the quad and
-contributes two. `DrawLines` and `DrawGrid` are one instanced line draw each. `DrawCylinder` is two
-instanced draws because its sides and caps use different meshes. Equal records merge: two
-`DrawCube` calls are one instanced draw with two instances.
+contributes two. `DrawLines`, `DrawGrid`, `DrawCircle`, `DrawRay`, `DrawBoundingBox`, and the wire
+helpers are one instanced line draw each. `DrawCylinder` is two instanced draws for equal positive
+radii because its sides and caps use different meshes; a tapered cylinder is one triangle draw.
+`DrawCapsule` is two instanced draws: side quads and cap triangles. Equal records merge: two
+`DrawCube` calls are one instanced draw with two instances, and every triangle- or line-based helper
+merges into the shared engine mesh batch for its program and render state.
 
 **Lines and wire shapes.** Lines are one pixel wide. The engine draws them as `LineList` geometry
 and never requests the `wideLines` device feature, so v1 has no thick-line option and no per-line

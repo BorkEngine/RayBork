@@ -259,6 +259,38 @@ public static class Collision {
     }
 
     /// <summary>
+    /// Casts a ray against a quad and returns the nearest non-negative intersection.
+    /// </summary>
+    /// <param name="ray">The ray.</param>
+    /// <param name="a">The first quad corner.</param>
+    /// <param name="b">The second quad corner.</param>
+    /// <param name="c">The third quad corner.</param>
+    /// <param name="d">The fourth quad corner.</param>
+    /// <returns>
+    /// The nearest hit, or <c>default(RayCollision)</c> when the ray misses.
+    /// </returns>
+    /// <remarks>
+    /// The quad is split into triangles <c>(a, b, c)</c> and <c>(a, c, d)</c>, and the nearest hit of
+    /// the two double-sided triangle tests is returned. Both triangles are coplanar for a planar quad;
+    /// a hit on their shared diagonal reports the <c>(a, b, c)</c> result. A degenerate (zero-area)
+    /// quad, a non-finite input, or a hit behind the ray origin reports a miss. The direction is not
+    /// required to be normalized.
+    /// </remarks>
+    public static RayCollision GetRayQuad(Ray ray, Vector3 a, Vector3 b, Vector3 c, Vector3 d) {
+        RayCollision first = GetRayTriangle(ray, a, b, c);
+        RayCollision second = GetRayTriangle(ray, a, c, d);
+        if (!first.Hit) {
+            return second;
+        }
+
+        if (!second.Hit) {
+            return first;
+        }
+
+        return second.Distance < first.Distance ? second : first;
+    }
+
+    /// <summary>
     /// Tests the double-sided Möller–Trumbore ray/triangle intersection the public queries share.
     /// </summary>
     /// <param name="ray">The ray.</param>

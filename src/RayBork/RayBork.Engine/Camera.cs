@@ -35,6 +35,23 @@ namespace RayBork;
 /// </remarks>
 public sealed class Camera : IDisposable {
     private const string MESH_TEXTURE_BINDING = "mainTexture";
+    private const int CIRCLE_SEGMENTS = 36;
+    private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
+
+    private static readonly (int Start, int End)[] _boxEdges = [
+        (0, 1),
+        (2, 3),
+        (4, 5),
+        (6, 7),
+        (0, 2),
+        (1, 3),
+        (4, 6),
+        (5, 7),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ];
 
     private readonly CameraService _service;
     private readonly RenderFramePacket _packet;
@@ -603,6 +620,167 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
+    /// Records a triangle strip as one instanced triangle draw.
+    /// </summary>
+    /// <param name="points">The world-space strip vertices in order.</param>
+    /// <param name="color">The linear triangle color.</param>
+    /// <remarks>
+    /// <para>
+    /// The strip is decomposed into <c>points.Length - 2</c> triangles. The first triangle uses the
+    /// first three points; every following triangle swaps its first two corners, which is the sliding
+    /// window of <see cref="PrimitiveTopology.TriangleStrip"/>. Each triangle keeps the same winding
+    /// and front-face culling as <see cref="DrawTriangle"/>.
+    /// </para>
+    /// <para>
+    /// A degenerate (zero-area) triangle records no instance, and fewer than three points records
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of a point is not finite.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawTriangleStrip(ReadOnlySpan<Vector3> points, Color color) {
+        EnsureDrawable(nameof(DrawTriangleStrip));
+        for (int index = 0; index < points.Length; index++) {
+            ValidateFinite(points[index], nameof(points));
+        }
+
+        if (points.Length < 3) {
+            return;
+        }
+
+        int triangleCount = 0;
+        for (int triangle = 0; triangle + 2 < points.Length; triangle++) {
+            Vector3 a = GetStripCorner(points, triangle, 0);
+            Vector3 b = GetStripCorner(points, triangle, 1);
+            Vector3 c = GetStripCorner(points, triangle, 2);
+            if (Vector3.Cross(b - a, c - a).LengthSquared() > 0f) {
+                triangleCount++;
+            }
+        }
+
+        if (triangleCount == 0) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Triangle,
+            material,
+            material.DefaultRenderState,
+            color,
+            triangleCount);
+        int matrixIndex = 0;
+        for (int triangle = 0; triangle + 2 < points.Length; triangle++) {
+            Vector3 a = GetStripCorner(points, triangle, 0);
+            Vector3 b = GetStripCorner(points, triangle, 1);
+            Vector3 c = GetStripCorner(points, triangle, 2);
+            Vector3 normal = Vector3.Cross(b - a, c - a);
+            if (normal.LengthSquared() > 0f) {
+                matrices[matrixIndex++] = CreateTriangleMatrix(a, b, c, normal, Vector3.UnitZ);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records a ray as one line segment from <see cref="Ray.Origin"/> to
+    /// <see cref="Ray.Origin"/> plus <see cref="Ray.Direction"/>.
+    /// </summary>
+    /// <param name="ray">The world-space ray.</param>
+    /// <param name="color">The linear line color.</param>
+    /// <remarks>
+    /// The segment has the direction's length because the direction is not normalized, matching the
+    /// ray parameter used by the collision queries. A zero direction records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// A component of the origin or direction is not finite, or the endpoint is not finite.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawRay(Ray ray, Color color) {
+        EnsureDrawable(nameof(DrawRay));
+        ValidateFinite(ray.Origin, nameof(ray));
+        ValidateFinite(ray.Direction, nameof(ray));
+        Vector3 end = ray.Origin + ray.Direction;
+        ValidateFinite(end, nameof(ray));
+        if (!((end - ray.Origin).LengthSquared() > 0f)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Line,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount: 1);
+        matrices[0] = CreateLineMatrix(ray.Origin, end);
+    }
+
+    /// <summary>
+    /// Records the twelve edges of a box as one instanced line draw.
+    /// </summary>
+    /// <param name="box">The box; its corners come from <see cref="BoundingBox.Min"/> and
+    /// <see cref="BoundingBox.Max"/>.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// Each edge is one engine line instance. An edge whose endpoints coincide records no instance, so
+    /// a box with a zero extent draws only its non-degenerate edges. An inverted box is drawn as
+    /// given.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of <see cref="BoundingBox.Min"/> or
+    /// <see cref="BoundingBox.Max"/> is not finite.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawBoundingBox(BoundingBox box, Color color) {
+        EnsureDrawable(nameof(DrawBoundingBox));
+        ValidateFinite(box.Min, nameof(box));
+        ValidateFinite(box.Max, nameof(box));
+
+        Span<Vector3> corners = stackalloc Vector3[8];
+        for (int corner = 0; corner < corners.Length; corner++) {
+            corners[corner] = new Vector3(
+                (corner & 1) == 0 ? box.Min.X : box.Max.X,
+                (corner & 2) == 0 ? box.Min.Y : box.Max.Y,
+                (corner & 4) == 0 ? box.Min.Z : box.Max.Z);
+        }
+
+        int edgeCount = 0;
+        foreach ((int start, int end) in _boxEdges) {
+            if ((corners[end] - corners[start]).LengthSquared() > 0f) {
+                edgeCount++;
+            }
+        }
+
+        if (edgeCount == 0) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Line,
+            material,
+            material.DefaultRenderState,
+            color,
+            edgeCount);
+        int matrixIndex = 0;
+        foreach ((int start, int end) in _boxEdges) {
+            if ((corners[end] - corners[start]).LengthSquared() > 0f) {
+                matrices[matrixIndex++] = CreateLineMatrix(corners[start], corners[end]);
+            }
+        }
+    }
+
+    /// <summary>
     /// Records one solid box centered at <paramref name="position"/> with <paramref name="size"/>
     /// extents.
     /// </summary>
@@ -639,6 +817,82 @@ public sealed class Camera : IDisposable {
             color,
             instanceCount: 1);
         matrices[0] = CreateTranslationScaleMatrix(position, size);
+    }
+
+    /// <summary>
+    /// Records one solid box centered at <paramref name="position"/> with explicit width, height, and
+    /// depth.
+    /// </summary>
+    /// <param name="position">The world-space center.</param>
+    /// <param name="width">The world-space width along <c>X</c>.</param>
+    /// <param name="height">The world-space height along <c>Y</c>.</param>
+    /// <param name="length">The world-space depth along <c>Z</c>.</param>
+    /// <param name="color">The linear box color.</param>
+    /// <remarks>
+    /// This is the scalar convenience form of <see cref="DrawCube(Vector3, Vector3, Color)"/>: the
+    /// dimensions map to <c>(X, Y, Z)</c> size. A zero component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of a dimension or of
+    /// <paramref name="position"/> is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCube(Vector3 position, float width, float height, float length, Color color) {
+        EnsureDrawable(nameof(DrawCube));
+        ValidateFinite(width, nameof(width));
+        ValidateFinite(height, nameof(height));
+        ValidateFinite(length, nameof(length));
+        ValidateNonNegative(width, nameof(width));
+        ValidateNonNegative(height, nameof(height));
+        ValidateNonNegative(length, nameof(length));
+        DrawCube(position, new Vector3(width, height, length), color);
+    }
+
+    /// <summary>
+    /// Records one solid box at a transform with the transform's scale applied to
+    /// <paramref name="size"/>.
+    /// </summary>
+    /// <param name="transform">The box transform; its position is the box center.</param>
+    /// <param name="size">The local-space width, height, and depth before the transform scale.</param>
+    /// <param name="color">The linear box color.</param>
+    /// <remarks>
+    /// <para>
+    /// The instance matrix is <c>Matrix4x4.CreateScale(size) * transform.ToMatrix()</c> under the
+    /// row-vector convention. The transform position is the box center, the transform rotation orients
+    /// the box, and the transform scale multiplies <paramref name="size"/> on each local axis. Identity
+    /// rotation and unit scale reproduce <see cref="DrawCube(Vector3, Vector3, Color)"/> at
+    /// <see cref="Transform.Position"/>.
+    /// </para>
+    /// <para>A zero size component or a zero transform scale component records nothing.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of the transform or
+    /// <paramref name="size"/> is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
+    /// is negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCube(Transform transform, Vector3 size, Color color) {
+        EnsureDrawable(nameof(DrawCube));
+        ValidateTransform(transform);
+        ValidateFinite(size, nameof(size));
+        ValidateNonNegative(size, nameof(size));
+        if (size.X == 0f || size.Y == 0f || size.Z == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Cube,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount: 1);
+        matrices[0] = Matrix4x4.CreateScale(size) * transform.ToMatrix();
     }
 
     /// <summary>
@@ -681,8 +935,162 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
-    /// Records one capped cylinder whose base is at <paramref name="position"/> and whose axis points
-    /// up world <c>+Y</c>.
+    /// Records one solid sphere at a transform with the transform's scale applied to
+    /// <paramref name="radius"/>.
+    /// </summary>
+    /// <param name="transform">The sphere transform; its position is the sphere center.</param>
+    /// <param name="radius">The local-space radius before the transform scale.</param>
+    /// <param name="color">The linear sphere color.</param>
+    /// <remarks>
+    /// <para>
+    /// The instance matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c> under the
+    /// row-vector convention. The transform position is the sphere center, the rotation orients it, and
+    /// the scale multiplies the radius on each local axis, so a non-uniform scale produces an
+    /// ellipsoid. Identity rotation and unit scale reproduce
+    /// <see cref="DrawSphere(Vector3, float, Color)"/> at <see cref="Transform.Position"/>.
+    /// </para>
+    /// <para>A zero radius or a zero transform scale component records nothing.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
+    /// negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawSphere(Transform transform, float radius, Color color) {
+        EnsureDrawable(nameof(DrawSphere));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        if (radius == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Sphere,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount: 1);
+        matrices[0] = Matrix4x4.CreateScale(radius) * transform.ToMatrix();
+    }
+
+    /// <summary>
+    /// Records one solid tessellated sphere centered at <paramref name="center"/>.
+    /// </summary>
+    /// <param name="center">The world-space center.</param>
+    /// <param name="radius">The world-space radius.</param>
+    /// <param name="rings">The number of latitude bands; at least two.</param>
+    /// <param name="slices">The number of longitude segments; at least three.</param>
+    /// <param name="color">The linear sphere color.</param>
+    /// <remarks>
+    /// Unlike <see cref="DrawSphere(Vector3, float, Color)"/>, which instances the fixed engine sphere
+    /// mesh, this overload composes the requested surface as one instanced triangle draw with
+    /// <c>2 * slices * (rings - 1)</c> triangles. The two poles are triangle fans and the seam closes
+    /// without a duplicated meridian. A zero radius records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of <paramref name="center"/> or
+    /// <paramref name="radius"/> is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawSphere(Vector3 center, float radius, int rings, int slices, Color color) {
+        EnsureDrawable(nameof(DrawSphere));
+        ValidateFinite(center, nameof(center));
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateTessellation(rings, slices);
+        if (radius == 0f) {
+            return;
+        }
+
+        DrawTessellatedSphere(
+            Matrix4x4.CreateScale(radius) * Matrix4x4.CreateTranslation(center),
+            rings,
+            slices,
+            color);
+    }
+
+    /// <summary>
+    /// Records one solid tessellated sphere at a transform with the transform's scale applied to
+    /// <paramref name="radius"/>.
+    /// </summary>
+    /// <param name="transform">The sphere transform; its position is the sphere center.</param>
+    /// <param name="radius">The local-space radius before the transform scale.</param>
+    /// <param name="rings">The number of latitude bands; at least two.</param>
+    /// <param name="slices">The number of longitude segments; at least three.</param>
+    /// <param name="color">The linear sphere color.</param>
+    /// <remarks>
+    /// The surface is composed as in <see cref="DrawSphere(Vector3, float, int, int, Color)"/> and its
+    /// instance matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>, so the transform
+    /// position is the center, the rotation orients the surface, and the scale multiplies the radius on
+    /// each local axis. A zero radius or a zero transform scale component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The radius or a transform scale component is negative, <paramref name="rings"/> is less than
+    /// two, or <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawSphere(Transform transform, float radius, int rings, int slices, Color color) {
+        EnsureDrawable(nameof(DrawSphere));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateTessellation(rings, slices);
+        if (radius == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        DrawTessellatedSphere(
+            Matrix4x4.CreateScale(radius) * transform.ToMatrix(),
+            rings,
+            slices,
+            color);
+    }
+
+    /// <summary>
+    /// Records one capped equal-radius cylinder whose base is at <paramref name="position"/> and whose
+    /// axis points up world <c>+Y</c>, using the default 16 side segments.
+    /// </summary>
+    /// <param name="position">The world-space center of the base cap.</param>
+    /// <param name="radius">The world-space radius.</param>
+    /// <param name="height">The world-space height above the base.</param>
+    /// <param name="color">The linear cylinder color.</param>
+    /// <remarks>
+    /// This is the convenience overload for callers that do not need a tessellation argument; it calls
+    /// <see cref="DrawCylinder(Vector3, float, float, Color, int)"/> with <c>16</c> sides. A radius or
+    /// height of zero records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// A component of <paramref name="position"/>, <paramref name="radius"/>, or
+    /// <paramref name="height"/> is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="radius"/> or <paramref name="height"/> is negative.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCylinder(Vector3 position, float radius, float height, Color color) {
+        DrawCylinder(position, radius, height, color, sides: 16);
+    }
+
+    /// <summary>
+    /// Records one capped equal-radius cylinder whose base is at <paramref name="position"/> and whose
+    /// axis points up world <c>+Y</c>.
     /// </summary>
     /// <param name="position">The world-space center of the base cap.</param>
     /// <param name="radius">The world-space radius.</param>
@@ -707,64 +1115,348 @@ public sealed class Camera : IDisposable {
     /// The camera service has no primitive assets, or the caller is not the tick thread.
     /// </exception>
     /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
-    public void DrawCylinder(Vector3 position, float radius, float height, Color color, int sides = 16) {
+    public void DrawCylinder(Vector3 position, float radius, float height, Color color, int sides) {
         EnsureDrawable(nameof(DrawCylinder));
         ValidateFinite(position, nameof(position));
         ValidateFinite(radius, nameof(radius));
         ValidateFinite(height, nameof(height));
         ValidateNonNegative(radius, nameof(radius));
         ValidateNonNegative(height, nameof(height));
-        if (sides < 3) {
-            throw new ArgumentOutOfRangeException(
-                nameof(sides),
-                sides,
-                "A cylinder needs at least three sides.");
-        }
-
+        ValidateSides(sides);
         if (radius == 0f || height == 0f) {
             return;
         }
 
-        PrimitiveAssets primitives = RequirePrimitives();
-        Shader material = primitives.PrimitiveMaterial;
-        Span<Matrix4x4> sideMatrices = BeginPrimitiveDraw(
-            primitives.Quad,
-            material,
-            material.DefaultRenderState,
-            color,
-            sides);
-        Span<Matrix4x4> capMatrices = BeginPrimitiveDraw(
-            primitives.Triangle,
-            material,
-            material.DefaultRenderState,
-            color,
-            sides * 2);
-        Vector3 topOffset = Vector3.UnitY * height;
-        Vector3 bottomCenter = position;
-        Vector3 topCenter = position + topOffset;
-        for (int side = 0; side < sides; side++) {
-            float angle = MathF.Tau * side / sides;
-            float nextAngle = MathF.Tau * (side + 1) / sides;
-            Vector3 bottomStart = position + (new Vector3(MathF.Cos(angle), 0f, MathF.Sin(angle)) * radius);
-            Vector3 bottomEnd = position + (new Vector3(MathF.Cos(nextAngle), 0f, MathF.Sin(nextAngle)) * radius);
-            Vector3 topStart = bottomStart + topOffset;
-            Vector3 topEnd = bottomEnd + topOffset;
-            sideMatrices[side] = CreateCylinderSideMatrix(bottomStart, bottomEnd, height);
-            // The bottom cap faces -Y and the top cap faces +Y; crossing the ring edges in this order
-            // makes both caps wind outward, matching the side quads.
-            capMatrices[side * 2] = CreateTriangleMatrix(
-                bottomCenter,
-                bottomStart,
-                bottomEnd,
-                Vector3.Cross(bottomStart - bottomCenter, bottomEnd - bottomCenter),
-                -Vector3.UnitY);
-            capMatrices[(side * 2) + 1] = CreateTriangleMatrix(
-                topCenter,
-                topEnd,
-                topStart,
-                Vector3.Cross(topEnd - topCenter, topStart - topCenter),
-                Vector3.UnitY);
+        DrawCylinderCore(
+            Matrix4x4.CreateTranslation(position),
+            radius,
+            radius,
+            height,
+            sides,
+            color);
+    }
+
+    /// <summary>
+    /// Records one capped cylinder or cone with unequal cap radii whose base is at
+    /// <paramref name="position"/> and whose axis points up world <c>+Y</c>.
+    /// </summary>
+    /// <param name="position">The world-space center of the bottom cap.</param>
+    /// <param name="radiusTop">The radius of the top cap; zero makes a cone apex.</param>
+    /// <param name="radiusBottom">The radius of the bottom cap; zero makes an inverted cone apex.</param>
+    /// <param name="height">The world-space height above the bottom cap.</param>
+    /// <param name="sides">The number of side segments; must be at least three.</param>
+    /// <param name="color">The linear cylinder color.</param>
+    /// <remarks>
+    /// <para>
+    /// <paramref name="radiusBottom"/> is the cap at <paramref name="position"/> and
+    /// <paramref name="radiusTop"/> is the cap <paramref name="height"/> above it. Equal positive radii
+    /// are recorded as two instanced draws: <paramref name="sides"/> side quads and <c>2 * sides</c>
+    /// cap triangles with outward-facing winding. Unequal positive radii are a tapered cylinder that
+    /// needs two triangles per side segment, so it is recorded as one instanced triangle draw with
+    /// <c>4 * sides</c> triangles: two sides and one triangle per cap for each segment. When exactly
+    /// one radius is zero the shape is a cone and is recorded as one instanced triangle draw with
+    /// <c>2 * sides</c> triangles: <paramref name="sides"/> sides and <paramref name="sides"/> base-cap
+    /// triangles; the degenerate cap at the apex records nothing.
+    /// </para>
+    /// <para>A zero height or two zero radii records nothing.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// A component of <paramref name="position"/>, <paramref name="radiusTop"/>,
+    /// <paramref name="radiusBottom"/>, or <paramref name="height"/> is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A radius or the height is negative, or <paramref name="sides"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCylinder(
+        Vector3 position,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color) {
+        EnsureDrawable(nameof(DrawCylinder));
+        ValidateFinite(position, nameof(position));
+        ValidateFinite(radiusTop, nameof(radiusTop));
+        ValidateFinite(radiusBottom, nameof(radiusBottom));
+        ValidateFinite(height, nameof(height));
+        ValidateNonNegative(radiusTop, nameof(radiusTop));
+        ValidateNonNegative(radiusBottom, nameof(radiusBottom));
+        ValidateNonNegative(height, nameof(height));
+        ValidateSides(sides);
+        if (height == 0f || (radiusTop == 0f && radiusBottom == 0f)) {
+            return;
         }
+
+        DrawCylinderCore(
+            Matrix4x4.CreateTranslation(position),
+            radiusTop,
+            radiusBottom,
+            height,
+            sides,
+            color);
+    }
+
+    /// <summary>
+    /// Records one capped cylinder between two axis endpoints.
+    /// </summary>
+    /// <param name="start">The world-space center of the start cap.</param>
+    /// <param name="end">The world-space center of the end cap.</param>
+    /// <param name="startRadius">The radius of the cap at <paramref name="start"/>.</param>
+    /// <param name="endRadius">The radius of the cap at <paramref name="end"/>.</param>
+    /// <param name="sides">The number of side segments; must be at least three.</param>
+    /// <param name="color">The linear cylinder color.</param>
+    /// <remarks>
+    /// The local <c>+Y</c> axis is oriented from <paramref name="start"/> to <paramref name="end"/> and
+    /// the height is the segment length, so the cap radii apply at the matching endpoints. A zero
+    /// radius on one end makes a cone. The roll around the segment is deterministic. A zero-length
+    /// segment or two zero radii records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of an endpoint or radius is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A radius is negative, or <paramref name="sides"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCylinder(
+        Vector3 start,
+        Vector3 end,
+        float startRadius,
+        float endRadius,
+        int sides,
+        Color color) {
+        EnsureDrawable(nameof(DrawCylinder));
+        ValidateFinite(start, nameof(start));
+        ValidateFinite(end, nameof(end));
+        ValidateFinite(startRadius, nameof(startRadius));
+        ValidateFinite(endRadius, nameof(endRadius));
+        ValidateNonNegative(startRadius, nameof(startRadius));
+        ValidateNonNegative(endRadius, nameof(endRadius));
+        ValidateSides(sides);
+        Vector3 axis = end - start;
+        if (!(axis.LengthSquared() > 0f) || (startRadius == 0f && endRadius == 0f)) {
+            return;
+        }
+
+        DrawCylinderCore(
+            CreateSegmentMatrix(start, end),
+            endRadius,
+            startRadius,
+            axis.Length(),
+            sides,
+            color);
+    }
+
+    /// <summary>
+    /// Records a capped cylinder at a transform with the transform's scale applied to its dimensions.
+    /// </summary>
+    /// <param name="transform">The cylinder transform; its position is the center of the bottom cap.</param>
+    /// <param name="radiusTop">The local-space top radius before the transform scale.</param>
+    /// <param name="radiusBottom">The local-space bottom radius before the transform scale.</param>
+    /// <param name="height">The local-space height above the bottom cap before the transform scale.</param>
+    /// <param name="sides">The number of side segments; must be at least three.</param>
+    /// <param name="color">The linear cylinder color.</param>
+    /// <remarks>
+    /// <para>
+    /// The cylinder's local axis is <c>+Y</c> and its bottom cap is at the local origin, so the
+    /// transform position is the bottom-cap center, <see cref="Transform.Up"/> is the axis, and
+    /// <see cref="Transform.Position"/> plus <c>Up * height * Scale.Y</c> is the top-cap center. The
+    /// instance matrices are composed as <c>local * transform.ToMatrix()</c>, so the transform scale
+    /// multiplies the radii on the local X/Z axes and the height on the local Y axis. Identity rotation
+    /// and unit scale reproduce <see cref="DrawCylinder(Vector3, float, float, Color, int)"/> at
+    /// <see cref="Transform.Position"/>.
+    /// </para>
+    /// <para>A zero height, two zero radii, or a zero transform scale component records nothing.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">A radius, the height, or a transform component is not
+    /// finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A radius, the height, or a transform scale component is negative, or <paramref name="sides"/>
+    /// is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCylinder(
+        Transform transform,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color) {
+        EnsureDrawable(nameof(DrawCylinder));
+        ValidateTransform(transform);
+        ValidateFinite(radiusTop, nameof(radiusTop));
+        ValidateFinite(radiusBottom, nameof(radiusBottom));
+        ValidateFinite(height, nameof(height));
+        ValidateNonNegative(radiusTop, nameof(radiusTop));
+        ValidateNonNegative(radiusBottom, nameof(radiusBottom));
+        ValidateNonNegative(height, nameof(height));
+        ValidateSides(sides);
+        if (height == 0f || (radiusTop == 0f && radiusBottom == 0f) || HasZeroScale(transform)) {
+            return;
+        }
+
+        DrawCylinderCore(transform.ToMatrix(), radiusTop, radiusBottom, height, sides, color);
+    }
+
+    /// <summary>
+    /// Records a wire cylinder whose base is at <paramref name="position"/> and whose axis points up
+    /// world <c>+Y</c>.
+    /// </summary>
+    /// <param name="position">The world-space center of the bottom cap.</param>
+    /// <param name="radiusTop">The radius of the top ring; zero omits the ring.</param>
+    /// <param name="radiusBottom">The radius of the bottom ring; zero omits the ring.</param>
+    /// <param name="height">The world-space height above the bottom cap.</param>
+    /// <param name="sides">The number of side and ring segments; must be at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The wire is one instanced line draw with <paramref name="sides"/> vertical edges plus one ring
+    /// of <paramref name="sides"/> segments for each non-zero radius, so
+    /// <c>sides * (1 + nonZeroRadiusCount)</c> line instances. It contributes no triangles. A zero
+    /// height or two zero radii records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of <paramref name="position"/> or a radius or
+    /// the height is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A radius or the height is negative, or <paramref name="sides"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireCylinder(
+        Vector3 position,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color) {
+        EnsureDrawable(nameof(DrawWireCylinder));
+        ValidateFinite(position, nameof(position));
+        ValidateFinite(radiusTop, nameof(radiusTop));
+        ValidateFinite(radiusBottom, nameof(radiusBottom));
+        ValidateFinite(height, nameof(height));
+        ValidateNonNegative(radiusTop, nameof(radiusTop));
+        ValidateNonNegative(radiusBottom, nameof(radiusBottom));
+        ValidateNonNegative(height, nameof(height));
+        ValidateSides(sides);
+        if (height == 0f || (radiusTop == 0f && radiusBottom == 0f)) {
+            return;
+        }
+
+        DrawWireCylinderCore(
+            Matrix4x4.CreateTranslation(position),
+            radiusTop,
+            radiusBottom,
+            height,
+            sides,
+            color);
+    }
+
+    /// <summary>
+    /// Records a wire cylinder between two axis endpoints.
+    /// </summary>
+    /// <param name="start">The world-space center of the start ring.</param>
+    /// <param name="end">The world-space center of the end ring.</param>
+    /// <param name="startRadius">The radius of the ring at <paramref name="start"/>.</param>
+    /// <param name="endRadius">The radius of the ring at <paramref name="end"/>.</param>
+    /// <param name="sides">The number of side and ring segments; must be at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The local <c>+Y</c> axis is oriented from <paramref name="start"/> to <paramref name="end"/> and
+    /// the height is the segment length. The instance count follows
+    /// <see cref="DrawWireCylinder(Vector3, float, float, float, int, Color)"/>. A zero-length segment
+    /// or two zero radii records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of an endpoint or radius is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A radius is negative, or <paramref name="sides"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireCylinder(
+        Vector3 start,
+        Vector3 end,
+        float startRadius,
+        float endRadius,
+        int sides,
+        Color color) {
+        EnsureDrawable(nameof(DrawWireCylinder));
+        ValidateFinite(start, nameof(start));
+        ValidateFinite(end, nameof(end));
+        ValidateFinite(startRadius, nameof(startRadius));
+        ValidateFinite(endRadius, nameof(endRadius));
+        ValidateNonNegative(startRadius, nameof(startRadius));
+        ValidateNonNegative(endRadius, nameof(endRadius));
+        ValidateSides(sides);
+        Vector3 axis = end - start;
+        if (!(axis.LengthSquared() > 0f) || (startRadius == 0f && endRadius == 0f)) {
+            return;
+        }
+
+        DrawWireCylinderCore(
+            CreateSegmentMatrix(start, end),
+            endRadius,
+            startRadius,
+            axis.Length(),
+            sides,
+            color);
+    }
+
+    /// <summary>
+    /// Records a wire cylinder at a transform with the transform's scale applied to its dimensions.
+    /// </summary>
+    /// <param name="transform">The cylinder transform; its position is the bottom-ring center.</param>
+    /// <param name="radiusTop">The local-space top radius before the transform scale.</param>
+    /// <param name="radiusBottom">The local-space bottom radius before the transform scale.</param>
+    /// <param name="height">The local-space height above the bottom ring before the transform scale.</param>
+    /// <param name="sides">The number of side and ring segments; must be at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The local axis is <c>+Y</c> with the bottom ring at the local origin, so the transform position
+    /// is the bottom-ring center and the transform scale multiplies the radii and height. A zero
+    /// height, two zero radii, or a zero transform scale component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A radius, the height, or a transform component is not
+    /// finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A radius, the height, or a transform scale component is negative, or <paramref name="sides"/>
+    /// is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireCylinder(
+        Transform transform,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color) {
+        EnsureDrawable(nameof(DrawWireCylinder));
+        ValidateTransform(transform);
+        ValidateFinite(radiusTop, nameof(radiusTop));
+        ValidateFinite(radiusBottom, nameof(radiusBottom));
+        ValidateFinite(height, nameof(height));
+        ValidateNonNegative(radiusTop, nameof(radiusTop));
+        ValidateNonNegative(radiusBottom, nameof(radiusBottom));
+        ValidateNonNegative(height, nameof(height));
+        ValidateSides(sides);
+        if (height == 0f || (radiusTop == 0f && radiusBottom == 0f) || HasZeroScale(transform)) {
+            return;
+        }
+
+        DrawWireCylinderCore(transform.ToMatrix(), radiusTop, radiusBottom, height, sides, color);
     }
 
     /// <summary>
@@ -803,6 +1495,51 @@ public sealed class Camera : IDisposable {
             color,
             instanceCount: 1);
         matrices[0] = Matrix4x4.CreateScale(size.X, 1f, size.Y) * Matrix4x4.CreateTranslation(center);
+    }
+
+    /// <summary>
+    /// Records one horizontal plane at a transform with the transform's scale applied to
+    /// <paramref name="size"/>.
+    /// </summary>
+    /// <param name="transform">The plane transform; its position is the plane center.</param>
+    /// <param name="size">The local-space width along <c>X</c> and depth along <c>Z</c> before the
+    /// transform scale.</param>
+    /// <param name="color">The linear plane color.</param>
+    /// <remarks>
+    /// The plane's local surface is the <c>XZ</c> plane facing local <c>+Y</c>, so the instance matrix
+    /// is <c>Matrix4x4.CreateScale(size.X, 1, size.Y) * transform.ToMatrix()</c> under the row-vector
+    /// convention: the transform position is the plane center, the rotation orients the surface, and
+    /// the transform's X and Z scale components multiply the width and depth. Identity rotation and
+    /// unit scale reproduce <see cref="DrawPlane(Vector3, Vector2, Color)"/> at
+    /// <see cref="Transform.Position"/>. A zero size component or a zero transform scale component
+    /// records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of the transform or
+    /// <paramref name="size"/> is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
+    /// is negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawPlane(Transform transform, Vector2 size, Color color) {
+        EnsureDrawable(nameof(DrawPlane));
+        ValidateTransform(transform);
+        ValidateFinite(size, nameof(size));
+        ValidateNonNegative(size, nameof(size));
+        if (size.X == 0f || size.Y == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Plane,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount: 1);
+        matrices[0] = Matrix4x4.CreateScale(size.X, 1f, size.Y) * transform.ToMatrix();
     }
 
     /// <summary>
@@ -903,6 +1640,80 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
+    /// Records the twelve edges of a box centered at <paramref name="position"/> with explicit width,
+    /// height, and depth.
+    /// </summary>
+    /// <param name="position">The world-space center.</param>
+    /// <param name="width">The world-space width along <c>X</c>.</param>
+    /// <param name="height">The world-space height along <c>Y</c>.</param>
+    /// <param name="length">The world-space depth along <c>Z</c>.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// This is the scalar convenience form of <see cref="DrawWireCube(Vector3, Vector3, Color)"/>: the
+    /// dimensions map to <c>(X, Y, Z)</c> size. A zero component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of a dimension or of
+    /// <paramref name="position"/> is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireCube(Vector3 position, float width, float height, float length, Color color) {
+        EnsureDrawable(nameof(DrawWireCube));
+        ValidateFinite(width, nameof(width));
+        ValidateFinite(height, nameof(height));
+        ValidateFinite(length, nameof(length));
+        ValidateNonNegative(width, nameof(width));
+        ValidateNonNegative(height, nameof(height));
+        ValidateNonNegative(length, nameof(length));
+        DrawWireCube(position, new Vector3(width, height, length), color);
+    }
+
+    /// <summary>
+    /// Records the twelve edges of a box at a transform with the transform's scale applied to
+    /// <paramref name="size"/>.
+    /// </summary>
+    /// <param name="transform">The box transform; its position is the box center.</param>
+    /// <param name="size">The local-space width, height, and depth before the transform scale.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The instance matrix is <c>Matrix4x4.CreateScale(size) * transform.ToMatrix()</c> under the
+    /// row-vector convention, so the transform position is the box center, the rotation orients the
+    /// edges, and the scale multiplies <paramref name="size"/>. Identity rotation and unit scale
+    /// reproduce <see cref="DrawWireCube(Vector3, Vector3, Color)"/> at
+    /// <see cref="Transform.Position"/>. A zero size component or a zero transform scale component
+    /// records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of the transform or
+    /// <paramref name="size"/> is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
+    /// is negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireCube(Transform transform, Vector3 size, Color color) {
+        EnsureDrawable(nameof(DrawWireCube));
+        ValidateTransform(transform);
+        ValidateFinite(size, nameof(size));
+        ValidateNonNegative(size, nameof(size));
+        if (size.X == 0f || size.Y == 0f || size.Z == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.WireCube,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount: 1);
+        matrices[0] = Matrix4x4.CreateScale(size) * transform.ToMatrix();
+    }
+
+    /// <summary>
     /// Records three great circles around <paramref name="center"/> with <paramref name="radius"/>
     /// world units.
     /// </summary>
@@ -939,6 +1750,426 @@ public sealed class Camera : IDisposable {
             color,
             instanceCount: 1);
         matrices[0] = CreateTranslationScaleMatrix(center, new Vector3(radius));
+    }
+
+    /// <summary>
+    /// Records three great circles at a transform with the transform's scale applied to
+    /// <paramref name="radius"/>.
+    /// </summary>
+    /// <param name="transform">The wire-sphere transform; its position is the center.</param>
+    /// <param name="radius">The local-space radius before the transform scale.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The instance matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>, so the
+    /// transform position is the center, the rotation orients the great circles, and the scale
+    /// multiplies the radius on each local axis. Identity rotation and unit scale reproduce
+    /// <see cref="DrawWireSphere(Vector3, float, Color)"/> at <see cref="Transform.Position"/>. A zero
+    /// radius or a zero transform scale component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
+    /// negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireSphere(Transform transform, float radius, Color color) {
+        EnsureDrawable(nameof(DrawWireSphere));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        if (radius == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.WireSphere,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount: 1);
+        matrices[0] = Matrix4x4.CreateScale(radius) * transform.ToMatrix();
+    }
+
+    /// <summary>
+    /// Records a tessellated wire sphere centered at <paramref name="center"/>.
+    /// </summary>
+    /// <param name="center">The world-space center.</param>
+    /// <param name="radius">The world-space radius.</param>
+    /// <param name="rings">The number of latitude bands; at least two.</param>
+    /// <param name="slices">The number of longitude segments; at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// Unlike <see cref="DrawWireSphere(Vector3, float, Color)"/>, which instances the fixed
+    /// wire-sphere mesh, this overload composes <paramref name="slices"/> meridians of
+    /// <paramref name="rings"/> segments each plus <c>rings - 1</c> latitude circles of
+    /// <paramref name="slices"/> segments each, for <c>slices * (2 * rings - 1)</c> line instances in
+    /// one draw. The poles and seam are shared and the draw contributes no triangles. A zero radius
+    /// records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of <paramref name="center"/> or
+    /// <paramref name="radius"/> is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireSphere(Vector3 center, float radius, int rings, int slices, Color color) {
+        EnsureDrawable(nameof(DrawWireSphere));
+        ValidateFinite(center, nameof(center));
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateTessellation(rings, slices);
+        if (radius == 0f) {
+            return;
+        }
+
+        DrawTessellatedWireSphere(
+            Matrix4x4.CreateScale(radius) * Matrix4x4.CreateTranslation(center),
+            rings,
+            slices,
+            color);
+    }
+
+    /// <summary>
+    /// Records a tessellated wire sphere at a transform with the transform's scale applied to
+    /// <paramref name="radius"/>.
+    /// </summary>
+    /// <param name="transform">The wire-sphere transform; its position is the center.</param>
+    /// <param name="radius">The local-space radius before the transform scale.</param>
+    /// <param name="rings">The number of latitude bands; at least two.</param>
+    /// <param name="slices">The number of longitude segments; at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The line instances are composed as in
+    /// <see cref="DrawWireSphere(Vector3, float, int, int, Color)"/> and transformed by
+    /// <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>. A zero radius or a zero transform
+    /// scale component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The radius or a transform scale component is negative, <paramref name="rings"/> is less than
+    /// two, or <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireSphere(Transform transform, float radius, int rings, int slices, Color color) {
+        EnsureDrawable(nameof(DrawWireSphere));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateTessellation(rings, slices);
+        if (radius == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        DrawTessellatedWireSphere(
+            Matrix4x4.CreateScale(radius) * transform.ToMatrix(),
+            rings,
+            slices,
+            color);
+    }
+
+    /// <summary>
+    /// Records one solid capsule between two spherical cap centers.
+    /// </summary>
+    /// <param name="start">The world-space center of the start spherical cap.</param>
+    /// <param name="end">The world-space center of the end spherical cap.</param>
+    /// <param name="radius">The cap radius.</param>
+    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
+    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
+    /// <param name="color">The linear capsule color.</param>
+    /// <remarks>
+    /// The capsule is the cylinder between the two cap centers plus one hemisphere at each end. It is
+    /// recorded as two instanced draws: <paramref name="slices"/> side quads and
+    /// <c>2 * slices * (2 * rings - 1)</c> cap triangles. The cap-center distance is the segment
+    /// length, so the total capsule height is <c>|end - start| + 2 * radius</c>. A zero radius or a
+    /// zero-length segment records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of an endpoint or the radius is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCapsule(
+        Vector3 start,
+        Vector3 end,
+        float radius,
+        int rings,
+        int slices,
+        Color color) {
+        EnsureDrawable(nameof(DrawCapsule));
+        ValidateFinite(start, nameof(start));
+        ValidateFinite(end, nameof(end));
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateTessellation(rings, slices);
+        Vector3 axis = end - start;
+        if (!(axis.LengthSquared() > 0f) || radius == 0f) {
+            return;
+        }
+
+        float height = axis.Length();
+        DrawCapsuleCore(
+            CreateSegmentMatrix((start + end) * 0.5f, end),
+            radius,
+            height,
+            rings,
+            slices,
+            color);
+    }
+
+    /// <summary>
+    /// Records one solid capsule at a transform; the capsule is centered at the transform origin and
+    /// its axis is local <c>+Y</c>.
+    /// </summary>
+    /// <param name="transform">The capsule transform; the capsule is centered at its position.</param>
+    /// <param name="radius">The local-space cap radius before the transform scale.</param>
+    /// <param name="height">The local-space distance between the two cap centers before the transform
+    /// scale.</param>
+    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
+    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
+    /// <param name="color">The linear capsule color.</param>
+    /// <remarks>
+    /// <para>
+    /// The cap centers are at local <c>(0, ±height/2, 0)</c>, so the capsule is centered on the
+    /// transform origin and its total height is <c>(height + 2 * radius) * Scale.Y</c> along
+    /// <see cref="Transform.Up"/>. The instance matrices are composed as
+    /// <c>local * transform.ToMatrix()</c>, so the transform rotation orients the capsule and the scale
+    /// multiplies the radius and height.
+    /// </para>
+    /// <para>A zero radius, zero height, or zero transform scale component records nothing.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius, height, or a transform component is not
+    /// finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The radius, height, or a transform scale component is negative, <paramref name="rings"/> is
+    /// less than two, or <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCapsule(
+        Transform transform,
+        float radius,
+        float height,
+        int rings,
+        int slices,
+        Color color) {
+        EnsureDrawable(nameof(DrawCapsule));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateFinite(height, nameof(height));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateNonNegative(height, nameof(height));
+        ValidateTessellation(rings, slices);
+        if (radius == 0f || height == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        DrawCapsuleCore(transform.ToMatrix(), radius, height, rings, slices, color);
+    }
+
+    /// <summary>
+    /// Records the wire frame of a capsule between two spherical cap centers.
+    /// </summary>
+    /// <param name="start">The world-space center of the start spherical cap.</param>
+    /// <param name="end">The world-space center of the end spherical cap.</param>
+    /// <param name="radius">The cap radius.</param>
+    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
+    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The wire frame is one instanced line draw with <c>slices * (4 * rings + 1)</c> segments:
+    /// <paramref name="slices"/> body edges, one equator ring per end, and per hemispherical cap
+    /// <paramref name="slices"/> meridians of <paramref name="rings"/> segments plus <c>rings - 1</c>
+    /// interior latitude rings. It contributes no triangles. A zero radius or a zero-length segment
+    /// records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of an endpoint or the radius is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="radius"/> is negative, <paramref name="rings"/> is less than two, or
+    /// <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireCapsule(
+        Vector3 start,
+        Vector3 end,
+        float radius,
+        int rings,
+        int slices,
+        Color color) {
+        EnsureDrawable(nameof(DrawWireCapsule));
+        ValidateFinite(start, nameof(start));
+        ValidateFinite(end, nameof(end));
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateTessellation(rings, slices);
+        Vector3 axis = end - start;
+        if (!(axis.LengthSquared() > 0f) || radius == 0f) {
+            return;
+        }
+
+        float height = axis.Length();
+        DrawWireCapsuleCore(
+            CreateSegmentMatrix((start + end) * 0.5f, end),
+            radius,
+            height,
+            rings,
+            slices,
+            color);
+    }
+
+    /// <summary>
+    /// Records the wire frame of a capsule at a transform; the capsule is centered at the transform
+    /// origin and its axis is local <c>+Y</c>.
+    /// </summary>
+    /// <param name="transform">The capsule transform; the capsule is centered at its position.</param>
+    /// <param name="radius">The local-space cap radius before the transform scale.</param>
+    /// <param name="height">The local-space distance between the two cap centers before the transform
+    /// scale.</param>
+    /// <param name="rings">The number of latitude bands per hemispherical cap; at least two.</param>
+    /// <param name="slices">The number of longitude segments around the axis; at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    /// <remarks>
+    /// The wire frame is composed as in
+    /// <see cref="DrawWireCapsule(Vector3, Vector3, float, int, int, Color)"/> with the cap centers at
+    /// local <c>±height/2</c> on <c>Y</c>, then transformed by <c>transform.ToMatrix()</c>. A zero
+    /// radius, zero height, or zero transform scale component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius, height, or a transform component is not
+    /// finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The radius, height, or a transform scale component is negative, <paramref name="rings"/> is
+    /// less than two, or <paramref name="slices"/> is less than three.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawWireCapsule(
+        Transform transform,
+        float radius,
+        float height,
+        int rings,
+        int slices,
+        Color color) {
+        EnsureDrawable(nameof(DrawWireCapsule));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateFinite(height, nameof(height));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateNonNegative(height, nameof(height));
+        ValidateTessellation(rings, slices);
+        if (radius == 0f || height == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        DrawWireCapsuleCore(transform.ToMatrix(), radius, height, rings, slices, color);
+    }
+
+    /// <summary>
+    /// Records a closed circle in the plane defined by a center, a rotation axis, and a rotation
+    /// angle.
+    /// </summary>
+    /// <param name="center">The world-space circle center.</param>
+    /// <param name="radius">The world-space radius.</param>
+    /// <param name="rotationAxis">The axis the base circle is rotated around; must be non-zero.</param>
+    /// <param name="rotationAngle">The rotation around <paramref name="rotationAxis"/> in degrees.</param>
+    /// <param name="color">The linear line color.</param>
+    /// <remarks>
+    /// The base circle lies in the local <c>XZ</c> plane with local <c>+Y</c> as its normal, matching
+    /// <see cref="DrawPlane(Vector3, Vector2, Color)"/>, and is rotated by
+    /// <paramref name="rotationAngle"/> degrees around <paramref name="rotationAxis"/> before it is
+    /// translated to <paramref name="center"/>. The circle is 36 line segments and closes the loop. A
+    /// zero radius records nothing; a zero rotation axis is <see cref="ArgumentException"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentException">A component of <paramref name="center"/>,
+    /// <paramref name="radius"/>, <paramref name="rotationAxis"/>, or
+    /// <paramref name="rotationAngle"/> is not finite, or <paramref name="rotationAxis"/> is zero.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radius"/> is negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCircle(
+        Vector3 center,
+        float radius,
+        Vector3 rotationAxis,
+        float rotationAngle,
+        Color color) {
+        EnsureDrawable(nameof(DrawCircle));
+        ValidateFinite(center, nameof(center));
+        ValidateFinite(radius, nameof(radius));
+        ValidateFinite(rotationAxis, nameof(rotationAxis));
+        ValidateFinite(rotationAngle, nameof(rotationAngle));
+        ValidateNonNegative(radius, nameof(radius));
+        float axisLengthSquared = rotationAxis.LengthSquared();
+        if (!(axisLengthSquared > 0f)) {
+            throw new ArgumentException(
+                "The rotation axis must not be zero length.",
+                nameof(rotationAxis));
+        }
+
+        if (radius == 0f) {
+            return;
+        }
+
+        Matrix4x4 rotation = Matrix4x4.CreateFromAxisAngle(
+            rotationAxis / MathF.Sqrt(axisLengthSquared),
+            rotationAngle * DEGREES_TO_RADIANS);
+        DrawCircleCore(
+            Matrix4x4.CreateScale(radius) * rotation * Matrix4x4.CreateTranslation(center),
+            color);
+    }
+
+    /// <summary>
+    /// Records a closed circle at a transform in its local <c>XZ</c> plane.
+    /// </summary>
+    /// <param name="transform">The circle transform; its position is the circle center and its local
+    /// <c>+Y</c> is the circle normal.</param>
+    /// <param name="radius">The local-space radius before the transform scale.</param>
+    /// <param name="color">The linear line color.</param>
+    /// <remarks>
+    /// The base circle is the local <c>XZ</c> plane with local <c>+Y</c> as its normal, matching
+    /// <see cref="DrawPlane(Transform, Vector2, Color)"/> and <see cref="DrawGrid"/>. Its instance
+    /// matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>, so the transform position
+    /// is the center, the rotation orients the plane, and the scale multiplies the radius on the local
+    /// X and Z axes (a non-uniform scale produces an ellipse). The circle is 36 line segments and
+    /// closes the loop. A zero radius or a zero transform scale component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius or a transform component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
+    /// negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawCircle(Transform transform, float radius, Color color) {
+        EnsureDrawable(nameof(DrawCircle));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        if (radius == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        DrawCircleCore(Matrix4x4.CreateScale(radius) * transform.ToMatrix(), color);
     }
 
     /// <summary>
@@ -1268,6 +2499,632 @@ public sealed class Camera : IDisposable {
     private static Vector3 NormalizeOr(Vector3 value, Vector3 fallback) {
         float length = value.Length();
         return length > 0f && float.IsFinite(length) ? value / length : fallback;
+    }
+
+    /// <summary>
+    /// Composes a rotation and translation that maps the local <c>+Y</c> axis to
+    /// <paramref name="end"/> - <paramref name="start"/> and the local origin to
+    /// <paramref name="start"/>.
+    /// </summary>
+    /// <remarks>
+    /// The roll around the segment is deterministic: the local X axis is the normalized cross product
+    /// of world up (or world X for a vertical segment) and the segment axis.
+    /// </remarks>
+    private static Matrix4x4 CreateSegmentMatrix(Vector3 start, Vector3 end) {
+        Vector3 axisY = Vector3.Normalize(end - start);
+        Vector3 helper = MathF.Abs(axisY.Y) < 0.999f ? Vector3.UnitY : Vector3.UnitX;
+        Vector3 axisX = Vector3.Normalize(Vector3.Cross(helper, axisY));
+        Vector3 axisZ = Vector3.Cross(axisX, axisY);
+        return new Matrix4x4(
+            axisX.X, axisX.Y, axisX.Z, 0f,
+            axisY.X, axisY.Y, axisY.Z, 0f,
+            axisZ.X, axisZ.Y, axisZ.Z, 0f,
+            start.X, start.Y, start.Z, 1f);
+    }
+
+    /// <summary>
+    /// Composes the reference-triangle map for one world-space triangle and then applies
+    /// <paramref name="outer"/>.
+    /// </summary>
+    private static Matrix4x4 CreateTriangleMatrix(
+        Vector3 a,
+        Vector3 b,
+        Vector3 c,
+        Matrix4x4 outer) =>
+        CreateTriangleMatrix(a, b, c, Vector3.Cross(b - a, c - a), Vector3.UnitZ) * outer;
+
+    /// <summary>
+    /// Records a tessellated unit sphere through <paramref name="outer"/> as one instanced triangle
+    /// draw.
+    /// </summary>
+    /// <param name="outer">The unit-sphere-to-world matrix.</param>
+    /// <param name="rings">The validated number of latitude bands; at least two.</param>
+    /// <param name="slices">The validated number of longitude segments; at least three.</param>
+    /// <param name="color">The linear sphere color.</param>
+    private void DrawTessellatedSphere(Matrix4x4 outer, int rings, int slices, Color color) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Triangle,
+            material,
+            material.DefaultRenderState,
+            color,
+            2 * slices * (rings - 1));
+        int matrixIndex = 0;
+        float firstPhi = MathF.PI / rings;
+        for (int slice = 0; slice < slices; slice++) {
+            Vector3 start = GetSpherePoint(firstPhi, GetSliceAngle(slice, slices));
+            Vector3 end = GetSpherePoint(firstPhi, GetSliceAngle(slice + 1, slices));
+            matrices[matrixIndex++] = CreateTriangleMatrix(Vector3.UnitY, start, end, outer);
+        }
+
+        for (int ring = 1; ring < rings - 1; ring++) {
+            float upperPhi = MathF.PI * ring / rings;
+            float lowerPhi = MathF.PI * (ring + 1) / rings;
+            for (int slice = 0; slice < slices; slice++) {
+                float startAngle = GetSliceAngle(slice, slices);
+                float endAngle = GetSliceAngle(slice + 1, slices);
+                Vector3 upperStart = GetSpherePoint(upperPhi, startAngle);
+                Vector3 upperEnd = GetSpherePoint(upperPhi, endAngle);
+                Vector3 lowerStart = GetSpherePoint(lowerPhi, startAngle);
+                Vector3 lowerEnd = GetSpherePoint(lowerPhi, endAngle);
+                // The same winding as the engine sphere mesh: upper-left, lower-left, upper-right,
+                // then upper-right, lower-left, lower-right.
+                matrices[matrixIndex++] = CreateTriangleMatrix(upperStart, lowerStart, upperEnd, outer);
+                matrices[matrixIndex++] = CreateTriangleMatrix(upperEnd, lowerStart, lowerEnd, outer);
+            }
+        }
+
+        float lastPhi = MathF.PI * (rings - 1) / rings;
+        for (int slice = 0; slice < slices; slice++) {
+            Vector3 start = GetSpherePoint(lastPhi, GetSliceAngle(slice, slices));
+            Vector3 end = GetSpherePoint(lastPhi, GetSliceAngle(slice + 1, slices));
+            matrices[matrixIndex++] = CreateTriangleMatrix(start, -Vector3.UnitY, end, outer);
+        }
+    }
+
+    /// <summary>
+    /// Records a tessellated unit wire sphere through <paramref name="outer"/> as one instanced line
+    /// draw.
+    /// </summary>
+    /// <param name="outer">The unit-sphere-to-world matrix.</param>
+    /// <param name="rings">The validated number of latitude bands; at least two.</param>
+    /// <param name="slices">The validated number of longitude segments; at least three.</param>
+    /// <param name="color">The linear wire color.</param>
+    private void DrawTessellatedWireSphere(Matrix4x4 outer, int rings, int slices, Color color) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Line,
+            material,
+            material.DefaultRenderState,
+            color,
+            slices * ((2 * rings) - 1));
+        int matrixIndex = 0;
+        for (int ring = 1; ring < rings; ring++) {
+            float phi = MathF.PI * ring / rings;
+            for (int slice = 0; slice < slices; slice++) {
+                Vector3 start = GetSpherePoint(phi, GetSliceAngle(slice, slices));
+                Vector3 end = GetSpherePoint(phi, GetSliceAngle(slice + 1, slices));
+                matrices[matrixIndex++] = CreateLineMatrix(start, end) * outer;
+            }
+        }
+
+        for (int slice = 0; slice < slices; slice++) {
+            float theta = GetSliceAngle(slice, slices);
+            Vector3 start = Vector3.UnitY;
+            for (int ring = 1; ring < rings; ring++) {
+                Vector3 end = GetSpherePoint(MathF.PI * ring / rings, theta);
+                matrices[matrixIndex++] = CreateLineMatrix(start, end) * outer;
+                start = end;
+            }
+
+            matrices[matrixIndex++] = CreateLineMatrix(start, -Vector3.UnitY) * outer;
+        }
+    }
+
+    /// <summary>
+    /// Records a capped cylinder in local shape space through <paramref name="outer"/>.
+    /// </summary>
+    /// <remarks>
+    /// Local space has its bottom cap at the origin and its axis along <c>+Y</c>. Equal positive radii
+    /// use quad side instances and two cap triangle instances per side. Unequal positive radii use two
+    /// side triangles plus one triangle per cap for each side because a tapered segment is not an
+    /// affine image of the unit quad. A zero radius at one end uses one side triangle and one base-cap
+    /// triangle per side; the degenerate cap at the apex is skipped. The caller validates the values,
+    /// rejects two zero radii, and rejects a zero height.
+    /// </remarks>
+    private void DrawCylinderCore(
+        Matrix4x4 outer,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Vector3 topCenter = new(0f, height, 0f);
+        bool hasTop = radiusTop > 0f;
+        bool hasBottom = radiusBottom > 0f;
+        if (hasTop && hasBottom && radiusTop == radiusBottom) {
+            Span<Matrix4x4> sideMatrices = BeginPrimitiveDraw(
+                primitives.Quad,
+                material,
+                material.DefaultRenderState,
+                color,
+                sides);
+            Span<Matrix4x4> capMatrices = BeginPrimitiveDraw(
+                primitives.Triangle,
+                material,
+                material.DefaultRenderState,
+                color,
+                sides * 2);
+            for (int side = 0; side < sides; side++) {
+                Vector3 bottomStart = GetCylinderPoint(radiusBottom, 0f, side, sides);
+                Vector3 bottomEnd = GetCylinderPoint(radiusBottom, 0f, side + 1, sides);
+                Vector3 topStart = GetCylinderPoint(radiusTop, height, side, sides);
+                Vector3 topEnd = GetCylinderPoint(radiusTop, height, side + 1, sides);
+                sideMatrices[side] = CreateCylinderSideMatrix(bottomStart, bottomEnd, height) * outer;
+                capMatrices[side * 2] = CreateTriangleMatrix(
+                    Vector3.Zero,
+                    bottomStart,
+                    bottomEnd,
+                    Vector3.Cross(bottomStart, bottomEnd),
+                    -Vector3.UnitY) * outer;
+                capMatrices[(side * 2) + 1] = CreateTriangleMatrix(
+                    topCenter,
+                    topEnd,
+                    topStart,
+                    Vector3.Cross(topEnd - topCenter, topStart - topCenter),
+                    Vector3.UnitY) * outer;
+            }
+        } else if (hasTop && hasBottom) {
+            // A tapered side segment is a trapezoid, not an affine image of the unit quad, so the
+            // unequal-radius cylinder records two triangles per side segment instead of one quad.
+            int sideTriangleCount = sides * 2;
+            Span<Matrix4x4> triangleMatrices = BeginPrimitiveDraw(
+                primitives.Triangle,
+                material,
+                material.DefaultRenderState,
+                color,
+                sides * 4);
+            for (int side = 0; side < sides; side++) {
+                Vector3 bottomStart = GetCylinderPoint(radiusBottom, 0f, side, sides);
+                Vector3 bottomEnd = GetCylinderPoint(radiusBottom, 0f, side + 1, sides);
+                Vector3 topStart = GetCylinderPoint(radiusTop, height, side, sides);
+                Vector3 topEnd = GetCylinderPoint(radiusTop, height, side + 1, sides);
+                triangleMatrices[side * 2] = CreateTriangleMatrix(
+                    bottomEnd,
+                    bottomStart,
+                    topStart,
+                    outer);
+                triangleMatrices[(side * 2) + 1] = CreateTriangleMatrix(
+                    bottomEnd,
+                    topStart,
+                    topEnd,
+                    outer);
+                triangleMatrices[sideTriangleCount + side] = CreateTriangleMatrix(
+                    Vector3.Zero,
+                    bottomStart,
+                    bottomEnd,
+                    Vector3.Cross(bottomStart, bottomEnd),
+                    -Vector3.UnitY) * outer;
+                triangleMatrices[sideTriangleCount + sides + side] = CreateTriangleMatrix(
+                    topCenter,
+                    topEnd,
+                    topStart,
+                    Vector3.Cross(topEnd - topCenter, topStart - topCenter),
+                    Vector3.UnitY) * outer;
+            }
+        } else {
+            Span<Matrix4x4> triangleMatrices = BeginPrimitiveDraw(
+                primitives.Triangle,
+                material,
+                material.DefaultRenderState,
+                color,
+                sides * 2);
+            for (int side = 0; side < sides; side++) {
+                Vector3 ringStart = GetCylinderPoint(radiusBottom, 0f, side, sides);
+                Vector3 ringEnd = GetCylinderPoint(radiusBottom, 0f, side + 1, sides);
+                Vector3 capStart = GetCylinderPoint(radiusTop, height, side, sides);
+                Vector3 capEnd = GetCylinderPoint(radiusTop, height, side + 1, sides);
+                if (hasBottom) {
+                    triangleMatrices[side] = CreateTriangleMatrix(
+                        topCenter,
+                        ringStart,
+                        ringEnd,
+                        outer);
+                    triangleMatrices[sides + side] = CreateTriangleMatrix(
+                        Vector3.Zero,
+                        ringStart,
+                        ringEnd,
+                        Vector3.Cross(ringStart, ringEnd),
+                        -Vector3.UnitY) * outer;
+                } else {
+                    triangleMatrices[side] = CreateTriangleMatrix(
+                        Vector3.Zero,
+                        capEnd,
+                        capStart,
+                        outer);
+                    triangleMatrices[sides + side] = CreateTriangleMatrix(
+                        topCenter,
+                        capEnd,
+                        capStart,
+                        Vector3.Cross(capEnd - topCenter, capStart - topCenter),
+                        Vector3.UnitY) * outer;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records a wire cylinder in local shape space through <paramref name="outer"/> as one instanced
+    /// line draw.
+    /// </summary>
+    /// <remarks>
+    /// The draw has one vertical edge per side plus one closed ring per non-zero radius. The caller
+    /// validates the values, rejects two zero radii, and rejects a zero height.
+    /// </remarks>
+    private void DrawWireCylinderCore(
+        Matrix4x4 outer,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        bool hasTop = radiusTop > 0f;
+        bool hasBottom = radiusBottom > 0f;
+        int instanceCount = sides + (hasTop ? sides : 0) + (hasBottom ? sides : 0);
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Line,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount);
+        int matrixIndex = 0;
+        for (int side = 0; side < sides; side++) {
+            matrices[matrixIndex++] = CreateLineMatrix(
+                GetCylinderPoint(radiusBottom, 0f, side, sides),
+                GetCylinderPoint(radiusTop, height, side, sides)) * outer;
+        }
+
+        if (hasBottom) {
+            for (int side = 0; side < sides; side++) {
+                matrices[matrixIndex++] = CreateLineMatrix(
+                    GetCylinderPoint(radiusBottom, 0f, side, sides),
+                    GetCylinderPoint(radiusBottom, 0f, side + 1, sides)) * outer;
+            }
+        }
+
+        if (hasTop) {
+            for (int side = 0; side < sides; side++) {
+                matrices[matrixIndex++] = CreateLineMatrix(
+                    GetCylinderPoint(radiusTop, height, side, sides),
+                    GetCylinderPoint(radiusTop, height, side + 1, sides)) * outer;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Records a solid capsule in local shape space through <paramref name="outer"/>.
+    /// </summary>
+    /// <remarks>
+    /// Local space is centered at the origin with the cap centers at <c>(0, ±height/2, 0)</c>. The body
+    /// is <c>slices</c> side quads and the two hemispherical caps are
+    /// <c>2 * slices * (2 * rings - 1)</c> triangles. The caller validates the values and rejects a
+    /// zero radius or height.
+    /// </remarks>
+    private void DrawCapsuleCore(
+        Matrix4x4 outer,
+        float radius,
+        float height,
+        int rings,
+        int slices,
+        Color color) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> sideMatrices = BeginPrimitiveDraw(
+            primitives.Quad,
+            material,
+            material.DefaultRenderState,
+            color,
+            slices);
+        int capTriangleCount = 2 * slices * ((2 * rings) - 1);
+        Span<Matrix4x4> capMatrices = BeginPrimitiveDraw(
+            primitives.Triangle,
+            material,
+            material.DefaultRenderState,
+            color,
+            capTriangleCount);
+        float halfHeight = height * 0.5f;
+        for (int side = 0; side < slices; side++) {
+            Vector3 bottomStart = GetCylinderPoint(radius, -halfHeight, side, slices);
+            Vector3 bottomEnd = GetCylinderPoint(radius, -halfHeight, side + 1, slices);
+            sideMatrices[side] = CreateCylinderSideMatrix(bottomStart, bottomEnd, height) * outer;
+        }
+
+        int matrixIndex = AddHemisphereTriangles(
+            capMatrices,
+            0,
+            halfHeight,
+            radius,
+            rings,
+            slices,
+            top: true,
+            outer);
+        AddHemisphereTriangles(
+            capMatrices,
+            matrixIndex,
+            -halfHeight,
+            radius,
+            rings,
+            slices,
+            top: false,
+            outer);
+    }
+
+    /// <summary>
+    /// Records a wire capsule in local shape space through <paramref name="outer"/> as one instanced
+    /// line draw.
+    /// </summary>
+    /// <remarks>
+    /// The draw has <c>slices * (4 * rings + 1)</c> line instances: one body edge per slice, one
+    /// equator ring per end, and per hemispherical cap one meridian per slice with <c>rings</c>
+    /// segments plus <c>rings - 1</c> interior latitude rings. The caller validates the values and
+    /// rejects a zero radius or height.
+    /// </remarks>
+    private void DrawWireCapsuleCore(
+        Matrix4x4 outer,
+        float radius,
+        float height,
+        int rings,
+        int slices,
+        Color color) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Line,
+            material,
+            material.DefaultRenderState,
+            color,
+            slices * ((4 * rings) + 1));
+        int matrixIndex = 0;
+        float halfHeight = height * 0.5f;
+        for (int slice = 0; slice < slices; slice++) {
+            matrices[matrixIndex++] = CreateLineMatrix(
+                GetCylinderPoint(radius, -halfHeight, slice, slices),
+                GetCylinderPoint(radius, halfHeight, slice, slices)) * outer;
+        }
+
+        for (int slice = 0; slice < slices; slice++) {
+            matrices[matrixIndex++] = CreateLineMatrix(
+                GetCylinderPoint(radius, -halfHeight, slice, slices),
+                GetCylinderPoint(radius, -halfHeight, slice + 1, slices)) * outer;
+            matrices[matrixIndex++] = CreateLineMatrix(
+                GetCylinderPoint(radius, halfHeight, slice, slices),
+                GetCylinderPoint(radius, halfHeight, slice + 1, slices)) * outer;
+        }
+
+        for (int cap = 0; cap < 2; cap++) {
+            bool top = cap == 0;
+            float centerY = top ? halfHeight : -halfHeight;
+            for (int slice = 0; slice < slices; slice++) {
+                float theta = GetSliceAngle(slice, slices);
+                Vector3 start = top ? new Vector3(0f, centerY + radius, 0f) : new Vector3(0f, centerY - radius, 0f);
+                for (int ring = 1; ring <= rings; ring++) {
+                    float phi = (MathF.PI * 0.5f) * ring / rings;
+                    Vector3 end = GetHemispherePoint(centerY, radius, phi, theta, top);
+                    matrices[matrixIndex++] = CreateLineMatrix(start, end) * outer;
+                    start = end;
+                }
+            }
+
+            for (int ring = 1; ring < rings; ring++) {
+                float phi = (MathF.PI * 0.5f) * ring / rings;
+                for (int slice = 0; slice < slices; slice++) {
+                    Vector3 start = GetHemispherePoint(
+                        centerY,
+                        radius,
+                        phi,
+                        GetSliceAngle(slice, slices),
+                        top);
+                    Vector3 end = GetHemispherePoint(
+                        centerY,
+                        radius,
+                        phi,
+                        GetSliceAngle(slice + 1, slices),
+                        top);
+                    matrices[matrixIndex++] = CreateLineMatrix(start, end) * outer;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fill the cap triangles of one capsule hemisphere, starting at <paramref name="matrixIndex"/>.
+    /// </summary>
+    /// <remarks>
+    /// The top hemisphere uses the same winding as the engine sphere mesh. The bottom hemisphere
+    /// mirrors the top coordinates and reverses each triangle's winding, so both caps face outward.
+    /// </remarks>
+    private static int AddHemisphereTriangles(
+        Span<Matrix4x4> matrices,
+        int matrixIndex,
+        float centerY,
+        float radius,
+        int rings,
+        int slices,
+        bool top,
+        Matrix4x4 outer) {
+        Vector3 pole = top
+            ? new Vector3(0f, centerY + radius, 0f)
+            : new Vector3(0f, centerY - radius, 0f);
+        float firstPhi = (MathF.PI * 0.5f) / rings;
+        for (int slice = 0; slice < slices; slice++) {
+            Vector3 start = GetHemispherePoint(
+                centerY,
+                radius,
+                firstPhi,
+                GetSliceAngle(slice, slices),
+                top);
+            Vector3 end = GetHemispherePoint(
+                centerY,
+                radius,
+                firstPhi,
+                GetSliceAngle(slice + 1, slices),
+                top);
+            matrixIndex = AddCapsuleTriangle(matrices, matrixIndex, pole, start, end, top, outer);
+        }
+
+        for (int ring = 1; ring < rings; ring++) {
+            float upperPhi = (MathF.PI * 0.5f) * ring / rings;
+            float lowerPhi = (MathF.PI * 0.5f) * (ring + 1) / rings;
+            for (int slice = 0; slice < slices; slice++) {
+                float startAngle = GetSliceAngle(slice, slices);
+                float endAngle = GetSliceAngle(slice + 1, slices);
+                Vector3 upperStart = GetHemispherePoint(centerY, radius, upperPhi, startAngle, top);
+                Vector3 upperEnd = GetHemispherePoint(centerY, radius, upperPhi, endAngle, top);
+                Vector3 lowerStart = GetHemispherePoint(centerY, radius, lowerPhi, startAngle, top);
+                Vector3 lowerEnd = GetHemispherePoint(centerY, radius, lowerPhi, endAngle, top);
+                matrixIndex = AddCapsuleTriangle(
+                    matrices,
+                    matrixIndex,
+                    upperStart,
+                    lowerStart,
+                    upperEnd,
+                    top,
+                    outer);
+                matrixIndex = AddCapsuleTriangle(
+                    matrices,
+                    matrixIndex,
+                    upperEnd,
+                    lowerStart,
+                    lowerEnd,
+                    top,
+                    outer);
+            }
+        }
+
+        return matrixIndex;
+    }
+
+    private static int AddCapsuleTriangle(
+        Span<Matrix4x4> matrices,
+        int matrixIndex,
+        Vector3 a,
+        Vector3 b,
+        Vector3 c,
+        bool top,
+        Matrix4x4 outer) {
+        matrices[matrixIndex] = top
+            ? CreateTriangleMatrix(a, b, c, outer)
+            : CreateTriangleMatrix(a, c, b, outer);
+        return matrixIndex + 1;
+    }
+
+    /// <summary>
+    /// Records a closed unit circle in the local <c>XZ</c> plane through <paramref name="outer"/> as
+    /// one instanced line draw.
+    /// </summary>
+    private void DrawCircleCore(Matrix4x4 outer, Color color) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Line,
+            material,
+            material.DefaultRenderState,
+            color,
+            CIRCLE_SEGMENTS);
+        for (int segment = 0; segment < CIRCLE_SEGMENTS; segment++) {
+            matrices[segment] = CreateLineMatrix(
+                GetCirclePoint(segment, CIRCLE_SEGMENTS),
+                GetCirclePoint(segment + 1, CIRCLE_SEGMENTS)) * outer;
+        }
+    }
+
+    private static Vector3 GetCirclePoint(int segment, int segments) {
+        float angle = GetSliceAngle(segment, segments);
+        return new Vector3(MathF.Sin(angle), 0f, MathF.Cos(angle));
+    }
+
+    private static Vector3 GetCylinderPoint(float radius, float y, int side, int sides) {
+        float angle = GetSliceAngle(side, sides);
+        return new Vector3(MathF.Cos(angle) * radius, y, MathF.Sin(angle) * radius);
+    }
+
+    private static Vector3 GetSpherePoint(float phi, float theta) =>
+        new(MathF.Sin(phi) * MathF.Sin(theta), MathF.Cos(phi), MathF.Sin(phi) * MathF.Cos(theta));
+
+    private static Vector3 GetHemispherePoint(
+        float centerY,
+        float radius,
+        float phi,
+        float theta,
+        bool top) {
+        float ringRadius = radius * MathF.Sin(phi);
+        float poleOffset = radius * MathF.Cos(phi);
+        return new Vector3(
+            ringRadius * MathF.Sin(theta),
+            centerY + (top ? poleOffset : -poleOffset),
+            ringRadius * MathF.Cos(theta));
+    }
+
+    private static float GetSliceAngle(int slice, int slices) => MathF.Tau * slice / slices;
+
+    private static Vector3 GetStripCorner(ReadOnlySpan<Vector3> points, int triangle, int corner) {
+        if ((triangle & 1) == 0) {
+            return points[triangle + corner];
+        }
+
+        return corner switch {
+            0 => points[triangle + 1],
+            1 => points[triangle],
+            _ => points[triangle + 2],
+        };
+    }
+
+    private static void ValidateTransform(Transform transform) {
+        ValidateFinite(transform.Position, nameof(transform));
+        Quaternion rotation = transform.Rotation;
+        if (!float.IsFinite(rotation.X)
+            || !float.IsFinite(rotation.Y)
+            || !float.IsFinite(rotation.Z)
+            || !float.IsFinite(rotation.W)) {
+            throw new ArgumentException("The transform rotation must be finite.", nameof(transform));
+        }
+
+        ValidateFinite(transform.Scale, nameof(transform));
+        ValidateNonNegative(transform.Scale, nameof(transform));
+    }
+
+    private static bool HasZeroScale(Transform transform) =>
+        transform.Scale.X == 0f || transform.Scale.Y == 0f || transform.Scale.Z == 0f;
+
+    private static void ValidateTessellation(int rings, int slices) {
+        if (rings < 2) {
+            throw new ArgumentOutOfRangeException(
+                nameof(rings),
+                rings,
+                "The shape needs at least two rings.");
+        }
+
+        if (slices < 3) {
+            throw new ArgumentOutOfRangeException(
+                nameof(slices),
+                slices,
+                "The shape needs at least three slices.");
+        }
+    }
+
+    private static void ValidateSides(int sides) {
+        if (sides < 3) {
+            throw new ArgumentOutOfRangeException(
+                nameof(sides),
+                sides,
+                "A cylinder needs at least three sides.");
+        }
     }
 
     private static void ValidateParts(IReadOnlyList<ModelPart> parts) {

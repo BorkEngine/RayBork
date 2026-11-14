@@ -1191,7 +1191,8 @@ RayBork.Mesh.HasCollisionAcceleration.get -> bool
 RayBork.MeshBuilder.GenerateCollisions() -> void
 RayBork.Camera.DrawBillboard(RayBork.Texture! texture, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera = true) -> void
 RayBork.Camera.DrawCube(System.Numerics.Vector3 position, System.Numerics.Vector3 size, RayBork.Color color) -> void
-RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radius, float height, RayBork.Color color, int sides = 16) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radius, float height, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radius, float height, RayBork.Color color, int sides) -> void
 RayBork.Camera.DrawGrid(int slices, float spacing, RayBork.Color color) -> void
 RayBork.Camera.DrawLine(System.Numerics.Vector3 start, System.Numerics.Vector3 end, RayBork.Color color) -> void
 RayBork.Camera.DrawLines(System.ReadOnlySpan<System.Numerics.Vector3> points, RayBork.Color color) -> void
@@ -1210,3 +1211,30 @@ RayBork.MeshBuilder.GeneratePlane(float width, float length, int resX, int resZ)
 RayBork.MeshBuilder.GeneratePoly(int sides, float radius) -> void
 RayBork.MeshBuilder.GenerateSphere(float radius, int rings, int slices) -> void
 RayBork.MeshBuilder.GenerateTorus(float radius, float size, int radSeg, int sides) -> void
+RayBork.Camera.DrawBoundingBox(RayBork.BoundingBox box, RayBork.Color color) -> void
+RayBork.Camera.DrawCapsule(RayBork.Transform transform, float radius, float height, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawCapsule(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawCircle(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawCircle(System.Numerics.Vector3 center, float radius, System.Numerics.Vector3 rotationAxis, float rotationAngle, RayBork.Color color) -> void
+RayBork.Camera.DrawCube(RayBork.Transform transform, System.Numerics.Vector3 size, RayBork.Color color) -> void
+RayBork.Camera.DrawCube(System.Numerics.Vector3 position, float width, float height, float length, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(RayBork.Transform transform, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float startRadius, float endRadius, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawPlane(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawRay(RayBork.Ray ray, RayBork.Color color) -> void
+RayBork.Camera.DrawSphere(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawSphere(RayBork.Transform transform, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawSphere(System.Numerics.Vector3 center, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawTriangleStrip(System.ReadOnlySpan<System.Numerics.Vector3> points, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCapsule(RayBork.Transform transform, float radius, float height, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCapsule(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCube(RayBork.Transform transform, System.Numerics.Vector3 size, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCube(System.Numerics.Vector3 position, float width, float height, float length, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCylinder(RayBork.Transform transform, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCylinder(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float startRadius, float endRadius, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCylinder(System.Numerics.Vector3 position, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, int rings, int slices, RayBork.Color color) -> void
+static RayBork.Collision.GetRayQuad(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, System.Numerics.Vector3 d) -> RayBork.RayCollision
