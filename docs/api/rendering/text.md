@@ -41,23 +41,36 @@ public enum TextWrapping {
 }
 ```
 
-Fonts are TTF/OTF assets. The bake copies the font file and its face metadata; the runtime parses
-the face and generates MSDF glyph textures on demand.
+Fonts are TTF/OTF assets. The bake copies the whole face file and records the MSDF settings; the runtime
+parses the face once and generates MSDF glyph textures on demand. There is no preload range and no
+`ranges` sidecar field: every glyph the face's cmap maps can be generated at runtime.
 
-- One glyph is one small texture, 32 px on its longest side, with a baked distance range and
+- One glyph is one small texture, 32 px on its longest side by default, with a baked distance range and
   padding. There is no atlas. Glyph textures are bindless, full-texture quads sampled `0..1`, and are
   referenced per text instance.
-- `Load<Font>` parses the face and preloads ASCII (`U+0020..U+007E`) plus the replacement glyph.
-  Glyph generation is asynchronous: the engine's `RayBork.Font` thread generates and uploads textures
+- `Load<Font>` is a CPU-only engine asset load: it parses the face and generates no glyph texture, so it
+  performs no GPU upload and `CachedGlyphCount` is `0` when it completes. A shared font keeps one cache
+  for its lifetime.
+- Glyph generation is asynchronous: the engine's `RayBork.Font` thread generates and uploads textures
   while the tick thread keeps running. `DrawText` never waits: a glyph whose texture is not ready is
   skipped for that call and appears on a later frame, while the pen still advances from the face
   metrics. `Acquire` adds the frame hold for a cached glyph before it returns, so a recorded draw keeps
   its glyph texture's GPU resource alive through the frame.
+- An unmapped rune falls back to glyph id 0 (`.notdef`), so every rune still advances the pen and draws
+  the missing-glyph quad once that texture is ready.
 - `GlyphCount` is the number of mapped glyphs in the face. `CachedGlyphCount` is the number with a
-  generated MSDF texture.
-- `TryGetGlyph` returns only cached glyphs. `Measure` works from face metrics and kerning without
-  generating textures.
-- Metrics (`LineHeight`, `Ascent`, `Descent`) are in em units; `Measure` and `DrawText` multiply by
+  generated MSDF texture; it grows as draws request glyphs and can fall when the per-font texture cache
+  evicts its least recently used entries.
+- `TryGetGlyph` returns only cached glyphs; an empty glyph such as a space has no texture and is not
+  returned. `Measure` works from face metrics and kerning without generating textures.
+- `Glyph` values are in em units. `Advance` is the horizontal pen advance. `Bearing` is the padded
+  quad's bottom-left corner relative to the pen position on the baseline. `Size` is the padded quad
+  size. `Uv0` is `(0, 0)` and `Uv1` is `(1, 1)` because one glyph is one whole texture. `Rune`
+  echoes the rune that produced the value; for an unmapped rune it is the requested rune while the
+  geometry comes from `.notdef`.
+- Metrics (`LineHeight`, `Ascent`, `Descent`) are in em units:
+  `(ascender - descender + lineGap) / unitsPerEm`, `ascender / unitsPerEm`, and
+  `-descender / unitsPerEm` from the `hhea`/`head` tables. `Measure` and `DrawText` multiply them by
   the requested `size`.
 - Kerning is applied. Ligatures, contextual shaping (Arabic, Indic), bidi, font fallback, color
   fonts, and emoji are post-1.0. Latin/Cyrillic/Greek text maps codepoint-to-glyph directly.
@@ -73,8 +86,9 @@ the face and generates MSDF glyph textures on demand.
 - Text batching uses the built-in MSDF shader. All text with the same font and render state can be
   one instanced draw; each glyph instance carries its bindless texture index as its per-instance
   texture data, and the shader samples the whole glyph texture without a per-instance UV rectangle.
-- Fonts are shared assets. Disposing a font while a frame references it is safe; using the public
-  object after `Dispose` is not.
+- Fonts are shared assets. The built-in Fira Sans Regular face is available as
+  `EngineContext.Defaults.DefaultFont`; the engine owns it and the game must not dispose it. Disposing a
+  font while a frame references it is safe; using the public object after `Dispose` is not.
 
 `Camera` also exposes:
 

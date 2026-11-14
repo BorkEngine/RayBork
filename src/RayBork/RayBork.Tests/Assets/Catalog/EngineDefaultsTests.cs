@@ -10,10 +10,11 @@ public sealed class EngineDefaultsTests {
     private const string MESH_SHADER_PATH = "/shaders/mesh";
     private const string WHITE_PATH = "/textures/white";
     private const string ERROR_PATH = "/textures/error";
+    private const string FONT_PATH = "/fonts/fira-sans";
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadAsyncPreloadsTheProgramAndBothTextures() {
+    public async Task LoadAsyncPreloadsTheProgramAndBothTexturesAndTheDefaultFont() {
         using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack()]);
 
         EngineDefaults defaults = await EngineDefaults.LoadAsync(harness.Catalog);
@@ -22,6 +23,9 @@ public sealed class EngineDefaultsTests {
             Assert.False(defaults.IsDisposed);
             Assert.Equal(WHITE_PATH, defaults.White.Path);
             Assert.Equal(ERROR_PATH, defaults.Error.Path);
+            Assert.Equal(FONT_PATH, defaults.DefaultFont.Path);
+            Assert.Equal(1, defaults.DefaultFont.GlyphCount);
+            Assert.Equal(0, defaults.DefaultFont.CachedGlyphCount);
             Assert.Equal(3, harness.Worker.UploadCallCount);
 
             Shader material = defaults.CreateMeshShader();
@@ -85,6 +89,7 @@ public sealed class EngineDefaultsTests {
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.White);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.Error);
+        Assert.Throws<ObjectDisposedException>(() => _ = defaults.DefaultFont);
         Assert.Throws<ObjectDisposedException>(defaults.CreateMeshShader);
 
         defaults.Dispose();
@@ -128,14 +133,16 @@ public sealed class EngineDefaultsTests {
         Assert.False(harness.Catalog.Exists(MESH_SHADER_PATH));
     }
 
-    private static byte[] BuildDefaultsPack() => CatalogTestData.BuildPack(
+    private static byte[] BuildDefaultsPack() => CatalogTestData.BuildPack([
         ("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor())),
         ("shaders/basic-vert", AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
         ("shaders/basic-frag", AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()),
         ("textures/white", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/white-ktx2"))),
         ("textures/white-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
         ("textures/error", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/error-ktx2"))),
-        ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));
+        ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
+        .. CatalogTestData.CreateFontEntries(),
+    ]);
 
     private static TextureAssetDescriptor CreateTextureDescriptor(string payload) => new() {
         Payload = payload,

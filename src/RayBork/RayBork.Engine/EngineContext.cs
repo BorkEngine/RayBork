@@ -78,15 +78,16 @@ public sealed class EngineContext {
     public IAssetCatalog Assets { get; }
 
     /// <summary>
-    /// Gets the engine-owned default assets: the built-in mesh shader program, the white texture, and
-    /// the error texture. Valid from <see cref="IGame.Setup"/> and released during shutdown.
+    /// Gets the engine-owned default assets: the built-in mesh shader program, the white and error
+    /// textures, and the built-in default font. Valid from <see cref="IGame.Setup"/> and released during
+    /// shutdown.
     /// </summary>
     /// <remarks>
     /// The defaults are preloaded after the catalog starts and before <see cref="IGame.Setup"/> runs.
     /// <see cref="EngineDefaults.CreateMeshShader"/> returns a new caller-owned material per call;
-    /// <see cref="EngineDefaults.White"/> and <see cref="EngineDefaults.Error"/> are engine-owned and
-    /// must not be disposed by the game. After the app stops, every member throws
-    /// <see cref="ObjectDisposedException"/>.
+    /// <see cref="EngineDefaults.White"/>, <see cref="EngineDefaults.Error"/>, and
+    /// <see cref="EngineDefaults.DefaultFont"/> are engine-owned and must not be disposed by the game.
+    /// After the app stops, every member throws <see cref="ObjectDisposedException"/>.
     /// </remarks>
     public EngineDefaults Defaults { get; }
 

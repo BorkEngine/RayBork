@@ -9,27 +9,25 @@ namespace RayBork.Bake.Processors;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The optional <c>[font]</c> sidecar supplies preload <c>ranges</c> and the MSDF settings
-/// <c>msdf_pixel_size</c>, <c>msdf_range</c>, and <c>msdf_padding</c>. Their defaults are
-/// <c>["U+0020-007E"]</c>, <c>32</c>, <c>4</c>, and <c>2</c>. M3 validates and stores the settings;
-/// runtime font parsing and MSDF generation arrive in M6, so no glyph or table content is parsed.
+/// The optional <c>[font]</c> sidecar supplies the MSDF settings <c>msdf_pixel_size</c>,
+/// <c>msdf_range</c>, and <c>msdf_padding</c>. Their defaults are <c>32</c>, <c>4</c>, and <c>2</c>.
+/// The whole face is packed: there is no preload range and no <c>ranges</c> key, and the runtime
+/// generates glyph textures on demand for any mapped glyph.
 /// </para>
 /// <para>
 /// The container must be a single sfnt face: <c>0x00010000</c> or <c>true</c> for TTF, and
 /// <c>OTTO</c> for OTF with CFF or CFF2 outlines. A TrueType Collection is rejected. Every table
-/// directory record must lie inside the file. An invalid container, range, or setting is
-/// <c>RB4010</c> and emits no outputs.
+/// directory record must lie inside the file. An invalid container or setting is <c>RB4010</c> and
+/// emits no outputs.
 /// </para>
 /// </remarks>
 internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
-    private const string DEFAULT_RANGE = "U+0020-007E";
     private const int DEFAULT_MSDF_PIXEL_SIZE = 32;
     private const int DEFAULT_MSDF_RANGE = 4;
     private const int DEFAULT_MSDF_PADDING = 2;
     private const string FACE_PAYLOAD_SUFFIX = "-face";
 
     private static readonly string[] _extensions = ["ttf", "otf"];
-    private static readonly string[] _defaultRanges = [DEFAULT_RANGE];
 
     /// <inheritdoc/>
     public override string Name => "font";
@@ -51,13 +49,7 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(sidecar);
 
-        if (!TryResolveSettings(
-                context,
-                sidecar,
-                out string[] ranges,
-                out int pixelSize,
-                out int msdfRange,
-                out int padding)) {
+        if (!TryResolveSettings(context, sidecar, out int pixelSize, out int msdfRange, out int padding)) {
             return;
         }
 
@@ -94,7 +86,6 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
             FacePayload = payloadPath,
             Format = format,
             ByteLength = (uint)face.Length,
-            Ranges = ranges,
             MsdfPixelSize = pixelSize,
             MsdfRange = msdfRange,
             MsdfPadding = padding,
@@ -105,11 +96,9 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
     private static bool TryResolveSettings(
         AssetProcessorContext context,
         FontSidecar sidecar,
-        out string[] ranges,
         out int pixelSize,
         out int msdfRange,
         out int padding) {
-        ranges = sidecar.Ranges is null ? [.. _defaultRanges] : [.. sidecar.Ranges];
         pixelSize = sidecar.MsdfPixelSize ?? DEFAULT_MSDF_PIXEL_SIZE;
         msdfRange = sidecar.MsdfRange ?? DEFAULT_MSDF_RANGE;
         padding = sidecar.MsdfPadding ?? DEFAULT_MSDF_PADDING;
@@ -136,17 +125,6 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
                 $"Font source '{context.RelativePath}' declares msdf_padding {padding}; it must be "
                     + "non-negative.");
             return false;
-        }
-
-        for (int index = 0; index < ranges.Length; index++) {
-            string? range = ranges[index];
-            if (!FontRangeValidator.TryValidate(range ?? string.Empty, out string? reason)) {
-                context.Diagnostics.Error(
-                    FontDiagnosticCodes.FONT_INVALID,
-                    $"Font source '{context.RelativePath}' declares an invalid range at index "
-                        + $"{index}: {reason}.");
-                return false;
-            }
         }
 
         return true;

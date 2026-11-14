@@ -33,6 +33,7 @@ public sealed class EngineDefaults {
     public Shader CreateMeshShader();
     public Texture White { get; }
     public Texture Error { get; }
+    public Font DefaultFont { get; }
 }
 
 [Flags]
@@ -152,23 +153,26 @@ Rules and errors:
 read-only and do not reflect the current values. There is no public `GetUniform` in v1; if it is
 added, it will read the cursor, not the GPU.
 
-**Engine defaults.** The app preloads the built-in mesh shader program at `/shaders/mesh` and the
-white and error textures after the asset catalog starts and before `IGame.Setup`. `EngineDefaults`
-exposes them through `EngineContext.Defaults`:
+**Engine defaults.** The app preloads the built-in mesh shader program at `/shaders/mesh`, the white
+and error textures, and the built-in default font at `/fonts/fira-sans` after the asset catalog starts
+and before `IGame.Setup`. `EngineDefaults` exposes them through `EngineContext.Defaults`:
 
 - `CreateMeshShader()` returns a new caller-owned material over the preloaded program. Dispose every
   material it returns exactly once.
 - `White` is the opaque 1x1 white sRGB texture (bindless slot 0) and `Error` is the 4x4 magenta/black
   checkerboard with nearest filtering. Both are engine-owned; do not dispose them.
+- `DefaultFont` is the built-in Fira Sans Regular face. It is a CPU-only engine asset: preloading it
+  performs no GPU upload, and its glyph textures are generated on demand. It is engine-owned; do not
+  dispose it.
 - Startup fails with an `AssetLoadException` when a built-in default is missing or corrupt.
 - The `EngineDefaults` owner references are released during shutdown, after the game callbacks
   return. After that, every `EngineDefaults` member throws `ObjectDisposedException`.
 
 The app also preloads the built-in `/shaders/primitive` program for the engine's primitive meshes and
 the `Camera` primitive helpers, and the built-in `/shaders/msdf` program that owns the engine's MSDF
-text material, but neither program is exposed through `EngineDefaults`; the type still offers only
-`CreateMeshShader`, `White`, and `Error`. `PrimitiveAssets` holds one material over each of the three
-preloaded programs, including the text material a later text draw API uses. `/shaders/primitive` and
+text material, but neither program is exposed through `EngineDefaults`; the type offers only
+`CreateMeshShader`, `White`, `Error`, and `DefaultFont`. `PrimitiveAssets` holds one material over each
+of the three preloaded programs, including the text material the text draw API uses. `/shaders/primitive` and
 `/shaders/msdf` are ordinary built-in shader entries, so `Load<Shader>` returns a caller-owned
 material over either one for a game's own vertex-color meshes or distance-field quads.
 `/shaders/primitive` reflects no uniforms and no textures, so every `SetUniform` name is rejected and

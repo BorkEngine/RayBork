@@ -304,4 +304,54 @@ public sealed class EngineDefaultsAppTests {
         Assert.Equal(EnginePreloadCounts.DEFAULTS + 2, worker.UploadCallCount);
         Assert.Equal(worker.UploadCallCount - 1, worker.DestroyCalls.Count);
     }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheDefaultFontIsPreloadedBeforeSetupLiveInTickAndDisposedAfterShutdown() {
+        FakeAssetGpuWorker worker = new();
+        FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
+        FakeEnginePlatform platform = new();
+        Font? setupFont = null;
+        bool usableInSetup = false;
+        bool usableInTick = false;
+        ScriptedGame game = new();
+        game.SetupHandler = context => {
+            setupFont = context.Defaults.DefaultFont;
+            usableInSetup = setupFont.Path == "/fonts/fira-sans"
+                && !setupFont.IsDisposed
+                && setupFont.GlyphCount > 0
+                && setupFont.CachedGlyphCount == 0
+                && setupFont.LineHeight > 0f
+                && setupFont.Ascent > 0f
+                && setupFont.Measure("Hello", 1f).X > 0f;
+            return Task.CompletedTask;
+        };
+        game.TickHandler = context => {
+            usableInTick = ReferenceEquals(context.Defaults.DefaultFont, setupFont)
+                && !setupFont!.IsDisposed
+                && setupFont.Measure("Hi", 2f).X > 0f;
+            context.RequestExit();
+        };
+
+        RayBorkApp app = new RayBorkAppBuilder()
+            .WithGame(game)
+            .WithTargetFps(2)
+            .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .Build(_ => platform, () => renderer, TimeProvider.System);
+        try {
+            app.Run();
+        } finally {
+            app.Dispose();
+        }
+
+        Assert.NotNull(setupFont);
+        Assert.True(usableInSetup);
+        Assert.True(usableInTick);
+        // Loading the built-in font is CPU-only, so the startup upload and destroy counts are unchanged.
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.UploadCallCount);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
+        Assert.True(setupFont!.IsDisposed);
+        Assert.Equal("/fonts/fira-sans", setupFont.Path);
+        Assert.Throws<ObjectDisposedException>(() => _ = setupFont.LineHeight);
+    }
 }

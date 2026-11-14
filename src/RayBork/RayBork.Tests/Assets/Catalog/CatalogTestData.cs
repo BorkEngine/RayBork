@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PolyType;
 using RayBork.Internal;
 using RayBork.Tests.Assets.Gpu;
+using RayBork.Tests.Fonts;
 
 namespace RayBork.Tests.Assets.Catalog;
 
@@ -31,7 +32,19 @@ internal static class CatalogTestData {
     internal const string SHADER_FRAGMENT_PAYLOAD_PATH = "shaders/basic-frag";
     internal const string DATA_PATH = "data/settings";
     internal const string MODEL_PATH = "models/castle";
-    internal const string FONT_PATH = "fonts/inter";
+
+    /// <summary>
+    /// The catalog font tests serve the synthetic face at the engine's default font path, so the same
+    /// pack also satisfies <see cref="EngineDefaults.LoadAsync"/>.
+    /// </summary>
+    internal const string FONT_PATH = "fonts/fira-sans";
+    internal const string FONT_PAYLOAD_PATH = "fonts/fira-sans-face";
+
+    /// <summary>The glyph id of the square <c>A</c> glyph the font test face maps.</summary>
+    internal const int FONT_GLYPH_ID = 1;
+
+    /// <summary>The <c>.notdef</c> glyph id.</summary>
+    internal const int FONT_NOTDEF_GLYPH_ID = 0;
 
     internal const uint MESH_VERTEX_COUNT = 3;
     internal const uint MESH_INDEX_COUNT = 3;
@@ -119,6 +132,55 @@ internal static class CatalogTestData {
     };
 
     internal static byte[] CreateDataPayload() => AssetSerialization.Serialize(CreateSettings());
+
+    /// <summary>
+    /// Builds the synthetic face the font tests load: a 1000-unit em with an 800/-200 ascender and
+    /// descender, a <c>.notdef</c> triangle at glyph zero, and a mapped square <c>A</c> at glyph one
+    /// with a 600-unit advance and one -100-unit kern pair for A followed by A.
+    /// </summary>
+    internal static byte[] CreateFontFace() {
+        SyntheticFontBuilder builder = SyntheticFontBuilder.Create();
+        int glyphId = builder.AddSimple(
+            600,
+            0,
+            new SyntheticPoint(0, 0),
+            new SyntheticPoint(500, 0),
+            new SyntheticPoint(500, 500),
+            new SyntheticPoint(0, 500));
+        return builder
+            .WithCmap(4, (0x41, glyphId))
+            .WithKernPairs((glyphId, glyphId, -100))
+            .Build();
+    }
+
+    internal static FontAssetDescriptor CreateFontDescriptor(
+        byte[] face,
+        int msdfPixelSize = 32,
+        int msdfRange = 4,
+        int msdfPadding = 2,
+        uint? byteLength = null) => new() {
+            FacePayload = FONT_PAYLOAD_PATH,
+            Format = "ttf",
+            ByteLength = byteLength ?? (uint)face.Length,
+            MsdfPixelSize = msdfPixelSize,
+            MsdfRange = msdfRange,
+            MsdfPadding = msdfPadding,
+        };
+
+    /// <summary>
+    /// Builds the font descriptor entry and its sibling face payload entry. A test that needs a broken
+    /// pair passes its own descriptor or face bytes.
+    /// </summary>
+    internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateFontEntries(
+        byte[]? face = null,
+        FontAssetDescriptor? descriptor = null) {
+        byte[] resolvedFace = face ?? CreateFontFace();
+        FontAssetDescriptor resolvedDescriptor = descriptor ?? CreateFontDescriptor(resolvedFace);
+        return [
+            (FONT_PATH, AssetEntryType.Font, AssetSerialization.Serialize(resolvedDescriptor)),
+            (FONT_PAYLOAD_PATH, AssetEntryType.Raw, resolvedFace),
+        ];
+    }
 
     internal static byte[] CreatePattern(int length, int seed) {
         byte[] payload = new byte[length];

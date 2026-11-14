@@ -48,6 +48,10 @@ internal static class AssetLoadErrors {
                 || string.Equals(
                     loadFailure.DiagnosticCode,
                     DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
+                    StringComparison.Ordinal)
+                || string.Equals(
+                    loadFailure.DiagnosticCode,
+                    DiagnosticCodes.FONT_LOAD_FAILED,
                     StringComparison.Ordinal))) {
             return loadFailure;
         }

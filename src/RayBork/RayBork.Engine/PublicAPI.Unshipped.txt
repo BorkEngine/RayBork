@@ -159,6 +159,7 @@ RayBork.EngineContext.UnscaledDeltaTime.get -> double
 RayBork.EngineContext.Window.get -> RayBork.IWindow!
 RayBork.EngineDefaults
 RayBork.EngineDefaults.CreateMeshShader() -> RayBork.Shader!
+RayBork.EngineDefaults.DefaultFont.get -> RayBork.Font!
 RayBork.EngineDefaults.Error.get -> RayBork.Texture!
 RayBork.EngineDefaults.White.get -> RayBork.Texture!
 RayBork.EngineInfo
@@ -187,6 +188,17 @@ RayBork.EngineInfo.Version.init -> void
 RayBork.EngineInfo.VulkanApiVersion.get -> uint
 RayBork.EngineInfo.VulkanApiVersion.init -> void
 RayBork.EngineVersion
+RayBork.Font
+RayBork.Font.Ascent.get -> float
+RayBork.Font.CachedGlyphCount.get -> int
+RayBork.Font.Descent.get -> float
+RayBork.Font.Dispose() -> void
+RayBork.Font.GlyphCount.get -> int
+RayBork.Font.IsDisposed.get -> bool
+RayBork.Font.LineHeight.get -> float
+RayBork.Font.Measure(System.ReadOnlySpan<char> text, float size) -> System.Numerics.Vector2
+RayBork.Font.Path.get -> string!
+RayBork.Font.TryGetGlyph(System.Text.Rune rune, out RayBork.Glyph glyph) -> bool
 RayBork.GameException
 RayBork.GameException.GameException() -> void
 RayBork.GameException.GameException(string! message) -> void
@@ -219,6 +231,14 @@ RayBork.GamepadButton.West = 2 -> RayBork.GamepadButton
 RayBork.GamepadTrigger
 RayBork.GamepadTrigger.Left = 0 -> RayBork.GamepadTrigger
 RayBork.GamepadTrigger.Right = 1 -> RayBork.GamepadTrigger
+RayBork.Glyph
+RayBork.Glyph.Advance.get -> System.Numerics.Vector2
+RayBork.Glyph.Bearing.get -> System.Numerics.Vector2
+RayBork.Glyph.Glyph() -> void
+RayBork.Glyph.Rune.get -> System.Text.Rune
+RayBork.Glyph.Size.get -> System.Numerics.Vector2
+RayBork.Glyph.Uv0.get -> System.Numerics.Vector2
+RayBork.Glyph.Uv1.get -> System.Numerics.Vector2
 RayBork.GraphicsDeviceLostException
 RayBork.GraphicsDeviceLostException.GraphicsDeviceLostException() -> void
 RayBork.GraphicsDeviceLostException.GraphicsDeviceLostException(string! message) -> void

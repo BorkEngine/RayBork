@@ -68,7 +68,7 @@ There is one typed loader. `Load<T>` handles both engine assets and registered c
 | `Mesh`, `Texture` | Loads a shared, reference-counted engine asset. Completes after GPU upload. `T` is an `IAsset` and must be disposed once per successful load. |
 | `Shader` (M4) | Returns a **new independent material instance** every call, backed by one cached internal shader program for the path. `Shader` is not an `IAsset` and is never reference-counted. Dispose every material exactly once. |
 | `Model` (M4) | Returns a **new `Model` wrapper** every call over the shared cached part meshes and programs, with one new material per part. `Model` is not an `IAsset`, is never reference-counted, and owns its part materials. Dispose every returned model exactly once. |
-| `Font` (M6), later `AudioClip` | The shared, reference-counted engine-asset contract; the types arrive with their milestones. |
+| `Font` (M6) | Loads a shared, reference-counted engine asset. It is CPU-only: the load parses the sfnt face and completes without a GPU upload, and its glyph textures are created later on demand. `T` is an `IAsset` and must be disposed once per successful load. `AudioClip` follows in A1. |
 | A custom type registered with `WithAssetType<T>()` | Deserializes a MessagePack `Data` entry through the compiled `[GenerateShape]`. Returns a fresh caller-owned instance per call; no reference counting and no `Dispose`. |
 | A custom type registered with `WithAssetLoader<T>` | Invokes the registered loader with the entry payload and returns its fresh caller-owned value. The loader declares the entry type it accepts, so the entry kind is not limited to `Data`. |
 | Any other type | `NotSupportedException` naming the type and asking for `WithAssetType<T>()` or `WithAssetLoader<T>()`. |
@@ -158,7 +158,7 @@ prefix.
 | `Texture` | PNG, JPEG, TGA, BMP, or a `TextureBuilder` | GPU-ready KTX2 payload or procedural uncompressed levels, mips, sRGB flag, sampler state | M3 |
 | `Shader` | GLSL vertex + fragment pair | Internal SPIR-V program plus sidecar metadata, entry points, and a default render state; public `Shader` materials are created over it | M3 program, M4 material |
 | `Model` | glTF 2.0, OBJ | Multi-part wrapper with per-part materials over shared cached meshes and programs; not an engine asset | M4 (baked in M3) |
-| `Font` | TTF, OTF | Face metrics plus runtime-generated MSDF glyphs | M6 (baked in M3) |
+| `Font` | TTF, OTF | Whole face packed; runtime-parsed face metrics plus on-demand MSDF glyph textures | M6 (baked in M3) |
 | Custom data | TOML source | MessagePack payload deserialized through `Load<T>` after `WithAssetType<T>()` | M3 |
 | Custom asset | Any entry kind | Decoded by an `IAssetLoader<T>` after `WithAssetLoader<T>()`; `Load<T>` returns a fresh caller-owned value | Current |
 | Raw data | Any processor output or raw source | Opaque bytes through `LoadData` | M3 |
@@ -167,6 +167,13 @@ glTF and OBJ are **source formats only**. The bake converts them to the engine's
 format; the runtime never parses glTF or OBJ. The engine texture payload is a complete KTX2 2.0
 file; PNG/JPEG/TGA/BMP have been the texture source formats since M3, and the runtime only reads the
 packed KTX2 payload. KTX2 source passthrough is a later addition, not a supported source format.
+
+`Font` is a CPU-only engine asset. The bake packs the whole face file and the MSDF settings; there is
+no preload range and no `ranges` sidecar key. `Load<Font>` parses the face and creates one per-font
+glyph pipeline, so it completes without queueing a GPU upload, and a freshly loaded font has no cached
+glyph texture. Glyph textures are small procedural textures that the engine's `RayBork.Font` thread
+creates and uploads asynchronously when a draw first needs a glyph. A font pack baked before M6 has a
+different descriptor shape (it carries the removed `Ranges` member) and must be rebaked.
 
 `RenderTexture` is created at runtime and is not a pack asset. `AudioClip` is post-1.0.
 
@@ -203,6 +210,9 @@ the sRGB formats; the runtime creates the matching Vulkan format.
 - A load of the same path with a different engine asset type throws `AssetTypeMismatchException`.
 - `Dispose` releases one reference. Once the count reaches zero, the public object becomes
   disposed and GPU destruction is queued on the render thread.
+- A CPU-only engine asset has no GPU resource of its own: `Font` queues no upload on load, and
+  releasing its last reference disposes its glyph pipeline and the cached glyph textures instead of
+  destroying a font GPU resource.
 - A frame packet that uses an engine asset holds its own reference for the lifetime of that frame.
   Recording a draw calls an internal retain on each referenced asset; the frame ring releases the
   hold after the frame is presented. Disposing an asset immediately after recording a draw is
@@ -229,7 +239,8 @@ the sRGB formats; the runtime creates the matching Vulkan format.
 - `Load<Shader>` cancellation follows the same rule: a caller that cancels before the material is
   constructed acquires no material and releases its program reference. An already-canceled caller
   does not receive a material even when the program is cached.
-- The engine preloads `/shaders/mesh` and the white/error textures into `EngineContext.Defaults`; see
+- The engine preloads `/shaders/mesh`, the white/error textures, and the default font into
+  `EngineContext.Defaults`; see
   [Rendering: Shaders](rendering/shaders.md#73-shader-materials-and-setuniform).
 
 `Load<Model>` follows the same shape for a different reason: it loads or reuses every part mesh and
@@ -274,6 +285,8 @@ Load<T>(path)
   -> Mesh, Texture  -> read/decompress -> descriptor -> queue GPU upload
                     -> loader continues with the next request
                     -> on upload completion -> construct -> refcount -> complete Load
+  -> Font           -> read the face -> parse the sfnt face -> create the glyph pipeline
+                    -> construct -> refcount -> complete Load (no GPU upload)
   -> Shader         -> load the internal program through the engine-asset path
                     -> acquire one program reference for the new material -> return a new material
   -> Model          -> resolve every part mesh and internal program through the engine-asset path
@@ -289,6 +302,9 @@ Consequences:
 - `Load<T>` for engine assets is asynchronous. The read runs on the dedicated `RayBork.Asset`
   thread; the upload is queued to the render thread. The loader does not wait for the GPU copy and
   immediately serves the next request; the load task completes only after the upload succeeds.
+- `Font` is the CPU-only exception: the read, the face parse, and the glyph pipeline construction run
+  on the `RayBork.Asset` thread and the load completes without a GPU upload. Glyph texture generation
+  is separate asynchronous work on the `RayBork.Font` thread; a draw never waits for it.
 - The render thread records and submits uploads without waiting for their fences. It polls
   completion on later loop turns, so frames continue to submit and present while an upload is in
   flight. A bounded wait of a few milliseconds is used only while upload work is queued or in
@@ -334,12 +350,14 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 ### 6.6 Pack mounting and built-in assets
 
 - The engine's built-in pack is mounted first, below every user pack. It contains the white and
-  error textures, the present shader pair, and the built-in mesh draw shader program at
-  `/shaders/mesh`, produced by the same `IAssetProcessor` pipeline as game content. The app preloads
-  the mesh program and the two textures into `EngineContext.Defaults` before `IGame.Setup`. The bake
+  error textures, the present shader pair, the built-in mesh draw shader program at `/shaders/mesh`,
+  and the built-in default font at `/fonts/fira-sans` (Fira Sans Regular), produced by the same
+  `IAssetProcessor` pipeline as game content. The app preloads the mesh program, the two textures, and
+  the font into `EngineContext.Defaults` before `IGame.Setup`. The bake
   writes `shaders/mesh` when a model part has no authored `[model] shader`, and the model loader
-  requires every part to carry a canonical shader path. Primitive meshes arrive with M5 and the
-  missing-glyph error glyph with M6.
+  requires every part to carry a canonical shader path. Primitive meshes arrive with M5.
+- A font pack baked before M6 carries the removed `Ranges` descriptor member and must be rebaked; the
+  built-in pack is regenerated on every engine build.
 - `WithAssetsPack` mounts user packs in call order after the built-in pack. Later packs shadow
   earlier packs for the same canonical path.
 - The winning entry is the last mounted pack that contains the path. A shadowed entry is never

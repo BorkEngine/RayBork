@@ -21,7 +21,11 @@ runtime tone-mapping surface: `TonemappingSettings` behind `EngineContext.Tonema
 `Color.FromSrgbBytes`, and `Color.ToSrgb` helpers. The M5 present pass replaces the M4 AgX curve and
 its separate HDR highlight path with Godot 4.7's HDR-aware AgX curve: SDR uses an output maximum of
 `1`, scRGB HDR uses the reported display headroom, and the curve output is scaled by paper white.
-`DrawTexture` is not part of M5; it moves to M7 with the orthographic sprite contract. The rest of
+`DrawTexture` is not part of M5; it moves to M7 with the orthographic sprite contract. M6 ships the
+font surface: `Font` and `Glyph`, `Load<Font>`, `TryGetGlyph`, `Measure`, on-demand asynchronous MSDF
+glyph generation, and the built-in Fira Sans Regular default font exposed as
+`EngineDefaults.DefaultFont`. The text alignment and wrapping enums and the text draw contract are
+described in §7.10. The rest of
 the API reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
@@ -173,6 +177,7 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `TonemappingSettings`, `EngineContext.Tonemapping`, `WithAgxWhite`, and `WithAgxContrast` | M5 |
 | `Color.FromSrgb`, `Color.FromSrgbBytes`, `Color.ToSrgb`, and the 158 restored Bork2d/Unity presets | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
+| `EngineDefaults.DefaultFont` and the built-in Fira Sans Regular font | M6 |
 | `DrawTexture` with destination rectangles and sprite/orthographic sampling | M7 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
 
@@ -258,6 +263,17 @@ shapes are line geometry rather than polygon-mode rasterization; `DrawWireModel`
 `fillModeNonSolid` and has no fallback; HDR10/PQ output is deferred and never selected; the SDR AgX
 image differs from the M4 curve at the same exposure; and the `Gray`/`Grey`, `Yellow`, and
 `DarkCyan` preset values changed with the sRGB-authored palette.
+
+**M6 subset.** `EngineContext.Defaults` additionally exposes `DefaultFont`, the built-in Fira Sans
+Regular face. `Font` and `Glyph` ship as described in §7.10: `Load<Font>` returns the shared,
+reference-counted font asset; the load parses the packed face and is CPU-only, so it queues no GPU
+upload and `CachedGlyphCount` is `0` when it completes. `TryGetGlyph` returns only glyphs whose MSDF
+texture is already generated, and `Measure` reads face metrics and kerning without generating a
+texture. An unmapped rune falls back to glyph id zero (`.notdef`). Glyph generation runs
+asynchronously on the app-lifetime `RayBork.Font` thread that the asset catalog starts before
+`Setup`; a draw never blocks on it. The font descriptor no longer carries a preload range: the bake
+packs the whole face and any mapped glyph can be generated at runtime, so a font pack baked before
+M6 must be rebaked.
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and

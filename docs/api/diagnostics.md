@@ -125,8 +125,11 @@ naming the device and the feature; there is no CPU line-geometry fallback. The n
 `ArgumentOutOfRangeException`/`NotSupportedException`/`ObjectDisposedException` like the rest of the
 builder API, and `Collision.GetRayQuad` is a pure numeric query that reports a miss instead of
 throwing for numeric input. `EngineContext.Tonemapping` is copied into each sealed frame; the render
-thread and the present pass read that snapshot, never the live settings object. `ShaderException`
-remains a contract for a later milestone.
+thread and the present pass read that snapshot, never the live settings object. M6 adds the font
+asset and its load failures: `Load<Font>` reports a missing or wrong-length face payload, an invalid
+sfnt face, an unsupported outline source (CFF2) or parser feature, and invalid MSDF settings as
+`AssetLoadException` `RB1011` with a message naming the cause. `ShaderException` remains a contract
+for a later milestone.
 
 Game and platform diagnostic codes (M1, M2):
 
@@ -159,6 +162,7 @@ Asset diagnostic codes (M3):
 | `RB1008` | `AssetLoadException` | A descriptor, KTX2 payload, mesh payload, or custom-data shape could not be decoded. |
 | `RB1009` | `AssetException` | An asset path is not canonical. |
 | `RB1010` | `AssetLoadException` | A GPU upload or device-recovery re-upload failed. |
+| `RB1011` | `AssetLoadException` | A font load failed: the face payload is unavailable or has the wrong length, the face is invalid, an unsupported outline or parser feature was found, or the descriptor's MSDF settings are invalid. |
 
 Bake diagnostic codes (M3, `RayBork.Bake`):
 
