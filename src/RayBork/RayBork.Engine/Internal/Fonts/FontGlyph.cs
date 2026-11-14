@@ -5,8 +5,9 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <see cref="Bounds"/> is the glyph header's bounding box, not a box computed from the resolved
-/// segments. An empty glyph has an all-zero box and <see cref="OutlinePath.Empty"/> as its outline.
-/// The instance is immutable and safe to read from any thread.
+/// segments. <see cref="IsEmpty"/> means the glyph has no drawable outline; such a glyph has an
+/// all-zero box and <see cref="OutlinePath.Empty"/> as its outline, even when the source glyph record
+/// carries a non-zero header box. The instance is immutable and safe to read from any thread.
 /// </remarks>
 internal readonly struct FontGlyph {
     /// <summary>Initializes a resolved glyph.</summary>

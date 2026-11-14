@@ -14,6 +14,7 @@ public sealed class FontParserFuzzTests {
     private const int MUTATION_ITERATIONS = 3000;
     private const int DIRECTORY_ITERATIONS = 2000;
     private const int ALLOCATION_ITERATIONS = 200;
+    private const int HOSTILE_MUTATION_ITERATIONS = 200;
     private const long ALLOCATION_BOUND = 16 * 1024 * 1024;
 
     private static readonly Rune[] _runes = [
@@ -99,6 +100,81 @@ public sealed class FontParserFuzzTests {
         Assert.True(
             maximum < ALLOCATION_BOUND,
             $"A mutated parse allocated {maximum} bytes; the bound is {ALLOCATION_BOUND}.");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void HostileFacesStayWithinTheAllocationBound() {
+        foreach ((string name, byte[] faceBytes) in HostileFontFaces.All()) {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            SfntFace? face = null;
+            try {
+                face = SfntFace.Parse(faceBytes);
+            } catch (FontFormatException) {
+            }
+
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.True(
+                allocated < ALLOCATION_BOUND,
+                $"Parsing the {name} face allocated {allocated} bytes.");
+
+            if (face is null) {
+                continue;
+            }
+
+            foreach (int glyph in SampleGlyphIds(face.GlyphCount, 32)) {
+                before = GC.GetAllocatedBytesForCurrentThread();
+                try {
+                    _ = face.GetAdvanceWidth(glyph);
+                    _ = face.GetLeftSideBearing(glyph);
+                    if (face.OutlineKind == SfntOutlineKind.TrueType) {
+                        _ = face.GetGlyph(glyph);
+                    }
+                } catch (FontFormatException) {
+                } catch (FontUnsupportedException) {
+                }
+
+                allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                Assert.True(
+                    allocated < ALLOCATION_BOUND,
+                    $"Resolving glyph {glyph} of the {name} face allocated {allocated} bytes.");
+            }
+
+            int[] kerningGlyphs = SampleGlyphIds(face.GlyphCount, 24);
+            before = GC.GetAllocatedBytesForCurrentThread();
+            foreach (int left in kerningGlyphs) {
+                foreach (int right in kerningGlyphs) {
+                    _ = face.GetKerning(left, right);
+                }
+            }
+
+            allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.True(
+                allocated < ALLOCATION_BOUND,
+                $"Kerning lookups on the {name} face allocated {allocated} bytes.");
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void HostileGposMutationsAreControlled() {
+        byte[][] faces = [
+            HostileFontFaces.CreateAliasedGposFace(),
+            HostileFontFaces.CreateAliasedPositioningFace(),
+            HostileFontFaces.CreateDenseCmapFace(),
+        ];
+        var random = new Random(SEED + 4);
+        int iteration = 0;
+        foreach (byte[] original in faces) {
+            for (int mutation = 0; mutation < HOSTILE_MUTATION_ITERATIONS; mutation++) {
+                Exercise(Mutate(original, random, iteration++), iteration);
+            }
+
+            for (int part = 0; part < 64; part++) {
+                int length = (int)((long)original.Length * part / 64);
+                Exercise(original.AsMemory(0, length), iteration++);
+            }
+        }
     }
 
     private static byte[] CreateFuzzFace() {
@@ -207,8 +283,7 @@ public sealed class FontParserFuzzTests {
             Assert.InRange(face.MappedGlyphCount, 0, 0x11_0000);
             Assert.Contains(face.CmapFormat, new[] { 0, 4, 6, 12 });
 
-            int glyphLimit = Math.Min(face.GlyphCount, 16);
-            for (int glyph = 0; glyph < glyphLimit; glyph++) {
+            foreach (int glyph in SampleGlyphIds(face.GlyphCount, 64)) {
                 _ = face.GetAdvanceWidth(glyph);
                 _ = face.GetLeftSideBearing(glyph);
                 if (face.OutlineKind == SfntOutlineKind.TrueType) {
@@ -222,16 +297,40 @@ public sealed class FontParserFuzzTests {
                 }
             }
 
-            int kerningLimit = Math.Min(face.GlyphCount, 8);
-            for (int left = 0; left < kerningLimit; left++) {
-                for (int right = 0; right < kerningLimit; right++) {
+            int[] kerningGlyphs = SampleGlyphIds(face.GlyphCount, 16);
+            foreach (int left in kerningGlyphs) {
+                foreach (int right in kerningGlyphs) {
                     _ = face.GetKerning(left, right);
                 }
             }
         } catch (FontFormatException) {
+        } catch (FontUnsupportedException) {
         } catch (Exception exception) {
             Assert.Fail(
                 $"Mutation {iteration} leaked {exception.GetType().FullName}: {exception.Message}");
         }
+    }
+
+    /// <summary>Samples glyph identifiers from across the whole face, including the last glyph.</summary>
+    private static int[] SampleGlyphIds(int glyphCount, int maximum) {
+        if (glyphCount <= 0) {
+            return [];
+        }
+
+        int count = Math.Min(glyphCount, maximum);
+        if (count == glyphCount) {
+            return [.. Enumerable.Range(0, glyphCount)];
+        }
+
+        int[] ids = new int[count];
+        int step = Math.Max(1, glyphCount / count);
+        int glyph = 0;
+        for (int index = 0; index < count; index++) {
+            ids[index] = Math.Min(glyph, glyphCount - 1);
+            glyph += step;
+        }
+
+        ids[^1] = glyphCount - 1;
+        return ids;
     }
 }

@@ -15,11 +15,20 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// Only the first glyph's <c>XAdvance</c> contributes. The other value record fields are skipped by
-/// their value-format bits and the second glyph's value record is ignored. The first lookup, in
-/// lookup-list order, that positions a pair supplies the value; a lookup that does not position the
-/// pair is skipped. Lookup flags are not interpreted because the engine applies kerning to a glyph
-/// pair without shaping, and the language system's required feature is not consulted. Values are in
-/// font units.
+/// their value-format bits and the second glyph's value record is ignored. The first positioning
+/// subtable, in kern-feature order (language-system feature order, then each feature's lookup order,
+/// then each lookup's subtable order), that positions the pair supplies the value; a subtable that
+/// does not position the pair is skipped. Lookup flags are not interpreted because the engine applies
+/// kerning to a glyph pair without shaping, and the language system's required feature is not
+/// consulted. Values are in font units.
+/// </para>
+/// <para>
+/// Parsing is bounded for hostile tables: the kern feature may reference at most 64 distinct
+/// lookups and list at most 65,536 lookup references, the pair lookups may declare at most 65,536
+/// subtable records, at most 256 distinct pair-positioning subtables are stored, and at most 65,536
+/// pair sets and 1,000,000 pair records are validated. Lookup references, lookups, and positioning
+/// subtables are deduplicated by absolute table offset, so aliased offsets are parsed and stored
+/// once; exceeding a cap throws <see cref="FontFormatException"/>.
 /// </para>
 /// <para>
 /// The instance is immutable after construction and safe to read from any thread. Lookups allocate
@@ -43,6 +52,12 @@ internal sealed class GposKerning {
     private const int USE_MARK_FILTERING_SET = 0x0010;
     private const int BASE_HEADER_LENGTH = 10;
     private const int VERSION_1_1_HEADER_LENGTH = 14;
+    private const int MAX_REFERENCED_LOOKUPS = 64;
+    private const int MAX_FEATURE_LOOKUP_STEPS = 65536;
+    private const int MAX_LOOKUP_SUBTABLES = 65536;
+    private const int MAX_PAIR_POSITIONINGS = 256;
+    private const int MAX_VALIDATED_PAIR_SETS = 65536;
+    private const long MAX_VALIDATED_PAIR_RECORDS = 1_000_000;
     private const string CONTEXT = "the 'GPOS' table";
 
     private readonly ReadOnlyMemory<byte> _data;
@@ -109,7 +124,9 @@ internal sealed class GposKerning {
         }
 
         bool[] seenLookups = new bool[lookupCount];
-        List<int>? kernLookups = null;
+        var budget = new ParseBudget();
+        HashSet<int> referencedLookupOffsets = [];
+        List<int> kernLookups = [];
         for (int index = 0; index < featureIndexCount; index++) {
             int featureIndex = reader.ReadUInt16(langSysOffset + 6 + (2 * index));
             if (featureIndex >= featureCount) {
@@ -127,6 +144,12 @@ internal sealed class GposKerning {
             int lookupIndexCount = reader.ReadUInt16(featureOffset + 2);
             reader.Require(featureOffset + 4, (long)lookupIndexCount * 2);
             for (int lookup = 0; lookup < lookupIndexCount; lookup++) {
+                budget.FeatureLookupSteps++;
+                if (budget.FeatureLookupSteps > MAX_FEATURE_LOOKUP_STEPS) {
+                    throw new FontFormatException(
+                        $"the 'GPOS' kern feature lists more than {MAX_FEATURE_LOOKUP_STEPS} lookup references");
+                }
+
                 int lookupIndex = reader.ReadUInt16(featureOffset + 4 + (2 * lookup));
                 if (lookupIndex >= lookupCount) {
                     throw new FontFormatException(
@@ -138,18 +161,34 @@ internal sealed class GposKerning {
                 }
 
                 seenLookups[lookupIndex] = true;
-                kernLookups ??= [];
-                kernLookups.Add(lookupIndex);
+                int lookupOffset = lookupListOffset + reader.ReadUInt16(lookupListOffset + 2 + (2 * lookupIndex));
+                if (!referencedLookupOffsets.Add(lookupOffset)) {
+                    continue;
+                }
+
+                if (referencedLookupOffsets.Count > MAX_REFERENCED_LOOKUPS) {
+                    throw new FontFormatException(
+                        $"the 'GPOS' kern feature references more than {MAX_REFERENCED_LOOKUPS} distinct lookups");
+                }
+
+                kernLookups.Add(lookupOffset);
             }
         }
 
-        if (kernLookups is null) {
+        if (kernLookups.Count == 0) {
             return null;
         }
 
         List<PairPositioning> positionings = [];
+        HashSet<int> positioningOffsets = [];
         for (int index = 0; index < kernLookups.Count; index++) {
-            AppendLookup(reader, lookupListOffset, kernLookups[index], glyphCount, positionings);
+            AppendLookup(
+                reader,
+                kernLookups[index],
+                glyphCount,
+                positionings,
+                positioningOffsets,
+                budget);
         }
 
         return positionings.Count == 0 ? null : new GposKerning(gpos, positionings.ToArray());
@@ -236,11 +275,11 @@ internal sealed class GposKerning {
 
     private static void AppendLookup(
         SfntReader reader,
-        int lookupListOffset,
-        int lookupIndex,
+        int lookupOffset,
         int glyphCount,
-        List<PairPositioning> positionings) {
-        int lookupOffset = lookupListOffset + reader.ReadUInt16(lookupListOffset + 2 + (2 * lookupIndex));
+        List<PairPositioning> positionings,
+        HashSet<int> positioningOffsets,
+        ParseBudget budget) {
         reader.Require(lookupOffset, 6);
         int lookupType = reader.ReadUInt16(lookupOffset);
         int lookupFlag = reader.ReadUInt16(lookupOffset + 2);
@@ -258,6 +297,12 @@ internal sealed class GposKerning {
 
         reader.Require(subtablesOffset, subtablesLength);
         for (int index = 0; index < subtableCount; index++) {
+            budget.LookupSubtables++;
+            if (budget.LookupSubtables > MAX_LOOKUP_SUBTABLES) {
+                throw new FontFormatException(
+                    $"the 'GPOS' pair lookups declare more than {MAX_LOOKUP_SUBTABLES} subtable records");
+            }
+
             int subtableOffset = lookupOffset + reader.ReadUInt16(subtablesOffset + (2 * index));
             if (lookupType == LOOKUP_TYPE_EXTENSION_POSITIONING) {
                 reader.Require(subtableOffset, 8);
@@ -281,14 +326,24 @@ internal sealed class GposKerning {
                 subtableOffset = (int)extended;
             }
 
-            positionings.Add(ParsePairPositioning(reader, subtableOffset, glyphCount));
+            if (!positioningOffsets.Add(subtableOffset)) {
+                continue;
+            }
+
+            if (positionings.Count >= MAX_PAIR_POSITIONINGS) {
+                throw new FontFormatException(
+                    $"the 'GPOS' kern feature positions more than {MAX_PAIR_POSITIONINGS} distinct subtable offsets");
+            }
+
+            positionings.Add(ParsePairPositioning(reader, subtableOffset, glyphCount, budget));
         }
     }
 
     private static PairPositioning ParsePairPositioning(
         SfntReader reader,
         int subtableOffset,
-        int glyphCount) {
+        int glyphCount,
+        ParseBudget budget) {
         reader.Require(subtableOffset, 8);
         int format = reader.ReadUInt16(subtableOffset);
         if (format != PAIR_POS_FORMAT_1 && format != PAIR_POS_FORMAT_2) {
@@ -318,10 +373,27 @@ internal sealed class GposKerning {
 
             reader.Require(subtableOffset + 10, (long)pairSetCount * 2);
             int recordLength = 2 + valueSize1 + valueSize2;
+            HashSet<int> pairSetOffsets = [];
             for (int index = 0; index < pairSetCount; index++) {
                 int pairSetOffset = subtableOffset + reader.ReadUInt16(subtableOffset + 10 + (2 * index));
+                if (!pairSetOffsets.Add(pairSetOffset)) {
+                    continue;
+                }
+
+                budget.PairSets++;
+                if (budget.PairSets > MAX_VALIDATED_PAIR_SETS) {
+                    throw new FontFormatException(
+                        $"the 'GPOS' pair positioning validates more than {MAX_VALIDATED_PAIR_SETS} pair sets");
+                }
+
                 reader.Require(pairSetOffset, 2);
                 int pairCount = reader.ReadUInt16(pairSetOffset);
+                budget.PairRecords += pairCount;
+                if (budget.PairRecords > MAX_VALIDATED_PAIR_RECORDS) {
+                    throw new FontFormatException(
+                        $"the 'GPOS' pair positioning declares more than {MAX_VALIDATED_PAIR_RECORDS} pair records");
+                }
+
                 reader.Require(pairSetOffset + 2, (long)pairCount * recordLength);
                 int previous = -1;
                 for (int pair = 0; pair < pairCount; pair++) {
@@ -641,5 +713,16 @@ internal sealed class GposKerning {
         internal int ClassDef2Offset { get; }
 
         internal int Class2Count { get; }
+    }
+
+    /// <summary>
+    /// The work counters of one <see cref="TryParse"/> call. The caps keep a hostile table from
+    /// turning a small byte array into unbounded parse work or into a large positioning array.
+    /// </summary>
+    private sealed class ParseBudget {
+        internal int FeatureLookupSteps;
+        internal int LookupSubtables;
+        internal int PairSets;
+        internal long PairRecords;
     }
 }

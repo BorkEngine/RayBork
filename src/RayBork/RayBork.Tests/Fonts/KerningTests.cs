@@ -202,6 +202,34 @@ public sealed class KerningTests {
         Assert.Throws<ArgumentOutOfRangeException>(() => face.GetKerning(a, face.GlyphCount));
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void KernSubtablesFilterUnsupportedVersionAndCoverage() {
+        (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
+        byte[] kern = SyntheticKern.Build(
+            new SyntheticKernSubtable(1, 0x0001, (a, v, 111)),
+            new SyntheticKernSubtable(0, 0x0101, (t, o, 222)),
+            new SyntheticKernSubtable(0, 0x0000, (a, o, 333)),
+            new SyntheticKernSubtable(0, 0x0001, (a, v, -40)));
+        SfntFace face = SfntFace.Parse(builder.WithRawKern(kern).Build());
+
+        Assert.Equal(-40, face.GetKerning(a, v));
+        Assert.Equal(0, face.GetKerning(t, o));
+        Assert.Equal(0, face.GetKerning(a, o));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void KernDuplicatePairsTakeTheLastSubtable() {
+        (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
+        byte[] kern = SyntheticKern.Build(
+            new SyntheticKernSubtable(0, 0x0001, (a, v, -10)),
+            new SyntheticKernSubtable(0, 0x0001, (a, v, 50)));
+        SfntFace face = SfntFace.Parse(builder.WithRawKern(kern).Build());
+
+        Assert.Equal(50, face.GetKerning(a, v));
+    }
+
     private static (SyntheticFontBuilder Builder, int A, int V, int T, int O) CreateKerningBuilder() {
         var builder = SyntheticFontBuilder.Create();
         int a = AddGlyph(builder);

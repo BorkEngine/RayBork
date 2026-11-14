@@ -7,9 +7,11 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Coordinates are exactly the values the <c>glyf</c> or CFF table stores: font units with +X to the
-/// right and +Y up, unscaled, relative to the glyph origin. Multiply by
-/// <c>size / unitsPerEm</c> to place a glyph in world units.
+/// Coordinates are in font units with +X to the right and +Y up, unscaled and relative to the glyph
+/// origin. The on-curve points, direct control points, and component offsets come from the
+/// <c>glyf</c> or CFF table; implied on-curve midpoints between consecutive off-curve points, the
+/// implied start point of an all-off-curve contour, and transformed composite points are derived.
+/// Multiply by <c>size / unitsPerEm</c> to place a glyph in world units.
 /// </para>
 /// <para>
 /// Contours keep their source order and direction; the fill rule is non-zero winding. Every contour

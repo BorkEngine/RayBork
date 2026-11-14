@@ -18,7 +18,8 @@ namespace RayBork.Internal;
 /// Lookups are read-only over the retained face bytes, allocate nothing, and take O(log segments) or
 /// O(log groups) time. A mapping to glyph 0 (the <c>.notdef</c> glyph) or to an identifier that is not
 /// below <c>numGlyphs</c> is treated as unmapped, as is an indirect format 4 reference that points
-/// outside its subtable.
+/// outside its subtable. The mapped-glyph count excludes surrogate codepoints so it is comparable
+/// across subtable formats.
 /// </para>
 /// <para>
 /// The instance is immutable after construction and safe to read from any thread without locks.
@@ -64,6 +65,8 @@ internal sealed class CmapTable {
 
     /// <summary>
     /// Gets the number of codepoints that map to a nonzero glyph identifier below <c>numGlyphs</c>.
+    /// Surrogate codepoints (U+D800..U+DFFF) are excluded because no <see cref="Rune"/> can represent
+    /// them, so the count means the same thing for every supported subtable format.
     /// </summary>
     internal int MappedGlyphCount => _mappedGlyphCount;
 
@@ -263,20 +266,20 @@ internal sealed class CmapTable {
                 low = middle + 1;
             } else {
                 long glyph = (long)reader.ReadUInt32(group + 8) + (codepoint - startCode);
-                return TryAccept((int)glyph, out glyphId);
+                return TryAccept(glyph, out glyphId);
             }
         }
 
         return false;
     }
 
-    private bool TryAccept(int glyph, out int glyphId) {
-        if (glyph == 0 || glyph >= _glyphCount) {
+    private bool TryAccept(long glyph, out int glyphId) {
+        if (glyph <= 0 || glyph >= _glyphCount) {
             glyphId = 0;
             return false;
         }
 
-        glyphId = glyph;
+        glyphId = (int)glyph;
         return true;
     }
 
@@ -436,9 +439,10 @@ internal sealed class CmapTable {
                     $"the 'cmap' format 12 subtable at offset {offset} has overlapping or unsorted groups at U+{startCode:X}");
             }
 
-            if (startGlyph + (endCode - startCode) > 0xFFFF) {
+            ulong lastGlyph = (ulong)startGlyph + (endCode - startCode);
+            if (lastGlyph > int.MaxValue) {
                 throw new FontFormatException(
-                    $"the 'cmap' format 12 subtable at offset {offset} maps past glyph 65535 in the group from U+{startCode:X}");
+                    $"the 'cmap' format 12 subtable at offset {offset} maps past the maximum glyph identifier in the group from U+{startCode:X}");
             }
 
             previousEnd = endCode;
@@ -483,11 +487,27 @@ internal sealed class CmapTable {
                 data[(idRangeOffsetOffset + (2 * segment))..]);
             if (idRangeOffset == 0) {
                 int firstGlyph = (startCode + idDelta) & 0xFFFF;
-                count += CountValidGlyphs(firstGlyph, endCode - startCode + 1, glyphCount);
+                int width = endCode - startCode + 1;
+                int valid = CountValidGlyphs(firstGlyph, width, glyphCount);
+                int surrogateStart = Math.Max(startCode, SURROGATE_FIRST);
+                int surrogateEnd = Math.Min(endCode, SURROGATE_LAST);
+                if (surrogateStart <= surrogateEnd) {
+                    int surrogateFirstGlyph = (surrogateStart + idDelta) & 0xFFFF;
+                    valid -= CountValidGlyphs(
+                        surrogateFirstGlyph,
+                        surrogateEnd - surrogateStart + 1,
+                        glyphCount);
+                }
+
+                count += valid;
                 continue;
             }
 
             for (int codepoint = startCode; codepoint <= endCode; codepoint++) {
+                if (IsSurrogate(codepoint)) {
+                    continue;
+                }
+
                 int glyphOffset = idRangeOffsetOffset + (2 * segment) + idRangeOffset
                     + (2 * (codepoint - startCode));
                 if (glyphOffset < 0 || glyphOffset > data.Length - 2) {
@@ -509,9 +529,14 @@ internal sealed class CmapTable {
     }
 
     private static int CountFormat6(ReadOnlySpan<byte> data, int glyphCount) {
+        int firstCode = BinaryPrimitives.ReadUInt16BigEndian(data[6..]);
         int entryCount = BinaryPrimitives.ReadUInt16BigEndian(data[8..]);
         int count = 0;
         for (int index = 0; index < entryCount; index++) {
+            if (IsSurrogate(firstCode + index)) {
+                continue;
+            }
+
             int glyph = BinaryPrimitives.ReadUInt16BigEndian(data[(10 + (2 * index))..]);
             if (IsMappedGlyph(glyph, glyphCount)) {
                 count++;
@@ -570,4 +595,7 @@ internal sealed class CmapTable {
     }
 
     private static bool IsMappedGlyph(int glyph, int glyphCount) => glyph != 0 && glyph < glyphCount;
+
+    private static bool IsSurrogate(int codepoint) =>
+        codepoint is >= SURROGATE_FIRST and <= SURROGATE_LAST;
 }

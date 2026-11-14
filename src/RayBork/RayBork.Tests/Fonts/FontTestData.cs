@@ -20,4 +20,15 @@ internal static class FontTestData {
         Assert.Contains(reason, exception.Reason, StringComparison.Ordinal);
         return exception;
     }
+
+    /// <summary>Resolves a glyph and asserts the documented unsupported-feature failure.</summary>
+    internal static FontUnsupportedException AssertGlyphUnsupported(
+        SfntFace face,
+        int glyphId,
+        string reason) {
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => face.GetGlyph(glyphId));
+        Assert.Contains(reason, exception.Reason, StringComparison.Ordinal);
+        return exception;
+    }
 }

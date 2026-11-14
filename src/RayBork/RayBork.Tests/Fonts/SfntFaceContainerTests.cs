@@ -38,7 +38,6 @@ public sealed class SfntFaceContainerTests {
         Assert.Equal(SfntOutlineKind.TrueType, face.OutlineKind);
         Assert.Equal(1, face.MappedGlyphCount);
         Assert.Equal(0, SfntFace.NOTDEF_GLYPH_ID);
-        Assert.Equal(faceBytes, face.Data.ToArray());
         Assert.True(face.CffTable.IsEmpty);
         Assert.True(face.Cff2Table.IsEmpty);
     }
@@ -49,22 +48,21 @@ public sealed class SfntFaceContainerTests {
         byte[] faceBytes = CreateDefaultFace();
         SfntFace face = SfntFace.Parse(faceBytes);
 
-        Assert.Equal(7, face.Tables.Length);
         SyntheticTableRecord headRecord = SyntheticFontBuilder.FindTable(faceBytes, "head");
         Assert.True(face.TryGetTable(FontTableTag.Head, out FontTable head));
         Assert.Equal(headRecord.Offset, head.Offset);
         Assert.Equal(headRecord.Length, head.Length);
         Assert.Equal(faceBytes.AsSpan(head.Offset, head.Length).ToArray(), head.Data.ToArray());
         Assert.False(face.TryGetTable(FontTableTag.Kern, out _));
-        Assert.True(face.GetTableData(FontTableTag.Kern).IsEmpty);
-        Assert.True(face.GetTableData(FontTableTag.Gpos).IsEmpty);
+        Assert.False(face.TryGetTable(FontTableTag.Gpos, out _));
 
-        string[] tags = [.. face.Tables.Span.ToArray().Select(table => table.Tag.ToName())];
-        Assert.Contains("head", tags);
-        Assert.Contains("cmap", tags);
-        Assert.Contains("loca", tags);
-        Assert.Contains("glyf", tags);
+        string[] tags = ["head", "maxp", "hhea", "hmtx", "cmap", "loca", "glyf"];
+        foreach (string tag in tags) {
+            Assert.True(face.TryGetTable(FontTableTag.FromAscii(TagBytes(tag)), out _));
+        }
     }
+
+    private static byte[] TagBytes(string tag) => Encoding.ASCII.GetBytes(tag);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
@@ -383,11 +381,17 @@ public sealed class SfntFaceContainerTests {
         Assert.Equal(expected.NumberOfHMetrics, actual.NumberOfHMetrics);
         Assert.Equal(expected.MappedGlyphCount, actual.MappedGlyphCount);
         Assert.Equal(expected.OutlineKind, actual.OutlineKind);
-        Assert.Equal(expected.Tables.Length, actual.Tables.Length);
-        for (int index = 0; index < expected.Tables.Length; index++) {
-            Assert.Equal(expected.Tables.Span[index].Tag, actual.Tables.Span[index].Tag);
-            Assert.Equal(expected.Tables.Span[index].Offset, actual.Tables.Span[index].Offset);
-            Assert.Equal(expected.Tables.Span[index].Length, actual.Tables.Span[index].Length);
+        Assert.Equal(expected.CmapFormat, actual.CmapFormat);
+        string[] tags = ["head", "maxp", "hhea", "hmtx", "cmap", "loca", "glyf", "kern", "GPOS"];
+        foreach (string tag in tags) {
+            bool expectedPresent = expected.TryGetTable(FontTableTag.FromAscii(TagBytes(tag)), out FontTable expectedTable);
+            bool actualPresent = actual.TryGetTable(FontTableTag.FromAscii(TagBytes(tag)), out FontTable actualTable);
+            Assert.Equal(expectedPresent, actualPresent);
+            if (expectedPresent) {
+                Assert.Equal(expectedTable.Tag, actualTable.Tag);
+                Assert.Equal(expectedTable.Offset, actualTable.Offset);
+                Assert.Equal(expectedTable.Length, actualTable.Length);
+            }
         }
 
         for (int glyphId = 0; glyphId < expected.GlyphCount; glyphId++) {

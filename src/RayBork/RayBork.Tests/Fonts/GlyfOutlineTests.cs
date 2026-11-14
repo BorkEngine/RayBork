@@ -203,6 +203,61 @@ public sealed class GlyfOutlineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ZeroContourGlyphWithHeaderBoundsHasZeroBounds() {
+        var builder = SyntheticFontBuilder.Create();
+        int glyph = AddTriangle(builder);
+        byte[] faceBytes = builder.WithCmap(4, (0x41, glyph)).Build();
+        BinaryPrimitives.WriteInt16BigEndian(
+            faceBytes.AsSpan(GlyphStart(faceBytes, glyph)),
+            0);
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        FontGlyph resolved = face.GetGlyph(glyph);
+
+        Assert.True(resolved.IsEmpty);
+        Assert.Equal(0, resolved.Bounds.XMin);
+        Assert.Equal(0, resolved.Bounds.YMin);
+        Assert.Equal(0, resolved.Bounds.XMax);
+        Assert.Equal(0, resolved.Bounds.YMax);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CompositeOfEmptyGlyphsHasZeroBounds() {
+        var builder = SyntheticFontBuilder.Create();
+        int empty = builder.AddEmpty(300);
+        int glyph = builder.AddComposite(
+            700,
+            10,
+            new FontBounds(0, 0, 500, 700),
+            SyntheticComponent.Translate(empty, 20, 30));
+        SfntFace face = Parse(builder, glyph);
+
+        FontGlyph resolved = face.GetGlyph(glyph);
+
+        Assert.True(resolved.IsEmpty);
+        Assert.Equal(0, resolved.Bounds.XMin);
+        Assert.Equal(0, resolved.Bounds.YMin);
+        Assert.Equal(0, resolved.Bounds.XMax);
+        Assert.Equal(0, resolved.Bounds.YMax);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CompositeComponentGlyphOutsideTheFaceIsRejected() {
+        var builder = SyntheticFontBuilder.Create();
+        AddTriangle(builder);
+        int glyph = builder.AddComposite(
+            700,
+            10,
+            SyntheticComponent.Translate(100, 0, 0));
+        SfntFace face = Parse(builder, glyph);
+
+        FontTestData.AssertGlyphFailure(face, glyph, "references glyph 100");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void CompositeGlyphAppliesComponentOffsets() {
         var builder = SyntheticFontBuilder.Create();
         int baseGlyph = AddTriangle(builder);
@@ -401,7 +456,7 @@ public sealed class GlyfOutlineTests {
         int glyph = builder.AddComposite(700, 10, SyntheticComponent.PointMatch(baseGlyph));
         SfntFace face = Parse(builder, glyph);
 
-        FontTestData.AssertGlyphFailure(face, glyph, "point-matched component arguments");
+        FontTestData.AssertGlyphUnsupported(face, glyph, "point-matched component arguments");
     }
 
     [Fact]

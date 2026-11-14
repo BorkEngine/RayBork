@@ -5,14 +5,14 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every malformed, truncated, inconsistent, or unsupported face is reported through this one type;
-/// the parser never lets a framework exception escape for corrupt input. The runtime font loader
-/// wraps it as an <see cref="AssetLoadException"/> with the <c>RB1011</c> diagnostic code and uses
+/// Every malformed, truncated, or inconsistent face is reported through this type; the parser never
+/// lets a framework exception escape for corrupt input. A valid feature that the runtime cannot
+/// express yet is reported separately as <see cref="FontUnsupportedException"/>. Consumers that
+/// surface these failures as asset errors own the diagnostic mapping and read
 /// <see cref="Reason"/> for the actionable cause.
 /// </para>
 /// <para>
-/// The exception is not serializable and carries no state beyond the reason; it never escapes the
-/// font loader.
+/// The exception is not serializable and carries no state beyond the reason.
 /// </para>
 /// </remarks>
 internal sealed class FontFormatException : Exception {

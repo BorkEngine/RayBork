@@ -53,6 +53,7 @@ internal sealed class SyntheticFontBuilder {
     private int _descender = -200;
     private int _lineGap = 0;
     private byte[]? _rawCmap;
+    private byte[]? _rawKern;
     private SyntheticGpos? _gpos;
     private SyntheticOutline _outline = SyntheticOutline.TrueType;
     private byte[] _cffData = [];
@@ -165,11 +166,24 @@ internal sealed class SyntheticFontBuilder {
         return this;
     }
 
+    /// <summary>Adds a format 4 cmap whose segments address a glyph-id array.</summary>
+    internal SyntheticFontBuilder WithCmapIndirectGlyphArray(
+        params (int Codepoint, int GlyphId)[] mappings) {
+        _cmapRecords.Add(new SyntheticCmapRecord(3, 1, 4, mappings, indirectGlyphArray: true));
+        return this;
+    }
+
     internal SyntheticFontBuilder WithKernPairs(params (int Left, int Right, int Value)[] pairs) {
         foreach ((int left, int right, int value) in pairs) {
             _kernPairs.Add(new SyntheticKernPair(left, right, value));
         }
 
+        return this;
+    }
+
+    /// <summary>Uses raw <c>kern</c> table bytes instead of the generated format 0 table.</summary>
+    internal SyntheticFontBuilder WithRawKern(byte[] kern) {
+        _rawKern = kern;
         return this;
     }
 
@@ -218,10 +232,12 @@ internal sealed class SyntheticFontBuilder {
             throw new InvalidOperationException($"Synthetic loca format {_locaFormat} is not 0 or 1.");
         }
 
-        foreach (SyntheticKernPair pair in _kernPairs) {
-            if (pair.Left < 0 || pair.Left >= glyphCount || pair.Right < 0 || pair.Right >= glyphCount) {
-                throw new InvalidOperationException(
-                    $"Synthetic kern pair ({pair.Left}, {pair.Right}) is outside the face.");
+        if (_rawKern is null) {
+            foreach (SyntheticKernPair pair in _kernPairs) {
+                if (pair.Left < 0 || pair.Left >= glyphCount || pair.Right < 0 || pair.Right >= glyphCount) {
+                    throw new InvalidOperationException(
+                        $"Synthetic kern pair ({pair.Left}, {pair.Right}) is outside the face.");
+                }
             }
         }
 
@@ -263,8 +279,12 @@ internal sealed class SyntheticFontBuilder {
             tables.Add(("CFF2", _cff2Data));
         }
 
-        if (!_omittedTables.Contains("kern") && _kernPairs.Count > 0) {
-            tables.Add(("kern", BuildKern()));
+        if (!_omittedTables.Contains("kern")) {
+            if (_rawKern is not null) {
+                tables.Add(("kern", _rawKern));
+            } else if (_kernPairs.Count > 0) {
+                tables.Add(("kern", BuildKern()));
+            }
         }
 
         if (!_omittedTables.Contains("GPOS") && _gpos is not null) {

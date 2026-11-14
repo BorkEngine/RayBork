@@ -14,7 +14,8 @@ namespace RayBork.Internal;
 /// component contours in component order, and reject reference cycles and nesting deeper than
 /// <see cref="MAX_COMPOSITE_DEPTH"/> composite levels. A resolved glyph carries at most
 /// <see cref="MAX_POINTS_PER_GLYPH"/> source points; the limit is enforced before the point arrays
-/// are allocated.
+/// are allocated. Point-matched component arguments are a valid font feature outside the supported
+/// subset and raise <see cref="FontUnsupportedException"/>.
 /// </para>
 /// <para>
 /// The reader is immutable and safe to read from any thread. Each resolution allocates only the
@@ -102,6 +103,10 @@ internal sealed class GlyphOutlineReader {
     /// <returns>The resolved glyph in font units.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     /// <exception cref="FontFormatException">The glyph data is malformed or exceeds a documented limit.</exception>
+    /// <exception cref="FontUnsupportedException">
+    /// The glyph uses a valid feature outside the supported subset, currently point-matched composite
+    /// component arguments.
+    /// </exception>
     internal FontGlyph ReadGlyph(int glyphId) {
         if ((uint)glyphId >= (uint)_glyphCount) {
             throw new ArgumentOutOfRangeException(
@@ -134,10 +139,11 @@ internal sealed class GlyphOutlineReader {
 
         internal FontGlyph Read(int glyphId) {
             OutlineContour[] contours = ResolveContours(glyphId, 0, out FontBounds bounds);
-            return new FontGlyph(
-                glyphId,
-                bounds,
-                contours.Length == 0 ? OutlinePath.Empty : new OutlinePath(contours));
+            if (contours.Length == 0) {
+                return new FontGlyph(glyphId, default, OutlinePath.Empty);
+            }
+
+            return new FontGlyph(glyphId, bounds, new OutlinePath(contours));
         }
 
         private OutlineContour[] ResolveContours(int glyphId, int depth, out FontBounds bounds) {
@@ -391,7 +397,7 @@ internal sealed class GlyphOutlineReader {
                 }
 
                 if ((flags & ARGS_ARE_XY_VALUES) == 0) {
-                    throw new FontFormatException(
+                    throw new FontUnsupportedException(
                         $"the composite glyph {glyphId} uses point-matched component arguments; only XY offsets are supported");
                 }
 

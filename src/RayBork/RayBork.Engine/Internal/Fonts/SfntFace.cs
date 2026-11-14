@@ -11,8 +11,9 @@ namespace RayBork.Internal;
 /// The instance retains the packed face bytes for its lifetime because glyphs, kerning values, and
 /// table spans are read on demand; the <c>loca</c>/<c>glyf</c> tables, cmap, and kerning lookups are
 /// parsed once and never copied. A face is immutable after <see cref="Parse"/> and safe to read from
-/// any thread without locks. Every read that returns a value is allocation-free except
-/// <see cref="GetGlyph"/>, which allocates the resolved contour and segment arrays.
+/// any thread without locks, provided the caller does not mutate the retained buffer. Every read that
+/// returns a value is allocation-free except <see cref="GetGlyph"/>, which allocates the resolved
+/// contour and segment arrays.
 /// </para>
 /// <para>
 /// The container accepts the <c>0x00010000</c> and <c>true</c> TrueType magic and the <c>OTTO</c>
@@ -27,7 +28,8 @@ namespace RayBork.Internal;
 /// The container, the required tables, the selected cmap subtable, and the optional kerning tables are
 /// validated by <see cref="Parse"/>. Glyph data is resolved and validated by <see cref="GetGlyph"/> on
 /// demand, so a face with a corrupt unused glyph still parses; resolving that glyph throws the same
-/// <see cref="FontFormatException"/>, including composite depth or reference-cycle failures.
+/// <see cref="FontFormatException"/>, including composite depth or reference-cycle failures. A valid
+/// but unsupported glyph feature raises <see cref="FontUnsupportedException"/> instead.
 /// </para>
 /// <para>
 /// Every structural failure, including truncation, an out-of-bounds table record, a bad metric, or a
@@ -68,7 +70,6 @@ internal sealed class SfntFace {
     private const int LONG_METRIC_LENGTH = 4;
     private const int TRAILING_BEARING_LENGTH = 2;
 
-    private readonly ReadOnlyMemory<byte> _data;
     private readonly ReadOnlyMemory<FontTable> _tables;
     private readonly ReadOnlyMemory<byte> _hmtx;
     private readonly ReadOnlyMemory<byte> _cff;
@@ -80,7 +81,6 @@ internal sealed class SfntFace {
     private readonly KerningReader _kerning;
 
     private SfntFace(
-        ReadOnlyMemory<byte> data,
         ReadOnlyMemory<FontTable> tables,
         ReadOnlyMemory<byte> hmtx,
         Metrics metrics,
@@ -90,7 +90,6 @@ internal sealed class SfntFace {
         CmapTable cmap,
         GlyphOutlineReader? outlines,
         KerningReader kerning) {
-        _data = data;
         _tables = tables;
         _hmtx = hmtx;
         _metrics = metrics;
@@ -101,16 +100,6 @@ internal sealed class SfntFace {
         _outlines = outlines;
         _kerning = kerning;
     }
-
-    /// <summary>Gets the retained face bytes.</summary>
-    internal ReadOnlyMemory<byte> Data => _data;
-
-    /// <summary>Gets the validated table directory in file order; use <c>Tables.Span</c> to iterate.</summary>
-    /// <remarks>
-    /// A corrupt face that repeats a tag keeps the first record; the sfnt specification requires
-    /// unique tags, so this only affects malformed input.
-    /// </remarks>
-    internal ReadOnlyMemory<FontTable> Tables => _tables;
 
     /// <summary>Gets the outline source of the face's glyphs.</summary>
     internal SfntOutlineKind OutlineKind => _outlineKind;
@@ -136,13 +125,19 @@ internal sealed class SfntFace {
     /// <summary>Gets the <c>maxp</c> <c>numGlyphs</c> value.</summary>
     internal int GlyphCount => _metrics.GlyphCount;
 
-    /// <summary>Gets the <c>hhea</c> <c>numberOfHMetrics</c> value.</summary>
+    /// <summary>
+    /// Gets the <c>hhea</c> <c>numberOfHMetrics</c> value. Diagnostics and tests read it; layout reads
+    /// advances through <see cref="GetAdvanceWidth"/>, which already honors the boundary.
+    /// </summary>
     internal int NumberOfHMetrics => _metrics.NumberOfHMetrics;
 
     /// <summary>Gets the number of codepoints that the selected cmap subtable maps to a real glyph.</summary>
     internal int MappedGlyphCount => _cmap.MappedGlyphCount;
 
-    /// <summary>Gets the format of the selected cmap subtable: 0, 4, 6, or 12.</summary>
+    /// <summary>
+    /// Gets the format of the selected cmap subtable: 0, 4, 6, or 12. Diagnostics and tests read it;
+    /// codepoint mapping reads never need it.
+    /// </summary>
     internal int CmapFormat => _cmap.Format;
 
     /// <summary>Parses and validates one packed sfnt face.</summary>
@@ -235,7 +230,6 @@ internal sealed class SfntFace {
         KerningReader kerning = KerningReader.Parse(kern, gpos, metrics.GlyphCount);
 
         return new SfntFace(
-            data,
             tables,
             hmtx.Data,
             metrics,
@@ -251,6 +245,10 @@ internal sealed class SfntFace {
     /// <param name="tag">The table tag.</param>
     /// <param name="table">The table record when it is present.</param>
     /// <returns><see langword="true"/> when the face carries the table.</returns>
+    /// <remarks>
+    /// A corrupt face that repeats a tag keeps the first record; the sfnt specification requires
+    /// unique tags, so this only affects malformed input.
+    /// </remarks>
     internal bool TryGetTable(FontTableTag tag, out FontTable table) {
         FontTable? found = FindTable(_tables.Span, tag);
         if (found is null) {
@@ -261,12 +259,6 @@ internal sealed class SfntFace {
         table = found.Value;
         return true;
     }
-
-    /// <summary>Gets a table's bytes, or empty when the face does not carry the table.</summary>
-    /// <param name="tag">The table tag.</param>
-    /// <returns>The table bytes.</returns>
-    internal ReadOnlyMemory<byte> GetTableData(FontTableTag tag) =>
-        FindTable(_tables.Span, tag)?.Data ?? ReadOnlyMemory<byte>.Empty;
 
     /// <summary>Resolves a Unicode scalar value to a glyph identifier.</summary>
     /// <param name="rune">The Unicode scalar value.</param>
@@ -306,18 +298,22 @@ internal sealed class SfntFace {
 
     /// <summary>Resolves one glyph's stored bounds and font-unit outline.</summary>
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
-    /// <returns>The resolved glyph in font units.</returns>
+    /// <returns>The resolved glyph in font units; an empty result has zero bounds and no contours.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     /// <exception cref="NotSupportedException">The face stores CFF or CFF2 outlines.</exception>
     /// <exception cref="FontFormatException">
     /// The glyph data is malformed, nests composites too deeply, has a reference cycle, or exceeds the
     /// point limit.
     /// </exception>
+    /// <exception cref="FontUnsupportedException">
+    /// The glyph uses a valid feature outside the supported subset, currently point-matched composite
+    /// component arguments.
+    /// </exception>
     internal FontGlyph GetGlyph(int glyphId) {
         ThrowIfGlyphOutOfRange(glyphId, nameof(glyphId));
         if (_outlines is null) {
             throw new NotSupportedException(
-                "This face stores CFF outlines; only TrueType 'glyf' outlines are resolved.");
+                "This face stores CFF or CFF2 outlines; only TrueType 'glyf' outlines are resolved.");
         }
 
         return _outlines.ReadGlyph(glyphId);

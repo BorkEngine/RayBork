@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text;
 using RayBork.Internal;
 
@@ -279,6 +280,154 @@ public sealed class CmapTests {
 
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
     }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format4IndirectGlyphArrayMapsCodepoints() {
+        (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
+        int third = AddGlyph(builder, 800);
+        byte[] faceBytes = builder
+            .WithCmapIndirectGlyphArray((0x41, first), (0x42, second), (0x43, third))
+            .Build();
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(4, face.CmapFormat);
+        AssertMapped(face, 'A', first);
+        AssertMapped(face, 'B', second);
+        AssertMapped(face, 'C', third);
+        AssertUnmapped(face, 'D');
+        Assert.Equal(3, face.MappedGlyphCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format4IndirectGlyphArrayOutsideTheSubtableIsUnmapped() {
+        (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
+        byte[] faceBytes = builder
+            .WithCmapIndirectGlyphArray((0x41, first), (0x42, second))
+            .Build();
+        SyntheticTableRecord cmap = SyntheticFontBuilder.FindTable(faceBytes, "cmap");
+        BinaryPrimitives.WriteUInt16BigEndian(
+            faceBytes.AsSpan(cmap.Offset + 12 + 22),
+            0xFFFF);
+
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(0, face.MappedGlyphCount);
+        AssertUnmapped(face, 'A');
+        AssertUnmapped(face, 'B');
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format4MappedGlyphCountExcludesSurrogates() {
+        var builder = SyntheticFontBuilder.Create();
+        int first = AddGlyph(builder, 600);
+        int second = AddGlyph(builder, 700);
+        int third = AddGlyph(builder, 800);
+        byte[] faceBytes = builder
+            .WithCmap(4, (0xD7FF, first), (0xD800, second), (0xD801, third))
+            .Build();
+
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(1, face.MappedGlyphCount);
+        AssertMapped(face, 0xD7FF, first);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format4IndirectMappedGlyphCountExcludesSurrogates() {
+        var builder = SyntheticFontBuilder.Create();
+        int first = AddGlyph(builder, 600);
+        int second = AddGlyph(builder, 700);
+        int third = AddGlyph(builder, 800);
+        byte[] faceBytes = builder
+            .WithCmapIndirectGlyphArray((0xD7FF, first), (0xD800, second), (0xD801, third))
+            .Build();
+
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(1, face.MappedGlyphCount);
+        AssertMapped(face, 0xD7FF, first);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format6MappedGlyphCountExcludesSurrogates() {
+        var builder = SyntheticFontBuilder.Create();
+        int[] glyphs = new int[5];
+        for (int index = 0; index < glyphs.Length; index++) {
+            glyphs[index] = AddGlyph(builder, 600 + index);
+        }
+
+        byte[] faceBytes = builder
+            .WithCmap(
+                6,
+                (0xD7FE, glyphs[0]),
+                (0xD7FF, glyphs[1]),
+                (0xD800, glyphs[2]),
+                (0xD801, glyphs[3]),
+                (0xE000, glyphs[4]))
+            .Build();
+
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(3, face.MappedGlyphCount);
+        AssertMapped(face, 0xD7FE, glyphs[0]);
+        AssertMapped(face, 0xE000, glyphs[4]);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format12GlyphIdentifierOverflowIsRejected() {
+        (SyntheticFontBuilder builder, int _, int _) = CreateMappableBuilder();
+        byte[] faceBytes = builder
+            .WithRawCmap(BuildRawFormat12(0x41, 0xFFFF_FFFEu))
+            .Build();
+
+        FontFormatException exception = FontTestData.AssertFaceFailure(faceBytes, "format 12");
+        Assert.Contains("maximum glyph identifier", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format12GlyphIdentifierPastTheGlyphCountIsUnmapped() {
+        (SyntheticFontBuilder builder, int _, int _) = CreateMappableBuilder();
+        byte[] faceBytes = builder
+            .WithRawCmap(BuildRawFormat12(0x41, 100_000))
+            .Build();
+
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(0, face.MappedGlyphCount);
+        AssertUnmapped(face, 'A');
+    }
+
+    private static byte[] BuildRawFormat12(int codepoint, uint startGlyph) {
+        byte[] cmap = new byte[40];
+        BinaryPrimitives.WriteUInt16BigEndian(cmap, 0);
+        BinaryPrimitives.WriteUInt16BigEndian(cmap.AsSpan(2), 1);
+        BinaryPrimitives.WriteUInt16BigEndian(cmap.AsSpan(4), 3);
+        BinaryPrimitives.WriteUInt16BigEndian(cmap.AsSpan(6), 10);
+        BinaryPrimitives.WriteUInt32BigEndian(cmap.AsSpan(8), 12);
+        BinaryPrimitives.WriteUInt16BigEndian(cmap.AsSpan(12), 12);
+        BinaryPrimitives.WriteUInt16BigEndian(cmap.AsSpan(14), 0);
+        BinaryPrimitives.WriteUInt32BigEndian(cmap.AsSpan(16), 28);
+        BinaryPrimitives.WriteUInt32BigEndian(cmap.AsSpan(20), 0);
+        BinaryPrimitives.WriteUInt32BigEndian(cmap.AsSpan(24), 1);
+        BinaryPrimitives.WriteUInt32BigEndian(cmap.AsSpan(28), (uint)codepoint);
+        BinaryPrimitives.WriteUInt32BigEndian(cmap.AsSpan(32), (uint)codepoint);
+        BinaryPrimitives.WriteUInt32BigEndian(cmap.AsSpan(36), startGlyph);
+        return cmap;
+    }
+
+    private static int AddGlyph(SyntheticFontBuilder builder, int advance) => builder.AddSimple(
+        advance,
+        10,
+        new SyntheticPoint(0, 0),
+        new SyntheticPoint(500, 0),
+        new SyntheticPoint(250, 700));
 
     private static (SyntheticFontBuilder Builder, int First, int Second) CreateMappableBuilder() {
         var builder = SyntheticFontBuilder.Create();

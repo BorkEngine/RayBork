@@ -8,11 +8,13 @@ internal readonly struct SyntheticCmapRecord {
         int platformId,
         int encodingId,
         int format,
-        (int Codepoint, int GlyphId)[] mappings) {
+        (int Codepoint, int GlyphId)[] mappings,
+        bool indirectGlyphArray = false) {
         PlatformId = platformId;
         EncodingId = encodingId;
         Format = format;
         Mappings = mappings;
+        IndirectGlyphArray = indirectGlyphArray;
     }
 
     internal int PlatformId { get; }
@@ -22,6 +24,9 @@ internal readonly struct SyntheticCmapRecord {
     internal int Format { get; }
 
     internal (int Codepoint, int GlyphId)[] Mappings { get; }
+
+    /// <summary>Gets a value indicating whether format 4 should address a glyph-id array.</summary>
+    internal bool IndirectGlyphArray { get; }
 }
 
 /// <summary>Encodes synthetic <c>cmap</c> tables in formats 0, 4, 6, and 12.</summary>
@@ -29,7 +34,10 @@ internal static class SyntheticCmap {
     internal static byte[] Build(IReadOnlyList<SyntheticCmapRecord> records) {
         byte[][] subtables = new byte[records.Count][];
         for (int index = 0; index < records.Count; index++) {
-            subtables[index] = BuildSubtable(records[index].Format, records[index].Mappings);
+            subtables[index] = BuildSubtable(
+                records[index].Format,
+                records[index].Mappings,
+                records[index].IndirectGlyphArray);
         }
 
         int headerLength = 4 + (8 * records.Count);
@@ -56,10 +64,21 @@ internal static class SyntheticCmap {
         return cmap;
     }
 
-    private static byte[] BuildSubtable(int format, (int Codepoint, int GlyphId)[] mappings) {
+    private static byte[] BuildSubtable(
+        int format,
+        (int Codepoint, int GlyphId)[] mappings,
+        bool indirectGlyphArray) {
+        if (indirectGlyphArray && format != 4) {
+            throw new ArgumentException(
+                "Only the format 4 synthetic subtable can address a glyph-id array.",
+                nameof(indirectGlyphArray));
+        }
+
         return format switch {
             0 => BuildFormat0(Sort(mappings, 0xFF)),
-            4 => BuildFormat4(Sort(mappings, 0xFFFE)),
+            4 => indirectGlyphArray
+                ? BuildFormat4Indirect(Sort(mappings, 0xFFFE))
+                : BuildFormat4(Sort(mappings, 0xFFFE)),
             6 => BuildFormat6(Sort(mappings, 0xFFFF)),
             12 => BuildFormat12(Sort(mappings, 0x10FFFF)),
             _ => throw new ArgumentException($"Unsupported synthetic cmap format {format}.", nameof(format)),
@@ -169,6 +188,45 @@ internal static class SyntheticCmap {
                 table.AsSpan(deltaOffset + (2 * segment)),
                 (ushort)segments[segment].Delta);
             BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(rangeOffset + (2 * segment)), 0);
+        }
+
+        return table;
+    }
+
+    private static byte[] BuildFormat4Indirect((int Codepoint, int GlyphId)[] mappings) {
+        int firstCode = mappings[0].Codepoint;
+        int lastCode = mappings[^1].Codepoint;
+        int entryCount = lastCode - firstCode + 1;
+        int length = 24 + (2 * entryCount);
+        if (length > 0xFFFF) {
+            throw new ArgumentException(
+                "A synthetic indirect format 4 subtable must fit its 16-bit length.",
+                nameof(mappings));
+        }
+
+        byte[] table = new byte[length];
+        BinaryPrimitives.WriteUInt16BigEndian(table, 4);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(2), (ushort)length);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(4), 0);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(6), 2);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(8), 2);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(10), 0);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(12), 0);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(14), (ushort)lastCode);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(18), (ushort)firstCode);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(20), 0);
+        BinaryPrimitives.WriteUInt16BigEndian(table.AsSpan(22), 2);
+        int mappingIndex = 0;
+        for (int codepoint = firstCode; codepoint <= lastCode; codepoint++) {
+            int glyph = 0;
+            if (mappingIndex < mappings.Length && mappings[mappingIndex].Codepoint == codepoint) {
+                glyph = mappings[mappingIndex].GlyphId;
+                mappingIndex++;
+            }
+
+            BinaryPrimitives.WriteUInt16BigEndian(
+                table.AsSpan(24 + (2 * (codepoint - firstCode))),
+                (ushort)glyph);
         }
 
         return table;

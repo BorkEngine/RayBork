@@ -5,8 +5,9 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// A TrueType face stores quadratic outlines in <c>glyf</c>; an OpenType CFF face stores its outlines
-/// in <c>CFF </c> or <c>CFF2</c>. The runtime currently resolves only TrueType outlines, and the
-/// asset loader rejects <see cref="Cff2"/> faces because CFF2 outlines are not generated.
+/// in <c>CFF </c> or <c>CFF2</c>. The runtime resolves only TrueType outlines, so <see cref="Cff"/>
+/// and <see cref="Cff2"/> faces expose their table span but cannot draw glyphs until the CFF outline
+/// reader lands.
 /// </remarks>
 internal enum SfntOutlineKind {
     /// <summary>TrueType quadratic outlines in the <c>glyf</c> table.</summary>
