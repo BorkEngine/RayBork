@@ -280,7 +280,7 @@ assets executable and no pack: `Setup` builds its only texture with `CreateTextu
 sample draws the M5 primitive helpers in one perspective pass at 800x450 with orbit controls and the
 `--frames` and `--help` options. The published `win-x64` and `linux-x64` hosts run from the publish
 directory with zero AOT/trim warnings, and the publish directory contains no bake tooling. The M5
-suite is 1,898 tests, 93 of them GPU integration tests, and every sample solution builds.
+suite is 1,899 tests, 93 of them GPU integration tests, and every sample solution builds.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
 executable out of process, bakes `/models/obj/castle` and `/models/obj/castle_diffuse` into

@@ -500,7 +500,7 @@ mesh generation, and the collision queries a small game expects.
 - All helpers batch with the same rules as user draws; stats reflect it, and `RenderStats.Triangles`
   still counts recorded triangle primitives for a wireframe model draw.
 - Castle uses `DrawGrid` for the raylib reference grid; all sample solutions build.
-- The suite is 1,898 tests, 93 of them GPU integration tests.
+- The suite is 1,899 tests, 93 of them GPU integration tests.
 - Native AOT publish runs the gallery on Windows and Linux.
 
 **As-built notes.** M5 shipped the planned primitive and collision scope, the approved ray-mesh
@@ -723,7 +723,7 @@ color helpers, and the restored Bork2d/Unity color preset set:
   uses orbit controls, and accepts `--frames` and `--help`. The published `win-x64` and `linux-x64`
   hosts run from the publish directory with zero AOT/trim warnings, and the publish directory contains
   no bake tooling. The sample is a plain user-facing example and contains no test-only draw
-  assertion. The M5 suite is 1,898 tests, 93 of them GPU integration tests, and every sample solution
+  assertion. The M5 suite is 1,899 tests, 93 of them GPU integration tests, and every sample solution
   builds.
 - **DrawTexture boundary.** `DrawTexture` is not part of M5. The preview screen-space overlay helper
   is removed and re-homed to M7, where it returns with the orthographic/sprite contract and
@@ -1086,7 +1086,7 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   polygon-mode-line path: front-facing triangle edges without a filled interior, texture sampling on
   a wireframe fragment, and distinct filled/wireframe pipelines. The collision queries and the BVH
   are covered by deterministic unit tests, including accelerated-versus-brute-force equivalence, and
-  the baked payload by codec and loader tests. The M5 suite is 1,898 tests, 93 of them GPU
+  the baked payload by codec and loader tests. The M5 suite is 1,899 tests, 93 of them GPU
   integration tests; every sample solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

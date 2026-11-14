@@ -1013,7 +1013,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `samples/Castle`, which baked `castle.pck`, loaded the model and its texture, and drew the castle
   through the geometry pipeline. M5 moves the gate to `samples/PrimitiveGallery`: it has no assets
   executable or pack, builds its only texture at runtime, draws the M5 primitive helpers through the
-  built-in primitive and mesh programs, and shuts down. The M5 suite is 1,898 tests, 93 of them GPU
+  built-in primitive and mesh programs, and shuts down. The M5 suite is 1,899 tests, 93 of them GPU
   integration tests, and every sample solution builds. `samples/Castle` remains a buildable and
   publishable sample but is not the M5 gate, and `samples/HelloInterop` remains the M1-M3 diagnostic
   host.
@@ -1074,7 +1074,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   helpers are also covered by unit tests for recorded matrices, validation, batching, and retention,
   and the collision surface by deterministic unit tests for the checks, ray queries, BVH invariants,
   and accelerated-versus-brute-force equivalence, plus pack/codec and loader tests for the baked
-  payload. The suite is 1,898 tests, 93 of them GPU integration tests.
+  payload. The suite is 1,899 tests, 93 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
