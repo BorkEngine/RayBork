@@ -5,8 +5,9 @@ and `Shutdown` on the tick thread, and exercises the Vulkan 1.2 renderer end to 
 clears the linear HDR scene target, the present pass applies `--tonemapping` and `--exposure`, MSAA
 is resolved before presentation, and the swapchain prefers an HDR (scRGB) format when the OS/window
 HDR state is enabled and falls back to the SDR path otherwise. The milestone AOT gate is
-[samples/PrimitiveGallery](../PrimitiveGallery/README.md); `samples/Castle` was the M4 gate and
-remains a buildable and publishable sample. This host intentionally has no camera or draw calls.
+[samples/Text](../Text/README.md); `samples/Castle` was the M4 gate and `samples/PrimitiveGallery`
+was the M5 gate, and both remain buildable and publishable samples. This host intentionally has no
+camera or draw calls.
 
 The host logs the renderer, GPU, and presentation state selected at startup, the effective MSAA
 sample count and present mode after fallback, per-second `RenderStats` lines, one final statistics
@@ -51,7 +52,7 @@ or not a pack is mounted:
 | `Texture` | `ctx.CreateTextureBuilder(2, 2, Rgba8Srgb)` from four `Color` pixels with mip generation | Synthetic `/_procedural/texture/N` path, size, mip count, format, sRGB, `IsProcedural`. |
 
 Both builds are awaited in `Setup`, so they exercise the non-blocking GPU upload path and the
-`BuildAsync` contract in the Native AOT gate. The assets are disposed in `Shutdown`. See
+`BuildAsync` contract in the host's own AOT publish. The assets are disposed in `Shutdown`. See
 [docs/api/rendering/meshes.md](../../docs/api/rendering/meshes.md) §7.5 and
 [docs/api/rendering/textures.md](../../docs/api/rendering/textures.md) §7.6.
 
@@ -203,7 +204,7 @@ samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --fram
 The publish must finish with zero AOT/trim warnings, its directory must contain `hello.pck` beside
 the executable, and the published host must exit `0` after mounting the adjacent pack, loading the
 texture, mesh, shader, and custom data, and presenting 30 frames. This is the diagnostic-host
-publish; the per-milestone AOT gate is `samples/PrimitiveGallery`.
+publish; the per-milestone AOT gate is `samples/Text`.
 
 ## WSL Linux Native AOT
 

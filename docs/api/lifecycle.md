@@ -131,8 +131,11 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > caches no glyph texture (a repeated load shares the object and its cache). `Setup` can therefore
 > preload any number of fonts without startup uploads; glyph
 > generation starts on demand on the app-lifetime `RayBork.Font` thread that the catalog starts before
-> the tick thread runs. The `Glyph` value, `TryGetGlyph`, and `Measure` are part of
-> [Rendering: text](rendering/text.md#710-fonts-and-text).
+> the tick thread runs. `Camera.DrawText` and `Camera.DrawTextBillboard` record world-space text
+> through the built-in `/shaders/msdf` program; a glyph whose texture is not ready is skipped for
+> that call while its advance stays. There is no font preload range: the bake packs the whole face and
+> any cmap-mapped glyph can be generated later. The `Glyph` value, `TryGetGlyph`, and `Measure` are part
+> of [Rendering: text](rendering/text.md#710-fonts-and-text).
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -245,7 +248,7 @@ public sealed class EngineContext {
 | Member | Thread | Notes |
 | --- | --- | --- |
 | `Assets` | Any | Shared catalog; see §6. M3. |
-| `Defaults` | Any | Engine-owned default assets preloaded before `Setup`: the built-in mesh shader program, the white and error textures, and the built-in Fira Sans default font. `CreateMeshShader` returns a new caller-owned material; the textures and the font are engine-owned and must not be disposed. Released during shutdown. M4; the font arrives in M6. |
+| `Defaults` | Any | Engine-owned default assets preloaded before `Setup`: the built-in mesh shader program, the white and error textures, and the built-in Fira Sans default font. `CreateMeshShader` returns a new caller-owned material; the textures and the font are engine-owned and must not be disposed. Released during shutdown. The font and its text draws ship in M6. |
 | `Input` | Tick | Input snapshot for the current tick. |
 | `Window` | Any | Snapshot getters; setters are queued. |
 | `LoggerFactory` | Any | App-owned factory; create category loggers from it. Never `null`. |

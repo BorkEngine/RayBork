@@ -34,7 +34,7 @@ that value from the instance record; it never reads a live material cursor or ca
 `DrawWireModel` is a tick-thread record call like `DrawModel`. The `fillModeNonSolid` support check
 and the polygon-mode-line pipeline creation happen on the render thread when the batch is submitted,
 so a device without the feature fails the frame with `GraphicsException` `RB3001` instead of throwing
-from the camera call. M5 has no CPU line-geometry fallback.
+from the camera call. The engine has no CPU line-geometry fallback.
 
 ### 11.2 The "join before Tick returns" rule
 

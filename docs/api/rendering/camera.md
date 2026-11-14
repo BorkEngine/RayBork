@@ -218,20 +218,20 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
   is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
-> **M5 subset.** `Camera` ships the raylib-style helper surface: the line, point, and triangle helpers
-> (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
+> **M5 and M6 surface.** `Camera` ships the raylib-style helper surface: the line, point, and triangle
+> helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
 > `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`, `DrawCapsule`/`DrawWireCapsule`,
 > `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawWireCube`, `DrawWireSphere`,
 > and `DrawGrid`), and the eight `DrawBillboard` overloads, with the shape, position, tessellation,
 > start/end, and `Transform` overloads listed above. Their geometry, programs, render states,
 > validation, and batching are specified in §7.9. The model helpers are `DrawModel`,
-> `DrawModelInstanced`, and `DrawWireModel`; the wireframe helper is specified below. The `Target`
-> property and the `target` parameter arrive with `RenderTexture` in M8. `DrawText` and
-> `DrawTextBillboard` are the runtime text draws specified under **Text** below and in §7.9. `DrawTexture`
-> is not part of M5: it moves to M7 with the orthographic/sprite contract, where the destination
-> rectangle is in render pixels and the texture is sampled with its own point/linear filter. The camera
-> always records into the app's linear HDR scene target, and the present pass applies AgX after all
-> cameras finish.
+> `DrawModelInstanced`, and `DrawWireModel`; the wireframe helper is specified below. M6 adds the
+> world-space text draws: `DrawText` and `DrawTextBillboard` are specified under **Text** below and in
+> §7.10. The `Target` property and the `target` parameter arrive with `RenderTexture` in M8.
+> `DrawTexture` is not part of M6: it moves to M7 with the orthographic/sprite contract, where the
+> destination rectangle is in render pixels and the texture is sampled with its own point/linear
+> filter. The camera always records into the app's linear HDR scene target, and the present pass
+> applies AgX after all cameras finish.
 
 Properties:
 
@@ -310,8 +310,8 @@ geometry pipeline cache key, so a wireframe draw never reuses a filled pipeline;
 created on first use per shader, render state, and topology and cached for the rest of the scene
 target's lifetime. A device without `fillModeNonSolid` reports the draw as an unsupported
 `GraphicsException` with diagnostic code `RB3001` instead of silently drawing nothing: the error names
-the device and the feature, the frame is dropped, and the app stops with that exception. M5 has no
-CPU line-geometry fallback. Filled model draws never need the feature.
+the device and the feature, the frame is dropped, and the app stops with that exception. The engine
+has no CPU line-geometry fallback. Filled model draws never need the feature.
 
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
@@ -453,11 +453,11 @@ defined values, and `maxWidth` must be finite and non-negative (positive for `Te
 transform scale component records nothing, and empty text records nothing. A camera draw off the tick
 thread is `InvalidOperationException`.
 
-**DrawTexture (M7).** The screen-space texture helper is not part of M5. It returns in M7 as the
+**DrawTexture (M7).** The screen-space texture helper is not part of M6. It returns in M7 as the
 sprite helper for an orthographic camera: `destination` is a render-pixel rectangle relative to the
 camera viewport (top-left origin, Y downward), `tint` is linear, and the texture's own sampler
 selects point or linear filtering. It draws an alpha-blended textured quad on the normal draw path;
-the M5 unprojected-overlay implementation is not part of the shipped surface.
+the earlier unprojected-overlay preview is not part of the shipped surface.
 
 **Ray/quad collision.** `Collision.GetRayQuad(ray, a, b, c, d)` splits the quad into the triangles
 `(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the nearest

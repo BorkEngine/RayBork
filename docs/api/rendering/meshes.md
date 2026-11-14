@@ -269,7 +269,7 @@ Mesh mesh = await builder.BuildAsync();
   with the part's material. The wireframe pipeline needs the device's `fillModeNonSolid` feature; the
   renderer enables it when the device supports it, includes the polygon mode in the pipeline cache
   key, and reports an unsupported `GraphicsException` (`RB3001`) instead of drawing nothing on a
-  device without the feature. M5 has no CPU line-geometry fallback.
+  device without the feature. The engine has no CPU line-geometry fallback.
 - Each part gets its own material. Two parts that name the same program path share the internal
   program but never a material, and two materials over one program batch together.
 - `Model` is not an animation asset. Skeletal and morph animation are post-1.0.

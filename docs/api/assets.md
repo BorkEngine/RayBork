@@ -352,13 +352,17 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 
 ### 6.6 Pack mounting and built-in assets
 
-- The engine's built-in pack is mounted first, below every user pack. It contains the white and
-  error textures, the present shader pair, the built-in mesh draw shader program at `/shaders/mesh`,
-  and the built-in default font at `/fonts/fira-sans` (Fira Sans Regular), produced by the same
-  `IAssetProcessor` pipeline as game content. The app preloads the mesh program, the two textures, and
-  the font into `EngineContext.Defaults` before `IGame.Setup`. The bake
+- The engine's built-in pack is mounted first, below every user pack. It has 18 entries and contains
+  the white and error textures, the present shader pair, the built-in mesh draw shader program at
+  `/shaders/mesh`, the primitive program at `/shaders/primitive`, the MSDF text program at
+  `/shaders/msdf`, and the built-in default font at `/fonts/fira-sans` (Fira Sans Regular) with its
+  face payload, produced by the same `IAssetProcessor` pipeline as game content. The app preloads the
+  mesh program, the two textures, and the font into `EngineContext.Defaults` before `IGame.Setup`;
+  the primitive and MSDF programs and the primitive meshes are built into the engine's primitive
+  assets. The bake
   writes `shaders/mesh` when a model part has no authored `[model] shader`, and the model loader
-  requires every part to carry a canonical shader path. Primitive meshes arrive with M5.
+  requires every part to carry a canonical shader path. The primitive meshes are procedural assets
+  built at startup, not pack entries.
 - A font pack baked before M6 still loads: its descriptor carries the removed `Ranges` member, and
   unknown descriptor members are ignored. Only a TOML sidecar that still declares `ranges` is a bake
   error (`RB4002`); the built-in pack is regenerated on every engine build.

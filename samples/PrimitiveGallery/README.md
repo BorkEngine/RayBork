@@ -8,8 +8,9 @@ of meshes generated with `MeshBuilder.Generate*` and drawn with the built-in mes
 its texture and its generated meshes at runtime, so it needs no asset pack, no manual bake, and no
 `--assets` argument. It also draws a small FPS and render-statistics line at the top-left of the view.
 
-The sample is also a Native AOT gate, but it contains no test-only logic: it opens a window, draws the
-gallery, and exits cleanly. Build and run it from the repository root:
+The sample was the M5 Native AOT gate and remains buildable and publishable; it contains no test-only
+logic: it opens a window, draws the gallery, and exits cleanly. Build and run it from the repository
+root:
 
 ```powershell
 dotnet build samples/PrimitiveGallery/PrimitiveGallery.slnx -c Debug
@@ -92,7 +93,7 @@ The row is drawn with `Camera.DrawMesh`, one material created by
 and samples the renderer's white fallback, so the tint is the shape color, and the mesh shader's
 default opaque render state culls back faces exactly like the primitive helpers. The five meshes and
 the material are disposed in `Shutdown`, alongside the texture. The path needs no bake and no
-optional device feature, so it stays inside the gallery's Native AOT gate.
+optional device feature, so it stayed inside the M5 gate's AOT scope.
 
 ## Texture
 
@@ -183,8 +184,8 @@ packages: the sample has no bake tooling and no external pack, and the generated
   [docs/api/rendering/meshes.md](../../docs/api/rendering/meshes.md) and are not drawn, and the row
   uses the default render state with no texture binding. `DrawInstanced`, `ComputeNormals`,
   `ComputeTangents`, and `GenerateCollisions` are likewise documented but not shown.
-- **Wireframe model drawing.** `DrawWireModel` is deliberately not part of this sample: the gallery is
-  the Native AOT gate and must not depend on the optional `fillModeNonSolid` device feature. The
+- **Wireframe model drawing.** `DrawWireModel` is deliberately not part of this sample: the M5 gate
+  must not depend on the optional `fillModeNonSolid` device feature. The
   `ModelWireframeGpuTests` suite covers the wireframe pipeline; the Castle sample no longer draws a
   wireframe overlay.
 - **Animation.** The scene is static; only the orbit camera moves.

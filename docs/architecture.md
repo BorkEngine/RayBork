@@ -1,8 +1,9 @@
 # RayBork Architecture
 
-Status: M5 as-built for the primitive and collision surface, on top of the M4 core 3D renderer, the
-M3 asset pipeline, the M2 renderer foundation, and the M1 host, platform, threads, frame handoff,
-HDR presentation, recovery, and time. M0 established the build, dependency, and AOT guardrails. M1
+Status: M6 as-built for the font and text runtime, on top of the M5 primitive and collision surface,
+the M4 core 3D renderer, the M3 asset pipeline, the M2 renderer foundation, and the M1 host,
+platform, threads, frame handoff, HDR presentation, recovery, and time. M0 established the build,
+dependency, and AOT guardrails. M1
 ships the app host, dedicated tick thread, SDL3 window/input/platform seam, the render-thread frame
 handoff, time/pacing, and logging. M2 adds the Vulkan 1.2 backend behind the internal seam, the
 linear HDR scene target, the AgX/scRGB present pass, MSAA with color resolve, reverse-Z depth,
@@ -18,8 +19,13 @@ the eight `DrawBillboard` overloads, `DrawWireModel`, the engine-owned primitive
 built-in `/shaders/primitive` program, `Collision` and `RayCollision` with `GetRayQuad` and the
 ray-mesh BVH, the procedural collision opt-in, the baked `RBVC` collision payloads, the nine
 `MeshBuilder.Generate*` factories, the HDR-aware AgX rework with runtime tone mapping, the sRGB color
-helpers, and the Primitive Gallery AOT gate. `DrawTexture` is not part of M5; it arrives in M7 with
-the orthographic sprite path, while `DrawText` is M6 and `RenderTexture` is M8.
+helpers, and the Primitive Gallery AOT gate. M6 adds the managed sfnt/TTF/OTF parser, the
+deterministic on-demand MSDF generator, the app-lifetime `RayBork.Font` thread with its per-font
+glyph pipeline and bounded cache, the CPU-only `Font` asset and the `Glyph`/layout surface, the
+built-in Fira Sans face and `EngineDefaults.DefaultFont`, the world-space `Camera.DrawText`/
+`Camera.DrawTextBillboard` draws over the built-in `/shaders/msdf` program, and the Text AOT gate.
+`DrawTexture` is not part of M6; it arrives in M7 with the orthographic sprite path, while
+`RenderTexture` is M8.
 
 ## Goals
 
@@ -53,10 +59,12 @@ RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, St
 build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
 samples/HelloInterop -> RayBork.Engine (M1-M3 diagnostic host, Native AOT)
 samples/HelloInterop/HelloInterop.Assets -> RayBork.Bake (M3 assets executable, JIT)
-samples/PrimitiveGallery -> RayBork.Engine (M5 sample and Native AOT gate)
+samples/Text -> RayBork.Engine (M6 sample and Native AOT gate)
+samples/Text/Text.Assets -> RayBork.Bake (M6 assets executable, JIT)
+samples/PrimitiveGallery -> RayBork.Engine (M5 sample, was the M5 Native AOT gate)
 samples/Castle -> RayBork.Engine (M4 sample, buildable and publishable)
 samples/Castle/Castle.Assets -> RayBork.Bake (M4 assets executable, JIT)
-Samples (M11) ──────> RayBork.Engine
+Samples (M7, M11) -> RayBork.Engine
 ```
 
 | Project | Role |
@@ -67,10 +75,12 @@ Samples (M11) ──────> RayBork.Engine
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
 | `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the AOT gate. |
 | `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
-| `samples/PrimitiveGallery` | M5 sample and Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. |
-| `samples/Castle` | M4 sample, still buildable and publishable but no longer the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, and, when the pointer ray hits the model bounds, adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
+| `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It now also draws a world-space FPS/render-statistics status line. |
+| `samples/Text` | M6 sample and Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans face and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both faces, a camera-facing billboard, a lazily generated Greek line, a status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
+| `samples/Text/Text.Assets` | M6 assets executable: bakes `text.pck` from the checked-in Lora face at sample build time. JIT only. |
+| `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, draws a world-space status line, and, when the pointer ray hits the model bounds, adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
-| `samples/` | Pong, Text, Instancing, RenderTarget (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
+| `samples/` | Pong, Instancing, RenderTarget (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
 
 Rules:
 
@@ -99,14 +109,14 @@ policy.
 
 | Package | Version | Purpose | AOT status |
 | --- | --- | --- | --- |
-| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, events, window HDR state, and Vulkan surfaces | Exercised end to end by the M5 `samples/PrimitiveGallery` AOT gate on `win-x64` and `linux-x64`; earlier M1-M4 hosts use the same bindings. |
+| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, events, window HDR state, and Vulkan surfaces | Exercised end to end by the M6 `samples/Text` AOT gate on `win-x64` and `linux-x64`; earlier M1-M5 hosts use the same bindings. |
 | `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same hosts on both RIDs. |
-| `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the backend | Exercised end to end by the M5 AOT gate: the published host creates the instance, device, swapchain, scene target, present pass, and the primitive draw path. |
-| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by every AOT gate; the M5 gate decodes the built-in texture and shader descriptors, and the M4 Castle gate also loaded the packed model, mesh, shader, and texture descriptors through compiled shapes. |
-| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in pack descriptor decode in every AOT gate, including the M4 Castle gate. |
-| `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the built-in pack read in every AOT gate; no reflection or dynamic code. |
-| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M5 AOT gate on both RIDs. |
-| `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M5 AOT gate on both RIDs. |
+| `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the backend | Exercised end to end by the M6 AOT gate: the published host creates the instance, device, swapchain, scene target, present pass, and the text draw path. |
+| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by every AOT gate; the M6 gate decodes the built-in font, texture, and shader descriptors plus the sample's baked font descriptor through compiled shapes. |
+| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in and sample pack descriptor decode in every AOT gate, including the M6 font descriptor. |
+| `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the built-in and sample pack read in every AOT gate; no reflection or dynamic code. |
+| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M6 AOT gate on both RIDs. |
+| `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M6 AOT gate on both RIDs. |
 | `System.IO.Compression.Zstandard*` | in-box `net11.0` | Zstandard pack payload compression | Part of the .NET 11 shared framework; no package and no separate AOT gate. |
 
 **Test and tooling dependencies** (JIT only; outside the runtime publish graph):
@@ -128,9 +138,9 @@ policy.
 SDL3 and logging are exercised end to end by every sample AOT gate. The M2 milestone gate exercised
 Silk.NET.Vulkan with the presenter; the M3 gate extended the host with a baked pack, a KTX2 texture
 upload, a mesh upload, a shader-module upload, and a MessagePack custom-data load; the M4 gate drew
-the castle model with the built-in mesh material; the M5 gate is `samples/PrimitiveGallery`, which
-draws the M5 primitive helpers through the built-in primitive and mesh programs and builds its only
-texture procedurally, so it reads only the built-in pack and needs no assets executable. Both
+the castle model with the built-in mesh material; the M5 gate drew the primitive helpers from the
+built-in pack; the M6 gate is `samples/Text`, which loads the built-in Fira Sans face and the baked
+Lora face from its own `text.pck`, generates glyph textures on demand, and draws the text scene. Both
 publishes must finish with zero AOT/trim warnings. The sample solutions are outside the engine
 solution, and a sample build bakes its pack beside the sample executable when it has one, so the JIT
 bake tool and its packages stay out of the sample's AOT publish graph. The Vulkan loader is a
@@ -777,8 +787,9 @@ the visible edges of front-facing triangles are drawn. `Wireframe` is not part o
 `RenderState`: the public depth, culling, and blending contract is unchanged, and there is no public
 wireframe flag. The polygon-mode-line pipeline needs the core **`fillModeNonSolid`** feature, which
 the renderer enables at device creation when the physical device advertises it. A device without the
-feature fails the frame with `GraphicsException` `RB3001` naming the device and the feature; M5 has no
-CPU line-geometry fallback. `RenderStats.Triangles` still counts the recorded triangle primitives,
+feature fails the frame with `GraphicsException` `RB3001` naming the device and the feature; the
+engine has no CPU line-geometry fallback. `RenderStats.Triangles` still counts the recorded triangle
+primitives,
 because the polygon mode changes rasterization, not the record's topology or index count.
 
 The render path writes **one 256-byte frame uniform block per frame slot**. All camera passes
@@ -901,38 +912,165 @@ references; a frame that recorded the model keeps the programs, meshes, and boun
 through its retention set. `Model` is not an `IAsset` and has no path or lifetime of its own. `Model`
 is static: no skeletal or morph animation in v1.
 
-### Fonts
+### Fonts and text
+
+The font and text runtime is CPU-side until a glyph texture is generated. It has five pieces: the
+managed face parser, the deterministic MSDF generator, the per-font glyph pipeline and its
+app-lifetime thread, the CPU-only `Font` asset and its pack contract, and the layout/draw path that
+records the world-space text.
+
+#### Font parsing
+
+`SfntFace` parses one sfnt (TTF or OTF) face. It validates the table directory and requires
+`head`, `maxp`, `hhea`, `hmtx`, and `cmap`; a TrueType face also carries `loca`/`glyf`, while a CFF
+face carries `CFF ` or `CFF2`. It parses the table directory and `head` (`unitsPerEm`, index-to-loc
+format), `maxp` (`numGlyphs`), `hhea` (ascender, descender, line gap, horizontal metric count), and
+`hmtx` once, and keeps the packed face bytes for the font's lifetime because glyphs, kerning values,
+and table spans are read on demand. cmap selection is deterministic across formats 0, 4, 6, and 12: a
+Unicode subtable wins over a symbol or legacy one, and `MappedGlyphCount` counts mapped codepoints.
+TrueType `glyf` outlines resolve simple and composite glyphs, with a recursive-component budget and
+rejection of point-matched composite arguments. CFF 1.0 resolves Type 2 charstrings, including the
+CID-keyed FDArray/FDSelect path and the deprecated `seac` composition, with its own interpreter
+budgets; CFF2 parses structurally and is rejected before a glyph is read. Kerning comes from `kern`
+format 0 or GPOS PairPos format 1/2 including extension lookups. The parser splits failures into
+`FontFormatException` (malformed) and `FontUnsupportedException` (valid but outside a documented
+limit), never lets a framework exception escape for malformed input, and caps composite depth (16),
+points per glyph (20,000), component resolutions (4,096), composite/`kern`/GPOS pair counts, CFF
+DICT/INDEX/interpreter work, and more. `FontParserFuzzTests` and `CffFuzzTests` exercise fixed-seed
+mutations, truncations, and byte corruption against that surface and a 16 MiB per-parse allocation
+bound. There is no shaping: a cmap-mapped Unicode rune is one glyph, and an unmapped rune falls back
+to glyph id 0 (`.notdef`). Variable faces load and render their default instance; no axis is exposed.
+Ligatures, contextual shaping, bidi, color fonts, and emoji are not implemented.
+
+#### MSDF generation
+
+`MsdfGenerator` computes one glyph's padded layout and its RGBA8 distance field on the CPU.
+`ComputeLayout` fits the glyph bounds into `pixelSize - 2 * padding` pixels, so the final padded
+texture has its longest side at the authored `msdf_pixel_size` (default `32`) and keeps an empty
+border of `msdf_padding` (default `2`); the distance range is `msdf_range` (default `4`). The
+bearing, size, and top-down UV orientation match the engine's top-left convention. `Generate`
+rasterizes the closed outline with msdfgen-style two-channel edge colouring, writes the three distance
+channels plus an opaque alpha, and normalizes the field so `0.5` is the glyph edge, the authored range
+maps to `[0, 1]`, and a value above `0.5` is inside. The output is byte-identical for identical input
+bytes: no randomness, parallel reduction, culture formatting, or hash-order dependency. The field is
+the exact nearest-edge distance per channel and deliberately does not extend an edge past its
+endpoints, so there is no pseudo-distance corner extension and bilinear filtering can round a sharp
+corner at very large sizes. The generator caps one texture at 4,194,304 texels and one generation at
+8,388,608 edge-texel pairs. `MsdfAnalyticFieldTests`, `MsdfEdgeColoringTests`, `MsdfLayoutTests`, and
+`MsdfGeneratorTests` pin the numeric field, colouring, layout, determinism, and limits.
+
+#### Glyph pipeline and thread
+
+`FontGlyphPipeline` is one per parsed face. The tick thread calls only `BeginFrame`, `Acquire`, and
+`GetMetrics`; the app-lifetime `GlyphGenerationService` runs on the `RayBork.Font` thread and is the
+only thread that inserts or evicts glyph textures. `BeginFrame` records the frame index once per
+camera and keeps the highest value, so a repeated or stale call never moves the cache clock backwards.
+`Acquire` first looks in the cache under the pipeline lock: a hit stamps the use and adds the
+texture's frame hold to the caller's `FrameAssetRetention` **while the lock is held**, so eviction
+cannot release the owner reference between the lookup and the hold; a miss marks the glyph pending,
+records a waiter, enqueues exactly one request, and returns no texture. The draw skips that glyph for
+the call while the pen still advances, and the glyph appears on a later frame. A frame hold is
+idempotent per distinct texture for the retention set and is released by the frame ring, never by the
+pipeline.
+
+The per-font cache is hard-capped at `MAX_CACHED_TEXTURES` (512). Inserting a texture at capacity
+evicts the least-recently-used entries in one batch, regardless of the frame that used them, and
+disposes their owner references outside the cache lock. Eviction can dispose the texture wrapper in
+the same frame that acquired it; the already-recorded frame hold keeps the GPU resource behind the
+texture's lifetime alive until the frame ring releases it, so eviction never destroys a texture a
+recorded frame references. A redundant or late texture for a disposed pipeline is disposed instead
+of leaked. Failure is terminal for the glyph: a failed generation or upload marks it failed, is
+logged once, and is not retried; an empty glyph (such as a space) becomes ready without a texture;
+a font-data failure in the metrics path falls back to the face advance with a zero quad, logs once,
+and is not logged again by the generator. Glyph textures are ordinary engine-owned procedural
+textures, so they use the same bindless allocation, frame retention, destruction, and
+device-recovery re-upload path as any other texture. `FontGlyphPipelineCacheTests`,
+`FontGlyphPipelineMetricsTests`, `FontGlyphSettingsTests`, and `GlyphGenerationServiceTests` cover
+the cache bound, eviction, frame holds, async settlement, failures, and shutdown.
+
+`AssetCatalog.Start` starts the `GlyphGenerationService` (and its `RayBork.Font` thread) before the
+asset loader thread and before the tick thread runs; `AssetCatalog.Stop` stops it before the
+procedural asset service and before it force-disposes the cached assets, while the render thread
+still services the GPU upload bridge. A
+font disposed earlier in the run disposes its pipeline while the service may still be running; the
+pipeline unregisters its queued requests and a late generated texture is disposed by the insert path
+instead of leaking. The `RayBork.Font` thread blocks on the glyph texture upload, so exactly one glyph
+uploads at a time, and the production completion comes from the render thread through the bridge. The
+catalog owns the `GlyphGenerationService` and the procedural glyph texture factory for the app
+lifetime.
+
+#### Font asset and pack contract
 
 `Font` is the engine's first CPU-only engine asset. `FontAssetFormat` reads the `Font` descriptor,
 reads the sibling `<base>-face` raw payload, checks it against the descriptor's `ByteLength`, parses
 the sfnt face once with `SfntFace`, and builds the per-font `FontGlyphSettings` and
-`FontGlyphPipeline`. It rejects an unavailable or wrong-length face, an invalid face, an unsupported
-outline source (CFF2) or parser feature, and invalid MSDF settings with `AssetLoadException` `RB1011`
-naming the cause. It returns a `DecodedAsset<Font>` with no GPU upload.
+`FontGlyphPipeline`. It rejects an unavailable or wrong-length face, an invalid face, CFF2, an
+unsupported parser feature, and invalid MSDF settings with `AssetLoadException` `RB1011` naming the
+cause. It returns a `DecodedAsset<Font>` with no GPU upload and generates no glyph texture.
 
 The catalog's engine-asset path accepts that: `DecodedAsset<T>` may carry a null upload,
 `LoadEngineObjectAsync` skips the bridge, and `EngineAsset` accepts a null `GpuAssetResource` and
 queues no GPU destruction. A CPU-only asset passes a release callback instead, which the lifetime
 invokes exactly once at the same transition as a GPU destruction would; for a font it disposes the
 glyph pipeline and with it the cached glyph textures. The mesh, texture, and shader paths are
-unchanged. A failed or stopped font load releases the just-created pipeline before it faults.
+unchanged. A failed or stopped font load releases the just-created pipeline before it faults. A
+font load is shared and reference-counted like any engine asset, so `Load<Font>` returns the same
+object for the same path and a repeated load's `CachedGlyphCount` reflects the shared live cache.
+The public `Font` object keeps only tick-thread metrics and acquisition members; `Path` and
+`IsDisposed` stay readable after disposal. The font descriptor carries the MSDF settings and the face
+payload only: the pre-M6 `Ranges` member is removed, a pre-M6 pack still loads because MessagePack
+ignores the unknown member, and an old TOML sidecar that still declares `ranges` fails the bake with
+`RB4002`. There is no `Preload` and no preload range; every cmap-mapped glyph can be generated on
+demand.
 
-The runtime never generates glyph textures during the load. A draw calls the pipeline's `Acquire` on
-the tick thread; a miss marks the glyph pending, enqueues one request on the app-lifetime
-`GlyphGenerationService`, and draws nothing for that glyph until a later frame. The `RayBork.Font`
-thread generates the MSDF bitmap and calls `ProceduralGlyphTextureFactory`, which uploads one
-procedural `Rgba8Unorm`, linear, clamp-sampled texture with no mip chain through the catalog's
-`ProceduralAssetService` and blocks on the bridge completion. Glyph textures are ordinary
-engine-owned procedural textures, so the frame retention and destruction path is the same as any
-other texture. The `Font` public object keeps only tick-thread metrics and acquisition members;
-`Path` and `IsDisposed` stay readable after disposal.
+#### Built-in font
 
-The catalog owns the `GlyphGenerationService` and the `ProceduralGlyphTextureFactory` for the app
-lifetime. `AssetCatalog.Start` starts the service with the loader thread, and `AssetCatalog.Stop`
-stops it before the procedural asset service and before it force-disposes the cached assets, while
-the render thread still services the bridge. `EngineDefaults` preloads the built-in Fira Sans Regular
-face from `/fonts/fira-sans` last, so `EngineContext.Defaults.DefaultFont` is available before
-`IGame.Setup` without adding a startup GPU upload.
+`EngineDefaults` preloads the built-in Fira Sans Regular face from `/fonts/fira-sans` after the
+built-in pack and before `IGame.Setup`, so `EngineContext.Defaults.DefaultFont` is available to
+`Setup` without adding a startup GPU upload. The pack carries the face and its
+`/fonts/fira-sans-face` payload, baked by the ordinary font processor with the default 32/4/2 MSDF
+settings, so the built-in pack has 18 entries. Fira Sans Regular is version 4.203, licensed under the
+SIL Open Font License 1.1, and covers Latin, Cyrillic, and Greek. The face is engine-owned and must
+not be disposed; its owner reference is released during shutdown. It is recorded in the
+bundled-assets section of [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). The sample-only Lora
+face is baked into `samples/Text/text.pck` and keeps its own notice under `samples/Text/`.
+
+#### Text layout and drawing
+
+`TextLayoutEngine` is pure CPU and reads `ITextMetrics`; it allocates nothing once the caller's
+`TextLayoutBuffer` has grown. It decodes UTF-16 with `Rune` (an unpaired surrogate is U+FFFD),
+starts a new line on `'\n'`, ignores `'\r'`, and advances by the face advance plus `kern`/GPOS
+kerning. `LineHeight` is `(ascender - descender + lineGap) / unitsPerEm`; `Ascent` and `Descent` are
+the `hhea` values in em units. `TextAlignment` shifts each line inside the layout box.
+`TextWrapping.Word` breaks only before a whitespace run that follows a word and drops that run, while
+`TextWrapping.Character` breaks between any two glyphs and never drops a rune; both require a
+positive `maxWidth`. `TextWrapping.None` with `maxWidth == 0` sizes the box to the widest line.
+`Measure` ignores wrapping and a width limit and returns the widest line advance plus
+`lineCount * LineHeight * size`. The layout origin is the top-left of the layout box; the first
+baseline is at `-Ascent * size`, line `i`'s baseline is at `-(Ascent + i * LineHeight) * size`, and
+the block bounds are the union of the box and every glyph quad.
+
+`Camera.DrawText` records world-space text through the engine quad and the built-in
+`/shaders/msdf` program. The block lies in the transform's local XY plane, with `+X` right, `+Y` up,
+the readable face toward local `+Z`, and the origin at the top-left of the first line's ascent box.
+Each laid-out glyph is one instance of the engine quad, mapped to the layout `Position`/`Size` and
+composed as `glyphQuad * transform.ToMatrix()`. `Camera.DrawTextBillboard` uses the same layout with
+`TextWrapping.None` and no width limit, centers the union of the layout box and every glyph quad on
+`position` in a camera-facing plane, and aligns each line inside the block width; its `+X`/`+Y` axes
+are the camera's right and up axes and the quad's `+Z` faces the camera. One call records at most one
+draw record, and every ready glyph is one instance in layout order with its own per-instance
+bindless glyph texture; the per-instance UV rectangle stays `(0, 0, 1, 1)` because one glyph is one
+whole padded texture. The text render state is alpha blending, no culling, `greater_equal`, and no
+depth write. All text over the quad, the MSDF program, and that state batches together across calls,
+fonts, sizes, and strings; `Instances` counts the submitted glyph instances after frustum culling and
+`Triangles` is two per submitted instance. A call whose glyphs are all pending, empty, or failed
+records nothing. A glyph texture the draw acquired is retained by its frame hold, not again by the
+draw record. Validation runs before any retention or record mutation; a null font is
+`ArgumentNullException`, a disposed camera or font is `ObjectDisposedException`, non-finite or
+out-of-range layout arguments are `ArgumentException`/`ArgumentOutOfRangeException`, and a zero
+transform scale or empty text records nothing. Text is world-space geometry; the screen-space
+orthographic path, including HUD text and `DrawTexture`, is M7.
+
 
 ### GPU upload bridge and frame retention
 
@@ -1052,10 +1190,10 @@ registered `[GenerateShape]` shape; there is no reflection resolver and no runti
 
 The runtime exposes the `Model` loader. The model processor emits a `Model` descriptor plus one
 `Mesh` part per primitive; the font processor emits a `Font` descriptor plus the face payload. The
-runtime parses the font face and generates MSDF glyphs on demand; M3 baked and validated both entry
-types before the runtime types existed, and the runtime `Model` load path and the model/part ownership
-are described above. Each mesh descriptor may carry the baked collision payload described in the
-previous section.
+runtime parses the font face and generates MSDF glyphs on demand, as described under
+[Fonts and text](#fonts-and-text); M3 baked and validated both entry types before the runtime types
+existed, and the runtime `Model` load path and the model/part ownership are described above. Each
+mesh descriptor may carry the baked collision payload described in the previous section.
 
 ### Bake tooling and the built-in pack
 
@@ -1091,16 +1229,21 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   target, and present pass and presented frames. M3 extended it again with a baked pack, a KTX2
   texture, a mesh, a shader, and a MessagePack custom-data value. M4 moved the gate to
   `samples/Castle`, which baked `castle.pck`, loaded the model and its texture, and drew the castle
-  through the geometry pipeline. M5 moves the gate to `samples/PrimitiveGallery`: it has no assets
-  executable or pack, builds its only texture at runtime, draws the M5 primitive helpers through the
-  built-in primitive and mesh programs, and shuts down. The M5 suite is 1,899 tests, 93 of them GPU
-  integration tests, and every sample solution builds. `samples/Castle` remains a buildable and
-  publishable sample but is not the M5 gate, and `samples/HelloInterop` remains the M1-M3 diagnostic
-  host.
+  through the geometry pipeline. M5 moved the gate to `samples/PrimitiveGallery`, which built its only
+  texture at runtime and drew the primitive helpers from the built-in pack. M6 moves the gate to
+  `samples/Text`: it bakes `text.pck` from the checked-in Lora face, loads the built-in Fira Sans face
+  and the custom Lora face, generates glyph textures on demand, draws the text scene, and shuts down.
+  The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim warnings, contained
+  `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows hardware driver and
+  on WSLg's dzn hardware device. The suite is 2,594 tests, 102 of them GPU integration tests, and
+  every sample solution builds. `samples/Castle` and `samples/PrimitiveGallery` remain buildable and
+  publishable samples but are not the M6 gate, and `samples/HelloInterop` remains the M1-M3
+  diagnostic host.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
-  built-in pack descriptor decode in every gate; the pack reader and descriptor decoding contain no
-  reflection resolver. The M5 gallery reads only the built-in pack, so packed model, mesh, and
-  texture descriptors remain covered by the M4 Castle gate and the asset tests.
+  built-in and sample pack descriptor decode in every gate; the pack reader and descriptor decoding
+  contain no reflection resolver. The M6 Text gate decodes the built-in font, texture, and shader
+  descriptors and the sample's baked `Font` descriptor, so the font entry type is covered end to end;
+  the M4 Castle gate covered the packed model, mesh, shader, and texture descriptors.
 - The Vulkan loader is loaded through `NativeLibrary` with a custom `INativeContext` instead of
   Silk.NET's path resolution, so the published host does not depend on a per-RID Silk.NET loader
   asset. The loader itself is a system/GPU-driver component and is not redistributed with the
@@ -1154,7 +1297,16 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   helpers are also covered by unit tests for recorded matrices, validation, batching, and retention,
   and the collision surface by deterministic unit tests for the checks, ray queries, BVH invariants,
   and accelerated-versus-brute-force equivalence, plus pack/codec and loader tests for the baked
-  payload. The suite is 1,899 tests, 93 of them GPU integration tests.
+  payload.
+- M6 adds the text draw suite (`TextDrawGpuTests`): it loads `/fonts/fira-sans` from the built-in pack
+  through the real catalog and generation service, records the production `Camera.DrawText` and
+  `Camera.DrawTextBillboard`, submits the sealed packet through `Vulkan12Backend`, and asserts
+  validation-layer cleanliness, one draw call with one instance per ready glyph and two triangles per
+  instance, and single-pixel linear scene-target probes for glyph orientation, ink coverage, batching
+  across calls, and occlusion behind opaque geometry. The glyph texture path is also covered by the
+  per-instance texture record and GPU suites. The font, layout, MSDF, and parser suites are
+  deterministic CPU tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The
+  suite is 2,594 tests, 102 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
@@ -1175,16 +1327,18 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 1. The tick thread never calls the renderer backend. The render thread never calls user code.
 2. A `Camera` is valid only between `CreateCamera` and `Dispose`, inside one `Tick`.
 3. A frame slot retains every engine asset a recorded frame references until the frame completes.
+   For a glyph texture, `Acquire` adds the frame hold atomically before it returns, so cache
+   eviction cannot destroy a texture the recorded frame references.
 4. Shader state is captured at draw time; later mutation cannot change a recorded draw.
 5. The render thread consumes the newest completed tick, never a stale queue.
 6. Public API never exposes a native handle or a backend type.
 7. A game assembly published with `PublishAot=true` must start, load the assets it needs (a pack,
-   procedural assets, or both), draw where the milestone has a draw path, and shut down. The M5 gate
-   sample ships no user pack because it builds its only texture at runtime.
+   procedural assets, or both), draw where the milestone has a draw path, and shut down. The M6 gate
+   sample bakes and loads `text.pck` and uses the built-in font; it draws the text scene.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
-10. The engine's built-in pack is always mounted first; it supplies the present shader pair, the
-    built-in mesh draw shader program at `/shaders/mesh`, the primitive program at
+10. The engine's built-in pack is always mounted first; it has 18 entries and supplies the present
+    shader pair, the built-in mesh draw shader program at `/shaders/mesh`, the primitive program at
     `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, the white/error textures, and the
     default font at `/fonts/fira-sans`. The
     app preloads the mesh program, both textures, and the default font into `EngineContext.Defaults`
@@ -1196,8 +1350,13 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 13. The ray-mesh collision structure is immutable after it is built, is CPU-only, is released with
     its mesh, and takes no locks on the query path; no public type exposes the BVH, and
     `Collision.GetRayMesh` is the only query over it.
+14. A `Font` is a CPU-only engine asset: a load parses the face and creates no glyph texture, glyph
+    generation runs on the app-lifetime `RayBork.Font` thread, and the tick thread never waits for
+    it. The per-font glyph texture cache is hard-capped and its eviction is coordinated with frame
+    holds.
 
 Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3; 2-4, 7, and 10 are exercised end to end by
-the camera and draw path, and 7 and 10 by the M5 Primitive Gallery AOT gate; 13 is enforced by the
-collision unit tests and the loader tests for the baked payload. M3 enforced the asset and
-frame-retention parts of 3, 7, and 10 before the draw recorder existed.
+the camera and draw path, and 7 and 10 by the M6 `samples/Text` AOT gate; 13 is enforced by the
+collision unit tests and the loader tests for the baked payload; 14 is enforced by the glyph
+pipeline, font asset, and text draw tests. M3 enforced the asset and frame-retention parts of 3, 7,
+and 10 before the draw recorder existed.

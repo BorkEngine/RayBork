@@ -7,7 +7,7 @@ with a surface hit point when the pointer is over it, and draws a small FPS and 
 at the top-left of the view. The source is kept small and commented so the scene can be read and
 adapted as a starting point.
 
-`samples/PrimitiveGallery` is the M5 Native AOT gate. This sample remains a buildable and publishable
+`samples/Text` is the M6 Native AOT gate. This sample remains a buildable and publishable
 example, and it contains no test-only logic: it opens the window, draws the scene, and exits cleanly.
 Build and run it from the repository root:
 
