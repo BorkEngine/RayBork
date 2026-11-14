@@ -959,6 +959,26 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScreenToWorldRayExtrapolatesForAPositionOutsideTheViewport() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera(transform: new Transform(new Vector3(0f, 0f, 5f)));
+
+        Vector2 outside = new(-100f, 800f);
+        Ray ray = camera.ScreenToWorldRay(outside);
+        Vector2 screen = camera.WorldToScreen(ray.Origin + (ray.Direction * 10f));
+
+        Assert.Equal(new Vector3(0f, 0f, 5f), ray.Origin);
+        Assert.True(ray.Direction.X < 0f);
+        Assert.True(ray.Direction.Y < 0f);
+        Assert.Equal(outside.X, screen.X, 1e-3f);
+        Assert.Equal(outside.Y, screen.Y, 1e-3f);
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ScreenToWorldRayRoundTripsForAnOrthographicCamera() {
         using CameraTestHost host = new();
         host.BeginFrame();

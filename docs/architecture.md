@@ -68,7 +68,7 @@ Samples (M11) ──────> RayBork.Engine
 | `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the AOT gate. |
 | `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
 | `samples/PrimitiveGallery` | M5 sample and Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. |
-| `samples/Castle` | M4 sample, still buildable and publishable but no longer the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, and exits on Escape or `--frames`. |
+| `samples/Castle` | M4 sample, still buildable and publishable but no longer the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, and, when the pointer ray hits the model bounds, adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
 | `samples/` | Pong, Text, Instancing, RenderTarget (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
 
@@ -1013,7 +1013,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `samples/Castle`, which baked `castle.pck`, loaded the model and its texture, and drew the castle
   through the geometry pipeline. M5 moves the gate to `samples/PrimitiveGallery`: it has no assets
   executable or pack, builds its only texture at runtime, draws the M5 primitive helpers through the
-  built-in primitive and mesh programs, and shuts down. The M5 suite is 1,896 tests, 93 of them GPU
+  built-in primitive and mesh programs, and shuts down. The M5 suite is 1,898 tests, 93 of them GPU
   integration tests, and every sample solution builds. `samples/Castle` remains a buildable and
   publishable sample but is not the M5 gate, and `samples/HelloInterop` remains the M1-M3 diagnostic
   host.
@@ -1074,7 +1074,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   helpers are also covered by unit tests for recorded matrices, validation, batching, and retention,
   and the collision surface by deterministic unit tests for the checks, ray queries, BVH invariants,
   and accelerated-versus-brute-force equivalence, plus pack/codec and loader tests for the baked
-  payload. The suite is 1,896 tests, 93 of them GPU integration tests.
+  payload. The suite is 1,898 tests, 93 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

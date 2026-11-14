@@ -412,17 +412,18 @@ automatic instancing, and per-instance textures/uniforms.
   `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
   diagnostic host.
 - **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
-  texture, an orbital camera, and the reference XZ grid. It deliberately leaves out features that
-  need later milestones: model/texture drag-and-drop (post-1.0 platform work), click selection and a
-  wire-box overlay (the engine ships `Collision.GetRayBox` and, from M5, `Camera.DrawBoundingBox` and
-  `Camera.DrawWireCube`; the sample does not implement selection), and the
-  `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The grid is
-  `DrawGrid(20, 10f, Color.Gray)` in the same opaque, depth-tested pass as the castle. The model and
-  its diffuse texture are drawn with the built-in `/shaders/mesh` material that the loaded model
-  owns; there is no custom Castle shader. The sample draws only the castle and its grid; render
-  statistics are available to games but are not drawn. The castle model and texture are
-  sample-only assets with their own notice under `samples/Castle/`; that notice is deliberately not
-  duplicated in the repository-root notices.
+  texture, an orbital camera, the reference XZ grid, and a mouse-hover outline. It deliberately
+  leaves out features that need later milestones: model/texture drag-and-drop (post-1.0 platform
+  work), click selection (the sample tests the pointer ray with `Collision.GetRayBox` and
+  `Collision.GetRayMesh` and draws `Camera.DrawBoundingBox` plus the nearest hit point, but it has no
+  click action and keeps no selection state), and the `DrawText`/`DrawFPS` overlay (runtime text
+  arrives in M6). The grid is `DrawGrid(20, 10f, Color.Gray)` in the same opaque, depth-tested pass
+  as the castle, and the hover box and hit sphere join that pass only while the pointer is over the
+  model. The model and its diffuse texture are drawn with the built-in `/shaders/mesh` material that
+  the loaded model owns; there is no custom Castle shader. The sample draws the castle, its grid, and
+  the hover overlays; render statistics are available to games but are not drawn. The castle model and
+  texture are sample-only assets with their own notice under `samples/Castle/`; that notice is
+  deliberately not duplicated in the repository-root notices.
 - **WSLg dzn compatibility.** On the WSL gate host WSLg selects
   `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and prints
   "dzn is not a conformant Vulkan implementation, testing use only". The original runtime
@@ -499,7 +500,7 @@ mesh generation, and the collision queries a small game expects.
 - All helpers batch with the same rules as user draws; stats reflect it, and `RenderStats.Triangles`
   still counts recorded triangle primitives for a wireframe model draw.
 - Castle uses `DrawGrid` for the raylib reference grid; all sample solutions build.
-- The suite is 1,896 tests, 93 of them GPU integration tests.
+- The suite is 1,898 tests, 93 of them GPU integration tests.
 - Native AOT publish runs the gallery on Windows and Linux.
 
 **As-built notes.** M5 shipped the planned primitive and collision scope, the approved ray-mesh
@@ -722,7 +723,7 @@ color helpers, and the restored Bork2d/Unity color preset set:
   uses orbit controls, and accepts `--frames` and `--help`. The published `win-x64` and `linux-x64`
   hosts run from the publish directory with zero AOT/trim warnings, and the publish directory contains
   no bake tooling. The sample is a plain user-facing example and contains no test-only draw
-  assertion. The M5 suite is 1,896 tests, 93 of them GPU integration tests, and every sample solution
+  assertion. The M5 suite is 1,898 tests, 93 of them GPU integration tests, and every sample solution
   builds.
 - **DrawTexture boundary.** `DrawTexture` is not part of M5. The preview screen-space overlay helper
   is removed and re-homed to M7, where it returns with the orthographic/sprite contract and
@@ -736,10 +737,11 @@ color helpers, and the restored Bork2d/Unity color preset set:
 - **Castle and the M4 forward references.** `samples/Castle` keeps its orbitable scene and adds
   `DrawGrid(20, 10f, Color.Gray)` under the model in the same opaque, depth-tested pass, so the
   reference XZ grid is no longer deferred. Two M4 forward references are corrected: the grid ships in
-  M5, and `DrawBoundingBox` now ships as a public M5 helper. The Castle sample still does not
-  implement click selection, so it does not use the new helper. Castle remains a buildable and
-  publishable sample; the M5 AOT gate is the gallery. The M4 limitation of one `rbFrame` block per
-  frame slot is unchanged by M5.
+  M5, and `DrawBoundingBox` now ships as a public M5 helper. The Castle sample uses the helper for its
+  hover overlay: it tests the pointer ray against the model bounds with `Collision.GetRayBox`, draws
+  the bounds on a hit, and marks the nearest `Collision.GetRayMesh` hit. It still does not implement
+  click selection. Castle remains a buildable and publishable sample; the M5 AOT gate is the gallery.
+  The M4 limitation of one `rbFrame` block per frame slot is unchanged by M5.
 
 **Risks.**
 
@@ -1084,7 +1086,7 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   polygon-mode-line path: front-facing triangle edges without a filled interior, texture sampling on
   a wireframe fragment, and distinct filled/wireframe pipelines. The collision queries and the BVH
   are covered by deterministic unit tests, including accelerated-versus-brute-force equivalence, and
-  the baked payload by codec and loader tests. The M5 suite is 1,896 tests, 93 of them GPU
+  the baked payload by codec and loader tests. The M5 suite is 1,898 tests, 93 of them GPU
   integration tests; every sample solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

@@ -172,5 +172,6 @@ packages: the sample has no bake tooling and no external pack, and the generated
   `ComputeTangents`, and `GenerateCollisions` are likewise documented but not shown.
 - **Wireframe model drawing.** `DrawWireModel` is deliberately not part of this sample: the gallery is
   the Native AOT gate and must not depend on the optional `fillModeNonSolid` device feature. The
-  Castle sample demonstrates the wireframe overlay on hardware that supports the feature.
+  `ModelWireframeGpuTests` suite covers the wireframe pipeline; the Castle sample no longer draws a
+  wireframe overlay.
 - **Animation.** The scene is static; only the orbit camera moves.

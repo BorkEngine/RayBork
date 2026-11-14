@@ -14,8 +14,9 @@ internal static class Program {
     private const string USAGE_TEXT = """
         Castle - an orbitable castle scene
 
-        A castle model and its diffuse texture, drawn solid and as a wireframe overlay with the
-        built-in mesh material and an orbital perspective camera.
+        A castle model and its diffuse texture, drawn solid with the built-in mesh material and an
+        orbital perspective camera. Hovering the castle outlines its bounds and marks the nearest
+        surface point under the pointer.
 
         Usage:
           Castle [options]
@@ -29,6 +30,7 @@ internal static class Program {
         Controls:
           Left mouse drag   Orbit the camera.
           Mouse wheel       Zoom the camera.
+          Mouse hover       Outline the castle and mark the surface point under the pointer.
           Escape            Exit.
         """;
 
