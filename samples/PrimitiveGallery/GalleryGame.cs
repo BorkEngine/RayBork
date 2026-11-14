@@ -383,7 +383,7 @@ internal sealed class GalleryGame : IGame {
 
     private void UpdateOrbit(IInput input) {
         // Drag to orbit; the wheel moves the camera closer or farther away. Screen Y grows
-        // downward, so adding the vertical delta raises the camera when the pointer moves up.
+        // downward, so adding the vertical delta raises the camera when the pointer moves down.
         if (input.IsMouseButtonDown(MouseButton.Left)) {
             Vector2 delta = input.MouseDelta;
             _yawDegrees -= delta.X * ORBIT_DEGREES_PER_PIXEL;

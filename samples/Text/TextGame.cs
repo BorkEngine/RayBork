@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Numerics;
 using RayBork;
 
@@ -46,7 +45,7 @@ internal sealed class TextGame : IGame {
     private const float PARAGRAPH_MAX_WIDTH = 4.2f;
     private const float PARAGRAPH_LARGE_SIZE = 0.32f;
     private const float PARAGRAPH_MEDIUM_SIZE = 0.16f;
-    private const float PARAGRAPH_SMALL_SIZE = 0.08f;
+    private const float PARAGRAPH_SMALL_SIZE = 0.12f;
     private const float BODY_MAX_WIDTH = 3.9f;
     private const float BODY_SIZE = 0.14f;
     private const float HEADING_SIZE = 0.16f;
@@ -65,16 +64,16 @@ internal sealed class TextGame : IGame {
     private const float STATUS_MAX_WIDTH = 4.4f;
     private const float SIZE_DEMO_TOP_Y = 2.72f;
     private const float MEDIUM_DEMO_TOP_Y = -0.1f;
-    private const float SMALL_DEMO_TOP_Y = -1.42f;
+    private const float SMALL_DEMO_TOP_Y = -1.38f;
     private const float ROW_ONE_HEADING_Y = 2.8f;
     private const float ROW_ONE_PARAGRAPH_Y = 2.55f;
     private const float ROW_TWO_HEADING_Y = 1.7f;
     private const float ROW_TWO_PARAGRAPH_Y = 1.45f;
-    private const float BILLBOARD_X = 4.4f;
+    private const float BILLBOARD_X = 2.3f;
     private const float BILLBOARD_Y = -0.7f;
     private const float BILLBOARD_Z = 1.5f;
-    private const float BILLBOARD_SIZE = 0.18f;
-    private const float LAZY_LINE_TOP_Y = -1.92f;
+    private const float BILLBOARD_SIZE = 0.16f;
+    private const float LAZY_LINE_TOP_Y = -1.95f;
     private const float LAZY_LINE_SIZE = 0.16f;
 
     private const int LAZY_GLYPH_INTERVAL_FRAMES = 30;
@@ -346,7 +345,7 @@ internal sealed class TextGame : IGame {
 
     private void UpdateOrbit(IInput input) {
         // Drag to orbit; the wheel moves the camera closer or farther away. Screen Y grows
-        // downward, so adding the vertical delta raises the camera when the pointer moves up.
+        // downward, so adding the vertical delta raises the camera when the pointer moves down.
         if (input.IsMouseButtonDown(MouseButton.Left)) {
             Vector2 delta = input.MouseDelta;
             _yawDegrees -= delta.X * ORBIT_DEGREES_PER_PIXEL;

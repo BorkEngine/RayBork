@@ -37,7 +37,7 @@ alignment, wrapping mode, and rotation:
 | --- | --- | --- | --- | --- | --- |
 | Large | `0.32` em | `Left` | `Word` | none | `4.2` world units |
 | Medium | `0.16` em | `Center` | `Word` | `-5` degrees around Z | `4.2` world units |
-| Small | `0.08` em | `Right` | `Character` | `10` degrees around Y | `4.2` world units |
+| Small | `0.12` em | `Right` | `Character` | `10` degrees around Y | `4.2` world units |
 
 `size` is the em height in world units, while `maxWidth` is an absolute world-space box width at that
 size, so one box holds a different number of lines at each size. The large copy contains
@@ -45,14 +45,15 @@ size, so one box holds a different number of lines at each size. The large copy 
 leaves it whole and lets it overflow its line, and the paragraph's other lines stay inside the box.
 The small copy uses `Character` wrapping, which breaks between any two glyphs, so its lines split
 mid-word. The medium and small copies rotate the text plane itself, which shows that layout happens in
-the transform's local space.
+the transform's local space. At 1280x720 the `0.12` em copy is readable, but it is the smallest, so it
+is best read up close: the mouse wheel zooms the orbit distance down to `2.5` world units.
 
 Latin and Cyrillic paragraphs are drawn in both faces: `Fira Sans, Latin`, `Lora, Latin`,
 `Fira Sans, Cyrillic`, and `Lora, Cyrillic`. Each heading is drawn in the face it names, and each
 paragraph wraps inside a `3.9` world-unit box. Both faces map the Latin and Cyrillic codepoints
 directly; no fallback font is involved.
 
-The billboard label is drawn with `Camera.DrawTextBillboard` at `(4.4, -0.7, 1.5)`. It centers its
+The billboard label is drawn with `Camera.DrawTextBillboard` at `(2.3, -0.7, 1.5)`. It centers its
 layout box on that point and uses the camera's right and up axes as its plane, so it turns to face the
 orbiting camera instead of staying on the wall.
 
@@ -84,8 +85,10 @@ The built-in Fira Sans Regular face is not in this pack. The engine preloads it 
 and exposes it as `ctx.Defaults.DefaultFont`; the sample uses that object directly and never disposes
 it. The Lora load is the sample's own reference and is released in `Shutdown`.
 
-`Load<Font>` is CPU-only: it parses the face and queues no GPU upload. Every glyph texture is generated
-on demand on the engine's font thread, so `Setup` preloads both faces without generating a single glyph.
+`Load<Font>` is CPU-only: it parses the face and queues no GPU upload. The engine preloads Fira Sans
+before `Setup`, so that face is already available; `Setup` loads Lora with `Load<Font>`, which parses
+the Lora face and queues no upload. Every glyph texture is generated on demand on the engine's font
+thread, so neither load generates a single glyph texture.
 
 The pack is generated output under `bin/` and `obj/` and is gitignored. The Lora font is sample-only and
 is **not** covered by RayBork's MIT license; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
