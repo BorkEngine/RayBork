@@ -101,7 +101,7 @@ Transform world = local.WithParent(parent); // Position == (1, 1, 0)
 Components are normally in `[0, 1]`, but HDR rendering deliberately allows values above `1`.
 There is no 8-bit sRGB `Color` and no implicit gamma conversion; use the explicit `FromSrgb`,
 `FromSrgbBytes`, and `ToSrgb` helpers when a display-encoded value crosses the API boundary. The
-present pass applies AgX and the output transfer function.
+present pass applies Godot 4.7's HDR-aware AgX curve and then the output transfer function.
 
 ```csharp
 public readonly struct Color : IEquatable<Color>, IFormattable {
@@ -178,8 +178,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
   `Vector4`, not a `Color`, because the result is display-encoded rather than linear. It does not
   clamp: values above `1` and negative values extrapolate through the same formula, so callers that
   write to a display or an 8-bit target must clamp.
-- The final output path applies AgX tone mapping and then the swapchain transfer function. Sampling
-  an sRGB texture decodes to linear before lighting. Sampling a linear texture stays linear.
+- The final output path applies the HDR-aware AgX tone map and then the swapchain transfer function.
+  Sampling an sRGB texture decodes to linear before lighting. Sampling a linear texture stays linear.
 
 ### 5.4 `Rect`
 

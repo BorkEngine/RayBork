@@ -45,14 +45,15 @@ public static class EngineVersion {
 | `Current` | **Any** | The version of the loaded `RayBork.Engine` assembly. Immutable for the app lifetime. Safe to read from any thread. Throws no `RayBorkException`. |
 
 `Current` is the loaded `RayBork.Engine` assembly's `Version`; it reports `0.1.0.0` in the 0.1
-release, including M1 through M4. The build and package version is `0.1.0`. It describes the engine
+release, including M1 through M5. The build and package version is `0.1.0`. It describes the engine
 assembly that is actually loaded, not the game assembly, the pack format, or the shader ABI. The
 value cannot change while the process runs, and no RayBork API mutates it. `EngineVersion` is the
 only public type added in M0. M1 adds the host, window, input, time, and logging surface listed in
 §1.6; M2 adds the renderer diagnostics (`EngineInfo`, `RenderStats`, `PresentMode`,
 `TonemappingMode`, `GraphicsException`, and `GraphicsDeviceLostException`); M3 adds the asset
-exceptions; M4 adds the camera/draw path and the draw-arm `RenderStats` semantics in §10.6. Every
-other type in this reference remains a contract for later milestones.
+exceptions; M4 adds the camera/draw path and the draw-arm `RenderStats` semantics in §10.6; M5 adds
+the primitive and collision surface and the runtime tone-mapping settings without a new diagnostic
+type. Every other type in this reference remains a contract for later milestones.
 
 The getter has no dependency on a pack, window, GPU, renderer, or logger. It does not block, does not
 require synchronization, and throws no `RayBorkException`; the value is available to loggers,

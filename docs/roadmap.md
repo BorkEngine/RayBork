@@ -70,7 +70,7 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M2 | Renderer foundation | Backend seam, swapchain, HDR/AgX/MSAA, reverse-Z, recovery | M1 |
 | M3 | Asset pipeline | Pack v1, assets executable, processors, typed loaders | M1 |
 | M4 | Core 3D renderer | Models, shaders, bindless textures, instancing, camera draws | M2, M3 |
-| M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, collision queries | M4 |
+| M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, collision queries, HDR AgX rework | M4 |
 | M6 | Text and MSDF | TTF/OTF, runtime MSDF, layout, world-space text | M4 |
 | M7 | 2D and orthographic rendering | Sprites, 2D shapes, pixel mapping, Pong | M4 |
 | M8 | Render targets and multiple cameras | HDR/MSAA targets, readback, split-screen | M4 |
@@ -198,8 +198,9 @@ AgX presentation, MSAA, reverse-Z depth, and recovery from recoverable failures.
   space on HDR windows, then `B8G8R8A8_SRGB` or `R8G8B8A8_SRGB`. HDR10/PQ
   (`A2B10G10R10_UNORM_PACK32`) is deferred until the output transform and HDR metadata exist.
 - Linear `Rgba16Float` scene target; present pass with AgX and exposure; `TonemappingMode.None`
-  escape hatch. AgX is an SDR-referred view transform: it places display white at the window's
-  reported SDR white level and does not use the HDR headroom; the highlight extension is M4.
+  escape hatch. M2 shipped an initial AgX curve that did not use the HDR headroom; M5 replaced it
+  with Godot 4.7's HDR-aware AgX and removed the separate highlight stage. The rest of the M2 present
+  path is unchanged.
 - MSAA 4x default (1/2/4/8 supported); HDR color resolves to a single-sample image before present.
   Depth is cleared and compared under MSAA but not resolved until something samples it (M4/M8).
 - Present mode `Mailbox` default, `Fifo` fallback, `Immediate` by explicit choice.
@@ -232,10 +233,11 @@ AgX presentation, MSAA, reverse-Z depth, and recovery from recoverable failures.
 - A software-Vulkan (lavapipe) CI job runs the same clear test under Xvfb, if the CI host has no
   GPU.
 
-**Notes.** AgX cannot exceed display white by construction, so M2 presents SDR-referred content at
-the correct luminance in an HDR window but does not produce highlights above paper white.
-`TonemappingMode.None` can write above paper white for direct authoring. The paper-white/peak
-extension that uses the reported HDR headroom is M4.
+**Notes.** The M2 AgX curve was normalized to display white and did not use the reported HDR
+headroom, so HDR highlights stopped at paper white. `TonemappingMode.None` could write above
+paper white for direct authoring. M5 reworked the tone mapper so the curve's output maximum is the
+reported headroom on the scRGB path; see the M5 as-built and
+[Rendering: Camera](api/rendering/camera.md#72-projection-clear-hdr-and-tone-mapping).
 
 **Risks.** WSL's Vulkan 1.2 implementation may expose a different feature set than native Windows.
 HDR swapchain support is highly driver-dependent; the SDR fallback is the guaranteed path. The
@@ -331,10 +333,11 @@ automatic instancing, and per-instance textures/uniforms.
 - Fixed vertex layout: position, normal, uv, uv1, uv2, uv3, color, tangent.
 - Entry points `main_vertex` and `main_fragment`.
 - HDR scene target, AgX present, MSAA resolve, `TonemappingMode`, exposure.
-- AgX highlight extension for HDR windows: keep AgX for the SDR range, then extend scene luminance
-  above the AgX white point into the reported HDR headroom at constant chromaticity, using the
-  reported SDR white level as paper white and the reported HDR headroom as the peak. The SDR image
-  stays identical to M2; `TonemappingMode.None` remains the direct HDR authoring path.
+- M4's initial HDR AgX was the M2 curve with a separate paper-white highlight stage driven by the
+  reported SDR white level and HDR headroom. `TonemappingMode.None` remained the direct HDR authoring
+  path. M5 replaced that entire path with Godot 4.7's HDR-aware AgX; the current contract is in the
+  M5 as-built and
+  [Rendering: Camera](api/rendering/camera.md#72-projection-clear-hdr-and-tone-mapping).
 - Built-in unlit mesh shader (`/shaders/mesh`), white/error textures, preloaded through
   `EngineContext.Defaults`.
 - `DrawModel`/`DrawMesh` errors: disposed assets, wrong render state, mismatched topology, missing
@@ -356,9 +359,11 @@ automatic instancing, and per-instance textures/uniforms.
 - A uniform change between draws does not mutate earlier draws.
 - Near geometry is closer in reverse-Z depth; a depth-precision probe passes at near `0.01` with an
   infinite far plane.
-- On an HDR window, paper white stays at the reported SDR white level and a scene value above the
-  AgX white point reaches the reported peak; the same content on an SDR window produces the M2
-  image. Numeric probes, no golden images.
+- On an HDR window, paper white stayed at the reported SDR white level and a scene value above the
+  AgX white point reached the reported peak through the M4 highlight stage; the same content on an
+  SDR window produced the M2 image. Numeric probes, no golden images. M5 replaced this path; the
+  current behavior is in the M5 as-built and
+  [Rendering: Camera](api/rendering/camera.md#72-projection-clear-hdr-and-tone-mapping).
 - Validation is clean for the gate scene; resize works with the new pipelines.
 - Native AOT publish renders the Castle scene on Windows and Linux.
 
@@ -388,19 +393,13 @@ automatic instancing, and per-instance textures/uniforms.
   rectangle, one bindless index per sidecar texture binding, and the reflected uniform values, so
   uniform and texture changes never split a batch. `Draw*` snapshots the shader cursor once per call;
   `DrawInstanced` applies one snapshot to every transform.
-- **AgX highlight extension with paper-white normalization.** AgX remains the SDR-referred curve. On
-  an HDR window the scRGB path normalizes AgX's neutral white by
-  `luma(AgX(white)) = 0.9829795037669735` to display luminance `1.0` and scales that to the window's
-  reported SDR white level (paper white). Above the AgX white point at
-  `AGX_WHITE_SCENE_LUMINANCE = 2^4.026069 = 16.291742...` scene-linear luminance, with
-  `r = sceneLuminance / AGX_WHITE_SCENE_LUMINANCE`,
-  `t = clamp((r - 1) / (headroom - 1), 0, 1)`, and
-  `yOut = paperWhite + (peak - paperWhite) * t`, where `peak = paperWhite * HDR_headroom`, the
-  normalized AgX color is scaled by `yOut / luma(normalized)`. Displayed luminance is `yOut` and
-  channel ratios are preserved; the mapping is continuous at the knee and clamps beyond the reported
-  peak. It is disabled when the headroom is at most one or when `TonemappingMode.None` is selected.
-  SDR windows keep paper white and peak at `1`, so their image is unchanged from M2, and `None`
-  remains the direct HDR authoring path.
+- **HDR AgX present (reworked in M5).** M4's initial HDR AgX was the M2 curve plus a separate
+  paper-white highlight stage: on an HDR window the scRGB path normalized AgX's neutral white so it
+  sat at display white, scaled it to the reported SDR white level, and mapped scene luminance above
+  the AgX white point into the reported HDR headroom. `TonemappingMode.None` remained the direct HDR
+  authoring path. M5 replaced that entire path with Godot 4.7's HDR-aware AgX curve; the current
+  contract is in the M5 as-built and
+  [Rendering: Camera](api/rendering/camera.md#72-projection-clear-hdr-and-tone-mapping).
 - **Castle AOT gate.** `samples/Castle` and `samples/Castle/Castle.Assets` were the M4
   per-milestone AOT gate. The sample owns `samples/Castle/Castle.slnx`; it is not part of
   `src/RayBork/RayBork.slnx`. The sample build invokes the JIT assets executable out of process
@@ -476,8 +475,9 @@ device selection instead of clamping silently.
 - Castle uses `DrawGrid` for the raylib reference grid.
 - Native AOT publish runs the gallery on Windows and Linux.
 
-**As-built notes.** M5 shipped the planned scope plus one approved addition, the ray-mesh
-acceleration structure and its baked payload:
+**As-built notes.** M5 shipped the planned primitive and collision scope, the approved ray-mesh
+acceleration structure with its baked payload, and the combined HDR AgX rework with runtime tone
+mapping and sRGB color helpers:
 
 - **Primitive helpers and representation.** `Camera` ships 13 helpers. `DrawLine` maps the engine's
   unit line mesh from `(0,0,0)`–`(1,0,0)` to the segment. `DrawLines` records one instance per
@@ -584,6 +584,30 @@ acceleration structure and its baked payload:
   is an overlay: alpha blended, no depth write, `DepthTest.Always`, and `Cull.None`, so it covers
   scene geometry and is not covered by it. The helper retains the texture for the frame and leaves
   the engine material's binding empty.
+- **HDR AgX rework (merged into M5).** M5 replaces the M2/M4 AgX and its separate paper-white
+  highlight stage with Godot 4.7's HDR-aware AgX. The present fragment shader applies the combined
+  Rec.709 to Rec.2020 and AgX inset matrix, the allenwp curve (crossover `0.18`; `toe_a`, `slope`,
+  and `w` derived on the CPU), a clamp to the output maximum, and the combined inverse outset and
+  Rec.2020 to Rec.709 matrix. The combined matrices preserve neutral gray, so a neutral scene color
+  stays neutral. SDR uses an output maximum of `1.0`; the scRGB path uses the reported display
+  headroom as the curve's output maximum, so the curve writes paper-white units up to the display
+  peak and the pass then multiplies by paper white. The old highlight stage, its scene/output
+  white-luminance shader constants, and the old curve are gone; `TonemappingMode.None` remains the
+  direct path. The shader's curve is mirrored by the CPU reference `AgxToneMap` with
+  `AgxCurveParameters`, covered by pinned unit tests; the renderer never calls the reference per
+  frame.
+- **Runtime tone mapping.** `EngineContext.Tonemapping` exposes the app-lifetime
+  `TonemappingSettings`: `Exposure` in stops, `AgxWhite` (default `16.29`), and `AgxContrast`
+  (default `1.25`). `WithExposure`, `WithAgxWhite`, and `WithAgxContrast` set the startup defaults;
+  `WithTonemapping` still fixes the mode at startup. Every member is tick-thread only; the tick
+  thread snapshots the values into the frame packet at `CameraService.EndFrame`, the values in effect
+  when the frame is sealed apply to that frame's present, and the render thread never reads the live
+  settings object. The scene frame block's exposure field is written from the same snapshot.
+- **sRGB color helpers.** `Color.FromSrgb(float r, float g, float b, float a = 1f)`,
+  `Color.FromSrgbBytes(byte r, byte g, byte b, byte a = 255)`, and `Color.ToSrgb()` convert between
+  display-encoded sRGB and linear `Color` values. `Color` and its named constants remain linear:
+  `Color.Gray` is linear `0.5` and appears light, and `Color.FromSrgb(0.5f, 0.5f, 0.5f)` is the
+  display mid-gray. Named constants did not change.
 - **Primitive gallery AOT gate.** `samples/PrimitiveGallery` is a single-project self-contained
   solution, `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It
   has no assets executable and no pack; `Setup` builds its one `128x128` `Rgba8Srgb` checker texture
@@ -875,13 +899,13 @@ The matrix is the scope contract.
 | Model animations | Post | — | Skeletal/morph post-1.0. |
 | 3D shapes | Covered | M5 | Lines, points, triangles, cube, sphere, cylinder, plane, grid, wires. |
 | Collision | Covered | M5 | Ray/sphere/box/triangle/plane/mesh queries. |
-| HDR / AgX / MSAA | Covered | M2, M4 | Linear scene target, AgX present, 4x default MSAA. |
+| HDR / AgX / MSAA | Covered | M2, M4, M5 | Linear scene target, Godot 4.7's HDR-aware AgX present, 4x default MSAA. |
 | Renderer backend | Covered | M2 | Vulkan 1.2 first; internal seam for future mobile/web backends. |
 | Device-loss recovery | Covered | M2, M10 | Recoverable failures retry; unrecoverable loss is fatal. |
 | Audio | Post | A1-A3 | AAC in engine, FFmpeg bake, mixer, 3D sources, HRTF, Doppler. |
 | VR | Post | — | Not in 1.0. |
 | Math | Covered | M1 | `System.Numerics` + `Transform` + degree-based Unity-style extensions. |
-| Colors | Covered | M1 | Linear HDR `Color`, Unity palette, OkLab, AgX output. |
+| Colors | Covered | M1, M5 | Linear HDR `Color`, Unity palette, OkLab, sRGB conversion helpers, AgX output. |
 
 "Covered" means the API exists and has a sample/test gate. "Partial" means the common case is
 covered and the missing part is documented. "Post" means deliberately after 1.0.
@@ -926,6 +950,12 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   orientation for perspective and orthographic cameras, and overlay-versus-depth ordering. The
   collision queries and the BVH are covered by deterministic unit tests, including
   accelerated-versus-brute-force equivalence, and the baked payload by codec and loader tests.
+- The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
+  parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
+  the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,
+  scRGB paper white and peak at two headrooms, the frame tone-mapping snapshot, and the direct
+  `None` path. A host without the scRGB swapchain path reports the test as a skip with its actual
+  selected format.
 - The architecture tests enforce the dependency rules, the no-native/backend-types-in-public-API
   rule, and the absence of a public `Material`.
 - CI runs on Windows and WSL/Linux. The WSL job uses the hardware Vulkan path when available and
@@ -979,7 +1009,7 @@ removed from the release notes rather than weakened silently.
 | --- | --- | --- | --- |
 | WSL Vulkan 1.2 feature gaps | Bindless/instancing unavailable on a target platform | Feature-probe early in M2; document required device features; test both native and WSL | M2 |
 | HDR swapchain variability | HDR path unavailable or inconsistent | Prefer HDR, fall back to sRGB; report `EngineInfo.HdrOutput`; test both | M2/M10 |
-| AgX is SDR-referred | HDR highlights never exceed paper white | Paper-white/peak extension driven by the reported `HDR_headroom`, extended at constant chromaticity; probe paper white and peak on an HDR display | M4 |
+| HDR tone mapping is display-dependent | HDR highlights are capped at the reported display headroom; HDR10/PQ output is deferred | The AgX curve's output maximum is the reported headroom on scRGB, so the curve itself reaches the display peak; HDR10/PQ remains deferred and is never selected; probe paper white and peak on an HDR display | M2/M4/M5 |
 | MSAA + HDR resolve | Extra memory/bandwidth or resolve bugs | 4x default, 1/2/4/8 support or fallback; resolve tests; validation | M2/M8 |
 | Shader ABI complexity | Bake/runtime/sample churn; custom shaders hard to author | Prototype two shaders before M4 batching; explicit sidecar; publish ABI guide | M4 |
 | Per-instance uniform limits | Batches split unexpectedly; performance regressions | Size estimator, device-limit checks, documented split behavior, per-draw fallback | M4 |

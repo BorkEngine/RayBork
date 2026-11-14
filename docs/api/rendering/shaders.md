@@ -213,6 +213,36 @@ The frame block is declared as `layout(set = 0, binding = 0, std140) uniform Ray
 `CameraPosition`, `Time`, `Viewport`, and `ScreenSize` are written by the engine frame path. They are
 not shader uniforms and cannot be changed with `SetUniform`.
 
+**Present pass push constants**
+
+The present pass is a separate built-in program, not a user shader: its descriptor set 0 has one
+combined image sampler for the resolved scene color, and it receives its configuration through a
+40-byte push-constant block:
+
+| Offset | Type | Member | Contents |
+| --- | --- | --- | --- |
+| 0 | `float` | `exposureMultiplier` | `2^Exposure` from the frame's tone-mapping snapshot, computed on the CPU |
+| 4 | `float` | `hdrWhiteScale` | Paper white in scRGB units: the window's SDR white level on HDR, `1` on SDR |
+| 8 | `float` | `outputMaxValue` | `1` on SDR, the reported display headroom (peak / paper white) on scRGB HDR |
+| 12 | `float` | `awpContrast` | allenwp curve contrast |
+| 16 | `float` | `awpToeA` | allenwp toe intersection parameter |
+| 20 | `float` | `awpSlope` | allenwp shoulder slope at the `0.18` crossover |
+| 24 | `float` | `awpW` | allenwp shoulder width that places the AgX white at `outputMaxValue` |
+| 28 | `int` | `tonemapping` | `0` = AgX, `1` = none |
+| 32 | `int` | `encoding` | `0` = linear clamp, `1` = manual sRGB encode, `2` = scRGB HDR |
+| 36 | `int` | `reserved` | `0`; keeps the block 40 bytes |
+
+The block is exactly 40 bytes: seven `float` members at offsets 0 through 24, then three 32-bit
+integers at offsets 28, 32, and 36. The push-constant range is fragment-stage only. `tonemapping`
+selects `AgX` or the direct `None` path; there is no separate HDR highlight stage flag and no AgX
+white-point or log-range constant. The `awp*` fields are the allenwp curve parameters derived on the
+CPU by `Internal/Graphics/AgxCurveParameters.cs`; the shader (`Shaders/Present.frag.glsl`) and the CPU
+reference (`Internal/Graphics/AgxToneMap.cs`) evaluate the same combined-matrix and curve pipeline and
+are covered by pinned unit tests. The values come from the frame packet's tone-mapping snapshot, never
+from the live `EngineContext.Tonemapping` object. The scene frame block's `ScreenSize.z` exposure
+field is written from the same snapshot, so the scene shader's frame data and the present pass agree
+on exposure for the frame.
+
 **Instance record layout**
 
 `RayBorkInstance` is the std430 record in the set 0 binding 2 storage buffer. The record starts with a

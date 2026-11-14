@@ -10,13 +10,17 @@ exceptions, pack mounting and lookup, custom TOML data through `WithAssetType<T>
 and the build-time built-in pack. M4 ships the core 3D renderer: `Camera`, `CameraProjection`,
 `ClearMode`, `Model`, `ModelPart`, `Ray`, `BoundingFrustum`, the camera draw methods,
 `Shader.SetUniform`/`ResetUniforms`, and the shader ABI, backed by the bindless texture table,
-instanced batches, pipeline and sampler caches, and the AgX HDR highlight extension. M5 ships the
+instanced batches, pipeline and sampler caches, and the HDR AgX present path. M5 ships the
 primitive surface and the collision queries: the 13 `Camera` helpers, the engine-owned primitive
 meshes and the built-in `/shaders/primitive` program, `Collision`, `RayCollision`,
 `MeshBuilder.GenerateCollisions`, `Mesh.HasCollisionAcceleration`, and the baked `RBVC` collision
 payload. M5 also ships the runtime tone-mapping surface: `TonemappingSettings` behind
-`EngineContext.Tonemapping`, with `WithAgxWhite` and `WithAgxContrast` as startup defaults. The rest
-of the API reference remains the 1.0 contract, not a description of shipped behavior.
+`EngineContext.Tonemapping`, with `WithAgxWhite` and `WithAgxContrast` as startup defaults, and the
+`Color.FromSrgb`, `Color.FromSrgbBytes`, and `Color.ToSrgb` helpers. The M5 present pass replaces the
+M4 AgX curve and its separate HDR highlight path with Godot 4.7's HDR-aware AgX curve: SDR uses an
+output maximum of `1`, scRGB HDR uses the reported display headroom, and the curve output is scaled
+by paper white. The rest of the API reference remains the 1.0 contract, not a description of shipped
+behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -164,6 +168,7 @@ owns the deferred surface; the full code blocks in the section pages stay the 1.
 | `Collision` and `RayCollision` | M5 |
 | `MeshBuilder.GenerateCollisions` and `Mesh.HasCollisionAcceleration` | M5 |
 | `TonemappingSettings`, `EngineContext.Tonemapping`, `WithAgxWhite`, and `WithAgxContrast` | M5 |
+| `Color.FromSrgb`, `Color.FromSrgbBytes`, and `Color.ToSrgb` | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
 
@@ -229,7 +234,12 @@ exposes the app-lifetime `TonemappingSettings`: `Exposure` in stops, `AgxWhite` 
 and `AgxContrast` (default `1.25`), all initialized from the builder and mutable from `Setup`,
 `Tick`, and `Shutdown` on the tick thread. The present pass is frame-global, and the tick thread
 snapshots the values into the frame packet when it seals the frame, so a write during `Tick` applies
-to that frame's present. `Camera.Target` and `DrawText` remain later milestones (M8 and M6).
+to that frame's present. The M5 present pass reworks the tone mapper to Godot 4.7's HDR-aware AgX
+curve with the `allenwp` curve and CPU-derived curve parameters; SDR uses an output maximum of `1`,
+and scRGB HDR uses the reported display headroom and then scales by paper white. `Color` remains a
+linear value and its named constants are unchanged; `Color.FromSrgb`, `Color.FromSrgbBytes`, and
+`Color.ToSrgb` add the explicit display-encoded conversions. `Camera.Target` and `DrawText` remain
+later milestones (M8 and M6).
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
