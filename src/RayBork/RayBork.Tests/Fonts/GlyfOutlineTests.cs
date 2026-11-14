@@ -502,6 +502,74 @@ public sealed class GlyfOutlineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CompositeResolutionBudgetAllowsTheExactLimit() {
+        var builder = SyntheticFontBuilder.Create();
+        int leaf = builder.AddEmpty(300);
+        SyntheticComponent[] components = new SyntheticComponent[4_096];
+        for (int index = 0; index < components.Length; index++) {
+            components[index] = SyntheticComponent.Translate(leaf, index, 0);
+        }
+
+        int glyph = builder.AddComposite(700, 10, components);
+        SfntFace face = Parse(builder, glyph);
+
+        Assert.True(face.GetGlyph(glyph).IsEmpty);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CompositeResolutionBudgetRejectsOnePastTheLimit() {
+        var builder = SyntheticFontBuilder.Create();
+        int leaf = builder.AddEmpty(300);
+        SyntheticComponent[] components = new SyntheticComponent[4_097];
+        for (int index = 0; index < components.Length; index++) {
+            components[index] = SyntheticComponent.Translate(leaf, index, 0);
+        }
+
+        int glyph = builder.AddComposite(700, 10, components);
+        SfntFace face = Parse(builder, glyph);
+
+        FontTestData.AssertGlyphUnsupported(face, glyph, "4096 composite components");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CompositeResolutionBudgetIsPerCallNotStatic() {
+        var builder = SyntheticFontBuilder.Create();
+        int leaf = builder.AddEmpty(300);
+        int fanout = AddFanout(builder, leaf, levels: 15, width: 8);
+        int triangle = AddTriangle(builder);
+        int small = builder.AddComposite(
+            700,
+            10,
+            SyntheticComponent.Translate(triangle, 10, 20));
+        SfntFace face = Parse(builder, small);
+
+        FontTestData.AssertGlyphUnsupported(face, fanout, "4096 composite components");
+        OutlineContour contour = face.GetGlyph(small).Outline.Contours.Span[0];
+        Assert.Equal(new Vector2(10, 20), contour.Start);
+    }
+
+    private static int AddFanout(
+        SyntheticFontBuilder builder,
+        int leaf,
+        int levels,
+        int width) {
+        int glyph = leaf;
+        for (int level = 0; level < levels; level++) {
+            SyntheticComponent[] components = new SyntheticComponent[width];
+            for (int component = 0; component < width; component++) {
+                components[component] = SyntheticComponent.Translate(glyph, 0, component);
+            }
+
+            glyph = builder.AddComposite(700, 10, components);
+        }
+
+        return glyph;
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void CompositeFanoutPastTheResolutionBudgetIsUnsupported() {
         var builder = SyntheticFontBuilder.Create();
         int glyph = builder.AddEmpty(300);

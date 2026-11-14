@@ -6,15 +6,14 @@ namespace RayBork.Internal;
 /// <remarks>
 /// <para>
 /// Every malformed, truncated, or inconsistent face is reported through this type; the parser never
-/// lets a framework exception escape for corrupt input. Valid faces outside the supported subset or
-/// past a defensive parser limit are reported separately as <see cref="FontUnsupportedException"/>.
+/// lets a framework exception escape for corrupt input. A structurally valid face outside the
+/// supported subset, or one that exceeds a documented defensive parser limit, is reported separately
+/// as <see cref="FontUnsupportedException"/>.
 /// </para>
 /// <para>
-/// The font loader maps this to <see cref="AssetLoadException"/> with the <c>RB1011</c> code and an
-/// "invalid face" message, reading <see cref="Reason"/> for the actionable cause.
-/// </para>
-/// <para>
-/// The exception is not serializable and carries no state beyond the reason.
+/// This parser guarantees only that classification and <see cref="Reason"/>; how the runtime surfaces
+/// it as an asset diagnostic is owned by the future font loader task. The exception is not
+/// serializable and carries no state beyond the reason.
 /// </para>
 /// </remarks>
 internal sealed class FontFormatException : Exception {

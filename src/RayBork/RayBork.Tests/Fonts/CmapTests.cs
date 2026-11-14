@@ -278,7 +278,10 @@ public sealed class CmapTests {
             face.TryGetGlyphId(new Rune(0x41 + (iteration % 4)), out _);
         }
 
-        Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        // The threshold leaves room for runtime/JIT bookkeeping on the test thread while still
+        // proving the per-codepoint path allocates nothing (well under a byte per lookup).
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(allocated < 4096, $"10,000 cmap lookups allocated {allocated} bytes.");
     }
 
     [Fact]

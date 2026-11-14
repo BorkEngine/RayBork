@@ -27,9 +27,9 @@ namespace RayBork.Internal;
 /// lookups and list at most 65,536 lookup references, the pair lookups may declare at most 32,768
 /// subtable records, at most 256 distinct pair-positioning subtables are stored, and at most 65,536
 /// pair sets, 1,000,000 pair records, and 262,144 coverage or class definition entries are
-/// validated. The subtable-record cap is lower than the 16-bit offset space because a lookup's
-/// subtable offsets, and the lookup-list offsets that reach it, are themselves 16-bit; real fonts are
-/// three orders of magnitude below it. Lookup references, lookups, positioning subtables, and pair
+/// validated. The subtable-record cap is a defensive budget slightly above the forward-offset,
+/// non-overlapping bound implied by 16-bit subtable offsets; real fonts are three orders of
+/// magnitude below it. Lookup references, lookups, positioning subtables, and pair
 /// sets are deduplicated by absolute table offset, so aliased offsets are parsed and stored once;
 /// exceeding a cap raises <see cref="FontUnsupportedException"/> because the face is valid but
 /// outside the parser's supported size.
@@ -470,8 +470,8 @@ internal sealed class GposKerning {
         int format = reader.ReadUInt16(coverageOffset);
         if (format == COVERAGE_FORMAT_1) {
             int glyphCountInCoverage = reader.ReadUInt16(coverageOffset + 2);
-            ChargeGlyphClassEntries(budget, glyphCountInCoverage);
             reader.Require(coverageOffset + 4, (long)glyphCountInCoverage * 2);
+            ChargeGlyphClassEntries(budget, glyphCountInCoverage);
             int previous = -1;
             for (int index = 0; index < glyphCountInCoverage; index++) {
                 int glyph = reader.ReadUInt16(coverageOffset + 4 + (2 * index));
@@ -510,7 +510,6 @@ internal sealed class GposKerning {
                     $"the 'GPOS' coverage at offset {coverageOffset} has overlapping or unsorted ranges");
             }
 
-            ChargeGlyphClassEntries(budget, end - start + 1);
             if (end >= glyphCount) {
                 throw new FontFormatException(
                     $"the 'GPOS' coverage at offset {coverageOffset} references glyph {end}; the face has {glyphCount} glyph(s)");
@@ -521,6 +520,7 @@ internal sealed class GposKerning {
                     $"the 'GPOS' coverage at offset {coverageOffset} has a non-contiguous coverage index {startCoverageIndex}");
             }
 
+            ChargeGlyphClassEntries(budget, end - start + 1);
             coverageCount += end - start + 1;
             previousEnd = end;
         }
@@ -549,12 +549,13 @@ internal sealed class GposKerning {
             reader.Require(classDefOffset + 2, 4);
             int startGlyph = reader.ReadUInt16(classDefOffset + 2);
             int glyphCountInClassDef = reader.ReadUInt16(classDefOffset + 4);
-            ChargeGlyphClassEntries(budget, glyphCountInClassDef);
             reader.Require(classDefOffset + 6, (long)glyphCountInClassDef * 2);
             if (startGlyph + glyphCountInClassDef > glyphCount) {
                 throw new FontFormatException(
                     $"the 'GPOS' {which} class definition at offset {classDefOffset} covers glyphs past the face's {glyphCount}");
             }
+
+            ChargeGlyphClassEntries(budget, glyphCountInClassDef);
 
             for (int index = 0; index < glyphCountInClassDef; index++) {
                 if (reader.ReadUInt16(classDefOffset + 6 + (2 * index)) >= classCount) {
@@ -589,12 +590,12 @@ internal sealed class GposKerning {
                     $"the 'GPOS' {which} class definition at offset {classDefOffset} covers glyphs past the face's {glyphCount}");
             }
 
-            ChargeGlyphClassEntries(budget, end - start + 1);
             if (classValue >= classCount) {
                 throw new FontFormatException(
                     $"the 'GPOS' {which} class definition at offset {classDefOffset} declares a class outside {classCount}");
             }
 
+            ChargeGlyphClassEntries(budget, end - start + 1);
             previousEnd = end;
         }
     }

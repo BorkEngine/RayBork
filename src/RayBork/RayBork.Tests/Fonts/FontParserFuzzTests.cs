@@ -6,8 +6,9 @@ namespace RayBork.Tests.Fonts;
 
 /// <summary>
 /// Fuzzes the face parser with a fixed-seed deterministic mutation stream, every 1/64th truncation,
-/// and random byte flips inside the table directory. Corrupt input must either parse or throw
-/// <see cref="FontFormatException"/>; a single parse must stay within a generous allocation bound.
+/// and random byte flips inside the table directory. Input must either parse or throw
+/// <see cref="FontFormatException"/> (malformed) or <see cref="FontUnsupportedException"/> (valid but
+/// outside a documented limit); a single parse must stay within a generous allocation bound.
 /// </summary>
 public sealed class FontParserFuzzTests {
     private const int SEED = 20261114;
@@ -91,6 +92,7 @@ public sealed class FontParserFuzzTests {
             try {
                 SfntFace.Parse(mutated);
             } catch (FontFormatException) {
+            } catch (FontUnsupportedException) {
             }
 
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;

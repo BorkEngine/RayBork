@@ -7,13 +7,17 @@ namespace RayBork.Internal;
 /// <para>
 /// This is separate from <see cref="FontFormatException"/>: the face is not corrupt. It covers valid
 /// features the runtime cannot express (point-matched composite component arguments, CFF/CFF2
-/// outlines) and valid faces that exceed a documented defensive parser limit (composite
-/// component-resolution fanout, kern pair count, and the GPOS work caps).
+/// outlines) and valid faces that exceed a documented defensive parser limit. The reason always
+/// names the limit. The limits are: 16 composite levels, 20,000 points per glyph, 4,096 component
+/// resolutions per glyph, 1,000,000 legacy kern pairs, 64 referenced GPOS lookups, 65,536 GPOS
+/// feature lookup references, 32,768 GPOS subtable records, 256 GPOS pair-positioning subtables,
+/// 65,536 validated GPOS pair sets, 1,000,000 validated GPOS pair records, and 262,144 validated
+/// coverage or class definition entries.
 /// </para>
 /// <para>
-/// The font loader maps this to <see cref="AssetLoadException"/> with the <c>RB1011</c> code and an
-/// "unsupported feature" message; <see cref="FontFormatException"/> keeps the "invalid face" message
-/// for the same code.
+/// This parser guarantees only that classification and <see cref="Reason"/>; the future font loader
+/// task defines how it is surfaced as an asset diagnostic. The exception is not serializable and
+/// carries no state beyond the reason.
 /// </para>
 /// </remarks>
 internal sealed class FontUnsupportedException : Exception {

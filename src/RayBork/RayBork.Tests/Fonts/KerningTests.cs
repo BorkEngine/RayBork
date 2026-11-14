@@ -233,9 +233,19 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KernPairCountBeyondTheCapIsUnsupported() {
+    public void KernPairBudgetAllowsTheExactLimit() {
+        (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
+        byte[] kern = BuildKernTable(CreatePairCounts(1_000_000));
+        SfntFace face = SfntFace.Parse(builder.WithRawKern(kern).Build());
+
+        Assert.Equal(-42, face.GetKerning(a, v));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void KernPairBudgetRejectsOnePastTheLimit() {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateKerningBuilder();
-        byte[] kern = BuildOversizedKernTable();
+        byte[] kern = BuildKernTable(CreatePairCounts(1_000_001));
         byte[] faceBytes = builder.WithRawKern(kern).Build();
 
         long before = GC.GetAllocatedBytesForCurrentThread();
@@ -248,19 +258,53 @@ public sealed class KerningTests {
         Assert.True(allocated < 16 * 1024 * 1024, $"The rejected kern parse allocated {allocated} bytes.");
     }
 
-    private static byte[] BuildOversizedKernTable() {
-        const int subtableCount = 92;
-        const int pairCount = 10_920;
-        int subtableLength = 14 + (6 * pairCount);
-        byte[] kern = new byte[4 + (subtableCount * subtableLength)];
+    private static int[] CreatePairCounts(int totalPairs) {
+        const int pairsPerSubtable = 10_920;
+        int fullSubtables = totalPairs / pairsPerSubtable;
+        int remainder = totalPairs % pairsPerSubtable;
+        int[] counts = new int[fullSubtables + (remainder > 0 ? 1 : 0)];
+        Array.Fill(counts, pairsPerSubtable, 0, fullSubtables);
+        if (remainder > 0) {
+            counts[^1] = remainder;
+        }
+
+        return counts;
+    }
+
+    private static byte[] BuildKernTable(int[] pairCounts) {
+        int totalLength = 4;
+        foreach (int pairCount in pairCounts) {
+            totalLength += 14 + (6 * pairCount);
+        }
+
+        byte[] kern = new byte[totalLength];
         BinaryPrimitives.WriteUInt16BigEndian(kern, 0);
-        BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(2), (ushort)subtableCount);
+        BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(2), (ushort)pairCounts.Length);
         int position = 4;
-        for (int index = 0; index < subtableCount; index++) {
+        bool distinctPairWritten = false;
+        foreach (int pairCount in pairCounts) {
+            int subtableLength = 14 + (6 * pairCount);
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position), 0);
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 2), (ushort)subtableLength);
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 4), 0x0001);
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 6), (ushort)pairCount);
+            for (int pair = 0; pair < pairCount; pair++) {
+                int record = position + 14 + (6 * pair);
+                int left = 0;
+                int right = 0;
+                int value = 0;
+                if (!distinctPairWritten) {
+                    left = 1;
+                    right = 2;
+                    value = -42;
+                    distinctPairWritten = true;
+                }
+
+                BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(record), (ushort)left);
+                BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(record + 2), (ushort)right);
+                BinaryPrimitives.WriteInt16BigEndian(kern.AsSpan(record + 4), (short)value);
+            }
+
             position += subtableLength;
         }
 

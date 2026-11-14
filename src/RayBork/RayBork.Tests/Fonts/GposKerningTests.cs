@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using RayBork.Internal;
 
 namespace RayBork.Tests.Fonts;
@@ -225,6 +226,57 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void LookupSubtableRecordBudgetAllowsTheExactLimit() {
+        (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
+        var gpos = new SyntheticGpos { AliasLookupSubtables = true };
+        gpos.AddLookup(17);
+        gpos.AddLookup(32_751, (a, v, -10));
+        gpos.AddFeature("kern", 1, 0);
+        gpos.AddScript("latn", 0);
+        SfntFace face = SfntFace.Parse(builder.WithGpos(gpos).Build());
+
+        Assert.Equal(-10, face.GetKerning(a, v));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void LookupSubtableRecordBudgetRejectsOnePastTheLimit() {
+        (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
+        var gpos = new SyntheticGpos { AliasLookupSubtables = true };
+        gpos.AddLookup(18);
+        gpos.AddLookup(32_751, (a, v, -10));
+        gpos.AddFeature("kern", 1, 0);
+        gpos.AddScript("latn", 0);
+
+        AssertUnsupported(builder.WithGpos(gpos).Build(), "subtable records");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CoverageEntryBudgetIsEnforced() {
+        byte[] gpos = BuildBudgetGpos(
+            5,
+            CreateHugeCoverage(),
+            CreateEmptyClassDef());
+        byte[] faceBytes = CreateManyGlyphFace(gpos);
+
+        AssertUnsupported(faceBytes, "262144");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ClassDefinitionEntryBudgetIsEnforced() {
+        byte[] gpos = BuildBudgetGpos(
+            3,
+            CreateTinyCoverage(),
+            CreateHugeClassDef());
+        byte[] faceBytes = CreateManyGlyphFace(gpos);
+
+        AssertUnsupported(faceBytes, "262144");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void TooManyPairPositioningsAreRejected() {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos { SubtablesPerLookup = 200 };
@@ -253,6 +305,121 @@ public sealed class GposKerningTests {
 
         SfntFace face = SfntFace.Parse(builder.WithGpos(gpos).Build());
         return face.GetKerning(a, v);
+    }
+
+    private static byte[] CreateManyGlyphFace(byte[] gpos) {
+        var builder = SyntheticFontBuilder.Create();
+        for (int index = 0; index < 65_534; index++) {
+            builder.AddEmpty(500);
+        }
+
+        builder.WithCmap(4, (0x41, 1));
+        builder.WithRawGpos(gpos);
+        return builder.Build();
+    }
+
+    private static byte[] BuildBudgetGpos(int subtableCount, byte[] coverage, byte[] classDef) {
+        const int scriptLength = 20;
+        const int featureLength = 14;
+        int lookupListOffset = 10 + scriptLength + featureLength;
+        int lookupHeaderLength = 6 + (2 * subtableCount);
+        int coverageOffset = lookupHeaderLength + (16 * subtableCount);
+        int classDefOffset = coverageOffset + coverage.Length;
+        int lookupLength = classDefOffset + classDef.Length;
+        byte[] gpos = new byte[lookupListOffset + 4 + lookupLength];
+
+        WriteUInt16(gpos, 0, 1);
+        WriteUInt16(gpos, 2, 0);
+        WriteUInt16(gpos, 4, 10);
+        WriteUInt16(gpos, 6, 10 + scriptLength);
+        WriteUInt16(gpos, 8, lookupListOffset);
+
+        WriteUInt16(gpos, 10, 1);
+        WriteTag(gpos, 12, "latn");
+        WriteUInt16(gpos, 16, 8);
+        WriteUInt16(gpos, 18, 4);
+        WriteUInt16(gpos, 20, 0);
+        WriteUInt16(gpos, 22, 0);
+        WriteUInt16(gpos, 24, 0xFFFF);
+        WriteUInt16(gpos, 26, 1);
+        WriteUInt16(gpos, 28, 0);
+
+        WriteUInt16(gpos, 30, 1);
+        WriteTag(gpos, 32, "kern");
+        WriteUInt16(gpos, 36, 8);
+        WriteUInt16(gpos, 38, 0);
+        WriteUInt16(gpos, 40, 1);
+        WriteUInt16(gpos, 42, 0);
+
+        WriteUInt16(gpos, lookupListOffset, 1);
+        WriteUInt16(gpos, lookupListOffset + 2, 4);
+        int lookup = lookupListOffset + 4;
+        WriteUInt16(gpos, lookup, 2);
+        WriteUInt16(gpos, lookup + 2, 0);
+        WriteUInt16(gpos, lookup + 4, (ushort)subtableCount);
+        int offsets = lookup + 6;
+        int subtables = offsets + (2 * subtableCount);
+        for (int index = 0; index < subtableCount; index++) {
+            int subtable = subtables + (16 * index);
+            WriteUInt16(gpos, offsets + (2 * index), (ushort)(subtable - lookup));
+            WriteUInt16(gpos, subtable, 2);
+            WriteUInt16(gpos, subtable + 2, (ushort)(lookup + coverageOffset - subtable));
+            WriteUInt16(gpos, subtable + 4, 0);
+            WriteUInt16(gpos, subtable + 6, 0);
+            WriteUInt16(gpos, subtable + 8, (ushort)(lookup + classDefOffset - subtable));
+            WriteUInt16(gpos, subtable + 10, (ushort)(lookup + classDefOffset - subtable));
+            WriteUInt16(gpos, subtable + 12, 1);
+            WriteUInt16(gpos, subtable + 14, 1);
+        }
+
+        coverage.CopyTo(gpos, lookup + coverageOffset);
+        classDef.CopyTo(gpos, lookup + classDefOffset);
+        return gpos;
+    }
+
+    private static byte[] CreateHugeCoverage() {
+        byte[] coverage = new byte[10];
+        WriteUInt16(coverage, 0, 2);
+        WriteUInt16(coverage, 2, 1);
+        WriteUInt16(coverage, 4, 0);
+        WriteUInt16(coverage, 6, 0xFFFE);
+        WriteUInt16(coverage, 8, 0);
+        return coverage;
+    }
+
+    private static byte[] CreateTinyCoverage() {
+        byte[] coverage = new byte[6];
+        WriteUInt16(coverage, 0, 1);
+        WriteUInt16(coverage, 2, 1);
+        WriteUInt16(coverage, 4, 0);
+        return coverage;
+    }
+
+    private static byte[] CreateEmptyClassDef() {
+        byte[] classDef = new byte[4];
+        WriteUInt16(classDef, 0, 2);
+        WriteUInt16(classDef, 2, 0);
+        return classDef;
+    }
+
+    private static byte[] CreateHugeClassDef() {
+        byte[] classDef = new byte[10];
+        WriteUInt16(classDef, 0, 2);
+        WriteUInt16(classDef, 2, 1);
+        WriteUInt16(classDef, 4, 0);
+        WriteUInt16(classDef, 6, 0xFFFE);
+        WriteUInt16(classDef, 8, 0);
+        return classDef;
+    }
+
+    private static void WriteUInt16(byte[] target, int offset, int value) =>
+        BinaryPrimitives.WriteUInt16BigEndian(target.AsSpan(offset), (ushort)value);
+
+    private static void WriteTag(byte[] target, int offset, string tag) {
+        target[offset] = (byte)tag[0];
+        target[offset + 1] = (byte)tag[1];
+        target[offset + 2] = (byte)tag[2];
+        target[offset + 3] = (byte)tag[3];
     }
 
     private static void AssertUnsupported(byte[] faceBytes, string reason) {

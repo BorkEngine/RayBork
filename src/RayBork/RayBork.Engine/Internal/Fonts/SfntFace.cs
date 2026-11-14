@@ -149,7 +149,7 @@ internal sealed class SfntFace {
     /// kerning table is malformed.
     /// </exception>
     /// <exception cref="FontUnsupportedException">
-    /// A kerning table is valid but exceeds a documented defensive parser limit.
+    /// A <c>kern</c> or <c>GPOS</c> table is valid but exceeds a documented defensive parser limit.
     /// </exception>
     internal static SfntFace Parse(ReadOnlyMemory<byte> data) {
         SfntReader face = new(data.Span, "the face");
@@ -308,9 +308,9 @@ internal sealed class SfntFace {
     /// The glyph data is malformed or has a composite reference cycle.
     /// </exception>
     /// <exception cref="FontUnsupportedException">
-    /// The face stores CFF or CFF2 outlines, or the glyph is valid but exceeds a supported limit:
-    /// point-matched composite component arguments, more than 16 composite levels, more than 20,000
-    /// points, or more than 4,096 component resolutions.
+    /// The glyph is valid but outside the supported subset: CFF/CFF2 outlines, point-matched
+    /// composite component arguments, more than 16 composite levels, more than 20,000 points, or
+    /// more than 4,096 component resolutions.
     /// </exception>
     internal FontGlyph GetGlyph(int glyphId) {
         ThrowIfGlyphOutOfRange(glyphId, nameof(glyphId));

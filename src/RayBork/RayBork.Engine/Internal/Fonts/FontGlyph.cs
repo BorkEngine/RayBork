@@ -4,8 +4,8 @@ namespace RayBork.Internal;
 /// One resolved glyph: its stored bounds and its font-unit, y-up outline.
 /// </summary>
 /// <remarks>
-/// <see cref="Bounds"/> is the stored glyph-header box for a glyph that has a drawable outline.
-/// <see cref="IsEmpty"/> means the resolved glyph has no drawable outline; such a glyph has an
+/// <see cref="Bounds"/> is the stored glyph-header box for a glyph with a non-empty resolved outline.
+/// <see cref="IsEmpty"/> means the resolved glyph has no non-empty outline; such a glyph has an
 /// all-zero box and <see cref="OutlinePath.Empty"/> as its outline, even when the source glyph record
 /// carries a non-zero header box. The instance is immutable and safe to read from any thread.
 /// </remarks>

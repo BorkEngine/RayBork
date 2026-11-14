@@ -54,6 +54,7 @@ internal sealed class SyntheticFontBuilder {
     private int _lineGap = 0;
     private byte[]? _rawCmap;
     private byte[]? _rawKern;
+    private byte[]? _rawGpos;
     private SyntheticGpos? _gpos;
     private SyntheticOutline _outline = SyntheticOutline.TrueType;
     private byte[] _cffData = [];
@@ -187,6 +188,12 @@ internal sealed class SyntheticFontBuilder {
         return this;
     }
 
+    /// <summary>Uses raw <c>GPOS</c> table bytes instead of the generated table.</summary>
+    internal SyntheticFontBuilder WithRawGpos(byte[] gpos) {
+        _rawGpos = gpos;
+        return this;
+    }
+
     internal SyntheticFontBuilder WithGpos(SyntheticGpos gpos) {
         _gpos = gpos;
         return this;
@@ -230,6 +237,10 @@ internal sealed class SyntheticFontBuilder {
 
         if (_locaFormat is not 0 and not 1) {
             throw new InvalidOperationException($"Synthetic loca format {_locaFormat} is not 0 or 1.");
+        }
+
+        if (_rawGpos is not null && _gpos is not null) {
+            throw new InvalidOperationException("A synthetic face cannot use raw and generated GPOS bytes.");
         }
 
         if (_rawKern is null) {
@@ -287,8 +298,12 @@ internal sealed class SyntheticFontBuilder {
             }
         }
 
-        if (!_omittedTables.Contains("GPOS") && _gpos is not null) {
-            tables.Add(("GPOS", _gpos.Build(glyphCount)));
+        if (!_omittedTables.Contains("GPOS")) {
+            if (_rawGpos is not null) {
+                tables.Add(("GPOS", _rawGpos));
+            } else if (_gpos is not null) {
+                tables.Add(("GPOS", _gpos.Build(glyphCount)));
+            }
         }
 
         uint magic = _outline == SyntheticOutline.TrueType ? 0x0001_0000u : 0x4F54_544Fu;

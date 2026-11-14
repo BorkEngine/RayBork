@@ -4,8 +4,9 @@ namespace RayBork.Tests.Fonts;
 
 /// <summary>
 /// Builds the structured hostile faces the parser allocation and fuzz tests use: aliased GPOS
-/// references and subtables, cap-crossing lookup counts, dense cmap and kern tables, and huge
-/// declared counts over short payloads. None of these bytes come from a real font.
+/// references and subtables, a composite-fanout fixture, cap-crossing lookup counts, dense cmap and
+/// kern tables, and huge declared counts over short payloads. None of these bytes come from a real
+/// font.
 /// </summary>
 internal static class HostileFontFaces {
     internal static IReadOnlyList<(string Name, byte[] Face)> All() => [
@@ -31,8 +32,10 @@ internal static class HostileFontFaces {
     }
 
     /// <summary>
-    /// A lookup list whose 64 entries all point at one lookup, that lookup holding 8,192 aliased
-    /// subtable records. The parser dedupes the entries by offset and the subtables by offset.
+    /// Corpus coverage for the pre-hardening aliasing baseline: 64 lookup-list entries all pointing
+    /// at one lookup, that lookup holding 8,192 aliased subtable records. Before the absolute-offset
+    /// dedupe this multiplied into roughly 524,000 positionings; the hardened parser resolves one
+    /// lookup and one positioning. Cap-crossing tests are the current regression tests.
     /// </summary>
     internal static byte[] CreateAliasedLookupListFace() {
         (SyntheticFontBuilder builder, int a, int v) = CreateBaseFace();
@@ -163,8 +166,10 @@ internal static class HostileFontFaces {
         var gpos = new SyntheticGpos().AddPair(a, v, -10);
         byte[] faceBytes = builder.WithGpos(gpos).Build();
         SyntheticTableRecord gposRecord = SyntheticFontBuilder.FindTable(faceBytes, "GPOS");
+        int lookupListOffset = BinaryPrimitives.ReadUInt16BigEndian(
+            faceBytes.AsSpan(gposRecord.Offset + 8));
         BinaryPrimitives.WriteUInt16BigEndian(
-            faceBytes.AsSpan(gposRecord.Offset + 10),
+            faceBytes.AsSpan(gposRecord.Offset + lookupListOffset),
             0xFFFF);
         return faceBytes;
     }

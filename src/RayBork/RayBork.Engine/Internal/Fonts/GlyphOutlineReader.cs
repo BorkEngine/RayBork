@@ -107,11 +107,12 @@ internal sealed class GlyphOutlineReader {
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
     /// <returns>The resolved glyph in font units.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    /// <exception cref="FontFormatException">The glyph data is malformed or exceeds a documented limit.</exception>
+    /// <exception cref="FontFormatException">The glyph data is malformed or has a reference cycle.</exception>
     /// <exception cref="FontUnsupportedException">
-    /// The glyph uses a valid feature outside the supported subset, currently point-matched composite
-    /// component arguments or more composite component resolutions than
-    /// <see cref="MAX_COMPONENT_RESOLUTIONS"/>.
+    /// The glyph is valid but exceeds a supported limit: point-matched composite component
+    /// arguments, more than <see cref="MAX_COMPOSITE_DEPTH"/> composite levels, more than
+    /// <see cref="MAX_POINTS_PER_GLYPH"/> points, or more than
+    /// <see cref="MAX_COMPONENT_RESOLUTIONS"/> component resolutions.
     /// </exception>
     internal FontGlyph ReadGlyph(int glyphId) {
         if ((uint)glyphId >= (uint)_glyphCount) {
