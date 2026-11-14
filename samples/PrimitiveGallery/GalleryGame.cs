@@ -29,6 +29,12 @@ internal sealed class GalleryGame : IGame {
     private const int TEXTURE_SIZE = 128;
     private const int CHECKER_SIZE = 16;
 
+    // The status line is world-space text until M7 adds the screen-space HUD path. It sits on a
+    // camera-facing plane one world unit in front of the camera.
+    private const float OVERLAY_DISTANCE = 1f;
+    private const float OVERLAY_PIXEL_HEIGHT = 14f;
+    private const float OVERLAY_MARGIN_PIXELS = 8f;
+
     private static readonly Vector3 _orbitCenter = new(0f, 2.4f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(8f, 6.2f, 12.5f);
 
@@ -145,6 +151,10 @@ internal sealed class GalleryGame : IGame {
             far: float.PositiveInfinity);
 
         DrawGallery(camera);
+
+        // A small FPS and render-statistics line at the top-left of the view. It is recorded last
+        // and, like every other text draw in M6, is world-space text.
+        DrawStatusOverlay(camera, context);
 
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
@@ -336,6 +346,40 @@ internal sealed class GalleryGame : IGame {
 
     private Vector3 Station(float offset, float height) =>
         (_galleryRight * offset) + (Vector3.UnitY * height);
+
+    /// <summary>
+    /// Draws the FPS, frame-time, draw-call, and instance line at the top-left of the view.
+    /// </summary>
+    /// <remarks>
+    /// Screen-space text arrives in M7. Until then the line is world-space text on a camera-facing
+    /// plane one unit in front of the camera, positioned and oriented with the camera's own axes.
+    /// </remarks>
+    private static void DrawStatusOverlay(Camera camera, EngineContext context) {
+        // One render pixel spans worldPerPixel world units at the overlay distance. The text size is
+        // an em height in world units, so a 14-pixel line uses 14 * worldPerPixel.
+        float halfHeight = OVERLAY_DISTANCE * MathF.Tan(camera.FieldOfView * (MathF.PI / 180f) * 0.5f);
+        float worldPerPixel = (2f * halfHeight) / camera.Viewport.Height;
+        float halfWidth = halfHeight * (camera.Viewport.Width / camera.Viewport.Height);
+        float margin = OVERLAY_MARGIN_PIXELS * worldPerPixel;
+
+        // The camera transform's axes are the screen axes: +X is right, +Y is up, and +Z points back
+        // toward the viewer. The text layout origin is the top-left of the first line, so placing it
+        // at the inset corner of the plane and reusing the camera rotation keeps the line upright,
+        // facing the camera, and where a HUD would sit.
+        Vector3 position = camera.Transform.Position
+            + (camera.Transform.Forward * OVERLAY_DISTANCE)
+            + (camera.Transform.Up * (halfHeight - margin))
+            - (camera.Transform.Right * (halfWidth - margin));
+
+        string status = FormattableString.Invariant(
+            $"FPS {context.Fps:0.0}   frame {context.DeltaTime * 1000.0:0.0} ms   draw calls {context.Stats.DrawCalls}   instances {context.Stats.Instances}");
+        camera.DrawText(
+            context.Defaults.DefaultFont,
+            status,
+            new Transform(position, camera.Transform.Rotation, Vector3.One),
+            OVERLAY_PIXEL_HEIGHT * worldPerPixel,
+            Color.White);
+    }
 
     private void UpdateOrbit(IInput input) {
         // Drag to orbit; the wheel moves the camera closer or farther away. Screen Y grows

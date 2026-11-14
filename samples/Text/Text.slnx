@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Text.csproj" />
+  <Project Path="Text.Assets/Text.Assets.csproj" />
+</Solution>

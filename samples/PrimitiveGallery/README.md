@@ -6,7 +6,7 @@ strip, point), the wire shapes (wire cube, wire sphere, wire cylinder, wire caps
 the line and curve helpers (line, polyline, ray, circle), a reference grid, two billboards, and a row
 of meshes generated with `MeshBuilder.Generate*` and drawn with the built-in mesh shader. It builds
 its texture and its generated meshes at runtime, so it needs no asset pack, no manual bake, and no
-`--assets` argument.
+`--assets` argument. It also draws a small FPS and render-statistics line at the top-left of the view.
 
 The sample is also a Native AOT gate, but it contains no test-only logic: it opens a window, draws the
 gallery, and exits cleanly. Build and run it from the repository root:
@@ -102,6 +102,18 @@ the billboards. The warm checker colors are `Color.GoldenRod` and `Color.SaddleB
 `Color.CornflowerBlue` and `Color.MidnightBlue`. The texture is uploaded with `BuildAsync` and
 disposed in `Shutdown`, together with the generated meshes and the mesh material.
 
+## Status overlay
+
+`DrawStatusOverlay` records one more world-space draw: a `14`-pixel line in the built-in Fira Sans font
+showing FPS, frame time, draw calls, and instances. Screen-space text arrives in M7, so the line is
+text on a camera-facing plane one unit in front of the camera rather than an orthographic HUD. At that
+distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so the text's em size is
+`14 * worldPerPixel`. The camera's right and up axes place the layout origin at the top-left corner,
+inset by an 8-pixel margin, and the transform reuses the camera rotation: the line stays upright,
+faces the camera, and remains fixed to the view as the camera orbits or the window resizes. The line
+is `Color.White` against the `Color.Gray3` background, and because it is depth-tested world-space text,
+geometry closer than one unit to the camera can still occlude it.
+
 ## Options
 
 | Argument | Contract |
@@ -157,8 +169,9 @@ packages: the sample has no bake tooling and no external pack, and the generated
 
 ## What the sample omits
 
-- **Text labels.** `DrawText` arrives in M6, so the README documents which helper is which instead of
-  drawing labels.
+- **Per-helper text labels.** The gallery's only text is the status overlay, so the table above
+  documents which helper is which instead of drawing a label on every shape. Screen-space HUD text
+  arrives in M7.
 - **Thick lines and point sprites.** M5 draws one-pixel lines and camera-facing point quads.
 - **Overload completeness.** The gallery shows one representative call per helper family instead of
   every overload. The start/end `DrawCylinder` form, the other `Transform` overloads, the non-facing
