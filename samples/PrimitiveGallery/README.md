@@ -106,15 +106,16 @@ disposed in `Shutdown`, together with the generated meshes and the mesh material
 
 ## Status overlay
 
-`DrawStatusOverlay` records one more world-space draw: a `14`-pixel line in the built-in Fira Sans font
-showing presented frames per second, the tick rate, the render CPU time, draw calls, and instances.
+`DrawStatusOverlay` records one more world-space draw: an `18`-pixel line in the built-in JetBrains
+Mono font showing presented frames per second, the tick rate, the render CPU time, draw calls, and
+instances. The monospaced face keeps the changing counters from shifting the text around them.
 The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
 presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`. The render time is
 `ctx.Stats.CpuFrameMilliseconds`, which measures only the render thread's planning, recording, and
 submission and excludes the fence, acquire, and present waits. Screen-space text arrives in M7, so
 the line is text on a camera-facing plane one unit in front of the camera rather than an
 orthographic HUD. At that distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so
-the text's em size is `14 * worldPerPixel`. The camera's right and up axes place the layout origin at
+the text's em size is `18 * worldPerPixel`. The camera's right and up axes place the layout origin at
 the top-left corner, inset by an 8-pixel margin, and the transform reuses the camera rotation: the
 line stays upright, faces the camera, and remains fixed to the view as the camera orbits or the
 window resizes. The line is `Color.White` against the `Color.Gray3` background, and because it is

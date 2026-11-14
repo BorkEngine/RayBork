@@ -23,12 +23,13 @@ its separate HDR highlight path with Godot 4.7's HDR-aware AgX curve: SDR uses a
 `1`, scRGB HDR uses the reported display headroom, and the curve output is scaled by paper white.
 `DrawTexture` is not part of M6; it moves to M7 with the orthographic sprite contract. M6 ships the
 font and text surface: `Font` and `Glyph`, `Load<Font>`, `TryGetGlyph`, `Measure`, on-demand
-asynchronous MSDF glyph generation, the built-in Fira Sans Regular default font exposed as
-`EngineDefaults.DefaultFont`, and the world-space `Camera.DrawText` and `Camera.DrawTextBillboard`
-draws. The text alignment and wrapping enums and the text draw contract are described in §7.10. The
-M6 Native AOT gate is `samples/Text`, which loads the built-in face and a baked custom face and draws
-the world-space text scene. The rest of the API reference remains the 1.0 contract, not a description
-of shipped behavior.
+asynchronous MSDF glyph generation, the built-in Fira Sans Regular default font and JetBrains Mono
+Regular monospaced font exposed as `EngineDefaults.DefaultFont` and
+`EngineDefaults.DefaultMonoFont`, and the world-space `Camera.DrawText` and
+`Camera.DrawTextBillboard` draws. The text alignment and wrapping enums and the text draw contract are
+described in §7.10. The M6 Native AOT gate is `samples/Text`, which loads the built-in faces and a
+baked custom face and draws the world-space text scene. The rest of the API reference remains the 1.0
+contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -157,9 +158,9 @@ with HDR/SDR output, the scRGB HDR present path, AgX tone mapping, MSAA with col
 reverse-Z depth, bounded recovery, and the GPU tests. M3 ships the asset pipeline and pack; M4 ships
 the core 3D renderer, camera draws, and shader ABI; M5 ships the primitive, billboard, wireframe, and
 collision surface plus the HDR AgX rework; M6 ships the managed font parser, on-demand MSDF glyph
-pipeline, layout, built-in default font, and world-space text draws. The remaining rows name the
-milestone that owns the deferred surface; the full code blocks in the section pages stay the 1.0
-contract.
+pipeline, layout, built-in default and monospaced fonts, and world-space text draws. The remaining
+rows name the milestone that owns the deferred surface; the full code blocks in the section pages stay
+the 1.0 contract.
 
 | Surface | Milestone |
 | --- | --- |
@@ -183,7 +184,7 @@ contract.
 | `TonemappingSettings`, `EngineContext.Tonemapping`, `WithAgxWhite`, and `WithAgxContrast` | M5 |
 | `Color.FromSrgb`, `Color.FromSrgbBytes`, `Color.ToSrgb`, and the 158 restored Bork2d/Unity presets | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
-| `EngineDefaults.DefaultFont` and the built-in Fira Sans Regular font | M6 |
+| `EngineDefaults.DefaultFont`, `EngineDefaults.DefaultMonoFont`, and the built-in Fira Sans Regular and JetBrains Mono Regular fonts | M6 |
 | `DrawTexture` with destination rectangles and sprite/orthographic sampling | M7 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
 
@@ -241,9 +242,9 @@ uniforms or textures), the billboard draws through `/shaders/mesh` with an alpha
 `DrawWireModel` draws model parts through a polygon-mode-line pipeline gated on the device's
 `fillModeNonSolid` feature (`GraphicsException` `RB3001` on a device without it; the engine has no CPU
 line-geometry fallback). The meshes and the primitive program are internal engine assets; at M5,
-`EngineDefaults` exposed only `CreateMeshShader`, `White`, and `Error`, and M6 adds `DefaultFont`.
-`Collision` and
-`RayCollision` ship as allocation-free, thread-safe queries over `Ray`, `BoundingBox`, and `Plane`;
+`EngineDefaults` exposed only `CreateMeshShader`, `White`, and `Error`, and M6 adds `DefaultFont` and
+`DefaultMonoFont`. `Collision` and `RayCollision` ship as allocation-free, thread-safe queries over
+`Ray`, `BoundingBox`, and `Plane`;
 `GetRayQuad` splits a quad into two double-sided triangles and returns the nearest non-negative hit,
 and `GetRayMesh` accepts triangle-list and triangle-strip meshes, maps the hit through a world
 transform, and traverses an immutable structure when the mesh has one.
@@ -273,9 +274,10 @@ image differs from the M4 curve at the same exposure; and the `Gray`/`Grey`, `Ye
 `DarkCyan` preset values changed with the sRGB-authored palette.
 
 **M6 subset.** `EngineContext.Defaults` additionally exposes `DefaultFont`, the built-in Fira Sans
-Regular face. `Font` and `Glyph` ship as described in §7.10: `Load<Font>` returns the shared,
-reference-counted font asset; the load parses the packed face and is CPU-only, so it queues no GPU
-upload and the font object that load creates reports `CachedGlyphCount` `0` (a repeated load returns
+Regular face, and `DefaultMonoFont`, the built-in JetBrains Mono Regular face. `Font` and `Glyph` ship
+as described in §7.10: `Load<Font>` returns the shared, reference-counted font asset; the load parses
+the packed face and is CPU-only, so it queues no GPU upload and the font object that load creates
+reports `CachedGlyphCount` `0` (a repeated load returns
 the shared object, whose cache reflects earlier draws). `TryGetGlyph` returns only glyphs whose MSDF
 texture is already generated, and `Measure` reads face metrics and kerning without generating a
 texture. An unmapped rune falls back to glyph id zero (`.notdef`). Glyph generation runs
@@ -317,15 +319,16 @@ them GPU integration tests, and every sample solution built.
 `samples/Text` is the M6 AOT gate. It is a two-project solution, `samples/Text/Text.slnx`, outside
 `src/RayBork/RayBork.slnx`: the sample and a JIT `Text.Assets` executable that bakes `text.pck` from
 the checked-in Lora face and copies it beside the sample executable, so the sample has no `--assets`
-argument. It draws the built-in Fira Sans and the custom Lora face at several sizes, rotations,
-alignments, and wrapping modes, with Latin and Cyrillic paragraphs, a camera-facing billboard, a
-lazily generated Greek line, a world-space status line showing presented FPS, the tick rate, render
-CPU time, draw calls, and instances, orbit/zoom controls, and the `--frames` and `--help` options.
+argument. It draws the built-in Fira Sans and JetBrains Mono faces and the custom Lora face at several
+sizes, rotations, alignments, and wrapping modes, with Latin and Cyrillic paragraphs, a camera-facing
+billboard, a lazily generated Greek line, a world-space mono status line showing presented FPS, the
+tick rate, render CPU time, draw calls, and instances, orbit/zoom controls, and the `--frames` and
+`--help` options.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; the engine default remains Mailbox for games that want the decoupled path. The published
 `win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
 Windows hardware driver and on WSLg's dzn hardware device. The M6
-suite is 2,619 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
+suite is 2,621 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`

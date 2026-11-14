@@ -62,6 +62,10 @@ internal static class CatalogTestData {
     internal const string FONT_PATH = "fonts/fira-sans";
     internal const string FONT_PAYLOAD_PATH = "fonts/fira-sans-face";
 
+    /// <summary>The catalog font tests serve a second synthetic face at the engine's mono font path.</summary>
+    internal const string MONO_FONT_PATH = "fonts/jetbrains-mono";
+    internal const string MONO_FONT_PAYLOAD_PATH = "fonts/jetbrains-mono-face";
+
     /// <summary>The glyph id of the square <c>A</c> glyph the font test face maps.</summary>
     internal const int FONT_GLYPH_ID = 1;
 
@@ -177,8 +181,9 @@ internal static class CatalogTestData {
         int msdfPixelSize = 32,
         int msdfRange = 4,
         int msdfPadding = 2,
-        uint? byteLength = null) => new() {
-            FacePayload = FONT_PAYLOAD_PATH,
+        uint? byteLength = null,
+        string facePayload = FONT_PAYLOAD_PATH) => new() {
+            FacePayload = facePayload,
             Format = "ttf",
             ByteLength = byteLength ?? (uint)face.Length,
             MsdfPixelSize = msdfPixelSize,
@@ -192,13 +197,27 @@ internal static class CatalogTestData {
     /// </summary>
     internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateFontEntries(
         byte[]? face = null,
-        FontAssetDescriptor? descriptor = null) {
+        FontAssetDescriptor? descriptor = null,
+        string path = FONT_PATH,
+        string payloadPath = FONT_PAYLOAD_PATH) {
         byte[] resolvedFace = face ?? CreateFontFace();
-        FontAssetDescriptor resolvedDescriptor = descriptor ?? CreateFontDescriptor(resolvedFace);
+        FontAssetDescriptor resolvedDescriptor =
+            descriptor ?? CreateFontDescriptor(resolvedFace, facePayload: payloadPath);
         return [
-            (FONT_PATH, AssetEntryType.Font, AssetSerialization.Serialize(resolvedDescriptor)),
-            (FONT_PAYLOAD_PATH, AssetEntryType.Raw, resolvedFace),
+            (path, AssetEntryType.Font, AssetSerialization.Serialize(resolvedDescriptor)),
+            (payloadPath, AssetEntryType.Raw, resolvedFace),
         ];
+    }
+
+    /// <summary>Builds the synthetic mono font descriptor entry and its sibling face payload entry.</summary>
+    internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateMonoFontEntries(
+        byte[]? face = null) {
+        byte[] resolvedFace = face ?? CreateFontFace();
+        return CreateFontEntries(
+            resolvedFace,
+            CreateFontDescriptor(resolvedFace, facePayload: MONO_FONT_PAYLOAD_PATH),
+            MONO_FONT_PATH,
+            MONO_FONT_PAYLOAD_PATH);
     }
 
     /// <summary>

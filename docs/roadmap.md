@@ -600,8 +600,8 @@ color helpers, and the restored Bork2d/Unity color preset set:
   billboard uses the built-in `/shaders/mesh` program with the `RenderState.AlphaBlend` state
   override. The engine material's texture binding is set only around the recorded call and cleared
   immediately afterwards, and the frame record retains the texture. At M5, `EngineDefaults` exposed
-  only `CreateMeshShader`, `White`, and `Error`; M6 adds `DefaultFont`. `/shaders/primitive` is an
-  ordinary
+  only `CreateMeshShader`, `White`, and `Error`; M6 adds `DefaultFont` and `DefaultMonoFont`.
+  `/shaders/primitive` is an ordinary
   built-in shader entry, so a game can load a material over it by path for its own vertex-color
   meshes; the primitive meshes have no public accessor. `DrawTexture` is not built or shipped in M5;
   the screen-space overlay path is re-homed to M7.
@@ -796,7 +796,8 @@ blocking glyph generation.
   glyph texture, `TryGetGlyph`, `Measure`, unmapped-rune fallback to `.notdef`, and `RB1011` for an
   invalid or unsupported face. There is no `Preload` and no font preload range.
 - Built-in Fira Sans Regular at `/fonts/fira-sans`, exposed as `EngineDefaults.DefaultFont`, and the
-  `[font]` sidecar carrying only the MSDF settings.
+  built-in JetBrains Mono Regular at `/fonts/jetbrains-mono`, exposed as
+  `EngineDefaults.DefaultMonoFont`; the `[font]` sidecar carries only the MSDF settings.
 - Layout: advance, kerning, line breaks, line height, `TextAlignment`, `TextWrapping`, `maxWidth`,
   and `Measure`; the `DrawText` origin is the top-left of the first line's ascent box.
 - Drawing: `Camera.DrawText` in a transform's local XY plane and `Camera.DrawTextBillboard` in a
@@ -804,7 +805,7 @@ blocking glyph generation.
   draw record per call, one instance per ready glyph, and a per-instance bindless glyph texture.
 - `samples/Text` as the M6 sample and Native AOT gate, with `Text.Assets` baking `text.pck` from the
   checked-in Lora face; `samples/Castle` and `samples/PrimitiveGallery` gain the presented-FPS text
-  status overlays they had deferred.
+  status overlays they had deferred, drawn at 18 px in the built-in mono face.
 - Tests for parsing, layout, MSDF, the glyph pipeline, the font asset, text draws, and fuzzing.
 - **Out of scope for v1:** complex shaping, ligatures, bidi ordering, font fallback, color fonts,
   emoji, variable font axes, and CFF2 outlines.
@@ -813,7 +814,8 @@ blocking glyph generation.
 
 - `samples/Text` renders the same paragraph at multiple sizes, rotations, alignments, and wrapping
   modes, with Latin and Cyrillic paragraphs in the built-in Fira Sans and custom Lora faces, a
-  camera-facing billboard, lazily appearing Greek glyphs, an orbit camera, and `--frames`/`--help`.
+  camera-facing billboard, lazily appearing Greek glyphs, a mono status line, an orbit camera, and
+  `--frames`/`--help`.
 - Glyphs remain sharp at large sizes and readable at small sizes with one padded texture per glyph
   and no atlas seams; the generated MSDF field matches the analytic distance within the documented
   tolerance.
@@ -830,7 +832,7 @@ blocking glyph generation.
   run `--frames 30` to exit `0` (Windows hardware and WSLg dzn).
 - Fuzz tests cover malformed sfnt/cmap/glyf/CFF/kern/GPOS tables without crashes or unbounded
   allocation.
-- The suite is 2,619 tests, 106 of them GPU integration tests, and every sample solution builds.
+- The suite is 2,621 tests, 106 of them GPU integration tests, and every sample solution builds.
 
 **As-built notes.** M6 shipped the planned text surface with the following as-built shape:
 
@@ -894,14 +896,17 @@ blocking glyph generation.
   glyphs whose texture is ready and does not generate one; `Measure` reads face metrics and kerning
   without generating a texture. An unmapped rune falls back to glyph id 0 (`.notdef`), so layout
   still advances.
-- **Built-in font.** The built-in pack carries Fira Sans Regular version 4.203 at
-  `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload, produced by the ordinary font
-  processor with the default 32/4/2 MSDF settings, so the pack has 18 entries. Fira Sans is
-  licensed under the SIL Open Font License 1.1 and covers Latin, Cyrillic, and Greek, which is the
-  coverage the samples exercise. The app preloads the face before `IGame.Setup` and exposes it as
-  `EngineContext.Defaults.DefaultFont`; the font is engine-owned, the preload is CPU-only and
-  queues no GPU upload, and the owner reference is released during shutdown. The font is recorded
-  in the bundled-assets section of [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). The sample's
+- **Built-in fonts.** The built-in pack carries Fira Sans Regular version 4.203 at
+  `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload and JetBrains Mono Regular version
+  2.211 at `/fonts/jetbrains-mono` with its `/fonts/jetbrains-mono-face` payload, produced by the
+  ordinary font processor with the default 32/4/2 MSDF settings, so the pack has 20 entries. Fira
+  Sans and JetBrains Mono are licensed under the SIL Open Font License 1.1 (the JetBrains Mono grant
+  is 1.1 or later) and cover Latin, Cyrillic, and Greek, which is the coverage the samples exercise.
+  The app preloads the faces before `IGame.Setup` and exposes them as
+  `EngineContext.Defaults.DefaultFont` and `EngineContext.Defaults.DefaultMonoFont`; the fonts are
+  engine-owned, the preload is CPU-only and queues no GPU upload, and the owner references are
+  released during shutdown. Both are recorded in the bundled-assets section of
+  [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). The sample's
   Lora face is sample-only and keeps its own notice under `samples/Text/`.
 - **Layout.** The layout engine is pure CPU and reads `ITextMetrics`; it allocates nothing once the
   caller's buffer has grown. `'\n'` starts a new line and `'\r'` is ignored. Advances and kerning
@@ -961,7 +966,7 @@ blocking glyph generation.
   1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets. The
   per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
   milestone.
-- **Tests.** The suite is 2,619 tests, 106 of them GPU integration tests. M6 adds the font parser,
+- **Tests.** The suite is 2,621 tests, 106 of them GPU integration tests. M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
   colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
   the text layout, measurement, wrapping, buffer, and validation suites; the camera text draw
@@ -970,7 +975,8 @@ blocking glyph generation.
   presented-frame counter and recovery/suboptimal result, and acquire-excluded CPU timing suites.
   The two AOT publishes cover the Text sample on both RIDs. There is no golden-image suite.
 - **Limitations.** There is no complex shaping, ligature substitution, bidi ordering, font fallback,
-  color font, or emoji support. Coverage is per face: Fira Sans covers Latin, Cyrillic, and Greek.
+  color font, or emoji support. Coverage is per face: Fira Sans and JetBrains Mono cover Latin,
+  Cyrillic, and Greek.
   Variable fonts load their default instance. CFF2 is rejected. One texture per glyph consumes
   bindless slots: 512 cached per font, within the fixed 2048-slot table. There is no preload and no
   synchronous glyph generation. Text is world-space only; screen-space/HUD text is M7. MSDF sharp
@@ -1314,7 +1320,7 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   `TextDrawTests` cover the CPU-only asset, `.notdef`, layout, and the camera draw records;
   `TextDrawGpuTests` submits the production text draws through the Vulkan backend and asserts
   validation-layer cleanliness, draw/instance/triangle statistics, and single-pixel linear
-  scene-target probes. The suite is 2,619 tests, 106 of them GPU integration tests, and every sample
+  scene-target probes. The suite is 2,621 tests, 106 of them GPU integration tests, and every sample
   solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

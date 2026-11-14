@@ -8,8 +8,8 @@ namespace RayBork.Tests;
 /// <para>
 /// The app first preloads <see cref="DEFAULTS"/> GPU-uploaded assets into <see cref="EngineDefaults"/>:
 /// the <c>/shaders/mesh</c> program plus the white and error textures. The app also preloads the
-/// default font there, but a font load is CPU-only: it queues no upload and no destroy, so it adds
-/// nothing to these counts. The engine primitive assets then add
+/// default and monospaced fonts there, but a font load is CPU-only: it queues no upload and no
+/// destroy, so they add nothing to these counts. The engine primitive assets then add
 /// <see cref="ADDITIONAL_PRIMITIVE_PROGRAMS"/> programs (the <c>/shaders/primitive</c> and
 /// <c>/shaders/msdf</c> programs; the mesh program is already cached) and
 /// <see cref="PRIMITIVE_MESHES"/> procedural mesh uploads.

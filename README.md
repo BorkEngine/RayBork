@@ -61,11 +61,14 @@ and `Measure`; `Camera.DrawText` draws in a transform's local XY plane and `Came
 centers a camera-facing block. Both record one draw record per call with one instance per ready glyph
 and a per-instance bindless glyph texture, so text batches across calls and fonts. The built-in Fira
 Sans Regular face (OFL 1.1, Latin/Cyrillic/Greek) is at `/fonts/fira-sans` in the built-in pack and
-is exposed as `EngineDefaults.DefaultFont`; `samples/Text` is the M6 sample and AOT gate, and the
-Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics text overlays. The
-samples set no tick target and request FIFO presentation, so the display refresh paces the tick
+is exposed as `EngineDefaults.DefaultFont`; the built-in JetBrains Mono Regular face (OFL 1.1 or
+later, Latin/Cyrillic/Greek) at `/fonts/jetbrains-mono` is exposed as
+`EngineDefaults.DefaultMonoFont`, and the samples draw their status/statistics readouts with it so
+changing counters keep their positions. `samples/Text` is the M6 sample and AOT gate, and the
+Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics text overlays at 18 px.
+The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
-The suite is 2,619 tests, 106 of them GPU integration tests, and every sample builds. The Windows
+The suite is 2,621 tests, 106 of them GPU integration tests, and every sample builds. The Windows
 hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
 host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
@@ -123,8 +126,8 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   wire cube, wire sphere) are built once before `IGame.Setup` through the procedural GPU bridge, are
   internal, and are not exposed as public assets; the tessellated sphere, cylinder, capsule, and
   circle helpers compose their geometry from those unit meshes. `EngineDefaults` exposes
-  `CreateMeshShader`, `White`, `Error`, and `DefaultFont`; a game can load a material over
-  `/shaders/primitive` for its own vertex-color meshes.
+  `CreateMeshShader`, `White`, `Error`, `DefaultFont`, and `DefaultMonoFont`; a game can load a
+  material over `/shaders/primitive` for its own vertex-color meshes.
 - `Collision` and `RayCollision` are allocation-free, thread-safe queries: sphere/sphere, box/box,
   box/sphere, and ray/sphere, ray/box, ray/triangle, ray/quad, ray/plane, and ray/mesh. `GetRayQuad`
   splits its quad into two double-sided triangles and returns the nearest non-negative hit. `GetRayMesh`
@@ -152,8 +155,8 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, the
-  MSDF text shader, the white/error textures, and the default Fira Sans face with its payload: 18
-  entries in all.
+  MSDF text shader, the white/error textures, and the default Fira Sans and JetBrains Mono faces with
+  their payloads: 20 entries in all.
 - Shaders are GLSL compiled to SPIR-V ahead of runtime by the bake; the runtime never compiles
   shaders. The shader ABI generates the prologue and reflection for a frame uniform block, a fixed
   2048-element bindless texture array, and a per-instance storage buffer. `/shaders/primitive` has no
@@ -164,8 +167,9 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   generated deterministically per glyph on the app-lifetime `RayBork.Font` thread: one padded texture
   per glyph (32 px longest side by default, range 4, padding 2), a 512-texture per-font LRU cache,
   and no blocking on the tick thread. `Load<Font>` is CPU-only and has no preload; the built-in Fira
-  Sans face is `EngineDefaults.DefaultFont`. `Camera.DrawText` and `Camera.DrawTextBillboard` draw
-  through the built-in `/shaders/msdf` program. Complex shaping, ligatures, bidi, fallback, color
+  Sans and JetBrains Mono faces are `EngineDefaults.DefaultFont` and
+  `EngineDefaults.DefaultMonoFont`. `Camera.DrawText` and `Camera.DrawTextBillboard` draw through the
+  built-in `/shaders/msdf` program. Complex shaping, ligatures, bidi, fallback, color
   fonts, emoji, variable axes, and CFF2 are out of scope for v1.
 - The renderer recovers from swapchain/device loss where possible; failed recovery is fatal. Live
   GPU assets are re-uploaded from their retained CPU descriptors after a device recovery.
@@ -179,11 +183,12 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
 src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
   Shaders/                    present-pass GLSL sources and committed SPIR-V blobs
   BuiltInAssets/Assets/       built-in pack sources (mesh, primitive, msdf, and present shaders,
-                              textures, and the Fira Sans face)
+                              textures, and the Fira Sans and JetBrains Mono faces)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
-samples/Text/                 M6 sample and Native AOT gate (world-space text with two faces)
+samples/Text/                 M6 sample and Native AOT gate (world-space text with two proportional
+                              faces and a mono status line)
   Text.slnx                   sample-owned solution (sample + assets executable)
   Text.Assets/                JIT assets executable (bakes text.pck from the Lora face)
 samples/PrimitiveGallery/     M5 primitive sample (was the M5 AOT gate; no pack)
@@ -210,9 +215,9 @@ and test projects.
 Run the samples from the repository root with a Vulkan 1.2 device and a real window system (on WSL,
 use the WSLg display). The Castle build bakes `castle.pck` beside the executable, and the sample loads
 it automatically; `--assets` is only an optional override. The Text build bakes `text.pck` with the
-custom Lora face beside the executable and loads it automatically; the built-in Fira Sans face comes
-from the engine's built-in pack. The gallery has no assets executable and no pack: it builds its
-only texture at runtime.
+custom Lora face beside the executable and loads it automatically; the built-in Fira Sans and
+JetBrains Mono faces come from the engine's built-in pack. The gallery has no assets executable and
+no pack: it builds its only texture at runtime.
 
 ```powershell
 dotnet build samples/Text/Text.slnx -c Debug

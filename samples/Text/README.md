@@ -1,11 +1,11 @@
 # Text
 
 `Text` is the M6 sample and Native AOT gate: a world-space text scene drawn in one perspective pass
-with the built-in Fira Sans face and a custom baked Lora face. It shows the same paragraph at three
-sizes, three alignments, both wrapping modes, and two rotations; Latin and Cyrillic paragraphs in both
-faces; a camera-facing billboard; a line that appends one new Greek glyph every 30 ticks; and a live
-status line. It loads the custom face from its own baked `text.pck`, so it also exercises the font
-asset path end to end.
+with the built-in Fira Sans and JetBrains Mono faces and a custom baked Lora face. It shows the same
+paragraph at three sizes, three alignments, both wrapping modes, and two rotations; Latin and Cyrillic
+paragraphs in both proportional faces; a camera-facing billboard; a line that appends one new Greek
+glyph every 30 ticks; and a live status line in the mono face. It loads the custom face from its own
+baked `text.pck`, so it also exercises the font asset path end to end.
 
 The sample contains no test-only logic: it opens a window, draws the scene, and exits cleanly. Build and
 run it from the repository root:
@@ -69,9 +69,10 @@ the whole Greek alphabet used by the line.
 
 ## Status line
 
-The built-in face draws the presented frames per second, the tick rate, the render CPU time, and the
-last completed frame's `DrawCalls` and `Instances` from `ctx.Stats` at the top-right of the wall. The
-presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
+The built-in mono face draws the presented frames per second, the tick rate, the render CPU time, and
+the last completed frame's `DrawCalls` and `Instances` from `ctx.Stats` at the top-right of the wall.
+The monospaced face keeps the changing counters from shifting the text around them. The presented rate
+is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
 presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`. The render time is
 `ctx.Stats.CpuFrameMilliseconds`, which measures only the render thread's planning, recording, and
 submission and excludes the fence, acquire, and present waits. The status block is ordinary
@@ -86,14 +87,15 @@ No manual bake step is required.
 | --- | --- | --- |
 | `Assets/fonts/lora.ttf` | `/fonts/lora` | Lora Regular 3.008, copied verbatim. One font descriptor and the whole face as the sibling `/fonts/lora-face` raw payload. No sidecar, so the MSDF defaults `32`/`4`/`2` apply: a 32-pixel padded texture, a 4-pixel distance range, and a 2-pixel border. |
 
-The built-in Fira Sans Regular face is not in this pack. The engine preloads it at `/fonts/fira-sans`
-and exposes it as `ctx.Defaults.DefaultFont`; the sample uses that object directly and never disposes
-it. The Lora load is the sample's own reference and is released in `Shutdown`.
+The built-in Fira Sans and JetBrains Mono faces are not in this pack. The engine preloads them at
+`/fonts/fira-sans` and `/fonts/jetbrains-mono` and exposes them as `ctx.Defaults.DefaultFont` and
+`ctx.Defaults.DefaultMonoFont`; the sample uses those objects directly and never disposes them. The
+Lora load is the sample's own reference and is released in `Shutdown`.
 
-`Load<Font>` is CPU-only: it parses the face and queues no GPU upload. The engine preloads Fira Sans
-before `Setup`, so that face is already available; `Setup` loads Lora with `Load<Font>`, which parses
-the Lora face and queues no upload. Every glyph texture is generated on demand on the engine's font
-thread, so neither load generates a single glyph texture.
+`Load<Font>` is CPU-only: it parses the face and queues no GPU upload. The engine preloads both
+built-in faces before `Setup`, so they are already available; `Setup` loads Lora with `Load<Font>`,
+which parses the Lora face and queues no upload. Every glyph texture is generated on demand on the
+engine's font thread, so neither load generates a single glyph texture.
 
 The pack is generated output under `bin/` and `obj/` and is gitignored. The Lora font is sample-only and
 is **not** covered by RayBork's MIT license; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

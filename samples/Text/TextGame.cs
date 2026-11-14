@@ -4,9 +4,9 @@ using RayBork;
 namespace Text;
 
 /// <summary>
-/// A world-space text scene: two faces, one paragraph at three sizes, rotations, and alignments, the
-/// two wrapping modes, Latin and Cyrillic paragraphs, a camera-facing billboard, a lazy Greek glyph
-/// line, and a live status line.
+/// A world-space text scene: two proportional faces plus the built-in mono face for the status line,
+/// one paragraph at three sizes, rotations, and alignments, the two wrapping modes, Latin and Cyrillic
+/// paragraphs, a camera-facing billboard, a lazy Greek glyph line, and a live status readout.
 /// </summary>
 /// <remarks>
 /// The scene is one vertical text wall at the world origin. Text is drawn in the transform's local XY
@@ -114,9 +114,9 @@ internal sealed class TextGame : IGame {
 
     /// <inheritdoc/>
     public async Task Setup(EngineContext context) {
-        // The built-in Fira Sans face is an engine-owned default at /fonts/fira-sans. The custom Lora
-        // face comes from this sample's text.pck; the sample owns that reference and releases it in
-        // Shutdown. Both loads are CPU-only: no glyph texture is generated until a draw needs one.
+        // The built-in default faces are engine-owned defaults. The custom Lora face comes from this
+        // sample's text.pck; the sample owns that reference and releases it in Shutdown. Both loads
+        // are CPU-only: no glyph texture is generated until a draw needs one.
         _loraFont = await context.Assets.Load<Font>(LORA_FONT_PATH);
     }
 
@@ -163,7 +163,7 @@ internal sealed class TextGame : IGame {
 
     /// <inheritdoc/>
     public Task Shutdown() {
-        // The built-in default font is engine-owned and must not be disposed; only the Lora load is
+        // The built-in default fonts are engine-owned and must not be disposed; only the Lora load is
         // this sample's reference.
         _loraFont?.Dispose();
         _loraFont = null;
@@ -172,6 +172,7 @@ internal sealed class TextGame : IGame {
 
     private void DrawTextScene(Camera camera, EngineContext context) {
         Font firaSans = context.Defaults.DefaultFont;
+        Font mono = context.Defaults.DefaultMonoFont;
         Font lora = _loraFont!;
 
         // The same title in both faces. Lora is a serif, so the shape difference is visible at a
@@ -203,9 +204,10 @@ internal sealed class TextGame : IGame {
 
         // The status line is ordinary world-space text too; it reports the presented rate, the tick
         // rate, and the last completed frame's render statistics, so on the first frame the draw,
-        // instance, and presented-frame values are still zero.
+        // instance, and presented-frame values are still zero. The mono face keeps the changing
+        // counters from shifting their neighbors.
         camera.DrawText(
-            firaSans,
+            mono,
             _overlay.Build(context),
             new Transform(new Vector3(STATUS_X, STATUS_TOP_Y, 0f)),
             STATUS_SIZE,

@@ -12,12 +12,12 @@ internal static class Program {
     private const string DEFAULT_PACK_FILE_NAME = "text.pck";
 
     private const string USAGE_TEXT = """
-        Text - world-space text with two fonts
+        Text - world-space text with three faces
 
-        Draws MSDF text in the built-in Fira Sans face and a baked Lora face: a title in each face,
-        one paragraph at three sizes, three alignments, two wrapping modes and two rotations, Latin
-        and Cyrillic paragraphs in both faces, a camera-facing billboard, a lazily extended Greek
-        glyph line, and a live status line.
+        Draws MSDF text in the built-in Fira Sans and JetBrains Mono faces and a baked Lora face: a
+        title in each proportional face, one paragraph at three sizes, three alignments, two wrapping
+        modes and two rotations, Latin and Cyrillic paragraphs in both proportional faces, a
+        camera-facing billboard, a lazily extended Greek glyph line, and a live mono status line.
 
         Usage:
           Text [options]

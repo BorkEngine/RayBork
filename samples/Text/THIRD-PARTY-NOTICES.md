@@ -1,8 +1,9 @@
 # Text sample third-party notices
 
-The Text sample is a RayBork sample that draws the built-in Fira Sans face and a custom Lora face. Its
-sample-only notice applies only to this directory. It is not part of RayBork's MIT license and is not
-listed in the repository-level [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md).
+The Text sample is a RayBork sample that draws the built-in Fira Sans and JetBrains Mono faces and a
+custom Lora face. This sample-only notice covers the Lora face in this directory; the built-in faces
+are recorded in the repository-level [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md). The Lora
+face is not part of RayBork's MIT license and is not listed in the repository-level notice.
 
 ## Lora
 

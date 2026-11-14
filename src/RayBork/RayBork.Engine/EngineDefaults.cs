@@ -4,7 +4,7 @@ namespace RayBork;
 
 /// <summary>
 /// The engine-owned default assets: the built-in mesh shader program, the white and error textures,
-/// and the built-in default font.
+/// and the built-in default and monospaced fonts.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -14,8 +14,9 @@ namespace RayBork;
 /// itself.
 /// </para>
 /// <para>
-/// <see cref="White"/>, <see cref="Error"/>, and <see cref="DefaultFont"/> are engine-owned. Do not
-/// dispose them: the engine's reference keeps them alive until shutdown. <see cref="CreateMeshShader"/>
+/// <see cref="White"/>, <see cref="Error"/>, <see cref="DefaultFont"/>, and
+/// <see cref="DefaultMonoFont"/> are engine-owned. Do not dispose them: the engine's reference keeps
+/// them alive until shutdown. <see cref="CreateMeshShader"/>
 /// returns a new caller-owned material for each call; dispose every material it returns exactly once.
 /// </para>
 /// <para>
@@ -36,10 +37,14 @@ public sealed class EngineDefaults {
     /// <summary>The canonical path of the built-in default font.</summary>
     internal const string DEFAULT_FONT_PATH = "/fonts/fira-sans";
 
+    /// <summary>The canonical path of the built-in monospaced font.</summary>
+    internal const string DEFAULT_MONO_FONT_PATH = "/fonts/jetbrains-mono";
+
     private readonly ShaderProgram _meshShader;
     private readonly Texture _white;
     private readonly Texture _error;
     private readonly Font _defaultFont;
+    private readonly Font _defaultMonoFont;
     private bool _disposed;
 
     /// <summary>
@@ -50,17 +55,25 @@ public sealed class EngineDefaults {
     /// <param name="white">The built-in white texture.</param>
     /// <param name="error">The built-in error texture.</param>
     /// <param name="defaultFont">The built-in default font.</param>
+    /// <param name="defaultMonoFont">The built-in monospaced font.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal EngineDefaults(ShaderProgram meshShader, Texture white, Texture error, Font defaultFont) {
+    internal EngineDefaults(
+        ShaderProgram meshShader,
+        Texture white,
+        Texture error,
+        Font defaultFont,
+        Font defaultMonoFont) {
         ArgumentNullException.ThrowIfNull(meshShader);
         ArgumentNullException.ThrowIfNull(white);
         ArgumentNullException.ThrowIfNull(error);
         ArgumentNullException.ThrowIfNull(defaultFont);
+        ArgumentNullException.ThrowIfNull(defaultMonoFont);
 
         _meshShader = meshShader;
         _white = white;
         _error = error;
         _defaultFont = defaultFont;
+        _defaultMonoFont = defaultMonoFont;
     }
 
     /// <summary>
@@ -104,6 +117,24 @@ public sealed class EngineDefaults {
     }
 
     /// <summary>
+    /// Gets the built-in monospaced font: JetBrains Mono Regular, one parsed face with an on-demand
+    /// MSDF glyph cache. The engine owns it; do not dispose it.
+    /// </summary>
+    /// <remarks>
+    /// The monospaced face has the same advance for every glyph, so counters stay aligned as their
+    /// digits change; the samples draw their status readouts with it. Preloading it is CPU-only and
+    /// issues no GPU upload, and its <see cref="Font.CachedGlyphCount"/> grows as text draws need
+    /// glyphs.
+    /// </remarks>
+    /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
+    public Font DefaultMonoFont {
+        get {
+            ThrowIfDisposed();
+            return _defaultMonoFont;
+        }
+    }
+
+    /// <summary>
     /// Gets whether the engine released the defaults. It stays readable after disposal.
     /// </summary>
     internal bool IsDisposed => _disposed;
@@ -126,9 +157,9 @@ public sealed class EngineDefaults {
     /// <param name="assets">The started asset catalog.</param>
     /// <returns>The preloaded defaults, which own one owner reference per asset.</returns>
     /// <remarks>
-    /// The mesh program and both textures load first and the default font last. The font load is
-    /// CPU-only: it parses the face and does not queue a GPU upload, so it adds nothing to the app's
-    /// startup upload count.
+    /// The mesh program and both textures load first and the two fonts last. A font load is CPU-only:
+    /// it parses the face and does not queue a GPU upload, so neither font adds to the app's startup
+    /// upload count.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
     /// <exception cref="AssetLoadException">
@@ -141,21 +172,26 @@ public sealed class EngineDefaults {
         Texture? white = null;
         Texture? error = null;
         Font? defaultFont = null;
+        Font? defaultMonoFont = null;
         try {
             meshShader = await assets.Load<ShaderProgram>(MESH_SHADER_PATH).ConfigureAwait(false);
             white = await assets.Load<Texture>(WHITE_TEXTURE_PATH).ConfigureAwait(false);
             error = await assets.Load<Texture>(ERROR_TEXTURE_PATH).ConfigureAwait(false);
             defaultFont = await assets.Load<Font>(DEFAULT_FONT_PATH).ConfigureAwait(false);
-            return new EngineDefaults(meshShader, white, error, defaultFont);
+            defaultMonoFont = await assets.Load<Font>(DEFAULT_MONO_FONT_PATH).ConfigureAwait(false);
+            return new EngineDefaults(meshShader, white, error, defaultFont, defaultMonoFont);
         } catch (Exception exception) when (exception is not OutOfMemoryException) {
             ReleaseQuietly(meshShader);
             ReleaseQuietly(white);
             ReleaseQuietly(error);
+            ReleaseQuietly(defaultFont);
+            ReleaseQuietly(defaultMonoFont);
             throw new AssetLoadException(
                 $"The engine's built-in default assets are missing or corrupt: the mesh shader "
                     + $"program '{MESH_SHADER_PATH}', the white texture '{WHITE_TEXTURE_PATH}', the "
-                    + $"error texture '{ERROR_TEXTURE_PATH}', and the default font "
-                    + $"'{DEFAULT_FONT_PATH}' must all load from the built-in pack.",
+                    + $"error texture '{ERROR_TEXTURE_PATH}', the default font '{DEFAULT_FONT_PATH}', "
+                    + $"and the monospaced font '{DEFAULT_MONO_FONT_PATH}' must all load from the "
+                    + "built-in pack.",
                 DiagnosticCodes.ASSET_LOAD_FAILED,
                 exception);
         }
@@ -175,6 +211,7 @@ public sealed class EngineDefaults {
         ReleaseQuietly(_white);
         ReleaseQuietly(_error);
         ReleaseQuietly(_defaultFont);
+        ReleaseQuietly(_defaultMonoFont);
     }
 
     private static void ReleaseQuietly(ShaderProgram? program) {

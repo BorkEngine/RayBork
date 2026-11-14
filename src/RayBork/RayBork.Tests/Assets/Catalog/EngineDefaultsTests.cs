@@ -6,18 +6,19 @@ namespace RayBork.Tests.Assets.Catalog;
 
 /// <summary>
 /// Tests the app-owned <see cref="EngineDefaults"/> preload: the built-in mesh shader program, the white
-/// and error textures, and the default font are loaded once, handed to the game, and released during
-/// shutdown.
+/// and error textures, and the default and monospaced fonts are loaded once, handed to the game, and
+/// released during shutdown.
 /// </summary>
 public sealed class EngineDefaultsTests {
     private const string MESH_SHADER_PATH = "/shaders/mesh";
     private const string WHITE_PATH = "/textures/white";
     private const string ERROR_PATH = "/textures/error";
     private const string FONT_PATH = "/fonts/fira-sans";
+    private const string MONO_FONT_PATH = "/fonts/jetbrains-mono";
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadAsyncPreloadsTheProgramAndBothTexturesAndTheDefaultFont() {
+    public async Task LoadAsyncPreloadsTheProgramBothTexturesAndBothDefaultFonts() {
         using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack()]);
 
         EngineDefaults defaults = await EngineDefaults.LoadAsync(harness.Catalog);
@@ -29,6 +30,10 @@ public sealed class EngineDefaultsTests {
             Assert.Equal(FONT_PATH, defaults.DefaultFont.Path);
             Assert.Equal(1, defaults.DefaultFont.GlyphCount);
             Assert.Equal(0, defaults.DefaultFont.CachedGlyphCount);
+            Assert.Equal(MONO_FONT_PATH, defaults.DefaultMonoFont.Path);
+            Assert.Equal(1, defaults.DefaultMonoFont.GlyphCount);
+            Assert.Equal(0, defaults.DefaultMonoFont.CachedGlyphCount);
+            Assert.NotSame(defaults.DefaultFont, defaults.DefaultMonoFont);
             Assert.Equal(3, harness.Worker.UploadCallCount);
 
             Shader material = defaults.CreateMeshShader();
@@ -93,6 +98,7 @@ public sealed class EngineDefaultsTests {
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.White);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.Error);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.DefaultFont);
+        Assert.Throws<ObjectDisposedException>(() => _ = defaults.DefaultMonoFont);
         Assert.Throws<ObjectDisposedException>(defaults.CreateMeshShader);
 
         defaults.Dispose();
@@ -138,27 +144,61 @@ public sealed class EngineDefaultsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DisposeReleasesTheDefaultFontAndAReloadCreatesANewFont() {
+    public async Task DisposeReleasesBothDefaultFontsAndAReloadCreatesNewFonts() {
         using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack()]);
         EngineDefaults defaults = await EngineDefaults.LoadAsync(harness.Catalog);
         Font first = defaults.DefaultFont;
+        Font firstMono = defaults.DefaultMonoFont;
 
         defaults.Dispose();
 
         Assert.True(first.IsDisposed);
+        Assert.True(firstMono.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => _ = first.LineHeight);
+        Assert.Throws<ObjectDisposedException>(() => _ = firstMono.LineHeight);
 
         Font second = await harness.Catalog.Load<Font>(FONT_PATH, TestContext.Current.CancellationToken);
+        Font secondMono = await harness.Catalog.Load<Font>(
+            MONO_FONT_PATH,
+            TestContext.Current.CancellationToken);
         try {
             Assert.NotSame(first, second);
+            Assert.NotSame(firstMono, secondMono);
             Assert.False(second.IsDisposed);
             Assert.Equal(1, second.GlyphCount);
             Assert.Equal(0, second.CachedGlyphCount);
+            Assert.False(secondMono.IsDisposed);
+            Assert.Equal(1, secondMono.GlyphCount);
+            Assert.Equal(0, secondMono.CachedGlyphCount);
         } finally {
             second.Dispose();
+            secondMono.Dispose();
         }
 
         Assert.True(second.IsDisposed);
+        Assert.True(secondMono.IsDisposed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task TheBuiltInMonoFontLoadsAsAWorkingFont() {
+        using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
+
+        Font font = await harness.Catalog.Load<Font>(
+            MONO_FONT_PATH,
+            TestContext.Current.CancellationToken);
+        try {
+            Assert.Equal(MONO_FONT_PATH, font.Path);
+            Assert.True(font.GlyphCount > 0, "The mono font must map glyphs.");
+            Assert.Equal(0, font.CachedGlyphCount);
+            Assert.True(font.LineHeight > 0f, "The mono font must report a line height.");
+            Assert.True(font.Ascent > 0f, "The mono font must report an ascent.");
+            Assert.True(font.Measure("0123456789", 1f).X > 0f, "The mono font must measure text.");
+        } finally {
+            font.Dispose();
+        }
+
+        Assert.True(font.IsDisposed);
     }
 
     [Fact]
@@ -189,7 +229,7 @@ public sealed class EngineDefaultsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task APackMissingOnlyTheFontFailsAndNamesIt() {
+    public async Task APackMissingBothFontsFailsAndNamesThem() {
         using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack(includeFont: false)]);
 
         AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
@@ -197,6 +237,7 @@ public sealed class EngineDefaultsTests {
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains(FONT_PATH, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(MONO_FONT_PATH, thrown.Message, StringComparison.Ordinal);
         Assert.IsType<AssetNotFoundException>(thrown.InnerException);
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 3,
@@ -218,7 +259,11 @@ public sealed class EngineDefaultsTests {
             return CatalogTestData.BuildPack(entries);
         }
 
-        return CatalogTestData.BuildPack([.. entries, .. CatalogTestData.CreateFontEntries()]);
+        return CatalogTestData.BuildPack([
+            .. entries,
+            .. CatalogTestData.CreateFontEntries(),
+            .. CatalogTestData.CreateMonoFontEntries(),
+        ]);
     }
 
     private static TextureAssetDescriptor CreateTextureDescriptor(string payload) => new() {

@@ -22,7 +22,8 @@ ray-mesh BVH, the procedural collision opt-in, the baked `RBVC` collision payloa
 helpers, and the Primitive Gallery AOT gate. M6 adds the managed sfnt/TTF/OTF parser, the
 deterministic on-demand MSDF generator, the app-lifetime `RayBork.Font` thread with its per-font
 glyph pipeline and bounded cache, the CPU-only `Font` asset and the `Glyph`/layout surface, the
-built-in Fira Sans face and `EngineDefaults.DefaultFont`, the world-space `Camera.DrawText`/
+built-in Fira Sans and JetBrains Mono faces with `EngineDefaults.DefaultFont` and
+`EngineDefaults.DefaultMonoFont`, the world-space `Camera.DrawText`/
 `Camera.DrawTextBillboard` draws over the built-in `/shaders/msdf` program, and the Text AOT gate.
 `DrawTexture` is not part of M6; it arrives in M7 with the orthographic sprite path, while
 `RenderTexture` is M8.
@@ -75,10 +76,10 @@ Samples (M7, M11) -> RayBork.Engine
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
 | `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the AOT gate. |
 | `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
-| `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It now also draws a world-space presented-FPS/render-statistics status line. |
-| `samples/Text` | M6 sample and Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans face and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both faces, a camera-facing billboard, a lazily generated Greek line, a status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
+| `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It now also draws a world-space presented-FPS/render-statistics status line in the built-in mono face. |
+| `samples/Text` | M6 sample and Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans and JetBrains Mono faces and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both proportional faces, a camera-facing billboard, a lazily generated Greek line, a mono status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
 | `samples/Text/Text.Assets` | M6 assets executable: bakes `text.pck` from the checked-in Lora face at sample build time. JIT only. |
-| `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, draws a world-space presented-FPS status line, and, when the pointer ray hits the model bounds, adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
+| `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, draws a world-space presented-FPS status line in the built-in mono face, and, when the pointer ray hits the model bounds, adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
 | `samples/` | Pong, Instancing, RenderTarget (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
 
@@ -139,14 +140,14 @@ SDL3 and logging are exercised end to end by every sample AOT gate. The M2 miles
 Silk.NET.Vulkan with the presenter; the M3 gate extended the host with a baked pack, a KTX2 texture
 upload, a mesh upload, a shader-module upload, and a MessagePack custom-data load; the M4 gate drew
 the castle model with the built-in mesh material; the M5 gate drew the primitive helpers from the
-built-in pack; the M6 gate is `samples/Text`, which loads the built-in Fira Sans face and the baked
-Lora face from its own `text.pck`, generates glyph textures on demand, and draws the text scene. Both
-publishes must finish with zero AOT/trim warnings. The sample solutions are outside the engine
-solution, and a sample build bakes its pack beside the sample executable when it has one, so the JIT
-bake tool and its packages stay out of the sample's AOT publish graph. The Vulkan loader is a
-system/GPU-driver component, not a NuGet dependency. The bake's source-format tooling is JIT only and
-never enters the runtime publish graph; `build/RayBork.BuiltInAssets` invokes it at engine build time
-but its output is only the generated byte array.
+built-in pack; the M6 gate is `samples/Text`, which loads the built-in Fira Sans and JetBrains Mono
+faces and the baked Lora face from its own `text.pck`, generates glyph textures on demand, and draws
+the text scene. Both publishes must finish with zero AOT/trim warnings. The sample solutions are
+outside the engine solution, and a sample build bakes its pack beside the sample executable when it
+has one, so the JIT bake tool and its packages stay out of the sample's AOT publish graph. The Vulkan
+loader is a system/GPU-driver component, not a NuGet dependency. The bake's source-format tooling is
+JIT only and never enters the runtime publish graph; `build/RayBork.BuiltInAssets` invokes it at
+engine build time but its output is only the generated byte array.
 
 ## Platform seam (M1, Vulkan surface in M2)
 
@@ -365,11 +366,12 @@ Startup runs on the main thread and interleaves with the render thread:
    is a startup failure and no game callback runs. The loader is ready before `Setup`, so `Setup` can
    await engine-asset loads and enqueue glyph generation for a font it loads.
 5. The main thread preloads `EngineDefaults` — the mesh shader program, the white and error textures,
-   and the built-in default font at `/fonts/fira-sans` — and then the engine's primitive assets: the
-   `/shaders/primitive` and `/shaders/mesh` programs, the `/shaders/msdf` text program, their three
+   and the built-in default and monospaced fonts at `/fonts/fira-sans` and `/fonts/jetbrains-mono` —
+   and then the engine's primitive assets: the `/shaders/primitive` and `/shaders/mesh` programs,
+   the `/shaders/msdf` text program, their three
    engine materials, and the eight primitive meshes built through the procedural GPU bridge. The
    camera service holds them for the app lifetime, so the first tick can record a primitive draw. The
-   font load is CPU-only and queues no GPU upload; opening the face generates no glyph texture.
+   font loads are CPU-only and queue no GPU upload; opening a face generates no glyph texture.
 6. The tick thread starts and `IGame.Setup` runs. Because the tick thread starts only after the
    renderer is ready, `Setup` observes a valid `EngineContext.Info`.
 7. The main loop services the surface channel, pumps events, and checks for exit, tick completion,
@@ -695,12 +697,15 @@ glyph edge, the authored distance range maps to `[0, 1]`, and a value above `0.5
 glyph. Its render state is alpha blending, no culling, a `greater_equal` depth test, and no depth
 write (M10 changes the default to an alpha-to-coverage cutout).
 
-The built-in pack also carries the default font at `/fonts/fira-sans`. It is Fira Sans Regular (SIL
-Open Font License 1.1; see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)) baked by the ordinary
-font processor with the default 32/4/2 MSDF settings and the sibling `/fonts/fira-sans-face` raw
-payload, so the built-in pack has 18 entries. The runtime exposes the face as
-`EngineContext.Defaults.DefaultFont`. The font descriptor and face payload are ordinary entries; the
-pack format is unchanged and the runtime generates glyph textures on demand.
+The built-in pack also carries two fonts. The default font at `/fonts/fira-sans` is Fira Sans
+Regular (SIL Open Font License 1.1; see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)). The
+monospaced font at `/fonts/jetbrains-mono` is JetBrains Mono Regular (SIL Open Font License 1.1 or
+later; see the same file). Both are baked by the ordinary font processor with the default 32/4/2
+MSDF settings and a sibling raw face payload (`/fonts/fira-sans-face` and
+`/fonts/jetbrains-mono-face`), so the built-in pack has 20 entries. The runtime exposes the faces as
+`EngineContext.Defaults.DefaultFont` and `EngineContext.Defaults.DefaultMonoFont`. Each font
+descriptor and face payload is an ordinary entry; the pack format is unchanged and the runtime
+generates glyph textures on demand.
 
 ## Primitive assets
 
@@ -722,7 +727,7 @@ materials, and releases every mesh and program owner reference; it runs on the m
 tick thread has joined. A
 startup failure releases everything already created and surfaces as `AssetLoadException`
 `ASSET_LOAD_FAILED`. The meshes and the three primitive materials have no public accessor, and
-`EngineDefaults` gains only the default font in M6; the primitive assets stay unexposed.
+`EngineDefaults` gains only the default fonts in M6; the primitive assets stay unexposed.
 `DrawTexture` is not built from this set in M5; it moves to M7 with the
 sprite path.
 
@@ -1063,15 +1068,19 @@ ignores the unknown member, and an old TOML sidecar that still declares `ranges`
 `RB4002`. There is no `Preload` and no preload range; every cmap-mapped glyph can be generated on
 demand.
 
-#### Built-in font
+#### Built-in fonts
 
-`EngineDefaults` preloads the built-in Fira Sans Regular face from `/fonts/fira-sans` after the
-built-in pack and before `IGame.Setup`, so `EngineContext.Defaults.DefaultFont` is available to
-`Setup` without adding a startup GPU upload. The pack carries the face and its
-`/fonts/fira-sans-face` payload, baked by the ordinary font processor with the default 32/4/2 MSDF
-settings, so the built-in pack has 18 entries. Fira Sans Regular is version 4.203, licensed under the
-SIL Open Font License 1.1, and covers Latin, Cyrillic, and Greek. The face is engine-owned and must
-not be disposed; its owner reference is released during shutdown. It is recorded in the
+`EngineDefaults` preloads the built-in Fira Sans Regular face from `/fonts/fira-sans` and the
+JetBrains Mono Regular face from `/fonts/jetbrains-mono` after the built-in pack and before
+`IGame.Setup`, so `EngineContext.Defaults.DefaultFont` and
+`EngineContext.Defaults.DefaultMonoFont` are available to `Setup` without adding a startup GPU upload.
+The pack carries each face and its sibling raw payload (`/fonts/fira-sans-face` and
+`/fonts/jetbrains-mono-face`), baked by the ordinary font processor with the default 32/4/2 MSDF
+settings, so the built-in pack has 20 entries. Fira Sans Regular is version 4.203 and JetBrains Mono
+Regular is version 2.211; both are licensed under the SIL Open Font License 1.1 (the JetBrains Mono
+grant is 1.1 or later) and cover Latin, Cyrillic, and Greek. The samples use the mono face for their
+status/statistics readouts so changing counters keep their positions. The faces are engine-owned and
+must not be disposed; their owner references are released during shutdown. Both are recorded in the
 bundled-assets section of [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). The sample-only Lora
 face is baked into `text.pck` beside the `samples/Text` executable and keeps its own notice under
 `samples/Text/`.
@@ -1273,14 +1282,14 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `samples/Castle`, which baked `castle.pck`, loaded the model and its texture, and drew the castle
   through the geometry pipeline. M5 moved the gate to `samples/PrimitiveGallery`, which built its only
   texture at runtime and drew the primitive helpers from the built-in pack. M6 moves the gate to
-  `samples/Text`: it bakes `text.pck` from the checked-in Lora face, loads the built-in Fira Sans face
-  and the custom Lora face, generates glyph textures on demand, draws the text scene, and shuts down.
-  The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim warnings, contained
-  `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows hardware driver and
-  on WSLg's dzn hardware device. The suite is 2,619 tests, 106 of them GPU integration tests, and
-  every sample solution builds. `samples/Castle` and `samples/PrimitiveGallery` remain buildable and
-  publishable samples but are not the M6 gate, and `samples/HelloInterop` remains the M1-M3
-  diagnostic host.
+  `samples/Text`: it bakes `text.pck` from the checked-in Lora face, loads the built-in Fira Sans and
+  JetBrains Mono faces and the custom Lora face, generates glyph textures on demand, draws the text
+  scene, and shuts down. The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim
+  warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
+  hardware driver and on WSLg's dzn hardware device. The suite is 2,621 tests, 106 of them GPU
+  integration tests, and every sample solution builds. `samples/Castle` and
+  `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate, and
+  `samples/HelloInterop` remains the M1-M3 diagnostic host.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the
   gates that mount a user pack (M3 `samples/HelloInterop`, M4 `samples/Castle`, and M6
@@ -1351,7 +1360,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `Camera.DrawTextBillboard` is covered by the unit suite `Tests/Rendering/TextDrawTests.cs` for its
   centering, bounds union, and alignment. The glyph texture path is also covered by the per-instance
   texture record and GPU suites. The font, layout, MSDF, and parser suites are deterministic CPU
-  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,619
+  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,621
   tests, 106 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
@@ -1380,16 +1389,16 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 6. Public API never exposes a native handle or a backend type.
 7. A game assembly published with `PublishAot=true` must start, load the assets it needs (a pack,
    procedural assets, or both), draw where the milestone has a draw path, and shut down. The M6 gate
-   sample bakes and loads `text.pck` and uses the built-in font; it draws the text scene.
+   sample bakes and loads `text.pck` and uses the built-in fonts; it draws the text scene.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
-10. The engine's built-in pack is always mounted first; it has 18 entries and supplies the present
+10. The engine's built-in pack is always mounted first; it has 20 entries and supplies the present
     shader pair, the built-in mesh draw shader program at `/shaders/mesh`, the primitive program at
     `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, the white/error textures, and the
-    default font at `/fonts/fira-sans`. The
-    app preloads the mesh program, both textures, and the default font into `EngineContext.Defaults`
+    default and monospaced fonts at `/fonts/fira-sans` and `/fonts/jetbrains-mono`. The app preloads
+    the mesh program, both textures, and both fonts into `EngineContext.Defaults`
     and builds the primitive assets, including their three engine materials, before `IGame.Setup`, and
-    releases them during shutdown. The font load is CPU-only and adds no startup GPU upload.
+    releases them during shutdown. The font loads are CPU-only and add no startup GPU upload.
 11. Only one RayBork app runs per process in v1.
 12. A GPU resource is created, re-created after a device recovery, and destroyed only on the render
     thread, and only after every frame that references it has completed.

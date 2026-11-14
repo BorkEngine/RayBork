@@ -160,6 +160,7 @@ RayBork.EngineContext.Window.get -> RayBork.IWindow!
 RayBork.EngineDefaults
 RayBork.EngineDefaults.CreateMeshShader() -> RayBork.Shader!
 RayBork.EngineDefaults.DefaultFont.get -> RayBork.Font!
+RayBork.EngineDefaults.DefaultMonoFont.get -> RayBork.Font!
 RayBork.EngineDefaults.Error.get -> RayBork.Texture!
 RayBork.EngineDefaults.White.get -> RayBork.Texture!
 RayBork.EngineInfo

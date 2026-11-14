@@ -307,29 +307,42 @@ public sealed class EngineDefaultsAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheDefaultFontIsPreloadedBeforeSetupLiveInTickAndDisposedAfterShutdown() {
+    public void TheDefaultFontsArePreloadedBeforeSetupLiveInTickAndDisposedAfterShutdown() {
         FakeAssetGpuWorker worker = new();
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
         Font? setupFont = null;
+        Font? setupMonoFont = null;
         bool usableInSetup = false;
         bool usableInTick = false;
         ScriptedGame game = new();
         game.SetupHandler = context => {
             setupFont = context.Defaults.DefaultFont;
+            setupMonoFont = context.Defaults.DefaultMonoFont;
             usableInSetup = setupFont.Path == "/fonts/fira-sans"
                 && !setupFont.IsDisposed
                 && setupFont.GlyphCount > 0
                 && setupFont.CachedGlyphCount == 0
                 && setupFont.LineHeight > 0f
                 && setupFont.Ascent > 0f
-                && setupFont.Measure("Hello", 1f).X > 0f;
+                && setupFont.Measure("Hello", 1f).X > 0f
+                && setupMonoFont.Path == "/fonts/jetbrains-mono"
+                && !setupMonoFont.IsDisposed
+                && setupMonoFont.GlyphCount > 0
+                && setupMonoFont.CachedGlyphCount == 0
+                && setupMonoFont.LineHeight > 0f
+                && setupMonoFont.Ascent > 0f
+                && setupMonoFont.Measure("Hello", 1f).X > 0f
+                && !ReferenceEquals(setupFont, setupMonoFont);
             return Task.CompletedTask;
         };
         game.TickHandler = context => {
             usableInTick = ReferenceEquals(context.Defaults.DefaultFont, setupFont)
+                && ReferenceEquals(context.Defaults.DefaultMonoFont, setupMonoFont)
                 && !setupFont!.IsDisposed
-                && setupFont.Measure("Hi", 2f).X > 0f;
+                && !setupMonoFont!.IsDisposed
+                && setupFont.Measure("Hi", 2f).X > 0f
+                && setupMonoFont.Measure("Hi", 2f).X > 0f;
             context.RequestExit();
         };
 
@@ -345,13 +358,17 @@ public sealed class EngineDefaultsAppTests {
         }
 
         Assert.NotNull(setupFont);
+        Assert.NotNull(setupMonoFont);
         Assert.True(usableInSetup);
         Assert.True(usableInTick);
-        // Loading the built-in font is CPU-only, so the startup upload and destroy counts are unchanged.
+        // Loading the built-in fonts is CPU-only, so the startup upload and destroy counts are unchanged.
         Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.UploadCallCount);
         Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
         Assert.True(setupFont!.IsDisposed);
+        Assert.True(setupMonoFont!.IsDisposed);
         Assert.Equal("/fonts/fira-sans", setupFont.Path);
+        Assert.Equal("/fonts/jetbrains-mono", setupMonoFont.Path);
         Assert.Throws<ObjectDisposedException>(() => _ = setupFont.LineHeight);
+        Assert.Throws<ObjectDisposedException>(() => _ = setupMonoFont.LineHeight);
     }
 }
