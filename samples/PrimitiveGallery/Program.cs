@@ -15,8 +15,8 @@ internal static class Program {
 
         Draws the solid and wire shape families (cube, sphere, cylinder, cone, capsule, plane,
         circle, triangle, triangle strip, point, line, polyline, ray, and bounding box), a
-        reference grid, and two textured billboards with the built-in primitive shader and an
-        orbital perspective camera.
+        reference grid, two textured billboards, and a row of generated meshes with the built-in
+        primitive and mesh shaders and an orbital perspective camera.
 
         Usage:
           PrimitiveGallery [options]

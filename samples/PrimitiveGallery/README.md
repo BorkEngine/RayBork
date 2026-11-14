@@ -1,11 +1,12 @@
 # Primitive Gallery
 
 `Primitive Gallery` is a small RayBork sample that draws the M5 primitive helper families in one perspective
-camera pass with the built-in primitive shader: the solid shapes (cube, sphere, cylinder and cone,
-capsule, plane, triangle, triangle strip, point), the wire shapes (wire cube, wire sphere, wire
-cylinder, wire capsule, bounding box), the line and curve helpers (line, polyline, ray, circle), a
-reference grid, and two billboards. It builds its only texture at runtime, so it needs no asset pack,
-no manual bake, and no `--assets` argument.
+camera pass: the solid shapes (cube, sphere, cylinder and cone, capsule, plane, triangle, triangle
+strip, point), the wire shapes (wire cube, wire sphere, wire cylinder, wire capsule, bounding box),
+the line and curve helpers (line, polyline, ray, circle), a reference grid, two billboards, and a row
+of meshes generated with `MeshBuilder.Generate*` and drawn with the built-in mesh shader. It builds
+its texture and its generated meshes at runtime, so it needs no asset pack, no manual bake, and no
+`--assets` argument.
 
 The sample is also a Native AOT gate, but it contains no test-only logic: it opens a window, draws the
 gallery, and exits cleanly. Build and run it from the repository root:
@@ -17,23 +18,28 @@ dotnet run --project samples/PrimitiveGallery/PrimitiveGallery.csproj -c Debug -
 
 ## Scene
 
-The scene has no lights: every helper is unlit and uses the built-in vertex-color or texture shader.
-The reference grid lies on the ground plane, and the helpers are arranged in two rows above it. The
-rows run along the initial camera's horizontal axis, so the composition reads left to right before
-the first orbit. Every helper uses a named `Color` preset, and each preset is the Bork2d/Unity sRGB
-color converted to linear.
+The scene has no lights: the solid, wire, line, and billboard helpers are unlit and use the built-in
+primitive shader, and the generated row uses the built-in mesh shader through a caller-owned
+material. The reference grid lies on the ground plane, and the shapes are arranged in three rows
+above it. The rows run along the initial camera's horizontal axis, so the composition reads left to
+right before the first orbit. Every draw uses a named `Color` preset, and each preset is the
+Bork2d/Unity sRGB color converted to linear.
 
-The lower row is six stations. The first five pair a helper with the M5 form of the same family: the
-scalar solid and wire cube, the fixed and tessellated sphere, the equal-radius cylinder and its cone,
-the solid and wire capsule, and the triangle with its strip. The last station puts the point above the
-plane. The upper row groups the wire shapes on the left, the line and curve helpers in the middle, and
-the ray/bounding-box pair and the two billboards on the right.
+The lower row is six stations above the grid. The first five pair a helper with the M5 form of
+the same family: the scalar solid and wire cube, the fixed and tessellated sphere, the equal-radius
+cylinder and its cone, the solid and wire capsule, and the triangle with its strip. Every pair is
+spaced with a clear gap at the starting camera distance, so no two shapes touch or intersect. The last
+station puts the point above the plane.
+
+The middle row is five generated meshes; the [Generated meshes](#generated-meshes) section covers the
+build path. The upper row floats above it: the wire shapes on the left, the line and curve helpers in
+the middle, and the ray/bounding-box pair and the two billboards on the right.
 
 | Helper | Color | Placement |
 | --- | --- | --- |
 | `DrawGrid(20, 1.0f)` | `Color.Gray5` | The reference grid on the ground plane, centered on the origin. |
-| `DrawCube` (scalar) | `Color.LightSeaGreen` | Lower row, far left. A solid cube resting on the grid, using the explicit `width`/`height`/`length` form. |
-| `DrawWireCube` (scalar) | `Color.Orange` | Lower row, far left. The scalar wire cube beside the solid cube. |
+| `DrawCube` (scalar) | `Color.LightSeaGreen` | Lower row, far left. A solid 1-unit cube resting on the grid, using the explicit `width`/`height`/`length` form. |
+| `DrawWireCube` (scalar) | `Color.Orange` | Lower row, far left. The 1-unit scalar wire cube beside the solid cube, with a clear gap between them. |
 | `DrawSphere` | `Color.RoyalBlue` | Lower row, left-center. The fixed-mesh UV sphere. |
 | `DrawSphere` (rings/slices) | `Color.CadetBlue` | Lower row, left-center. The tessellated sphere beside it, faceted at 5 rings by 10 slices. |
 | `DrawCylinder` | `Color.Purple` | Lower row, center-left. A capped equal-radius cylinder standing on the grid. |
@@ -44,6 +50,11 @@ the ray/bounding-box pair and the two billboards on the right.
 | `DrawTriangleStrip` | `Color.YellowGreen` | Lower row, center-right. A six-point strip beside the triangle. |
 | `DrawPoint` | `Color.Yellow` | Lower row, right. A camera-facing quad of `0.55` world units above the plane. |
 | `DrawPlane` | `Color.MediumVioletRed` | Lower row, right. A `2.2 x 2.2` XZ plane just above the grid. |
+| `GenerateCube` then `DrawMesh` | `Color.Coral` | Generated row, left. A `0.9`-unit cube built in `Setup` and drawn with the mesh shader. |
+| `GenerateSphere` then `DrawMesh` | `Color.Aquamarine` | Generated row, left-center. A `0.5`-radius sphere, 12 rings by 24 slices. |
+| `GenerateTorus` then `DrawMesh` | `Color.GoldenRod` | Generated row, center. A `0.42` major radius by `0.14` tube torus, turned a quarter around the row axis so its hole faces the initial camera. |
+| `GenerateKnot` then `DrawMesh` | `Color.Violet` | Generated row, center-right. A `0.4` winding radius by `0.12` tube trefoil knot. |
+| `GenerateCone` then `DrawMesh` | `Color.SeaGreen` | Generated row, right. A `0.42` base radius by `0.9` height cone; the transform puts its base half a height below the row center. |
 | `DrawWireCube` | `Color.Orange` | Upper row, far left. The vector `size` form of the wire cube. |
 | `DrawWireSphere` | `Color.Turquoise` | Upper row, left-center. The fixed-mesh wire sphere (three great circles). |
 | `DrawWireSphere` (rings/slices) | `Color.SkyBlue` | Upper row, left-center. The tessellated wire sphere beside it, 4 rings by 10 slices. |
@@ -52,7 +63,7 @@ the ray/bounding-box pair and the two billboards on the right.
 | `DrawLine` | `Color.SoftRed` | Upper row, center. One diagonal line segment. |
 | `DrawLines` | `Color.DarkOrange` | Upper row, center. A four-point zigzag; three segments. |
 | `DrawBoundingBox` | `Color.Silver` | Upper row, center-right. The twelve edges of a world-space axis-aligned box. |
-| `DrawRay` | `Color.Gold` | Upper row, center-right. A ray that starts below the box and ends at its center. |
+| `DrawRay` | `Color.Gold` | Upper row, center-right. A ray that starts just outside the box and points through its center; the engine normalizes the direction and draws the ray long, so it passes through the box and continues well past it. |
 | `DrawBillboard` | `Color.Beige` tint | Upper row, right. A full-texture quad that faces the camera. |
 | `DrawBillboard` (source rect) | `Color.Beige` tint | Upper row, right. The same texture cropped to its warm left half through the `source` rectangle. |
 
@@ -66,13 +77,30 @@ the per-instance source rectangle reads against the uncropped quad.
 The triangle and the triangle strip are single-sided, like the engine's primitive material, so they
 are culled when the camera orbits behind them. The billboards face the orbiting camera.
 
+## Generated meshes
+
+`Setup` creates one `MeshBuilder` with `EngineContext.CreateMeshBuilder` and reuses it for five
+builds: `GenerateCube(0.9, 0.9, 0.9)`, `GenerateSphere(0.5, 12, 24)`,
+`GenerateTorus(0.42, 0.14, 32, 12)`, `GenerateKnot(0.4, 0.12, 48, 8)`, and
+`GenerateCone(0.42, 0.9, 24)`. Each `Generate*` call replaces the builder's geometry and fills
+positions, outward normals, and UVs; `BuildAsync` then uploads that snapshot as a caller-owned mesh,
+so reusing the builder is safe. The five meshes are immutable triangle lists uploaded during
+`Setup`, before the first tick.
+
+The row is drawn with `Camera.DrawMesh`, one material created by
+`EngineDefaults.CreateMeshShader`, and a per-shape tint. The material's `mainTexture` stays unbound
+and samples the renderer's white fallback, so the tint is the shape color, and the mesh shader's
+default opaque render state culls back faces exactly like the primitive helpers. The five meshes and
+the material are disposed in `Shutdown`, alongside the texture. The path needs no bake and no
+optional device feature, so it stays inside the gallery's Native AOT gate.
+
 ## Texture
 
 `Setup` creates one `128 x 128` `Rgba8Srgb` texture with `EngineContext.CreateTextureBuilder`. A warm
 left half, a cool right half, and a 16-pixel checkerboard make the texture's orientation visible on
 the billboards. The warm checker colors are `Color.GoldenRod` and `Color.SaddleBrown`; the cool pair is
 `Color.CornflowerBlue` and `Color.MidnightBlue`. The texture is uploaded with `BuildAsync` and
-disposed in `Shutdown`. It is the only asset the sample owns.
+disposed in `Shutdown`, together with the generated meshes and the mesh material.
 
 ## Options
 
@@ -101,8 +129,9 @@ as `0.214041`). The camera pass draws the whole scene.
 
 The sample is a self-contained solution, `samples/PrimitiveGallery/PrimitiveGallery.slnx`, containing
 `PrimitiveGallery.csproj`. It is not part of `src/RayBork/RayBork.slnx`. The project references
-`RayBork.Engine` directly; the engine's built-in pack supplies the primitive meshes and shaders, so
-the sample has no bake step and no pack of its own.
+`RayBork.Engine` directly; the engine's built-in pack supplies the primitive meshes, the primitive
+shader, and the mesh shader program, and `Setup` builds the texture and the procedural meshes, so the
+sample has no bake step and no pack of its own.
 
 ## Native AOT
 
@@ -123,8 +152,8 @@ samples/PrimitiveGallery/bin/Release/net11.0/linux-x64/publish/PrimitiveGallery 
 
 Both publishes must finish with zero AOT/trim warnings. The publish directory must not contain
 `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native libraries, or the glTF
-packages: the sample has no bake tooling and no external pack. The published host opens a real window,
-so run it on a desktop session or under WSLg.
+packages: the sample has no bake tooling and no external pack, and the generated meshes upload at
+`Setup`. The published host opens a real window, so run it on a desktop session or under WSLg.
 
 ## What the sample omits
 
@@ -136,6 +165,11 @@ so run it on a desktop session or under WSLg.
   billboard forms, and the billboard origin pivot are documented in
   [docs/api/rendering/camera.md](../../docs/api/rendering/camera.md) and
   [docs/api/rendering/draws.md](../../docs/api/rendering/draws.md).
+- **Generated-mesh coverage.** The generated row shows five of the nine `Generate*` methods.
+  `GeneratePoly`, `GeneratePlane`, `GenerateHemiSphere`, and `GenerateCylinder` are documented in
+  [docs/api/rendering/meshes.md](../../docs/api/rendering/meshes.md) and are not drawn, and the row
+  uses the default render state with no texture binding. `DrawInstanced`, `ComputeNormals`,
+  `ComputeTangents`, and `GenerateCollisions` are likewise documented but not shown.
 - **Wireframe model drawing.** `DrawWireModel` is deliberately not part of this sample: the gallery is
   the Native AOT gate and must not depend on the optional `fillModeNonSolid` device feature. The
   Castle sample demonstrates the wireframe overlay on hardware that supports the feature.
