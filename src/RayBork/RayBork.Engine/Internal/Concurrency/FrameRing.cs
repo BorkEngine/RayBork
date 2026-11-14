@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// the newest ready frame with <see cref="TryAcquireNewest"/> or <see cref="AcquireNewest"/> and
 /// releases it after rendering. Publishing supersedes an older ready frame instead of queueing it,
 /// so the consumer never renders a backlog, and never touches a slot that is being rendered. The
-/// producer blocks only when no slot is free, which bounds run-ahead.
+/// producer blocks when no slot is free, which bounds run-ahead, and a FIFO-paced producer also waits
+/// after publishing until the render loop finishes with that frame.
 /// </para>
 /// <para>
 /// A slot owns at most one <see cref="FrameAssetRetention"/> set. The producer attaches it to the
@@ -30,6 +31,15 @@ namespace RayBork.Internal;
 /// GPU upload work at the same time. Blocking acquisitions return <c>null</c> when the ring is
 /// complete and drained; invalid or stale leases throw <see cref="InvalidOperationException"/>.
 /// </para>
+/// <para>
+/// The ring also tracks the highest frame index the render thread finished with using
+/// <see cref="MarkPresented"/>, so a FIFO-paced producer can wait for the frame it published with
+/// <see cref="WaitForPresentation"/>. "Finished with" includes a successful presentation, a frame
+/// dropped by minimization or device recovery, and a failed submit or present; only
+/// <see cref="RenderStats.PresentedFrames"/> counts successful presentations. A newer mark
+/// satisfies an older wait because a superseded frame is no longer needed. Completion and
+/// cancellation both release the wait.
+/// </para>
 /// </remarks>
 internal sealed class FrameRing {
     private const int SLOT_COUNT = 3;
@@ -39,8 +49,11 @@ internal sealed class FrameRing {
     private readonly RenderFramePacket[] _packets = new RenderFramePacket[SLOT_COUNT];
     private readonly AutoResetEvent _writableAvailable = new(false);
     private readonly AutoResetEvent _readyAvailable = new(false);
+    private readonly AutoResetEvent _presentedAvailable = new(false);
 
     private long _nextFrameIndex = 1;
+    private long _highestPresentedFrameIndex;
+    private int _presentationWaiterCount;
     private bool _completed;
 
     /// <summary>
@@ -57,6 +70,12 @@ internal sealed class FrameRing {
     /// render loop waits on it together with the GPU asset bridge signal.
     /// </summary>
     internal WaitHandle ReadySignal => _readyAvailable;
+
+    /// <summary>
+    /// Gets the number of threads currently blocked in <see cref="WaitForPresentation"/>. Test-only
+    /// observation; it is not part of the ring protocol.
+    /// </summary>
+    internal int PresentationWaiterCount => Volatile.Read(ref _presentationWaiterCount);
 
     /// <summary>
     /// Gets whether the producer completed the ring. A completed ring still has to be drained by the
@@ -206,6 +225,7 @@ internal sealed class FrameRing {
         if (completedNow) {
             _writableAvailable.Set();
             _readyAvailable.Set();
+            _presentedAvailable.Set();
         }
     }
 
@@ -256,6 +276,78 @@ internal sealed class FrameRing {
             }
 
             WaitForSignal(_readyAvailable, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Records that the render thread finished the presentation attempt for <paramref name="frameIndex"/>.
+    /// The mark is monotonic: a frame at or below the highest marked index counts as finished, so a
+    /// superseded frame is satisfied by the newer frame that replaced it. Safe and idempotent from any
+    /// thread; advances the completion waiters only when the highest index moves.
+    /// </summary>
+    /// <remarks>
+    /// The render loop calls this after every present attempt, including a dropped frame and a
+    /// recovered or thrown failure, and before it releases the lease. The mark is a pacing-completion
+    /// signal, not a successful-presentation counter: a frame that was dropped or failed still marks
+    /// so a FIFO-paced tick cannot wait forever, while <see cref="RenderStats.PresentedFrames"/> counts
+    /// only frames that reached the presentation engine.
+    /// </remarks>
+    /// <param name="frameIndex">The frame index that finished its presentation attempt.</param>
+    internal void MarkPresented(long frameIndex) {
+        bool advanced = false;
+        lock (_gate) {
+            if (frameIndex > _highestPresentedFrameIndex) {
+                _highestPresentedFrameIndex = frameIndex;
+                advanced = true;
+            }
+        }
+
+        if (advanced) {
+            _presentedAvailable.Set();
+        }
+    }
+
+    /// <summary>
+    /// Blocks until the render loop finished with <paramref name="frameIndex"/> (presented, dropped,
+    /// or failed), or a newer frame, or until the ring completes. No lock is held while waiting.
+    /// </summary>
+    /// <remarks>
+    /// The wait is used by the FIFO pacing policy: one tick waits for the render loop to finish with
+    /// the frame it published, so a normal presentation paces the tick rate to the display refresh.
+    /// A frame dropped by minimization or recovery and a failed submit or present also finish the
+    /// wait; <see cref="RenderStats.PresentedFrames"/> is the successful-presentation counter. The
+    /// tick runner does not call this in MAILBOX or IMMEDIATE mode. A ring that is already complete,
+    /// or that completes while waiting, releases the wait so shutdown cannot deadlock even when the
+    /// render thread never presents the frame.
+    /// </remarks>
+    /// <param name="frameIndex">The frame index whose completion the caller waits for.</param>
+    /// <param name="cancellationToken">The stop token that releases the wait during shutdown.</param>
+    /// <returns>
+    /// <see langword="true"/> when the render loop finished with the frame or a newer one, or when the
+    /// ring is complete; <see langword="false"/> when <paramref name="cancellationToken"/> was
+    /// canceled first.
+    /// </returns>
+    internal bool WaitForPresentation(long frameIndex, CancellationToken cancellationToken) {
+        while (true) {
+            lock (_gate) {
+                if (_highestPresentedFrameIndex >= frameIndex || _completed) {
+                    return true;
+                }
+            }
+
+            if (cancellationToken.IsCancellationRequested) {
+                return false;
+            }
+
+            Interlocked.Increment(ref _presentationWaiterCount);
+            try {
+                using CancellationTokenRegistration registration = cancellationToken.Register(
+                    static state => ((AutoResetEvent)state!).Set(),
+                    _presentedAvailable);
+                _presentedAvailable.WaitOne();
+            } finally {
+                Interlocked.Decrement(ref _presentationWaiterCount);
+            }
         }
     }
 

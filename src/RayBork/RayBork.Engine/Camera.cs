@@ -59,6 +59,19 @@ public sealed class Camera : IDisposable {
     private static readonly Rect _fullTextureRect = new(0f, 0f, 1f, 1f);
     private static readonly Vector2 _centerOrigin = new(0.5f, 0.5f);
 
+    /// <summary>
+    /// The state every text draw records: source-over blending, no face culling, reverse-Z
+    /// greater-or-equal depth testing, and no depth writes. It matches the declared state of the
+    /// built-in <c>/shaders/msdf</c> program. Text records that program, so a text record never merges
+    /// with a billboard record over the mesh program.
+    /// </summary>
+    private static readonly RenderState _textRenderState = new() {
+        Blend = BlendMode.Alpha,
+        Cull = CullMode.None,
+        DepthTest = DepthTest.GreaterOrEqual,
+        DepthWrite = false,
+    };
+
     private readonly CameraService _service;
     private readonly RenderFramePacket _packet;
     private readonly CameraPass _pass;
@@ -2686,6 +2699,153 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
+    /// Records world-space text laid out in a transform's local XY plane through the built-in MSDF
+    /// program.
+    /// </summary>
+    /// <param name="font">The font whose face metrics and glyph textures the text uses.</param>
+    /// <param name="text">The UTF-16 text to lay out. Empty text records nothing.</param>
+    /// <param name="transform">
+    /// The text block's world transform. The block's layout origin is the top-left corner of the first
+    /// line's ascent box; the transform supplies its position, rotation, and scale.
+    /// </param>
+    /// <param name="size">The em height in world units. It must be finite and positive.</param>
+    /// <param name="color">The linear per-instance tint. Every glyph instance carries it.</param>
+    /// <param name="alignment">How each line is aligned inside the layout box.</param>
+    /// <param name="wrapping">Where lines may break.</param>
+    /// <param name="maxWidth">
+    /// The alignment and wrapping box width in world units at <paramref name="size"/>, or <c>0</c> for
+    /// no box limit. <see cref="TextWrapping.Word"/> and <see cref="TextWrapping.Character"/> require a
+    /// positive width.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The layout is the engine text layout: <c>+X</c> runs right, <c>+Y</c> runs up, and the readable
+    /// face points toward local <c>+Z</c>. The transform's local XY plane is the text plane, so the
+    /// block is world-space geometry. Each laid-out glyph is one instance of the engine quad mapped to
+    /// its layout position and size, then composed as <c>glyphQuad * transform.ToMatrix()</c> under the
+    /// row-vector convention.
+    /// </para>
+    /// <para>
+    /// Glyph textures are generated asynchronously. The call never waits: a glyph whose texture is not
+    /// ready, or whose generation failed or whose outline is empty, is skipped for this call while the
+    /// pen still advances by its face metrics, so the remaining glyphs keep their layout positions. The
+    /// glyph appears on a later frame once its texture is ready. The call retains the engine quad mesh
+    /// and the MSDF program in the frame; each recorded glyph texture is retained by its acquisition.
+    /// </para>
+    /// <para>
+    /// A call records at most one draw record: the engine quad, the engine MSDF material, the documented
+    /// text render state, and the call's tint. Every ready glyph is one instance with its own
+    /// per-instance glyph texture in layout order. All text over that mesh/program/state batches
+    /// together across calls and fonts; a call with no ready glyph records nothing. Validation runs
+    /// before any retention or record mutation, so a rejected call leaves the frame packet and its
+    /// retention set untouched.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A transform position, rotation, or scale component, or a color component, is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="size"/> is not finite and positive; a transform scale component is negative;
+    /// <paramref name="alignment"/> or <paramref name="wrapping"/> is undefined; or
+    /// <paramref name="maxWidth"/> is invalid for the requested wrapping mode.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or <paramref name="font"/> is disposed.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The caller is not the tick thread, or the camera service has no primitive assets.
+    /// </exception>
+    public void DrawText(
+        Font font,
+        ReadOnlySpan<char> text,
+        Transform transform,
+        float size,
+        Color color,
+        TextAlignment alignment = TextAlignment.Left,
+        TextWrapping wrapping = TextWrapping.None,
+        float maxWidth = 0f) {
+        EnsureDrawable(nameof(DrawText));
+        ArgumentNullException.ThrowIfNull(font);
+        ObjectDisposedException.ThrowIf(font.IsDisposed, font);
+        ValidateTransform(transform);
+        ValidateFinite(color, nameof(color));
+        TextLayoutBuffer layout = _service.TextLayout;
+        TextLayoutEngine.Arrange(font.Metrics, text, size, alignment, wrapping, maxWidth, layout, out _);
+        if (layout.Count == 0 || HasZeroScale(transform)) {
+            return;
+        }
+
+        RecordText(font, layout, color, transform.ToMatrix());
+    }
+
+    /// <summary>
+    /// Records the same text layout in a camera-facing plane, centered on a world position and drawn
+    /// through the built-in MSDF program.
+    /// </summary>
+    /// <param name="font">The font whose face metrics and glyph textures the text uses.</param>
+    /// <param name="text">The UTF-16 text to lay out. Empty text records nothing.</param>
+    /// <param name="position">The world-space center of the text block's layout bounds.</param>
+    /// <param name="size">The em height in world units. It must be finite and positive.</param>
+    /// <param name="color">The linear per-instance tint. Every glyph instance carries it.</param>
+    /// <param name="alignment">How each line is aligned inside the block width.</param>
+    /// <remarks>
+    /// <para>
+    /// The layout is the same as <see cref="DrawText"/> with <see cref="TextWrapping.None"/> and no
+    /// width limit. The union of the layout box and every glyph quad
+    /// (<see cref="TextLayoutResult.BoundsMin"/> to <see cref="TextLayoutResult.BoundsMax"/>) is
+    /// centered on <paramref name="position"/> in the camera-facing plane: the camera's right and up
+    /// axes span the plane and the quad's <c>+Z</c> faces the camera. <paramref name="alignment"/>
+    /// positions each line inside the block width. There is no roll or orientation parameter; the
+    /// block always faces the camera.
+    /// </para>
+    /// <para>
+    /// The asynchronous glyph behavior, the single draw record, the per-instance glyph textures,
+    /// batching, and the validation rules are the same as <see cref="DrawText"/>.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A position or color component is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="size"/> is not finite and positive, or <paramref name="alignment"/> is undefined.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or <paramref name="font"/> is disposed.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The caller is not the tick thread, or the camera service has no primitive assets.
+    /// </exception>
+    public void DrawTextBillboard(
+        Font font,
+        ReadOnlySpan<char> text,
+        Vector3 position,
+        float size,
+        Color color,
+        TextAlignment alignment = TextAlignment.Left) {
+        EnsureDrawable(nameof(DrawTextBillboard));
+        ArgumentNullException.ThrowIfNull(font);
+        ObjectDisposedException.ThrowIf(font.IsDisposed, font);
+        ValidateFinite(position, nameof(position));
+        ValidateFinite(color, nameof(color));
+        TextLayoutBuffer layout = _service.TextLayout;
+        TextLayoutEngine.Arrange(
+            font.Metrics,
+            text,
+            size,
+            alignment,
+            TextWrapping.None,
+            0f,
+            layout,
+            out TextLayoutResult result);
+        if (layout.Count == 0) {
+            return;
+        }
+
+        (Vector3 right, Vector3 up, Vector3 front) = GetCameraFacingBasis();
+        Matrix4x4 block = TextDrawMath.CreateCenteredBlockOffset(result.BoundsMin, result.BoundsMax)
+            * CreateBillboardOrientation(position, right, up, front);
+        RecordText(font, layout, color, block);
+    }
+
+    /// <summary>
     /// Validates and records a billboard positioned by a world-space point with an identity transform.
     /// </summary>
     /// <remarks>
@@ -2783,6 +2943,84 @@ public sealed class Camera : IDisposable {
             matrices[0] = matrix;
         } finally {
             material.SetUniform(MESH_TEXTURE_BINDING, null);
+        }
+    }
+
+    /// <summary>
+    /// Acquires each ready glyph texture, records one MSDF draw with one instance per ready glyph, and
+    /// clears the reusable per-call scratch.
+    /// </summary>
+    /// <param name="font">The validated, undisposed font.</param>
+    /// <param name="layout">The service-owned layout buffer holding the arranged glyph records.</param>
+    /// <param name="color">The validated, finite linear tint.</param>
+    /// <param name="quadToWorld">
+    /// The local-glyph-quad-to-world matrix: the text block's transform for <see cref="DrawText"/>, or
+    /// the centered camera-facing block matrix for <see cref="DrawTextBillboard"/>.
+    /// </param>
+    /// <remarks>
+    /// Validation has already run; the remaining failures are engine-asset invariants: a disposed
+    /// primitive asset, or an MSDF material whose declared texture bindings no longer match the one
+    /// per-instance glyph texture this path records. The MSDF material is engine-owned, so its shared
+    /// texture binding is not set per call: each glyph instance carries its own texture in the record's
+    /// per-instance set. Glyph textures are retained by <see cref="Font.AcquireGlyphTexture"/> through
+    /// the frame's retention set and are deliberately not retained again here; the quad mesh and the
+    /// material's program are retained explicitly.
+    /// </remarks>
+    private void RecordText(Font font, TextLayoutBuffer layout, Color color, Matrix4x4 quadToWorld) {
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.MsdfMaterial;
+        int textureBindingCount = material.Textures.Count;
+        if (textureBindingCount != 1) {
+            throw new InvalidOperationException(
+                $"The engine MSDF material '{material.Path}' declares {textureBindingCount} texture "
+                    + "bindings; a text draw records exactly one per-instance glyph texture, so the "
+                    + "material and the text path disagree.");
+        }
+
+        ReadOnlySpan<TextGlyphInstance> glyphs = layout.Glyphs;
+        Span<Matrix4x4> matrices = _service.ReserveTextGlyphs(glyphs.Length);
+        Span<Texture?> textures = _service.TextGlyphTextures;
+        try {
+            _service.BeginTextFont(font);
+            int readyGlyphCount = 0;
+            for (int index = 0; index < glyphs.Length; index++) {
+                TextGlyphInstance glyph = glyphs[index];
+                if (!(glyph.Size.X > 0f) || !(glyph.Size.Y > 0f)) {
+                    continue;
+                }
+
+                Texture? texture = font.AcquireGlyphTexture(glyph.GlyphId, _packet.Retention);
+                if (texture is null) {
+                    continue;
+                }
+
+                matrices[readyGlyphCount] = TextDrawMath.CreateGlyphQuad(glyph.Position, glyph.Size) * quadToWorld;
+                textures[readyGlyphCount] = texture;
+                readyGlyphCount++;
+            }
+
+            if (readyGlyphCount == 0) {
+                return;
+            }
+
+            _packet.Retention.Add(primitives.Quad.Lifetime);
+            _packet.Retention.Add(material.Program.Lifetime);
+            RenderDrawRecord record = BeginDraw(
+                primitives.Quad.Lifetime,
+                primitives.Quad.Topology,
+                primitives.Quad.Bounds,
+                primitives.Quad.IndexCount,
+                material.Program.Lifetime,
+                _textRenderState,
+                color,
+                wireframe: false);
+            record.SetPerInstanceShaderState(material);
+            matrices[..readyGlyphCount].CopyTo(record.BeginInstances(readyGlyphCount));
+            // The binding-count guard above keeps the flat per-instance buffer instance-major: one
+            // glyph texture per instance.
+            textures[..readyGlyphCount].CopyTo(record.BeginInstanceTextureBindings());
+        } finally {
+            _service.ClearTextGlyphs();
         }
     }
 
@@ -3863,6 +4101,15 @@ public sealed class Camera : IDisposable {
     private static void ValidateFinite(float value, string parameterName) {
         if (!float.IsFinite(value)) {
             throw new ArgumentException("The value must be finite.", parameterName);
+        }
+    }
+
+    private static void ValidateFinite(Color color, string parameterName) {
+        if (!float.IsFinite(color.R)
+            || !float.IsFinite(color.G)
+            || !float.IsFinite(color.B)
+            || !float.IsFinite(color.A)) {
+            throw new ArgumentException("The color components must be finite.", parameterName);
         }
     }
 

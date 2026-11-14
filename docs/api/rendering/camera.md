@@ -218,19 +218,20 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
   is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
-> **M5 subset.** `Camera` ships the raylib-style helper surface: the line, point, and triangle helpers
-> (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
+> **M5 and M6 surface.** `Camera` ships the raylib-style helper surface: the line, point, and triangle
+> helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
 > `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`, `DrawCapsule`/`DrawWireCapsule`,
 > `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawWireCube`, `DrawWireSphere`,
 > and `DrawGrid`), and the eight `DrawBillboard` overloads, with the shape, position, tessellation,
 > start/end, and `Transform` overloads listed above. Their geometry, programs, render states,
 > validation, and batching are specified in §7.9. The model helpers are `DrawModel`,
-> `DrawModelInstanced`, and `DrawWireModel`; the wireframe helper is specified below. The `Target`
-> property and the `target` parameter arrive with `RenderTexture` in M8; `DrawText` and
-> `DrawTextBillboard` arrive with runtime text in M6. `DrawTexture` is not part of M5: it moves to M7
-> with the orthographic/sprite contract, where the destination rectangle is in render pixels and the
-> texture is sampled with its own point/linear filter. The camera always records into the app's linear
-> HDR scene target, and the present pass applies AgX after all cameras finish.
+> `DrawModelInstanced`, and `DrawWireModel`; the wireframe helper is specified below. M6 adds the
+> world-space text draws: `DrawText` and `DrawTextBillboard` are specified under **Text** below and in
+> §7.10. The `Target` property and the `target` parameter arrive with `RenderTexture` in M8.
+> `DrawTexture` is not part of M6: it moves to M7 with the orthographic/sprite contract, where the
+> destination rectangle is in render pixels and the texture is sampled with its own point/linear
+> filter. The camera always records into the app's linear HDR scene target, and the present pass
+> applies AgX after all cameras finish.
 
 Properties:
 
@@ -309,8 +310,8 @@ geometry pipeline cache key, so a wireframe draw never reuses a filled pipeline;
 created on first use per shader, render state, and topology and cached for the rest of the scene
 target's lifetime. A device without `fillModeNonSolid` reports the draw as an unsupported
 `GraphicsException` with diagnostic code `RB3001` instead of silently drawing nothing: the error names
-the device and the feature, the frame is dropped, and the app stops with that exception. M5 has no
-CPU line-geometry fallback. Filled model draws never need the feature.
+the device and the feature, the frame is dropped, and the app stops with that exception. The engine
+has no CPU line-geometry fallback. Filled model draws never need the feature.
 
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
@@ -405,11 +406,62 @@ camera-facing, full-texture, centered quad. The other forms add a normalized sou
   retains the texture until the renderer releases the slot, so a texture disposed after the call
   stays alive for the recorded frame.
 
-**DrawTexture (M7).** The screen-space texture helper is not part of M5. It returns in M7 as the
+**Text.** `DrawText` records world-space text through the built-in `/shaders/msdf` program. The engine
+text layout places the block in the transform's local XY plane: `+X` runs right, `+Y` runs up, the
+readable face points toward local `+Z`, and the layout origin is the top-left corner of the first
+line's ascent box. `size` is the em height in world units; advances, kerning, line metrics, alignment,
+and wrapping come from the layout engine at that size. Each laid-out glyph is one instance of the
+engine quad mapped to the instance's `Position`/`Size` in local units and then composed as
+`glyphQuad * transform.ToMatrix()`. One call records at most one draw record: the engine quad, the
+engine MSDF material over the built-in program, the call's `color` as the per-instance tint, and the
+fixed text render state `{ Blend = Alpha, Cull = None, DepthTest = GreaterOrEqual, DepthWrite = false }`
+(M10 changes the default to an alpha-to-coverage cutout).
+Every ready glyph is one instance with its own per-instance glyph texture in layout order. Text leaves
+the per-instance UV rectangle at `(0, 0, 1, 1)`, because one glyph is one whole padded texture sampled
+`0..1`; there is no atlas and no glyph sub-rectangle.
+
+Glyph textures are generated asynchronously. A text draw begins the font's frame clock once per
+camera, then calls `AcquireGlyphTexture` for each layout instance with a positive size. It never waits:
+a glyph whose
+texture is not generated yet, whose generation failed, or whose outline is empty is skipped for that
+call, while the pen still advances by the face metrics, so the remaining glyphs keep their layout
+positions and the glyph appears on a later frame. A call that records no ready glyph records nothing.
+The recorded frame retains the engine quad and the MSDF program; each ready glyph texture is retained
+by its acquisition, not again by the draw record. A call retains nothing when it records nothing.
+
+`DrawTextBillboard` uses the same layout with `TextWrapping.None` and no width limit. It centers the
+union of the layout box and every glyph quad, `TextLayoutResult.BoundsMin` to
+`TextLayoutResult.BoundsMax`, on `position` in a camera-facing plane, and `alignment` positions each
+line inside the block width. The plane's `+X` and `+Y` axes are the camera's right and up axes, and the
+quad's `+Z` faces the camera. There is no roll or orientation parameter: a billboard block always faces
+the camera.
+
+Text is world-space geometry. Screen-space text, like the rest of the orthographic sprite surface,
+arrives with M7.
+
+Batching and statistics: every text draw records the same quad, MSDF program, and render state, so all
+text batches together regardless of the font, size, or string; uniform values and per-instance textures
+are not part of the batch key. The plan sorts text batches back-to-front with the other alpha batches.
+`Instances` counts the submitted glyph instances after frustum culling, and `Triangles` is two per
+submitted instance. A call with no ready glyph adds no draw record and no draw call.
+`CpuFrameMilliseconds` measures only the render thread's planning, recording, and submission and
+excludes the fence, acquire, and present waits. `PresentedFrames` counts successful presentations
+since startup; it is not the tick rate, which `EngineContext.Fps` reports.
+
+Validation runs before any retention or record mutation. A null font is `ArgumentNullException`; a
+disposed camera or font is `ObjectDisposedException`; a non-finite transform position, rotation, scale,
+billboard position, or color component is `ArgumentException`; a negative transform scale component is
+`ArgumentOutOfRangeException`. `size` must be finite and positive, `alignment` and `wrapping` must be
+defined values, and `maxWidth` must be finite and non-negative (positive for `TextWrapping.Word` and
+`TextWrapping.Character`); the layout engine rejects each as `ArgumentOutOfRangeException`. A zero
+transform scale component records nothing, and empty text records nothing. A camera draw off the tick
+thread is `InvalidOperationException`.
+
+**DrawTexture (M7).** The screen-space texture helper is not part of M6. It returns in M7 as the
 sprite helper for an orthographic camera: `destination` is a render-pixel rectangle relative to the
 camera viewport (top-left origin, Y downward), `tint` is linear, and the texture's own sampler
 selects point or linear filtering. It draws an alpha-blended textured quad on the normal draw path;
-the M5 unprojected-overlay implementation is not part of the shipped surface.
+the earlier unprojected-overlay preview is not part of the shipped surface.
 
 **Ray/quad collision.** `Collision.GetRayQuad(ray, a, b, c, d)` splits the quad into the triangles
 `(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the nearest
@@ -420,8 +472,8 @@ The ray direction is unit length, so the hit distance is a world distance.
 
 **Error model.**
 
-- A `null` model, mesh, or material argument is `ArgumentNullException`.
-- A disposed camera, model, mesh, part material, or bound texture is `ObjectDisposedException`.
+- A `null` model, mesh, material, texture, or font argument is `ArgumentNullException`.
+- A disposed camera, model, mesh, part material, bound texture, or font is `ObjectDisposedException`.
 - A material that does not declare both the vertex and fragment stages is
   `InvalidOperationException`.
 - A camera draw or `Dispose` from a thread other than the tick thread is
@@ -636,7 +688,12 @@ own `SampleCount` (M8).
 not advertise it; a requested `Fifo` falls back to `Mailbox` when FIFO is unavailable. `Immediate` is
 used only when explicitly selected, and an unavailable `Immediate` mode fails startup with `RB3001`
 instead of falling back. Mailbox is not a guarantee of tearing-free presentation on every driver;
-the selected mode is reported by `EngineInfo.PresentMode`.
+the selected mode is reported by `EngineInfo.PresentMode`. The effective mode also sets the tick
+pacing: `Fifo` makes the tick thread wait until the render loop finishes with the frame it published
+(normally its presentation), so the tick rate follows the display refresh, while `Mailbox` and
+`Immediate` keep the tick decoupled and the renderer presents the newest completed frame. A dropped
+or failed frame also finishes the wait. A target set with `WithTargetFps` still caps the tick loop
+and sleeps longer after the wait when the target is below the refresh.
 
 **Reverse-Z.** The scene target clears depth to `0.0`. Depth-tested pipelines use `GreaterOrEqual`,
 enable depth test and depth write, and use the `[0, 1]` depth range. The present triangle is not

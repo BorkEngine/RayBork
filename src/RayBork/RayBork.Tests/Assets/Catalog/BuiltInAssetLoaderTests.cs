@@ -12,9 +12,10 @@ public sealed class BuiltInAssetLoaderTests {
     public void CreateDefaultRegistersTheEngineFormatsAndLoaders() {
         AssetTypeRegistry registry = new(BuiltInAssetLoaders.CreateDefault());
 
-        Assert.Equal(5, registry.Count);
+        Assert.Equal(6, registry.Count);
         Assert.True(registry.Contains(typeof(Mesh)));
         Assert.True(registry.Contains(typeof(Texture)));
+        Assert.True(registry.Contains(typeof(Font)));
         Assert.True(registry.Contains(typeof(ShaderProgram)));
         Assert.True(registry.Contains(typeof(Shader)));
         Assert.True(registry.Contains(typeof(Model)));
@@ -28,6 +29,11 @@ public sealed class BuiltInAssetLoaderTests {
             registry.Get(typeof(Texture)));
         Assert.Equal(AssetEntryType.Texture, texture.EntryType);
         Assert.Same(TextureAssetFormat.Instance, texture.Format);
+
+        EngineAssetTypeRegistration<Font> font = Assert.IsType<EngineAssetTypeRegistration<Font>>(
+            registry.Get(typeof(Font)));
+        Assert.Equal(AssetEntryType.Font, font.EntryType);
+        Assert.Same(FontAssetFormat.Instance, font.Format);
 
         EngineAssetTypeRegistration<ShaderProgram> program =
             Assert.IsType<EngineAssetTypeRegistration<ShaderProgram>>(registry.Get(typeof(ShaderProgram)));

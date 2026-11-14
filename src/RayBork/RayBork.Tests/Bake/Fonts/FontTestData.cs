@@ -22,6 +22,11 @@ internal static class FontTestData {
         ["head", "maxp", "hhea", "hmtx", "cmap", "CFF "],
         []);
 
+    internal static byte[] BuildCff2Otf() => BuildFace(
+        OTTO_MAGIC,
+        ["head", "maxp", "hhea", "hmtx", "cmap", "CFF2"],
+        []);
+
     internal static byte[] BuildTrueMagicTtf() => BuildFace(
         TRUE_MAGIC,
         ["head", "maxp", "hhea", "hmtx", "cmap", "glyf"],
@@ -103,6 +108,7 @@ internal static class FontTestData {
         "cmap" => 12,
         "glyf" => 8,
         "CFF " => 8,
+        "CFF2" => 8,
         _ => 4,
     };
 

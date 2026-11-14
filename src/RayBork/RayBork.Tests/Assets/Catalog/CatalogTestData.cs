@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PolyType;
 using RayBork.Internal;
 using RayBork.Tests.Assets.Gpu;
+using RayBork.Tests.Fonts;
 
 namespace RayBork.Tests.Assets.Catalog;
 
@@ -14,6 +15,28 @@ internal sealed partial class CatalogTestSettings {
     public required string Name { get; init; }
 
     public required int Difficulty { get; init; }
+}
+
+/// <summary>
+/// The pre-M6 font descriptor shape: the runtime descriptor plus the removed <c>Ranges</c> member. A
+/// legacy pack serialized this shape, and the runtime must still load it because unknown descriptor
+/// members are ignored.
+/// </summary>
+[GenerateShape]
+internal sealed partial class LegacyFontAssetDescriptor {
+    public required string FacePayload { get; init; }
+
+    public required string Format { get; init; }
+
+    public required uint ByteLength { get; init; }
+
+    public required string[] Ranges { get; init; }
+
+    public required int MsdfPixelSize { get; init; }
+
+    public required int MsdfRange { get; init; }
+
+    public required int MsdfPadding { get; init; }
 }
 
 /// <summary>
@@ -31,7 +54,20 @@ internal static class CatalogTestData {
     internal const string SHADER_FRAGMENT_PAYLOAD_PATH = "shaders/basic-frag";
     internal const string DATA_PATH = "data/settings";
     internal const string MODEL_PATH = "models/castle";
-    internal const string FONT_PATH = "fonts/inter";
+
+    /// <summary>
+    /// The catalog font tests serve the synthetic face at the engine's default font path, so the same
+    /// pack also satisfies <see cref="EngineDefaults.LoadAsync"/>.
+    /// </summary>
+    internal const string FONT_PATH = "fonts/fira-sans";
+    internal const string FONT_PAYLOAD_PATH = "fonts/fira-sans-face";
+
+    /// <summary>The catalog font tests serve a second synthetic face at the engine's mono font path.</summary>
+    internal const string MONO_FONT_PATH = "fonts/jetbrains-mono";
+    internal const string MONO_FONT_PAYLOAD_PATH = "fonts/jetbrains-mono-face";
+
+    /// <summary>The glyph id of the square <c>A</c> glyph the font test face maps.</summary>
+    internal const int FONT_GLYPH_ID = 1;
 
     internal const uint MESH_VERTEX_COUNT = 3;
     internal const uint MESH_INDEX_COUNT = 3;
@@ -119,6 +155,92 @@ internal static class CatalogTestData {
     };
 
     internal static byte[] CreateDataPayload() => AssetSerialization.Serialize(CreateSettings());
+
+    /// <summary>
+    /// Builds the synthetic face the font tests load: a 1000-unit em with an 800/-200 ascender and
+    /// descender, a <c>.notdef</c> triangle at glyph zero, and a mapped square <c>A</c> at glyph one
+    /// with a 600-unit advance and one -100-unit kern pair for A followed by A.
+    /// </summary>
+    internal static byte[] CreateFontFace() {
+        SyntheticFontBuilder builder = SyntheticFontBuilder.Create();
+        int glyphId = builder.AddSimple(
+            600,
+            0,
+            new SyntheticPoint(0, 0),
+            new SyntheticPoint(500, 0),
+            new SyntheticPoint(500, 500),
+            new SyntheticPoint(0, 500));
+        return builder
+            .WithCmap(4, (0x41, glyphId))
+            .WithKernPairs((glyphId, glyphId, -100))
+            .Build();
+    }
+
+    internal static FontAssetDescriptor CreateFontDescriptor(
+        byte[] face,
+        int msdfPixelSize = 32,
+        int msdfRange = 4,
+        int msdfPadding = 2,
+        uint? byteLength = null,
+        string facePayload = FONT_PAYLOAD_PATH) => new() {
+            FacePayload = facePayload,
+            Format = "ttf",
+            ByteLength = byteLength ?? (uint)face.Length,
+            MsdfPixelSize = msdfPixelSize,
+            MsdfRange = msdfRange,
+            MsdfPadding = msdfPadding,
+        };
+
+    /// <summary>
+    /// Builds the font descriptor entry and its sibling face payload entry. A test that needs a broken
+    /// pair passes its own descriptor or face bytes.
+    /// </summary>
+    internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateFontEntries(
+        byte[]? face = null,
+        FontAssetDescriptor? descriptor = null,
+        string path = FONT_PATH,
+        string payloadPath = FONT_PAYLOAD_PATH) {
+        byte[] resolvedFace = face ?? CreateFontFace();
+        FontAssetDescriptor resolvedDescriptor =
+            descriptor ?? CreateFontDescriptor(resolvedFace, facePayload: payloadPath);
+        return [
+            (path, AssetEntryType.Font, AssetSerialization.Serialize(resolvedDescriptor)),
+            (payloadPath, AssetEntryType.Raw, resolvedFace),
+        ];
+    }
+
+    /// <summary>Builds the synthetic mono font descriptor entry and its sibling face payload entry.</summary>
+    internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateMonoFontEntries(
+        byte[]? face = null) {
+        byte[] resolvedFace = face ?? CreateFontFace();
+        return CreateFontEntries(
+            resolvedFace,
+            CreateFontDescriptor(resolvedFace, facePayload: MONO_FONT_PAYLOAD_PATH),
+            MONO_FONT_PATH,
+            MONO_FONT_PAYLOAD_PATH);
+    }
+
+    /// <summary>
+    /// Serializes the pre-M6 font descriptor shape, including its removed <c>Ranges</c> member, for the
+    /// legacy-pack regression test.
+    /// </summary>
+    internal static byte[] CreateLegacyFontDescriptorPayload(byte[] face) {
+        ArgumentNullException.ThrowIfNull(face);
+
+        return AssetSerialization.Serialize(new LegacyFontAssetDescriptor {
+            FacePayload = FONT_PAYLOAD_PATH,
+            Format = "ttf",
+            ByteLength = (uint)face.Length,
+            Ranges = ["U+0020-007E"],
+            MsdfPixelSize = 32,
+            MsdfRange = 4,
+            MsdfPadding = 2,
+        });
+    }
+
+    /// <summary>Opens a pack archive over the standard synthetic font entries.</summary>
+    internal static PackArchive OpenFontArchive()
+        => PackArchive.Open(BuildPack(CreateFontEntries()), "font-format.pck");
 
     internal static byte[] CreatePattern(int length, int seed) {
         byte[] payload = new byte[length];

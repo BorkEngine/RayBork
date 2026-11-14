@@ -389,7 +389,7 @@ public sealed class AssetCatalogLoadTests {
         AssetTypeMismatchException model = await Assert.ThrowsAsync<AssetTypeMismatchException>(
             () => harness.Catalog.Load<Mesh>("/models/castle", TestContext.Current.CancellationToken));
         AssetTypeMismatchException font = await Assert.ThrowsAsync<AssetTypeMismatchException>(
-            () => harness.Catalog.Load<Mesh>("/fonts/inter", TestContext.Current.CancellationToken));
+            () => harness.Catalog.Load<Mesh>("/" + CatalogTestData.FONT_PATH, TestContext.Current.CancellationToken));
 
         Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, model.DiagnosticCode);
         Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, font.DiagnosticCode);

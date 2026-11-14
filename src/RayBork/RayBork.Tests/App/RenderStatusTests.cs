@@ -128,6 +128,7 @@ public sealed class RenderStatusTests {
 
     private static RenderStats CreateRenderStats() => new(
         42L,
+        84L,
         7,
         9,
         1200,

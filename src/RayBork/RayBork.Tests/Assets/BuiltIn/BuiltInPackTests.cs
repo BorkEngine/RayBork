@@ -24,7 +24,16 @@ public sealed class BuiltInPackTests {
     private const string PRIMITIVE_SHADER_PATH = "shaders/primitive";
     private const string PRIMITIVE_VERTEX_PAYLOAD_PATH = "shaders/primitive-vert";
     private const string PRIMITIVE_FRAGMENT_PAYLOAD_PATH = "shaders/primitive-frag";
-    private const int ENTRY_COUNT = 13;
+    private const string MSDF_SHADER_PATH = "shaders/msdf";
+    private const string MSDF_VERTEX_PAYLOAD_PATH = "shaders/msdf-vert";
+    private const string MSDF_FRAGMENT_PAYLOAD_PATH = "shaders/msdf-frag";
+    private const string FONT_PATH = "fonts/fira-sans";
+    private const string FONT_FACE_PAYLOAD_PATH = "fonts/fira-sans-face";
+    private const string MONO_FONT_PATH = "fonts/jetbrains-mono";
+    private const string MONO_FONT_FACE_PAYLOAD_PATH = "fonts/jetbrains-mono-face";
+    private const int ENTRY_COUNT = 20;
+    private const uint FONT_BYTE_LENGTH = 456996;
+    private const uint MONO_FONT_BYTE_LENGTH = 187208;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
 
     private static readonly byte[] _ktx2Identifier =
@@ -44,6 +53,8 @@ public sealed class BuiltInPackTests {
     ];
 
     private static readonly byte[] _spirvMagic = [0x03, 0x02, 0x23, 0x07];
+
+    private static readonly byte[] _trueTypeMagic = [0x00, 0x01, 0x00, 0x00];
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
@@ -77,6 +88,29 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, PRIMITIVE_SHADER_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, PRIMITIVE_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, PRIMITIVE_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, MSDF_SHADER_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, MSDF_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, MSDF_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, FONT_PATH, AssetEntryType.Font, isGpuPayload: false);
+        AssertEntry(archive, FONT_FACE_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, MONO_FONT_PATH, AssetEntryType.Font, isGpuPayload: false);
+        AssertEntry(archive, MONO_FONT_FACE_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ContainsTheDefaultFiraSansFontDescriptorAndFacePayload() {
+        using PackArchive archive = OpenBuiltInPack();
+
+        AssertTrueTypeFont(archive, FONT_PATH, FONT_FACE_PAYLOAD_PATH, FONT_BYTE_LENGTH);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ContainsTheMonoFontDescriptorAndFacePayload() {
+        using PackArchive archive = OpenBuiltInPack();
+
+        AssertTrueTypeFont(archive, MONO_FONT_PATH, MONO_FONT_FACE_PAYLOAD_PATH, MONO_FONT_BYTE_LENGTH);
     }
 
     [Fact]
@@ -190,6 +224,32 @@ public sealed class BuiltInPackTests {
         AssertSpirvPayload(archive, descriptor.FragmentPayload);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MsdfShaderHasTheTextStateAndOneTextureBinding() {
+        using PackArchive archive = OpenBuiltInPack();
+        ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, MSDF_SHADER_PATH);
+
+        Assert.Equal(MSDF_VERTEX_PAYLOAD_PATH, descriptor.VertexPayload);
+        Assert.Equal(MSDF_FRAGMENT_PAYLOAD_PATH, descriptor.FragmentPayload);
+        Assert.Equal("main_vertex", descriptor.VertexEntry);
+        Assert.Equal("main_fragment", descriptor.FragmentEntry);
+        Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, descriptor.Stages);
+        Assert.Equal(
+            new RenderState {
+                Blend = BlendMode.Alpha,
+                Cull = CullMode.None,
+                DepthTest = DepthTest.GreaterOrEqual,
+                DepthWrite = false,
+            },
+            descriptor.DefaultRenderState);
+        Assert.Empty(descriptor.Uniforms);
+        Assert.Equal(["mainTexture"], descriptor.Textures);
+
+        AssertSpirvPayload(archive, descriptor.VertexPayload);
+        AssertSpirvPayload(archive, descriptor.FragmentPayload);
+    }
+
     private static PackArchive OpenBuiltInPack()
         => PackArchive.Open(BuiltInAssetPack.Bytes, DISPLAY_PATH);
 
@@ -213,6 +273,30 @@ public sealed class BuiltInPackTests {
     private static ShaderAssetDescriptor ReadShaderDescriptor(PackArchive archive, string path) {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
         return AssetSerialization.Deserialize<ShaderAssetDescriptor>(archive.ReadPayload(entry));
+    }
+
+    private static FontAssetDescriptor ReadFontDescriptor(PackArchive archive, string path) {
+        Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
+        return AssetSerialization.Deserialize<FontAssetDescriptor>(archive.ReadPayload(entry));
+    }
+
+    private static void AssertTrueTypeFont(
+        PackArchive archive,
+        string path,
+        string payloadPath,
+        uint byteLength) {
+        FontAssetDescriptor descriptor = ReadFontDescriptor(archive, path);
+
+        Assert.Equal(payloadPath, descriptor.FacePayload);
+        Assert.Equal("ttf", descriptor.Format);
+        Assert.Equal(byteLength, descriptor.ByteLength);
+        Assert.Equal(32, descriptor.MsdfPixelSize);
+        Assert.Equal(4, descriptor.MsdfRange);
+        Assert.Equal(2, descriptor.MsdfPadding);
+
+        byte[] face = ReadRawPayload(archive, descriptor.FacePayload);
+        Assert.Equal((int)byteLength, face.Length);
+        Assert.Equal(_trueTypeMagic, face.AsSpan(0, _trueTypeMagic.Length).ToArray());
     }
 
     private static void AssertKtx2Payload(PackArchive archive, string path) {

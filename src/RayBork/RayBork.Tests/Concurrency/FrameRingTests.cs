@@ -392,6 +392,107 @@ public sealed class FrameRingTests {
         ring.Abandon(reused);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PresentationWaitReturnsForAnAlreadyPresentedOrNewerFrame() {
+        FrameRing ring = new();
+        ring.MarkPresented(5);
+
+        Assert.True(ring.WaitForPresentation(5, CancellationToken.None));
+        Assert.True(ring.WaitForPresentation(4, CancellationToken.None));
+        Assert.True(ring.WaitForPresentation(1, CancellationToken.None));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task PresentationWaitWakesWhenTheFrameIsMarked() {
+        FrameRing ring = new();
+        Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, CancellationToken.None));
+        WaitForPresentationWaiter(ring);
+
+        ring.MarkPresented(1);
+
+        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.Equal(0, ring.PresentationWaiterCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task PresentationWaitWakesWhenANewerFrameIsMarked() {
+        FrameRing ring = new();
+        Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(2, CancellationToken.None));
+        WaitForPresentationWaiter(ring);
+
+        ring.MarkPresented(3);
+
+        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RepeatedAndOlderMarksAreIdempotent() {
+        FrameRing ring = new();
+
+        ring.MarkPresented(5);
+        ring.MarkPresented(5);
+        ring.MarkPresented(2);
+
+        Assert.True(ring.WaitForPresentation(5, CancellationToken.None));
+        Assert.True(ring.WaitForPresentation(2, CancellationToken.None));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CompleteWakesAPresentationWait() {
+        FrameRing ring = new();
+        Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, CancellationToken.None));
+        WaitForPresentationWaiter(ring);
+
+        ring.Complete();
+
+        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PresentationWaitAfterCompletionReturnsTrue() {
+        FrameRing ring = new();
+        ring.Complete();
+
+        Assert.True(ring.WaitForPresentation(1, CancellationToken.None));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CancellationWakesAPresentationWait() {
+        using CancellationTokenSource cancellation = new();
+        FrameRing ring = new();
+        Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, cancellation.Token));
+        WaitForPresentationWaiter(ring);
+
+        cancellation.Cancel();
+
+        Assert.False(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.Equal(0, ring.PresentationWaiterCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CancellationDoesNotHideAFramePresentedBeforeTheWaitObservesIt() {
+        using CancellationTokenSource cancellation = new();
+        FrameRing ring = new();
+        Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, cancellation.Token));
+
+        ring.MarkPresented(1);
+        cancellation.Cancel();
+
+        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+    }
+
+    private static void WaitForPresentationWaiter(FrameRing ring) => Assert.True(
+        SpinWait.SpinUntil(() => ring.PresentationWaiterCount == 1, _blockingTimeout),
+        "The presentation waiter did not block.");
+
     private static FrameLease[] AcquireAllWritable(FrameRing ring) {
         FrameLease[] leases = new FrameLease[SLOT_COUNT];
         for (int i = 0; i < leases.Length; i++) {

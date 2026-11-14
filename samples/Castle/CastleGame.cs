@@ -22,12 +22,19 @@ internal sealed class CastleGame : IGame {
     private const float GRID_SPACING = 10f;
     private const float HIT_POINT_RADIUS = 0.2f;
 
+    // The status line is world-space text until M7 adds the screen-space HUD path. It sits on a
+    // camera-facing plane one world unit in front of the camera.
+    private const float OVERLAY_DISTANCE = 1f;
+    private const float OVERLAY_PIXEL_HEIGHT = 18f;
+    private const float OVERLAY_MARGIN_PIXELS = 8f;
+
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
     private static readonly Color _hoverBoundsColor = Color.Cyan;
     private static readonly Color _hitPointColor = Color.Red;
 
     private readonly int _frameLimit;
+    private readonly StatusOverlay _overlay = new();
 
     private Model? _model;
     private Texture? _texture;
@@ -107,6 +114,11 @@ internal sealed class CastleGame : IGame {
 
         DrawHoverOverlay(camera, context);
 
+        // The DrawFPS-style overlay: presented FPS over a one-second window, the tick rate, the
+        // render CPU time, and the last completed frame's draw and instance counts. It is recorded
+        // last and is also world-space text.
+        DrawStatusOverlay(camera, context);
+
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
             context.RequestExit();
@@ -153,6 +165,40 @@ internal sealed class CastleGame : IGame {
         }
     }
 
+    /// <summary>
+    /// Draws the presented-FPS, tick-rate, render-time, draw-call, and instance line at the top-left
+    /// of the view.
+    /// </summary>
+    /// <remarks>
+    /// Screen-space text arrives in M7. Until then the line is world-space text on a camera-facing
+    /// plane one unit in front of the camera, positioned and oriented with the camera's own axes.
+    /// </remarks>
+    private void DrawStatusOverlay(Camera camera, EngineContext context) {
+        // One render pixel spans worldPerPixel world units at the overlay distance. The text size is
+        // an em height in world units, so an 18-pixel line uses 18 * worldPerPixel. The built-in mono
+        // face keeps the changing counters from shifting the text around them.
+        float halfHeight = OVERLAY_DISTANCE * MathF.Tan(camera.FieldOfView * (MathF.PI / 180f) * 0.5f);
+        float worldPerPixel = (2f * halfHeight) / camera.Viewport.Height;
+        float halfWidth = halfHeight * (camera.Viewport.Width / camera.Viewport.Height);
+        float margin = OVERLAY_MARGIN_PIXELS * worldPerPixel;
+
+        // The camera transform's axes are the screen axes: +X is right, +Y is up, and +Z points back
+        // toward the viewer. The text layout origin is the top-left of the first line, so placing it
+        // at the inset corner of the plane and reusing the camera rotation keeps the line upright,
+        // facing the camera, and where a HUD would sit.
+        Vector3 position = camera.Transform.Position
+            + (camera.Transform.Forward * OVERLAY_DISTANCE)
+            + (camera.Transform.Up * (halfHeight - margin))
+            - (camera.Transform.Right * (halfWidth - margin));
+
+        camera.DrawText(
+            context.Defaults.DefaultMonoFont,
+            _overlay.Build(context),
+            new Transform(position, camera.Transform.Rotation, Vector3.One),
+            OVERLAY_PIXEL_HEIGHT * worldPerPixel,
+            Color.Black);
+    }
+
     /// <inheritdoc/>
     public Task Shutdown() {
         // The model owns its part materials; the texture is owned by this scene.
@@ -165,7 +211,7 @@ internal sealed class CastleGame : IGame {
 
     private void UpdateOrbit(IInput input) {
         // Drag to orbit; the wheel moves the camera closer or farther away. Screen Y grows
-        // downward, so adding the vertical delta raises the camera when the pointer moves up.
+        // downward, so adding the vertical delta raises the camera when the pointer moves down.
         if (input.IsMouseButtonDown(MouseButton.Left)) {
             Vector2 delta = input.MouseDelta;
             _yawDegrees -= delta.X * ORBIT_DEGREES_PER_PIXEL;

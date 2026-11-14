@@ -85,6 +85,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     internal bool PublishFrameStats { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether <see cref="Submit"/> returns without recording or publishing a frame,
+    /// which models a frame dropped on a minimized surface or during a device recreation.
+    /// </summary>
+    internal bool SkipSubmitForTests { get; set; }
+
+    /// <summary>
     /// Gets or sets an optional hook invoked at the end of <see cref="Submit"/>.
     /// </summary>
     internal Action<RenderFramePacket>? OnSubmit { get; set; }
@@ -235,6 +241,10 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
 
         UpdateWindowState();
+        if (SkipSubmitForTests) {
+            return;
+        }
+
         if (SubmitException is not null) {
             throw SubmitException;
         }
@@ -242,6 +252,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         if (PublishFrameStats) {
             Stats = new RenderStats(
                 frame.FrameIndex,
+                0,
                 1,
                 0,
                 0,

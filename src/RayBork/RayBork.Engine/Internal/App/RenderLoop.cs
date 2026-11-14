@@ -185,6 +185,10 @@ internal sealed class RenderLoop {
                             publishedInfo = info;
                         }
                     } finally {
+                        // The presentation attempt is finished for this frame even when Submit or
+                        // Present threw, so a FIFO-paced tick that is waiting for it is released
+                        // before the render loop's failure stops the app.
+                        _frameRing.MarkPresented(lease.FrameIndex);
                         _frameRing.Release(lease);
                     }
 

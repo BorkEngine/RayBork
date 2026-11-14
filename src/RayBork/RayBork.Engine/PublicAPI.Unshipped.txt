@@ -159,6 +159,8 @@ RayBork.EngineContext.UnscaledDeltaTime.get -> double
 RayBork.EngineContext.Window.get -> RayBork.IWindow!
 RayBork.EngineDefaults
 RayBork.EngineDefaults.CreateMeshShader() -> RayBork.Shader!
+RayBork.EngineDefaults.DefaultFont.get -> RayBork.Font!
+RayBork.EngineDefaults.DefaultMonoFont.get -> RayBork.Font!
 RayBork.EngineDefaults.Error.get -> RayBork.Texture!
 RayBork.EngineDefaults.White.get -> RayBork.Texture!
 RayBork.EngineInfo
@@ -187,6 +189,17 @@ RayBork.EngineInfo.Version.init -> void
 RayBork.EngineInfo.VulkanApiVersion.get -> uint
 RayBork.EngineInfo.VulkanApiVersion.init -> void
 RayBork.EngineVersion
+RayBork.Font
+RayBork.Font.Ascent.get -> float
+RayBork.Font.CachedGlyphCount.get -> int
+RayBork.Font.Descent.get -> float
+RayBork.Font.Dispose() -> void
+RayBork.Font.GlyphCount.get -> int
+RayBork.Font.IsDisposed.get -> bool
+RayBork.Font.LineHeight.get -> float
+RayBork.Font.Measure(System.ReadOnlySpan<char> text, float size) -> System.Numerics.Vector2
+RayBork.Font.Path.get -> string!
+RayBork.Font.TryGetGlyph(System.Text.Rune rune, out RayBork.Glyph glyph) -> bool
 RayBork.GameException
 RayBork.GameException.GameException() -> void
 RayBork.GameException.GameException(string! message) -> void
@@ -219,6 +232,14 @@ RayBork.GamepadButton.West = 2 -> RayBork.GamepadButton
 RayBork.GamepadTrigger
 RayBork.GamepadTrigger.Left = 0 -> RayBork.GamepadTrigger
 RayBork.GamepadTrigger.Right = 1 -> RayBork.GamepadTrigger
+RayBork.Glyph
+RayBork.Glyph.Advance.get -> System.Numerics.Vector2
+RayBork.Glyph.Bearing.get -> System.Numerics.Vector2
+RayBork.Glyph.Glyph() -> void
+RayBork.Glyph.Rune.get -> System.Text.Rune
+RayBork.Glyph.Size.get -> System.Numerics.Vector2
+RayBork.Glyph.Uv0.get -> System.Numerics.Vector2
+RayBork.Glyph.Uv1.get -> System.Numerics.Vector2
 RayBork.GraphicsDeviceLostException
 RayBork.GraphicsDeviceLostException.GraphicsDeviceLostException() -> void
 RayBork.GraphicsDeviceLostException.GraphicsDeviceLostException(string! message) -> void
@@ -695,7 +716,7 @@ RayBork.RenderStats.CpuFrameMilliseconds.get -> double
 RayBork.RenderStats.CpuFrameMilliseconds.init -> void
 RayBork.RenderStats.CulledInstances.get -> int
 RayBork.RenderStats.CulledInstances.init -> void
-RayBork.RenderStats.Deconstruct(out long FrameIndex, out int DrawCalls, out int Instances, out int Triangles, out int CulledInstances, out int PipelineCount, out int TextureCount, out int SampleCount, out bool HdrOutput, out double CpuFrameMilliseconds, out double GpuFrameMilliseconds, out int FramesInFlight, out int RecoveryCount) -> void
+RayBork.RenderStats.Deconstruct(out long FrameIndex, out long PresentedFrames, out int DrawCalls, out int Instances, out int Triangles, out int CulledInstances, out int PipelineCount, out int TextureCount, out int SampleCount, out bool HdrOutput, out double CpuFrameMilliseconds, out double GpuFrameMilliseconds, out int FramesInFlight, out int RecoveryCount) -> void
 RayBork.RenderStats.DrawCalls.get -> int
 RayBork.RenderStats.DrawCalls.init -> void
 RayBork.RenderStats.Equals(RayBork.RenderStats other) -> bool
@@ -711,10 +732,12 @@ RayBork.RenderStats.Instances.get -> int
 RayBork.RenderStats.Instances.init -> void
 RayBork.RenderStats.PipelineCount.get -> int
 RayBork.RenderStats.PipelineCount.init -> void
+RayBork.RenderStats.PresentedFrames.get -> long
+RayBork.RenderStats.PresentedFrames.init -> void
 RayBork.RenderStats.RecoveryCount.get -> int
 RayBork.RenderStats.RecoveryCount.init -> void
 RayBork.RenderStats.RenderStats() -> void
-RayBork.RenderStats.RenderStats(long FrameIndex, int DrawCalls, int Instances, int Triangles, int CulledInstances, int PipelineCount, int TextureCount, int SampleCount, bool HdrOutput, double CpuFrameMilliseconds, double GpuFrameMilliseconds, int FramesInFlight, int RecoveryCount) -> void
+RayBork.RenderStats.RenderStats(long FrameIndex, long PresentedFrames, int DrawCalls, int Instances, int Triangles, int CulledInstances, int PipelineCount, int TextureCount, int SampleCount, bool HdrOutput, double CpuFrameMilliseconds, double GpuFrameMilliseconds, int FramesInFlight, int RecoveryCount) -> void
 RayBork.RenderStats.SampleCount.get -> int
 RayBork.RenderStats.SampleCount.init -> void
 RayBork.RenderStats.TextureCount.get -> int
@@ -772,6 +795,10 @@ RayBork.ShaderUniformType.UInt = 2 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector2 = 4 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector3 = 5 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector4 = 6 -> RayBork.ShaderUniformType
+RayBork.TextAlignment
+RayBork.TextAlignment.Center = 1 -> RayBork.TextAlignment
+RayBork.TextAlignment.Left = 0 -> RayBork.TextAlignment
+RayBork.TextAlignment.Right = 2 -> RayBork.TextAlignment
 RayBork.Texture
 RayBork.Texture.Dispose() -> void
 RayBork.Texture.Format.get -> RayBork.TextureFormat
@@ -810,6 +837,10 @@ RayBork.TextureWrap
 RayBork.TextureWrap.Clamp = 1 -> RayBork.TextureWrap
 RayBork.TextureWrap.Mirror = 2 -> RayBork.TextureWrap
 RayBork.TextureWrap.Repeat = 0 -> RayBork.TextureWrap
+RayBork.TextWrapping
+RayBork.TextWrapping.Character = 2 -> RayBork.TextWrapping
+RayBork.TextWrapping.None = 0 -> RayBork.TextWrapping
+RayBork.TextWrapping.Word = 1 -> RayBork.TextWrapping
 RayBork.TonemappingMode
 RayBork.TonemappingMode.AgX = 0 -> RayBork.TonemappingMode
 RayBork.TonemappingMode.None = 1 -> RayBork.TonemappingMode
@@ -1245,4 +1276,6 @@ RayBork.Camera.DrawWireCylinder(System.Numerics.Vector3 position, float radiusTo
 RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, RayBork.Color color) -> void
 RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, int rings, int slices, RayBork.Color color) -> void
 RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawText(RayBork.Font! font, System.ReadOnlySpan<char> text, RayBork.Transform transform, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left, RayBork.TextWrapping wrapping = RayBork.TextWrapping.None, float maxWidth = 0) -> void
+RayBork.Camera.DrawTextBillboard(RayBork.Font! font, System.ReadOnlySpan<char> text, System.Numerics.Vector3 position, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left) -> void
 static RayBork.Collision.GetRayQuad(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, System.Numerics.Vector3 d) -> RayBork.RayCollision

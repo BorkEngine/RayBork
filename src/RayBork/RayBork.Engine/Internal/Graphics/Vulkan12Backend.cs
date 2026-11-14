@@ -88,6 +88,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private Semaphore _pendingRenderFinished;
     private bool _swapchainOutOfDate;
     private bool _suboptimalRecoveryPending;
+    private long _presentedFrames;
     private int _recoveryCount;
     private int _consecutiveRecoveries;
     private int _deviceGeneration;
@@ -274,7 +275,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             return;
         }
 
-        long startTimestamp = Stopwatch.GetTimestamp();
         WindowSurfaceState state = _options!.WindowStateProvider();
         if (state.IsMinimized || state.RenderWidth <= 0 || state.RenderHeight <= 0) {
             _stats = CreateZeroDrawStats(frame.FrameIndex);
@@ -299,9 +299,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Device deviceHandle = _device.Device;
         ThrowIfFailed(vulkan.WaitForFences(deviceHandle, 1, &fence, true, WAIT_TIMEOUT), "vkWaitForFences");
 
-        FramePlan plan = new BatchPlanner().Plan(frame);
-
         Semaphore imageAvailable = _imageAvailableSemaphores[frameSlot];
+        BeforeAcquireForTests?.Invoke();
         SwapchainResult acquire = _swapchain.Acquire(frameSlot, imageAvailable, out uint imageIndex);
         if (acquire == SwapchainResult.OutOfDate) {
             RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
@@ -321,6 +320,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 "The swapchain image acquisition was suboptimal; the presentation path is recreated after the present.");
         }
 
+        // CPU frame time covers only planning, recording, and submission. It starts after the fence
+        // wait and the swapchain acquire, both of which are blocking waits on the GPU or display, and
+        // stops after the queue submission, so it never reports a presentation or acquire stall as
+        // render CPU work.
+        long startTimestamp = Stopwatch.GetTimestamp();
+        FramePlan plan = new BatchPlanner().Plan(frame);
         ulong instanceBytes = ComputeInstanceBytes(plan);
         _frameResources!.EnsureSlot((int)frameSlot, instanceBytes, frame.FrameIndex);
 
@@ -391,6 +396,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         double cpuMilliseconds = (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / Stopwatch.Frequency;
         _stats = new RenderStats(
             frame.FrameIndex,
+            _presentedFrames,
             plan.DrawCalls,
             plan.Instances,
             plan.Triangles,
@@ -539,6 +545,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// through <see cref="Recover"/>. Test-only; it is not part of the renderer seam.
     /// </summary>
     internal void SimulateSwapchainOutOfDateForTests() => _swapchainOutOfDate = true;
+
+    /// <summary>
+    /// Gets or sets a hook invoked immediately before the swapchain acquire. Test-only; it is not
+    /// part of the renderer seam. The CPU-time test uses it to hold the acquire long enough to prove
+    /// that <see cref="RenderStats.CpuFrameMilliseconds"/> excludes the wait.
+    /// </summary>
+    internal Action? BeforeAcquireForTests { get; set; }
 
     /// <summary>
     /// Gets whether no submitted frame can still reference a GPU asset resource.
@@ -1416,7 +1429,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The record header is the transposed world matrix, the tint, and the UV rectangle, followed by
     /// the draw's uniform template and the resolved bindless texture indices. The batch's first
     /// instance index is <c>byteOffset / stride</c>, which the shader receives through
-    /// <c>gl_InstanceIndex</c>.
+    /// <c>gl_InstanceIndex</c>. A draw with its own per-instance texture set resolves each instance's
+    /// indices from that instance's run; every other draw repeats its shared set. Neither path allocates,
+    /// and the stride stays <c>INSTANCE_HEADER_SIZE + template length</c> either way.
     /// </remarks>
     private void WriteInstanceRecords(
         int frameSlot,
@@ -1436,7 +1451,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             WriteVector4(record, ShaderAbiLayout.UV_RECT_OFFSET, draw.UvRect);
             draw.InstanceTemplate.CopyTo(record[ShaderAbiLayout.INSTANCE_HEADER_SIZE..]);
 
-            ReadOnlySpan<Texture?> textures = draw.GetTextureBindings();
+            ReadOnlySpan<Texture?> textures = GetInstanceTextureRun(draw, instance.InstanceIndex);
             for (int textureIndex = 0; textureIndex < textures.Length; textureIndex++) {
                 WriteUInt32(
                     record,
@@ -1444,6 +1459,27 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     ResolveTextureSlot(textures[textureIndex]));
             }
         }
+    }
+
+    /// <summary>
+    /// Gets the texture-binding run one instance writes: its own contiguous slice for a draw with a
+    /// per-instance set, or the shared set every instance repeats.
+    /// </summary>
+    /// <param name="draw">The draw record that supplies the bindings.</param>
+    /// <param name="instanceIndex">The zero-based instance index inside the draw record.</param>
+    /// <returns>The texture objects in sidecar declaration order for this instance.</returns>
+    /// <remarks>
+    /// The per-instance set is stored instance-major, so one instance's bindings are a contiguous run
+    /// and the slice is a view over the record's pooled buffer; the read allocates nothing. The recorder
+    /// retained each texture in the frame's retention set, so the resolved bindless slots are still live.
+    /// </remarks>
+    private static ReadOnlySpan<Texture?> GetInstanceTextureRun(RenderDrawRecord draw, int instanceIndex) {
+        if (!draw.HasPerInstanceTextureBindings) {
+            return draw.GetTextureBindings();
+        }
+
+        int bindingCount = draw.TextureBindingCount;
+        return draw.GetInstanceTextureBindings().Slice(instanceIndex * bindingCount, bindingCount);
     }
 
     private uint ResolveTextureSlot(Texture? texture) {
@@ -1553,6 +1589,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private static void WriteUInt32(Span<byte> destination, int offset, uint value)
         => BinaryPrimitives.WriteUInt32LittleEndian(destination[offset..], value);
 
+    /// <summary>
+    /// Gets whether a presentation result means the image reached the presentation engine. A
+    /// suboptimal result still presented; an out-of-date or lost surface did not.
+    /// </summary>
+    /// <param name="result">The result of <c>vkQueuePresentKHR</c>.</param>
+    /// <returns><see langword="true"/> when the presentation succeeded.</returns>
+    internal static bool CountsAsPresented(SwapchainResult result) =>
+        result is SwapchainResult.Success or SwapchainResult.Suboptimal;
+
     private void PresentPending() {
         if (!_pendingPresent) {
             return;
@@ -1563,11 +1608,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _pendingPresent = false;
         _pendingRenderFinished = default;
         _instance!.ThrowIfValidationError("presenting a frame");
-        if (result is SwapchainResult.Success or SwapchainResult.Suboptimal) {
+        if (CountsAsPresented(result)) {
             // The image reached the presentation engine, so a frame completed. A suboptimal hint is a
-            // routine driver notification and must not count toward the recovery bound.
+            // routine driver notification and must not count toward the recovery bound, but the
+            // presentation itself succeeded and is counted. An out-of-date, lost, or recreated
+            // presentation is not.
             _lastPresentedImageIndex = presentedImageIndex;
+            _presentedFrames++;
             _consecutiveRecoveries = 0;
+            _stats = _stats with { PresentedFrames = _presentedFrames };
         }
 
         bool recoverSuboptimal = _suboptimalRecoveryPending;
@@ -1605,6 +1654,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     private RenderStats CreateZeroDrawStats(long frameIndex) => new(
         frameIndex,
+        _presentedFrames,
         0,
         0,
         0,

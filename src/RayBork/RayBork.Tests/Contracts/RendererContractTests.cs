@@ -47,9 +47,10 @@ public sealed class RendererContractTests {
         Assert.NotEqual(stats, changed);
         Assert.True(stats != changed);
 
-        var (frameIndex, drawCalls, instances, triangles, culledInstances, pipelineCount, textureCount, sampleCount, hdrOutput, cpuFrameMilliseconds, gpuFrameMilliseconds, framesInFlight, recoveryCount) = stats;
+        var (frameIndex, presentedFrames, drawCalls, instances, triangles, culledInstances, pipelineCount, textureCount, sampleCount, hdrOutput, cpuFrameMilliseconds, gpuFrameMilliseconds, framesInFlight, recoveryCount) = stats;
 
         Assert.Equal(42L, frameIndex);
+        Assert.Equal(84L, presentedFrames);
         Assert.Equal(7, drawCalls);
         Assert.Equal(9, instances);
         Assert.Equal(1200, triangles);
@@ -156,6 +157,7 @@ public sealed class RendererContractTests {
 
     private static RenderStats CreateRenderStats() => new(
         42L,
+        84L,
         7,
         9,
         1200,

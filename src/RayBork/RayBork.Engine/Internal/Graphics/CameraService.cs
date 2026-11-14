@@ -20,11 +20,18 @@ namespace RayBork.Internal;
 /// </para>
 /// </remarks>
 internal sealed class CameraService {
+    private const int MINIMUM_TEXT_GLYPH_CAPACITY = 64;
+
     private readonly IWindow _window;
+    private readonly TextLayoutBuffer _textLayout = new();
+    private readonly HashSet<Font> _textFontsStarted = [];
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
     private PrimitiveAssets? _primitives;
     private TonemappingSettings? _tonemapping;
+    private Matrix4x4[] _textGlyphMatrices = [];
+    private Texture?[] _textGlyphTextures = [];
+    private int _textGlyphCount;
     private int _nextCameraNumber;
 
     /// <summary>
@@ -84,6 +91,84 @@ internal sealed class CameraService {
     internal void AttachTonemapping(TonemappingSettings tonemapping) {
         ArgumentNullException.ThrowIfNull(tonemapping);
         _tonemapping = tonemapping;
+    }
+
+    /// <summary>
+    /// Gets the layout buffer the camera text draws reuse.
+    /// </summary>
+    /// <remarks>
+    /// The service owns one buffer for the app lifetime, so a warmed buffer lays text out without
+    /// allocating. Cameras are sequential, so one buffer is sufficient; the glyph span it exposes is
+    /// valid only until the next arrange call, and a text draw consumes it before returning.
+    /// </remarks>
+    internal TextLayoutBuffer TextLayout => _textLayout;
+
+    /// <summary>
+    /// Reserves the reusable per-call glyph scratch and returns its writable matrix span.
+    /// </summary>
+    /// <param name="count">The number of laid-out glyph records the call may record.</param>
+    /// <returns>Exactly <paramref name="count"/> matrix slots for this call to fill.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
+    /// <remarks>
+    /// A call fills one slot per ready glyph, so the reserved span can be longer than the recorded
+    /// instance count. The matching texture span is <see cref="TextGlyphTextures"/>; call
+    /// <see cref="ClearTextGlyphs"/> once the draw record copied both spans.
+    /// </remarks>
+    internal Span<Matrix4x4> ReserveTextGlyphs(int count) {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        if (_textGlyphMatrices.Length < count) {
+            int capacity = Math.Max(count, Math.Max(_textGlyphMatrices.Length * 2, MINIMUM_TEXT_GLYPH_CAPACITY));
+            _textGlyphMatrices = new Matrix4x4[capacity];
+            _textGlyphTextures = new Texture?[capacity];
+        }
+
+        _textGlyphCount = count;
+        return _textGlyphMatrices.AsSpan(0, count);
+    }
+
+    /// <summary>
+    /// Gets the writable per-glyph texture span reserved by <see cref="ReserveTextGlyphs"/>.
+    /// </summary>
+    internal Span<Texture?> TextGlyphTextures => _textGlyphTextures.AsSpan(0, _textGlyphCount);
+
+    /// <summary>
+    /// Clears the per-glyph texture references the last text draw wrote.
+    /// </summary>
+    /// <remarks>
+    /// The matrices hold no references, so only the textures are cleared: the app-lifetime service
+    /// must not keep a glyph texture reachable between frames. The frame's retention set, not this
+    /// scratch, owns the resource hold that keeps the texture alive while the frame renders.
+    /// </remarks>
+    internal void ClearTextGlyphs() {
+        if (_textGlyphCount == 0) {
+            return;
+        }
+
+        Array.Clear(_textGlyphTextures, 0, _textGlyphCount);
+        _textGlyphCount = 0;
+    }
+
+    /// <summary>
+    /// Marks <paramref name="font"/> as begun for the camera that is recording and starts its glyph
+    /// cache clock once.
+    /// </summary>
+    /// <param name="font">The font recording text is about to acquire glyphs from.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException"><paramref name="font"/> is disposed.</exception>
+    /// <exception cref="InvalidOperationException">No frame is recording.</exception>
+    /// <remarks>
+    /// The camera draw path calls this for every text draw it records, and the per-camera set makes the
+    /// actual <see cref="Font.BeginFrame"/> call happen once per camera and font. The pipeline keeps the
+    /// highest frame index, so a later camera in the same tick may pass the same index again without
+    /// moving the clock backwards.
+    /// </remarks>
+    internal void BeginTextFont(Font font) {
+        ArgumentNullException.ThrowIfNull(font);
+        RenderFramePacket packet = _packet
+            ?? throw new InvalidOperationException("A font's frame can begin only while a frame is recording.");
+        if (_textFontsStarted.Add(font)) {
+            font.BeginFrame(packet.FrameIndex);
+        }
     }
 
     /// <summary>
@@ -258,6 +343,8 @@ internal sealed class CameraService {
             clearMode,
             resolvedClearColor);
 
+        // Font frame clocks are begun once per camera and font, so a new camera starts a fresh set.
+        _textFontsStarted.Clear();
         Camera camera = new(
             this,
             packet,

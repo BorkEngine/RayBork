@@ -51,7 +51,7 @@ using (var screen = ctx.CreateOrthographicCamera(
 ```
 
 The snippet is inside `Tick`; `CreateRenderTextureAsync` would normally be awaited in `Setup`
-and the target stored in a field. `DrawTexture` is the M7 sprite helper and is not part of the M5
+and the target stored in a field. `DrawTexture` is the M7 sprite helper and is not part of the M6
 surface; its destination is in render pixels relative to the camera viewport.
 
 - `CreateRenderTextureAsync` returns after the render thread has allocated the image. It is legal
@@ -83,6 +83,7 @@ surface; its destination is in render pixels relative to the camera viewport.
 ```csharp
 public readonly record struct RenderStats(
     long FrameIndex,
+    long PresentedFrames,
     int DrawCalls,
     int Instances,
     int Triangles,
@@ -100,6 +101,7 @@ public readonly record struct RenderStats(
 | Field | Meaning |
 | --- | --- |
 | `FrameIndex` | The tick frame this snapshot describes. |
+| `PresentedFrames` | Successful presentations since startup. It is cumulative across frames and recoveries and advances only after the image reached the presentation engine. A skipped frame, a dropped recovery frame, and a present with no pending frame do not increment it. |
 | `DrawCalls` | Scene draw commands submitted for the frame: the camera-pass draws after batch splitting. The present pass' fullscreen triangle is not counted. A frame with no camera passes reports `0`. |
 | `Instances` | Instances that survived culling and were submitted in the scene draws. The present triangle is not an instance. |
 | `Triangles` | Submitted triangle count after instancing: `indexCount / 3` per triangle-list instance, `indexCount - 2` per triangle-strip instance, and `0` for line and point topologies. |
@@ -108,7 +110,7 @@ public readonly record struct RenderStats(
 | `TextureCount` | Bindless texture slots live after the frame, including the reserved white slot at slot 0. A texture allocates its slot when its GPU upload completes and releases it only when its GPU resource is destroyed. |
 | `SampleCount` | Effective MSAA sample count for the frame. |
 | `HdrOutput` | Whether the frame presented through the scRGB HDR path. |
-| `CpuFrameMilliseconds` | Render-thread CPU time for planning and recording. |
+| `CpuFrameMilliseconds` | Render-thread CPU time for planning, recording, and submitting the frame. The measurement starts after the frame fence wait and the swapchain acquire, so it excludes both blocking waits and presentation. |
 | `GpuFrameMilliseconds` | GPU timestamp delta, or `0` when timestamps are unavailable. GPU timestamps are not collected in v1, so this always reports `0`. |
 | `FramesInFlight` | Frames submitted but not yet retired at snapshot time; `0` to `3` (the frame ring has three slots). |
 | `RecoveryCount` | Device, surface, and swapchain recoveries completed since startup. |
@@ -116,11 +118,13 @@ public readonly record struct RenderStats(
 `ctx.Stats` is a snapshot of the last completed frame, not the frame currently being recorded. It
 is updated by the render thread and read by the tick thread; individual fields are not a
 consistent transactional snapshot. Use it for diagnostics and overlays, not for synchronization.
-A frame that idles on a minimized or zero-extent surface reports zero draw calls, instances,
-triangles, culled instances, pipelines, and textures, with zero CPU and GPU time. A frame that
-records camera passes but draws nothing (for example, everything was culled) reports zero for the
-draw counters; `SampleCount` and `TextureCount` still report the frame's effective sample count and
-live bindless slots.
+`PresentedFrames` is monotonic and is the truthful source for a presented-frame-rate overlay:
+difference it over a one-second window. `EngineContext.Fps` is the tick rate and is not a presented
+rate. A frame that idles on a minimized or zero-extent surface reports zero draw calls, instances,
+triangles, culled instances, pipelines, and textures, with zero CPU and GPU time, and leaves
+`PresentedFrames` unchanged. A frame that records camera passes but draws nothing (for example,
+everything was culled) reports zero for the draw counters; `SampleCount` and `TextureCount` still
+report the frame's effective sample count and live bindless slots.
 
 `RecoveryCount` is incremented when a recovery completes; the public snapshot publishes the new
 value with the next completed frame. A device, surface, and swapchain recovery all count. A

@@ -23,9 +23,9 @@ public interface IGame {
 `Setup` is where assets are loaded, shaders are configured, and render targets are created. It is
 legal to call `Shader.SetUniform` in `Setup`; those values become the defaults for the first draw.
 Camera creation is not legal in `Setup` because there is no frame to record into. The engine has
-already preloaded `EngineContext.Defaults` (the built-in mesh shader program and the white/error
-textures) before `Setup` runs; a missing or corrupt built-in default is a startup failure and
-`Setup` is not called.
+already preloaded `EngineContext.Defaults` (the built-in mesh shader program, the white/error
+textures, and the built-in default and monospaced fonts) before `Setup` runs; a missing or corrupt
+built-in default is a startup failure and `Setup` is not called.
 
 `Tick` must not call `.GetAwaiter().GetResult()` on an asset load unless it is a deliberate,
 documented hitch. Prefer loading in `Setup`.
@@ -75,7 +75,7 @@ public sealed class RayBorkAppBuilder {
 | `WithExposure` | `0` EV | The startup exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. The game can change it at runtime through `ctx.Tonemapping.Exposure`. |
 | `WithAgxWhite` | `16.29` | The startup scene-linear AgX white, before the display headroom scaling. Finite and at least `2`. The game can change it at runtime through `ctx.Tonemapping.AgxWhite`. |
 | `WithAgxContrast` | `1.25` | The startup AgX curve contrast. Finite and at least `1`. The game can change it at runtime through `ctx.Tonemapping.AgxContrast`. |
-| `WithTargetFps` | `0` (uncapped) | Caps the tick loop when vsync/mailbox is not throttling. `0` means no cap. |
+| `WithTargetFps` | `0` (uncapped) | Caps the tick loop. With FIFO presentation the display refresh paces ticks first, so a target below the refresh sleeps longer and a target above it has no effect; with Mailbox or Immediate the target caps the decoupled tick loop directly. `0` means no cap. The samples set no target and request FIFO. |
 | `WithValidation` | `true` in Debug, `false` in Release | If the validation layer is unavailable, the app logs a warning and continues without it. |
 | `WithLoggerFactory` | default ZLogger console factory | A caller-supplied factory is not disposed by the app. `EngineContext.LoggerFactory` always returns a usable factory. |
 | `WithLogLevel` | `Information` | Minimum level for the default ZLogger provider. Ignored when a caller-supplied factory already filters. |
@@ -124,6 +124,20 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > frame packet when the frame is sealed. M5 replaces the M4 AgX and its separate HDR highlight path
 > with Godot 4.7's HDR-aware AgX curve; `WithTonemapping` still fixes the mode at startup, and
 > `WithExposure` keeps its meaning.
+
+> **M6 subset.** `Load<Font>` returns the shared, reference-counted `Font` asset and
+> `EngineDefaults.DefaultFont` and `EngineDefaults.DefaultMonoFont` expose the built-in Fira Sans
+> Regular and JetBrains Mono (default instance Regular) faces. A font load parses the whole packed
+> face and is CPU-only:
+> it queues no GPU upload, and the font object that load creates caches no glyph texture (a repeated
+> load shares the object and its cache). `Setup` can therefore
+> preload any number of fonts without startup uploads; glyph
+> generation starts on demand on the app-lifetime `RayBork.Font` thread that the catalog starts before
+> the tick thread runs. `Camera.DrawText` and `Camera.DrawTextBillboard` record world-space text
+> through the built-in `/shaders/msdf` program; a glyph whose texture is not ready is skipped for
+> that call while its advance stays. There is no font preload range: the bake packs the whole face and
+> any cmap-mapped glyph can be generated later. The `Glyph` value, `TryGetGlyph`, and `Measure` are part
+> of [Rendering: text](rendering/text.md#710-fonts-and-text).
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -236,7 +250,7 @@ public sealed class EngineContext {
 | Member | Thread | Notes |
 | --- | --- | --- |
 | `Assets` | Any | Shared catalog; see §6. M3. |
-| `Defaults` | Any | Engine-owned default assets preloaded before `Setup`: the built-in mesh shader program plus the white and error textures. `CreateMeshShader` returns a new caller-owned material; the textures are engine-owned and must not be disposed. Released during shutdown. M4. |
+| `Defaults` | Any | Engine-owned default assets preloaded before `Setup`: the built-in mesh shader program, the white and error textures, and the built-in Fira Sans and JetBrains Mono default fonts. `CreateMeshShader` returns a new caller-owned material; the textures and the fonts are engine-owned and must not be disposed. Released during shutdown. The fonts and their text draws ship in M6. |
 | `Input` | Tick | Input snapshot for the current tick. |
 | `Window` | Any | Snapshot getters; setters are queued. |
 | `LoggerFactory` | Any | App-owned factory; create category loggers from it. Never `null`. |
@@ -245,11 +259,11 @@ public sealed class EngineContext {
 | `DeltaTime` | Tick | Clamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
 | `UnscaledDeltaTime` | Tick | Unclamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
 | `FrameCount` | Tick | `0` in `Setup`; `1` during the first `Tick`. |
-| `Fps` | Tick | Ticks per second averaged over a 1-second sliding window; `0` before two ticks. |
+| `Fps` | Tick | Ticks per second averaged over a 1-second sliding window; `0` before two ticks. This is the tick rate, not a presented frame rate: difference `Stats.PresentedFrames` over a window for presented FPS, as the samples do. |
 | `IsFirstTick` | Tick | `true` only during the first `Tick`. |
 | `IsExiting` | Tick | `true` after `RequestExit`, a window close, or an engine stop request. |
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
-| `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. |
+| `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. `PresentedFrames` is cumulative and monotonic; `CpuFrameMilliseconds` excludes the fence, acquire, and present waits. |
 | `Tonemapping` | Tick | App-lifetime runtime tone-mapping settings, initialized from the builder defaults. Read or write them on the tick thread. A write during `Tick` applies to the frame that tick records. |
 | `CreateCamera` | Tick | Perspective camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateOrthographicCamera` | Tick | Orthographic camera. `height` is the visible world-space height. |
@@ -298,22 +312,30 @@ that target and can be sampled by a later camera.
    b. Query the Vulkan instance extensions on the main thread and create the surface channel.
    c. Render thread starts: create the instance, request the native surface through the main-thread
       channel, create the device and swapchain, and publish Info.
-   d. The asset catalog mounts the built-in pack (and any user packs) and starts the loader; the app
-      preloads `EngineContext.Defaults` (the `/shaders/mesh` program and the white/error textures) and
-      then the engine's primitive assets (the `/shaders/primitive` program, its material, and the
-      eight primitive meshes).
+   d. The asset catalog mounts the built-in pack (and any user packs), starts the app-lifetime glyph
+      generation service, and starts the loader; the app
+      preloads `EngineContext.Defaults` (the `/shaders/mesh` program, the white/error textures, and the
+      built-in `/fonts/fira-sans` and `/fonts/jetbrains-mono` fonts; each font load is CPU-only and
+      uploads nothing) and then the engine's primitive assets (the `/shaders/primitive`,
+      `/shaders/msdf`, and `/shaders/mesh` programs, one engine material over each, and the eight
+      primitive meshes; the mesh program itself is already cached by the defaults, but its material is
+      created here).
    e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info, Defaults, and a
       ready primitive draw path.
    f. IGame.Setup(ctx) is awaited on the tick thread.
    g. Loop: input snapshot, clock, IGame.Tick, frame publish; render consumes previous frame.
    h. Exit: stop accepting ticks. The tick thread publishes the final frame and runs
       IGame.Shutdown, then exits.
-   i. Join the tick thread and complete the frame ring; the render thread drains and presents the
-      final frame, disposes the GPU objects, and destroys the native surface through the channel
-      while the main thread services it.
-   j. The app releases the engine defaults and the primitive assets, stops the asset catalog, closes
-      the surface channel, disposes the platform (window, SDL3, Vulkan loader), and releases the
-      remaining engine state.
+   i. Join the tick thread (pumping the platform while it waits), then release the engine defaults and
+      the primitive assets. The primitive assets are detached from the camera service before their
+      owner references are released. `AssetCatalog.Stop` then stops the glyph generation service,
+      stops the procedural asset service, cancels and joins the asset loader, and force-disposes the
+      cached assets, while the render thread still services the GPU upload bridge.
+   j. Complete the frame ring; the render thread drains and presents the final frame, services the
+      pending GPU destructions, disposes the backend, and destroys the native surface through the
+      channel while the main thread services it.
+   k. The app joins the render thread, closes the surface channel, runs the deferred main-thread
+      teardown, and disposes the platform (window, SDL3, Vulkan loader).
 3. Run returns; Dispose releases the app object.
 ```
 
@@ -321,7 +343,9 @@ The surface handshake is bounded: a render-thread surface request and the main-t
 renderer each time out after 30 seconds. The tick thread does not start before the renderer is
 ready, so `Setup` can read `Info` and `Defaults`. M3 inserts the asset loader after (a); M4 inserts
 the engine-defaults preload between the catalog start and the tick thread start; M5 adds the
-primitive-asset preload after the defaults.
+primitive-asset preload after the defaults; M6 adds the default fonts to the preload and starts the
+glyph generation service as part of the catalog start, so a font loaded from `Setup` can enqueue
+glyph generation.
 
 Failure behavior:
 

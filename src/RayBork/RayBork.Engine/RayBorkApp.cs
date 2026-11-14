@@ -288,8 +288,9 @@ public sealed class RayBorkApp : IDisposable {
             engineDefaults = LoadEngineDefaults(assetCatalog);
 
             // The engine primitive meshes and materials are required built-ins too, and they must be
-            // recordable from the first tick. Attach them before the tick thread starts; the catalog
-            // already holds the shared programs, so only the primitive program and the meshes upload.
+            // recordable from the first tick. Attach them before the tick thread starts; the primitive
+            // and MSDF programs plus the three engine materials load here, while the mesh program is
+            // shared with the defaults.
             primitiveAssets = LoadPrimitiveAssets(assetCatalog);
             cameraService.AttachPrimitives(primitiveAssets);
 

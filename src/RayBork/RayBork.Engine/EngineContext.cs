@@ -78,14 +78,16 @@ public sealed class EngineContext {
     public IAssetCatalog Assets { get; }
 
     /// <summary>
-    /// Gets the engine-owned default assets: the built-in mesh shader program, the white texture, and
-    /// the error texture. Valid from <see cref="IGame.Setup"/> and released during shutdown.
+    /// Gets the engine-owned default assets: the built-in mesh shader program, the white and error
+    /// textures, and the built-in default and monospaced fonts. Valid from <see cref="IGame.Setup"/> and
+    /// released during shutdown.
     /// </summary>
     /// <remarks>
     /// The defaults are preloaded after the catalog starts and before <see cref="IGame.Setup"/> runs.
     /// <see cref="EngineDefaults.CreateMeshShader"/> returns a new caller-owned material per call;
-    /// <see cref="EngineDefaults.White"/> and <see cref="EngineDefaults.Error"/> are engine-owned and
-    /// must not be disposed by the game. After the app stops, every member throws
+    /// <see cref="EngineDefaults.White"/>, <see cref="EngineDefaults.Error"/>,
+    /// <see cref="EngineDefaults.DefaultFont"/>, and <see cref="EngineDefaults.DefaultMonoFont"/> are
+    /// engine-owned and must not be disposed by the game. After the app stops, every member throws
     /// <see cref="ObjectDisposedException"/>.
     /// </remarks>
     public EngineDefaults Defaults { get; }
@@ -305,7 +307,9 @@ public sealed class EngineContext {
     public long FrameCount { get; private set; }
 
     /// <summary>
-    /// Gets the smoothed number of ticks per second. Read it on the tick thread.
+    /// Gets the smoothed number of ticks per second. It is the tick rate, not the presented frame
+    /// rate: difference <see cref="RenderStats.PresentedFrames"/> over a window for presented
+    /// frames per second. Read it on the tick thread.
     /// </summary>
     public double Fps { get; private set; }
 

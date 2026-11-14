@@ -6,10 +6,12 @@ strip, point), the wire shapes (wire cube, wire sphere, wire cylinder, wire caps
 the line and curve helpers (line, polyline, ray, circle), a reference grid, two billboards, and a row
 of meshes generated with `MeshBuilder.Generate*` and drawn with the built-in mesh shader. It builds
 its texture and its generated meshes at runtime, so it needs no asset pack, no manual bake, and no
-`--assets` argument.
+`--assets` argument. It also draws a small presented-FPS and render-statistics line at the top-left
+of the view.
 
-The sample is also a Native AOT gate, but it contains no test-only logic: it opens a window, draws the
-gallery, and exits cleanly. Build and run it from the repository root:
+The sample was the M5 Native AOT gate and remains buildable and publishable; it contains no test-only
+logic: it opens a window, draws the gallery, and exits cleanly. Build and run it from the repository
+root:
 
 ```powershell
 dotnet build samples/PrimitiveGallery/PrimitiveGallery.slnx -c Debug
@@ -92,7 +94,7 @@ The row is drawn with `Camera.DrawMesh`, one material created by
 and samples the renderer's white fallback, so the tint is the shape color, and the mesh shader's
 default opaque render state culls back faces exactly like the primitive helpers. The five meshes and
 the material are disposed in `Shutdown`, alongside the texture. The path needs no bake and no
-optional device feature, so it stays inside the gallery's Native AOT gate.
+optional device feature, so it stayed inside the M5 gate's AOT scope.
 
 ## Texture
 
@@ -102,6 +104,23 @@ the billboards. The warm checker colors are `Color.GoldenRod` and `Color.SaddleB
 `Color.CornflowerBlue` and `Color.MidnightBlue`. The texture is uploaded with `BuildAsync` and
 disposed in `Shutdown`, together with the generated meshes and the mesh material.
 
+## Status overlay
+
+`DrawStatusOverlay` records one more world-space draw: an `18`-pixel line in the built-in JetBrains
+Mono font showing presented frames per second, the tick rate, the render CPU time, draw calls, and
+instances. The monospaced face keeps the changing counters from shifting the text around them.
+The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
+presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`. The render time is
+`ctx.Stats.CpuFrameMilliseconds`, which measures only the render thread's planning, recording, and
+submission and excludes the fence, acquire, and present waits. Screen-space text arrives in M7, so
+the line is text on a camera-facing plane one unit in front of the camera rather than an
+orthographic HUD. At that distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so
+the text's em size is `18 * worldPerPixel`. The camera's right and up axes place the layout origin at
+the top-left corner, inset by an 8-pixel margin, and the transform reuses the camera rotation: the
+line stays upright, faces the camera, and remains fixed to the view as the camera orbits or the
+window resizes. The line is `Color.White` against the `Color.Gray3` background, and because it is
+depth-tested world-space text, geometry closer than one unit to the camera can still occlude it.
+
 ## Options
 
 | Argument | Contract |
@@ -109,8 +128,9 @@ disposed in `Shutdown`, together with the generated meshes and the mesh material
 | `--frames N` | Run `N` ticks, then request exit. `0` runs until the window closes. Default `0`. |
 | `--help` | Print usage and exit `0`. |
 
-The sample uses an 800x450 resizable window, a 60 FPS target, a `0.25` second delta clamp, and the
-engine's default renderer settings. An unknown option prints the usage text and exits `2`.
+The sample uses an 800x450 resizable window, a `0.25` second delta clamp, and the engine's default
+renderer settings, and it sets no tick target. It requests FIFO presentation, so the display refresh
+paces the tick thread. An unknown option prints the usage text and exits `2`.
 
 ## Controls
 
@@ -157,8 +177,9 @@ packages: the sample has no bake tooling and no external pack, and the generated
 
 ## What the sample omits
 
-- **Text labels.** `DrawText` arrives in M6, so the README documents which helper is which instead of
-  drawing labels.
+- **Per-helper text labels.** The gallery's only text is the status overlay, so the table above
+  documents which helper is which instead of drawing a label on every shape. Screen-space HUD text
+  arrives in M7.
 - **Thick lines and point sprites.** M5 draws one-pixel lines and camera-facing point quads.
 - **Overload completeness.** The gallery shows one representative call per helper family instead of
   every overload. The start/end `DrawCylinder` form, the other `Transform` overloads, the non-facing
@@ -170,8 +191,8 @@ packages: the sample has no bake tooling and no external pack, and the generated
   [docs/api/rendering/meshes.md](../../docs/api/rendering/meshes.md) and are not drawn, and the row
   uses the default render state with no texture binding. `DrawInstanced`, `ComputeNormals`,
   `ComputeTangents`, and `GenerateCollisions` are likewise documented but not shown.
-- **Wireframe model drawing.** `DrawWireModel` is deliberately not part of this sample: the gallery is
-  the Native AOT gate and must not depend on the optional `fillModeNonSolid` device feature. The
+- **Wireframe model drawing.** `DrawWireModel` is deliberately not part of this sample: the M5 gate
+  must not depend on the optional `fillModeNonSolid` device feature. The
   `ModelWireframeGpuTests` suite covers the wireframe pipeline; the Castle sample no longer draws a
   wireframe overlay.
 - **Animation.** The scene is static; only the orbit camera moves.

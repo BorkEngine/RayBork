@@ -60,9 +60,10 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(tickMaterial!.IsDisposed);
 
         // The two materials were preloaded without a second program upload, and everything the engine
-        // owns (the defaults plus the primitive program and meshes) is released by shutdown.
-        Assert.Equal(12, worker.UploadCallCount);
-        Assert.Equal(12, worker.DestroyCalls.Count);
+        // owns (the defaults, the two additional primitive programs, and the eight meshes) is released
+        // by shutdown.
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.UploadCallCount);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
         Assert.True(defaults!.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.White);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.Error);
@@ -174,8 +175,10 @@ public sealed class EngineDefaultsAppTests {
             materialsUsableInTick = tickPrimitives is not null
                 && tickPrimitives.PrimitiveMaterial.Path == "/shaders/primitive"
                 && tickPrimitives.MeshMaterial.Path == "/shaders/mesh"
+                && tickPrimitives.MsdfMaterial.Path == "/shaders/msdf"
                 && !tickPrimitives.PrimitiveMaterial.IsDisposed
-                && !tickPrimitives.MeshMaterial.IsDisposed;
+                && !tickPrimitives.MeshMaterial.IsDisposed
+                && !tickPrimitives.MsdfMaterial.IsDisposed;
             context.RequestExit();
         };
 
@@ -192,9 +195,9 @@ public sealed class EngineDefaultsAppTests {
 
         Assert.NotNull(setupPrimitives);
         Assert.Same(setupPrimitives, tickPrimitives);
-        // The three defaults, the primitive program, and the eight primitive meshes upload before
-        // Setup; nothing is destroyed until shutdown.
-        Assert.Equal(12, uploadCountAtSetup);
+        // The three defaults, the two additional primitive programs, and the eight primitive meshes
+        // upload before Setup; nothing is destroyed until shutdown.
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, uploadCountAtSetup);
         Assert.Equal(0, destroyCountAtSetup);
         Assert.Equal(0, destroyCountInTick);
         Assert.True(meshesUsableInTick);
@@ -204,11 +207,12 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(created.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => _ = created.Cube);
         Assert.Throws<ObjectDisposedException>(() => _ = created.PrimitiveMaterial);
+        Assert.Throws<ObjectDisposedException>(() => _ = created.MsdfMaterial);
         Assert.Null(app.Cameras!.Primitives);
-        Assert.Equal(12, worker.DestroyCalls.Count);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
 
         created.Dispose();
-        Assert.Equal(12, worker.DestroyCalls.Count);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
     }
 
     [Fact]
@@ -247,10 +251,124 @@ public sealed class EngineDefaultsAppTests {
         Assert.Equal(0, game.SetupCount);
         Assert.Equal(0, game.TickCount);
         Assert.Equal(0, game.ShutdownCount);
-        // The three defaults, the primitive program, and two completed primitive meshes were created
-        // before the third mesh upload failed. The mesh program is shared with the defaults, so only
-        // six resources exist and every one of them is released by the failed startup.
-        Assert.Equal(7, worker.UploadCallCount);
-        Assert.Equal(6, worker.DestroyCalls.Count);
+        // The defaults, the two additional primitive programs, and two completed primitive meshes were
+        // created before the third mesh upload failed; the failed third upload created no resource.
+        int createdBeforeFailure =
+            EnginePreloadCounts.DEFAULTS + EnginePreloadCounts.ADDITIONAL_PRIMITIVE_PROGRAMS + 2;
+        Assert.Equal(createdBeforeFailure + 1, worker.UploadCallCount);
+        Assert.Equal(createdBeforeFailure, worker.DestroyCalls.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AMissingMsdfProgramFailsStartupAndNamesTheBuiltInAsset() {
+        FakeAssetGpuWorker worker = new();
+        worker.UploadHandler = upload => {
+            if (upload.Kind == AssetGpuUploadKind.Shader
+                && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal)) {
+                throw new InvalidOperationException("Injected missing built-in msdf program.");
+            }
+
+            return new FakeGpuAssetResource(upload, worker.NextHandle());
+        };
+        FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
+        FakeEnginePlatform platform = new();
+        ScriptedGame game = new() {
+            TickHandler = context => context.RequestExit(),
+        };
+
+        RayBorkApp app = new RayBorkAppBuilder()
+            .WithGame(game)
+            .WithTargetFps(2)
+            .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .Build(_ => platform, () => renderer, TimeProvider.System);
+        AssetLoadException thrown;
+        try {
+            thrown = Assert.Throws<AssetLoadException>(app.Run);
+        } finally {
+            app.Dispose();
+        }
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("/shaders/msdf", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(0, game.SetupCount);
+        Assert.Equal(0, game.TickCount);
+        Assert.Equal(0, game.ShutdownCount);
+        // The msdf program upload was attempted after the defaults and the primitive program; the failed
+        // upload created no resource, so every created resource is released by the failed startup.
+        Assert.Contains(
+            worker.UploadCalls,
+            upload => upload.Kind == AssetGpuUploadKind.Shader
+                && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal));
+        // The defaults, the primitive program, and the attempted msdf upload precede the failure.
+        Assert.Equal(EnginePreloadCounts.DEFAULTS + 2, worker.UploadCallCount);
+        Assert.Equal(worker.UploadCallCount - 1, worker.DestroyCalls.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheDefaultFontsArePreloadedBeforeSetupLiveInTickAndDisposedAfterShutdown() {
+        FakeAssetGpuWorker worker = new();
+        FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
+        FakeEnginePlatform platform = new();
+        Font? setupFont = null;
+        Font? setupMonoFont = null;
+        bool usableInSetup = false;
+        bool usableInTick = false;
+        ScriptedGame game = new();
+        game.SetupHandler = context => {
+            setupFont = context.Defaults.DefaultFont;
+            setupMonoFont = context.Defaults.DefaultMonoFont;
+            usableInSetup = setupFont.Path == "/fonts/fira-sans"
+                && !setupFont.IsDisposed
+                && setupFont.GlyphCount > 0
+                && setupFont.CachedGlyphCount == 0
+                && setupFont.LineHeight > 0f
+                && setupFont.Ascent > 0f
+                && setupFont.Measure("Hello", 1f).X > 0f
+                && setupMonoFont.Path == "/fonts/jetbrains-mono"
+                && !setupMonoFont.IsDisposed
+                && setupMonoFont.GlyphCount > 0
+                && setupMonoFont.CachedGlyphCount == 0
+                && setupMonoFont.LineHeight > 0f
+                && setupMonoFont.Ascent > 0f
+                && setupMonoFont.Measure("Hello", 1f).X > 0f
+                && !ReferenceEquals(setupFont, setupMonoFont);
+            return Task.CompletedTask;
+        };
+        game.TickHandler = context => {
+            usableInTick = ReferenceEquals(context.Defaults.DefaultFont, setupFont)
+                && ReferenceEquals(context.Defaults.DefaultMonoFont, setupMonoFont)
+                && !setupFont!.IsDisposed
+                && !setupMonoFont!.IsDisposed
+                && setupFont.Measure("Hi", 2f).X > 0f
+                && setupMonoFont.Measure("Hi", 2f).X > 0f;
+            context.RequestExit();
+        };
+
+        RayBorkApp app = new RayBorkAppBuilder()
+            .WithGame(game)
+            .WithTargetFps(2)
+            .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .Build(_ => platform, () => renderer, TimeProvider.System);
+        try {
+            app.Run();
+        } finally {
+            app.Dispose();
+        }
+
+        Assert.NotNull(setupFont);
+        Assert.NotNull(setupMonoFont);
+        Assert.True(usableInSetup);
+        Assert.True(usableInTick);
+        // Loading the built-in fonts is CPU-only, so the startup upload and destroy counts are unchanged.
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.UploadCallCount);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
+        Assert.True(setupFont!.IsDisposed);
+        Assert.True(setupMonoFont!.IsDisposed);
+        Assert.Equal("/fonts/fira-sans", setupFont.Path);
+        Assert.Equal("/fonts/jetbrains-mono", setupMonoFont.Path);
+        Assert.Throws<ObjectDisposedException>(() => _ = setupFont.LineHeight);
+        Assert.Throws<ObjectDisposedException>(() => _ = setupMonoFont.LineHeight);
     }
 }

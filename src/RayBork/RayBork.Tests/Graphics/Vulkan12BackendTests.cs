@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using RayBork.Internal;
 using Silk.NET.Vulkan;
 
@@ -95,6 +96,7 @@ public sealed class Vulkan12BackendTests {
         EngineInfo info = host.Backend.Info;
 
         Assert.Equal(frameIndex, stats.FrameIndex);
+        Assert.Equal(0, stats.PresentedFrames);
         Assert.Equal(0, stats.DrawCalls);
         Assert.Equal(0, stats.Instances);
         Assert.Equal(0, stats.Triangles);
@@ -106,6 +108,66 @@ public sealed class Vulkan12BackendTests {
         Assert.True(stats.CpuFrameMilliseconds >= 0);
         Assert.InRange(stats.FramesInFlight, 0, 3);
         Assert.Equal(0, stats.RecoveryCount);
+        host.Backend.Present();
+        Assert.Equal(1, host.Backend.Stats.PresentedFrames);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void PresentedFramesCountsOnlySuccessfulPresentations() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+
+        Assert.Equal(0, host.Backend.Stats.PresentedFrames);
+
+        for (long frameIndex = 1; frameIndex <= 3; frameIndex++) {
+            host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, frameIndex, _clearColor));
+            Assert.Equal(frameIndex - 1, host.Backend.Stats.PresentedFrames);
+
+            host.Backend.Present();
+            Assert.Equal(frameIndex, host.Backend.Stats.PresentedFrames);
+        }
+
+        // Presenting with nothing pending is a no-op and does not count.
+        host.Backend.Present();
+        Assert.Equal(3, host.Backend.Stats.PresentedFrames);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void AFrameSkippedOnAMinimizedSurfaceDoesNotCountAsPresented() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        host.State = host.State with { IsMinimized = true };
+
+        host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, 1, _clearColor));
+        host.Backend.Present();
+
+        Assert.Equal(0, host.Backend.Stats.PresentedFrames);
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void CpuFrameMillisecondsExcludesTheSwapchainAcquireWait() {
+        const double acquireDelayMilliseconds = 200;
+        const double maxCpuFrameMilliseconds = 100;
+
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        int acquireHookCalls = 0;
+        host.Backend.BeforeAcquireForTests = () => {
+            Interlocked.Increment(ref acquireHookCalls);
+            long startedAt = Stopwatch.GetTimestamp();
+            while (Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds < acquireDelayMilliseconds) {
+                Thread.SpinWait(100);
+            }
+        };
+
+        host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, 1, _clearColor));
+
+        Assert.Equal(1, acquireHookCalls);
+        Assert.InRange(host.Backend.Stats.CpuFrameMilliseconds, 0, maxCpuFrameMilliseconds);
         host.Backend.Present();
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }

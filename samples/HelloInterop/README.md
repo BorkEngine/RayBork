@@ -5,12 +5,13 @@ and `Shutdown` on the tick thread, and exercises the Vulkan 1.2 renderer end to 
 clears the linear HDR scene target, the present pass applies `--tonemapping` and `--exposure`, MSAA
 is resolved before presentation, and the swapchain prefers an HDR (scRGB) format when the OS/window
 HDR state is enabled and falls back to the SDR path otherwise. The milestone AOT gate is
-[samples/PrimitiveGallery](../PrimitiveGallery/README.md); `samples/Castle` was the M4 gate and
-remains a buildable and publishable sample. This host intentionally has no camera or draw calls.
+[samples/Text](../Text/README.md); `samples/Castle` was the M4 gate and `samples/PrimitiveGallery`
+was the M5 gate, and both remain buildable and publishable samples. This host intentionally has no
+camera or draw calls.
 
 The host logs the renderer, GPU, and presentation state selected at startup, the effective MSAA
-sample count and present mode after fallback, per-second `RenderStats` lines, one final statistics
-line and the elapsed runtime on shutdown, and the window, DPI, monitor, input, and gamepad activity of
+sample count and present mode after fallback, `RenderStats` lines every 60 ticks, one final
+statistics line and the elapsed runtime on shutdown, and the window, DPI, monitor, input, and gamepad activity of
 the M1 host. It exits on the window close request, Escape, or a scripted frame limit. It also proves
 that the renderer initializes, presents, and shuts down through a Native AOT publish.
 
@@ -51,12 +52,12 @@ or not a pack is mounted:
 | `Texture` | `ctx.CreateTextureBuilder(2, 2, Rgba8Srgb)` from four `Color` pixels with mip generation | Synthetic `/_procedural/texture/N` path, size, mip count, format, sRGB, `IsProcedural`. |
 
 Both builds are awaited in `Setup`, so they exercise the non-blocking GPU upload path and the
-`BuildAsync` contract in the Native AOT gate. The assets are disposed in `Shutdown`. See
+`BuildAsync` contract in the host's own AOT publish. The assets are disposed in `Shutdown`. See
 [docs/api/rendering/meshes.md](../../docs/api/rendering/meshes.md) §7.5 and
 [docs/api/rendering/textures.md](../../docs/api/rendering/textures.md) §7.6.
 
-The host uses `RayBorkAppBuilder` with a resizable window, a 60 FPS tick cap, a 0.25 second maximum
-delta, and the renderer options on the command line. It is an `Exe` with `PublishAot=true`, so console
+The host uses `RayBorkAppBuilder` with a resizable window, no tick target, a 0.25 second maximum
+delta, FIFO presentation by default, and the renderer options on the command line. It is an `Exe` with `PublishAot=true`, so console
 logging is visible and the AOT gate can run it on Windows and Linux. HDR presentation is automatic
 from the OS/window state: there is no HDR override, and the selected state is reported through
 `EngineContext.Info` as described in [docs/api/lifecycle.md](../../docs/api/lifecycle.md) §3.4,
@@ -73,7 +74,7 @@ from the OS/window state: there is no HDR override, and the selected state is re
 | `--title TEXT` | Window title. It must not be empty or whitespace. Default `HelloInterop`. |
 | `--size WxH` | Window client size in window units. Both values must be positive. Default `1280x720`. |
 | `--msaa N` | Requested MSAA sample count, a positive integer. Default `4`. The renderer selects the highest supported count that does not exceed the request and logs a warning when the effective count differs. |
-| `--present-mode NAME` | `Mailbox`, `Fifo`, or `Immediate`, case-insensitive. Default `Mailbox`; a surface that does not support Mailbox falls back to `Fifo` with a warning. `Immediate` is used only when explicitly requested. |
+| `--present-mode NAME` | `Mailbox`, `Fifo`, or `Immediate`, case-insensitive. Default `Fifo`; a surface that does not support Mailbox falls back to `Fifo` with a warning when Mailbox is requested. `Immediate` is used only when explicitly requested. |
 | `--tonemapping NAME` | `AgX` or `None`, case-insensitive. Default `AgX`. `None` writes linear values through the swapchain transfer function for custom presentation paths. |
 | `--exposure EV` | Exposure in stops applied before tone mapping, an invariant finite float. Default `0`; `+1` doubles linear exposure. |
 | `--validation on\|off` | Request or disable the Vulkan validation layer. When the option is omitted, the engine default applies: on in Debug, off in Release. The effective state is reported by `EngineContext.Info.ValidationEnabled`. |
@@ -86,21 +87,20 @@ command line prints the error and usage to stderr and exits `2`.
 ## Expected log output
 
 The renderer logs its device and presentation selection before `Setup` runs. On the HDR test host
-(SDL reports an SDR white level of `2.0` and an HDR headroom of `6.25`, and the surface advertises no
-`Mailbox` mode), `--frames 120` reports:
+(SDL reports an SDR white level of `2.0`, an HDR headroom of `6.25`, and a 144 Hz display refresh),
+`--frames 120` reports:
 
 ```text
 Vulkan 1.2 renderer initialized: AMD Radeon(TM) 8060S Graphics, API 1.4.359, validation enabled.
 Presentation path: R16G16B16A16_SFLOAT/ColorSpaceExtendedSrgbLinearExt, HDR True, present mode Fifo, 4x MSAA, 3 swapchain image(s), 1280x720.
 Window HDR state: enabled True, SDR white level 2, HDR headroom 6.25.
-The requested present mode Mailbox is not supported by the window surface; using Fifo.
 Engine RayBork 0.1.0.0: renderer Vulkan 1.4, GPU 'AMD Radeon(TM) 8060S Graphics', Vulkan 1.4.359, validation True.
 Presentation: swapchain R16G16B16A16_SFLOAT, HDR True, 4x MSAA, present mode Fifo.
 Requested scene: exposure 0 EV, tone mapping AgX.
-Tick render stats: frame 59, 0 draw call(s), 0 instance(s), 0 triangle(s), 0 culled instance(s), 0 pipeline(s), 3 texture(s), 4x MSAA, HDR True, CPU 0.536 ms, 1 frame(s) in flight, 0 recoveries.
-Final render stats: frame 119, 0 draw call(s), 0 instance(s), 0 triangle(s), 0 culled instance(s), 0 pipeline(s), 3 texture(s), 4x MSAA, HDR True, CPU 0.463 ms, 1 frame(s) in flight, 0 recoveries.
-Elapsed runtime: 2.664s.
-HelloInterop stopped after 120 tick(s): time 2.664s, fps 60.9, last window 1280x720 (render 1280x720, DPI scale 1.5), exit frame limit (120).
+Tick render stats: frame 59, 0 draw call(s), 0 instance(s), 0 triangle(s), 0 culled instance(s), 0 pipeline(s), 5 texture(s), 4x MSAA, HDR True, CPU 0.209 ms, 2 frame(s) in flight, 0 recoveries.
+Final render stats: frame 119, 0 draw call(s), 0 instance(s), 0 triangle(s), 0 culled instance(s), 0 pipeline(s), 5 texture(s), 4x MSAA, HDR True, CPU 0.238 ms, 2 frame(s) in flight, 0 recoveries.
+Elapsed runtime: 1.837s.
+HelloInterop stopped after 120 tick(s): time 1.837s, fps 139.5, last window 1280x720 (render 1280x720, DPI scale 1.5), exit frame limit (120).
 ```
 
 With the auto-mounted or explicit pack, the host adds the pack path and one metadata line per loaded
@@ -126,8 +126,8 @@ Procedural texture /_procedural/texture/1: 2x2, 2 mip level(s), format Rgba8Srgb
 - The HDR state is repeated by the engine `Window HDR state` line and by the host
   `Presentation`/`Requested scene` lines, so a run shows both the state that was requested and the
   effective sample count and present mode.
-- `RenderStats` is logged every 60 ticks (about one second at the 60 FPS cap) and once more during
-  shutdown. The shutdown snapshot is the last frame the render thread completed; it can lag the final
+- `RenderStats` is logged every 60 ticks and once more during shutdown. The shutdown snapshot is the
+  last frame the render thread completed; it can lag the final
   tick by one frame because the tick thread enters `Shutdown` before the frame ring is drained. This
   host records no camera passes, so the draw counters stay `0`; the present triangle is not a scene
   draw and `TextureCount` reports the live bindless slots (the built-in white and error textures plus
@@ -203,7 +203,7 @@ samples/HelloInterop/bin/Release/net11.0/win-x64/publish/HelloInterop.exe --fram
 The publish must finish with zero AOT/trim warnings, its directory must contain `hello.pck` beside
 the executable, and the published host must exit `0` after mounting the adjacent pack, loading the
 texture, mesh, shader, and custom data, and presenting 30 frames. This is the diagnostic-host
-publish; the per-milestone AOT gate is `samples/PrimitiveGallery`.
+publish; the per-milestone AOT gate is `samples/Text`.
 
 ## WSL Linux Native AOT
 
