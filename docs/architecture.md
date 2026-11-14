@@ -303,16 +303,23 @@ seam; the tick thread never touches them.
 | Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; input snapshot; frame publication | Dedicated thread. Starts only after the renderer published `Info`, so `Setup` can read it. The game-facing engine state is tick-thread affine. |
 | Render thread | Backend, instance, device, queues, swapchain, scene target, present pipeline, the newest published frame lease | Creates the Vulkan objects, consumes the newest frame, submits and presents, recovers, and disposes. Never calls user code and never touches the window directly. |
 | Asset loader | Pack I/O, decompression, descriptor decode, registered-load dispatch, MessagePack custom data | Dedicated `RayBork.Asset` thread added in M3. Runs the synchronous part of every registered `IAssetLoader<T>`; it never calls SDL, Vulkan, or tick-thread APIs. It queues engine-asset GPU uploads and continues serving the next request instead of waiting for the copy. |
+| Font generation | Per-font glyph pipelines and their glyph texture cache | Dedicated `RayBork.Font` thread added in M6. App lifetime: it starts before the tick thread starts and stops after the tick thread exits, before the asset catalog stops, while the render thread still services the GPU upload bridge. It reads parsed faces and generates CPU MSDF bitmaps, then blocks on the GPU texture upload; the render thread completes the copy, and the font thread never calls SDL or Vulkan. |
 | Sound thread | Audio mixer (post-1.0) | Not present in v1. |
 
-Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, `RayBork.Render`, and
-`RayBork.Asset`. The post-1.0 audio milestone adds `RayBork.Audio`.
+Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, `RayBork.Render`,
+`RayBork.Asset`, and `RayBork.Font`. The post-1.0 audio milestone adds `RayBork.Audio`.
 
 ### Thread-affine state
 
 - `IGame` callbacks run on the tick thread. Every object created by them (`Camera`, `RenderTexture`
-  in M8, `Font` preloading in M6, `Shader.SetUniform`, and the primitive draw helpers) is tick-thread
-  affine.
+  in M8, `Shader.SetUniform`, and the primitive draw helpers) is tick-thread affine.
+- `Font` metrics and glyph acquisition are tick-thread calls. The app-lifetime `RayBork.Font` thread is
+  the only thread that inserts and evicts glyph textures; the tick thread calls the pipeline's
+  `BeginFrame`, `Acquire`, and `GetMetrics` and updates the use stamps and waiter state while it does.
+  `Acquire` adds the texture's frame hold to the camera's retention set before it returns; eviction may
+  still dispose the texture wrapper in the same frame, and the frame hold keeps its GPU resource alive
+  until the frame ring releases it. A miss enqueues generation and returns no texture, so a draw never
+  blocks on the font thread and the glyph appears on a later frame.
 - M3 adds `IAssetCatalog.Load`, `LoadData`, and `Exists` as thread-safe calls with concurrent loads
   allowed. Engine assets may be used on the tick thread after completion; custom data returned by
   the same `Load<T>` method is caller-owned. Custom types must be registered before `Build` with
@@ -349,7 +356,9 @@ Startup runs on the main thread and interleaves with the render thread:
 5. The main thread preloads `EngineDefaults` and then the engine's primitive assets: the
    `/shaders/primitive` and `/shaders/mesh` programs, the `/shaders/msdf` text program, their three
    engine materials, and the eight primitive meshes built through the procedural GPU bridge. The
-   camera service holds them for the app lifetime, so the first tick can record a primitive draw.
+   camera service holds them for the app lifetime, so the first tick can record a primitive draw. The
+   main thread also creates and starts the app-lifetime glyph generation service before the tick
+   thread starts, so a font loaded from `Setup` can enqueue generation.
 6. The tick thread starts and `IGame.Setup` runs. Because the tick thread starts only after the
    renderer is ready, `Setup` observes a valid `EngineContext.Info`.
 7. The main loop services the surface channel, pumps events, and checks for exit, tick completion,
@@ -359,11 +368,13 @@ Shutdown unwinds in the opposite direction:
 
 1. The main thread stops accepting ticks and waits for the current tick to finish; the tick thread
    publishes the final frame and runs `IGame.Shutdown` on that thread, then exits.
-2. The main thread joins the tick thread (pumping the platform while it waits), then releases the
-   engine defaults and the primitive assets. The primitive assets are detached from the camera
-   service before their owner references are released, so no later camera can reach a disposed
-   primitive mesh. The asset loader is then canceled and joined, and the catalog releases its public
-   assets and queues their GPU destruction on the render thread through the upload bridge.
+2. The main thread joins the tick thread (pumping the platform while it waits), then stops the glyph
+   generation service and joins `RayBork.Font` while the render thread still services the GPU upload
+   bridge. It then releases the engine defaults and the primitive assets. The primitive assets are
+   detached from the camera service before their owner references are released, so no later camera can
+   reach a disposed primitive mesh. The asset loader is then canceled and joined, and the catalog
+   releases its public assets and queues their GPU destruction on the render thread through the upload
+   bridge.
 3. The main thread completes the frame ring. The complete ring still drains its last ready frame.
    The render thread services the pending GPU destructions before it disposes the backend.
 4. The main thread joins the render thread while it services the surface channel and pumps. The
@@ -373,6 +384,12 @@ Shutdown unwinds in the opposite direction:
    and unloads SDL3 and the Vulkan loader. GPU resources are not destroyed before `Shutdown`
    returns.
 6. `Run` returns.
+
+The `RayBork.Font` thread blocks on the glyph texture factory task, so exactly one glyph uploads at a
+time. The task must complete on a thread that never waits for `RayBork.Font`; the production path is
+the GPU upload bridge completed by the render thread. Shutdown stops the service before the asset
+catalog stops and before the render loop joins, so the bridge can still complete or cancel an
+in-flight glyph upload.
 
 The render thread never blocks on the platform directly and the main thread never blocks
 unboundedly on the render thread. A renderer initialization failure before `Setup` is a startup

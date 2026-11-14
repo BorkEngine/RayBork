@@ -11,7 +11,7 @@
 | `IGame` callbacks | Tick thread | Only the callback runs; no concurrent callback |
 | `Camera` | Tick thread | Create, draw, dispose inside one `Tick` |
 | `Shader` uniform cursor | Tick thread | `SetUniform`/`ResetUniforms` |
-| `Font` glyph cache | Tick thread | `Preload`, lazy glyph generation |
+| `Font` glyph cache | `RayBork.Font` thread (inserts and evicts) | The tick thread calls `BeginFrame`, `Acquire`, and `GetMetrics` and updates use stamps and waiter state. A miss enqueues and returns no texture; `Acquire` adds the texture's frame hold before it returns, so a draw never blocks. Eviction may dispose the wrapper; the frame hold keeps its GPU resource alive through the frame. |
 | `RenderTexture` handle | Tick thread | Create/dispose/resize; GPU work is deferred |
 | `EngineContext.Tonemapping` | Tick thread | Read/write during `Setup`, `Tick`, or `Shutdown`; the values are sealed into each frame |
 | `Collision`/`RayCollision` | Any thread | Pure CPU queries; no locks; a mesh must not be disposed while a `GetRayMesh` query reads it |
@@ -39,13 +39,21 @@ from the camera call. M5 has no CPU line-geometry fallback.
 ### 11.2 The "join before Tick returns" rule
 
 If user code starts a thread that touches game-owned objects, it must join that thread before
-`Tick` returns. This includes `Camera`, `Shader.SetUniform`, `Font.Preload`, `RenderTexture`, and
+`Tick` returns. This includes `Camera`, `Shader.SetUniform`, `RenderTexture`, and
 any object read by a recorded draw. The engine's frame handoff assumes that all game-owned state
 is quiescent at the end of `Tick`.
 
 `IAssetCatalog` is the exception: background loads are safe, but the completed asset must not be
 used by a tick-affine object until the tick that observes completion. `Load<T>` returns a
 caller-owned value for custom data; it can be used on any thread after completion.
+
+The glyph cache follows the same engine-owned exception. `RayBork.Font` is an app-lifetime thread that
+the engine joins during shutdown; it is the only thread that inserts and evicts glyph textures. The
+tick thread calls `BeginFrame`, `Acquire`, and `GetMetrics` and updates the use stamps and waiter state
+while it does. The draw path never waits for a glyph: a miss records the request and returns no
+texture. `Acquire` adds the texture's frame hold to the camera's frame retention set before it
+returns. Eviction may still dispose the texture wrapper in the same frame; the frame hold keeps its GPU
+resource alive until the frame ring releases it.
 
 Procedural builders are also thread-safe as a factory/build operation: `EngineContext.CreateMeshBuilder`,
 `EngineContext.CreateTextureBuilder`, and `BuildAsync` may be called on any thread, including `Setup`
@@ -62,6 +70,8 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 - `RenderTexture.Dispose` is deferred; frames that sample it keep it alive.
 - Engine asset `Dispose` releases a reference; frames and pending GPU work retain their own
   references.
+- The app-lifetime glyph generation service is stopped after the tick thread exits and before the
+  asset catalog stops; it joins `RayBork.Font`. A `Font` disposal does not stop the service.
 - `Load<T>` and `LoadData` results for custom data are caller-owned and are not disposed by the
   engine.
 - `RayBorkApp.Dispose` stops a running app, joins threads, and releases native resources. It is
@@ -76,7 +86,8 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 ```text
 1. Stop accepting new ticks; finish the current tick if one is running.
 2. The tick thread publishes the final frame and runs IGame.Shutdown on the tick thread, then exits.
-3. Join the tick thread and complete the frame ring.
+3. Join the tick thread, stop the glyph generation service while the render thread still services the
+   GPU upload bridge, and complete the frame ring.
 4. The render thread drains and presents the final frame, disposes the backend, and destroys the
    native surface through the surface channel.
 5. Join the render thread while the main thread services the surface channel and pumps, then close
@@ -86,7 +97,8 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 
 The order is deliberate: `Shutdown` runs while the renderer is still alive, but it cannot draw.
 GPU resources are not destroyed until after `Shutdown` returns, so a final readback or save is
-possible.
+possible. The glyph service stop runs before the asset catalog stops and before the render loop joins,
+so the bridge can still complete or cancel an in-flight glyph upload.
 
 M2 has a real renderer: the main thread services surface requests until the render thread exits,
 then disposes the platform. The shutdown join is bounded to 30 seconds for the render thread; the

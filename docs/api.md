@@ -122,7 +122,7 @@ bugs, not rendering bugs.
 | **Main** | Must be called on the process main thread; only `RayBorkApp.Run` normally does this. |
 | **Render** | Internal; never called by game code. |
 
-Unless marked otherwise, a mutable object (`Shader`, `Camera`, `Font` preloading) is tick-only.
+Unless marked otherwise, a mutable object (`Shader`, `Camera`) is tick-only.
 
 ### 1.5 Error model
 
