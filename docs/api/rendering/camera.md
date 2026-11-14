@@ -148,12 +148,27 @@ public sealed class Camera : IDisposable {
     public void DrawCircle(Vector3 center, float radius, Vector3 rotationAxis, float rotationAngle, Color color);
     public void DrawCircle(Transform transform, float radius, Color color);
     public void DrawGrid(int slices, float spacing, Color color);
+    public void DrawBillboard(Texture texture, Vector3 position, Vector2 size, Color color);
+    public void DrawBillboard(Texture texture, Vector3 position, Vector2 size, Color color, bool faceCamera);
+    public void DrawBillboard(Texture texture, Transform transform, Vector2 size, Color color);
+    public void DrawBillboard(Texture texture, Transform transform, Vector2 size, Color color, bool faceCamera);
+    public void DrawBillboard(Texture texture, Rect source, Vector3 position, Vector2 size, Color color);
+    public void DrawBillboard(Texture texture, Rect source, Vector3 position, Vector2 size, Color color, bool faceCamera);
     public void DrawBillboard(
         Texture texture,
-        Vector3 position,
+        Transform transform,
+        Rect source,
         Vector2 size,
+        Vector2 origin,
+        Color color);
+    public void DrawBillboard(
+        Texture texture,
+        Transform transform,
+        Rect source,
+        Vector2 size,
+        Vector2 origin,
         Color color,
-        bool faceCamera = true);
+        bool faceCamera);
     public void DrawText(
         Font font,
         ReadOnlySpan<char> text,
@@ -264,7 +279,10 @@ retained.
 
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
-The draw API does not expose a UV rectangle override, so it is `(0, 0, 1, 1)` for every draw.
+The general draw API does not expose a UV rectangle override, so `DrawMesh`, `DrawInstanced`, and
+every primitive helper except the billboard source-rectangle overloads record `(0, 0, 1, 1)`.
+`DrawBillboard` with a `source` rectangle records that normalized rectangle as `rbInstance.UvRect`;
+see **Billboards** below.
 
 For `DrawMesh` and `DrawInstanced`, `renderState` overrides the material's default render state for
 this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of the batching key.
@@ -279,10 +297,13 @@ is `ArgumentException`, a negative radius, height, size, extent, or point size i
 nothing, `sides < 3`, `rings < 2`, `slices < 3`, `slices < 1` for `DrawGrid`, and `spacing <= 0` are
 `ArgumentOutOfRangeException`, a zero `rotationAxis` is `ArgumentException`, a null texture is
 `ArgumentNullException`, and a disposed camera, texture, or primitive asset is
-`ObjectDisposedException`. Colors are linear; each helper writes its color as the per-instance tint.
-Lines are one pixel wide, wire shapes are line geometry, and `DrawCylinder` records two instanced
-draws for equal radii. The four-argument `DrawCylinder` convenience overload uses the default 16
-sides; the five-argument form takes `sides` explicitly.
+`ObjectDisposedException`. A billboard source rectangle with a non-finite component is
+`ArgumentException`; a non-positive width or height, or a rectangle outside the normalized `[0, 1]`
+texture rectangle, is `ArgumentOutOfRangeException`. A non-finite billboard origin is
+`ArgumentException`; the origin is not clamped. Colors are linear; each helper writes its color as
+the per-instance tint. Lines are one pixel wide, wire shapes are line geometry, and `DrawCylinder`
+records two instanced draws for equal radii. The four-argument `DrawCylinder` convenience overload
+uses the default 16 sides; the five-argument form takes `sides` explicitly.
 
 **Primitive overloads and Transform composition.** The primitive families use ordinary C# overloads;
 the engine has no `Ex`, `Rec`, `Pro`, or `V` suffixes. Every world shape has a raylib-compatible
@@ -292,7 +313,10 @@ explicit arguments. The instance matrix is `local * transform.ToMatrix()` under 
 convention, where `local` builds the shape dimensions in local space. The transform scale therefore
 multiplies the shape dimensions, and an identity rotation with unit scale reproduces the matching
 simple overload at `Transform.Position`. A zero transform scale component records nothing; a negative
-scale or a non-finite transform component is rejected like any other invalid argument.
+scale or a non-finite transform component is rejected like any other invalid argument. The billboard
+is the one exception: its non-facing `Transform` overloads orient the quad in world space, while the
+non-facing simple overloads keep the camera-relative vertical billboard, so an identity transform
+reproduces the simple facing overload but not the simple non-facing one.
 
 Anchors: the cube, wire cube, sphere, wire sphere, plane, and circle are centered at the transform
 origin; the cylinder and wire cylinder put their bottom cap/ring at the transform origin with local
@@ -311,6 +335,38 @@ requested `rings` by `slices` surface instead of instancing the fixed engine mes
 sphere and wire-sphere meshes remain the default for the shorter forms. A triangle strip is
 decomposed into `points.Length - 2` triangles with alternating winding; a zero-area triangle records
 nothing.
+
+**Billboards.** `DrawBillboard` records one engine quad instance through the built-in
+`/shaders/mesh` program with `RenderState.AlphaBlend`. The four-argument convenience form is the
+camera-facing, full-texture, centered quad. The other forms add a normalized source rectangle, a
+`Transform`, an explicit origin pivot, or a combination:
+
+- `source` is a normalized rectangle in the texture: `X` and `Y` are the top-left corner and
+  `Width`/`Height` are the positive extents, all inside `[0, 1]`. It is recorded as the per-instance
+  UV rectangle `rbInstance.UvRect = (X, Y, Width, Height)` and the mesh shader maps the quad's
+  authored UVs through it; the default `(0, 0, 1, 1)` reproduces the authored UVs. The rectangle is
+  per-instance data, so two billboards with different source rectangles still batch together.
+- `origin` is the normalized pivot in the billboard's local quad: `(0, 0)` is the bottom-left corner
+  and `(1, 1)` is the top-right corner. The pivot is placed at the transform position;
+  `(0.5, 0.5)` is the centered default of the overloads without an explicit origin. The origin is not
+  clamped; only its finiteness is validated, so a pivot outside the quad is legal.
+- `size` is the world-space width and height before the transform scale, and the transform scale
+  multiplies it on the local X and Y axes. A zero size component or a zero transform scale component
+  records nothing.
+- With `faceCamera: true` the quad faces the camera: the camera basis supplies the plane and the
+  transform rotation supplies only the in-plane roll, its twist about the billboard's local `+Z`
+  plane normal. Pitch and yaw components of the rotation do not tilt the plane; the transform
+  position and scale apply.
+- With `faceCamera: false` the quad does not face the camera. The `Vector3` overloads keep the
+  existing vertical billboard: world up plus the camera's yaw. The `Transform` overloads are
+  world-oriented by the transform (`local * transform.ToMatrix()`). An identity transform therefore
+  gives a world-space quad in the local XY plane facing world `+Z`, which is intentionally different
+  from the `Vector3` overloads' vertical orientation because the `Vector3` overloads have no
+  transform rotation to orient the plane.
+- The engine material's texture binding is set immediately before the recorded call and cleared
+  immediately afterwards, so the shared material never keeps a game texture. The recorded frame
+  retains the texture until the renderer releases the slot, so a texture disposed after the call
+  stays alive for the recorded frame.
 
 **Ray/quad collision.** `Collision.GetRayQuad(ray, a, b, c, d)` splits the quad into the triangles
 `(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the nearest

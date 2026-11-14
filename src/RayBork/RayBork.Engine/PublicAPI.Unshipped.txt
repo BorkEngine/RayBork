@@ -1189,7 +1189,14 @@ RayBork.RayCollision.Point.get -> System.Numerics.Vector3
 RayBork.RayCollision.RayCollision() -> void
 RayBork.Mesh.HasCollisionAcceleration.get -> bool
 RayBork.MeshBuilder.GenerateCollisions() -> void
-RayBork.Camera.DrawBillboard(RayBork.Texture! texture, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera = true) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Rect source, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Rect source, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, RayBork.Rect source, System.Numerics.Vector2 size, System.Numerics.Vector2 origin, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, RayBork.Rect source, System.Numerics.Vector2 size, System.Numerics.Vector2 origin, RayBork.Color color, bool faceCamera) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera) -> void
 RayBork.Camera.DrawCube(System.Numerics.Vector3 position, System.Numerics.Vector3 size, RayBork.Color color) -> void
 RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radius, float height, RayBork.Color color) -> void
 RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radius, float height, RayBork.Color color, int sides) -> void

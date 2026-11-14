@@ -53,6 +53,9 @@ public sealed class Camera : IDisposable {
         (3, 7),
     ];
 
+    private static readonly Rect _fullTextureRect = new(0f, 0f, 1f, 1f);
+    private static readonly Vector2 _centerOrigin = new(0.5f, 0.5f);
+
     private readonly CameraService _service;
     private readonly RenderFramePacket _packet;
     private readonly CameraPass _pass;
@@ -2173,23 +2176,65 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
-    /// Records one textured quad centered at <paramref name="position"/> that faces the camera.
+    /// Records one textured, camera-facing quad centered at <paramref name="position"/>.
     /// </summary>
     /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
-    /// <param name="position">The world-space center.</param>
+    /// <param name="position">The world-space position of the quad's origin pivot.</param>
     /// <param name="size">The world-space width and height of the quad.</param>
     /// <param name="color">The linear tint multiplied into the sampled texture.</param>
-    /// <param name="faceCamera">
-    /// When <see langword="true"/>, the quad's front faces along the camera's view direction. When
-    /// <see langword="false"/>, the quad is vertical: it keeps world up and only the camera's yaw
-    /// rotates it.
-    /// </param>
     /// <remarks>
-    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth
-    /// write. The engine material's texture binding is set immediately before the draw is recorded and
+    /// <para>
+    /// This is the convenience form of <see cref="DrawBillboard(Texture, Vector3, Vector2, Color, bool)"/>
+    /// with <c>faceCamera: true</c> and the full texture: the quad faces the camera and its normalized
+    /// origin is its center.
+    /// </para>
+    /// <para>
+    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
+    /// The engine material's texture binding is set immediately before the draw is recorded and
     /// cleared immediately afterwards, so the shared material never keeps a game texture past the
     /// call; the recorded frame retains the texture until the renderer releases the frame slot. A size
     /// component of zero records nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A component of <paramref name="position"/> or <paramref name="size"/> is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">A component of <paramref name="size"/> is negative.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawBillboard(Texture texture, Vector3 position, Vector2 size, Color color) {
+        DrawBillboard(texture, position, size, color, faceCamera: true);
+    }
+
+    /// <summary>
+    /// Records one textured quad centered at <paramref name="position"/>.
+    /// </summary>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="position">The world-space position of the quad's origin pivot.</param>
+    /// <param name="size">The world-space width and height of the quad.</param>
+    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <param name="faceCamera">
+    /// When <see langword="true"/>, the quad faces the camera. When <see langword="false"/>, the quad is
+    /// the existing vertical billboard: it keeps world up and only the camera's yaw rotates it.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The quad samples the full texture and uses the quad's center as its origin pivot. The position
+    /// overloads have no transform, so a <c>faceCamera: false</c> draw keeps the engine's vertical
+    /// billboard orientation.
+    /// </para>
+    /// <para>
+    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
+    /// The engine material's texture binding is set immediately before the draw is recorded and
+    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
+    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A size
+    /// component of zero records nothing.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">
@@ -2207,22 +2252,423 @@ public sealed class Camera : IDisposable {
         Vector3 position,
         Vector2 size,
         Color color,
-        bool faceCamera = true) {
+        bool faceCamera) {
+        DrawBillboardAtPosition(
+            texture,
+            position,
+            _fullTextureRect,
+            size,
+            _centerOrigin,
+            color,
+            faceCamera);
+    }
+
+    /// <summary>
+    /// Records one textured, camera-facing quad under <paramref name="transform"/>.
+    /// </summary>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="transform">
+    /// The billboard transform; see <see cref="DrawBillboard(Texture, Transform, Vector2, Color, bool)"/>.
+    /// </param>
+    /// <param name="size">The world-space width and height before the transform scale.</param>
+    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <remarks>
+    /// This is the convenience form of
+    /// <see cref="DrawBillboard(Texture, Transform, Vector2, Color, bool)"/> with <c>faceCamera: true</c>
+    /// and the full texture.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">A transform component or a size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A size component or a transform scale component is negative.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawBillboard(Texture texture, Transform transform, Vector2 size, Color color) {
+        DrawBillboard(texture, transform, size, color, faceCamera: true);
+    }
+
+    /// <summary>
+    /// Records one textured quad under <paramref name="transform"/>.
+    /// </summary>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="transform">
+    /// The billboard transform. Its position is the origin pivot's world position, its rotation supplies
+    /// the in-plane roll when <paramref name="faceCamera"/> is <see langword="true"/> and orients the
+    /// plane when it is <see langword="false"/>, and its scale multiplies <paramref name="size"/> on the
+    /// local X and Y axes.
+    /// </param>
+    /// <param name="size">The world-space width and height before the transform scale.</param>
+    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <param name="faceCamera">
+    /// When <see langword="true"/>, the quad faces the camera and the transform rotation contributes
+    /// only its twist about the billboard's local plane normal as the in-plane roll. When
+    /// <see langword="false"/>, the quad does not face the camera: the transform rotation orients the
+    /// billboard plane in world space, so an identity transform gives a world-space quad in the local
+    /// XY plane. This is intentionally different from the position overloads, whose
+    /// <c>faceCamera: false</c> form keeps the camera-relative vertical billboard; an identity
+    /// transform does not reproduce that vertical orientation.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The quad samples the full texture and uses the quad's center as its origin pivot. With
+    /// <c>faceCamera: false</c> the transform rotation orients the plane in world space; the position
+    /// overloads keep the camera-relative vertical billboard instead, so an identity transform does not
+    /// reproduce the position overload's non-facing orientation.
+    /// </para>
+    /// <para>
+    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
+    /// The engine material's texture binding is set immediately before the draw is recorded and
+    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
+    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A zero
+    /// size component or a zero transform scale component records nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">A transform component or a size component is not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A size component or a transform scale component is negative.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawBillboard(
+        Texture texture,
+        Transform transform,
+        Vector2 size,
+        Color color,
+        bool faceCamera) {
+        DrawBillboardWithTransform(
+            texture,
+            transform,
+            _fullTextureRect,
+            size,
+            _centerOrigin,
+            color,
+            faceCamera);
+    }
+
+    /// <summary>
+    /// Records one textured, camera-facing quad that samples a normalized sub-rectangle of
+    /// <paramref name="texture"/>.
+    /// </summary>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="source">
+    /// The normalized source rectangle in the texture: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are
+    /// the top-left corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the positive
+    /// extents, all in <c>[0, 1]</c>.
+    /// </param>
+    /// <param name="position">The world-space position of the quad's origin pivot.</param>
+    /// <param name="size">The world-space width and height of the quad.</param>
+    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <remarks>
+    /// This is the convenience form of
+    /// <see cref="DrawBillboard(Texture, Rect, Vector3, Vector2, Color, bool)"/> with
+    /// <c>faceCamera: true</c> and the quad's center as its origin pivot.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A component of <paramref name="position"/>, <paramref name="size"/>, or
+    /// <paramref name="source"/> is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A <paramref name="size"/> component is negative, <paramref name="source"/> does not have positive
+    /// width and height, or <paramref name="source"/> lies outside the normalized texture rectangle.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawBillboard(
+        Texture texture,
+        Rect source,
+        Vector3 position,
+        Vector2 size,
+        Color color) {
+        DrawBillboard(texture, source, position, size, color, faceCamera: true);
+    }
+
+    /// <summary>
+    /// Records one textured quad that samples a normalized sub-rectangle of <paramref name="texture"/>.
+    /// </summary>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="source">
+    /// The normalized source rectangle in the texture: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are
+    /// the top-left corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the positive
+    /// extents, all in <c>[0, 1]</c>.
+    /// </param>
+    /// <param name="position">The world-space position of the quad's origin pivot.</param>
+    /// <param name="size">The world-space width and height of the quad.</param>
+    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <param name="faceCamera">
+    /// When <see langword="true"/>, the quad faces the camera. When <see langword="false"/>, the quad is
+    /// the existing vertical billboard: it keeps world up and only the camera's yaw rotates it.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The source rectangle is recorded as the per-instance UV rectangle and the built-in mesh shader
+    /// maps the quad's authored UVs through it, so <c>(0, 0, 1, 1)</c> is the same full-texture sample
+    /// as the overloads without a source rectangle.
+    /// </para>
+    /// <para>
+    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
+    /// The engine material's texture binding is set immediately before the draw is recorded and
+    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
+    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A size
+    /// component of zero records nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A component of <paramref name="position"/>, <paramref name="size"/>, or
+    /// <paramref name="source"/> is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A <paramref name="size"/> component is negative, <paramref name="source"/> does not have positive
+    /// width and height, or <paramref name="source"/> lies outside the normalized texture rectangle.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawBillboard(
+        Texture texture,
+        Rect source,
+        Vector3 position,
+        Vector2 size,
+        Color color,
+        bool faceCamera) {
+        DrawBillboardAtPosition(
+            texture,
+            position,
+            source,
+            size,
+            _centerOrigin,
+            color,
+            faceCamera);
+    }
+
+    /// <summary>
+    /// Records one textured, camera-facing quad with an explicit source rectangle, size, and origin
+    /// pivot under <paramref name="transform"/>.
+    /// </summary>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="transform">The billboard transform; see the seven-argument overload.</param>
+    /// <param name="source">The normalized source rectangle; see the five-argument source overload.</param>
+    /// <param name="size">The world-space width and height before the transform scale.</param>
+    /// <param name="origin">
+    /// The normalized pivot in the billboard's local quad: <c>(0, 0)</c> is the bottom-left corner and
+    /// <c>(1, 1)</c> is the top-right corner. <c>(0.5, 0.5)</c> centers the quad on the transform
+    /// position.
+    /// </param>
+    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <remarks>
+    /// This is the convenience form of
+    /// <see cref="DrawBillboard(Texture, Transform, Rect, Vector2, Vector2, Color, bool)"/> with
+    /// <c>faceCamera: true</c>.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A transform, size, source, or origin component is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A size component or a transform scale component is negative, <paramref name="source"/> does not
+    /// have positive width and height, or <paramref name="source"/> lies outside the normalized texture
+    /// rectangle.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawBillboard(
+        Texture texture,
+        Transform transform,
+        Rect source,
+        Vector2 size,
+        Vector2 origin,
+        Color color) {
+        DrawBillboard(texture, transform, source, size, origin, color, faceCamera: true);
+    }
+
+    /// <summary>
+    /// Records one textured quad with an explicit source rectangle, size, and origin pivot under
+    /// <paramref name="transform"/>.
+    /// </summary>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="transform">
+    /// The billboard transform. Its position is the origin pivot's world position, its rotation supplies
+    /// the in-plane roll when <paramref name="faceCamera"/> is <see langword="true"/> and orients the
+    /// plane when it is <see langword="false"/>, and its scale multiplies <paramref name="size"/> on the
+    /// local X and Y axes.
+    /// </param>
+    /// <param name="source">
+    /// The normalized source rectangle in the texture: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are
+    /// the top-left corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the positive
+    /// extents, all in <c>[0, 1]</c>.
+    /// </param>
+    /// <param name="size">The world-space width and height before the transform scale.</param>
+    /// <param name="origin">
+    /// The normalized pivot in the billboard's local quad: <c>(0, 0)</c> is the bottom-left corner and
+    /// <c>(1, 1)</c> is the top-right corner. <c>(0.5, 0.5)</c> centers the quad on the transform
+    /// position.
+    /// </param>
+    /// <param name="color">The linear tint multiplied into the sampled texture.</param>
+    /// <param name="faceCamera">
+    /// When <see langword="true"/>, the quad faces the camera and the transform rotation contributes
+    /// only its twist about the billboard's local plane normal as the in-plane roll. When
+    /// <see langword="false"/>, the quad does not face the camera: the transform rotation orients the
+    /// billboard plane in world space, so an identity transform gives a world-space quad in the local
+    /// XY plane. This is intentionally different from the position overloads, whose
+    /// <c>faceCamera: false</c> form keeps the camera-relative vertical billboard; an identity
+    /// transform does not reproduce that vertical orientation.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The instance matrix maps the engine quad through the local billboard quad, the normalized origin
+    /// pivot, and the transform. Under the row-vector convention the local quad is
+    /// <c>Translate(-(origin - 0.5)) * Scale(size)</c>, so the pivot lands on the transform position and
+    /// the transform scale multiplies <paramref name="size"/>. With <c>faceCamera: true</c> the quad is
+    /// rolled by the transform's twist about its local <c>+Z</c> axis and then oriented by the camera
+    /// basis; with <c>false</c> the transform orientation is used directly, so an identity transform
+    /// gives a world-space quad in the local XY plane. The position overloads instead keep the
+    /// camera-relative vertical billboard when they do not face the camera.
+    /// </para>
+    /// <para>
+    /// The source rectangle is recorded as the per-instance UV rectangle and the built-in mesh shader
+    /// maps the quad's authored UVs through it, so <c>(0, 0, 1, 1)</c> is the same full-texture sample
+    /// as the overloads without a source rectangle.
+    /// </para>
+    /// <para>
+    /// The billboard is one instance of the engine quad mesh and is alpha-blended with no depth write.
+    /// The engine material's texture binding is set immediately before the draw is recorded and
+    /// cleared immediately afterwards, so the shared material never keeps a game texture past the
+    /// call; the recorded frame retains the texture until the renderer releases the frame slot. A zero
+    /// size component or a zero transform scale component records nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A transform, size, source, or origin component is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A size component or a transform scale component is negative, <paramref name="source"/> does not
+    /// have positive width and height, or <paramref name="source"/> lies outside the normalized texture
+    /// rectangle.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawBillboard(
+        Texture texture,
+        Transform transform,
+        Rect source,
+        Vector2 size,
+        Vector2 origin,
+        Color color,
+        bool faceCamera) {
+        DrawBillboardWithTransform(texture, transform, source, size, origin, color, faceCamera);
+    }
+
+    /// <summary>
+    /// Validates and records a billboard positioned by a world-space point with an identity transform.
+    /// </summary>
+    /// <remarks>
+    /// Validation runs before any retention or record mutation. A non-finite argument is
+    /// <see cref="ArgumentException"/>, a negative size or a source rectangle that has non-positive
+    /// extents or lies outside the normalized texture rectangle is
+    /// <see cref="ArgumentOutOfRangeException"/>, and a zero size component records nothing. The
+    /// position overloads keep the existing vertical billboard orientation when
+    /// <paramref name="faceCamera"/> is <see langword="false"/> because they have no transform
+    /// rotation.
+    /// </remarks>
+    private void DrawBillboardAtPosition(
+        Texture texture,
+        Vector3 position,
+        Rect source,
+        Vector2 size,
+        Vector2 origin,
+        Color color,
+        bool faceCamera) {
         EnsureDrawable(nameof(DrawBillboard));
         ArgumentNullException.ThrowIfNull(texture);
         ValidateFinite(position, nameof(position));
         ValidateFinite(size, nameof(size));
         ValidateNonNegative(size, nameof(size));
+        ValidateBillboardSource(source, nameof(source));
+        ValidateFinite(origin, nameof(origin));
         ObjectDisposedException.ThrowIf(texture.IsDisposed, texture);
         if (size.X == 0f || size.Y == 0f) {
             return;
         }
 
+        Matrix4x4 matrix = faceCamera
+            ? CreateFacingBillboardMatrix(new Transform(position), size, origin)
+            : CreateVerticalBillboardMatrix(position, size, origin);
+        RecordBillboard(texture, source, color, matrix);
+    }
+
+    /// <summary>
+    /// Validates and records a billboard positioned, oriented, and scaled by a <see cref="Transform"/>.
+    /// </summary>
+    /// <remarks>
+    /// Validation runs before any retention or record mutation. A non-finite argument is
+    /// <see cref="ArgumentException"/>, a negative size or transform scale component or a source
+    /// rectangle that has non-positive extents or lies outside the normalized texture rectangle is
+    /// <see cref="ArgumentOutOfRangeException"/>, and a zero size component or a zero transform scale
+    /// component records nothing.
+    /// </remarks>
+    private void DrawBillboardWithTransform(
+        Texture texture,
+        Transform transform,
+        Rect source,
+        Vector2 size,
+        Vector2 origin,
+        Color color,
+        bool faceCamera) {
+        EnsureDrawable(nameof(DrawBillboard));
+        ArgumentNullException.ThrowIfNull(texture);
+        ValidateTransform(transform);
+        ValidateFinite(size, nameof(size));
+        ValidateNonNegative(size, nameof(size));
+        ValidateBillboardSource(source, nameof(source));
+        ValidateFinite(origin, nameof(origin));
+        ObjectDisposedException.ThrowIf(texture.IsDisposed, texture);
+        if (size.X == 0f || size.Y == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        Matrix4x4 matrix = faceCamera
+            ? CreateFacingBillboardMatrix(transform, size, origin)
+            : CreateBillboardQuadMatrix(size, origin) * transform.ToMatrix();
+        RecordBillboard(texture, source, color, matrix);
+    }
+
+    /// <summary>
+    /// Binds the texture, records the one-instance billboard draw, and clears the shared binding.
+    /// </summary>
+    /// <remarks>
+    /// The caller has already validated every argument and composed the world matrix.
+    /// </remarks>
+    private void RecordBillboard(Texture texture, Rect source, Color color, Matrix4x4 matrix) {
         PrimitiveAssets primitives = RequirePrimitives();
         Shader material = primitives.MeshMaterial;
-        (Vector3 right, Vector3 up, Vector3 front) = faceCamera
-            ? GetCameraFacingBasis()
-            : GetVerticalBillboardBasis();
+        Vector4 uvRect = new(source.X, source.Y, source.Width, source.Height);
         // The engine material is shared by every billboard, so the binding exists only around this
         // recording call; the record keeps its own texture reference.
         material.SetUniform(MESH_TEXTURE_BINDING, texture);
@@ -2232,8 +2678,9 @@ public sealed class Camera : IDisposable {
                 material,
                 RenderState.AlphaBlend,
                 color,
-                instanceCount: 1);
-            matrices[0] = CreateBillboardMatrix(position, size.X, size.Y, right, up, front);
+                instanceCount: 1,
+                uvRect);
+            matrices[0] = matrix;
         } finally {
             material.SetUniform(MESH_TEXTURE_BINDING, null);
         }
@@ -2386,14 +2833,39 @@ public sealed class Camera : IDisposable {
     /// <remarks>
     /// Validation happens before any retention or record mutation, so a rejected call leaves the frame
     /// packet and its retention set untouched. Every caller runs on the tick thread from a recording
-    /// pass.
+    /// pass. The convenience overload records the full-texture UV rectangle <c>(0, 0, 1, 1)</c>.
     /// </remarks>
     private Span<Matrix4x4> BeginPrimitiveDraw(
         Mesh mesh,
         Shader material,
         RenderState renderState,
         Color tint,
-        int instanceCount) {
+        int instanceCount) =>
+        BeginPrimitiveDraw(
+            mesh,
+            material,
+            renderState,
+            tint,
+            instanceCount,
+            new Vector4(0f, 0f, 1f, 1f));
+
+    /// <summary>
+    /// Retains the mesh, program, and textures, snapshots the material cursor state, records one draw
+    /// with <paramref name="instanceCount"/> instances and the given per-instance UV rectangle, and
+    /// returns the world-matrix slot to fill.
+    /// </summary>
+    /// <remarks>
+    /// Validation happens before any retention or record mutation, so a rejected call leaves the frame
+    /// packet and its retention set untouched. Every caller runs on the tick thread from a recording
+    /// pass. <paramref name="uvRect"/> is per-instance data and never affects batching.
+    /// </remarks>
+    private Span<Matrix4x4> BeginPrimitiveDraw(
+        Mesh mesh,
+        Shader material,
+        RenderState renderState,
+        Color tint,
+        int instanceCount,
+        Vector4 uvRect) {
         ValidateMesh(mesh);
         ObjectDisposedException.ThrowIf(material.IsDisposed, material);
         ReadOnlySpan<Texture?> textures = material.TextureValues;
@@ -2410,6 +2882,7 @@ public sealed class Camera : IDisposable {
             renderState,
             tint);
         record.SetShaderState(material.InstanceData, textures);
+        record.SetUvRect(uvRect);
         return record.BeginInstances(instanceCount);
     }
 
@@ -2440,13 +2913,85 @@ public sealed class Camera : IDisposable {
         Vector3 right,
         Vector3 up,
         Vector3 front) {
-        Matrix4x4 orientation = new(
+        Matrix4x4 orientation = CreateBillboardOrientation(position, right, up, front);
+        return Matrix4x4.CreateScale(width, height, 1f) * orientation;
+    }
+
+    /// <summary>
+    /// Builds the local billboard quad that maps the unit quad so the normalized
+    /// <paramref name="origin"/> pivot sits at the local origin and <paramref name="size"/> scales it.
+    /// </summary>
+    /// <remarks>
+    /// The engine quad is one unit square in its local XY plane centered on the origin, so the pivot
+    /// offset from the center is <c>origin - 0.5</c>. Under the row-vector convention the translation
+    /// is applied before the scale, which puts the pivot at the local origin and keeps the offset in
+    /// world-size units.
+    /// </remarks>
+    private static Matrix4x4 CreateBillboardQuadMatrix(Vector2 size, Vector2 origin) =>
+        Matrix4x4.CreateTranslation(-(origin.X - 0.5f), -(origin.Y - 0.5f), 0f)
+        * Matrix4x4.CreateScale(size.X, size.Y, 1f);
+
+    /// <summary>
+    /// Builds the vertical billboard matrix: world up plus the camera yaw, with the origin pivot and
+    /// the world-space position.
+    /// </summary>
+    private Matrix4x4 CreateVerticalBillboardMatrix(Vector3 position, Vector2 size, Vector2 origin) {
+        (Vector3 right, Vector3 up, Vector3 front) = GetVerticalBillboardBasis();
+        return CreateBillboardQuadMatrix(size, origin)
+            * CreateBillboardOrientation(position, right, up, front);
+    }
+
+    /// <summary>
+    /// Builds the camera-facing billboard matrix with the transform position and scale and the
+    /// transform rotation's in-plane roll.
+    /// </summary>
+    /// <remarks>
+    /// The transform scale multiplies the width and height. The roll is applied around the pivot in the
+    /// billboard's local XY plane before the camera basis orients the quad.
+    /// </remarks>
+    private Matrix4x4 CreateFacingBillboardMatrix(Transform transform, Vector2 size, Vector2 origin) {
+        Vector2 scaledSize = new(size.X * transform.Scale.X, size.Y * transform.Scale.Y);
+        Matrix4x4 quad = Matrix4x4.CreateTranslation(-(origin.X - 0.5f), -(origin.Y - 0.5f), 0f)
+            * Matrix4x4.CreateScale(scaledSize.X, scaledSize.Y, 1f)
+            * Matrix4x4.CreateRotationZ(GetBillboardRoll(transform.Rotation));
+        (Vector3 right, Vector3 up, Vector3 front) = GetCameraFacingBasis();
+        return quad * CreateBillboardOrientation(transform.Position, right, up, front);
+    }
+
+    /// <summary>
+    /// Extracts the billboard's in-plane roll from a rotation: the twist about the local <c>+Z</c>
+    /// plane normal.
+    /// </summary>
+    /// <remarks>
+    /// The quaternion is decomposed into a swing and a twist about <c>+Z</c>. The twist angle is
+    /// <c>2 * atan2(Z, W)</c>, which is the rotation that must be applied in the billboard's plane. A
+    /// pure roll gives its angle, a pure pitch or yaw gives zero, and a combined rotation uses only its
+    /// roll component. The result is wrapped to <c>(-pi, pi]</c>.
+    /// </remarks>
+    private static float GetBillboardRoll(Quaternion rotation) {
+        float roll = 2f * MathF.Atan2(rotation.Z, rotation.W);
+        if (roll > MathF.PI) {
+            roll -= MathF.Tau;
+        } else if (roll < -MathF.PI) {
+            roll += MathF.Tau;
+        }
+
+        return roll;
+    }
+
+    /// <summary>
+    /// Builds the row-vector quad orientation from the given right, up, and front axes and position.
+    /// </summary>
+    private static Matrix4x4 CreateBillboardOrientation(
+        Vector3 position,
+        Vector3 right,
+        Vector3 up,
+        Vector3 front) =>
+        new(
             right.X, right.Y, right.Z, 0f,
             up.X, up.Y, up.Z, 0f,
             front.X, front.Y, front.Z, 0f,
             position.X, position.Y, position.Z, 1f);
-        return Matrix4x4.CreateScale(width, height, 1f) * orientation;
-    }
 
     private static Matrix4x4 CreateTranslationScaleMatrix(Vector3 position, Vector3 scale)
         => Matrix4x4.CreateScale(scale) * Matrix4x4.CreateTranslation(position);
@@ -3101,6 +3646,35 @@ public sealed class Camera : IDisposable {
 
     private static bool HasZeroScale(Transform transform) =>
         transform.Scale.X == 0f || transform.Scale.Y == 0f || transform.Scale.Z == 0f;
+
+    /// <summary>
+    /// Validates a normalized billboard source rectangle: finite, with positive extents, inside the
+    /// <c>[0, 1]</c> texture rectangle.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Rect.X"/> and <see cref="Rect.Y"/> are the top-left corner and
+    /// <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the extents. The bounds are exact
+    /// comparisons, so <c>(0, 0, 1, 1)</c> and a rectangle that ends exactly on <c>1</c> are legal.
+    /// </remarks>
+    private static void ValidateBillboardSource(Rect source, string parameterName) {
+        ValidateFinite(source.X, parameterName);
+        ValidateFinite(source.Y, parameterName);
+        ValidateFinite(source.Width, parameterName);
+        ValidateFinite(source.Height, parameterName);
+        if (!(source.Width > 0f) || !(source.Height > 0f)) {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                source,
+                "The source rectangle must have a positive width and height.");
+        }
+
+        if (source.X < 0f || source.Y < 0f || source.Right > 1f || source.Bottom > 1f) {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                source,
+                "The source rectangle must lie within the normalized [0, 1] texture rectangle.");
+        }
+    }
 
     private static void ValidateTessellation(int rings, int slices) {
         if (rings < 2) {

@@ -327,6 +327,110 @@ public sealed class PrimitiveDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void BillboardSourceRectangleSamplesTheSelectedSubRectangle() {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+        Color topLeft = new(1f, 0f, 0f, 1f);
+        Color topRight = new(0f, 1f, 0f, 1f);
+        Color bottomLeft = new(0f, 0f, 1f, 1f);
+        Color bottomRight = new(1f, 1f, 0f, 1f);
+        Texture texture = harness.CreateTexture(2, 2, topLeft, topRight, bottomLeft, bottomRight);
+
+        // The source rectangle is a normalized sub-rectangle of the quad's authored 0..1 UVs, so the
+        // top-right quadrant fills the whole billboard even at the quad's center.
+        Vector2 offCenterPixel = default;
+        harness.SubmitPerspective(
+            camera => {
+                camera.DrawBillboard(
+                    texture,
+                    new Rect(0.5f, 0f, 0.5f, 0.5f),
+                    new Vector3(0f, 0f, -5f),
+                    new Vector2(2f),
+                    Color.White);
+                offCenterPixel = camera.WorldToScreen(new Vector3(0.5f, 0.2f, -5f));
+            },
+            clearColor: _clearColor);
+        AssertColorNear(Unorm(topRight), harness.ReadColor(harness.Width / 2, harness.Height / 2));
+        AssertColorNear(Unorm(topRight), harness.ReadColor(Pixel(offCenterPixel.X), Pixel(offCenterPixel.Y)));
+
+        // The bottom-left quadrant proves the V axis is offset as well as the U axis.
+        harness.SubmitPerspective(
+            camera => camera.DrawBillboard(
+                texture,
+                new Rect(0f, 0.5f, 0.5f, 0.5f),
+                new Vector3(0f, 0f, -5f),
+                new Vector2(2f),
+                Color.White),
+            clearColor: _clearColor);
+        AssertColorNear(Unorm(bottomLeft), harness.ReadColor(harness.Width / 2, harness.Height / 2));
+        Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void BillboardOriginAndRollPlaceTheQuadInWorldSpace() {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+        Color color = new(0.25f, 0.5f, 0.75f, 1f);
+        Texture texture = harness.CreateTexture(1, 1, color);
+        Vector2 pivotPixel = default;
+        Vector2 outsideLeftPixel = default;
+        Vector2 outsideBelowPixel = default;
+
+        // The bottom-left origin pins the pivot to the transform position and the transform scale
+        // multiplies the size, so the world quad spans (0, 0) to (2, 2).
+        harness.SubmitOrthographic(
+            camera => {
+                camera.DrawBillboard(
+                    texture,
+                    new Transform(Vector3.Zero, Quaternion.Identity, new Vector3(2f, 2f, 1f)),
+                    Rect.FromSize(1f, 1f),
+                    new Vector2(1f),
+                    new Vector2(0f, 0f),
+                    Color.White,
+                    faceCamera: true);
+                pivotPixel = camera.WorldToScreen(new Vector3(0.5f, 0.5f, 0f));
+                outsideLeftPixel = camera.WorldToScreen(new Vector3(-0.5f, 0.5f, 0f));
+                outsideBelowPixel = camera.WorldToScreen(new Vector3(0.5f, -0.5f, 0f));
+            },
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            clearColor: _clearColor,
+            height: 4f);
+
+        AssertColorNear(Unorm(color), harness.ReadColor(Pixel(pivotPixel.X), Pixel(pivotPixel.Y)));
+        AssertColorNear(_clearColor, harness.ReadColor(Pixel(outsideLeftPixel.X), Pixel(outsideLeftPixel.Y)));
+        AssertColorNear(_clearColor, harness.ReadColor(Pixel(outsideBelowPixel.X), Pixel(outsideBelowPixel.Y)));
+
+        Vector2 rotatedInsidePixel = default;
+        Vector2 rotatedOutsidePixel = default;
+
+        // A 90 degree roll turns the 2x1 quad into a 1x2 footprint: the vertical probe is covered and
+        // the horizontal probe that the unrotated quad would cover is clear.
+        harness.SubmitOrthographic(
+            camera => {
+                camera.DrawBillboard(
+                    texture,
+                    new Transform(
+                        Vector3.Zero,
+                        Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2f),
+                        Vector3.One),
+                    Rect.FromSize(1f, 1f),
+                    new Vector2(2f, 1f),
+                    new Vector2(0.5f, 0.5f),
+                    Color.White,
+                    faceCamera: true);
+                rotatedInsidePixel = camera.WorldToScreen(new Vector3(0f, 0.7f, 0f));
+                rotatedOutsidePixel = camera.WorldToScreen(new Vector3(0.6f, 0f, 0f));
+            },
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            clearColor: _clearColor,
+            height: 4f);
+
+        AssertColorNear(Unorm(color), harness.ReadColor(Pixel(rotatedInsidePixel.X), Pixel(rotatedInsidePixel.Y)));
+        AssertColorNear(_clearColor, harness.ReadColor(Pixel(rotatedOutsidePixel.X), Pixel(rotatedOutsidePixel.Y)));
+        Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void BillboardBehindACubeIsOccluded() {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
         Color cubeColor = new(0.8f, 0.4f, 0.1f, 1f);
