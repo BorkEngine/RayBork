@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using RayBork.Internal;
 
@@ -38,6 +39,7 @@ public sealed class Camera : IDisposable {
     private const int CIRCLE_SEGMENTS = 36;
     private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
     private const float RAY_DRAW_DISTANCE = 1_000_000f;
+    private const int MAX_STACK_INSTANCE_MATRICES = 64;
 
     private static readonly (int Start, int End)[] _boxEdges = [
         (0, 1),
@@ -289,7 +291,8 @@ public sealed class Camera : IDisposable {
 
         Color effectiveTint = tint ?? Color.White;
         Matrix4x4 instanceMatrix = transform.ToMatrix();
-        for (int index = 0; index < parts.Count; index++) {
+        int partCount = parts.Count;
+        for (int index = 0; index < partCount; index++) {
             ModelPart part = parts[index];
             RecordPart(
                 part,
@@ -349,7 +352,8 @@ public sealed class Camera : IDisposable {
 
         Color effectiveTint = tint ?? Color.White;
         Matrix4x4 instanceMatrix = transform.ToMatrix();
-        for (int index = 0; index < parts.Count; index++) {
+        int partCount = parts.Count;
+        for (int index = 0; index < partCount; index++) {
             ModelPart part = parts[index];
             RecordPart(
                 part,
@@ -488,12 +492,35 @@ public sealed class Camera : IDisposable {
         }
 
         Color effectiveTint = tint ?? Color.White;
-        Matrix4x4[] instanceMatrices = new Matrix4x4[transforms.Length];
-        for (int index = 0; index < transforms.Length; index++) {
+        int instanceCount = transforms.Length;
+
+        // Small instanced model draws stay on the stack; larger ones rent from the pool once per call
+        // so the steady-state path records without a heap allocation.
+        if (instanceCount <= MAX_STACK_INSTANCE_MATRICES) {
+            Span<Matrix4x4> instanceMatrices = stackalloc Matrix4x4[instanceCount];
+            RecordInstancedModelParts(parts, transforms, instanceMatrices, effectiveTint);
+        } else {
+            Matrix4x4[] rentedMatrices = ArrayPool<Matrix4x4>.Shared.Rent(instanceCount);
+            try {
+                RecordInstancedModelParts(parts, transforms, rentedMatrices.AsSpan(0, instanceCount), effectiveTint);
+            } finally {
+                ArrayPool<Matrix4x4>.Shared.Return(rentedMatrices);
+            }
+        }
+    }
+
+    private void RecordInstancedModelParts(
+        IReadOnlyList<ModelPart> parts,
+        ReadOnlySpan<Transform> transforms,
+        Span<Matrix4x4> instanceMatrices,
+        Color tint) {
+        int instanceCount = transforms.Length;
+        for (int index = 0; index < instanceCount; index++) {
             instanceMatrices[index] = transforms[index].ToMatrix();
         }
 
-        for (int partIndex = 0; partIndex < parts.Count; partIndex++) {
+        int partCount = parts.Count;
+        for (int partIndex = 0; partIndex < partCount; partIndex++) {
             ModelPart part = parts[partIndex];
             Shader material = part.Shader;
             ReadOnlySpan<Texture?> textures = material.TextureValues;
@@ -506,12 +533,12 @@ public sealed class Camera : IDisposable {
                 part.Mesh.IndexCount,
                 material.Program.Lifetime,
                 part.RenderState,
-                effectiveTint,
+                tint,
                 wireframe: false);
             record.SetShaderState(material.InstanceData, textures);
-            Span<Matrix4x4> worldMatrices = record.BeginInstances(instanceMatrices.Length);
+            Span<Matrix4x4> worldMatrices = record.BeginInstances(instanceCount);
             Matrix4x4 localMatrix = part.LocalTransform.ToMatrix();
-            for (int index = 0; index < instanceMatrices.Length; index++) {
+            for (int index = 0; index < instanceCount; index++) {
                 worldMatrices[index] = localMatrix * instanceMatrices[index];
             }
         }
@@ -3786,7 +3813,8 @@ public sealed class Camera : IDisposable {
     }
 
     private static void ValidateParts(IReadOnlyList<ModelPart> parts) {
-        for (int index = 0; index < parts.Count; index++) {
+        int partCount = parts.Count;
+        for (int index = 0; index < partCount; index++) {
             ModelPart part = parts[index];
             ValidateMesh(part.Mesh);
             ValidateShader(part.Shader);
