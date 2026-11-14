@@ -8,8 +8,11 @@ namespace RayBork.Internal;
 /// The glyph generation service calls this interface only on the <c>RayBork.Font</c> thread. The call
 /// may complete asynchronously, as the production implementation uploads through the procedural asset
 /// service and the render thread; the service blocks the generation thread on the returned task so one
-/// glyph is uploaded at a time. The implementation must honor the cancellation token so
-/// <see cref="GlyphGenerationService.Stop"/> can cancel an in-flight upload and join the thread.
+/// glyph is uploaded at a time. The task must therefore complete on a thread that never waits for
+/// <c>RayBork.Font</c>; the production path is the GPU upload bridge, which the render thread
+/// completes. It must also honor the cancellation token, because
+/// <see cref="GlyphGenerationService.Stop"/> cancels an in-flight upload and then joins the font thread
+/// without a bounded wait.
 /// </para>
 /// <para>
 /// The returned texture is owned by the caller: the pipeline holds one owner reference and releases it

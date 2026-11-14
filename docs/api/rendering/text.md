@@ -49,9 +49,12 @@ the face and generates MSDF glyph textures on demand.
   padding. There is no atlas. Glyph textures are bindless, full-texture quads sampled `0..1`, and are
   referenced per text instance.
 - `Load<Font>` parses the face and preloads ASCII (`U+0020..U+007E`) plus the replacement glyph.
-  `Preload` generates any additional characters. `DrawText` generates missing glyphs on the tick
-  thread before recording; the first draw of a new script may hitch. Preload known text in
-  `Setup`.
+  `Preload` requests any additional characters. Glyph generation is asynchronous: the engine's
+  `RayBork.Font` thread generates and uploads textures while the tick thread keeps running. `DrawText`
+  never waits: a glyph whose texture is not ready is skipped for that call and appears on a later
+  frame, while the pen still advances from the face metrics. Preload known text in `Setup` to avoid
+  glyph-by-glyph pop-in. `Acquire` adds the frame hold for a cached glyph before it returns, so a
+  recorded draw keeps its texture alive through the frame.
 - `GlyphCount` is the number of mapped glyphs in the face. `CachedGlyphCount` is the number with a
   generated MSDF texture.
 - `TryGetGlyph` returns only cached glyphs. `Measure` works from face metrics and kerning without

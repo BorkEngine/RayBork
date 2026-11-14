@@ -4,8 +4,8 @@ using RayBork.Internal;
 namespace RayBork.Tests.Fonts.Glyph;
 
 /// <summary>
-/// Tests the per-glyph metrics path: a mapped glyph, an empty glyph, and the unsupported or malformed
-/// outlines that fall back to the face advance with a zero quad.
+/// Tests the per-glyph metrics path: a mapped glyph, an empty glyph, and the unsupported, malformed,
+/// or over-budget outlines that fall back to the face advance with a zero quad.
 /// </summary>
 public sealed class FontGlyphPipelineMetricsTests {
     [Fact]
@@ -72,6 +72,10 @@ public sealed class FontGlyphPipelineMetricsTests {
         Assert.Equal(0f, first.Width);
         Assert.Equal(0f, first.Height);
         Assert.Single(MetricWarnings(harness));
+        Assert.Contains(
+            "point-matched",
+            MetricWarnings(harness)[0].Message,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -89,23 +93,68 @@ public sealed class FontGlyphPipelineMetricsTests {
         Assert.Equal(0f, first.Width);
         Assert.Equal(0f, first.Height);
         Assert.Single(MetricWarnings(harness));
+        Assert.Contains("inverted", MetricWarnings(harness)[0].Message, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GlyphIdsOutsideTheFaceAreRejected() {
+    public void ATextureAboveTheTexelBudgetFallsBackAndLogsOnce() {
+        using GlyphPipelineTestHarness harness = new();
+        SfntFace face = GlyphTestFonts.CreateSquareFace(out int glyphId);
+        FontGlyphPipeline pipeline = harness.CreatePipeline(face, new FontGlyphSettings(1000, 4096, 4, 0));
+
+        TextGlyphMetrics first = pipeline.GetMetrics(glyphId);
+        TextGlyphMetrics second = pipeline.GetMetrics(glyphId);
+
+        Assert.Equal(first, second);
+        Assert.Equal(0.6f, first.AdvanceX);
+        Assert.Equal(0f, first.Width);
+        Assert.Equal(0f, first.Height);
+        Assert.Single(MetricWarnings(harness));
+        Assert.Contains("texels", MetricWarnings(harness)[0].Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ConcurrentMetricsResolutionLogsOneWarning() {
+        using GlyphPipelineTestHarness harness = new();
+        SfntFace face = GlyphTestFonts.CreateUnsupportedCompositeFace(out int glyphId);
+        FontGlyphPipeline pipeline = harness.CreatePipeline(face);
+        TextGlyphMetrics[] results = new TextGlyphMetrics[8];
+
+        Task[] workers = new Task[results.Length];
+        for (int index = 0; index < workers.Length; index++) {
+            int workerIndex = index;
+            workers[index] = Task.Run(
+                () => results[workerIndex] = pipeline.GetMetrics(glyphId),
+                TestContext.Current.CancellationToken);
+        }
+
+        await Task.WhenAll(workers)
+            .WaitAsync(GlyphPipelineTestHarness.TIMEOUT, TestContext.Current.CancellationToken);
+
+        Assert.All(results, result => Assert.Equal(results[0], result));
+        Assert.Single(MetricWarnings(harness));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GlyphIdsAndArgumentsOutsideTheContractAreRejected() {
         using GlyphPipelineTestHarness harness = new();
         SfntFace face = GlyphTestFonts.CreateSquareFace(out int glyphId);
         FontGlyphPipeline pipeline = harness.CreatePipeline(face);
+        FrameAssetRetention retention = new();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.GetMetrics(face.GlyphCount));
         Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.GetMetrics(-1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.Acquire(face.GlyphCount, 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.Acquire(glyphId, -1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.Acquire(face.GlyphCount, retention));
+        Assert.Throws<ArgumentNullException>(() => pipeline.Acquire(glyphId, null!));
         Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.TryGetTexture(-1, out _));
         Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.IsGlyphReady(face.GlyphCount));
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => { _ = pipeline.WhenGlyphReadyAsync(face.GlyphCount); });
+            () => { _ = pipeline.WhenGlyphSettledAsync(face.GlyphCount); });
+        Assert.Throws<ArgumentOutOfRangeException>(() => pipeline.BeginFrame(-1));
+        retention.Release();
     }
 
     [Fact]

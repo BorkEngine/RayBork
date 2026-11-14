@@ -7,9 +7,6 @@ namespace RayBork.Tests.Fonts.Glyph;
 /// outline-resolution failures, and a face with many small glyphs for the cache-budget test.
 /// </summary>
 internal static class GlyphTestFonts {
-    /// <summary>The font units per em of every synthetic face.</summary>
-    internal const int UNITS_PER_EM = 1000;
-
     /// <summary>Creates a face with one square glyph at glyph id 1 and a 600-unit advance.</summary>
     /// <param name="glyphId">Receives the square glyph id.</param>
     /// <returns>The parsed face.</returns>

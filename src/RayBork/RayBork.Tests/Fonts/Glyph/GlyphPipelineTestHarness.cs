@@ -51,33 +51,69 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
         return pipeline;
     }
 
-    /// <summary>Requests one glyph and waits until it is ready or failed.</summary>
+    /// <summary>
+    /// Begins one frame, requests one glyph, and waits until it settles. The probe acquisition holds no
+    /// frame and releases the empty retention set before it waits.
+    /// </summary>
     /// <param name="pipeline">The pipeline.</param>
     /// <param name="glyphId">The glyph id.</param>
-    /// <param name="stamp">The use stamp for the request.</param>
+    /// <param name="frameIndex">The frame index for the request.</param>
     /// <returns>A task that completes when the glyph is terminal.</returns>
     internal static async Task RequestAndWaitAsync(
         FontGlyphPipeline pipeline,
         int glyphId,
-        long stamp) {
-        Assert.Null(pipeline.Acquire(glyphId, stamp));
-        await pipeline.WhenGlyphReadyAsync(glyphId)
+        long frameIndex) {
+        pipeline.BeginFrame(frameIndex);
+        FrameAssetRetention probe = new();
+        Assert.Null(pipeline.Acquire(glyphId, probe));
+        probe.Release();
+        await pipeline.WhenGlyphSettledAsync(glyphId)
             .WaitAsync(TIMEOUT, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>Requests one glyph, waits until it is ready, and returns the cached texture.</summary>
+    /// <summary>
+    /// Begins one frame, requests one glyph, waits until it is ready, and returns the cached texture.
+    /// The acquisition's frame hold is released, simulating a frame that completed. A glyph that is
+    /// already cached is returned without a second generation.
+    /// </summary>
     /// <param name="pipeline">The pipeline.</param>
     /// <param name="glyphId">The glyph id.</param>
-    /// <param name="stamp">The use stamp for the request.</param>
+    /// <param name="frameIndex">The frame index for the request.</param>
     /// <returns>The generated texture.</returns>
     internal static async Task<Texture> GenerateAsync(
         FontGlyphPipeline pipeline,
         int glyphId,
-        long stamp) {
-        await RequestAndWaitAsync(pipeline, glyphId, stamp);
-        Assert.True(pipeline.TryGetTexture(glyphId, out Texture? texture));
+        long frameIndex) {
+        pipeline.BeginFrame(frameIndex);
+        FrameAssetRetention probe = new();
+        Texture? texture;
+        try {
+            texture = pipeline.Acquire(glyphId, probe);
+        } finally {
+            probe.Release();
+        }
+
+        if (texture is null) {
+            await pipeline.WhenGlyphSettledAsync(glyphId)
+                .WaitAsync(TIMEOUT, TestContext.Current.CancellationToken);
+            texture = AcquireOnce(pipeline, glyphId);
+        }
+
         Assert.NotNull(texture);
         return texture!;
+    }
+
+    /// <summary>Acquires one glyph and immediately releases the frame hold.</summary>
+    /// <param name="pipeline">The pipeline.</param>
+    /// <param name="glyphId">The glyph id.</param>
+    /// <returns>The cached texture, or <see langword="null"/> on a miss.</returns>
+    internal static Texture? AcquireOnce(FontGlyphPipeline pipeline, int glyphId) {
+        FrameAssetRetention retention = new();
+        try {
+            return pipeline.Acquire(glyphId, retention);
+        } finally {
+            retention.Release();
+        }
     }
 
     /// <inheritdoc/>
