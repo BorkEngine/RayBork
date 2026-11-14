@@ -14,8 +14,8 @@ internal static class Program {
     private const string USAGE_TEXT = """
         Castle - an orbitable castle scene
 
-        A castle model and its diffuse texture, drawn with the built-in mesh material and an
-        orbital perspective camera.
+        A castle model and its diffuse texture, drawn solid and as a wireframe overlay with the
+        built-in mesh material and an orbital perspective camera.
 
         Usage:
           Castle [options]
