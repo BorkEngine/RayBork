@@ -30,16 +30,17 @@ request.
 - **Versions move deliberately.** A version bump is a dependency change and follows the rules above.
 
 M6 status: the M6 font and text surface is exercised end to end by the `samples/Text` AOT gate.
-That sample opens a window, loads the built-in Fira Sans face from the engine pack and the baked Lora
-face from its own `text.pck`, runs the managed sfnt parser and the on-demand MSDF glyph pipeline,
-draws the text through the built-in `/shaders/msdf` program, and exits `0` on `win-x64` and
-`linux-x64`. The engine's built-in pack supplies the Fira Sans Regular face; the Lora face is
-sample-only and is recorded under `samples/Text/THIRD-PARTY-NOTICES.md`, not here. The M5
-`samples/PrimitiveGallery` gate remains a buildable and publishable sample that mounts the built-in
-pack and draws the primitive surface, and the M4 `samples/Castle` gate remains a buildable and
-publishable sample that mounts a baked pack and loads a multi-part `Model` with a KTX2 texture and
-the built-in mesh shader. `samples/HelloInterop` remains the M1-M3 diagnostic host for the host,
-input, time, logging, renderer, and asset-loading surface. `Silk.NET.Vulkan`, `SDL3-CS`, `PolyType`,
+That sample opens a window, loads the built-in Fira Sans and JetBrains Mono faces from the engine
+pack and the baked Lora face from its own `text.pck`, runs the managed sfnt parser and the on-demand
+MSDF glyph pipeline, draws the text through the built-in `/shaders/msdf` program, and exits `0` on
+`win-x64` and `linux-x64`. The engine's built-in pack supplies the Fira Sans and JetBrains Mono
+faces; the Lora face is sample-only and is recorded under `samples/Text/THIRD-PARTY-NOTICES.md`, not
+here. The M5 `samples/PrimitiveGallery` gate remains a buildable and publishable sample that mounts
+the built-in pack and draws the primitive surface, and the M4 `samples/Castle` gate remains a
+buildable and publishable sample that mounts a baked pack and loads a multi-part `Model` with a KTX2
+texture and the built-in mesh shader. `samples/HelloInterop` remains the M1-M3 diagnostic host for
+the host, input, time, logging, renderer, and asset-loading surface. `Silk.NET.Vulkan`, `SDL3-CS`,
+`PolyType`,
 `Nerdbank.MessagePack`, `System.IO.Hashing`, and
 the logging packages are exercised by the gates or their built-in pack and descriptor paths. The bake
 gains the JIT-only TOML, image, block-encoding, shaderc, and glTF packages below; they never enter a
@@ -138,7 +139,7 @@ NuGet packages and are not downloaded at run time; the full license text is repr
 | Asset | License | Purpose | Distribution |
 | --- | --- | --- | --- |
 | Fira Sans Regular 4.203, `src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/fira-sans.ttf` (upstream `FiraSans-Regular.ttf`) | SIL Open Font License 1.1 (the face's metadata permits 1.1 or later) | Built-in default font at the canonical path `/fonts/fira-sans`, exposed as `EngineContext.Defaults.DefaultFont`; covers Latin, Cyrillic, and Greek | Committed source asset; the build bakes it into the engine's embedded built-in pack, and the runtime never fetches it from the network |
-| JetBrains Mono Regular 2.211, `src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/jetbrains-mono.ttf` (upstream `JetBrainsMono-Regular.ttf`) | SIL Open Font License 1.1 or later | Built-in monospaced font at the canonical path `/fonts/jetbrains-mono`, exposed as `EngineContext.Defaults.DefaultMonoFont`; the samples draw their status/statistics readouts with it; covers Latin, Cyrillic, and Greek | Committed source asset; the build bakes it into the engine's embedded built-in pack, and the runtime never fetches it from the network |
+| JetBrains Mono 2.211 (variable), `src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/jetbrains-mono.ttf` (upstream `fonts/variable/JetBrainsMono[wght].ttf`) | SIL Open Font License 1.1 | Built-in monospaced font at the canonical path `/fonts/jetbrains-mono`, exposed as `EngineContext.Defaults.DefaultMonoFont`; the bundled variable face renders its default Regular instance (weight 400); the samples draw their status/statistics readouts with it; covers Latin, Cyrillic, and Greek | Committed source asset; the build bakes it into the engine's embedded built-in pack, and the runtime never fetches it from the network |
 
 Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A.
 
@@ -150,11 +151,14 @@ recorded in `samples/Text/THIRD-PARTY-NOTICES.md`, not in this repository-level 
 
 Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
 
-The bundled face is JetBrains Mono Regular version 2.211. Its name table records the 2020 copyright
-line above and the license URL <https://scripts.sil.org/OFL>; the upstream project is
-<https://github.com/JetBrains/JetBrainsMono>, and the committed file is
-`src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/jetbrains-mono.ttf`. The SIL Open Font License
-1.1 text is reproduced below.
+The bundled face is the JetBrains Mono variable font, version 2.211. Its `fvar` table declares one
+`wght` axis from 100 to 800 with seven named instances from Thin to ExtraBold; the default instance
+is Regular (weight 400), which is the instance the runtime renders. Its name table records the 2020
+copyright line above and the license URL <https://scripts.sil.org/OFL>; the upstream project is
+<https://github.com/JetBrains/JetBrainsMono>, the upstream file is
+`fonts/variable/JetBrainsMono[wght].ttf`, and the committed file is
+`src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/jetbrains-mono.ttf`. The SIL Open Font
+License 1.1 text is reproduced below.
 
 ### SIL Open Font License 1.1 text (Fira Sans)
 

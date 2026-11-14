@@ -105,7 +105,8 @@ parses the face once and generates MSDF glyph textures on demand. There is no pr
   bindless texture index as its per-instance texture data, and the shader samples the whole glyph
   texture without a per-instance UV rectangle.
 - Fonts are shared assets. The built-in Fira Sans Regular face is available as
-  `EngineContext.Defaults.DefaultFont` and the built-in JetBrains Mono Regular face as
+  `EngineContext.Defaults.DefaultFont` and the built-in JetBrains Mono variable face (default instance
+  Regular) as
   `EngineContext.Defaults.DefaultMonoFont`; the engine owns both and the game must not dispose them.
   Disposing a font while a frame references it is safe; using the public object after `Dispose` is
   not.
@@ -114,7 +115,8 @@ Limitations:
 
 - There is no complex shaping, ligature substitution, bidi ordering, font fallback, color font, or
   emoji support. A cmap-mapped rune maps directly to one glyph; an unmapped rune is `.notdef`.
-- Coverage is per face. The built-in Fira Sans Regular and JetBrains Mono Regular faces cover Latin,
+- Coverage is per face. The built-in Fira Sans Regular and JetBrains Mono (default instance Regular)
+  faces cover Latin,
   Cyrillic, and Greek; a different face covers whatever its cmap maps.
 - A variable font loads and renders its default instance; named variation axes are not exposed.
 - CFF2 outlines are rejected: only TrueType `glyf` and CFF 1.0 outlines are supported.

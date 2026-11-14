@@ -245,8 +245,30 @@ public sealed class EngineDefaultsTests {
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
     }
 
-    private static byte[] BuildDefaultsPack(bool includeFont = true) {
-        (string Path, AssetEntryType Type, byte[] Payload)[] entries = [
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task APackMissingOnlyTheMonoFontFailsAndReleasesTheLoadedDefaultFont() {
+        using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack(includeMonoFont: false)]);
+        FontCapturingCatalog assets = new(harness.Catalog);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => EngineDefaults.LoadAsync(assets));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains(MONO_FONT_PATH, thrown.Message, StringComparison.Ordinal);
+        Assert.IsType<AssetNotFoundException>(thrown.InnerException);
+        Assert.NotNull(assets.LoadedFont);
+        Assert.True(
+            assets.LoadedFont.IsDisposed,
+            "The already loaded default font must be released when the mono font load fails.");
+        AssetCatalogLoadTests.WaitUntil(
+            () => harness.Worker.DestroyCalls.Count == 3,
+            "The program and both textures must be released when the mono font load fails.");
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+    }
+
+    private static byte[] BuildDefaultsPack(bool includeFont = true, bool includeMonoFont = true) {
+        List<(string Path, AssetEntryType Type, byte[] Payload)> entries = [
             ("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor())),
             ("shaders/basic-vert", AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
             ("shaders/basic-frag", AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()),
@@ -255,15 +277,43 @@ public sealed class EngineDefaultsTests {
             ("textures/error", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/error-ktx2"))),
             ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
         ];
-        if (!includeFont) {
-            return CatalogTestData.BuildPack(entries);
+        if (includeFont) {
+            entries.AddRange(CatalogTestData.CreateFontEntries());
+            if (includeMonoFont) {
+                entries.AddRange(CatalogTestData.CreateMonoFontEntries());
+            }
         }
 
-        return CatalogTestData.BuildPack([
-            .. entries,
-            .. CatalogTestData.CreateFontEntries(),
-            .. CatalogTestData.CreateMonoFontEntries(),
-        ]);
+        return CatalogTestData.BuildPack([.. entries]);
+    }
+
+    /// <summary>
+    /// Captures the <see cref="Font"/> a load returns so a failure test can assert the defaults released
+    /// the font they had already acquired.
+    /// </summary>
+    private sealed class FontCapturingCatalog : IAssetCatalog {
+        private readonly IAssetCatalog _inner;
+
+        internal FontCapturingCatalog(IAssetCatalog inner) {
+            ArgumentNullException.ThrowIfNull(inner);
+            _inner = inner;
+        }
+
+        internal Font? LoadedFont { get; private set; }
+
+        public bool Exists(string path) => _inner.Exists(path);
+
+        public async Task<T> Load<T>(string path, CancellationToken cancellationToken = default) {
+            T value = await _inner.Load<T>(path, cancellationToken).ConfigureAwait(false);
+            if (value is Font font) {
+                LoadedFont = font;
+            }
+
+            return value;
+        }
+
+        public Task<byte[]> LoadData(string path, CancellationToken cancellationToken = default)
+            => _inner.LoadData(path, cancellationToken);
     }
 
     private static TextureAssetDescriptor CreateTextureDescriptor(string payload) => new() {

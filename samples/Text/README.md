@@ -95,7 +95,7 @@ Lora load is the sample's own reference and is released in `Shutdown`.
 `Load<Font>` is CPU-only: it parses the face and queues no GPU upload. The engine preloads both
 built-in faces before `Setup`, so they are already available; `Setup` loads Lora with `Load<Font>`,
 which parses the Lora face and queues no upload. Every glyph texture is generated on demand on the
-engine's font thread, so neither load generates a single glyph texture.
+engine's font thread, so no load generates a single glyph texture.
 
 The pack is generated output under `bin/` and `obj/` and is gitignored. The Lora font is sample-only and
 is **not** covered by RayBork's MIT license; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

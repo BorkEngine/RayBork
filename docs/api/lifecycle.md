@@ -127,7 +127,8 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 
 > **M6 subset.** `Load<Font>` returns the shared, reference-counted `Font` asset and
 > `EngineDefaults.DefaultFont` and `EngineDefaults.DefaultMonoFont` expose the built-in Fira Sans
-> Regular and JetBrains Mono Regular faces. A font load parses the whole packed face and is CPU-only:
+> Regular and JetBrains Mono (default instance Regular) faces. A font load parses the whole packed
+> face and is CPU-only:
 > it queues no GPU upload, and the font object that load creates caches no glyph texture (a repeated
 > load shares the object and its cache). `Setup` can therefore
 > preload any number of fonts without startup uploads; glyph

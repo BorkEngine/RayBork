@@ -356,7 +356,8 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
   the white and error textures, the present shader pair, the built-in mesh draw shader program at
   `/shaders/mesh`, the primitive program at `/shaders/primitive`, the MSDF text program at
   `/shaders/msdf`, and the built-in default and monospaced fonts at `/fonts/fira-sans` (Fira Sans
-  Regular) and `/fonts/jetbrains-mono` (JetBrains Mono Regular) with their face payloads, produced by
+  Regular) and `/fonts/jetbrains-mono` (the JetBrains Mono variable face, default instance Regular)
+  with their face payloads, produced by
   the same `IAssetProcessor` pipeline as game content. The app preloads the mesh program, the two
   textures, and both fonts into `EngineContext.Defaults` before `IGame.Setup`; the primitive and MSDF
   programs and the primitive meshes are built into the engine's primitive assets. The bake

@@ -796,8 +796,8 @@ blocking glyph generation.
   glyph texture, `TryGetGlyph`, `Measure`, unmapped-rune fallback to `.notdef`, and `RB1011` for an
   invalid or unsupported face. There is no `Preload` and no font preload range.
 - Built-in Fira Sans Regular at `/fonts/fira-sans`, exposed as `EngineDefaults.DefaultFont`, and the
-  built-in JetBrains Mono Regular at `/fonts/jetbrains-mono`, exposed as
-  `EngineDefaults.DefaultMonoFont`; the `[font]` sidecar carries only the MSDF settings.
+  built-in JetBrains Mono variable face at `/fonts/jetbrains-mono` (default instance Regular), exposed
+  as `EngineDefaults.DefaultMonoFont`; the `[font]` sidecar carries only the MSDF settings.
 - Layout: advance, kerning, line breaks, line height, `TextAlignment`, `TextWrapping`, `maxWidth`,
   and `Measure`; the `DrawText` origin is the top-left of the first line's ascent box.
 - Drawing: `Camera.DrawText` in a transform's local XY plane and `Camera.DrawTextBillboard` in a
@@ -832,7 +832,7 @@ blocking glyph generation.
   run `--frames 30` to exit `0` (Windows hardware and WSLg dzn).
 - Fuzz tests cover malformed sfnt/cmap/glyf/CFF/kern/GPOS tables without crashes or unbounded
   allocation.
-- The suite is 2,621 tests, 106 of them GPU integration tests, and every sample solution builds.
+- The suite is 2,622 tests, 106 of them GPU integration tests, and every sample solution builds.
 
 **As-built notes.** M6 shipped the planned text surface with the following as-built shape:
 
@@ -897,11 +897,12 @@ blocking glyph generation.
   without generating a texture. An unmapped rune falls back to glyph id 0 (`.notdef`), so layout
   still advances.
 - **Built-in fonts.** The built-in pack carries Fira Sans Regular version 4.203 at
-  `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload and JetBrains Mono Regular version
-  2.211 at `/fonts/jetbrains-mono` with its `/fonts/jetbrains-mono-face` payload, produced by the
-  ordinary font processor with the default 32/4/2 MSDF settings, so the pack has 20 entries. Fira
-  Sans and JetBrains Mono are licensed under the SIL Open Font License 1.1 (the JetBrains Mono grant
-  is 1.1 or later) and cover Latin, Cyrillic, and Greek, which is the coverage the samples exercise.
+  `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload and the JetBrains Mono variable face
+  version 2.211 at `/fonts/jetbrains-mono` with its `/fonts/jetbrains-mono-face` payload, produced by
+  the ordinary font processor with the default 32/4/2 MSDF settings, so the pack has 20 entries. The
+  bundled JetBrains Mono face's default named instance is Regular (weight 400); that is the instance
+  the runtime renders. Fira Sans and JetBrains Mono are licensed under the SIL Open Font License 1.1
+  and cover Latin, Cyrillic, and Greek, which is the coverage the samples exercise.
   The app preloads the faces before `IGame.Setup` and exposes them as
   `EngineContext.Defaults.DefaultFont` and `EngineContext.Defaults.DefaultMonoFont`; the fonts are
   engine-owned, the preload is CPU-only and queues no GPU upload, and the owner references are
@@ -938,13 +939,16 @@ blocking glyph generation.
 - **Text sample and AOT gate.** `samples/Text` is the M6 sample and Native AOT gate. Its solution
   `samples/Text/Text.slnx` contains the sample and the JIT `Text.Assets` executable, which bakes
   `text.pck` from the checked-in Lora Regular 3.008 face and copies it beside the sample
-  executable; the sample has no `--assets` argument. It draws a title in both faces, one paragraph
-  at three sizes, three alignments, both wrapping modes, and two rotations, Latin and Cyrillic
-  paragraphs in both faces, a camera-facing billboard, a Greek line that gains one lazily generated
-  glyph every 30 ticks, and a world-space status line; it has orbit/zoom controls and the
-  `--frames`/`--help` options. `samples/Castle` and `samples/PrimitiveGallery` gained the
-  `DrawText` status overlays they had deferred, so they now draw the presented FPS, the tick rate,
-  the render CPU time, and draw calls and instances from `RenderStats`. The published `win-x64` and
+  executable; the sample has no `--assets` argument. It draws text in the built-in Fira Sans and
+  JetBrains Mono faces and the baked Lora face: a title in each proportional face, one paragraph at
+  three sizes, three alignments, both wrapping modes, and two rotations, Latin and Cyrillic paragraphs
+  in both proportional faces, a camera-facing billboard, and a Greek line that gains one lazily
+  generated glyph every 30 ticks. A fixed right-aligned status block in the built-in mono face shows
+  presented FPS, the tick rate, the render CPU time, and draw calls and instances from `RenderStats`;
+  the sample has orbit/zoom controls and the `--frames`/`--help` options. `samples/Castle` and
+  `samples/PrimitiveGallery` gained the `DrawText` status overlays they had deferred, so they now draw
+  the presented FPS, the tick rate, the render CPU time, and draw calls and instances from
+  `RenderStats`. The published `win-x64` and
   `linux-x64` hosts finish with zero AOT/trim warnings, contain `text.pck` but no bake tooling, and
   both run `--frames 30` to exit `0`; the Linux run used WSLg's dzn hardware device.
 - **Presentation pacing and truthful diagnostics.** The samples set no tick target and request FIFO.
@@ -966,7 +970,7 @@ blocking glyph generation.
   1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets. The
   per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
   milestone.
-- **Tests.** The suite is 2,621 tests, 106 of them GPU integration tests. M6 adds the font parser,
+- **Tests.** The suite is 2,622 tests, 106 of them GPU integration tests. M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
   colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
   the text layout, measurement, wrapping, buffer, and validation suites; the camera text draw
@@ -1320,7 +1324,7 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   `TextDrawTests` cover the CPU-only asset, `.notdef`, layout, and the camera draw records;
   `TextDrawGpuTests` submits the production text draws through the Vulkan backend and asserts
   validation-layer cleanliness, draw/instance/triangle statistics, and single-pixel linear
-  scene-target probes. The suite is 2,621 tests, 106 of them GPU integration tests, and every sample
+  scene-target probes. The suite is 2,622 tests, 106 of them GPU integration tests, and every sample
   solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

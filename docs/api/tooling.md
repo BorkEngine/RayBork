@@ -436,10 +436,11 @@ is set.
   [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md)), baked by the ordinary font processor with
   the default 32/4/2 MSDF settings and the sibling `/fonts/fira-sans-face` raw payload; the runtime
   exposes it as `EngineContext.Defaults.DefaultFont`;
-- the built-in monospaced font at `/fonts/jetbrains-mono`: JetBrains Mono Regular (OFL 1.1 or later,
-  see [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md)), baked by the same font processor with
-  the default 32/4/2 MSDF settings and the sibling `/fonts/jetbrains-mono-face` raw payload; the
-  runtime exposes it as `EngineContext.Defaults.DefaultMonoFont`;
+- the built-in monospaced font at `/fonts/jetbrains-mono`: the JetBrains Mono variable face (default
+  instance Regular; OFL 1.1, see [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md)), baked by
+  the same font processor with the default 32/4/2 MSDF settings and the sibling
+  `/fonts/jetbrains-mono-face` raw payload; the runtime exposes it as
+  `EngineContext.Defaults.DefaultMonoFont`;
 - the built-in primitive program at `/shaders/primitive`, baked by the same shader processor with no
   reflected uniforms and no texture bindings, and an opaque/back/`greater_equal`/depth-write render
   state. Its vertex stage reads position and color and multiplies the color by `rbInstance.Color`;

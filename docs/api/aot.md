@@ -64,7 +64,8 @@ samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30
 `samples/Text/Text.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample and the JIT
 `Text.Assets` executable. The sample build bakes `text.pck` from the checked-in Lora Regular 3.008
 face and copies it beside the sample executable; the sample loads it automatically and has no
-`--assets` argument. The built-in Fira Sans Regular and JetBrains Mono Regular faces come from the
+`--assets` argument. The built-in Fira Sans Regular and JetBrains Mono (default instance Regular)
+faces come from the
 engine's built-in pack and are used through `EngineDefaults.DefaultFont` and
 `EngineDefaults.DefaultMonoFont`. The scene draws the same paragraph at several sizes, rotations,
 alignments, and wrapping modes, Latin and Cyrillic paragraphs in both proportional faces, a
@@ -97,7 +98,7 @@ the built-in `/shaders/msdf` program, and exit `0`. The gate path exercises the 
 face payload decode, the managed sfnt parser, the MSDF generator, the glyph pipeline and cache, the
 layout engine, the `Camera.DrawText`/`Camera.DrawTextBillboard` draw records, and the per-instance
 bindless glyph texture path. The sample is a plain user-facing example and contains no test-only
-draw assertion. The suite is 2,621 tests, 106 of them GPU integration tests, and every sample
+draw assertion. The suite is 2,622 tests, 106 of them GPU integration tests, and every sample
 solution builds.
 
 On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver

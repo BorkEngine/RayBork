@@ -61,14 +61,14 @@ and `Measure`; `Camera.DrawText` draws in a transform's local XY plane and `Came
 centers a camera-facing block. Both record one draw record per call with one instance per ready glyph
 and a per-instance bindless glyph texture, so text batches across calls and fonts. The built-in Fira
 Sans Regular face (OFL 1.1, Latin/Cyrillic/Greek) is at `/fonts/fira-sans` in the built-in pack and
-is exposed as `EngineDefaults.DefaultFont`; the built-in JetBrains Mono Regular face (OFL 1.1 or
-later, Latin/Cyrillic/Greek) at `/fonts/jetbrains-mono` is exposed as
+is exposed as `EngineDefaults.DefaultFont`; the built-in JetBrains Mono variable face (default
+instance Regular, OFL 1.1, Latin/Cyrillic/Greek) at `/fonts/jetbrains-mono` is exposed as
 `EngineDefaults.DefaultMonoFont`, and the samples draw their status/statistics readouts with it so
 changing counters keep their positions. `samples/Text` is the M6 sample and AOT gate, and the
 Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics text overlays at 18 px.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
-The suite is 2,621 tests, 106 of them GPU integration tests, and every sample builds. The Windows
+The suite is 2,622 tests, 106 of them GPU integration tests, and every sample builds. The Windows
 hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
 host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
@@ -167,7 +167,7 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   generated deterministically per glyph on the app-lifetime `RayBork.Font` thread: one padded texture
   per glyph (32 px longest side by default, range 4, padding 2), a 512-texture per-font LRU cache,
   and no blocking on the tick thread. `Load<Font>` is CPU-only and has no preload; the built-in Fira
-  Sans and JetBrains Mono faces are `EngineDefaults.DefaultFont` and
+  Sans and JetBrains Mono faces are exposed as `EngineDefaults.DefaultFont` and
   `EngineDefaults.DefaultMonoFont`. `Camera.DrawText` and `Camera.DrawTextBillboard` draw through the
   built-in `/shaders/msdf` program. Complex shaping, ligatures, bidi, fallback, color
   fonts, emoji, variable axes, and CFF2 are out of scope for v1.

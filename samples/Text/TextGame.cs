@@ -115,7 +115,7 @@ internal sealed class TextGame : IGame {
     /// <inheritdoc/>
     public async Task Setup(EngineContext context) {
         // The built-in default faces are engine-owned defaults. The custom Lora face comes from this
-        // sample's text.pck; the sample owns that reference and releases it in Shutdown. Both loads
+        // sample's text.pck; the sample owns that reference and releases it in Shutdown. These loads
         // are CPU-only: no glyph texture is generated until a draw needs one.
         _loraFont = await context.Assets.Load<Font>(LORA_FONT_PATH);
     }

@@ -166,9 +166,10 @@ exposes them through `EngineContext.Defaults`:
 - `DefaultFont` is the built-in Fira Sans Regular face. It is a CPU-only engine asset: preloading it
   performs no GPU upload, and its glyph textures are generated on demand. It is engine-owned; do not
   dispose it.
-- `DefaultMonoFont` is the built-in JetBrains Mono Regular face: the same CPU-only contract as
-  `DefaultFont`, with a fixed advance per glyph so counters stay aligned. It is engine-owned; do not
-  dispose it.
+- `DefaultMonoFont` is the built-in JetBrains Mono variable face (default instance Regular): the same
+  CPU-only contract as
+  `DefaultFont`, with a fixed advance for its letters and digits so counters stay aligned. It is
+  engine-owned; do not dispose it.
 - Startup fails with an `AssetLoadException` when a built-in default is missing or corrupt.
 - The `EngineDefaults` owner references are released during shutdown, after the game callbacks
   return. After that, every `EngineDefaults` member throws `ObjectDisposedException`.

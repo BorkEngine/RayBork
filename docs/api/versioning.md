@@ -124,7 +124,8 @@ The M6 text surface is world-space only. `Camera.DrawText` lays a block out in a
 XY plane and `Camera.DrawTextBillboard` centers a camera-facing block; the screen-space orthographic
 path, including HUD text and `DrawTexture`, arrives in M7. Complex shaping, ligatures, bidi ordering,
 font fallback, color fonts, emoji, and variable font axes are out of scope for v1, and CFF2 is
-rejected. Coverage is per face: the built-in Fira Sans Regular and JetBrains Mono Regular faces cover
+rejected. Coverage is per face: the built-in Fira Sans Regular and JetBrains Mono (default instance
+Regular) faces cover
 Latin, Cyrillic, and Greek. A variable font that a game packs loads and renders its default instance.
 
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A

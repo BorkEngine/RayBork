@@ -699,13 +699,13 @@ write (M10 changes the default to an alpha-to-coverage cutout).
 
 The built-in pack also carries two fonts. The default font at `/fonts/fira-sans` is Fira Sans
 Regular (SIL Open Font License 1.1; see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)). The
-monospaced font at `/fonts/jetbrains-mono` is JetBrains Mono Regular (SIL Open Font License 1.1 or
-later; see the same file). Both are baked by the ordinary font processor with the default 32/4/2
-MSDF settings and a sibling raw face payload (`/fonts/fira-sans-face` and
-`/fonts/jetbrains-mono-face`), so the built-in pack has 20 entries. The runtime exposes the faces as
-`EngineContext.Defaults.DefaultFont` and `EngineContext.Defaults.DefaultMonoFont`. Each font
-descriptor and face payload is an ordinary entry; the pack format is unchanged and the runtime
-generates glyph textures on demand.
+monospaced font at `/fonts/jetbrains-mono` is the JetBrains Mono variable face, rendered at its
+default Regular instance (SIL Open Font License 1.1; see the same file). Both are baked by the
+ordinary font processor with the default 32/4/2 MSDF settings and a sibling raw face payload
+(`/fonts/fira-sans-face` and `/fonts/jetbrains-mono-face`), so the built-in pack has 20 entries. The
+runtime exposes the faces as `EngineContext.Defaults.DefaultFont` and
+`EngineContext.Defaults.DefaultMonoFont`. Each font descriptor and face payload is an ordinary entry;
+the pack format is unchanged and the runtime generates glyph textures on demand.
 
 ## Primitive assets
 
@@ -1071,14 +1071,15 @@ demand.
 #### Built-in fonts
 
 `EngineDefaults` preloads the built-in Fira Sans Regular face from `/fonts/fira-sans` and the
-JetBrains Mono Regular face from `/fonts/jetbrains-mono` after the built-in pack and before
+JetBrains Mono variable face from `/fonts/jetbrains-mono` after the built-in pack and before
 `IGame.Setup`, so `EngineContext.Defaults.DefaultFont` and
 `EngineContext.Defaults.DefaultMonoFont` are available to `Setup` without adding a startup GPU upload.
 The pack carries each face and its sibling raw payload (`/fonts/fira-sans-face` and
 `/fonts/jetbrains-mono-face`), baked by the ordinary font processor with the default 32/4/2 MSDF
 settings, so the built-in pack has 20 entries. Fira Sans Regular is version 4.203 and JetBrains Mono
-Regular is version 2.211; both are licensed under the SIL Open Font License 1.1 (the JetBrains Mono
-grant is 1.1 or later) and cover Latin, Cyrillic, and Greek. The samples use the mono face for their
+is version 2.211; both are licensed under the SIL Open Font License 1.1 and cover Latin, Cyrillic, and
+Greek. The bundled JetBrains Mono variable face's default named instance is Regular (weight 400),
+which is the instance the runtime renders. The samples use the mono face for their
 status/statistics readouts so changing counters keep their positions. The faces are engine-owned and
 must not be disposed; their owner references are released during shutdown. Both are recorded in the
 bundled-assets section of [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). The sample-only Lora
@@ -1286,7 +1287,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   JetBrains Mono faces and the custom Lora face, generates glyph textures on demand, draws the text
   scene, and shuts down. The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
-  hardware driver and on WSLg's dzn hardware device. The suite is 2,621 tests, 106 of them GPU
+  hardware driver and on WSLg's dzn hardware device. The suite is 2,622 tests, 106 of them GPU
   integration tests, and every sample solution builds. `samples/Castle` and
   `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate, and
   `samples/HelloInterop` remains the M1-M3 diagnostic host.
@@ -1360,7 +1361,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `Camera.DrawTextBillboard` is covered by the unit suite `Tests/Rendering/TextDrawTests.cs` for its
   centering, bounds union, and alignment. The glyph texture path is also covered by the per-instance
   texture record and GPU suites. The font, layout, MSDF, and parser suites are deterministic CPU
-  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,621
+  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,622
   tests, 106 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.

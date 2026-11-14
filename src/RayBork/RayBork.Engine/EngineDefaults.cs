@@ -117,14 +117,15 @@ public sealed class EngineDefaults {
     }
 
     /// <summary>
-    /// Gets the built-in monospaced font: JetBrains Mono Regular, one parsed face with an on-demand
-    /// MSDF glyph cache. The engine owns it; do not dispose it.
+    /// Gets the built-in monospaced font: the JetBrains Mono variable face, rendered at its default
+    /// Regular instance, one parsed face with an on-demand MSDF glyph cache. The engine owns it; do not
+    /// dispose it.
     /// </summary>
     /// <remarks>
-    /// The monospaced face has the same advance for every glyph, so counters stay aligned as their
-    /// digits change; the samples draw their status readouts with it. Preloading it is CPU-only and
-    /// issues no GPU upload, and its <see cref="Font.CachedGlyphCount"/> grows as text draws need
-    /// glyphs.
+    /// The monospaced face has the same advance for its letters and digits, so counters stay aligned
+    /// as their digits change; the samples draw their status readouts with it. Preloading it is
+    /// CPU-only and issues no GPU upload, and its <see cref="Font.CachedGlyphCount"/> grows as text
+    /// draws need glyphs.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
     public Font DefaultMonoFont {
