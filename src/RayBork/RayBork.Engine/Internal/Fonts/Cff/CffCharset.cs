@@ -158,24 +158,19 @@ internal sealed class CffCharset {
         ushort value = (ushort)sid;
         ReadOnlySpan<SidGlyph> lookup = _lookup.Span;
         int low = 0;
-        int high = lookup.Length - 1;
-        while (low <= high) {
+        int high = lookup.Length;
+        while (low < high) {
             int middle = low + ((high - low) / 2);
-            int comparison = lookup[middle].Sid.CompareTo(value);
-            if (comparison == 0) {
-                while (middle > 0 && lookup[middle - 1].Sid == value) {
-                    middle--;
-                }
-
-                glyphId = lookup[middle].GlyphId;
-                return true;
-            }
-
-            if (comparison < 0) {
+            if (lookup[middle].Sid < value) {
                 low = middle + 1;
             } else {
-                high = middle - 1;
+                high = middle;
             }
+        }
+
+        if (low < lookup.Length && lookup[low].Sid == value) {
+            glyphId = lookup[low].GlyphId;
+            return true;
         }
 
         glyphId = 0;

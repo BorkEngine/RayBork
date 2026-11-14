@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using RayBork.Internal;
 
 namespace RayBork.Tests.Fonts;
@@ -257,6 +258,25 @@ public sealed class CffReaderTests {
         Assert.Equal(4, matchingGlyph);
         Assert.False(charset.TryGetGlyphId(999, out _));
         Assert.False(charset.TryGetGlyphId(39, out _));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ResolvesDuplicateSidsToTheLowestGlyph() {
+        int[] sids = [34, 34, 35, 34];
+        SyntheticCff builder = CreateGlyphTable(sids.Length + 1).WithCharset(sids);
+        byte[] table = builder.Build();
+
+        CffCharset charset = CffCharset.Parse(
+            table,
+            sids.Length + 1,
+            builder.CharsetOffset,
+            "the synthetic charset");
+
+        Assert.True(charset.TryGetGlyphId(34, out int duplicate));
+        Assert.Equal(1, duplicate);
+        Assert.True(charset.TryGetGlyphId(35, out int unique));
+        Assert.Equal(3, unique);
     }
 
     [Fact]
@@ -641,6 +661,67 @@ public sealed class CffReaderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AcceptsExactlyTheLocalSubrEntryLimit() {
+        byte[] faceBytes = BuildLocalSubrBoundaryFace(lastIndexEntries: 16);
+
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(SfntOutlineKind.Cff, face.OutlineKind);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsOneLocalSubrEntryPastTheLimit() {
+        byte[] faceBytes = BuildLocalSubrBoundaryFace(lastIndexEntries: 17);
+
+        AssertFaceUnsupported(faceBytes, "1048576");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsAliasedPrivateDictSizesThatExceedTheByteLimit() {
+        byte[] extra = new byte[65536];
+        for (int index = 0; index < extra.Length; index += 2) {
+            extra[index] = 139;
+            extra[index + 1] = 0;
+        }
+
+        SyntheticCff builder = SyntheticCff.Create();
+        builder.AddGlyph(SyntheticCffCharStrings.EndChar());
+        builder.AsCid();
+        int first = builder.AddFontDictWithPrivate(extra);
+        while (builder.FontDictCount < CffFont.MAX_FONT_DICTS) {
+            builder.AddSharedFontDict(first);
+        }
+
+        builder.WithFdSelectFormat0(0, 0);
+        byte[] face = builder.BuildFace();
+        SyntheticTableRecord cffTable = SyntheticFontBuilder.FindTable(face, "CFF ");
+        int cffOffset = cffTable.Offset;
+        int fdArray = builder.FdArrayOffset;
+        int count = BinaryPrimitives.ReadUInt16BigEndian(face.AsSpan(cffOffset + fdArray));
+        int offSize = face[cffOffset + fdArray + 2];
+        int offsetsStart = cffOffset + fdArray + 3;
+        int dataStart = offsetsStart + ((count + 1) * offSize);
+        Assert.Equal(CffFont.MAX_FONT_DICTS, count);
+
+        // Alias the one shared Private DICT at distinct prefix sizes; each prefix is a valid DICT
+        // of complete keys, so only the total-byte cap can stop the repeated parse work.
+        for (int fontDictIndex = 0; fontDictIndex < count; fontDictIndex++) {
+            int objectOffset = dataStart + (ReadBigEndian(face, offsetsStart + (fontDictIndex * offSize), offSize) - 1);
+            Assert.Equal(29, face[objectOffset]);
+            Assert.Equal(29, face[objectOffset + 5]);
+            Assert.Equal(18, face[objectOffset + 10]);
+            BinaryPrimitives.WriteUInt32BigEndian(
+                face.AsSpan(objectOffset + 1),
+                (uint)(extra.Length - (2 * fontDictIndex)));
+        }
+
+        AssertFaceUnsupported(face, "8388608");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void RejectsAnEncodingOffsetPastTheTable() {
         SyntheticCff builder = CreateGlyphTable(2)
             .WithTopDictExtra(SyntheticCff.DictKey(16, 100000));
@@ -795,6 +876,31 @@ public sealed class CffReaderTests {
         FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
             () => SfntFace.Parse(face));
         Assert.Contains(reason, exception.Reason, StringComparison.Ordinal);
+    }
+
+    private static byte[] BuildLocalSubrBoundaryFace(int lastIndexEntries) {
+        byte[] subr = SyntheticCffCharStrings.Return();
+        SyntheticCff builder = CreateGlyphTable(2).AsCid();
+        for (int index = 0; index < 16; index++) {
+            byte[][] subrs = new byte[65535][];
+            Array.Fill(subrs, subr);
+            builder.AddFontDict(subrs);
+        }
+
+        byte[][] last = new byte[lastIndexEntries][];
+        Array.Fill(last, subr);
+        builder.AddFontDict(last);
+        builder.WithFdSelectFormat0(0, 0);
+        return builder.BuildFace();
+    }
+
+    private static int ReadBigEndian(ReadOnlySpan<byte> data, int offset, int size) {
+        int value = 0;
+        for (int index = 0; index < size; index++) {
+            value = (value << 8) | data[offset + index];
+        }
+
+        return value;
     }
 
     private static SyntheticCff CreateGlyphTable(int glyphCount) {

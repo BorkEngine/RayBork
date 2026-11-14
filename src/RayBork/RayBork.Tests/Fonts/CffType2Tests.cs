@@ -733,8 +733,11 @@ public sealed class CffType2Tests {
     }
 
     [Theory]
+    [InlineData(0, 10, 50)]
     [InlineData(1, 100, 10)]
     [InlineData(-1, 50, 100)]
+    [InlineData(4, 100, 10)]
+    [InlineData(-4, 50, 100)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void EvaluatesRollInBothDirections(int shift, int expectedX, int expectedY) {
         FontGlyph glyph = ResolveWith(Concat(
@@ -746,6 +749,35 @@ public sealed class CffType2Tests {
             EndChar()));
 
         AssertPoint(expectedX, expectedY, glyph.Outline.Contours.Span[0].Start);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ResolvesARollHeavySubroutineWithinTheTokenBudget() {
+        List<byte[]> sequences = [];
+        for (int index = 0; index < 250; index++) {
+            sequences.Add(Concat(
+                Numbers(10, 50, 100, 3, 1),
+                EscapeOperator(ROLL),
+                EscapeOperator(DROP),
+                EscapeOperator(DROP),
+                EscapeOperator(DROP)));
+        }
+
+        SyntheticCff cff = SyntheticCff.Create();
+        cff.AddGlyph(EndChar());
+        cff.WithLocalSubrs(Concat([.. sequences, Return()]));
+        List<byte[]> calls = new(444);
+        for (int index = 0; index < 443; index++) {
+            calls.Add(CallSubr(-107));
+        }
+
+        calls.Add(EndChar());
+        int glyphId = cff.AddGlyph(Concat(calls.ToArray()));
+
+        FontGlyph glyph = SfntFace.Parse(cff.BuildFace()).GetGlyph(glyphId);
+
+        Assert.True(glyph.IsEmpty);
     }
 
     [Fact]
@@ -1279,6 +1311,19 @@ public sealed class CffType2Tests {
         FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
             () => Resolve(cff, 3));
         Assert.Contains("65536", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SharesTheTokenBudgetAcrossSeacComponents() {
+        SyntheticCff cff = CreateSeacTable(
+            BuildTokenCharString(600000),
+            BuildTokenCharString(500000),
+            EndCharSeac(0, 0, 65, 66));
+
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => Resolve(cff, 3));
+        Assert.Contains("1000000", exception.Reason, StringComparison.Ordinal);
     }
 
     [Fact]

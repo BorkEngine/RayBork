@@ -18,12 +18,13 @@ namespace RayBork.Internal;
 /// CFF features outside the subset are also unsupported: a predefined Expert or ExpertSubset charset,
 /// an FDSelect format 4 table, a <c>seac</c> in a CID-keyed face, a <c>seac</c> whose base or accent
 /// cannot be resolved, a nested <c>seac</c>, more than <see cref="MAX_FONT_DICTS"/> Font DICTs, more
-/// than <see cref="MAX_LOCAL_SUBR_ENTRIES"/> total local-subroutine entries, a
-/// <c>CharstringType</c> other than 2, a <c>PaintType</c> other than 0, a non-zero <c>StrokeWidth</c>,
-/// <c>SyntheticBase</c>, and the interpreter limits documented on
-/// <see cref="CffType2Interpreter"/>. All other structural failures are
-/// <see cref="FontFormatException"/>. Shared Private DICTs and Local Subr INDEXes are parsed once per
-/// (offset, size) or offset even when many Font DICTs reference them.
+/// than <see cref="MAX_LOCAL_SUBR_ENTRIES"/> total local-subroutine entries, more than
+/// <see cref="MAX_PRIVATE_DICT_BYTES"/> total private-DICT bytes, a <c>CharstringType</c> other than
+/// 2, a <c>PaintType</c> other than 0, a non-zero <c>StrokeWidth</c>, <c>SyntheticBase</c>, and the
+/// interpreter limits documented on <see cref="CffType2Interpreter"/>. All other structural failures
+/// are <see cref="FontFormatException"/>. Shared Private DICTs and Local Subr INDEXes are parsed once
+/// per (offset, size) or offset even when many Font DICTs reference them; the private-DICT byte cap
+/// counts each distinct (offset, size) once and includes the Top DICT Private DICT.
 /// </para>
 /// <para>
 /// Charstring coordinates are mapped to font units by the Top DICT FontMatrix and the face's
@@ -81,6 +82,9 @@ internal sealed class CffFont {
     /// <summary>The maximum total number of local-subroutine entries the parser accepts in one face.</summary>
     internal const int MAX_LOCAL_SUBR_ENTRIES = 1048576;
 
+    /// <summary>The maximum total number of private-DICT bytes the parser accepts in one face.</summary>
+    internal const int MAX_PRIVATE_DICT_BYTES = 8 * 1024 * 1024;
+
     private readonly int _glyphCount;
     private readonly int _unitsPerEm;
     private readonly CffIndex _globalSubrs;
@@ -131,7 +135,11 @@ internal sealed class CffFont {
     /// FDSelect is malformed, truncated, or inconsistent with the face.
     /// </exception>
     /// <exception cref="FontUnsupportedException">
-    /// The table is CFF2, a charset is a predefined Expert charset, or an FDSelect uses format 4.
+    /// The table is CFF2; a charset is a predefined Expert or ExpertSubset charset; an FDSelect uses
+    /// format 4; the Top DICT declares a supported-subset violation (<c>CharstringType</c> other than
+    /// 2, <c>PaintType</c> other than 0, a non-zero <c>StrokeWidth</c>, or <c>SyntheticBase</c>); or
+    /// the face exceeds a parse limit (256 Font DICTs, 1,048,576 local-subroutine entries, or
+    /// 8,388,608 private-DICT bytes).
     /// </exception>
     internal static CffFont Parse(ReadOnlyMemory<byte> table, int glyphCount, int unitsPerEm) {
         SfntReader reader = new(table.Span, "the 'CFF ' table");
@@ -319,9 +327,7 @@ internal sealed class CffFont {
                 fontMatrixOperands[4],
                 fontMatrixOperands[5]);
 
-        Dictionary<(int Offset, int Size), CffPrivateDict> privateDicts = [];
-        Dictionary<int, CffIndex> localSubrs = [];
-        int parsedLocalSubrEntries = 0;
+        CffParseState state = new();
         CffPrivateDict privateDict = CffPrivateDict.Empty;
         if (privateSize is not null && privateOffset is not null) {
             if (privateSize < 0) {
@@ -339,11 +345,8 @@ internal sealed class CffFont {
                 privateSize.Value,
                 privateOffset.Value,
                 "the CFF Private DICT",
-                privateDicts,
-                localSubrs,
-                ref parsedLocalSubrEntries);
+                state);
         }
-
         CffPrivateDict[]? fontDicts = null;
         CffFdSelect? fdSelect = null;
         if (isCidKeyed) {
@@ -377,9 +380,7 @@ internal sealed class CffFont {
                     table,
                     fdArray.Get(index),
                     index,
-                    privateDicts,
-                    localSubrs,
-                    ref parsedLocalSubrEntries);
+                    state);
             }
 
             fdSelect = CffFdSelect.Parse(
@@ -476,9 +477,7 @@ internal sealed class CffFont {
         int size,
         int offset,
         string context,
-        Dictionary<(int Offset, int Size), CffPrivateDict> privateDicts,
-        Dictionary<int, CffIndex> localSubrs,
-        ref int parsedLocalSubrEntries) {
+        CffParseState state) {
         if (size == 0) {
             if (offset > table.Length) {
                 throw new FontFormatException(
@@ -489,12 +488,18 @@ internal sealed class CffFont {
         }
 
         (int Offset, int Size) key = (offset, size);
-        if (privateDicts.TryGetValue(key, out CffPrivateDict cached)) {
+        if (state.PrivateDicts.TryGetValue(key, out CffPrivateDict cached)) {
             return cached;
         }
 
         SfntReader tableReader = new(table.Span, context);
         tableReader.Require(offset, size);
+        if (size > MAX_PRIVATE_DICT_BYTES - state.PrivateDictBytes) {
+            throw new FontUnsupportedException(
+                $"the CFF face parses more than {MAX_PRIVATE_DICT_BYTES} private-DICT bytes");
+        }
+
+        state.PrivateDictBytes += size;
         CffDictReader dict = new(table.Slice(offset, size), context);
         int? subrsRelativeOffset = null;
         while (dict.TryRead(out int operatorCode, out int operandCount)) {
@@ -522,25 +527,25 @@ internal sealed class CffFont {
             }
 
             int subrsOffset = (int)absoluteOffset;
-            if (!localSubrs.TryGetValue(subrsOffset, out CffIndex? index)) {
+            if (!state.LocalSubrs.TryGetValue(subrsOffset, out CffIndex? index)) {
                 index = CffIndex.Parse(
                     table,
                     subrsOffset,
                     "the CFF Local Subr INDEX",
                     out _);
-                parsedLocalSubrEntries += index.Count;
-                if (parsedLocalSubrEntries > MAX_LOCAL_SUBR_ENTRIES) {
+                state.LocalSubrEntries += index.Count;
+                if (state.LocalSubrEntries > MAX_LOCAL_SUBR_ENTRIES) {
                     throw new FontUnsupportedException(
                         $"the CFF face parses more than {MAX_LOCAL_SUBR_ENTRIES} local subroutine entries");
                 }
 
-                localSubrs.Add(subrsOffset, index);
+                state.LocalSubrs.Add(subrsOffset, index);
             }
 
             privateDict = new CffPrivateDict(index);
         }
 
-        privateDicts.Add(key, privateDict);
+        state.PrivateDicts.Add(key, privateDict);
         return privateDict;
     }
 
@@ -548,9 +553,7 @@ internal sealed class CffFont {
         ReadOnlyMemory<byte> table,
         ReadOnlyMemory<byte> data,
         int fontDictIndex,
-        Dictionary<(int Offset, int Size), CffPrivateDict> privateDicts,
-        Dictionary<int, CffIndex> localSubrs,
-        ref int parsedLocalSubrEntries) {
+        CffParseState state) {
         string context = $"the CFF Font DICT {fontDictIndex}";
         CffDictReader dict = new(data, context);
         int? privateSize = null;
@@ -584,9 +587,7 @@ internal sealed class CffFont {
             privateSize.Value,
             privateOffset.Value,
             $"{context} Private DICT",
-            privateDicts,
-            localSubrs,
-            ref parsedLocalSubrEntries);
+            state);
     }
 
     private static int ReadIntegerOperand(
@@ -749,5 +750,22 @@ internal sealed class CffFont {
             nameof(glyphId),
             glyphId,
             $"The face has {_glyphCount} glyph(s).");
+    }
+
+    /// <summary>
+    /// The mutable parse-time dedupe and budget state of one face.
+    /// </summary>
+    /// <remarks>
+    /// Shared by the Top DICT Private DICT and every Font DICT, so a Private DICT or Local Subr
+    /// INDEX referenced by many Font DICTs is parsed and counted once.
+    /// </remarks>
+    private sealed class CffParseState {
+        internal Dictionary<(int Offset, int Size), CffPrivateDict> PrivateDicts { get; } = [];
+
+        internal Dictionary<int, CffIndex> LocalSubrs { get; } = [];
+
+        internal int LocalSubrEntries { get; set; }
+
+        internal int PrivateDictBytes { get; set; }
     }
 }

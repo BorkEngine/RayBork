@@ -326,7 +326,11 @@ internal sealed class SfntFace {
     /// The glyph is valid but outside the supported subset: CFF2 outlines, point-matched composite
     /// component arguments, more than 16 composite levels, more than 20,000 points, more than 4,096
     /// component resolutions, or a Type 2 interpreter limit or unsupported CFF feature documented on
-    /// <see cref="CffType2Interpreter"/>.
+    /// <see cref="CffType2Interpreter"/>. Parse-time CFF features and limits — a non-Type-2
+    /// <c>CharstringType</c>, a stroked <c>PaintType</c>, a non-zero <c>StrokeWidth</c>,
+    /// <c>SyntheticBase</c>, more than 256 Font DICTs, more than 1,048,576 local-subroutine entries,
+    /// or more than 8,388,608 private-DICT bytes — are reported by <see cref="Parse"/> before a glyph
+    /// is read.
     /// </exception>
     internal FontGlyph GetGlyph(int glyphId) {
         ThrowIfGlyphOutOfRange(glyphId, nameof(glyphId));

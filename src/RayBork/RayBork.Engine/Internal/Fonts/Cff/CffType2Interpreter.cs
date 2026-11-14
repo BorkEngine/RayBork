@@ -45,9 +45,10 @@ namespace RayBork.Internal;
 /// reading an unwritten entry is deterministic. The deprecated no-argument <c>dotsection</c> operator
 /// is accepted and treated as a stack-clearing no-op. <c>endchar</c> ends the glyph even when it
 /// appears in a called subroutine, because some real fonts terminate from a shared subroutine; bytes
-/// after it are ignored. The instance is mutable and single-use; it is never shared across threads.
-/// Its operand-stack and transient scratch arrays are rented from the shared array pool and returned
-/// when <see cref="Run"/> completes.
+/// after it are ignored. The instance is mutable and single-use; it is never shared across threads,
+/// and a second <see cref="Run"/> throws <see cref="InvalidOperationException"/>. Its operand-stack
+/// and transient scratch arrays are rented from the shared array pool inside <see cref="Run"/> and
+/// returned when it completes, so per-token work is bounded by the fixed stack size.
 /// </para>
 /// </remarks>
 internal sealed class CffType2Interpreter {
@@ -135,9 +136,9 @@ internal sealed class CffType2Interpreter {
     private readonly CffIndex _localSubrs;
     private readonly bool _allowSeac;
     private readonly string _context;
-    private readonly double[] _stack;
-    private readonly double[] _transient;
-    private bool _arraysReturned;
+    private double[] _stack = [];
+    private double[] _transient = [];
+    private bool _run;
     private readonly List<OutlineContour> _contours = [];
     private List<OutlineSegment>? _segments;
     private Vector2 _current;
@@ -169,9 +170,6 @@ internal sealed class CffType2Interpreter {
         _localSubrs = privateDict.LocalSubrs;
         _allowSeac = allowSeac;
         _context = $"the CFF charstring of glyph {glyphId}";
-        _stack = ArrayPool<double>.Shared.Rent(MAX_OPERAND_STACK);
-        _transient = ArrayPool<double>.Shared.Rent(TRANSIENT_ARRAY_SIZE);
-        Array.Clear(_transient, 0, TRANSIENT_ARRAY_SIZE);
     }
 
     /// <summary>Gets the Type 2 subroutine bias for one subroutine count.</summary>
@@ -188,17 +186,25 @@ internal sealed class CffType2Interpreter {
     /// <returns>The closed contours in raw charstring coordinates, in drawing order.</returns>
     /// <exception cref="FontFormatException">The charstring or a called subroutine is malformed.</exception>
     /// <exception cref="FontUnsupportedException">The glyph exceeds an interpreter limit or uses an unsupported feature.</exception>
+    /// <exception cref="InvalidOperationException">The single-use interpreter has already run.</exception>
     internal OutlineContour[] Run(ReadOnlyMemory<byte> charString) {
+        if (_run) {
+            throw new InvalidOperationException("A CFF charstring interpreter is single-use.");
+        }
+
+        _run = true;
+        _stack = ArrayPool<double>.Shared.Rent(MAX_OPERAND_STACK);
+        _transient = ArrayPool<double>.Shared.Rent(TRANSIENT_ARRAY_SIZE);
+        Array.Clear(_transient, 0, TRANSIENT_ARRAY_SIZE);
         try {
             Execute(charString.Span, isSubroutine: false);
             FinishContour();
             return _contours.Count == 0 ? [] : [.. _contours];
         } finally {
-            if (!_arraysReturned) {
-                _arraysReturned = true;
-                ArrayPool<double>.Shared.Return(_stack);
-                ArrayPool<double>.Shared.Return(_transient);
-            }
+            ArrayPool<double>.Shared.Return(_stack);
+            ArrayPool<double>.Shared.Return(_transient);
+            _stack = [];
+            _transient = [];
         }
     }
 
@@ -737,14 +743,21 @@ internal sealed class CffType2Interpreter {
             shift += count;
         }
 
+        // Rotate right by reversing the whole window, then each partition, so one roll costs
+        // O(count) instead of O(shift * count); the stack is capped at 48 entries.
         int start = _stackCount - count;
-        for (int step = 0; step < shift; step++) {
-            double last = _stack[_stackCount - 1];
-            for (int index = _stackCount - 1; index > start; index--) {
-                _stack[index] = _stack[index - 1];
-            }
+        ReverseStack(start, _stackCount);
+        ReverseStack(start, start + shift);
+        ReverseStack(start + shift, _stackCount);
+    }
 
-            _stack[start] = last;
+    private void ReverseStack(int begin, int end) {
+        int low = begin;
+        int high = end - 1;
+        while (low < high) {
+            (_stack[low], _stack[high]) = (_stack[high], _stack[low]);
+            low++;
+            high--;
         }
     }
 
@@ -909,11 +922,6 @@ internal sealed class CffType2Interpreter {
         AddHints(TakeStemOperands());
         ClearStack();
         long maskBytes = (_hintCount + 7) / 8;
-        if (maskBytes < 0) {
-            throw new FontFormatException(
-                $"{_context} computes the negative hint mask length {maskBytes}");
-        }
-
         if (maskBytes > charString.Length - position) {
             throw new FontFormatException(
                 $"{_context} ends before its {maskBytes}-byte hint mask");

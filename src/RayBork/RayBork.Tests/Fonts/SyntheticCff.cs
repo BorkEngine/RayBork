@@ -77,6 +77,9 @@ internal sealed class SyntheticCff {
     /// <summary>Gets the top-level Private DICT offset of the last <see cref="Build"/>, or zero.</summary>
     internal int PrivateOffset { get; private set; }
 
+    /// <summary>Gets the FDArray INDEX offset of the last <see cref="Build"/>, or zero for a non-CID table.</summary>
+    internal int FdArrayOffset { get; private set; }
+
     /// <summary>Gets the FDSelect offset of the last <see cref="Build"/>, or zero for a non-CID table.</summary>
     internal int FdSelectOffset { get; private set; }
 
@@ -455,6 +458,7 @@ internal sealed class SyntheticCff {
         CharStringsOffset = charStringsOffset;
         CharsetOffset = charsetOffset;
         PrivateOffset = privateOffset;
+        FdArrayOffset = fdArrayOffset;
         FdSelectOffset = fdSelectOffset;
         return table;
     }
