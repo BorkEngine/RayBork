@@ -789,8 +789,9 @@ blocking glyph generation.
   `0.5` is the edge, derivative-based screen-space antialiasing in the shader, and analytic
   validation of the generated field.
 - Glyph pipeline: an app-lifetime `RayBork.Font` thread that generates and uploads glyphs
-  asynchronously, a tick thread that never waits, a per-font hard cache with LRU eviction, and frame
-  holds so an eviction cannot destroy a texture a recorded frame still references.
+  asynchronously, a tick thread that never waits for glyph generation, a per-font hard cache with LRU
+  eviction, and frame holds so an eviction cannot destroy a texture a recorded frame still
+  references.
 - The CPU-only `Font : IAsset` and `Glyph` contract: `Load<Font>` parses the face and generates no
   glyph texture, `TryGetGlyph`, `Measure`, unmapped-rune fallback to `.notdef`, and `RB1011` for an
   invalid or unsupported face. There is no `Preload` and no font preload range.
@@ -829,7 +830,7 @@ blocking glyph generation.
   run `--frames 30` to exit `0` (Windows hardware and WSLg dzn).
 - Fuzz tests cover malformed sfnt/cmap/glyf/CFF/kern/GPOS tables without crashes or unbounded
   allocation.
-- The suite is 2,609 tests, 105 of them GPU integration tests, and every sample solution builds.
+- The suite is 2,619 tests, 106 of them GPU integration tests, and every sample solution builds.
 
 **As-built notes.** M6 shipped the planned text surface with the following as-built shape:
 
@@ -920,7 +921,8 @@ blocking glyph generation.
   camera-facing plane, and aligns each line inside the block width. One call records at most one
   draw record; every ready glyph is one instance in layout order with its own bindless glyph texture,
   and the per-instance UV rectangle stays `(0, 0, 1, 1)`. The text render state is alpha blend, no
-  culling, `greater_equal`, no depth write. Instances of the same quad and program batch across
+  culling, `greater_equal`, no depth write (M10 changes the default to an alpha-to-coverage cutout).
+  Instances of the same quad and program batch across
   calls, fonts, sizes, and strings; `Instances` counts submitted glyph instances and `Triangles` is
   two per instance. A call whose glyphs are all pending or empty records nothing. A glyph texture
   the draw acquired is retained by its frame hold rather than again by the draw record. Validation
@@ -940,38 +942,43 @@ blocking glyph generation.
   the render CPU time, and draw calls and instances from `RenderStats`. The published `win-x64` and
   `linux-x64` hosts finish with zero AOT/trim warnings, contain `text.pck` but no bake tooling, and
   both run `--frames 30` to exit `0`; the Linux run used WSLg's dzn hardware device.
-- **Presentation pacing and truthful diagnostics.** The samples set no tick target. In FIFO mode the
-  tick thread waits for the presentation of the frame it published, so one tick maps to one
-  presented image and the tick rate follows the display refresh; MAILBOX and IMMEDIATE keep the
+- **Presentation pacing and truthful diagnostics.** The samples set no tick target and request FIFO.
+  In FIFO mode the tick thread waits until the render loop finishes with the frame it published
+  (normally its presentation), so one tick maps to one presented image and the tick rate follows the
+  display refresh; a dropped or failed frame also finishes the wait. MAILBOX and IMMEDIATE keep the
   tick decoupled and the renderer presents the newest completed frame. `RenderStats.PresentedFrames`
   counts successful presentations since startup, and the samples label `EngineContext.Fps` as
-  `tick` and show the presented rate separately from a one-second delta of that counter.
+  `tick` and show the presented rate separately from a one-second delta of that counter. The ring's
+  completion mark is a pacing signal, not a successful-presentation count.
   `RenderStats.CpuFrameMilliseconds` now measures only planning, recording, and submission: it
   starts after the frame fence wait and the swapchain acquire, so a vsync or acquire stall is no
   longer reported as CPU frame time.
 - **Measured text-path cost.** The Text sample records 1,196 glyph instances in one draw call.
   Measured on the reference machine, its tick-thread recording work (layout, metrics lookup, cache
   acquire, and frame retention) is about **10-13 ms per tick in Debug** (~80 ticks/s) and about
-  **2.7-3 ms per tick in Release** (~300 ticks/s). The render thread's plan, record, and submit is
-  about 1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets.
-  The earlier "80 FPS" observation was this Debug tick rate on a 144 Hz display, not a vsync cap.
-  The per-glyph text recording path is the cost, and optimizing it is deferred to the M10
-  optimization milestone.
-- **Tests.** The suite is 2,609 tests, 105 of them GPU integration tests. M6 adds the font parser,
+  **2.7-3 ms per tick in Release** (~300 ticks/s); the display refresh was 144 Hz, so the Debug tick
+  rate, not vsync, was the observed limit. The render thread's plan, record, and submit is about
+  1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets. The
+  per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
+  milestone.
+- **Tests.** The suite is 2,619 tests, 106 of them GPU integration tests. M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
   colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
   the text layout, measurement, wrapping, buffer, and validation suites; the camera text draw
   records and the `TextDrawGpuTests` presented-pixel and statistics suite; and the frame-ring
-  presentation-wait, app FIFO/Mailbox pacing, presented-frame counter, and acquire-excluded CPU
-  timing suites. The two AOT publishes cover the Text sample on both RIDs. There is no golden-image
-  suite.
+  presentation-wait, app FIFO/Mailbox pacing and mode-change, render-loop failure/drop marking,
+  presented-frame counter and recovery/suboptimal result, and acquire-excluded CPU timing suites.
+  The two AOT publishes cover the Text sample on both RIDs. There is no golden-image suite.
 - **Limitations.** There is no complex shaping, ligature substitution, bidi ordering, font fallback,
   color font, or emoji support. Coverage is per face: Fira Sans covers Latin, Cyrillic, and Greek.
   Variable fonts load their default instance. CFF2 is rejected. One texture per glyph consumes
   bindless slots: 512 cached per font, within the fixed 2048-slot table. There is no preload and no
   synchronous glyph generation. Text is world-space only; screen-space/HUD text is M7. MSDF sharp
   corners are not extended, so a small artifact can appear at very large sizes. A world-space
-  status overlay can be occluded by geometry closer than the overlay distance.
+  status overlay can be occluded by geometry closer than the overlay distance. M6 ships text as
+  alpha-blended (derivative antialiasing, transparent batch, no depth writes); M10 makes the
+  alpha-to-coverage cutout the default so text needs no sorting and resolves overlapping glyphs by
+  depth, keeping the alpha path for translucent text.
 
 **Risks.**
 
@@ -1088,6 +1095,14 @@ target games.
   the target cap.
 - Text recording-path optimization: the measured per-glyph layout, metrics lookup, cache acquire,
   and frame-retention cost, deferred from M6.
+- **Text cutout and alpha-to-coverage.** Text becomes a depth-writing cutout by default: add an
+  `AlphaToCoverage` pipeline and render-state capability, draw MSDF text with an opaque blend and
+  depth writes so MSAA resolves the glyph edges through alpha-to-coverage, and remove text from the
+  transparent sort. The alpha-blended MSDF variant stays available for translucent text. MSAA
+  antialiases triangle edges, not texture-defined glyph shapes, so a plain discard cutout would
+  alias; alpha-to-coverage (currently hard-coded off in the geometry pipeline) is the required
+  plumbing. Covered by edge and occlusion pixel probes plus a validation-clean pipeline test, and
+  the API and versioning docs record the changed default.
 - Pipeline cache persisted to disk; cache invalidation on driver/version change.
 - Buffer/descriptor/staging pools; no steady-state per-frame allocations in the renderer.
 - Bindless slot reuse and retirement; memory budget counters.
@@ -1299,7 +1314,7 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   `TextDrawTests` cover the CPU-only asset, `.notdef`, layout, and the camera draw records;
   `TextDrawGpuTests` submits the production text draws through the Vulkan backend and asserts
   validation-layer cleanliness, draw/instance/triangle statistics, and single-pixel linear
-  scene-target probes. The suite is 2,609 tests, 105 of them GPU integration tests, and every sample
+  scene-target probes. The suite is 2,619 tests, 106 of them GPU integration tests, and every sample
   solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

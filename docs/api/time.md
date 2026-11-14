@@ -31,11 +31,13 @@ Semantics:
 - `MaxDeltaTime` is fixed at build time; it prevents a debugger pause or a window drag from
   teleporting the simulation.
 - Presentation pacing follows the effective present mode reported by `Info.PresentMode`. With
-  `PresentMode.Fifo`, a tick waits for the presentation of the frame it published, so one tick maps
-  to one presented image and the tick rate follows the display refresh. With `Mailbox` or
-  `Immediate`, the tick stays decoupled and the render thread presents the newest completed frame;
-  the presented rate can then differ from the tick rate.
-- A configured tick target caps the tick loop after the presentation wait, so a target below the
+  `PresentMode.Fifo`, a tick waits until the render loop finishes with the frame it published
+  (normally its presentation), so one tick maps to one presented image and the tick rate follows the
+  display refresh. A frame dropped by minimization or recovery and a failed render attempt also
+  release the wait; `Stats.PresentedFrames` is the successful-presentation counter. With `Mailbox`
+  or `Immediate`, the tick stays decoupled and the render thread presents the newest completed
+  frame; the presented rate can then differ from the tick rate.
+- A configured tick target caps the tick loop after the render-finished wait, so a target below the
   display refresh sleeps longer and a target above it is naturally limited by FIFO presentation.
 - There is no interpolation between ticks in v1. In M2 the render thread presents the newest
   completed tick's frame, which currently clears the linear scene target and runs the present pass.

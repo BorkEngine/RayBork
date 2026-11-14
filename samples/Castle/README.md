@@ -40,8 +40,8 @@ are sample-only and are **not** covered by RayBork's MIT license; see
 | `--help` | Print usage and exit `0`. |
 
 The sample uses an 800x450 window and the engine's default renderer settings, and it sets no tick
-target. FIFO presentation paces the tick thread to the display refresh; Mailbox and Immediate leave
-the tick decoupled. A missing pack prints an error and exits `1`.
+target. It requests FIFO presentation, so the display refresh paces the tick thread. A missing pack
+prints an error and exits `1`.
 
 ## Controls
 

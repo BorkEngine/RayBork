@@ -49,8 +49,9 @@ MSDF is generated deterministically on demand: one texture per glyph, a complete
 px on its longest side by default (`msdf_range` 4, `msdf_padding` 2), msdfgen-style two-channel edge
 colouring, a normalized field where `0.5` is the edge, and derivative-based screen-space
 antialiasing in `/shaders/msdf`. The app-lifetime `RayBork.Font` thread generates and uploads glyphs
-asynchronously, so the tick thread never waits; a glyph whose texture is not ready is skipped for
-that call while its advance stays, and it appears on a later frame. Each font hard-caches 512 glyph
+asynchronously, so the tick thread never waits for glyph generation; a glyph whose texture is not
+ready is skipped for that call while its advance stays, and it appears on a later frame. Each font
+hard-caches 512 glyph
 textures with LRU eviction, and `Acquire` adds the frame hold atomically so an eviction cannot destroy
 a texture a recorded frame still references. The CPU-only `Font` asset is shared and
 reference-counted: `Load<Font>` parses the whole face and generates no glyph texture, and there is no
@@ -62,9 +63,9 @@ and a per-instance bindless glyph texture, so text batches across calls and font
 Sans Regular face (OFL 1.1, Latin/Cyrillic/Greek) is at `/fonts/fira-sans` in the built-in pack and
 is exposed as `EngineDefaults.DefaultFont`; `samples/Text` is the M6 sample and AOT gate, and the
 Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics text overlays. The
-samples set no tick target: FIFO presentation paces the tick thread, and Mailbox/Immediate leave it
-decoupled; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
-The suite is 2,609 tests, 105 of them GPU integration tests, and every sample builds. The Windows
+samples set no tick target and request FIFO presentation, so the display refresh paces the tick
+thread; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
+The suite is 2,619 tests, 106 of them GPU integration tests, and every sample builds. The Windows
 hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
 host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in

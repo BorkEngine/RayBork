@@ -1,7 +1,11 @@
+using System.Diagnostics;
+
 namespace RayBork.Tests;
 
 public sealed class PresentationPacingTests {
     private static readonly TimeSpan _absenceCheck = TimeSpan.FromMilliseconds(500);
+
+    private static readonly TimeSpan _minimumLowTargetTickInterval = TimeSpan.FromMilliseconds(50);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
@@ -11,7 +15,8 @@ public sealed class PresentationPacingTests {
         using ManualResetEventSlim secondTick = new(false);
 
         ScriptedGame game = new();
-        using AppTestHost host = new(game, targetFps: 0);
+        // A target above the display refresh: FIFO presentation must still pace the tick.
+        using AppTestHost host = new(game, targetFps: 1000);
         host.FakeRenderer.Info = host.FakeRenderer.Info with { PresentMode = PresentMode.Fifo };
         host.FakeRenderer.OnPresent = () => {
             presentStarted.Set();
@@ -161,6 +166,114 @@ public sealed class PresentationPacingTests {
             Assert.Equal(1, game.ShutdownCount);
         } finally {
             presentRelease.Set();
+            runThread.Join(AppTestHost.TIMEOUT);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void FifoWithALowTargetSleepsAfterPresentation() {
+        using ManualResetEventSlim secondTick = new(false);
+
+        ScriptedGame game = new();
+        using AppTestHost host = new(game, targetFps: 10);
+        host.FakeRenderer.Info = host.FakeRenderer.Info with { PresentMode = PresentMode.Fifo };
+
+        long firstTickStartedAt = 0;
+        TimeSpan tickInterval = TimeSpan.Zero;
+        game.TickHandler = context => {
+            if (game.TickCount == 1) {
+                firstTickStartedAt = Stopwatch.GetTimestamp();
+            } else if (game.TickCount == 2) {
+                tickInterval = Stopwatch.GetElapsedTime(firstTickStartedAt);
+                secondTick.Set();
+                context.RequestExit();
+            }
+        };
+
+        Exception? runFailure = null;
+        Thread runThread = new(() => {
+            try {
+                host.App.Run();
+            } catch (Exception exception) {
+                runFailure = exception;
+            }
+        });
+
+        runThread.Start();
+        try {
+            Assert.True(secondTick.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+            Assert.True(runThread.Join(AppTestHost.TIMEOUT));
+            Assert.Null(runFailure);
+            Assert.True(
+                tickInterval >= _minimumLowTargetTickInterval,
+                $"A 10 FPS target must sleep after presentation, but the tick interval was {tickInterval.TotalMilliseconds:0.0} ms.");
+            Assert.Equal(2, game.TickCount);
+        } finally {
+            runThread.Join(AppTestHost.TIMEOUT);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void APresentationModeChangeTakesEffectOnTheNextTick() {
+        using ManualResetEventSlim firstPresented = new(false);
+        using ManualResetEventSlim secondPresentStarted = new(false);
+        using ManualResetEventSlim secondPresentRelease = new(false);
+        using ManualResetEventSlim thirdTick = new(false);
+
+        ScriptedGame game = new();
+        using AppTestHost host = new(game, targetFps: 0);
+        int presentCount = 0;
+        host.FakeRenderer.OnPresent = () => {
+            int count = Interlocked.Increment(ref presentCount);
+            if (count == 1) {
+                firstPresented.Set();
+            } else if (count == 2) {
+                secondPresentStarted.Set();
+                secondPresentRelease.Wait(AppTestHost.TIMEOUT);
+            }
+        };
+        game.TickHandler = context => {
+            if (game.TickCount == 2) {
+                // The first frame was presented decoupled in MAILBOX. Switching to FIFO here is the
+                // recovery/HDR-switch analogue and must pace the frame this tick publishes. The fake
+                // backend and the live status both change, as the render loop would publish a
+                // recovered Info; the tick reads the live status after it publishes.
+                EngineInfo fifo = host.FakeRenderer.Info with { PresentMode = PresentMode.Fifo };
+                host.FakeRenderer.Info = fifo;
+                host.App.RenderStatus.SetInfo(fifo);
+            } else if (game.TickCount == 3) {
+                thirdTick.Set();
+                context.RequestExit();
+            }
+        };
+
+        Exception? runFailure = null;
+        Thread runThread = new(() => {
+            try {
+                host.App.Run();
+            } catch (Exception exception) {
+                runFailure = exception;
+            }
+        });
+
+        runThread.Start();
+        try {
+            Assert.True(firstPresented.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+            Assert.True(secondPresentStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+
+            Assert.False(thirdTick.Wait(_absenceCheck, TestContext.Current.CancellationToken));
+            Assert.Equal(2, game.TickCount);
+
+            secondPresentRelease.Set();
+
+            Assert.True(thirdTick.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+            Assert.True(runThread.Join(AppTestHost.TIMEOUT));
+            Assert.Null(runFailure);
+            Assert.Equal(3, game.TickCount);
+        } finally {
+            secondPresentRelease.Set();
             runThread.Join(AppTestHost.TIMEOUT);
         }
     }

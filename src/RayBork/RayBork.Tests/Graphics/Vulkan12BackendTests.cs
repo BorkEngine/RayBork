@@ -155,7 +155,9 @@ public sealed class Vulkan12BackendTests {
         const double maxCpuFrameMilliseconds = 100;
 
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        int acquireHookCalls = 0;
         host.Backend.BeforeAcquireForTests = () => {
+            Interlocked.Increment(ref acquireHookCalls);
             long startedAt = Stopwatch.GetTimestamp();
             while (Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds < acquireDelayMilliseconds) {
                 Thread.SpinWait(100);
@@ -164,6 +166,7 @@ public sealed class Vulkan12BackendTests {
 
         host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, 1, _clearColor));
 
+        Assert.Equal(1, acquireHookCalls);
         Assert.InRange(host.Backend.Stats.CpuFrameMilliseconds, 0, maxCpuFrameMilliseconds);
         host.Backend.Present();
         Assert.Empty(host.Instance.ConsumeValidationErrors());

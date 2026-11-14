@@ -1589,6 +1589,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private static void WriteUInt32(Span<byte> destination, int offset, uint value)
         => BinaryPrimitives.WriteUInt32LittleEndian(destination[offset..], value);
 
+    /// <summary>
+    /// Gets whether a presentation result means the image reached the presentation engine. A
+    /// suboptimal result still presented; an out-of-date or lost surface did not.
+    /// </summary>
+    /// <param name="result">The result of <c>vkQueuePresentKHR</c>.</param>
+    /// <returns><see langword="true"/> when the presentation succeeded.</returns>
+    internal static bool CountsAsPresented(SwapchainResult result) =>
+        result is SwapchainResult.Success or SwapchainResult.Suboptimal;
+
     private void PresentPending() {
         if (!_pendingPresent) {
             return;
@@ -1599,7 +1608,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _pendingPresent = false;
         _pendingRenderFinished = default;
         _instance!.ThrowIfValidationError("presenting a frame");
-        if (result is SwapchainResult.Success or SwapchainResult.Suboptimal) {
+        if (CountsAsPresented(result)) {
             // The image reached the presentation engine, so a frame completed. A suboptimal hint is a
             // routine driver notification and must not count toward the recovery bound, but the
             // presentation itself succeeded and is counted. An out-of-date, lost, or recreated

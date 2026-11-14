@@ -408,10 +408,12 @@ public sealed class FrameRingTests {
     public async Task PresentationWaitWakesWhenTheFrameIsMarked() {
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, CancellationToken.None));
+        WaitForPresentationWaiter(ring);
 
         ring.MarkPresented(1);
 
         Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.Equal(0, ring.PresentationWaiterCount);
     }
 
     [Fact]
@@ -419,6 +421,7 @@ public sealed class FrameRingTests {
     public async Task PresentationWaitWakesWhenANewerFrameIsMarked() {
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(2, CancellationToken.None));
+        WaitForPresentationWaiter(ring);
 
         ring.MarkPresented(3);
 
@@ -443,6 +446,7 @@ public sealed class FrameRingTests {
     public async Task CompleteWakesAPresentationWait() {
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, CancellationToken.None));
+        WaitForPresentationWaiter(ring);
 
         ring.Complete();
 
@@ -464,10 +468,12 @@ public sealed class FrameRingTests {
         using CancellationTokenSource cancellation = new();
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, cancellation.Token));
+        WaitForPresentationWaiter(ring);
 
         cancellation.Cancel();
 
         Assert.False(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.Equal(0, ring.PresentationWaiterCount);
     }
 
     [Fact]
@@ -482,6 +488,10 @@ public sealed class FrameRingTests {
 
         Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
     }
+
+    private static void WaitForPresentationWaiter(FrameRing ring) => Assert.True(
+        SpinWait.SpinUntil(() => ring.PresentationWaiterCount == 1, _blockingTimeout),
+        "The presentation waiter did not block.");
 
     private static FrameLease[] AcquireAllWritable(FrameRing ring) {
         FrameLease[] leases = new FrameLease[SLOT_COUNT];

@@ -75,7 +75,7 @@ public sealed class RayBorkAppBuilder {
 | `WithExposure` | `0` EV | The startup exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. The game can change it at runtime through `ctx.Tonemapping.Exposure`. |
 | `WithAgxWhite` | `16.29` | The startup scene-linear AgX white, before the display headroom scaling. Finite and at least `2`. The game can change it at runtime through `ctx.Tonemapping.AgxWhite`. |
 | `WithAgxContrast` | `1.25` | The startup AgX curve contrast. Finite and at least `1`. The game can change it at runtime through `ctx.Tonemapping.AgxContrast`. |
-| `WithTargetFps` | `0` (uncapped) | Caps the tick loop. With FIFO presentation the display refresh paces ticks first, so a target below the refresh sleeps longer and a target above it has no effect; with Mailbox or Immediate the target caps the decoupled tick loop directly. `0` means no cap. |
+| `WithTargetFps` | `0` (uncapped) | Caps the tick loop. With FIFO presentation the display refresh paces ticks first, so a target below the refresh sleeps longer and a target above it has no effect; with Mailbox or Immediate the target caps the decoupled tick loop directly. `0` means no cap. The samples set no target and request FIFO. |
 | `WithValidation` | `true` in Debug, `false` in Release | If the validation layer is unavailable, the app logs a warning and continues without it. |
 | `WithLoggerFactory` | default ZLogger console factory | A caller-supplied factory is not disposed by the app. `EngineContext.LoggerFactory` always returns a usable factory. |
 | `WithLogLevel` | `Information` | Minimum level for the default ZLogger provider. Ignored when a caller-supplied factory already filters. |

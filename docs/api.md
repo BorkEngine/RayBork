@@ -321,10 +321,11 @@ argument. It draws the built-in Fira Sans and the custom Lora face at several si
 alignments, and wrapping modes, with Latin and Cyrillic paragraphs, a camera-facing billboard, a
 lazily generated Greek line, a world-space status line showing presented FPS, the tick rate, render
 CPU time, draw calls, and instances, orbit/zoom controls, and the `--frames` and `--help` options.
-The samples set no tick target; FIFO presentation paces the tick thread, while Mailbox and Immediate
-leave it decoupled. The published `win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with
-zero AOT/trim warnings, on the Windows hardware driver and on WSLg's dzn hardware device. The M6
-suite is 2,609 tests, 105 of them GPU integration tests, and every sample solution builds. The Text
+The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
+thread; the engine default remains Mailbox for games that want the decoupled path. The published
+`win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
+Windows hardware driver and on WSLg's dzn hardware device. The M6
+suite is 2,619 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`

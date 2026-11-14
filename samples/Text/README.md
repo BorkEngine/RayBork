@@ -106,9 +106,9 @@ is **not** covered by RayBork's MIT license; see [THIRD-PARTY-NOTICES.md](THIRD-
 | `--help` | Print usage and exit `0`. |
 
 The sample uses a 1280x720 resizable window, a `0.25` second delta clamp, and the engine's default
-renderer settings, and it sets no tick target. FIFO presentation paces the tick thread to the
-display refresh; Mailbox and Immediate leave the tick decoupled. It loads `text.pck` from beside the
-executable, so it has no `--assets` argument. A missing pack prints an error and exits `1`.
+renderer settings, and it sets no tick target. It requests FIFO presentation, so the display refresh
+paces the tick thread. It loads `text.pck` from beside the executable, so it has no `--assets`
+argument. A missing pack prints an error and exits `1`.
 
 ## Controls
 

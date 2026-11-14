@@ -128,9 +128,8 @@ depth-tested world-space text, geometry closer than one unit to the camera can s
 | `--help` | Print usage and exit `0`. |
 
 The sample uses an 800x450 resizable window, a `0.25` second delta clamp, and the engine's default
-renderer settings, and it sets no tick target. FIFO presentation paces the tick thread to the
-display refresh; Mailbox and Immediate leave the tick decoupled. An unknown option prints the usage
-text and exits `2`.
+renderer settings, and it sets no tick target. It requests FIFO presentation, so the display refresh
+paces the tick thread. An unknown option prints the usage text and exits `2`.
 
 ## Controls
 

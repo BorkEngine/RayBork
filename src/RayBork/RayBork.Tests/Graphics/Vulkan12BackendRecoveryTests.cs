@@ -174,6 +174,21 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void PresentedFramesSurvivesAPresentationRecovery() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        RenderFrame(host, 1);
+        Assert.Equal(1, host.Backend.Stats.PresentedFrames);
+
+        host.Backend.SimulateSwapchainOutOfDateForTests();
+        RenderFrame(host, 2);
+
+        Assert.Equal(1, host.Backend.Stats.RecoveryCount);
+        Assert.Equal(2, host.Backend.Stats.PresentedFrames);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void DisposeAfterRecoveryIsClean() {
         BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
