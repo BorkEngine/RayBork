@@ -100,7 +100,7 @@ public sealed class GlyphGenerationServiceTests {
         Thread thread = Assert.IsType<Thread>(harness.Service.GenerationThread);
         Assert.True(thread.IsAlive);
 
-        harness.Service.Stop();
+        GlyphPipelineTestHarness.StopService(harness.Service);
 
         Assert.False(thread.IsAlive);
         Assert.False(harness.Service.IsRunning);
@@ -113,7 +113,7 @@ public sealed class GlyphGenerationServiceTests {
             harness.LoggerFactory.Entries,
             entry => entry.Level == LogLevel.Warning);
 
-        harness.Service.Stop();
+        GlyphPipelineTestHarness.StopService(harness.Service);
         Assert.False(harness.Service.IsRunning);
         retention.Release();
     }
@@ -124,7 +124,7 @@ public sealed class GlyphGenerationServiceTests {
         TrackingLoggerFactory loggerFactory = new();
         FakeGlyphTextureFactory factory = new();
         GlyphGenerationService service = new(loggerFactory);
-        SfntFace face = GlyphTestFonts.CreateManyGlyphFace(2, out int firstGlyphId);
+        SfntFace face = GlyphTestFonts.CreateManyGlyphFace(3, out int firstGlyphId);
         FontGlyphPipeline pipeline = new(
             face,
             FontGlyphSettings.CreateDefault(face.UnitsPerEm),
@@ -137,10 +137,13 @@ public sealed class GlyphGenerationServiceTests {
 
             Assert.Equal(
                 GlyphEnqueueResult.RejectedNotStarted,
-                service.Enqueue(pipeline, firstGlyphId + 1));
+                service.Enqueue(pipeline, firstGlyphId + 2));
             Assert.Null(pipeline.Acquire(firstGlyphId, retention));
+            Assert.Null(pipeline.Acquire(firstGlyphId + 1, retention));
             Assert.False(pipeline.IsGlyphReady(firstGlyphId));
+            Assert.False(pipeline.IsGlyphReady(firstGlyphId + 1));
             Assert.True(pipeline.WhenGlyphSettledAsync(firstGlyphId).IsCompleted);
+            Assert.True(pipeline.WhenGlyphSettledAsync(firstGlyphId + 1).IsCompleted);
             Assert.Single(NotStartedWarnings(loggerFactory));
 
             Assert.Null(pipeline.Acquire(firstGlyphId, retention));
@@ -148,13 +151,13 @@ public sealed class GlyphGenerationServiceTests {
             Assert.Equal(0, factory.CreateCount);
 
             service.Start();
-            await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId + 1, 1);
+            await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId + 2, 1);
 
-            Assert.True(pipeline.IsGlyphReady(firstGlyphId + 1));
+            Assert.True(pipeline.IsGlyphReady(firstGlyphId + 2));
             Assert.Equal(1, factory.CreateCount);
             retention.Release();
         } finally {
-            service.Stop();
+            GlyphPipelineTestHarness.StopService(service);
             pipeline.Dispose();
             loggerFactory.Dispose();
         }
@@ -182,7 +185,7 @@ public sealed class GlyphGenerationServiceTests {
             .WaitAsync(GlyphPipelineTestHarness.TIMEOUT, TestContext.Current.CancellationToken);
         Assert.Equal(1, harness.Factory.CreateCount);
 
-        harness.Service.Stop();
+        GlyphPipelineTestHarness.StopService(harness.Service);
         Assert.Equal(
             GlyphEnqueueResult.RejectedStopping,
             harness.Service.Enqueue(pipeline, firstGlyphId + 1));
@@ -260,6 +263,10 @@ public sealed class GlyphGenerationServiceTests {
             TestContext.Current.CancellationToken);
         Task second = Task.Run(harness.Service.Stop, TestContext.Current.CancellationToken);
 
+        bool entered = SpinWait.SpinUntil(
+            () => harness.Service.StopWaiterCount == 1,
+            GlyphPipelineTestHarness.TIMEOUT);
+        Assert.True(entered, "The second Stop did not enter the wait for the first stop.");
         Assert.False(second.IsCompleted);
         upload.TrySetCanceled(TestContext.Current.CancellationToken);
         await Task.WhenAll(first, second)
@@ -346,7 +353,7 @@ public sealed class GlyphGenerationServiceTests {
 
         Assert.Throws<InvalidOperationException>(() => harness.Service.Start());
 
-        harness.Service.Stop();
+        GlyphPipelineTestHarness.StopService(harness.Service);
 
         Assert.Throws<ObjectDisposedException>(() => harness.Service.Start());
     }
@@ -355,17 +362,20 @@ public sealed class GlyphGenerationServiceTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void EnqueueAfterStopIsRejectedAndFailsTheGlyph() {
         using GlyphPipelineTestHarness harness = new();
-        SfntFace face = GlyphTestFonts.CreateSquareFace(out int glyphId);
+        SfntFace face = GlyphTestFonts.CreateManyGlyphFace(2, out int firstGlyphId);
         FontGlyphPipeline pipeline = harness.CreatePipeline(face);
         pipeline.BeginFrame(1);
-        harness.Service.Stop();
+        GlyphPipelineTestHarness.StopService(harness.Service);
 
         Assert.Equal(
             GlyphEnqueueResult.RejectedStopping,
-            harness.Service.Enqueue(pipeline, glyphId));
-        Assert.Null(GlyphPipelineTestHarness.AcquireOnce(pipeline, glyphId));
-        Assert.False(pipeline.IsGlyphReady(glyphId));
-        Assert.True(pipeline.WhenGlyphSettledAsync(glyphId).IsCompleted);
+            harness.Service.Enqueue(pipeline, firstGlyphId));
+        Assert.Null(GlyphPipelineTestHarness.AcquireOnce(pipeline, firstGlyphId));
+        Assert.Null(GlyphPipelineTestHarness.AcquireOnce(pipeline, firstGlyphId + 1));
+        Assert.False(pipeline.IsGlyphReady(firstGlyphId));
+        Assert.False(pipeline.IsGlyphReady(firstGlyphId + 1));
+        Assert.True(pipeline.WhenGlyphSettledAsync(firstGlyphId).IsCompleted);
+        Assert.True(pipeline.WhenGlyphSettledAsync(firstGlyphId + 1).IsCompleted);
         Assert.Equal(0, harness.Factory.CreateCount);
         Assert.Single(StoppingWarnings(harness));
         Assert.Empty(NotStartedWarnings(harness));

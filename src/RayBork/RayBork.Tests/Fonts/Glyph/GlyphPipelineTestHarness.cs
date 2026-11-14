@@ -116,9 +116,23 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
         }
     }
 
+    /// <summary>
+    /// Stops a service on a pool thread with a bounded wait, so a broken join fails the test instead of
+    /// hanging it.
+    /// </summary>
+    /// <param name="service">The service to stop.</param>
+    internal static void StopService(GlyphGenerationService service) {
+        ArgumentNullException.ThrowIfNull(service);
+
+        Task.Run(service.Stop, TestContext.Current.CancellationToken)
+            .WaitAsync(TIMEOUT, TestContext.Current.CancellationToken)
+            .GetAwaiter()
+            .GetResult();
+    }
+
     /// <inheritdoc/>
     public void Dispose() {
-        Service.Stop();
+        StopService(Service);
         foreach (FontGlyphPipeline pipeline in _pipelines) {
             pipeline.Dispose();
         }

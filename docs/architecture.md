@@ -313,11 +313,13 @@ Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, `RayBork.Ren
 
 - `IGame` callbacks run on the tick thread. Every object created by them (`Camera`, `RenderTexture`
   in M8, `Shader.SetUniform`, and the primitive draw helpers) is tick-thread affine.
-- `Font` metrics and glyph acquisition are tick-thread calls. The per-font glyph cache is mutated only
-  by the app-lifetime `RayBork.Font` thread: the tick thread calls the pipeline's `BeginFrame`,
-  `Acquire`, and `GetMetrics`, and `Acquire` adds the texture's frame hold to the camera's retention
-  set before it returns. A miss enqueues generation and returns no texture, so a draw never blocks on
-  the font thread and the glyph appears on a later frame.
+- `Font` metrics and glyph acquisition are tick-thread calls. The app-lifetime `RayBork.Font` thread is
+  the only thread that inserts and evicts glyph textures; the tick thread calls the pipeline's
+  `BeginFrame`, `Acquire`, and `GetMetrics` and updates the use stamps and waiter state while it does.
+  `Acquire` adds the texture's frame hold to the camera's retention set before it returns; eviction may
+  still dispose the texture wrapper in the same frame, and the frame hold keeps its GPU resource alive
+  until the frame ring releases it. A miss enqueues generation and returns no texture, so a draw never
+  blocks on the font thread and the glyph appears on a later frame.
 - M3 adds `IAssetCatalog.Load`, `LoadData`, and `Exists` as thread-safe calls with concurrent loads
   allowed. Engine assets may be used on the tick thread after completion; custom data returned by
   the same `Load<T>` method is caller-owned. Custom types must be registered before `Build` with

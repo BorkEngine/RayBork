@@ -9,10 +9,12 @@ namespace RayBork.Internal;
 /// <remarks>
 /// <para>
 /// The later <c>Font</c> asset owns one pipeline per parsed face. The tick thread calls only
-/// <see cref="BeginFrame"/>, <see cref="Acquire"/>, and <see cref="GetMetrics"/>; the font thread of
-/// the generation service is the only thread that mutates the cache. It resolves outlines, generates
-/// MSDF bitmaps, and inserts finished textures. The metrics cache and the texture cache are guarded by
-/// one <see cref="Lock"/>, which is never held across an <c>await</c> or a blocking wait.
+/// <see cref="BeginFrame"/>, <see cref="Acquire"/>, and <see cref="GetMetrics"/>; the font thread of the
+/// generation service is the only thread that inserts and evicts textures. It resolves outlines,
+/// generates MSDF bitmaps, and inserts finished textures. The tick thread updates the use stamps, the
+/// glyph states, the waiters, and the frame index while it calls the three methods. One
+/// <see cref="Lock"/> guards both caches and all of that state, and it is never held across an
+/// <c>await</c> or a blocking wait.
 /// </para>
 /// <para>
 /// <see cref="BeginFrame"/> records the frame index supplied by
@@ -21,29 +23,31 @@ namespace RayBork.Internal;
 /// path: a miss marks the glyph pending, records a waiter, and enqueues exactly one generation request;
 /// a pending glyph draws nothing this call and appears on a later frame. A hit returns the cached
 /// texture and adds its frame hold to the caller's <see cref="FrameAssetRetention"/> while the cache
-/// lock is held. Eviction can therefore never release the owner reference between the lookup and the
-/// hold, and the returned texture stays alive until the frame ring releases the hold. The pipeline
-/// never adds or releases a frame hold itself; the recorder owns the retention set.
+/// lock is held, so eviction cannot release the owner reference between the lookup and the hold.
+/// Acquire adds the hold and never releases it; the recorder owns the retention set and the frame ring
+/// releases it after the frame completes.
 /// </para>
 /// <para>
 /// The texture cache is hard-capped at <see cref="MAX_CACHED_TEXTURES"/>. Every insert that would
-/// exceed the budget evicts the least-recently-used textures in one batch, regardless of the frame
-/// that used them, and disposes their owner references outside the cache lock. Eviction never removes
-/// a texture the caller is still using, because <see cref="Acquire"/> already recorded the frame hold
-/// before it returned; the GPU resource is destroyed only after the frame ring releases that hold.
+/// exceed the budget evicts the least-recently-used textures in one batch, regardless of the frame that
+/// used them, and disposes their owner references outside the cache lock. Eviction can dispose a
+/// texture wrapper in the same frame that acquired it; the already-recorded frame hold keeps the GPU
+/// resource behind <see cref="Texture.Lifetime"/> alive until the frame ring releases it. Eviction and
+/// disposal release only the owner reference; they never add or release a frame hold.
 /// </para>
 /// <para>
 /// Failure is terminal per glyph for the font's lifetime: a failed generation or upload marks the
-/// glyph failed and is never retried. An empty glyph (such as a space) becomes ready without a
-/// texture. Metrics fall back to the face advance with a zero quad when an outline cannot be resolved
-/// or its texture would exceed the generator's texel budget; the failure is logged once and cached.
-/// The generation service suppresses its own warning when the metrics path already reported the same
-/// failure.
+/// glyph failed and is never retried. An empty glyph (such as a space) becomes ready without a texture.
+/// Metrics fall back to the face advance with a zero quad when an outline cannot be resolved or its
+/// texture would exceed the generator's texel budget; the font-data failure is logged once and cached,
+/// and the generation service does not log the same terminal glyph again.
 /// </para>
 /// <para>
-/// Lock order: the pipeline's cache lock may be held while adding a frame hold, so the order is
+/// Lock order: <see cref="GlyphGenerationService.Enqueue"/> takes the service lock and then the
+/// pipeline's disposed flag; no path takes the pipeline lock while taking the service lock.
+/// <see cref="Acquire"/> may hold the pipeline lock while adding a frame hold, so that order is
 /// pipeline, then <see cref="FrameAssetRetention"/>, then the asset's own lock. No path takes the
-/// pipeline lock while holding either other lock. <see cref="GlyphGenerationService.Stop"/> must run
+/// pipeline lock while holding either of those. <see cref="GlyphGenerationService.Stop"/> must run
 /// before a pipeline is disposed; the reverse order would leave queued work pointing at a disposed
 /// texture owner. Disposal is idempotent, unregisters the pipeline from the service, disposes every
 /// cached texture exactly once, and settles every pending waiter.
@@ -199,9 +203,10 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// </returns>
     /// <remarks>
     /// The result is cached per glyph. A glyph whose stored box is inverted, whose outline cannot be
-    /// resolved, or whose layout would exceed the generator's texel budget logs one warning and falls
-    /// back to the face advance with a zero bearing and size, so it draws nothing but still advances
-    /// the pen. The method is thread-safe, never touches the GPU, and never uses the cache clock.
+    /// resolved, or whose layout would exceed the generator's texel budget logs one warning for that
+    /// font-data failure and falls back to the face advance with a zero bearing and size, so it draws
+    /// nothing but still advances the pen; the generation service does not log the same terminal glyph
+    /// again. The method is thread-safe, never touches the GPU, and never uses the cache clock.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     /// <exception cref="ObjectDisposedException">The pipeline is disposed.</exception>
@@ -361,7 +366,7 @@ internal sealed class FontGlyphPipeline : IDisposable {
         lock (_gate) {
             if (_disposed
                 || !_glyphs.TryGetValue(glyphId, out GlyphEntry? entry)
-                || entry.State is GlyphState.Ready or GlyphState.Empty or GlyphState.Failed) {
+                || entry.State != GlyphState.Pending) {
                 return Task.CompletedTask;
             }
 
@@ -379,9 +384,11 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// </param>
     /// <remarks>
     /// The cache is hard-capped: the method evicts the least-recently-used textures in one batch until
-    /// the new entry fits, regardless of the frame that last used them. A redundant or late texture for
-    /// an already terminal or disposed pipeline is disposed instead of leaked. Evicted textures are
-    /// disposed outside the cache lock, and the glyph waiter is settled even when a disposal throws.
+    /// the new entry fits, regardless of the frame that last used them. At capacity it copies and sorts
+    /// at most <c>budget + 1</c> cached entries under the lock; the cost is proportional to the cache
+    /// size, not to the face's glyph count. A redundant or late texture for an already terminal or
+    /// disposed pipeline is disposed instead of leaked. Evicted textures are disposed outside the cache
+    /// lock, and the glyph waiter is settled even when a disposal throws.
     /// </remarks>
     internal void Insert(int glyphId, Texture texture) {
         ArgumentNullException.ThrowIfNull(texture);
@@ -448,23 +455,17 @@ internal sealed class FontGlyphPipeline : IDisposable {
     }
 
     /// <summary>
-    /// Marks one glyph failed for the font's lifetime. The generation service calls it after a
-    /// generation or upload failure so later draws do not retry it.
+    /// Marks one pending glyph failed for the font's lifetime. The generation service calls it for a
+    /// generation or upload failure, for a stop cancellation, and for a rejected request; the caller
+    /// owns the diagnostic, so this method itself never logs. Later draws do not retry the glyph.
     /// </summary>
     /// <param name="glyphId">The glyph identifier.</param>
     internal void MarkGlyphFailed(int glyphId) => CompleteGlyph(glyphId, GlyphState.Failed);
 
     /// <summary>
-    /// Marks one pending glyph failed because the generation service stopped before it ran. Same
-    /// terminal state as <see cref="MarkGlyphFailed"/>, without a failure log.
-    /// </summary>
-    /// <param name="glyphId">The glyph identifier.</param>
-    internal void CancelGlyph(int glyphId) => CompleteGlyph(glyphId, GlyphState.Failed);
-
-    /// <summary>
-    /// Gets whether the metrics path already logged the unreadable outline of one glyph. The
-    /// generation service suppresses its own warning for the same failure so one font-data problem is
-    /// reported once.
+    /// Gets whether the metrics path already logged a font-data failure for one glyph. The generation
+    /// service suppresses its own warning for that glyph, so one font-data failure is reported once and
+    /// a later generation failure of the same terminal glyph is not logged again.
     /// </summary>
     /// <param name="glyphId">The glyph identifier.</param>
     /// <returns><see langword="true"/> when a metrics fallback warning was already logged.</returns>
@@ -566,27 +567,16 @@ internal sealed class FontGlyphPipeline : IDisposable {
         switch (result) {
             case GlyphEnqueueResult.Queued:
             case GlyphEnqueueResult.AlreadyPending:
-                break;
+                return;
             case GlyphEnqueueResult.RejectedNotStarted:
                 LogRejectionOnce(notStarted: true);
-                CancelGlyph(glyphId);
                 break;
             default:
                 LogRejectionOnce(notStarted: false);
-                CancelGlyph(glyphId);
                 break;
         }
 
-        if (result is GlyphEnqueueResult.Queued or GlyphEnqueueResult.AlreadyPending) {
-            bool disposed;
-            lock (_gate) {
-                disposed = _disposed;
-            }
-
-            if (disposed) {
-                _service.Unregister(this);
-            }
-        }
+        MarkGlyphFailed(glyphId);
     }
 
     private void LogRejectionOnce(bool notStarted) {

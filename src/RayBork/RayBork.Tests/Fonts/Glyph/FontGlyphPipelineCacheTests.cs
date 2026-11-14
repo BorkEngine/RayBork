@@ -363,7 +363,7 @@ public sealed class FontGlyphPipelineCacheTests {
         Texture first = await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId, 1);
         Texture second = await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId + 1, 2);
 
-        harness.Service.Stop();
+        GlyphPipelineTestHarness.StopService(harness.Service);
         pipeline.Dispose();
         pipeline.Dispose();
 
@@ -531,6 +531,62 @@ public sealed class FontGlyphPipelineCacheTests {
         Assert.False(pipeline.IsGlyphReady(firstGlyphId + 1));
         Assert.False(pipeline.TryGetTexture(firstGlyphId + 1, out _));
         retention.Release();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WhenGlyphSettledIsCompleteForAMetricsOnlyGlyph() {
+        using GlyphPipelineTestHarness harness = new();
+        SfntFace face = GlyphTestFonts.CreateSquareFace(out int glyphId);
+        FontGlyphPipeline pipeline = harness.CreatePipeline(face);
+
+        pipeline.GetMetrics(glyphId);
+
+        Assert.True(pipeline.WhenGlyphSettledAsync(glyphId).IsCompleted);
+        Assert.False(pipeline.TryGetTexture(glyphId, out _));
+        Assert.False(pipeline.IsGlyphReady(glyphId));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task WhenGlyphSettledIsCompleteForAnEvictedGlyph() {
+        using GlyphPipelineTestHarness harness = new();
+        SfntFace face = GlyphTestFonts.CreateManyGlyphFace(2, out int firstGlyphId);
+        FontGlyphPipeline pipeline = harness.CreatePipeline(
+            face,
+            new FontGlyphSettings(face.UnitsPerEm, 8, 4, 2),
+            textureBudget: 1);
+        await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId, 1);
+
+        await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId + 1, 2);
+
+        Assert.False(pipeline.IsGlyphReady(firstGlyphId));
+        Assert.True(pipeline.WhenGlyphSettledAsync(firstGlyphId).IsCompleted);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task StaleBeginFrameDoesNotMoveTheCacheClock() {
+        using GlyphPipelineTestHarness harness = new();
+        SfntFace face = GlyphTestFonts.CreateManyGlyphFace(3, out int firstGlyphId);
+        FontGlyphPipeline pipeline = harness.CreatePipeline(
+            face,
+            new FontGlyphSettings(face.UnitsPerEm, 8, 4, 2),
+            textureBudget: 2);
+        await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId, 10);
+        await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId + 1, 10);
+
+        pipeline.BeginFrame(4);
+        FrameAssetRetention recording = new();
+        Assert.NotNull(pipeline.Acquire(firstGlyphId + 1, recording));
+        recording.Release();
+
+        await GlyphPipelineTestHarness.GenerateAsync(pipeline, firstGlyphId + 2, 4);
+
+        Assert.Equal(2, pipeline.CachedGlyphCount);
+        Assert.True(pipeline.IsGlyphReady(firstGlyphId + 1));
+        Assert.True(pipeline.IsGlyphReady(firstGlyphId + 2));
+        Assert.False(pipeline.IsGlyphReady(firstGlyphId));
     }
 
     [Fact]

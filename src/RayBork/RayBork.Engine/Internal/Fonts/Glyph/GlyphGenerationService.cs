@@ -28,10 +28,17 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// A generation or upload failure is logged at warning level and marks the glyph failed for the font's
-/// lifetime; the service never retries it and the rest of the text keeps rendering. When the metrics
-/// path already logged the same unreadable outline, the service suppresses its duplicate warning. The
-/// MSDF generator bounds the work of one request, so the thread cannot be pinned by a single glyph
-/// beyond those documented limits.
+/// lifetime; the service never retries it and the rest of the text keeps rendering. One font-data
+/// failure is reported once per glyph: when the metrics path already logged it, the service does not
+/// log the same terminal glyph again. The MSDF generator bounds the work of one request, so the thread
+/// cannot be pinned by a single glyph beyond those documented limits.
+/// </para>
+/// <para>
+/// Lock order: <see cref="Enqueue"/> takes the service lock and then reads the pipeline's disposed
+/// flag; no path takes the pipeline lock while taking the service lock. The acquire path takes the
+/// pipeline, then <see cref="FrameAssetRetention"/>, then the asset's own lock. The service calls a
+/// pipeline only for that disposed read while holding its lock; cancellation callbacks and joins run
+/// outside it.
 /// </para>
 /// <para>
 /// Shutdown order: <see cref="Stop"/> cancels the stop token (which cancels an in-flight upload),
@@ -64,6 +71,7 @@ internal sealed class GlyphGenerationService : IDisposable {
     private bool _stopRequested;
     private bool _paused;
     private bool _disposed;
+    private int _stopWaiterCount;
     private GlyphRequest? _active;
 
     /// <summary>
@@ -95,6 +103,18 @@ internal sealed class GlyphGenerationService : IDisposable {
         get {
             lock (_gate) {
                 return _generationThread;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets the number of concurrent <see cref="Stop"/> callers waiting for the first stop to finish.
+    /// Diagnostic, for tests.
+    /// </summary>
+    internal int StopWaiterCount {
+        get {
+            lock (_gate) {
+                return _stopWaiterCount;
             }
         }
     }
@@ -193,7 +213,7 @@ internal sealed class GlyphGenerationService : IDisposable {
         }
 
         foreach (GlyphRequest request in removed) {
-            request.Pipeline.CancelGlyph(request.GlyphId);
+            request.Pipeline.MarkGlyphFailed(request.GlyphId);
         }
 
         CompleteIdleWaiters(idleWaiters);
@@ -283,7 +303,18 @@ internal sealed class GlyphGenerationService : IDisposable {
         }
 
         if (waitForFirstStop) {
-            _stopCompletion.Task.GetAwaiter().GetResult();
+            lock (_gate) {
+                _stopWaiterCount++;
+            }
+
+            try {
+                _stopCompletion.Task.GetAwaiter().GetResult();
+            } finally {
+                lock (_gate) {
+                    _stopWaiterCount--;
+                }
+            }
+
             return;
         }
 
@@ -302,7 +333,7 @@ internal sealed class GlyphGenerationService : IDisposable {
             // Queued requests never ran, so their waiters would otherwise hang. Settle them before the
             // join; the in-flight request settles its own waiter when it observes the stop token.
             foreach (GlyphRequest request in queued) {
-                request.Pipeline.CancelGlyph(request.GlyphId);
+                request.Pipeline.MarkGlyphFailed(request.GlyphId);
             }
 
             thread?.Join();
@@ -393,7 +424,7 @@ internal sealed class GlyphGenerationService : IDisposable {
 
             pipeline.Insert(glyphId, texture);
         } catch (OperationCanceledException) when (_stopSource.IsCancellationRequested) {
-            pipeline.CancelGlyph(glyphId);
+            pipeline.MarkGlyphFailed(glyphId);
         } catch (Exception exception) {
             if (!pipeline.HasLoggedMetricsFailure(glyphId)) {
                 _logger.LogWarning(
