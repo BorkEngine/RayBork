@@ -30,16 +30,17 @@ request.
 - **Versions move deliberately.** A version bump is a dependency change and follows the rules above.
 
 M6 status: the M6 font and text surface is exercised end to end by the `samples/Text` AOT gate.
-That sample opens a window, loads the built-in Fira Sans face from the engine pack and the baked Lora
-face from its own `text.pck`, runs the managed sfnt parser and the on-demand MSDF glyph pipeline,
-draws the text through the built-in `/shaders/msdf` program, and exits `0` on `win-x64` and
-`linux-x64`. The engine's built-in pack supplies the Fira Sans Regular face; the Lora face is
-sample-only and is recorded under `samples/Text/THIRD-PARTY-NOTICES.md`, not here. The M5
-`samples/PrimitiveGallery` gate remains a buildable and publishable sample that mounts the built-in
-pack and draws the primitive surface, and the M4 `samples/Castle` gate remains a buildable and
-publishable sample that mounts a baked pack and loads a multi-part `Model` with a KTX2 texture and
-the built-in mesh shader. `samples/HelloInterop` remains the M1-M3 diagnostic host for the host,
-input, time, logging, renderer, and asset-loading surface. `Silk.NET.Vulkan`, `SDL3-CS`, `PolyType`,
+That sample opens a window, loads the built-in Fira Sans and JetBrains Mono faces from the engine
+pack and the baked Lora face from its own `text.pck`, runs the managed sfnt parser and the on-demand
+MSDF glyph pipeline, draws the text through the built-in `/shaders/msdf` program, and exits `0` on
+`win-x64` and `linux-x64`. The engine's built-in pack supplies the Fira Sans and JetBrains Mono
+faces; the Lora face is sample-only and is recorded under `samples/Text/THIRD-PARTY-NOTICES.md`, not
+here. The M5 `samples/PrimitiveGallery` gate remains a buildable and publishable sample that mounts
+the built-in pack and draws the primitive surface, and the M4 `samples/Castle` gate remains a
+buildable and publishable sample that mounts a baked pack and loads a multi-part `Model` with a KTX2
+texture and the built-in mesh shader. `samples/HelloInterop` remains the M1-M3 diagnostic host for
+the host, input, time, logging, renderer, and asset-loading surface. `Silk.NET.Vulkan`, `SDL3-CS`,
+`PolyType`,
 `Nerdbank.MessagePack`, `System.IO.Hashing`, and
 the logging packages are exercised by the gates or their built-in pack and descriptor paths. The bake
 gains the JIT-only TOML, image, block-encoding, shaderc, and glTF packages below; they never enter a
@@ -138,6 +139,7 @@ NuGet packages and are not downloaded at run time; the full license text is repr
 | Asset | License | Purpose | Distribution |
 | --- | --- | --- | --- |
 | Fira Sans Regular 4.203, `src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/fira-sans.ttf` (upstream `FiraSans-Regular.ttf`) | SIL Open Font License 1.1 (the face's metadata permits 1.1 or later) | Built-in default font at the canonical path `/fonts/fira-sans`, exposed as `EngineContext.Defaults.DefaultFont`; covers Latin, Cyrillic, and Greek | Committed source asset; the build bakes it into the engine's embedded built-in pack, and the runtime never fetches it from the network |
+| JetBrains Mono 2.211 (variable), `src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/jetbrains-mono.ttf` (upstream `fonts/variable/JetBrainsMono[wght].ttf`) | SIL Open Font License 1.1 | Built-in monospaced font at the canonical path `/fonts/jetbrains-mono`, exposed as `EngineContext.Defaults.DefaultMonoFont`; the bundled variable face renders its default Regular instance (weight 400); the samples draw their status/statistics readouts with it; covers Latin, Cyrillic, and Greek | Committed source asset; the build bakes it into the engine's embedded built-in pack, and the runtime never fetches it from the network |
 
 Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A.
 
@@ -147,6 +149,17 @@ line above and "Open Font License, version 1.1 or later", with the license URL
 Font License 1.1 text is reproduced below. The Lora face used by `samples/Text` is sample-only and is
 recorded in `samples/Text/THIRD-PARTY-NOTICES.md`, not in this repository-level section.
 
+Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+
+The bundled face is the JetBrains Mono variable font, version 2.211. Its `fvar` table declares one
+`wght` axis from 100 to 800 with seven named instances from Thin to ExtraBold; the default instance
+is Regular (weight 400), which is the instance the runtime renders. Its name table records the 2020
+copyright line above and the license URL <https://scripts.sil.org/OFL>; the upstream project is
+<https://github.com/JetBrains/JetBrainsMono>, the upstream file is
+`fonts/variable/JetBrainsMono[wght].ttf`, and the committed file is
+`src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/jetbrains-mono.ttf`. The SIL Open Font
+License 1.1 text is reproduced below.
+
 ### SIL Open Font License 1.1 text (Fira Sans)
 
 ```text
@@ -155,6 +168,104 @@ Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A.
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
+
+
+-----------------------------------------------------------
+SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007
+-----------------------------------------------------------
+
+PREAMBLE
+The goals of the Open Font License (OFL) are to stimulate worldwide
+development of collaborative font projects, to support the font creation
+efforts of academic and linguistic communities, and to provide a free and
+open framework in which fonts may be shared and improved in partnership
+with others.
+
+The OFL allows the licensed fonts to be used, studied, modified and
+redistributed freely as long as they are not sold by themselves. The
+fonts, including any derivative works, can be bundled, embedded,
+redistributed and/or sold with any software provided that any reserved
+names are not used by derivative works. The fonts and derivatives,
+however, cannot be released under any other type of license. The
+requirement for fonts to remain under this license does not apply
+to any document created using the fonts or their derivatives.
+
+DEFINITIONS
+"Font Software" refers to the set of files released by the Copyright
+Holder(s) under this license and clearly marked as such. This may
+include source files, build scripts and documentation.
+
+"Reserved Font Name" refers to any names specified as such after the
+copyright statement(s).
+
+"Original Version" refers to the collection of Font Software components as
+distributed by the Copyright Holder(s).
+
+"Modified Version" refers to any derivative made by adding to, deleting,
+or substituting -- in part or in whole -- any of the components of the
+Original Version, by changing formats or by porting the Font Software to a
+new environment.
+
+"Author" refers to any designer, engineer, programmer, technical
+writer or other person who contributed to the Font Software.
+
+PERMISSION & CONDITIONS
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of the Font Software, to use, study, copy, merge, embed, modify,
+redistribute, and sell modified and unmodified copies of the Font
+Software, subject to the following conditions:
+
+1) Neither the Font Software nor any of its individual components,
+in Original or Modified Versions, may be sold by itself.
+
+2) Original or Modified Versions of the Font Software may be bundled,
+redistributed and/or sold with any software, provided that each copy
+contains the above copyright notice and this license. These can be
+included either as stand-alone text files, human-readable headers or
+in the appropriate machine-readable metadata fields within text or
+binary files as long as those fields can be easily viewed by the user.
+
+3) No Modified Version of the Font Software may use the Reserved Font
+Name(s) unless explicit written permission is granted by the corresponding
+Copyright Holder. This restriction only applies to the primary font name as
+presented to the users.
+
+4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font
+Software shall not be used to promote, endorse or advertise any
+Modified Version, except to acknowledge the contribution(s) of the
+Copyright Holder(s) and the Author(s) or with their explicit written
+permission.
+
+5) The Font Software, modified or unmodified, in part or in whole,
+must be distributed entirely under this license, and must not be
+distributed under any other license. The requirement for fonts to
+remain under this license does not apply to any document created
+using the Font Software.
+
+TERMINATION
+This license becomes null and void if any of the above conditions are
+not met.
+
+DISCLAIMER
+THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT
+OF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
+DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
+OTHER DEALINGS IN THE FONT SOFTWARE.
+```
+
+### SIL Open Font License 1.1 text (JetBrains Mono)
+
+```text
+Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+
+This license is copied below, and is also available with a FAQ at: https://scripts.sil.org/OFL
 
 
 -----------------------------------------------------------

@@ -436,6 +436,11 @@ is set.
   [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md)), baked by the ordinary font processor with
   the default 32/4/2 MSDF settings and the sibling `/fonts/fira-sans-face` raw payload; the runtime
   exposes it as `EngineContext.Defaults.DefaultFont`;
+- the built-in monospaced font at `/fonts/jetbrains-mono`: the JetBrains Mono variable face (default
+  instance Regular; OFL 1.1, see [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md)), baked by
+  the same font processor with the default 32/4/2 MSDF settings and the sibling
+  `/fonts/jetbrains-mono-face` raw payload; the runtime exposes it as
+  `EngineContext.Defaults.DefaultMonoFont`;
 - the built-in primitive program at `/shaders/primitive`, baked by the same shader processor with no
   reflected uniforms and no texture bindings, and an opaque/back/`greater_equal`/depth-write render
   state. Its vertex stage reads position and color and multiplies the color by `rbInstance.Color`;
@@ -447,15 +452,15 @@ is set.
   antialiasing band.
 
 The engine's primitive meshes are procedural assets built at engine startup, not pack entries, so
-the pack carries no primitive geometry. The default font's glyph id zero (`.notdef`) is the
+the pack carries no primitive geometry. Each font's glyph id zero (`.notdef`) is the
 missing-glyph fallback; there is no separate error-glyph entry. Pack v1 is unchanged by the M5 and
 M6 additions: the primitive and MSDF programs are ordinary shader entries at reserved built-in paths,
-the font is an ordinary `Font` descriptor plus a raw face payload, and none of them is a format
-change. The app preloads the mesh program, the white and error textures, and the built-in default font
-into `EngineContext.Defaults` before `IGame.Setup` and keeps the primitive, MSDF, and mesh programs,
-with one engine material over each, for the engine's primitive assets; the mesh program is already
-cached by the defaults, so only its material is new. The font preload is CPU-only and issues no GPU
-upload. A model part whose sidecar names no shader is baked
+each font is an ordinary `Font` descriptor plus a raw face payload, and none of them is a format
+change. The app preloads the mesh program, the white and error textures, and the built-in default and
+monospaced fonts into `EngineContext.Defaults` before `IGame.Setup` and keeps the primitive, MSDF, and
+mesh programs, with one engine material over each, for the engine's primitive assets; the mesh program
+is already cached by the defaults, so only its material is new. The font preload is CPU-only and
+issues no GPU upload. A model part whose sidecar names no shader is baked
 with `shaders/mesh`, and the runtime requires every part descriptor to name a canonical shader path.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator

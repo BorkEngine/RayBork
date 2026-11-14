@@ -242,8 +242,8 @@ the sRGB formats; the runtime creates the matching Vulkan format.
 - `Load<Shader>` cancellation follows the same rule: a caller that cancels before the material is
   constructed acquires no material and releases its program reference. An already-canceled caller
   does not receive a material even when the program is cached.
-- The engine preloads `/shaders/mesh`, the white/error textures, and the default font into
-  `EngineContext.Defaults`; see
+- The engine preloads `/shaders/mesh`, the white/error textures, and the default and monospaced fonts
+  into `EngineContext.Defaults`; see
   [Rendering: Shaders](rendering/shaders.md#73-shader-materials-and-setuniform).
 
 `Load<Model>` follows the same shape for a different reason: it loads or reuses every part mesh and
@@ -352,14 +352,15 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 
 ### 6.6 Pack mounting and built-in assets
 
-- The engine's built-in pack is mounted first, below every user pack. It has 18 entries and contains
+- The engine's built-in pack is mounted first, below every user pack. It has 20 entries and contains
   the white and error textures, the present shader pair, the built-in mesh draw shader program at
   `/shaders/mesh`, the primitive program at `/shaders/primitive`, the MSDF text program at
-  `/shaders/msdf`, and the built-in default font at `/fonts/fira-sans` (Fira Sans Regular) with its
-  face payload, produced by the same `IAssetProcessor` pipeline as game content. The app preloads the
-  mesh program, the two textures, and the font into `EngineContext.Defaults` before `IGame.Setup`;
-  the primitive and MSDF programs and the primitive meshes are built into the engine's primitive
-  assets. The bake
+  `/shaders/msdf`, and the built-in default and monospaced fonts at `/fonts/fira-sans` (Fira Sans
+  Regular) and `/fonts/jetbrains-mono` (the JetBrains Mono variable face, default instance Regular)
+  with their face payloads, produced by
+  the same `IAssetProcessor` pipeline as game content. The app preloads the mesh program, the two
+  textures, and both fonts into `EngineContext.Defaults` before `IGame.Setup`; the primitive and MSDF
+  programs and the primitive meshes are built into the engine's primitive assets. The bake
   writes `shaders/mesh` when a model part has no authored `[model] shader`, and the model loader
   requires every part to carry a canonical shader path. The primitive meshes are procedural assets
   built at startup, not pack entries.

@@ -56,6 +56,7 @@ public sealed class EngineContextTests {
         ("textures/error", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/error-ktx2"))),
         ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
         .. CatalogTestData.CreateFontEntries(),
+        .. CatalogTestData.CreateMonoFontEntries(),
     ]);
 
     private static TextureAssetDescriptor CreateTextureDescriptor(string payload) => new() {

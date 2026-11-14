@@ -11,7 +11,8 @@ namespace PrimitiveGallery;
 /// The presented rate is a delta of <see cref="RenderStats.PresentedFrames"/>, which is cumulative
 /// and advances only when a frame reaches the presentation engine. It is not
 /// <see cref="EngineContext.Fps"/>, which is the tick rate. The helper keeps one sample window, so an
-/// instance is per sample.
+/// instance is per sample. The sample draws the returned line in
+/// <see cref="EngineDefaults.DefaultMonoFont"/>, so the changing counters keep their positions.
 /// </remarks>
 internal sealed class StatusOverlay {
     private const double SAMPLE_SECONDS = 1.0;

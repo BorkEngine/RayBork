@@ -25,7 +25,7 @@ internal sealed class CastleGame : IGame {
     // The status line is world-space text until M7 adds the screen-space HUD path. It sits on a
     // camera-facing plane one world unit in front of the camera.
     private const float OVERLAY_DISTANCE = 1f;
-    private const float OVERLAY_PIXEL_HEIGHT = 14f;
+    private const float OVERLAY_PIXEL_HEIGHT = 18f;
     private const float OVERLAY_MARGIN_PIXELS = 8f;
 
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
@@ -175,7 +175,8 @@ internal sealed class CastleGame : IGame {
     /// </remarks>
     private void DrawStatusOverlay(Camera camera, EngineContext context) {
         // One render pixel spans worldPerPixel world units at the overlay distance. The text size is
-        // an em height in world units, so a 14-pixel line uses 14 * worldPerPixel.
+        // an em height in world units, so an 18-pixel line uses 18 * worldPerPixel. The built-in mono
+        // face keeps the changing counters from shifting the text around them.
         float halfHeight = OVERLAY_DISTANCE * MathF.Tan(camera.FieldOfView * (MathF.PI / 180f) * 0.5f);
         float worldPerPixel = (2f * halfHeight) / camera.Viewport.Height;
         float halfWidth = halfHeight * (camera.Viewport.Width / camera.Viewport.Height);
@@ -191,7 +192,7 @@ internal sealed class CastleGame : IGame {
             - (camera.Transform.Right * (halfWidth - margin));
 
         camera.DrawText(
-            context.Defaults.DefaultFont,
+            context.Defaults.DefaultMonoFont,
             _overlay.Build(context),
             new Transform(position, camera.Transform.Rotation, Vector3.One),
             OVERLAY_PIXEL_HEIGHT * worldPerPixel,

@@ -64,17 +64,19 @@ samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30
 `samples/Text/Text.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample and the JIT
 `Text.Assets` executable. The sample build bakes `text.pck` from the checked-in Lora Regular 3.008
 face and copies it beside the sample executable; the sample loads it automatically and has no
-`--assets` argument. The built-in Fira Sans Regular face comes from the engine's built-in pack and is
-used through `EngineDefaults.DefaultFont`. The scene draws the same paragraph at several sizes,
-rotations, alignments, and wrapping modes, Latin and Cyrillic paragraphs in both faces, a
+`--assets` argument. The built-in Fira Sans Regular and JetBrains Mono (default instance Regular)
+faces come from the
+engine's built-in pack and are used through `EngineDefaults.DefaultFont` and
+`EngineDefaults.DefaultMonoFont`. The scene draws the same paragraph at several sizes, rotations,
+alignments, and wrapping modes, Latin and Cyrillic paragraphs in both proportional faces, a
 camera-facing billboard, a Greek line that gains a lazily generated glyph every 30 ticks, and a
-world-space status line. `--frames` and `--help` are the only options.
+world-space mono status line. `--frames` and `--help` are the only options.
 
 The publish directory must contain the host, its native libraries, and `text.pck` beside the host,
 and must not contain `Text.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the
 shaderc native libraries, or the glTF packages.
 
-Both M6 publishes must start, load the built-in font and the baked Lora face, generate glyphs on
+Both M6 publishes must start, load the built-in fonts and the baked Lora face, generate glyphs on
 demand, draw the text scene, and shut down. Both finish with zero AOT/trim warnings, and both
 published hosts ran `--frames 30` to exit `0`: the Windows host on the hardware driver and the Linux
 host on WSLg's dzn hardware device.
@@ -90,13 +92,13 @@ and publishable single-project sample with no assets executable and no pack; it 
 texture at runtime.
 
 AOT publish is a per-milestone gate, not a release-only check. The M6 gate is `samples/Text`: the
-published hosts open a window, load both faces from the built-in pack and the sample pack, generate
-and upload the glyph textures through the real `RayBork.Font` thread, draw the text through the
-built-in `/shaders/msdf` program, and exit `0`. The gate path exercises the font descriptor and face
-payload decode, the managed sfnt parser, the MSDF generator, the glyph pipeline and cache, the
+published hosts open a window, load the built-in faces and the sample Lora face from their packs,
+generate and upload the glyph textures through the real `RayBork.Font` thread, draw the text through
+the built-in `/shaders/msdf` program, and exit `0`. The gate path exercises the font descriptor and
+face payload decode, the managed sfnt parser, the MSDF generator, the glyph pipeline and cache, the
 layout engine, the `Camera.DrawText`/`Camera.DrawTextBillboard` draw records, and the per-instance
 bindless glyph texture path. The sample is a plain user-facing example and contains no test-only
-draw assertion. The suite is 2,619 tests, 106 of them GPU integration tests, and every sample
+draw assertion. The suite is 2,622 tests, 106 of them GPU integration tests, and every sample
 solution builds.
 
 On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver

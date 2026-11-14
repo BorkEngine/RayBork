@@ -106,13 +106,13 @@ still builds and runs; re-check exposure and AgX white if it tuned against the M
 obsolete/migration cycle above.
 
 The M6 text surface is additive: `Font`, `Glyph`, `TextAlignment`, `TextWrapping`,
-`EngineDefaults.DefaultFont`, `Font.TryGetGlyph`, `Font.Measure`, `Camera.DrawText`, and
-`Camera.DrawTextBillboard` are new members, and `Load<Font>` returns a shared, reference-counted,
-CPU-only engine asset. Existing camera and asset calls keep their meaning. The font asset adds no
-GPU resource of its own, so a font load performs no upload and generates no glyph texture; glyph
-textures are created on demand and cached per font. The `Font` descriptor no longer carries the
-pre-M6 `Ranges` member and there is no `Preload`/preload-range concept: the bake packs the whole
-face and any cmap-mapped glyph may be generated later. A font pack baked before M6 still loads
+`EngineDefaults.DefaultFont`, `EngineDefaults.DefaultMonoFont`, `Font.TryGetGlyph`, `Font.Measure`,
+`Camera.DrawText`, and `Camera.DrawTextBillboard` are new members, and `Load<Font>` returns a shared,
+reference-counted, CPU-only engine asset. Existing camera and asset calls keep their meaning. The font
+asset adds no GPU resource of its own, so a font load performs no upload and generates no glyph
+texture; glyph textures are created on demand and cached per font. The `Font` descriptor no longer
+carries the pre-M6 `Ranges` member and there is no `Preload`/preload-range concept: the bake packs the
+whole face and any cmap-mapped glyph may be generated later. A font pack baked before M6 still loads
 because MessagePack ignores the removed descriptor member; only an old TOML sidecar that still
 declares `ranges` fails the bake with the unknown-key error `RB4002`. An unavailable or wrong-length
 face, an invalid face, CFF2 outlines, an unsupported parser feature, or invalid MSDF settings are
@@ -124,8 +124,9 @@ The M6 text surface is world-space only. `Camera.DrawText` lays a block out in a
 XY plane and `Camera.DrawTextBillboard` centers a camera-facing block; the screen-space orthographic
 path, including HUD text and `DrawTexture`, arrives in M7. Complex shaping, ligatures, bidi ordering,
 font fallback, color fonts, emoji, and variable font axes are out of scope for v1, and CFF2 is
-rejected. Coverage is per face: the built-in Fira Sans Regular face covers Latin, Cyrillic, and
-Greek. A variable font that a game packs loads and renders its default instance.
+rejected. Coverage is per face: the built-in Fira Sans Regular and JetBrains Mono (default instance
+Regular) faces cover
+Latin, Cyrillic, and Greek. A variable font that a game packs loads and renders its default instance.
 
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a

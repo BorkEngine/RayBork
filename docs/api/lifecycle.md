@@ -24,8 +24,8 @@ public interface IGame {
 legal to call `Shader.SetUniform` in `Setup`; those values become the defaults for the first draw.
 Camera creation is not legal in `Setup` because there is no frame to record into. The engine has
 already preloaded `EngineContext.Defaults` (the built-in mesh shader program, the white/error
-textures, and the built-in default font) before `Setup` runs; a missing or corrupt built-in default is
-a startup failure and `Setup` is not called.
+textures, and the built-in default and monospaced fonts) before `Setup` runs; a missing or corrupt
+built-in default is a startup failure and `Setup` is not called.
 
 `Tick` must not call `.GetAwaiter().GetResult()` on an asset load unless it is a deliberate,
 documented hitch. Prefer loading in `Setup`.
@@ -126,9 +126,11 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > `WithExposure` keeps its meaning.
 
 > **M6 subset.** `Load<Font>` returns the shared, reference-counted `Font` asset and
-> `EngineDefaults.DefaultFont` exposes the built-in Fira Sans Regular face. A font load parses the
-> whole packed face and is CPU-only: it queues no GPU upload, and the font object that load creates
-> caches no glyph texture (a repeated load shares the object and its cache). `Setup` can therefore
+> `EngineDefaults.DefaultFont` and `EngineDefaults.DefaultMonoFont` expose the built-in Fira Sans
+> Regular and JetBrains Mono (default instance Regular) faces. A font load parses the whole packed
+> face and is CPU-only:
+> it queues no GPU upload, and the font object that load creates caches no glyph texture (a repeated
+> load shares the object and its cache). `Setup` can therefore
 > preload any number of fonts without startup uploads; glyph
 > generation starts on demand on the app-lifetime `RayBork.Font` thread that the catalog starts before
 > the tick thread runs. `Camera.DrawText` and `Camera.DrawTextBillboard` record world-space text
@@ -248,7 +250,7 @@ public sealed class EngineContext {
 | Member | Thread | Notes |
 | --- | --- | --- |
 | `Assets` | Any | Shared catalog; see §6. M3. |
-| `Defaults` | Any | Engine-owned default assets preloaded before `Setup`: the built-in mesh shader program, the white and error textures, and the built-in Fira Sans default font. `CreateMeshShader` returns a new caller-owned material; the textures and the font are engine-owned and must not be disposed. Released during shutdown. The font and its text draws ship in M6. |
+| `Defaults` | Any | Engine-owned default assets preloaded before `Setup`: the built-in mesh shader program, the white and error textures, and the built-in Fira Sans and JetBrains Mono default fonts. `CreateMeshShader` returns a new caller-owned material; the textures and the fonts are engine-owned and must not be disposed. Released during shutdown. The fonts and their text draws ship in M6. |
 | `Input` | Tick | Input snapshot for the current tick. |
 | `Window` | Any | Snapshot getters; setters are queued. |
 | `LoggerFactory` | Any | App-owned factory; create category loggers from it. Never `null`. |
@@ -313,10 +315,11 @@ that target and can be sampled by a later camera.
    d. The asset catalog mounts the built-in pack (and any user packs), starts the app-lifetime glyph
       generation service, and starts the loader; the app
       preloads `EngineContext.Defaults` (the `/shaders/mesh` program, the white/error textures, and the
-      built-in `/fonts/fira-sans` font; the font load is CPU-only and uploads nothing) and
-      then the engine's primitive assets (the `/shaders/primitive`, `/shaders/msdf`, and
-      `/shaders/mesh` programs, one engine material over each, and the eight primitive meshes; the
-      mesh program itself is already cached by the defaults, but its material is created here).
+      built-in `/fonts/fira-sans` and `/fonts/jetbrains-mono` fonts; each font load is CPU-only and
+      uploads nothing) and then the engine's primitive assets (the `/shaders/primitive`,
+      `/shaders/msdf`, and `/shaders/mesh` programs, one engine material over each, and the eight
+      primitive meshes; the mesh program itself is already cached by the defaults, but its material is
+      created here).
    e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info, Defaults, and a
       ready primitive draw path.
    f. IGame.Setup(ctx) is awaited on the tick thread.
@@ -340,7 +343,7 @@ The surface handshake is bounded: a render-thread surface request and the main-t
 renderer each time out after 30 seconds. The tick thread does not start before the renderer is
 ready, so `Setup` can read `Info` and `Defaults`. M3 inserts the asset loader after (a); M4 inserts
 the engine-defaults preload between the catalog start and the tick thread start; M5 adds the
-primitive-asset preload after the defaults; M6 adds the default font to the preload and starts the
+primitive-asset preload after the defaults; M6 adds the default fonts to the preload and starts the
 glyph generation service as part of the catalog start, so a font loaded from `Setup` can enqueue
 glyph generation.
 
