@@ -48,6 +48,20 @@ parses the face once and generates MSDF glyph textures on demand. There is no pr
 - One glyph is one small texture, 32 px on its longest side by default, with a baked distance range and
   padding. There is no atlas. Glyph textures are bindless, full-texture quads sampled `0..1`, and are
   referenced per text instance.
+- The texture side is the complete padded texture: the default `msdf_pixel_size` is `32`, `msdf_range`
+  is `4`, and `msdf_padding` is `2`. The glyph box is fitted into `pixelSize - 2 * padding` pixels and
+  the authored range maps to the normalized field, so generation is deterministic and the field is
+  the exact nearest-edge distance per channel.
+- The shader reconstructs the glyph edge from the median of the three sampled distance channels. The
+  field is normalized with `0.5` as the edge and values above `0.5` inside; the antialiasing band
+  comes from the screen-space derivative, so there is no range, pixel-size, or per-font uniform. The
+  generator does not extend an edge past its endpoints (no pseudo-distance corner extension), so
+  bilinear filtering can round a sharp corner at very large sizes. That is the documented MSDF
+  quality limitation.
+- Each font hard-caches 512 generated glyph textures and evicts the least-recently-used entries when
+  it inserts a new one. Every glyph texture is a bindless slot, so the per-font cache is also a
+  descriptor budget within the engine's fixed 2048-slot table; a full table fails the upload with
+  `AssetLoadException` `RB1010`.
 - `Load<Font>` is a CPU-only engine asset load: it parses the face and generates no glyph texture, so it
   performs no GPU upload and the font object that load creates reports `CachedGlyphCount` `0`. A shared
   font keeps one cache for its lifetime, so a repeated load returns the shared object, whose count
@@ -86,16 +100,44 @@ parses the face once and generates MSDF glyph textures on demand. There is no pr
   `maxWidth == 0` aligns lines against the widest line.
 - `DrawTextBillboard` lays out the text in a camera-facing plane. It is the same layout and
   batching path with a billboard transform.
-- Text batching uses the built-in MSDF shader. All text with the same font and render state can be
-  one instanced draw; each glyph instance carries its bindless texture index as its per-instance
-  texture data, and the shader samples the whole glyph texture without a per-instance UV rectangle.
+- Text batching uses the built-in MSDF shader. All text with the same quad, program, and render state
+  can be one instanced draw, regardless of font, size, or string; each glyph instance carries its
+  bindless texture index as its per-instance texture data, and the shader samples the whole glyph
+  texture without a per-instance UV rectangle.
 - Fonts are shared assets. The built-in Fira Sans Regular face is available as
   `EngineContext.Defaults.DefaultFont`; the engine owns it and the game must not dispose it. Disposing a
   font while a frame references it is safe; using the public object after `Dispose` is not.
 
+Limitations:
+
+- There is no complex shaping, ligature substitution, bidi ordering, font fallback, color font, or
+  emoji support. A cmap-mapped rune maps directly to one glyph; an unmapped rune is `.notdef`.
+- Coverage is per face. The built-in Fira Sans Regular face covers Latin, Cyrillic, and Greek; a
+  different face covers whatever its cmap maps.
+- A variable font loads and renders its default instance; named variation axes are not exposed.
+- CFF2 outlines are rejected: only TrueType `glyf` and CFF 1.0 outlines are supported.
+- There is no preload and no synchronous glyph generation. The first draw of a glyph may skip it for
+  that call while the `RayBork.Font` thread generates its texture.
+- Text is world-space geometry. Screen-space/HUD text and the orthographic sprite path arrive in M7.
+- One texture per glyph means a font's glyph cache consumes bindless slots: 512 cached per font, and
+  the fixed bindless texture table is table-wide 2048 slots.
+- MSDF sharp corners are not extended, so a small artifact can appear at very large sizes.
+- A world-space text draw can be occluded by geometry closer to the camera, including a status
+  overlay placed one unit in front of the camera.
+
 `Camera` also exposes:
 
 ```csharp
+public void DrawText(
+    Font font,
+    ReadOnlySpan<char> text,
+    Transform transform,
+    float size,
+    Color color,
+    TextAlignment alignment = TextAlignment.Left,
+    TextWrapping wrapping = TextWrapping.None,
+    float maxWidth = 0f);
+
 public void DrawTextBillboard(
     Font font,
     ReadOnlySpan<char> text,

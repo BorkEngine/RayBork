@@ -105,6 +105,28 @@ still builds and runs; re-check exposure and AgX white if it tuned against the M
 0.x preview change and this paragraph is its migration note; after 1.0 the same change would need the
 obsolete/migration cycle above.
 
+The M6 text surface is additive: `Font`, `Glyph`, `TextAlignment`, `TextWrapping`,
+`EngineDefaults.DefaultFont`, `Font.TryGetGlyph`, `Font.Measure`, `Camera.DrawText`, and
+`Camera.DrawTextBillboard` are new members, and `Load<Font>` returns a shared, reference-counted,
+CPU-only engine asset. Existing camera and asset calls keep their meaning. The font asset adds no
+GPU resource of its own, so a font load performs no upload and generates no glyph texture; glyph
+textures are created on demand and cached per font. The `Font` descriptor no longer carries the
+pre-M6 `Ranges` member and there is no `Preload`/preload-range concept: the bake packs the whole
+face and any cmap-mapped glyph may be generated later. A font pack baked before M6 still loads
+because MessagePack ignores the removed descriptor member; only an old TOML sidecar that still
+declares `ranges` fails the bake with the unknown-key error `RB4002`. An unavailable or wrong-length
+face, an invalid face, CFF2 outlines, an unsupported parser feature, or invalid MSDF settings are
+`AssetLoadException` `RB1011`. An unmapped rune falls back to glyph id 0 (`.notdef`). These are 0.x
+preview additions and this paragraph is their migration note; after 1.0 a breaking change to this
+surface would need the obsolete/migration cycle above.
+
+The M6 text surface is world-space only. `Camera.DrawText` lays a block out in a transform's local
+XY plane and `Camera.DrawTextBillboard` centers a camera-facing block; the screen-space orthographic
+path, including HUD text and `DrawTexture`, arrives in M7. Complex shaping, ligatures, bidi ordering,
+font fallback, color fonts, emoji, and variable font axes are out of scope for v1, and CFF2 is
+rejected. Coverage is per face: the built-in Fira Sans Regular face covers Latin, Cyrillic, and
+Greek. A variable font that a game packs loads and renders its default instance.
+
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a
 best-effort read.
@@ -122,6 +144,7 @@ The following are deliberate exclusions, not forgotten features. The roadmap pla
 | Skeletal/morph animation | Deferred | Models are static. |
 | Built-in lighting/PBR/shadows | Deferred | Custom shaders can implement them. |
 | Physics | Deferred | Collision queries only. |
+| Text shaping and font features | Partial | No complex shaping, ligatures, bidi ordering, font fallback, color fonts, emoji, or variable font axes in v1; CFF2 is rejected; coverage is per face. |
 | UI toolkit | Deferred | Text, sprites, and orthographic cameras are the building blocks. |
 | Networking | Out | |
 | VR/OpenXR | Deferred | Not in 1.0; later. |

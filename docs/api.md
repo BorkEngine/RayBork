@@ -1,6 +1,6 @@
 # RayBork API Reference
 
-Status: **v0.1 M5**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M6**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
@@ -21,12 +21,14 @@ runtime tone-mapping surface: `TonemappingSettings` behind `EngineContext.Tonema
 `Color.FromSrgbBytes`, and `Color.ToSrgb` helpers. The M5 present pass replaces the M4 AgX curve and
 its separate HDR highlight path with Godot 4.7's HDR-aware AgX curve: SDR uses an output maximum of
 `1`, scRGB HDR uses the reported display headroom, and the curve output is scaled by paper white.
-`DrawTexture` is not part of M5; it moves to M7 with the orthographic sprite contract. M6 ships the
+`DrawTexture` is not part of M6; it moves to M7 with the orthographic sprite contract. M6 ships the
 font and text surface: `Font` and `Glyph`, `Load<Font>`, `TryGetGlyph`, `Measure`, on-demand
 asynchronous MSDF glyph generation, the built-in Fira Sans Regular default font exposed as
 `EngineDefaults.DefaultFont`, and the world-space `Camera.DrawText` and `Camera.DrawTextBillboard`
-draws. The text alignment and wrapping enums and the text draw contract are described in §7.10.
-The rest of the API reference remains the 1.0 contract, not a description of shipped behavior.
+draws. The text alignment and wrapping enums and the text draw contract are described in §7.10. The
+M6 Native AOT gate is `samples/Text`, which loads the built-in face and a baked custom face and draws
+the world-space text scene. The rest of the API reference remains the 1.0 contract, not a description
+of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -152,8 +154,12 @@ Unless marked otherwise, a mutable object (`Shader`, `Camera`) is tick-only.
 M0 ships `EngineVersion`. M1 ships the host, thread, window, input, time, and logging surface. M2
 ships the renderer foundation: the Vulkan 1.2 backend behind the internal seam, swapchain selection
 with HDR/SDR output, the scRGB HDR present path, AgX tone mapping, MSAA with color resolve,
-reverse-Z depth, bounded recovery, and the GPU tests. The remaining rows name the milestone that
-owns the deferred surface; the full code blocks in the section pages stay the 1.0 contract.
+reverse-Z depth, bounded recovery, and the GPU tests. M3 ships the asset pipeline and pack; M4 ships
+the core 3D renderer, camera draws, and shader ABI; M5 ships the primitive, billboard, wireframe, and
+collision surface plus the HDR AgX rework; M6 ships the managed font parser, on-demand MSDF glyph
+pipeline, layout, built-in default font, and world-space text draws. The remaining rows name the
+milestone that owns the deferred surface; the full code blocks in the section pages stay the 1.0
+contract.
 
 | Surface | Milestone |
 | --- | --- |
@@ -219,8 +225,9 @@ shader program and white/error textures. `Camera` ships as a frame-scoped record
 engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
 write that material's cursor. `Load<Shader>` returns a new independent material over a cached
 internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
-no `Font`, and no text draw helpers (`DrawText` arrives in M6); the primitive, line, billboard, and
-wireframe-model helpers ship in M5, while `DrawTexture` moves to M7 with the sprite path. Clear
+no `Font`, and no text draw helpers; the font asset and `DrawText`/`DrawTextBillboard` ship in M6. The
+primitive, line, billboard, and wireframe-model helpers ship in M5, while `DrawTexture` moves to M7
+with the sprite path. Clear
 control is per camera:
 `RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
 `ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
@@ -232,9 +239,10 @@ helpers; the twelve shape helpers with their shape, position, tessellation, star
 primitive meshes through the built-in `/shaders/primitive` program (vertex position and color, no
 uniforms or textures), the billboard draws through `/shaders/mesh` with an alpha render state, and
 `DrawWireModel` draws model parts through a polygon-mode-line pipeline gated on the device's
-`fillModeNonSolid` feature (`GraphicsException` `RB3001` on a device without it; M5 has no CPU
-line-geometry fallback). The meshes and the primitive program are internal engine assets, and
-`EngineDefaults` still exposes only `CreateMeshShader`, `White`, and `Error`. `Collision` and
+`fillModeNonSolid` feature (`GraphicsException` `RB3001` on a device without it; the engine has no CPU
+line-geometry fallback). The meshes and the primitive program are internal engine assets; at M5,
+`EngineDefaults` exposed only `CreateMeshShader`, `White`, and `Error`, and M6 adds `DefaultFont`.
+`Collision` and
 `RayCollision` ship as allocation-free, thread-safe queries over `Ray`, `BoundingBox`, and `Plane`;
 `GetRayQuad` splits a quad into two double-sided triangles and returns the nearest non-negative hit,
 and `GetRayMesh` accepts triangle-list and triangle-strip meshes, maps the hit through a world
@@ -295,23 +303,35 @@ zero for the draw counters. Textures allocate a bindless slot when their GPU upl
 `RayBorkTextures[2048]` array; a device whose update-after-bind sampled-image limits are below 2048
 is rejected during device selection, and the capacity is never reduced.
 
-`samples/PrimitiveGallery` is the M5 AOT gate. It is one project in its own solution,
+`samples/PrimitiveGallery` was the M5 AOT gate. It is one project in its own solution,
 `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It has no
 assets executable and no pack: `Setup` builds its only texture with `CreateTextureBuilder`, and the
 sample draws the M5 primitive helpers in one perspective pass at 800x450 with orbit controls and the
-`--frames` and `--help` options. The published `win-x64` and `linux-x64` hosts run from the publish
-directory with zero AOT/trim warnings, and the publish directory contains no bake tooling. The M5
-suite is 1,899 tests, 93 of them GPU integration tests, and every sample solution builds.
+`--frames` and `--help` options. Its published `win-x64` and `linux-x64` hosts ran with zero AOT/trim
+warnings, and the publish directory contains no bake tooling. The M5 suite was 1,899 tests, 93 of
+them GPU integration tests, and every sample solution built.
+
+`samples/Text` is the M6 AOT gate. It is a two-project solution, `samples/Text/Text.slnx`, outside
+`src/RayBork/RayBork.slnx`: the sample and a JIT `Text.Assets` executable that bakes `text.pck` from
+the checked-in Lora face and copies it beside the sample executable, so the sample has no `--assets`
+argument. It draws the built-in Fira Sans and the custom Lora face at several sizes, rotations,
+alignments, and wrapping modes, with Latin and Cyrillic paragraphs, a camera-facing billboard, a
+lazily generated Greek line, a world-space status line, orbit/zoom controls, and the `--frames` and
+`--help` options. The published `win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with
+zero AOT/trim warnings, on the Windows hardware driver and on WSLg's dzn hardware device. The M6
+suite is 2,594 tests, 102 of them GPU integration tests, and every sample solution builds. The Text
+sample is a plain user-facing example and contains no test-only draw assertion.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
 executable out of process, bakes `/models/obj/castle` and `/models/obj/castle_diffuse` into
 `castle.pck`, and copies the pack beside the sample executable, so the published hosts load it
 without a manual bake or an `--assets` argument. The model parts use the built-in mesh material, the
-pass draws the castle and `DrawGrid(20, 10f, Color.Gray)`, and the sample ray-casts the pointer
-against the model bounds and mesh with `Collision.GetRayBox` and `Collision.GetRayMesh`, drawing
-`Camera.DrawBoundingBox` and a small hit sphere while hovered. The hosts exit `0`. It is not the M5
-gate. The Windows hardware path, the conformant lavapipe Linux path, and the WSLg dzn hardware path
-all pass. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not the AOT gate.
+pass draws the castle, `DrawGrid(20, 10f, Color.Gray)`, and now a world-space FPS/render-statistics
+status line, and the sample ray-casts the pointer against the model bounds and mesh with
+`Collision.GetRayBox` and `Collision.GetRayMesh`, drawing `Camera.DrawBoundingBox` and a small hit
+sphere while hovered. The hosts exit `0`. It is not the AOT gate. The Windows hardware path, the
+conformant lavapipe Linux path, and the WSLg dzn hardware path all pass. `samples/HelloInterop`
+remains the M1-M3 diagnostic host; it is not the AOT gate.
 
 ## 2. Quick start
 

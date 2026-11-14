@@ -315,7 +315,7 @@ The built-in processors use `RB4007`-`RB4010`; the shared TOML and discovery fai
 
 ### 13.4 Pack v1 (as built)
 
-M5 does not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
+M5 and M6 do not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
 starts with a fixed 40-byte header:
 
 | Field | Size | Notes |
@@ -448,8 +448,9 @@ is set.
 
 The engine's primitive meshes are procedural assets built at engine startup, not pack entries, so
 the pack carries no primitive geometry. The default font's glyph id zero (`.notdef`) is the
-missing-glyph fallback; there is no separate error-glyph entry. Pack v1 is unchanged by the M5
-additions: the primitive program is an ordinary shader entry at a reserved built-in path, not a format
+missing-glyph fallback; there is no separate error-glyph entry. Pack v1 is unchanged by the M5 and
+M6 additions: the primitive and MSDF programs are ordinary shader entries at reserved built-in paths,
+the font is an ordinary `Font` descriptor plus a raw face payload, and none of them is a format
 change. The app preloads the mesh program, the white and error textures, and the built-in default font
 into `EngineContext.Defaults` before `IGame.Setup` and keeps the primitive, MSDF, and mesh programs,
 with one engine material over each, for the engine's primitive assets; the mesh program is already

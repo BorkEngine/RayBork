@@ -91,7 +91,7 @@ blending contract, and there is no public wireframe flag. It is part of the batc
 pipeline cache key, so a wireframe batch never reuses a filled pipeline. The wireframe pipeline needs
 the device's core **`fillModeNonSolid`** feature. The renderer enables it at device creation when the
 physical device advertises it; a device without it fails the frame with `GraphicsException` `RB3001`
-naming the device and the feature, instead of silently drawing nothing, and M5 has no CPU
+naming the device and the feature, instead of silently drawing nothing, and the engine has no CPU
 line-geometry fallback. Filled model draws never request the feature. `RenderStats.Triangles` still
 counts the recorded triangle primitives: polygon-mode line changes the rasterization, not the draw
 record's topology or index count.
@@ -100,12 +100,13 @@ record's topology or index count.
 not block on the GPU and does not submit a command buffer. The `fillModeNonSolid` support check runs
 on the render thread when the wireframe pipeline is created, not at the tick-thread draw call.
 
-### 7.9 Built-in primitives, lines, and billboards
+### 7.9 Built-in primitives, lines, billboards, and text
 
-The primitive helpers draw engine-owned unit meshes through two built-in programs. They are
+The primitive and text helpers draw engine-owned meshes through the built-in programs. They are
 convenience APIs over the same draw records, batching, culling, sorting, and statistics as
-`DrawMesh`; there is no second rendering path. The meshes and the primitive program are internal
-engine assets with no public accessor, built once before `IGame.Setup`.
+`DrawMesh`; there is no second rendering path. The meshes and the built-in programs are internal
+engine assets with no public accessor, built once before `IGame.Setup`. The text rows below summarize
+the draw; §7.10 specifies the font, layout, and glyph contract.
 
 | Method | Geometry | Semantics |
 | --- | --- | --- |

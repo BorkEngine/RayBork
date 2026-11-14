@@ -47,56 +47,65 @@ is visible.
 </Project>
 ```
 
-Publish commands used by the gate:
+Publish commands used by the M6 gate:
 
 ```text
-dotnet build samples/PrimitiveGallery/PrimitiveGallery.slnx -c Release
-dotnet publish samples/PrimitiveGallery/PrimitiveGallery.csproj -c Release -r win-x64   -p:PublishAot=true
-dotnet publish samples/PrimitiveGallery/PrimitiveGallery.csproj -c Release -r linux-x64 -p:PublishAot=true
-samples/PrimitiveGallery/bin/Release/net11.0/win-x64/publish/PrimitiveGallery.exe --frames 30
+dotnet build samples/Text/Text.slnx -c Release
+dotnet publish samples/Text/Text.csproj -c Release -r win-x64   -p:PublishAot=true
+dotnet publish samples/Text/Text.csproj -c Release -r linux-x64 -p:PublishAot=true
+samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30
 # WSL, from the repository root, on the WSLg display (dzn hardware):
-# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/PrimitiveGallery/bin/Release/net11.0/linux-x64/publish/PrimitiveGallery --frames 30
+# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30
 # WSL, optional conformant software run:
-# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/PrimitiveGallery/bin/Release/net11.0/linux-x64/publish/PrimitiveGallery --frames 30
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30
 ```
 
-The sample is its own solution, `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside
-`src/RayBork/RayBork.slnx`. It is a single project with no assets executable and no pack: `Setup`
-builds its only texture with `CreateTextureBuilder`, and the sample reads only the engine's built-in
-pack. `--frames` and `--help` are the only options. The publish directory must contain the host and
-its native libraries and must not contain `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the
+`samples/Text` is the M6 sample and Native AOT gate. It is its own solution,
+`samples/Text/Text.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample and the JIT
+`Text.Assets` executable. The sample build bakes `text.pck` from the checked-in Lora Regular 3.008
+face and copies it beside the sample executable; the sample loads it automatically and has no
+`--assets` argument. The built-in Fira Sans Regular face comes from the engine's built-in pack and is
+used through `EngineDefaults.DefaultFont`. The scene draws the same paragraph at several sizes,
+rotations, alignments, and wrapping modes, Latin and Cyrillic paragraphs in both faces, a
+camera-facing billboard, a Greek line that gains a lazily generated glyph every 30 ticks, and a
+world-space status line. `--frames` and `--help` are the only options.
+
+The publish directory must contain the host, its native libraries, and `text.pck` beside the host,
+and must not contain `Text.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the
 shaderc native libraries, or the glTF packages.
 
-`samples/Castle` remains a buildable and publishable sample, but it is not the M5 gate. Its build
+Both M6 publishes must start, load the built-in font and the baked Lora face, generate glyphs on
+demand, draw the text scene, and shut down. Both finish with zero AOT/trim warnings, and both
+published hosts ran `--frames 30` to exit `0`: the Windows host on the hardware driver and the Linux
+host on WSLg's dzn hardware device.
+
+`samples/Castle` remains a buildable and publishable sample, but it is not the M6 gate. Its build
 invokes the JIT assets executable out of process with the sample's configuration but without its
 publish settings, bakes `castle.pck`, and copies the pack beside the sample executable; `dotnet
 publish` copies the same pack into the publish directory, so the published hosts load the adjacent
 `castle.pck` with no `--assets` argument. Its publish directory must contain `castle.pck` beside the
 host and must not contain `Castle.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder,
-the shaderc native libraries, or the glTF packages.
+the shaderc native libraries, or the glTF packages. `samples/PrimitiveGallery` remains a buildable
+and publishable single-project sample with no assets executable and no pack; it builds its only
+texture at runtime.
 
-Both gate publishes must start, load the assets the sample needs, draw, and shut down. AOT publish
-is a per-milestone gate, not a release-only check. The M5 gate is `samples/PrimitiveGallery`: the
-published hosts open a window, build their procedural texture, draw the M5 primitive helpers through
-the built-in `/shaders/primitive` and `/shaders/mesh` programs, and must exit `0`. The M5 helper
-surface is 46 overloads over 17 helper families: the line, point, and triangle helpers, the twelve
-shape helpers (`DrawCube`, `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`,
-`DrawCapsule`/`DrawWireCapsule`, `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`,
-`DrawWireCube`, `DrawWireSphere`, and `DrawGrid`) with their shape, position, tessellation, start/end,
-and `Transform` overloads, and the eight `DrawBillboard` overloads. The M5 camera also ships
-`DrawWireModel`. The gate path exercises the zero-uniform primitive program, which has no texture
-binding at all, and the alpha-blended mesh program used by billboards; the polygon-mode-line pipeline
-used by `DrawWireModel` is covered by the GPU tests because the gallery has no model asset. The sample
-is a plain user-facing example and contains no test-only draw assertion. Both publishes must finish
-with zero AOT/trim warnings. The M5 suite is 1,899 tests, 93 of them GPU integration tests, and every
-sample solution builds.
+AOT publish is a per-milestone gate, not a release-only check. The M6 gate is `samples/Text`: the
+published hosts open a window, load both faces from the built-in pack and the sample pack, generate
+and upload the glyph textures through the real `RayBork.Font` thread, draw the text through the
+built-in `/shaders/msdf` program, and exit `0`. The gate path exercises the font descriptor and face
+payload decode, the managed sfnt parser, the MSDF generator, the glyph pipeline and cache, the
+layout engine, the `Camera.DrawText`/`Camera.DrawTextBillboard` draw records, and the per-instance
+bindless glyph texture path. The sample is a plain user-facing example and contains no test-only
+draw assertion. The suite is 2,594 tests, 102 of them GPU integration tests, and every sample
+solution builds.
 
 On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver
 (`Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)`) and prints "dzn is not a conformant Vulkan
 implementation, testing use only". The gate runs on that hardware driver: the fixed 2048-element
 bindless texture array avoids dzn's runtime-descriptor-array DXIL lowering and fits its 2048-slot
 sampler heap, so the published host exits `0` on the hardware dzn device and needs no `DZN_DEBUG`
-workaround. The conformant lavapipe ICD remains available for a software-only Linux run with
+workaround. Glyph textures are ordinary bindless procedural textures, so the text path uses that same
+fixed array. The conformant lavapipe ICD remains available for a software-only Linux run with
 `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. The Windows gate runs on the hardware
 driver.
 

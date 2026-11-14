@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M5 as-built**, 2026-11-14. M0-M5 are shipped. Milestones are ordered by
+Status: **v0.1 M6 as-built**, 2026-11-14. M0-M6 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -71,7 +71,7 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M3 | Asset pipeline | Pack v1, assets executable, processors, typed loaders | M1 |
 | M4 | Core 3D renderer | Models, shaders, bindless textures, instancing, camera draws | M2, M3 |
 | M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, wireframe models, mesh generators, collision queries, HDR AgX rework, restored linearized Bork2d color presets | M4 |
-| M6 | Text and MSDF | TTF/OTF, runtime MSDF, layout, world-space text | M4 |
+| M6 | Text and MSDF | Managed TTF/OTF parsing, deterministic on-demand MSDF, layout, built-in font, world-space text | M4 |
 | M7 | 2D and orthographic rendering | Sprites, 2D shapes, pixel mapping, Pong | M4 |
 | M8 | Render targets and multiple cameras | HDR/MSAA targets, readback, split-screen | M4 |
 | M9 | Input and window polish | IME, clipboard, fullscreen, gamepad hotplug/rumble | M1 |
@@ -414,15 +414,18 @@ automatic instancing, and per-instance textures/uniforms.
 - **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
   texture, an orbital camera, the reference XZ grid, and a mouse-hover outline. It deliberately
   leaves out features that need later milestones: model/texture drag-and-drop (post-1.0 platform
-  work), click selection (the sample tests the pointer ray with `Collision.GetRayBox` and
+  work) and click selection (the sample tests the pointer ray with `Collision.GetRayBox` and
   `Collision.GetRayMesh` and draws `Camera.DrawBoundingBox` plus the nearest hit point, but it has no
-  click action and keeps no selection state), and the `DrawText`/`DrawFPS` overlay (runtime text
-  arrives in M6). The grid is `DrawGrid(20, 10f, Color.Gray)` in the same opaque, depth-tested pass
-  as the castle, and the hover box and hit sphere join that pass only while the pointer is over the
-  model. The model and its diffuse texture are drawn with the built-in `/shaders/mesh` material that
-  the loaded model owns; there is no custom Castle shader. The sample draws the castle, its grid, and
-  the hover overlays; render statistics are available to games but are not drawn. The castle model and
-  texture are sample-only assets with their own notice under `samples/Castle/`; that notice is
+  click action and keeps no selection state). The M4 notes originally deferred the
+  `DrawText`/`DrawFPS` overlay because runtime text did not exist; the M6 change adds it, so the
+  sample now draws a world-space status line with FPS, frame time, `RenderStats.DrawCalls`, and
+  `RenderStats.Instances`. The grid is `DrawGrid(20, 10f, Color.Gray)` in the same opaque,
+  depth-tested pass as the castle, and the hover box and hit sphere join that pass only while the
+  pointer is over the model. The model and its diffuse texture are drawn with the built-in
+  `/shaders/mesh` material that the loaded model owns; there is no custom Castle shader. The sample
+  draws the castle, its grid, the hover overlays, and the status line; the status overlay is
+  world-space text and geometry closer than one unit to the camera can occlude it. The castle model
+  and texture are sample-only assets with their own notice under `samples/Castle/`; that notice is
   deliberately not duplicated in the repository-root notices.
 - **WSLg dzn compatibility.** On the WSL gate host WSLg selects
   `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and prints
@@ -595,8 +598,9 @@ color helpers, and the restored Bork2d/Unity color preset set:
   that color. Its default state is opaque, back-face culling, `greater_equal`, depth write. The
   billboard uses the built-in `/shaders/mesh` program with the `RenderState.AlphaBlend` state
   override. The engine material's texture binding is set only around the recorded call and cleared
-  immediately afterwards, and the frame record retains the texture. `EngineDefaults` is unchanged: it
-  still exposes only `CreateMeshShader`, `White`, and `Error`. `/shaders/primitive` is an ordinary
+  immediately afterwards, and the frame record retains the texture. At M5, `EngineDefaults` exposed
+  only `CreateMeshShader`, `White`, and `Error`; M6 adds `DefaultFont`. `/shaders/primitive` is an
+  ordinary
   built-in shader entry, so a game can load a material over it by path for its own vertex-color
   meshes; the primitive meshes have no public accessor. `DrawTexture` is not built or shipped in M5;
   the screen-space overlay path is re-homed to M7.
@@ -740,8 +744,9 @@ color helpers, and the restored Bork2d/Unity color preset set:
   M5, and `DrawBoundingBox` now ships as a public M5 helper. The Castle sample uses the helper for its
   hover overlay: it tests the pointer ray against the model bounds with `Collision.GetRayBox`, draws
   the bounds on a hit, and marks the nearest `Collision.GetRayMesh` hit. It still does not implement
-  click selection. Castle remains a buildable and publishable sample; the M5 AOT gate is the gallery.
-  The M4 limitation of one `rbFrame` block per frame slot is unchanged by M5.
+  click selection. M6 adds the world-space FPS/render-statistics status overlay the sample deferred
+  in M4. Castle remains a buildable and publishable sample; the M6 AOT gate is `samples/Text`. The M4
+  limitation of one `rbFrame` block per frame slot is unchanged by M5/M6.
 
 **Risks.**
 
@@ -769,37 +774,205 @@ color helpers, and the restored Bork2d/Unity color preset set:
 
 ### M6 — Text and runtime MSDF
 
-**Goal.** World-space text that looks correct at arbitrary sizes, with no pre-baked atlas.
+**Goal.** World-space text that looks correct at arbitrary sizes, with no pre-baked atlas and no
+blocking glyph generation.
 
 **Scope.**
 
-- TTF/OTF face parsing: cmap, glyf/CFF outlines, metrics, kerning, composite glyphs, replacement
-  glyph.
-- Runtime MSDF generation: one texture per glyph, 32 px longest side, range/padding, deterministic
-  field output, validation against a sampled distance field.
-- Glyph cache with bounds, eviction, preload ranges, and per-font bindless textures.
-- Layout: advance, kerning, line height, alignment, word/character wrapping, max width, measurement.
-- MSDF shader: median reconstruction, screen-space antialiasing, linear tint, gamma-correct
-  sampling in the HDR scene target.
-- `DrawText` world-plane orientation and `DrawTextBillboard`.
-- Missing-glyph fallback to the replacement glyph; no complex shaping in v1.
-- Font sidecar ranges and MSDF parameters; preload ASCII on load.
+- Managed sfnt face parsing: table directory, `head`/`maxp`/`hhea`/`hmtx` metrics, cmap formats 0, 4,
+  6, and 12, TrueType `glyf` simple and composite outlines, CFF 1.0 Type 2 charstrings including
+  CID FDArray/FDSelect and `seac`, `kern` format 0 and GPOS PairPos 1/2 with extension lookups,
+  `.notdef`, defensive limits, and fuzzing against hostile input.
+- Deterministic runtime MSDF: one padded texture per glyph with a 32-pixel longest side, an authored
+  distance range and padding, msdfgen-style two-channel edge colouring, a normalized field where
+  `0.5` is the edge, derivative-based screen-space antialiasing in the shader, and analytic
+  validation of the generated field.
+- Glyph pipeline: an app-lifetime `RayBork.Font` thread that generates and uploads glyphs
+  asynchronously, a tick thread that never waits, a per-font hard cache with LRU eviction, and frame
+  holds so an eviction cannot destroy a texture a recorded frame still references.
+- The CPU-only `Font : IAsset` and `Glyph` contract: `Load<Font>` parses the face and generates no
+  glyph texture, `TryGetGlyph`, `Measure`, unmapped-rune fallback to `.notdef`, and `RB1011` for an
+  invalid or unsupported face. There is no `Preload` and no font preload range.
+- Built-in Fira Sans Regular at `/fonts/fira-sans`, exposed as `EngineDefaults.DefaultFont`, and the
+  `[font]` sidecar carrying only the MSDF settings.
+- Layout: advance, kerning, line breaks, line height, `TextAlignment`, `TextWrapping`, `maxWidth`,
+  and `Measure`; the `DrawText` origin is the top-left of the first line's ascent box.
+- Drawing: `Camera.DrawText` in a transform's local XY plane and `Camera.DrawTextBillboard` in a
+  camera-facing plane, through the engine quad and the built-in `/shaders/msdf` program, with one
+  draw record per call, one instance per ready glyph, and a per-instance bindless glyph texture.
+- `samples/Text` as the M6 sample and Native AOT gate, with `Text.Assets` baking `text.pck` from the
+  checked-in Lora face; `samples/Castle` and `samples/PrimitiveGallery` gain the text status overlays
+  they had deferred.
+- Tests for parsing, layout, MSDF, the glyph pipeline, the font asset, text draws, and fuzzing.
+- **Out of scope for v1:** complex shaping, ligatures, bidi ordering, font fallback, color fonts,
+  emoji, variable font axes, and CFF2 outlines.
 
 **Exit criteria.**
 
-- The Text sample renders a paragraph at multiple sizes, rotations, alignments, and wraps.
-- Glyphs remain sharp at large sizes and readable at small sizes; no atlas seams.
-- A glyph generated lazily during a tick appears without corrupting the frame; preloading avoids
-  the hitch.
-- Kerning matches the font's metrics within tolerance for a test string.
-- A font with 5,000+ mapped glyphs loads without generating all of them.
-- The glyph cache does not exceed the configured texture budget; eviction is correct.
-- Native AOT publish renders text on Windows and Linux.
-- Fuzz tests cover malformed cmap/glyf/CFF tables without crashes or unbounded allocation.
+- `samples/Text` renders the same paragraph at multiple sizes, rotations, alignments, and wrapping
+  modes, with Latin and Cyrillic paragraphs in the built-in Fira Sans and custom Lora faces, a
+  camera-facing billboard, lazily appearing Greek glyphs, an orbit camera, and `--frames`/`--help`.
+- Glyphs remain sharp at large sizes and readable at small sizes with one padded texture per glyph
+  and no atlas seams; the generated MSDF field matches the analytic distance within the documented
+  tolerance.
+- A glyph generated lazily during a tick appears on a later frame without corrupting the frame; the
+  tick thread never blocks on glyph generation, and the per-font texture cache never exceeds its
+  budget.
+- Kerning from `kern`/GPOS matches the face metrics within tolerance, and a face with thousands of
+  mapped glyphs loads without generating a glyph texture; only the glyphs a draw requests are
+  generated, up to the per-font cache cap.
+- `Load<Font>` is CPU-only and generates no glyph texture; an unmapped rune falls back to `.notdef`;
+  an invalid face is `RB1011`; a pre-M6 pack still loads, while an old TOML `ranges` key is
+  `RB4002`.
+- Both AOT publishes (`win-x64` and `linux-x64`) finish with zero warnings and both published hosts
+  run `--frames 30` to exit `0` (Windows hardware and WSLg dzn).
+- Fuzz tests cover malformed sfnt/cmap/glyf/CFF/kern/GPOS tables without crashes or unbounded
+  allocation.
+- The suite is 2,594 tests, 102 of them GPU integration tests, and every sample solution builds.
 
-**Risks.** Managed TrueType/CFF parsing and MSDF generation are the highest-risk runtime libraries
-in the project. If quality or performance misses, the fallback is a pinned native msdfgen/FreeType
-path, which changes the AOT/native packaging story.
+**As-built notes.** M6 shipped the planned text surface with the following as-built shape:
+
+- **Managed font parser.** `SfntFace` parses the sfnt container and table directory, requires
+  `head`, `maxp`, `hhea`, `hmtx`, and `cmap`, and resolves TrueType `loca`/`glyf` or CFF 1.0. Cmap
+  selection is deterministic over formats 0, 4, 6, and 12; a Unicode subtable wins over a symbol or
+  legacy one, and `GlyphCount` counts mapped codepoints rather than distinct glyph ids. TrueType
+  simple and composite glyphs are supported, with point-matched composite arguments rejected as
+  unsupported and a recursive-component budget. CFF Type 2 charstrings resolve through the CID
+  FDArray/FDSelect path and the deprecated `seac` composition; CFF2 is parsed structurally and then
+  rejected at load. Kerning comes from `kern` format 0 or GPOS PairPos format 1/2 including
+  extension lookups. The parser enforces defensive caps (16 composite levels, 20,000 points per
+  glyph, 4,096 component resolutions, 1,000,000 `kern` pairs, bounded GPOS lookup/pair-set records,
+  and CFF/interpreter budgets) and fuzzing asserts that malformed input raises `FontFormatException`
+  (malformed) or `FontUnsupportedException` (valid but outside a documented limit), never a
+  framework exception, within a 16 MiB allocation bound per parse. Ligatures, contextual shaping,
+  bidi, color fonts, and emoji are not implemented. A variable face loads and renders its default
+  instance; named axes are not exposed.
+- **Deterministic runtime MSDF.** One glyph is one padded texture, not an atlas entry. The authored
+  `msdf_pixel_size` is the complete padded texture side, so the default `32` is the longest side of
+  the final texture; `msdf_range` defaults to `4` and `msdf_padding` to `2`, and the layout fits the
+  glyph box into `pixelSize - 2 * padding` so the outline keeps the empty border. Edge colouring
+  follows the msdfgen-style two-channel scheme; the field is normalized with `0.5` as the edge and
+  values above `0.5` inside, and the alpha channel is opaque. Generation is deterministic:
+  repeated calls on the same outline produce byte-identical buffers. The fragment shader
+  reconstructs the edge from the median of the three sampled distance channels and derives its
+  antialiasing band from `fwidth`, so there is no range, pixel-size, or per-font uniform. The field
+  is the exact nearest-edge distance per channel and deliberately does **not** extend edges past
+  their endpoints (no pseudo-distance corner extension), so bilinear filtering can round a sharp
+  corner at very large sizes; this is the documented quality limitation. The generator caps one
+  glyph at 4,194,304 texels and 8,388,608 edge-texel pairs and validates its layout arguments.
+  Analytic and generated-field tests pin the distance values, edge colouring, determinism, empty and
+  degenerate layouts, and the limits.
+- **Glyph pipeline and cache.** The asset catalog starts one app-lifetime `RayBork.Font` thread with
+  its loader thread, before the tick thread starts, and stops it during `AssetCatalog.Stop` while
+  the render thread still services the GPU upload bridge. `Load<Font>` parses the face and creates a
+  `FontGlyphPipeline`; it never generates a glyph. The tick thread calls `BeginFrame` once per
+  camera and `Acquire` per laid-out glyph with a positive size. A miss marks the glyph pending,
+  records a waiter, enqueues exactly one generation request, and returns no texture; the draw skips
+  that glyph for the call while the pen still advances, and the glyph appears on a later frame. A
+  hit adds the texture's frame hold to the recorder's retention set while the cache lock is held, so
+  eviction cannot release the owner reference between the lookup and the hold. The per-font cache is
+  hard-capped at 512 textures and evicts the least-recently-used entries in one batch on insert; a
+  glyph texture is an ordinary procedural `Rgba8Unorm`, linear, clamp-sampled texture, so frame
+  retention and device-recovery re-upload use the same path as any other texture. Generation and
+  upload failures are terminal for the glyph, logged once, and never retried; an empty glyph such as
+  a space becomes ready without a texture; a font-data failure falls back to the face advance with a
+  zero quad and is logged once.
+- **Font asset and pack contract.** `Font` is a shared, reference-counted `IAsset` and the engine's
+  first CPU-only engine asset: it has no GPU resource of its own, so a load queues no upload and the
+  last release disposes the glyph pipeline and its cached glyph textures. `Load<Font>` parses the
+  whole packed face once; a repeated load returns the same object and its live glyph cache. A font
+  descriptor carries the MSDF settings and the sibling `<base>-face` raw payload. The pre-M6
+  descriptor member `Ranges` is gone: a pre-M6 pack still loads because MessagePack ignores the
+  unknown member, while an old TOML sidecar that still declares `ranges` fails the bake with
+  `RB4002`. An unavailable or wrong-length face, an invalid face, CFF2, an unsupported parser
+  feature, or invalid MSDF settings is `AssetLoadException` `RB1011`. `Glyph` values are in em
+  units; `Advance` is the horizontal pen advance, `Bearing` is the padded quad's bottom-left corner
+  on the baseline, `Size` is the padded quad size, `Uv0`/`Uv1` are `(0, 0)`/`(1, 1)` because one
+  glyph is one whole texture, and `Rune` echoes the requested rune. `TryGetGlyph` returns only
+  glyphs whose texture is ready and does not generate one; `Measure` reads face metrics and kerning
+  without generating a texture. An unmapped rune falls back to glyph id 0 (`.notdef`), so layout
+  still advances.
+- **Built-in font.** The built-in pack carries Fira Sans Regular version 4.203 at
+  `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload, produced by the ordinary font
+  processor with the default 32/4/2 MSDF settings, so the pack has 18 entries. Fira Sans is
+  licensed under the SIL Open Font License 1.1 and covers Latin, Cyrillic, and Greek, which is the
+  coverage the samples exercise. The app preloads the face before `IGame.Setup` and exposes it as
+  `EngineContext.Defaults.DefaultFont`; the font is engine-owned, the preload is CPU-only and
+  queues no GPU upload, and the owner reference is released during shutdown. The font is recorded
+  in the bundled-assets section of [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). The sample's
+  Lora face is sample-only and keeps its own notice under `samples/Text/`.
+- **Layout.** The layout engine is pure CPU and reads `ITextMetrics`; it allocates nothing once the
+  caller's buffer has grown. `'\n'` starts a new line and `'\r'` is ignored. Advances and kerning
+  come from the face, line height is `(ascender - descender + lineGap) / unitsPerEm`, and
+  `TextAlignment` shifts each line inside the layout box. `TextWrapping.Word` breaks only before a
+  whitespace run that follows a word and drops that run; a word wider than the box overflows on its
+  own line. `TextWrapping.Character` breaks between any two glyphs and never drops a rune. `Word`
+  and `Character` require a positive `maxWidth`; `None` with `maxWidth == 0` sizes the box to the
+  widest line. `Measure` ignores wrapping and a width limit and returns the widest line advance plus
+  `lineCount * LineHeight * size`. The layout origin is the top-left of the box; the first baseline
+  is at `-Ascent * size` and the block bounds include every line box and glyph quad.
+- **Text drawing.** `Camera.DrawText` records world-space text through the engine quad and the
+  built-in `/shaders/msdf` program. The block lies in the transform's local XY plane, with `+X` to
+  the right, `+Y` up, the readable face toward local `+Z`, and the origin at the top-left of the
+  first line's ascent box. `Camera.DrawTextBillboard` uses the same layout with `TextWrapping.None`
+  and no width limit, centers the union of the layout box and every glyph quad on `position` in a
+  camera-facing plane, and aligns each line inside the block width. One call records at most one
+  draw record; every ready glyph is one instance in layout order with its own bindless glyph texture,
+  and the per-instance UV rectangle stays `(0, 0, 1, 1)`. The text render state is alpha blend, no
+  culling, `greater_equal`, no depth write. Instances of the same quad and program batch across
+  calls, fonts, sizes, and strings; `Instances` counts submitted glyph instances and `Triangles` is
+  two per instance. A call whose glyphs are all pending or empty records nothing. A glyph texture
+  the draw acquired is retained by its frame hold rather than again by the draw record. Validation
+  runs before any retention or record mutation: a null font is `ArgumentNullException`, a disposed
+  camera or font is `ObjectDisposedException`, non-finite or out-of-range layout arguments are
+  `ArgumentException`/`ArgumentOutOfRangeException`, and a zero transform scale or empty text records
+  nothing.
+- **Text sample and AOT gate.** `samples/Text` is the M6 sample and Native AOT gate. Its solution
+  `samples/Text/Text.slnx` contains the sample and the JIT `Text.Assets` executable, which bakes
+  `text.pck` from the checked-in Lora Regular 3.008 face and copies it beside the sample
+  executable; the sample has no `--assets` argument. It draws a title in both faces, one paragraph
+  at three sizes, three alignments, both wrapping modes, and two rotations, Latin and Cyrillic
+  paragraphs in both faces, a camera-facing billboard, a Greek line that gains one lazily generated
+  glyph every 30 ticks, and a world-space status line; it has orbit/zoom controls and the
+  `--frames`/`--help` options. `samples/Castle` and `samples/PrimitiveGallery` gained the
+  `DrawText` status overlays they had deferred, so they now draw FPS, frame time, draw calls, and
+  instances from `RenderStats`. The published `win-x64` and `linux-x64` hosts finish with zero
+  AOT/trim warnings, contain `text.pck` but no bake tooling, and both run `--frames 30` to exit
+  `0`; the Linux run used WSLg's dzn hardware device.
+- **Tests.** The suite is 2,594 tests, 102 of them GPU integration tests. M6 adds the font parser,
+  cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
+  colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
+  the text layout, measurement, wrapping, buffer, and validation suites; the camera text draw
+  records and the `TextDrawGpuTests` presented-pixel and statistics suite. The two AOT publishes
+  cover the Text sample on both RIDs. There is no golden-image suite.
+- **Limitations.** There is no complex shaping, ligature substitution, bidi ordering, font fallback,
+  color font, or emoji support. Coverage is per face: Fira Sans covers Latin, Cyrillic, and Greek.
+  Variable fonts load their default instance. CFF2 is rejected. One texture per glyph consumes
+  bindless slots: 512 cached per font, within the fixed 2048-slot table. There is no preload and no
+  synchronous glyph generation. Text is world-space only; screen-space/HUD text is M7. MSDF sharp
+  corners are not extended, so a small artifact can appear at very large sizes. A world-space
+  status overlay can be occluded by geometry closer than the overlay distance.
+
+**Risks.**
+
+- **The managed parser and MSDF generator shipped without a native fallback.** The highest-risk
+  runtime libraries are now the shipped implementation, not a prototype: quality, hostile-input
+  behavior, and performance are the runtime's own. The mitigation is the defensive caps, the
+  format/unsupported split, the deterministic generator, and the fuzz and analytic suites; a native
+  `msdfgen`/FreeType path stays a possible later change, not a hidden dependency.
+- **MSDF corner quality.** The generator does not extend edges past their endpoints, so a sharp
+  corner can round slightly under bilinear filtering at large sizes. The field is otherwise exact at
+  texel centers; a future generator change would need the same analytic coverage.
+- **Bindless slot pressure.** One texture per glyph means a glyph cache is also a descriptor budget:
+  512 textures per font against the fixed 2048-slot table. A scene that keeps many fonts alive
+  concurrently can exhaust the table, which fails the upload with `RB1010`; the per-font LRU bound
+  and the existing bindless table contract are the mitigation.
+- **Coverage and feature gaps.** There is no fallback, shaping, bidi, color font, emoji, or variable
+  axis support, and coverage is per face. A game that needs those features must pre-process its text
+  or wait for post-1.0 work; the samples state the per-face boundary honestly.
+- **World-space text only.** Screen-space HUD text arrives with the orthographic path in M7. The
+  sample overlays are world-space text one unit in front of the camera and can be occluded by closer
+  geometry; that is the documented M6 behavior, not an M7 feature already shipped.
 
 ### M7 — 2D, orthographic rendering, and sprites
 
@@ -930,8 +1103,9 @@ with Native AOT without reading the engine source.
 **Scope.**
 
 - Samples: Castle (3D textured/custom shader/HDR; the sample and its assets executable ship in M4,
-  and M11 polishes them), Pong (2D/input/text), Text (MSDF/layout), Instancing (batching/stats),
-  RenderTarget (offscreen/MSAA/post-process).
+  and M11 polishes them), Pong (2D/input/text), Text (MSDF/layout; the sample and its AOT gate ship in
+  M6, and M11 polishes them), Instancing (batching/stats), RenderTarget
+  (offscreen/MSAA/post-process).
 - `dotnet new raybork` template with a game project, assets executable, and AOT publish profile.
 - NuGet packages: `RayBork.Engine` and the bake tool; package validation and symbol packages.
 - XML docs for every public member; the API reference synchronized with the implementation.
@@ -1024,7 +1198,7 @@ The matrix is the scope contract.
 | Mouse | Covered | M1 | Buttons, position, delta, wheel. |
 | Gamepad | Covered | M1, M9 | Basic in M1; hotplug/rumble in M9. |
 | Touch | Post | — | Post-1.0. |
-| Text/fonts | Covered | M6 | Runtime MSDF; Latin-style shaping; no bidi/complex scripts. |
+| Text/fonts | Covered | M6 | Managed TTF/OTF parsing (cmap 0/4/6/12, TrueType `glyf`, CFF Type 2, `kern`/GPOS pair kerning), deterministic on-demand MSDF, layout/alignment/wrapping, and world-space text; no complex shaping, ligatures, bidi, fallback, color fonts, emoji, variable axes, or CFF2. |
 | Textures | Covered | M3, M5, M7, M8 | Loaded textures, billboard texture sampling, screen-space sprites, and HDR/MSAA render targets. |
 | Images | Partial | M3 | Bake decodes; no runtime image manipulation API. |
 | Models | Covered | M4, M5 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes; wireframe model drawing. |
@@ -1086,8 +1260,24 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   polygon-mode-line path: front-facing triangle edges without a filled interior, texture sampling on
   a wireframe fragment, and distinct filled/wireframe pipelines. The collision queries and the BVH
   are covered by deterministic unit tests, including accelerated-versus-brute-force equivalence, and
-  the baked payload by codec and loader tests. The M5 suite is 1,899 tests, 93 of them GPU
-  integration tests; every sample solution builds.
+  the baked payload by codec and loader tests. The M5 suite was 1,899 tests, 93 of them GPU
+  integration tests; every sample solution built.
+- M6 adds the font and text suites. `SfntFaceContainerTests`, `CmapTests`, `FontMetricsTests`,
+  `KerningTests`, `GposKerningTests`, `CffReaderTests`, and `CffType2Tests` cover the parser and
+  outlines; `FontParserFuzzTests` and `CffFuzzTests` cover malformed and hostile input against the
+  `FontFormatException`/`FontUnsupportedException` split and the allocation bound. The MSDF suites
+  (`MsdfGeneratorTests`, `MsdfLayoutTests`, `MsdfAnalyticFieldTests`, `MsdfEdgeColoringTests`) pin
+  determinism, the normalized field, edge colouring, the padded layout, and the work limits. The
+  glyph pipeline suites (`FontGlyphPipelineCacheTests`, `FontGlyphPipelineMetricsTests`,
+  `FontGlyphSettingsTests`, `GlyphGenerationServiceTests`) cover async generation, the 512-texture
+  LRU bound, frame holds, failure/empty handling, and shutdown. `FontAssetTests`,
+  `FontTests`, the layout suites (`TextLayoutEngineTests`, `TextLayoutMeasurementTests`,
+  `TextLayoutWrappingTests`, `TextLayoutBufferTests`, `TextLayoutValidationTests`), and
+  `TextDrawTests` cover the CPU-only asset, `.notdef`, layout, and the camera draw records;
+  `TextDrawGpuTests` submits the production text draws through the Vulkan backend and asserts
+  validation-layer cleanliness, draw/instance/triangle statistics, and single-pixel linear
+  scene-target probes. The suite is 2,594 tests, 102 of them GPU integration tests, and every sample
+  solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
   the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,
@@ -1154,7 +1344,7 @@ removed from the release notes rather than weakened silently.
 | MSAA + HDR resolve | Extra memory/bandwidth or resolve bugs | 4x default, 1/2/4/8 support or fallback; resolve tests; validation | M2/M8 |
 | Shader ABI complexity | Bake/runtime/sample churn; custom shaders hard to author | Prototype two shaders before M4 batching; explicit sidecar; publish ABI guide | M4 |
 | Per-instance uniform limits | Batches split unexpectedly; performance regressions | Size estimator, device-limit checks, documented split behavior, per-draw fallback | M4 |
-| Managed font/MSDF library | Quality or performance miss; AOT/packaging surprises | Benchmark early; keep native fallback scoped; fuzz parser | M6 |
+| Managed font/MSDF library | Quality, hostile-input, or performance miss; no native fallback ships | Shipped with defensive caps, the format/unsupported split, a deterministic generator, and fuzz/analytic suites; a native `msdfgen`/FreeType path stays a possible later change, not a hidden dependency | M6 |
 | SDL3-CS maturity | Missing binding, packaging gap, AOT issue | Pin and test per RID in M0; thin hand-written fallback for used functions | M0/M1 |
 | Renderer seam abstraction cost | Over-abstraction slows the Vulkan path | Keep the seam at frame/resource granularity; no per-draw virtual calls | M2/M10 |
 | Threading/lifetime bugs | Races, use-after-free, intermittent crashes | Frame retention, tick-affinity rules, stress suite, validation, deterministic shutdown order | M1-M5 |

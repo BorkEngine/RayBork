@@ -11,7 +11,7 @@
 | `IGame` callbacks | Tick thread | Only the callback runs; no concurrent callback |
 | `Camera` | Tick thread | Create, draw, dispose inside one `Tick` |
 | `Shader` uniform cursor | Tick thread | `SetUniform`/`ResetUniforms` |
-| `Font` glyph cache | `RayBork.Font` thread (inserts and evicts) | The tick thread calls `BeginFrame`, `Acquire`, and `GetMetrics` and updates use stamps and waiter state. A miss enqueues and returns no texture; `Acquire` adds the texture's frame hold before it returns, so a draw never blocks. Eviction may dispose the wrapper; the frame hold keeps its GPU resource alive through the frame. |
+| `Font` glyph cache | `RayBork.Font` thread (inserts and evicts) | The draw path calls `BeginFrame`, `Acquire`, and `GetMetrics`; the public read-only `TryGetGlyph` and `CachedGlyphCount` peek the cache through `TryGetTexture` and the cache count. The tick thread updates use stamps and waiter state. `BeginFrame` runs once per camera and font. A miss enqueues and returns no texture; `Acquire` adds the texture's frame hold before it returns, so a draw never blocks. Eviction may dispose the wrapper; the frame hold keeps its GPU resource alive through the frame. |
 | `RenderTexture` handle | Tick thread | Create/dispose/resize; GPU work is deferred |
 | `EngineContext.Tonemapping` | Tick thread | Read/write during `Setup`, `Tick`, or `Shutdown`; the values are sealed into each frame |
 | `Collision`/`RayCollision` | Any thread | Pure CPU queries; no locks; a mesh must not be disposed while a `GetRayMesh` query reads it |
@@ -34,7 +34,7 @@ that value from the instance record; it never reads a live material cursor or ca
 `DrawWireModel` is a tick-thread record call like `DrawModel`. The `fillModeNonSolid` support check
 and the polygon-mode-line pipeline creation happen on the render thread when the batch is submitted,
 so a device without the feature fails the frame with `GraphicsException` `RB3001` instead of throwing
-from the camera call. M5 has no CPU line-geometry fallback.
+from the camera call. The engine has no CPU line-geometry fallback.
 
 ### 11.2 The "join before Tick returns" rule
 
@@ -49,11 +49,13 @@ caller-owned value for custom data; it can be used on any thread after completio
 
 The glyph cache follows the same engine-owned exception. `RayBork.Font` is an app-lifetime thread that
 the engine joins during shutdown; it is the only thread that inserts and evicts glyph textures. The
-tick thread calls `BeginFrame`, `Acquire`, and `GetMetrics` and updates the use stamps and waiter state
-while it does. The draw path never waits for a glyph: a miss records the request and returns no
-texture. `Acquire` adds the texture's frame hold to the camera's frame retention set before it
-returns. Eviction may still dispose the texture wrapper in the same frame; the frame hold keeps its GPU
-resource alive until the frame ring releases it.
+draw path calls `BeginFrame`, `Acquire`, and `GetMetrics`; the public read-only `TryGetGlyph` and
+`CachedGlyphCount` peek the cache through `TryGetTexture` and the cache count. `BeginFrame` runs once
+per camera and font, and the tick thread updates the use stamps and waiter state while it does. The
+draw path never waits for a glyph: a miss records the request and returns no texture. `Acquire` adds
+the texture's frame hold to the camera's frame retention set before it returns. Eviction may still
+dispose the texture wrapper in the same frame; the frame hold keeps its GPU resource alive until the
+frame ring releases it.
 
 Procedural builders are also thread-safe as a factory/build operation: `EngineContext.CreateMeshBuilder`,
 `EngineContext.CreateTextureBuilder`, and `BuildAsync` may be called on any thread, including `Setup`
