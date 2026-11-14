@@ -42,7 +42,9 @@ internal static class RenderingTestAssets {
         RenderState? defaultRenderState = null,
         float defaultValue = 0f,
         ShaderStageMask stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
-        List<GpuAssetResource>? destroyed = null) {
+        List<GpuAssetResource>? destroyed = null,
+        string[]? textures = null) {
+        string[] declaredTextures = textures ?? [TEXTURE_BINDING];
         ShaderAssetDescriptor descriptor = new() {
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
@@ -57,7 +59,7 @@ internal static class RenderingTestAssets {
                     Default = [defaultValue],
                 },
             ],
-            Textures = [TEXTURE_BINDING],
+            Textures = declaredTextures,
         };
         var upload = new ShaderGpuUpload(path, descriptor, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty);
         Action<GpuAssetResource> queueDestruction = destroyed is null ? static _ => { } : destroyed.Add;
@@ -75,8 +77,9 @@ internal static class RenderingTestAssets {
         RenderState? defaultRenderState = null,
         float defaultValue = 0f,
         ShaderStageMask stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
-        List<GpuAssetResource>? destroyed = null) {
-        ShaderProgram program = CreateProgram(path, defaultRenderState, defaultValue, stages, destroyed);
+        List<GpuAssetResource>? destroyed = null,
+        string[]? textures = null) {
+        ShaderProgram program = CreateProgram(path, defaultRenderState, defaultValue, stages, destroyed, textures);
         Shader material = program.CreateMaterial();
         // The helper's reference only stood in for the catalog's cache reference; the material owns
         // the program from here on.

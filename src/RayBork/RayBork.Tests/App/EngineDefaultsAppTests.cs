@@ -60,10 +60,10 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(tickMaterial!.IsDisposed);
 
         // The two materials were preloaded without a second program upload, and everything the engine
-        // owns (the defaults plus the three primitive programs and the eight meshes) is released by
-        // shutdown.
-        Assert.Equal(13, worker.UploadCallCount);
-        Assert.Equal(13, worker.DestroyCalls.Count);
+        // owns (the defaults, the two additional primitive programs, and the eight meshes) is released
+        // by shutdown.
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.UploadCallCount);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
         Assert.True(defaults!.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.White);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.Error);
@@ -175,8 +175,10 @@ public sealed class EngineDefaultsAppTests {
             materialsUsableInTick = tickPrimitives is not null
                 && tickPrimitives.PrimitiveMaterial.Path == "/shaders/primitive"
                 && tickPrimitives.MeshMaterial.Path == "/shaders/mesh"
+                && tickPrimitives.MsdfMaterial.Path == "/shaders/msdf"
                 && !tickPrimitives.PrimitiveMaterial.IsDisposed
-                && !tickPrimitives.MeshMaterial.IsDisposed;
+                && !tickPrimitives.MeshMaterial.IsDisposed
+                && !tickPrimitives.MsdfMaterial.IsDisposed;
             context.RequestExit();
         };
 
@@ -193,9 +195,9 @@ public sealed class EngineDefaultsAppTests {
 
         Assert.NotNull(setupPrimitives);
         Assert.Same(setupPrimitives, tickPrimitives);
-        // The three defaults, the three primitive programs, and the eight primitive meshes upload
-        // before Setup; nothing is destroyed until shutdown.
-        Assert.Equal(13, uploadCountAtSetup);
+        // The three defaults, the two additional primitive programs, and the eight primitive meshes
+        // upload before Setup; nothing is destroyed until shutdown.
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, uploadCountAtSetup);
         Assert.Equal(0, destroyCountAtSetup);
         Assert.Equal(0, destroyCountInTick);
         Assert.True(meshesUsableInTick);
@@ -205,11 +207,12 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(created.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => _ = created.Cube);
         Assert.Throws<ObjectDisposedException>(() => _ = created.PrimitiveMaterial);
+        Assert.Throws<ObjectDisposedException>(() => _ = created.MsdfMaterial);
         Assert.Null(app.Cameras!.Primitives);
-        Assert.Equal(13, worker.DestroyCalls.Count);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
 
         created.Dispose();
-        Assert.Equal(13, worker.DestroyCalls.Count);
+        Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
     }
 
     [Fact]
@@ -248,11 +251,12 @@ public sealed class EngineDefaultsAppTests {
         Assert.Equal(0, game.SetupCount);
         Assert.Equal(0, game.TickCount);
         Assert.Equal(0, game.ShutdownCount);
-        // The three defaults, the three primitive programs, and two completed primitive meshes were
-        // created before the third mesh upload failed. The mesh program is shared with the defaults, so
-        // only seven resources exist and every one of them is released by the failed startup.
-        Assert.Equal(8, worker.UploadCallCount);
-        Assert.Equal(7, worker.DestroyCalls.Count);
+        // The defaults, the two additional primitive programs, and two completed primitive meshes were
+        // created before the third mesh upload failed; the failed third upload created no resource.
+        int createdBeforeFailure =
+            EnginePreloadCounts.DEFAULTS + EnginePreloadCounts.ADDITIONAL_PRIMITIVE_PROGRAMS + 2;
+        Assert.Equal(createdBeforeFailure + 1, worker.UploadCallCount);
+        Assert.Equal(createdBeforeFailure, worker.DestroyCalls.Count);
     }
 
     [Fact]
@@ -290,9 +294,14 @@ public sealed class EngineDefaultsAppTests {
         Assert.Equal(0, game.SetupCount);
         Assert.Equal(0, game.TickCount);
         Assert.Equal(0, game.ShutdownCount);
-        // The three defaults and the primitive program were created before the msdf program failed;
-        // every one of them is released by the failed startup.
-        Assert.Equal(5, worker.UploadCallCount);
-        Assert.Equal(4, worker.DestroyCalls.Count);
+        // The msdf program upload was attempted after the defaults and the primitive program; the failed
+        // upload created no resource, so every created resource is released by the failed startup.
+        Assert.Contains(
+            worker.UploadCalls,
+            upload => upload.Kind == AssetGpuUploadKind.Shader
+                && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal));
+        // The defaults, the primitive program, and the attempted msdf upload precede the failure.
+        Assert.Equal(EnginePreloadCounts.DEFAULTS + 2, worker.UploadCallCount);
+        Assert.Equal(worker.UploadCallCount - 1, worker.DestroyCalls.Count);
     }
 }

@@ -422,15 +422,21 @@ is set.
 - the built-in primitive program at `/shaders/primitive`, baked by the same shader processor with no
   reflected uniforms and no texture bindings, and an opaque/back/`greater_equal`/depth-write render
   state. Its vertex stage reads position and color and multiplies the color by `rbInstance.Color`;
-  its fragment stage writes that color.
+  its fragment stage writes that color;
+- the built-in MSDF text program at `/shaders/msdf`, baked by the same shader processor with no
+  reflected uniforms and one `mainTexture` binding, and an alpha/no-cull/`greater_equal`/no-depth-write
+  render state. Its vertex stage reads position and uv, and its fragment stage reconstructs the glyph
+  edge from the median of the sampled rgb distance channels with a screen-space derivative
+  antialiasing band.
 
 The engine's primitive meshes are procedural assets built at engine startup, not pack entries, so
 the pack carries no primitive geometry. The error glyph is added with the runtime font work in M6.
 Pack v1 is unchanged by the M5 additions: the primitive program is an ordinary shader entry at a
 reserved built-in path, not a format change. The app preloads the mesh program into
-`EngineContext.Defaults` before `IGame.Setup` and keeps the primitive program for the engine's
-primitive assets. A model part whose sidecar names no shader is baked with `shaders/mesh`, and the
-runtime requires every part descriptor to name a canonical shader path.
+`EngineContext.Defaults` before `IGame.Setup` and keeps the primitive and MSDF programs, with one
+engine material over each, for the engine's primitive assets. A model part whose sidecar names no
+shader is baked with `shaders/mesh`, and the runtime requires every part descriptor to name a
+canonical shader path.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
 that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by

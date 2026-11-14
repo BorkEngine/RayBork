@@ -35,6 +35,8 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <summary>The texture binding name the built-in mesh program samples.</summary>
     internal const string MESH_TEXTURE_BINDING = "mainTexture";
 
+    private static readonly SamplerState _defaultSampler = new(TextureFilter.Nearest, TextureWrap.Clamp, 1f);
+
     private readonly BackendTestHost _host;
     private readonly AssetGpuUploadHarness _uploads;
     private readonly AssetCatalog _catalog;
@@ -137,14 +139,26 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <param name="height">The base-level height in pixels.</param>
     /// <param name="pixels">The linear RGBA colors in row-major order from top to bottom.</param>
     /// <returns>The uploaded texture; the harness owns and disposes it.</returns>
-    internal Texture CreateTexture(int width, int height, params Color[] pixels) {
+    internal Texture CreateTexture(int width, int height, params Color[] pixels)
+        => CreateTexture(width, height, _defaultSampler, pixels);
+
+    /// <summary>
+    /// Builds a procedural texture with an explicit sampler and waits for its GPU upload on the test
+    /// thread.
+    /// </summary>
+    /// <param name="width">The base-level width in pixels.</param>
+    /// <param name="height">The base-level height in pixels.</param>
+    /// <param name="sampler">The sampler state; use a linear filter for a sampled gradient.</param>
+    /// <param name="pixels">The linear RGBA colors in row-major order from top to bottom.</param>
+    /// <returns>The uploaded texture; the harness owns and disposes it.</returns>
+    internal Texture CreateTexture(int width, int height, SamplerState sampler, params Color[] pixels) {
         AssertNotDisposed();
         TextureBuilder builder = _proceduralAssets.CreateTextureBuilder(
             width,
             height,
             TextureFormat.Rgba8Unorm,
             generateMips: false,
-            sampler: new SamplerState(TextureFilter.Nearest, TextureWrap.Clamp, 1f));
+            sampler: sampler);
         builder.SetPixels(pixels);
         Texture texture = _uploads.WaitFor(builder.BuildAsync(TestContext.Current.CancellationToken));
         _textures.Add(texture);

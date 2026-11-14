@@ -300,8 +300,9 @@ that target and can be sampled by a later camera.
       channel, create the device and swapchain, and publish Info.
    d. The asset catalog mounts the built-in pack (and any user packs) and starts the loader; the app
       preloads `EngineContext.Defaults` (the `/shaders/mesh` program and the white/error textures) and
-      then the engine's primitive assets (the `/shaders/primitive` program, its material, and the
-      eight primitive meshes).
+      then the engine's primitive assets (the `/shaders/primitive` and `/shaders/msdf` programs, one
+      engine material over each, the `/shaders/mesh` program shared with the defaults, and the eight
+      primitive meshes).
    e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info, Defaults, and a
       ready primitive draw path.
    f. IGame.Setup(ctx) is awaited on the tick thread.

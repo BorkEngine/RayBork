@@ -347,9 +347,9 @@ Startup runs on the main thread and interleaves with the render thread:
    loader thread. A pack failure is a startup failure and no game callback runs. The loader is ready
    before `Setup`, so `Setup` can await engine-asset loads.
 5. The main thread preloads `EngineDefaults` and then the engine's primitive assets: the
-   `/shaders/primitive` and `/shaders/mesh` programs, their two engine materials, and the eight
-   primitive meshes built through the procedural GPU bridge. The camera service holds them for the
-   app lifetime, so the first tick can record a primitive draw.
+   `/shaders/primitive` and `/shaders/mesh` programs, the `/shaders/msdf` text program, their three
+   engine materials, and the eight primitive meshes built through the procedural GPU bridge. The
+   camera service holds them for the app lifetime, so the first tick can record a primitive draw.
 6. The tick thread starts and `IGame.Setup` runs. Because the tick thread starts only after the
    renderer is ready, `Setup` observes a valid `EngineContext.Info`.
 7. The main loop services the surface channel, pumps events, and checks for exit, tick completion,
@@ -614,24 +614,36 @@ reserved bindless slot 0. After the catalog starts and before
 a new caller-owned material over the preloaded program; `White` and `Error` are engine-owned and must
 not be disposed by the game.
 
+The built-in pack also carries the MSDF text program at `/shaders/msdf`. It is an ordinary shader
+entry with one `mainTexture` binding and no uniforms, so its instance record is the fixed 96-byte
+header plus one texture index slot, and each glyph instance carries its own bindless texture. The
+vertex stage reads position (location 0) and uv (location 2) and passes `rbInstance.Color`; the
+fragment stage reconstructs the glyph edge from the median of the sampled rgb distance channels and
+derives its antialiasing band from the screen-space derivative, so the program needs no range,
+pixel-size, or per-font uniform. Glyph textures store a normalized distance field where `0.5` is the
+glyph edge and the authored distance range maps to `[0, 1]`. Its render state is alpha blending, no
+culling, a `greater_equal` depth test, and no depth write.
+
 ## Primitive assets
 
-The engine's primitive geometry is not in the pack. `PrimitiveAssets` loads the `/shaders/primitive`
-and `/shaders/mesh` programs and creates one engine-owned material over each, then builds eight unit
-meshes (cube, sphere, plane, quad, triangle, line, wire cube, wire sphere) from deterministic
-`PrimitiveMeshFactory` CPU geometry through the catalog's procedural GPU bridge. The app builds this
-set on the main thread after the asset catalog starts and before the tick thread starts, attaches it
-to `CameraService`, and holds the two materials, one owner reference per program, and one owner
+The engine's primitive geometry is not in the pack. `PrimitiveAssets` loads the `/shaders/primitive`,
+`/shaders/mesh`, and `/shaders/msdf` programs and creates one engine-owned material over each, then
+builds eight unit meshes (cube, sphere, plane, quad, triangle, line, wire cube, wire sphere) from
+deterministic `PrimitiveMeshFactory` CPU geometry through the catalog's procedural GPU bridge. The
+third material is the engine's MSDF text material, created and owned here so the text draw path can
+record against it without loading a program on the tick thread. The app builds this set on the main
+thread after the asset catalog starts and before the tick thread starts, attaches it to
+`CameraService`, and holds the three materials, one owner reference per program, and one owner
 reference per mesh. The M5 helpers either instance one of those meshes directly (line, point,
 triangle, cube, wire cube, plane, grid, ray, bounding box, fixed sphere, fixed wire sphere,
 billboard) or compose their geometry from the unit quad, triangle, and line meshes (tessellated
 sphere and wire sphere, cylinder, wire cylinder, capsule, wire capsule, and circle). Primitive draw
 records are ordinary draw records, so frame retention keeps the engine mesh, the program, and a bound
-texture alive exactly like a user draw. `PrimitiveAssets.Dispose` is idempotent, disposes both
+texture alive exactly like a user draw. `PrimitiveAssets.Dispose` is idempotent, disposes all three
 materials, and releases every mesh and program owner reference; it runs on the main thread after the
 tick thread has joined. A
 startup failure releases everything already created and surfaces as `AssetLoadException`
-`ASSET_LOAD_FAILED`. The meshes and the two primitive materials have no public accessor, and
+`ASSET_LOAD_FAILED`. The meshes and the three primitive materials have no public accessor, and
 `EngineDefaults` is unchanged. `DrawTexture` is not built from this set in M5; it moves to M7 with the
 sprite path.
 
@@ -1105,9 +1117,10 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
 10. The engine's built-in pack is always mounted first; it supplies the present shader pair, the
     built-in mesh draw shader program at `/shaders/mesh`, the primitive program at
-    `/shaders/primitive`, and the white/error textures. The app preloads the mesh program and both
-    textures into `EngineContext.Defaults` and builds the primitive assets before `IGame.Setup`, and
-    releases them during shutdown.
+    `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, and the white/error textures. The
+    app preloads the mesh program and both textures into `EngineContext.Defaults` and builds the
+    primitive assets, including their three engine materials, before `IGame.Setup`, and releases them
+    during shutdown.
 11. Only one RayBork app runs per process in v1.
 12. A GPU resource is created, re-created after a device recovery, and destroyed only on the render
     thread, and only after every frame that references it has completed.
