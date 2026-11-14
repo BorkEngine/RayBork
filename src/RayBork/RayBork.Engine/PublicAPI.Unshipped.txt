@@ -1273,4 +1273,6 @@ RayBork.Camera.DrawWireCylinder(System.Numerics.Vector3 position, float radiusTo
 RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, RayBork.Color color) -> void
 RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, int rings, int slices, RayBork.Color color) -> void
 RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawText(RayBork.Font! font, System.ReadOnlySpan<char> text, RayBork.Transform transform, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left, RayBork.TextWrapping wrapping = RayBork.TextWrapping.None, float maxWidth = 0) -> void
+RayBork.Camera.DrawTextBillboard(RayBork.Font! font, System.ReadOnlySpan<char> text, System.Numerics.Vector3 position, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left) -> void
 static RayBork.Collision.GetRayQuad(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, System.Numerics.Vector3 d) -> RayBork.RayCollision

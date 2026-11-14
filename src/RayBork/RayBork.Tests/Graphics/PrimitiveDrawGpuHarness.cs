@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Text;
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Internal;
 using RayBork.Tests.Graphics.Assets;
@@ -26,9 +27,14 @@ namespace RayBork.Tests;
 /// observe no in-flight asset holds.
 /// </para>
 /// <para>
-/// Disposal runs in reverse creation order: idle wait, camera host, test textures, primitive assets,
-/// catalog, GPU bridge, backend. The harness owns the textures it creates and disposes them exactly
-/// once.
+/// The harness also loads fonts from the mounted built-in pack and warms their glyph textures through
+/// the catalog's real generation service, pumping the GPU bridge while it waits. The fonts it loads are
+/// released before the catalog stops.
+/// </para>
+/// <para>
+/// Disposal runs in reverse creation order: idle wait, camera host, fonts, test textures, primitive
+/// assets, catalog, GPU bridge, backend. The harness owns the textures and fonts it creates and
+/// disposes them exactly once.
 /// </para>
 /// </remarks>
 internal sealed class PrimitiveDrawGpuHarness : IDisposable {
@@ -44,6 +50,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     private readonly PrimitiveAssets _primitives;
     private readonly CameraTestHost _frames;
     private readonly List<Texture> _textures = [];
+    private readonly List<Font> _fonts = [];
     private long _nextFrameIndex = 1;
     private bool _disposed;
 
@@ -163,6 +170,76 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         Texture texture = _uploads.WaitFor(builder.BuildAsync(TestContext.Current.CancellationToken));
         _textures.Add(texture);
         return texture;
+    }
+
+    /// <summary>
+    /// Loads a font from the harness's mounted catalog and waits for its CPU decode on the test thread.
+    /// </summary>
+    /// <param name="path">The canonical font path; the built-in Fira Sans face by default.</param>
+    /// <returns>The loaded font; the harness owns it.</returns>
+    /// <remarks>
+    /// A font load is CPU-only, but the wait still pumps the GPU bridge so a queued font-thread upload
+    /// from an earlier warm-up can complete. The load itself never blocks the loader thread on the GPU.
+    /// </remarks>
+    internal Font LoadFont(string path = EngineDefaults.DEFAULT_FONT_PATH) {
+        AssertNotDisposed();
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        Task<Font> load = _catalog.Load<Font>(path);
+        bool completed = SpinWait.SpinUntil(
+            () => {
+                _uploads.Pump();
+                return load.IsCompleted;
+            },
+            AssetGpuUploadHarness.Timeout);
+        Assert.True(completed, $"The font '{path}' did not finish loading from the built-in pack.");
+        Font font = load.GetAwaiter().GetResult();
+        _fonts.Add(font);
+        return font;
+    }
+
+    /// <summary>
+    /// Requests every glyph of <paramref name="text"/> and waits until each one has a generated texture.
+    /// </summary>
+    /// <param name="font">The loaded font.</param>
+    /// <param name="text">The text whose glyphs the test needs ready before it records a draw.</param>
+    /// <param name="frameIndex">The frame index to begin the font's cache clock at.</param>
+    /// <remarks>
+    /// The font thread runs the real MSDF generator and the production procedural texture factory, so
+    /// the test thread pumps the bridge while it waits for the settlement task. Every wait is bounded by
+    /// the harness timeout and there is no sleep or poll of the generated cache.
+    /// </remarks>
+    internal void WarmGlyphs(Font font, string text, long frameIndex = 1) {
+        AssertNotDisposed();
+        ArgumentNullException.ThrowIfNull(font);
+        ArgumentNullException.ThrowIfNull(text);
+
+        font.BeginFrame(frameIndex);
+        foreach (Rune rune in text.EnumerateRunes()) {
+            font.TryGetGlyphId(rune, out int glyphId);
+            FrameAssetRetention probe = new();
+            Texture? texture;
+            try {
+                texture = font.AcquireGlyphTexture(glyphId, probe);
+            } finally {
+                probe.Release();
+            }
+
+            if (texture is null) {
+                Task settled = font.WhenGlyphSettledAsync(glyphId);
+                bool completed = SpinWait.SpinUntil(
+                    () => {
+                        _uploads.Pump();
+                        return settled.IsCompleted;
+                    },
+                    AssetGpuUploadHarness.Timeout);
+                Assert.True(completed, "The glyph texture generation did not settle.");
+                settled.GetAwaiter().GetResult();
+            }
+
+            Assert.True(
+                font.TryGetGlyph(rune, out _),
+                $"The glyph U+{rune.Value:X4} did not generate an MSDF texture.");
+        }
     }
 
     /// <summary>
@@ -291,6 +368,12 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
             _host.Backend.WaitForFrameResourcesIdle();
             _frames.Service.DetachPrimitives();
             _frames.Dispose();
+            foreach (Font font in _fonts) {
+                if (!font.IsDisposed) {
+                    font.Dispose();
+                }
+            }
+
             foreach (Texture texture in _textures) {
                 texture.Dispose();
             }
