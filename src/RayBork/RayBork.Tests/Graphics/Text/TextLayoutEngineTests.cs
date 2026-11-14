@@ -233,7 +233,7 @@ public sealed class TextLayoutEngineTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void HandComputedQuadPositionsAndSizes() {
-        FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 2f, ascent: 1.2f, descent: 0.8f)
+        FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 2f, ascent: 1.2f)
             .Glyph('a', 7, advanceX: 0.5f, bearingX: 0.1f, bearingY: -0.25f, width: 0.4f, height: 0.9f)
             .Glyph('b', 8, advanceX: 0.75f, bearingX: -0.05f, bearingY: 0.15f, width: 0.6f, height: 0.3f);
         TextLayoutBuffer buffer = new();
@@ -265,7 +265,7 @@ public sealed class TextLayoutEngineTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void BaselinesUseAscentAndLineHeight() {
-        FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 1.2f, ascent: 0.8f, descent: 0.4f)
+        FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 1.2f, ascent: 0.8f)
             .Glyph('a', 1, advanceX: 0.5f, bearingY: 0.1f, width: 0.2f, height: 0.5f)
             .Glyph('b', 2, advanceX: 0.5f, bearingY: 0.1f, width: 0.2f, height: 0.5f)
             .Glyph('c', 3, advanceX: 0.5f, bearingY: 0.1f, width: 0.2f, height: 0.5f);
@@ -282,6 +282,72 @@ public sealed class TextLayoutEngineTests {
         Assert.Equal(-6.2f, buffer.Glyphs[2].Position.Y, TOLERANCE);
         AssertVector(new Vector2(0f, -7.2f), result.BoundsMin);
         AssertVector(new Vector2(1f, 0f), result.BoundsMax);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void LineHeightIsIndependentOfAscent() {
+        FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 2.5f, ascent: 1f)
+            .Glyph('a', 1, advanceX: 0.5f)
+            .Glyph('b', 2, advanceX: 0.5f)
+            .Glyph('c', 3, advanceX: 0.5f);
+        TextLayoutBuffer buffer = new();
+
+        Arrange(metrics, "a\nb\nc", buffer, out TextLayoutResult result);
+
+        Assert.Equal(3, result.LineCount);
+        // Baselines: line 0 = -1, line 1 = -(1 + 2.5), line 2 = -(1 + 5). Only LineHeight may drive
+        // the line step; an implementation that reused Ascent could not produce these values.
+        Assert.Equal(-1f, buffer.Glyphs[0].Position.Y, TOLERANCE);
+        Assert.Equal(-3.5f, buffer.Glyphs[1].Position.Y, TOLERANCE);
+        Assert.Equal(-6f, buffer.Glyphs[2].Position.Y, TOLERANCE);
+        Assert.Equal(7.5f, TextLayoutEngine.Measure(metrics, "a\nb\nc", 1f).Y, TOLERANCE);
+        Assert.Equal(7.5f, result.BoundsSize.Y, TOLERANCE);
+    }
+
+    [Theory]
+    [InlineData(TextAlignment.Center, -0.5f)]
+    [InlineData(TextAlignment.Right, -1f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void OverflowingLineUsesANegativeAlignmentOffset(TextAlignment alignment, float offset) {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        Arrange(metrics, "abcd", buffer, out TextLayoutResult result, alignment: alignment, maxWidth: 1f);
+
+        Assert.Equal(1, result.LineCount);
+        Assert.Equal(offset, buffer.Glyphs[0].Position.X, TOLERANCE);
+        Assert.Equal(offset + 0.5f, buffer.Glyphs[1].Position.X, TOLERANCE);
+        Assert.Equal(offset + 1f, buffer.Glyphs[2].Position.X, TOLERANCE);
+        Assert.Equal(offset + 1.5f, buffer.Glyphs[3].Position.X, TOLERANCE);
+        AssertVector(new Vector2(offset, -1.5f), result.BoundsMin);
+        AssertVector(new Vector2(1f, 0f), result.BoundsMax);
+    }
+
+    [Theory]
+    [InlineData(TextAlignment.Center, 0.25f)]
+    [InlineData(TextAlignment.Right, 0.5f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WrappedLinesAlignByTheirOwnWidth(TextAlignment alignment, float offset) {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        Arrange(
+            metrics,
+            "ab cd",
+            buffer,
+            out TextLayoutResult result,
+            alignment: alignment,
+            wrapping: TextWrapping.Word,
+            maxWidth: 1.5f);
+
+        Assert.Equal(2, result.LineCount);
+        // Both lines are one world unit wide while the unwrapped paragraph is 2.5 wide; an
+        // implementation that aligned by the paragraph width would use 0.75 or 1.5 instead.
+        Assert.Equal(offset, buffer.Glyphs[0].Position.X, TOLERANCE);
+        Assert.Equal(offset + 0.5f, buffer.Glyphs[1].Position.X, TOLERANCE);
+        Assert.Equal(offset, buffer.Glyphs[2].Position.X, TOLERANCE);
+        Assert.Equal(offset + 0.5f, buffer.Glyphs[3].Position.X, TOLERANCE);
     }
 
     [Fact]

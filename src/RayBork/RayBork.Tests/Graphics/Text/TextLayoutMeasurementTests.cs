@@ -111,6 +111,38 @@ public sealed class TextLayoutMeasurementTests {
         AssertVector(new Vector2(0f, 4.5f), size);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MeasureResetsKerningAtNewlines() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+            .Kerning(TextLayoutTestData.GLYPH_B, TextLayoutTestData.GLYPH_C, 1f);
+
+        Vector2 size = TextLayoutEngine.Measure(metrics, "ab\ncd", 1f);
+
+        // Both lines are one unit wide; a kerning pair carried across the newline would report two.
+        AssertVector(new Vector2(1f, 3f), size);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MeasureIgnoresCarriageReturnBeforeNewline() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+
+        Vector2 size = TextLayoutEngine.Measure(metrics, "ab\r\ncd", 1f);
+
+        AssertVector(new Vector2(1f, 3f), size);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MeasureMultiLineAtRequestedSize() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+
+        Vector2 size = TextLayoutEngine.Measure(metrics, "ab\ncde", 2f);
+
+        AssertVector(new Vector2(3f, 6f), size);
+    }
+
     private static void AssertVector(Vector2 expected, Vector2 actual) {
         Assert.Equal(expected.X, actual.X, TOLERANCE);
         Assert.Equal(expected.Y, actual.Y, TOLERANCE);

@@ -15,9 +15,10 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// Text is decoded with <see cref="Rune"/>; an unpaired surrogate decodes to U+FFFD. <c>'\n'</c>
-/// always starts a new line, <c>'\r'</c> is ignored, and every other decoded rune advances the pen by
-/// its glyph advance. All metrics are in em units, and the local layout space is in world units at the
-/// requested size with +X to the right and +Y up.
+/// always starts a new line and <c>'\r'</c> is ignored. Every other mapped rune advances the pen by its
+/// glyph advance; a rune without a glyph produces no record and no advance, and kerning still bridges it
+/// to the next mapped glyph. All metrics are in em units, and the local layout space is in world units
+/// at the requested size with +X to the right and +Y up.
 /// </para>
 /// <para>
 /// The origin is the top-left of the layout box. The first baseline is at <c>-Ascent * size</c> and
@@ -222,16 +223,13 @@ internal static class TextLayoutEngine {
             int lastGlyphId = NO_GLYPH;
             int index = lineStart;
             while (TryReadGlyph(metrics, text, lineEnd, ref index, out _, out TextGlyphMetrics glyph)) {
-                if (lastGlyphId != NO_GLYPH) {
-                    pen += metrics.GetKerning(lastGlyphId, glyph.GlyphId) * size;
-                }
-                Vector2 position = new(pen + glyph.BearingX * size, baselineY + glyph.BearingY * size);
+                float glyphPen = PlaceGlyph(ref pen, metrics, lastGlyphId, glyph, size);
+                Vector2 position = new(glyphPen + glyph.BearingX * size, baselineY + glyph.BearingY * size);
                 Vector2 glyphSize = new(glyph.Width * size, glyph.Height * size);
                 glyphs[glyphIndex] = new TextGlyphInstance(glyph.GlyphId, position, glyphSize);
                 glyphIndex++;
                 boundsMin = Vector2.Min(boundsMin, position);
                 boundsMax = Vector2.Max(boundsMax, position + glyphSize);
-                pen += glyph.AdvanceX * size;
                 lastGlyphId = glyph.GlyphId;
             }
             lineIndex++;
@@ -274,13 +272,32 @@ internal static class TextLayoutEngine {
         ref int glyphCount) {
         int index = start;
         while (TryReadGlyph(metrics, text, end, ref index, out _, out TextGlyphMetrics glyph)) {
-            if (lastGlyphId != NO_GLYPH) {
-                pen += metrics.GetKerning(lastGlyphId, glyph.GlyphId) * size;
-            }
-            pen += glyph.AdvanceX * size;
+            PlaceGlyph(ref pen, metrics, lastGlyphId, glyph, size);
             lastGlyphId = glyph.GlyphId;
             glyphCount++;
         }
+    }
+
+    /// <summary>
+    /// Applies the kerning from the previous glyph, returns the pen position the glyph is placed at, and
+    /// advances the pen past the glyph.
+    /// </summary>
+    /// <remarks>
+    /// Measurement, emission, and character wrapping share this step, so the arithmetic that decides a
+    /// line break is exactly the arithmetic that places the glyphs.
+    /// </remarks>
+    private static float PlaceGlyph(
+        ref float pen,
+        ITextMetrics metrics,
+        int lastGlyphId,
+        in TextGlyphMetrics glyph,
+        float size) {
+        if (lastGlyphId != NO_GLYPH) {
+            pen += metrics.GetKerning(lastGlyphId, glyph.GlyphId) * size;
+        }
+        float origin = pen;
+        pen += glyph.AdvanceX * size;
+        return origin;
     }
 
     private static Rune DecodeRune(ReadOnlySpan<char> text, int start, int end, out int consumed) {
@@ -478,10 +495,7 @@ internal static class TextLayoutEngine {
                     break;
                 }
                 float candidatePen = pen;
-                if (lastGlyphId != NO_GLYPH) {
-                    candidatePen += _metrics.GetKerning(lastGlyphId, glyph.GlyphId) * _size;
-                }
-                candidatePen += glyph.AdvanceX * _size;
+                PlaceGlyph(ref candidatePen, _metrics, lastGlyphId, glyph, _size);
                 if (glyphCount > 0 && candidatePen > _maxWidth) {
                     lineEnd = glyphIndex;
                     lineAdvance = pen;

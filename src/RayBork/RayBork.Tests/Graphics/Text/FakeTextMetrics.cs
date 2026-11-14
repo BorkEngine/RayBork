@@ -11,17 +11,14 @@ internal sealed class FakeTextMetrics : ITextMetrics {
     private readonly Dictionary<int, TextGlyphMetrics> _glyphs = [];
     private readonly Dictionary<(int Left, int Right), float> _kerning = [];
 
-    internal FakeTextMetrics(float lineHeight = 1.5f, float ascent = 1f, float descent = 0.5f) {
+    internal FakeTextMetrics(float lineHeight = 1.5f, float ascent = 1f) {
         LineHeight = lineHeight;
         Ascent = ascent;
-        Descent = descent;
     }
 
     public float LineHeight { get; }
 
     public float Ascent { get; }
-
-    public float Descent { get; }
 
     internal FakeTextMetrics Glyph(
         char character,

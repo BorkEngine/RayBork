@@ -5,9 +5,10 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The buffer owns a single array that grows once in geometric steps and never shrinks. In steady
-/// state the layout engine writes into the existing storage and allocates nothing. A camera holds one
-/// buffer and passes it to every text draw it records.
+/// The buffer owns a single array that grows geometrically and never shrinks. In steady state the
+/// layout engine writes into the existing storage and allocates nothing. The app-lifetime
+/// <c>CameraService</c> owns one buffer and reuses it for every camera and text draw it records, so
+/// the buffer warms up across frames.
 /// </para>
 /// <para>
 /// A buffer is not thread-safe and must not be shared between recording contexts. The span returned by

@@ -346,6 +346,136 @@ public sealed class TextLayoutWrappingTests {
         AssertGlyph(buffer.Glyphs[3], TextLayoutTestData.GLYPH_D, 0.5f, -4f);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void KerningScalesWithSize() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+            .Kerning(TextLayoutTestData.GLYPH_A, TextLayoutTestData.GLYPH_B, 0.25f);
+        TextLayoutBuffer buffer = new();
+
+        int count = ArrangeAtSize(metrics, "ab", buffer, 2f, TextWrapping.None, 0f, out TextLayoutResult result);
+
+        Assert.Equal(2, count);
+        Assert.Equal(1, result.LineCount);
+        AssertGlyph(buffer.Glyphs[0], TextLayoutTestData.GLYPH_A, 0f, -2f);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_B, 1.5f, -2f);
+        AssertVector(new Vector2(0f, -3f), result.BoundsMin);
+        AssertVector(new Vector2(2.5f, 0f), result.BoundsMax);
+        AssertVector(new Vector2(2.5f, 3f), TextLayoutEngine.Measure(metrics, "ab", 2f));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void WordWrappingScalesWithSize() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer unscaled = new();
+        TextLayoutBuffer scaled = new();
+
+        Arrange(metrics, "ab cd", unscaled, TextWrapping.Word, 3f, out TextLayoutResult unscaledResult);
+        ArrangeAtSize(metrics, "ab cd", scaled, 2f, TextWrapping.Word, 3f, out TextLayoutResult scaledResult);
+
+        Assert.Equal(1, unscaledResult.LineCount);
+        Assert.Equal(5, unscaled.Count);
+        Assert.Equal(2, scaledResult.LineCount);
+        Assert.Equal(4, scaled.Count);
+        AssertGlyph(scaled.Glyphs[2], TextLayoutTestData.GLYPH_C, 0f, -5f);
+        AssertGlyph(scaled.Glyphs[3], TextLayoutTestData.GLYPH_D, 1f, -5f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CharacterWrappingScalesWithSize() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer unscaled = new();
+        TextLayoutBuffer scaled = new();
+
+        Arrange(metrics, "abcd", unscaled, TextWrapping.Character, 3f, out TextLayoutResult unscaledResult);
+        ArrangeAtSize(metrics, "abcd", scaled, 2f, TextWrapping.Character, 3f, out TextLayoutResult scaledResult);
+
+        Assert.Equal(1, unscaledResult.LineCount);
+        Assert.Equal(4, unscaled.Count);
+        Assert.Equal(2, scaledResult.LineCount);
+        Assert.Equal(4, scaled.Count);
+        AssertGlyph(scaled.Glyphs[3], TextLayoutTestData.GLYPH_D, 0f, -5f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CharacterWrapDoesNotSplitASurrogatePair() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        int count = ArrangeAtSize(
+            metrics,
+            "a\U0001F600b",
+            buffer,
+            1f,
+            TextWrapping.Character,
+            0.5f,
+            out TextLayoutResult result);
+
+        Assert.Equal(3, count);
+        Assert.Equal(3, result.LineCount);
+        Assert.Equal(TextLayoutTestData.GLYPH_A, buffer.Glyphs[0].GlyphId);
+        Assert.Equal(TextLayoutTestData.GLYPH_EMOJI, buffer.Glyphs[1].GlyphId);
+        Assert.Equal(TextLayoutTestData.GLYPH_B, buffer.Glyphs[2].GlyphId);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_EMOJI, 0f, -2.5f);
+        AssertGlyph(buffer.Glyphs[2], TextLayoutTestData.GLYPH_B, 0f, -4f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CharacterWrapCanStartALineWithWhitespace() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        int count = ArrangeAtSize(metrics, "a b", buffer, 1f, TextWrapping.Character, 0.5f, out TextLayoutResult result);
+
+        Assert.Equal(3, count);
+        Assert.Equal(3, result.LineCount);
+        AssertGlyph(buffer.Glyphs[0], TextLayoutTestData.GLYPH_A, 0f, -1f);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_SPACE, 0f, -2.5f);
+        AssertGlyph(buffer.Glyphs[2], TextLayoutTestData.GLYPH_B, 0f, -4f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CarriageReturnBeforeNewlineUnderWordWrapping() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        int count = Arrange(metrics, "ab\r\ncd", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+
+        Assert.Equal(4, count);
+        Assert.Equal(2, result.LineCount);
+        AssertGlyph(buffer.Glyphs[0], TextLayoutTestData.GLYPH_A, 0f, -1f);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_B, 0.5f, -1f);
+        AssertGlyph(buffer.Glyphs[2], TextLayoutTestData.GLYPH_C, 0f, -2.5f);
+        AssertGlyph(buffer.Glyphs[3], TextLayoutTestData.GLYPH_D, 0.5f, -2.5f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CarriageReturnBeforeNewlineUnderCharacterWrapping() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        int count = Arrange(
+            metrics,
+            "ab\r\ncd",
+            buffer,
+            TextWrapping.Character,
+            1.2f,
+            out TextLayoutResult result);
+
+        Assert.Equal(4, count);
+        Assert.Equal(2, result.LineCount);
+        AssertGlyph(buffer.Glyphs[0], TextLayoutTestData.GLYPH_A, 0f, -1f);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_B, 0.5f, -1f);
+        AssertGlyph(buffer.Glyphs[2], TextLayoutTestData.GLYPH_C, 0f, -2.5f);
+        AssertGlyph(buffer.Glyphs[3], TextLayoutTestData.GLYPH_D, 0.5f, -2.5f);
+    }
+
     private static int Arrange(
         FakeTextMetrics metrics,
         string text,
@@ -357,6 +487,25 @@ public sealed class TextLayoutWrappingTests {
             metrics,
             text,
             1f,
+            TextAlignment.Left,
+            wrapping,
+            maxWidth,
+            buffer,
+            out result);
+    }
+
+    private static int ArrangeAtSize(
+        FakeTextMetrics metrics,
+        string text,
+        TextLayoutBuffer buffer,
+        float size,
+        TextWrapping wrapping,
+        float maxWidth,
+        out TextLayoutResult result) {
+        return TextLayoutEngine.Arrange(
+            metrics,
+            text,
+            size,
             TextAlignment.Left,
             wrapping,
             maxWidth,

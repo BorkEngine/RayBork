@@ -8,15 +8,21 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The runtime <c>Font</c> provides this interface to the layout engine. The engine never needs
-/// a glyph texture and never parses a font: metrics exist for every mapped rune whether or not the
-/// rune's glyph texture has been generated. Implementations must be safe to call from any thread, and
-/// the engine only calls them from the thread that called the enclosing layout operation.
+/// The engine never parses a font and never needs a glyph texture. The runtime <c>Font</c> exposes an
+/// internal adapter class that implements this interface; the adapter is a reference type, so an
+/// interface call never boxes it. This interface is internal because the architecture tests keep
+/// internal types out of the public surface, which stays limited to the documented <c>Font</c> members.
+/// </para>
+/// <para>
+/// Metrics exist for every mapped rune whether or not the rune's glyph texture has been generated.
+/// Implementations must be safe to call from any thread, and the engine only calls them from the thread
+/// that called the enclosing layout operation.
 /// </para>
 /// <para>
 /// A provider that substitutes a replacement glyph for an unmapped rune returns that glyph from
 /// <see cref="TryGetGlyphMetrics"/>. Returning <see langword="false"/> means the rune has no glyph; the
-/// layout engine then draws nothing for it and does not advance the pen.
+/// layout engine then draws nothing for it and does not advance the pen, and the kerning pair bridges
+/// the rune to the next mapped glyph.
 /// </para>
 /// </remarks>
 internal interface ITextMetrics {
@@ -29,16 +35,6 @@ internal interface ITextMetrics {
     /// Gets the distance from the baseline to the top of the ascent in em units. It must be positive.
     /// </summary>
     float Ascent { get; }
-
-    /// <summary>
-    /// Gets the distance from the baseline to the bottom of the descent in em units. It must be
-    /// positive.
-    /// </summary>
-    /// <remarks>
-    /// The layout box is defined by <see cref="LineHeight"/> and <see cref="Ascent"/> only; the engine
-    /// exposes the descent so a provider can report the same value as the public <c>Font.Descent</c>.
-    /// </remarks>
-    float Descent { get; }
 
     /// <summary>
     /// Tries to get the layout metrics of one mapped rune.
