@@ -1,6 +1,6 @@
 # Primitive Gallery
 
-`Primitive Gallery` is a small RayBork sample that draws every M5 primitive helper in one perspective
+`Primitive Gallery` is a small RayBork sample that draws the M5 primitive helper families in one perspective
 camera pass with the built-in primitive shader: the solid shapes (cube, sphere, cylinder and cone,
 capsule, plane, triangle, triangle strip, point), the wire shapes (wire cube, wire sphere, wire
 cylinder, wire capsule, bounding box), the line and curve helpers (line, polyline, ray, circle), a
