@@ -1416,7 +1416,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The record header is the transposed world matrix, the tint, and the UV rectangle, followed by
     /// the draw's uniform template and the resolved bindless texture indices. The batch's first
     /// instance index is <c>byteOffset / stride</c>, which the shader receives through
-    /// <c>gl_InstanceIndex</c>.
+    /// <c>gl_InstanceIndex</c>. A draw with its own per-instance texture set resolves each instance's
+    /// indices from that instance's run; every other draw repeats its shared set. Neither path allocates,
+    /// and the stride stays <c>INSTANCE_HEADER_SIZE + template length</c> either way.
     /// </remarks>
     private void WriteInstanceRecords(
         int frameSlot,
@@ -1436,7 +1438,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             WriteVector4(record, ShaderAbiLayout.UV_RECT_OFFSET, draw.UvRect);
             draw.InstanceTemplate.CopyTo(record[ShaderAbiLayout.INSTANCE_HEADER_SIZE..]);
 
-            ReadOnlySpan<Texture?> textures = draw.GetTextureBindings();
+            ReadOnlySpan<Texture?> textures = GetInstanceTextureRun(draw, instance.InstanceIndex);
             for (int textureIndex = 0; textureIndex < textures.Length; textureIndex++) {
                 WriteUInt32(
                     record,
@@ -1444,6 +1446,27 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     ResolveTextureSlot(textures[textureIndex]));
             }
         }
+    }
+
+    /// <summary>
+    /// Gets the texture-binding run one instance writes: its own contiguous slice for a draw with a
+    /// per-instance set, or the shared set every instance repeats.
+    /// </summary>
+    /// <param name="draw">The draw record that supplies the bindings.</param>
+    /// <param name="instanceIndex">The zero-based instance index inside the draw record.</param>
+    /// <returns>The texture objects in sidecar declaration order for this instance.</returns>
+    /// <remarks>
+    /// The per-instance set is stored instance-major, so one instance's bindings are a contiguous run
+    /// and the slice is a view over the record's pooled buffer; the read allocates nothing. The recorder
+    /// retained each texture in the frame's retention set, so the resolved bindless slots are still live.
+    /// </remarks>
+    private static ReadOnlySpan<Texture?> GetInstanceTextureRun(RenderDrawRecord draw, int instanceIndex) {
+        if (!draw.HasPerInstanceTextureBindings) {
+            return draw.GetTextureBindings();
+        }
+
+        int bindingCount = draw.TextureBindingCount;
+        return draw.GetInstanceTextureBindings().Slice(instanceIndex * bindingCount, bindingCount);
     }
 
     private uint ResolveTextureSlot(Texture? texture) {

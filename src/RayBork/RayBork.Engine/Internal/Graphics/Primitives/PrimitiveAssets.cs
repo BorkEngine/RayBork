@@ -1,8 +1,8 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The app-lifetime owner of the engine's built-in primitive meshes and the two materials the
-/// primitive draw helpers use.
+/// The app-lifetime owner of the engine's built-in primitive meshes and the engine materials the
+/// primitive, billboard, and text draw helpers use.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -12,15 +12,16 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// A <see cref="PrimitiveAssets"/> owns one <see cref="Shader"/> material over the built-in
-/// <c>/shaders/primitive</c> program for vertex-color geometry and one over the built-in
-/// <c>/shaders/mesh</c> program for billboards and textured quads. It also holds one owner reference
-/// for each of the eight primitive meshes. Creation runs on the main thread before the tick thread
-/// starts, and the meshes and materials are read on the tick thread while the app records frames.
+/// <c>/shaders/primitive</c> program for vertex-color geometry, one over the built-in
+/// <c>/shaders/mesh</c> program for billboards and textured quads, and one over the built-in
+/// <c>/shaders/msdf</c> program for MSDF text. It also holds one owner reference for each of the eight
+/// primitive meshes. Creation runs on the main thread before the tick thread starts, and the meshes and
+/// materials are read on the tick thread while the app records frames.
 /// <see cref="Dispose"/> runs on the main thread after the tick thread joined.
 /// </para>
 /// <para>
 /// <see cref="Dispose"/> is idempotent: it disposes each material once, releases each mesh owner
-/// reference once, and then releases the two program owner references. A creation failure releases
+/// reference once, and then releases the three program owner references. A creation failure releases
 /// everything already created and throws <see cref="AssetLoadException"/> with
 /// <see cref="DiagnosticCodes.ASSET_LOAD_FAILED"/>, so a failed startup leaves no partial state.
 /// Every accessor throws <see cref="ObjectDisposedException"/> after disposal.
@@ -30,38 +31,51 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// <summary>The canonical path of the built-in vertex-color primitive shader program.</summary>
     internal const string PRIMITIVE_SHADER_PATH = "/shaders/primitive";
 
+    /// <summary>The canonical path of the built-in MSDF text shader program.</summary>
+    internal const string MSDF_SHADER_PATH = "/shaders/msdf";
+
     private readonly ShaderProgram _primitiveProgram;
     private readonly ShaderProgram _meshProgram;
+    private readonly ShaderProgram _msdfProgram;
     private readonly Shader _primitiveMaterial;
     private readonly Shader _meshMaterial;
+    private readonly Shader _msdfMaterial;
     private readonly Meshes _meshes;
     private bool _disposed;
 
     /// <summary>
     /// Initializes the owner from the already built meshes, materials, and programs. The owner takes
-    /// over the two program references, the two material references, and one reference per mesh.
+    /// over the three program references, the three material references, and one reference per mesh.
     /// </summary>
     /// <param name="primitiveProgram">The preloaded <c>/shaders/primitive</c> program.</param>
     /// <param name="meshProgram">The preloaded <c>/shaders/mesh</c> program.</param>
+    /// <param name="msdfProgram">The preloaded <c>/shaders/msdf</c> program.</param>
     /// <param name="primitiveMaterial">The material over <paramref name="primitiveProgram"/>.</param>
     /// <param name="meshMaterial">The material over <paramref name="meshProgram"/>.</param>
+    /// <param name="msdfMaterial">The material over <paramref name="msdfProgram"/>.</param>
     /// <param name="meshes">The eight primitive meshes, each with one owner reference.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     private PrimitiveAssets(
         ShaderProgram primitiveProgram,
         ShaderProgram meshProgram,
+        ShaderProgram msdfProgram,
         Shader primitiveMaterial,
         Shader meshMaterial,
+        Shader msdfMaterial,
         Meshes meshes) {
         ArgumentNullException.ThrowIfNull(primitiveProgram);
         ArgumentNullException.ThrowIfNull(meshProgram);
+        ArgumentNullException.ThrowIfNull(msdfProgram);
         ArgumentNullException.ThrowIfNull(primitiveMaterial);
         ArgumentNullException.ThrowIfNull(meshMaterial);
+        ArgumentNullException.ThrowIfNull(msdfMaterial);
 
         _primitiveProgram = primitiveProgram;
         _meshProgram = meshProgram;
+        _msdfProgram = msdfProgram;
         _primitiveMaterial = primitiveMaterial;
         _meshMaterial = meshMaterial;
+        _msdfMaterial = msdfMaterial;
         _meshes = meshes;
     }
 
@@ -89,6 +103,18 @@ internal sealed class PrimitiveAssets : IDisposable {
         get {
             ThrowIfDisposed();
             return _meshMaterial;
+        }
+    }
+
+    /// <summary>
+    /// Gets the engine-owned material over the <c>/shaders/msdf</c> program for MSDF text. The text draw
+    /// path records one instance per glyph with its own per-instance texture binding on this material.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    internal Shader MsdfMaterial {
+        get {
+            ThrowIfDisposed();
+            return _msdfMaterial;
         }
     }
 
@@ -125,7 +151,7 @@ internal sealed class PrimitiveAssets : IDisposable {
     internal Mesh WireSphere => GetMesh(_meshes.WireSphere);
 
     /// <summary>
-    /// Loads the two built-in shader programs, creates their engine-owned materials, and builds the
+    /// Loads the three built-in shader programs, creates their engine-owned materials, and builds the
     /// eight primitive meshes through the catalog's procedural asset service.
     /// </summary>
     /// <param name="assets">The started asset catalog.</param>
@@ -148,8 +174,10 @@ internal sealed class PrimitiveAssets : IDisposable {
 
         ShaderProgram? primitiveProgram = null;
         ShaderProgram? meshProgram = null;
+        ShaderProgram? msdfProgram = null;
         Shader? primitiveMaterial = null;
         Shader? meshMaterial = null;
+        Shader? msdfMaterial = null;
         Mesh? cube = null;
         Mesh? sphere = null;
         Mesh? plane = null;
@@ -161,8 +189,10 @@ internal sealed class PrimitiveAssets : IDisposable {
         try {
             primitiveProgram = await assets.Load<ShaderProgram>(PRIMITIVE_SHADER_PATH).ConfigureAwait(false);
             meshProgram = await assets.Load<ShaderProgram>(EngineDefaults.MESH_SHADER_PATH).ConfigureAwait(false);
+            msdfProgram = await assets.Load<ShaderProgram>(MSDF_SHADER_PATH).ConfigureAwait(false);
             primitiveMaterial = primitiveProgram.CreateMaterial();
             meshMaterial = meshProgram.CreateMaterial();
+            msdfMaterial = msdfProgram.CreateMaterial();
             cube = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateCube()).ConfigureAwait(false);
             sphere = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateSphere()).ConfigureAwait(false);
             plane = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreatePlane()).ConfigureAwait(false);
@@ -174,12 +204,15 @@ internal sealed class PrimitiveAssets : IDisposable {
             return new PrimitiveAssets(
                 primitiveProgram,
                 meshProgram,
+                msdfProgram,
                 primitiveMaterial,
                 meshMaterial,
+                msdfMaterial,
                 new Meshes(cube, sphere, plane, quad, triangle, line, wireCube, wireSphere));
         } catch (Exception exception) when (exception is not OutOfMemoryException) {
             DisposeQuietly(primitiveMaterial);
             DisposeQuietly(meshMaterial);
+            DisposeQuietly(msdfMaterial);
             ReleaseQuietly(cube);
             ReleaseQuietly(sphere);
             ReleaseQuietly(plane);
@@ -190,17 +223,19 @@ internal sealed class PrimitiveAssets : IDisposable {
             ReleaseQuietly(wireSphere);
             ReleaseQuietly(primitiveProgram);
             ReleaseQuietly(meshProgram);
+            ReleaseQuietly(msdfProgram);
             throw new AssetLoadException(
                 $"The engine's built-in primitive assets are missing or corrupt: the "
                     + $"'{PRIMITIVE_SHADER_PATH}' program, the '{EngineDefaults.MESH_SHADER_PATH}' program, "
-                    + "and the engine primitive meshes must all load from the built-in pack.",
+                    + $"the '{MSDF_SHADER_PATH}' program, and the engine primitive meshes must all load "
+                    + "from the built-in pack.",
                 DiagnosticCodes.ASSET_LOAD_FAILED,
                 exception);
         }
     }
 
     /// <summary>
-    /// Disposes both materials, releases every mesh owner reference, and releases the program owner
+    /// Disposes all three materials, releases every mesh owner reference, and releases the program owner
     /// references. Idempotent; called by the app during shutdown after the game callbacks returned.
     /// </summary>
     public void Dispose() {
@@ -211,6 +246,7 @@ internal sealed class PrimitiveAssets : IDisposable {
         _disposed = true;
         DisposeQuietly(_primitiveMaterial);
         DisposeQuietly(_meshMaterial);
+        DisposeQuietly(_msdfMaterial);
         ReleaseQuietly(_meshes.Cube);
         ReleaseQuietly(_meshes.Sphere);
         ReleaseQuietly(_meshes.Plane);
@@ -221,6 +257,7 @@ internal sealed class PrimitiveAssets : IDisposable {
         ReleaseQuietly(_meshes.WireSphere);
         ReleaseQuietly(_primitiveProgram);
         ReleaseQuietly(_meshProgram);
+        ReleaseQuietly(_msdfProgram);
     }
 
     private static async Task<Mesh> BuildMeshAsync(

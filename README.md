@@ -130,8 +130,8 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   arrives in M6, and `RenderTexture` in M8.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
-  the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, and
-  the white/error textures.
+  the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, the
+  MSDF text shader, and the white/error textures.
 - Shaders are GLSL compiled to SPIR-V ahead of runtime by the bake; the runtime never compiles
   shaders. The shader ABI generates the prologue and reflection for a frame uniform block, a fixed
   2048-element bindless texture array, and a per-instance storage buffer. `/shaders/primitive` has no
@@ -150,7 +150,8 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
 ```text
 src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
   Shaders/                    present-pass GLSL sources and committed SPIR-V blobs
-  BuiltInAssets/Assets/       built-in pack sources (mesh, primitive, and present shaders, textures)
+  BuiltInAssets/Assets/       built-in pack sources (mesh, primitive, msdf, and present shaders,
+                              textures)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
