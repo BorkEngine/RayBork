@@ -1,0 +1,374 @@
+using Microsoft.Extensions.Logging;
+
+namespace RayBork.Internal;
+
+/// <summary>
+/// The app-lifetime background service that generates and uploads MSDF glyph textures for every
+/// <see cref="FontGlyphPipeline"/> on one dedicated font thread.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The service owns exactly one <see cref="Thread"/> named <c>RayBork.Font</c> and a FIFO queue of
+/// glyph requests. <see cref="Enqueue"/> is safe from any thread and deduplicates one
+/// <c>(pipeline, glyph)</c> pair across queued and in-flight work, so a draw that misses the cache
+/// every frame adds one request, not one per frame. The loop takes one request at a time: it resolves
+/// the outline, computes the layout and MSDF bitmap, calls the pipeline's texture factory, and inserts
+/// the uploaded texture. The upload may complete asynchronously; the loop waits for it on the font
+/// thread, so generation stays serialized and ordered.
+/// </para>
+/// <para>
+/// A generation or upload failure is logged at warning level and marks the glyph failed for the font's
+/// lifetime; the service never retries it and the rest of the text keeps rendering. The MSDF generator
+/// bounds the work of one request, so the thread cannot be pinned by a single glyph beyond those
+/// documented limits.
+/// </para>
+/// <para>
+/// Shutdown order: <see cref="Stop"/> cancels the stop token (which cancels an in-flight upload),
+/// completes the waiters of queued requests, joins the font thread, completes the idle waiters, and
+/// releases the service resources. It is idempotent, holds no lock across the join, and throws
+/// <see cref="InvalidOperationException"/> when called from the font thread instead of deadlocking on a
+/// self-join. Stop every service before disposing its pipelines, because a queued request points at a
+/// live pipeline's cache.
+/// </para>
+/// </remarks>
+internal sealed class GlyphGenerationService : IDisposable {
+    /// <summary>The generation thread and logger category name.</summary>
+    internal const string THREAD_NAME = "RayBork.Font";
+
+    /// <summary>The logger category for generation diagnostics.</summary>
+    internal const string LOGGER_CATEGORY = "RayBork.Font";
+
+    private readonly ILogger _logger;
+    private readonly Lock _gate = new();
+    private readonly Queue<GlyphRequest> _queue = [];
+    private readonly HashSet<GlyphRequestKey> _pending = [];
+    private readonly List<TaskCompletionSource> _idleWaiters = [];
+    private readonly AutoResetEvent _wake = new(false);
+    private readonly CancellationTokenSource _stopSource = new();
+
+    private Thread? _generationThread;
+    private bool _started;
+    private bool _stopRequested;
+    private bool _paused;
+    private bool _disposed;
+    private GlyphRequest? _active;
+
+    /// <summary>
+    /// Initializes the service. The app creates one instance for its lifetime and starts it before
+    /// loading a font.
+    /// </summary>
+    /// <param name="loggerFactory">The app logger factory.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> is <c>null</c>.</exception>
+    internal GlyphGenerationService(ILoggerFactory loggerFactory) {
+        ArgumentNullException.ThrowIfNull(loggerFactory);
+
+        _logger = loggerFactory.CreateLogger(LOGGER_CATEGORY);
+    }
+
+    /// <summary>
+    /// Gets whether the service started and has not stopped accepting work. Before
+    /// <see cref="Start"/> and after <see cref="Stop"/> it is <see langword="false"/>.
+    /// </summary>
+    internal bool IsRunning {
+        get {
+            lock (_gate) {
+                return _started && !_stopRequested;
+            }
+        }
+    }
+
+    /// <summary>Gets the font thread, or <see langword="null"/> before <see cref="Start"/>. Diagnostic, for tests.</summary>
+    internal Thread? GenerationThread {
+        get {
+            lock (_gate) {
+                return _generationThread;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts the font thread. The service accepts requests from that point until <see cref="Stop"/>.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The service already stopped.</exception>
+    /// <exception cref="InvalidOperationException">The service was already started.</exception>
+    internal void Start() {
+        lock (_gate) {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_started) {
+                throw new InvalidOperationException("The glyph generation service is already started.");
+            }
+
+            _started = true;
+            Thread thread = new(RunLoop) {
+                IsBackground = true,
+                Name = THREAD_NAME,
+            };
+            _generationThread = thread;
+            thread.Start();
+        }
+    }
+
+    /// <summary>
+    /// Queues one glyph generation request. Safe from any thread.
+    /// </summary>
+    /// <param name="pipeline">The font pipeline that owns the glyph.</param>
+    /// <param name="glyphId">The glyph identifier.</param>
+    /// <returns>
+    /// <see langword="true"/> when the request is queued or was already queued or in flight;
+    /// <see langword="false"/> when the service is not running and the request was rejected.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <c>null</c>.</exception>
+    internal bool Enqueue(FontGlyphPipeline pipeline, int glyphId) {
+        ArgumentNullException.ThrowIfNull(pipeline);
+
+        lock (_gate) {
+            if (_disposed || !_started || _stopRequested) {
+                return false;
+            }
+
+            GlyphRequestKey key = new(pipeline, glyphId);
+            if (!_pending.Add(key)) {
+                return true;
+            }
+
+            _queue.Enqueue(new GlyphRequest(pipeline, glyphId));
+            _wake.Set();
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Removes every queued request of one pipeline. <see cref="FontGlyphPipeline.Dispose"/> calls it so
+    /// no stopped pipeline keeps queue entries; an in-flight request releases its texture through the
+    /// disposed pipeline's insert path instead.
+    /// </summary>
+    /// <param name="pipeline">The pipeline that is disposing.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <c>null</c>.</exception>
+    internal void Unregister(FontGlyphPipeline pipeline) {
+        ArgumentNullException.ThrowIfNull(pipeline);
+
+        List<GlyphRequest> removed = [];
+        TaskCompletionSource[] idleWaiters;
+        lock (_gate) {
+            if (_queue.Count > 0) {
+                int count = _queue.Count;
+                for (int index = 0; index < count; index++) {
+                    GlyphRequest request = _queue.Dequeue();
+                    if (ReferenceEquals(request.Pipeline, pipeline)) {
+                        _pending.Remove(new GlyphRequestKey(request.Pipeline, request.GlyphId));
+                        removed.Add(request);
+                    } else {
+                        _queue.Enqueue(request);
+                    }
+                }
+            }
+
+            idleWaiters = _queue.Count == 0 && _active is null
+                ? TakeIdleWaitersLocked()
+                : [];
+        }
+
+        foreach (GlyphRequest request in removed) {
+            request.Pipeline.CancelGlyph(request.GlyphId);
+        }
+
+        CompleteIdleWaiters(idleWaiters);
+    }
+
+    /// <summary>
+    /// Gets a task that completes when the queue is empty and nothing is in flight.
+    /// </summary>
+    /// <returns>A completed task when the service is already idle, or the pending idle task.</returns>
+    /// <remarks>Test hook. Pausing does not count as idleness when requests are queued.</remarks>
+    internal Task WhenIdleAsync() {
+        lock (_gate) {
+            if (_queue.Count == 0 && _active is null) {
+                return Task.CompletedTask;
+            }
+
+            TaskCompletionSource waiter = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            _idleWaiters.Add(waiter);
+            return waiter.Task;
+        }
+    }
+
+    /// <summary>
+    /// Stops the loop before it dequeues the next request. A request already generating or uploading
+    /// finishes or observes the stop token.
+    /// </summary>
+    /// <remarks>
+    /// Test hook. Pair it with <see cref="Resume"/>; the pause is not a cancellation.
+    /// </remarks>
+    internal void Pause() {
+        lock (_gate) {
+            if (_disposed || _stopRequested) {
+                return;
+            }
+
+            _paused = true;
+        }
+    }
+
+    /// <summary>
+    /// Lets a paused loop dequeue again and signals it for any work that arrived while paused.
+    /// </summary>
+    /// <remarks>Test hook. After <see cref="Stop"/> it is a no-op.</remarks>
+    internal void Resume() {
+        lock (_gate) {
+            if (_disposed || _stopRequested) {
+                return;
+            }
+
+            _paused = false;
+            _wake.Set();
+        }
+    }
+
+    /// <summary>
+    /// Stops the service, cancels queued and in-flight work, and joins the font thread. Idempotent.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Called from the font thread.</exception>
+    internal void Stop() {
+        GlyphRequest[] queued;
+        TaskCompletionSource[] idleWaiters;
+        Thread? thread;
+        lock (_gate) {
+            if (_stopRequested) {
+                return;
+            }
+
+            if (ReferenceEquals(Thread.CurrentThread, _generationThread)) {
+                throw new InvalidOperationException(
+                    "The glyph generation service cannot be stopped from its own font thread.");
+            }
+
+            _disposed = true;
+            _stopRequested = true;
+            queued = [.. _queue];
+            _queue.Clear();
+            _pending.Clear();
+            thread = _generationThread;
+        }
+
+        _stopSource.Cancel();
+        lock (_gate) {
+            _wake.Set();
+        }
+
+        // Queued requests never ran, so their waiters would otherwise hang. Complete them before the
+        // join; the in-flight request completes its own waiter when it observes the stop token.
+        foreach (GlyphRequest request in queued) {
+            request.Pipeline.CancelGlyph(request.GlyphId);
+        }
+
+        thread?.Join();
+
+        lock (_gate) {
+            idleWaiters = TakeIdleWaitersLocked();
+        }
+
+        CompleteIdleWaiters(idleWaiters);
+        _stopSource.Dispose();
+        _wake.Dispose();
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Same as <see cref="Stop"/>.</remarks>
+    public void Dispose() => Stop();
+
+    private void RunLoop() {
+        while (true) {
+            _wake.WaitOne();
+            while (true) {
+                GlyphRequest request;
+                lock (_gate) {
+                    if (_stopRequested) {
+                        return;
+                    }
+
+                    if (_paused || _queue.Count == 0) {
+                        break;
+                    }
+
+                    request = _queue.Dequeue();
+                    _active = request;
+                }
+
+                Execute(request);
+
+                TaskCompletionSource[] idleWaiters;
+                lock (_gate) {
+                    _pending.Remove(new GlyphRequestKey(request.Pipeline, request.GlyphId));
+                    _active = null;
+                    idleWaiters = _queue.Count == 0 ? TakeIdleWaitersLocked() : [];
+                }
+
+                CompleteIdleWaiters(idleWaiters);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Generates and uploads one glyph on the font thread. Every failure is terminal for the glyph: it
+    /// is logged once and the pipeline never retries it.
+    /// </summary>
+    private void Execute(GlyphRequest request) {
+        FontGlyphPipeline pipeline = request.Pipeline;
+        int glyphId = request.GlyphId;
+        try {
+            _stopSource.Token.ThrowIfCancellationRequested();
+            FontGlyph glyph = pipeline.Face.GetGlyph(glyphId);
+            FontGlyphSettings settings = pipeline.Settings;
+            MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+                glyph.Bounds,
+                settings.UnitsPerEm,
+                settings.MsdfPixelSize,
+                settings.MsdfRange,
+                settings.MsdfPadding);
+            if (layout.IsEmpty) {
+                pipeline.CompleteEmpty(glyphId);
+                return;
+            }
+
+            byte[] bitmap = MsdfGenerator.Generate(glyph.Outline, layout);
+            Texture texture = pipeline.TextureFactory
+                .CreateAsync(layout.TextureWidth, layout.TextureHeight, bitmap, _stopSource.Token)
+                .GetAwaiter()
+                .GetResult();
+            if (texture is null) {
+                throw new InvalidOperationException(
+                    $"The glyph texture factory returned no texture for glyph {glyphId}.");
+            }
+
+            pipeline.Insert(glyphId, texture);
+        } catch (OperationCanceledException) when (_stopSource.IsCancellationRequested) {
+            pipeline.CancelGlyph(glyphId);
+        } catch (Exception exception) {
+            _logger.LogWarning(
+                exception,
+                "The glyph {GlyphId} could not be generated; it stays failed for this font.",
+                glyphId);
+            pipeline.MarkGlyphFailed(glyphId);
+        }
+    }
+
+    private TaskCompletionSource[] TakeIdleWaitersLocked() {
+        if (_idleWaiters.Count == 0) {
+            return [];
+        }
+
+        TaskCompletionSource[] waiters = [.. _idleWaiters];
+        _idleWaiters.Clear();
+        return waiters;
+    }
+
+    private static void CompleteIdleWaiters(TaskCompletionSource[] waiters) {
+        foreach (TaskCompletionSource waiter in waiters) {
+            waiter.TrySetResult();
+        }
+    }
+
+    private readonly record struct GlyphRequestKey(FontGlyphPipeline Pipeline, int GlyphId);
+
+    private readonly record struct GlyphRequest(FontGlyphPipeline Pipeline, int GlyphId);
+}

@@ -1,0 +1,92 @@
+using Microsoft.Extensions.Logging;
+using RayBork.Internal;
+
+namespace RayBork.Tests.Fonts.Glyph;
+
+/// <summary>
+/// Starts one app-lifetime generation service and creates pipelines over one fake texture factory.
+/// <see cref="Dispose"/> follows the required shutdown order: stop the service, then dispose every
+/// pipeline. A test may dispose a pipeline early; the second dispose is a no-op.
+/// </summary>
+internal sealed class GlyphPipelineTestHarness : IDisposable {
+    /// <summary>The timeout that guards every wait on the font thread.</summary>
+    internal static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(30);
+
+    private readonly List<FontGlyphPipeline> _pipelines = [];
+
+    /// <summary>Starts a service over a fresh logger factory and fake texture factory.</summary>
+    internal GlyphPipelineTestHarness() {
+        LoggerFactory = new TrackingLoggerFactory();
+        Factory = new FakeGlyphTextureFactory();
+        Service = new GlyphGenerationService(LoggerFactory);
+        Service.Start();
+    }
+
+    /// <summary>Gets the logger factory that records the pipeline and service diagnostics.</summary>
+    internal TrackingLoggerFactory LoggerFactory { get; }
+
+    /// <summary>Gets the fake texture factory.</summary>
+    internal FakeGlyphTextureFactory Factory { get; }
+
+    /// <summary>Gets the started generation service.</summary>
+    internal GlyphGenerationService Service { get; }
+
+    /// <summary>Creates and registers a pipeline over one face.</summary>
+    /// <param name="face">The parsed face.</param>
+    /// <param name="settings">The MSDF settings, or the face's defaults when omitted.</param>
+    /// <param name="textureBudget">The cache budget, or the production budget when omitted.</param>
+    /// <returns>The pipeline.</returns>
+    internal FontGlyphPipeline CreatePipeline(
+        SfntFace face,
+        FontGlyphSettings? settings = null,
+        int? textureBudget = null) {
+        ArgumentNullException.ThrowIfNull(face);
+
+        FontGlyphSettings resolved = settings ?? FontGlyphSettings.CreateDefault(face.UnitsPerEm);
+        ILogger logger = LoggerFactory.CreateLogger(GlyphGenerationService.LOGGER_CATEGORY);
+        FontGlyphPipeline pipeline = textureBudget is null
+            ? new FontGlyphPipeline(face, resolved, Factory, Service, logger)
+            : new FontGlyphPipeline(face, resolved, Factory, Service, textureBudget.Value, logger);
+        _pipelines.Add(pipeline);
+        return pipeline;
+    }
+
+    /// <summary>Requests one glyph and waits until it is ready or failed.</summary>
+    /// <param name="pipeline">The pipeline.</param>
+    /// <param name="glyphId">The glyph id.</param>
+    /// <param name="stamp">The use stamp for the request.</param>
+    /// <returns>A task that completes when the glyph is terminal.</returns>
+    internal static async Task RequestAndWaitAsync(
+        FontGlyphPipeline pipeline,
+        int glyphId,
+        long stamp) {
+        Assert.Null(pipeline.Acquire(glyphId, stamp));
+        await pipeline.WhenGlyphReadyAsync(glyphId)
+            .WaitAsync(TIMEOUT, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>Requests one glyph, waits until it is ready, and returns the cached texture.</summary>
+    /// <param name="pipeline">The pipeline.</param>
+    /// <param name="glyphId">The glyph id.</param>
+    /// <param name="stamp">The use stamp for the request.</param>
+    /// <returns>The generated texture.</returns>
+    internal static async Task<Texture> GenerateAsync(
+        FontGlyphPipeline pipeline,
+        int glyphId,
+        long stamp) {
+        await RequestAndWaitAsync(pipeline, glyphId, stamp);
+        Assert.True(pipeline.TryGetTexture(glyphId, out Texture? texture));
+        Assert.NotNull(texture);
+        return texture!;
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        Service.Stop();
+        foreach (FontGlyphPipeline pipeline in _pipelines) {
+            pipeline.Dispose();
+        }
+
+        LoggerFactory.Dispose();
+    }
+}
