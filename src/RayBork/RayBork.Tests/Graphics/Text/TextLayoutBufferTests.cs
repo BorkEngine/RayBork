@@ -10,6 +10,20 @@ public sealed class TextLayoutBufferTests {
     private const string STEADY_STATE_TEXT = "abcde abcde abcde";
     private const int STEADY_STATE_GLYPHS = 17;
     private const float WRAPPED_STEADY_STATE_MAX_WIDTH = 5f;
+
+    /// <summary>
+    /// The measured steady-state call count. A warm layout call allocates nothing, so the larger loop
+    /// amortizes the one-time runtime allocations a test thread can observe (tiered compilation and GC
+    /// bookkeeping) while the budget below stays far below one allocated object per call.
+    /// </summary>
+    private const int STEADY_STATE_MEASURED_CALLS = 1000;
+
+    /// <summary>
+    /// The allocation budget for the measured steady-state loop. Reaching it would take an allocation
+    /// every few calls, which a warm layout call never does.
+    /// </summary>
+    private const int STEADY_STATE_ALLOCATION_BUDGET = 16 * 1024;
+
     private static readonly string _wrappedSteadyStateText = string.Join(" ", Enumerable.Repeat("abcde", 12));
 
     [Fact]
@@ -103,37 +117,22 @@ public sealed class TextLayoutBufferTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SteadyStateArrangeAllocatesNothing() {
+    public void SteadyStateArrangeDoesNotAllocatePerCall() {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
-        for (int i = 0; i < 100; i++) {
-            TextLayoutEngine.Arrange(
-                metrics,
-                STEADY_STATE_TEXT,
-                1f,
-                TextAlignment.Left,
-                TextWrapping.None,
-                0f,
-                buffer,
-                out _);
-        }
+        ArrangeRepeatedly(
+            metrics, STEADY_STATE_TEXT, TextWrapping.None, 0f, buffer, STEADY_STATE_MEASURED_CALLS);
         int capacityAfterWarmUp = buffer.Capacity;
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 100; i++) {
-            TextLayoutEngine.Arrange(
-                metrics,
-                STEADY_STATE_TEXT,
-                1f,
-                TextAlignment.Left,
-                TextWrapping.None,
-                0f,
-                buffer,
-                out _);
-        }
+        ArrangeRepeatedly(
+            metrics, STEADY_STATE_TEXT, TextWrapping.None, 0f, buffer, STEADY_STATE_MEASURED_CALLS);
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.Equal(0L, allocated);
+        Assert.True(
+            allocated < STEADY_STATE_ALLOCATION_BUDGET,
+            $"The steady-state arrange allocated {allocated} bytes over "
+                + $"{STEADY_STATE_MEASURED_CALLS} calls.");
         Assert.Equal(capacityAfterWarmUp, buffer.Capacity);
         Assert.Equal(STEADY_STATE_GLYPHS, buffer.Count);
     }
@@ -142,44 +141,61 @@ public sealed class TextLayoutBufferTests {
     [InlineData(TextWrapping.Word, 60, 12)]
     [InlineData(TextWrapping.Character, 71, 8)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SteadyStateWrappedArrangeAllocatesNothing(
+    public void SteadyStateWrappedArrangeDoesNotAllocatePerCall(
         TextWrapping wrapping,
         int expectedGlyphs,
         int expectedLines) {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
-        TextLayoutResult result = default;
-        for (int i = 0; i < 100; i++) {
-            TextLayoutEngine.Arrange(
-                metrics,
-                _wrappedSteadyStateText,
-                1f,
-                TextAlignment.Left,
-                wrapping,
-                WRAPPED_STEADY_STATE_MAX_WIDTH,
-                buffer,
-                out result);
-        }
+        ArrangeRepeatedly(
+            metrics,
+            _wrappedSteadyStateText,
+            wrapping,
+            WRAPPED_STEADY_STATE_MAX_WIDTH,
+            buffer,
+            STEADY_STATE_MEASURED_CALLS);
         int capacityAfterWarmUp = buffer.Capacity;
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 100; i++) {
-            TextLayoutEngine.Arrange(
-                metrics,
-                _wrappedSteadyStateText,
-                1f,
-                TextAlignment.Left,
-                wrapping,
-                WRAPPED_STEADY_STATE_MAX_WIDTH,
-                buffer,
-                out result);
-        }
+        TextLayoutResult result = ArrangeRepeatedly(
+            metrics,
+            _wrappedSteadyStateText,
+            wrapping,
+            WRAPPED_STEADY_STATE_MAX_WIDTH,
+            buffer,
+            STEADY_STATE_MEASURED_CALLS);
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
-        Assert.Equal(0L, allocated);
+        Assert.True(
+            allocated < STEADY_STATE_ALLOCATION_BUDGET,
+            $"The steady-state arrange allocated {allocated} bytes over "
+                + $"{STEADY_STATE_MEASURED_CALLS} calls.");
         Assert.Equal(capacityAfterWarmUp, buffer.Capacity);
         Assert.Equal(expectedGlyphs, buffer.Count);
         Assert.Equal(expectedLines, result.LineCount);
+    }
+
+    private static TextLayoutResult ArrangeRepeatedly(
+        FakeTextMetrics metrics,
+        string text,
+        TextWrapping wrapping,
+        float maxWidth,
+        TextLayoutBuffer buffer,
+        int calls) {
+        TextLayoutResult result = default;
+        for (int index = 0; index < calls; index++) {
+            TextLayoutEngine.Arrange(
+                metrics,
+                text,
+                1f,
+                TextAlignment.Left,
+                wrapping,
+                maxWidth,
+                buffer,
+                out result);
+        }
+
+        return result;
     }
 
     private static int Arrange(FakeTextMetrics metrics, string text, TextLayoutBuffer buffer) {
