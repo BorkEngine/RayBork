@@ -14,10 +14,9 @@ namespace RayBork;
 /// </para>
 /// <para>
 /// The helpers never throw for numeric input, including negative and non-finite values. A NaN
-/// input reports no collision or a miss, and the ray queries treat every non-finite input as a
-/// miss. Ray results use the ray parameter <c>t</c>, so
-/// <see cref="RayCollision.Distance"/> is a world distance only when <see cref="Ray.Direction"/> is
-/// normalized.
+/// input reports no collision or a miss. A <see cref="Ray"/> carries a finite origin and a unit
+/// direction, so <see cref="RayCollision.Distance"/> is a world distance; <c>default(Ray)</c> has a
+/// zero direction and every ray query reports a miss for it.
 /// </para>
 /// </remarks>
 public static class Collision {
@@ -106,7 +105,8 @@ public static class Collision {
     /// </returns>
     /// <remarks>
     /// A zero or negative radius, a non-finite input, or no non-negative root reports a miss.
-    /// Tangency counts as a hit. The direction is not required to be normalized.
+    /// Tangency counts as a hit. The ray direction is unit length, so the hit distance is a world
+    /// distance; a <c>default(Ray)</c> has a zero direction and reports a miss.
     /// </remarks>
     public static RayCollision GetRaySphere(Ray ray, Vector3 center, float radius) {
         if (!(radius > 0f) || !float.IsFinite(radius) || !IsFinite(ray) || !IsFinite(center)) {
@@ -160,8 +160,9 @@ public static class Collision {
     /// </para>
     /// <para>
     /// An inverted box (any <see cref="BoundingBox.Min"/> component greater than the matching
-    /// <see cref="BoundingBox.Max"/> component), a non-finite input, or a zero direction reports a
-    /// miss. The direction is not required to be normalized.
+    /// <see cref="BoundingBox.Max"/> component), a non-finite input, or a <c>default(Ray)</c>
+    /// (zero direction) reports a miss. The ray direction is unit length, so the hit distance is a
+    /// world distance.
     /// </para>
     /// </remarks>
     public static RayCollision GetRayBox(Ray ray, BoundingBox box) {
@@ -247,8 +248,9 @@ public static class Collision {
     /// The test uses the double-sided Möller–Trumbore algorithm. <see cref="RayCollision.Normal"/>
     /// is the normalized geometric normal <c>cross(b - a, c - a)</c> and is not flipped toward the
     /// ray, so a back-face hit reports the same normal as a front-face hit. A degenerate
-    /// (zero-area) triangle, a parallel ray, a non-finite input, or a hit behind the ray origin
-    /// reports a miss. The direction is not required to be normalized.
+    /// (zero-area) triangle, a parallel ray, a non-finite input, a hit behind the ray origin, or a
+    /// <c>default(Ray)</c> (zero direction) reports a miss. The hit distance is a world distance
+    /// because the ray direction is unit length.
     /// </remarks>
     public static RayCollision GetRayTriangle(Ray ray, Vector3 a, Vector3 b, Vector3 c) {
         if (!TryGetTriangleIntersection(ray, a, b, c, out float distance, out Vector3 normal)) {
@@ -273,8 +275,9 @@ public static class Collision {
     /// The quad is split into triangles <c>(a, b, c)</c> and <c>(a, c, d)</c>, and the nearest hit of
     /// the two double-sided triangle tests is returned. Both triangles are coplanar for a planar quad;
     /// a hit on their shared diagonal reports the <c>(a, b, c)</c> result. A degenerate (zero-area)
-    /// quad, a non-finite input, or a hit behind the ray origin reports a miss. The direction is not
-    /// required to be normalized.
+    /// quad, a non-finite input, a hit behind the ray origin, or a <c>default(Ray)</c> (zero
+    /// direction) reports a miss. The hit distance is a world distance because the ray direction is
+    /// unit length.
     /// </remarks>
     public static RayCollision GetRayQuad(Ray ray, Vector3 a, Vector3 b, Vector3 c, Vector3 d) {
         RayCollision first = GetRayTriangle(ray, a, b, c);
@@ -366,8 +369,9 @@ public static class Collision {
     /// <remarks>
     /// The plane is double-sided: both faces hit. <see cref="RayCollision.Normal"/> is
     /// <see cref="Plane.Normal"/> normalized and is not flipped toward the ray. A ray parallel to
-    /// the plane, including one that lies in it, a non-finite input, or a hit behind the ray origin
-    /// reports a miss. The plane normal and ray direction are not required to be normalized.
+    /// the plane, including one that lies in it, a non-finite input, a hit behind the ray origin, or
+    /// a <c>default(Ray)</c> (zero direction) reports a miss. The plane normal is not required to be
+    /// normalized; the ray direction is unit length, so the hit distance is a world distance.
     /// </remarks>
     public static RayCollision GetRayPlane(Ray ray, Plane plane) {
         if (!IsFinite(ray) || !IsFinite(plane.Normal) || !float.IsFinite(plane.D)) {
@@ -406,8 +410,8 @@ public static class Collision {
     /// space. <see cref="RayCollision.Point"/> is the transformed mesh-space point and
     /// <see cref="RayCollision.Normal"/> is
     /// <c>normalize(Vector3.TransformNormal(meshNormal, Matrix4x4.Transpose(inverse)))</c>.
-    /// <see cref="RayCollision.Distance"/> is the mesh-space ray parameter, which equals the world
-    /// parameter along the given world direction.
+    /// <see cref="RayCollision.Distance"/> is the world-space ray parameter along the unit world
+    /// direction, so it is also the world distance from the ray origin to the hit.
     /// </para>
     /// <para>
     /// <see cref="PrimitiveTopology.TriangleList"/> uses the indices in groups of three.
@@ -442,9 +446,24 @@ public static class Collision {
             throw new ArgumentException("The mesh transform is not invertible.", nameof(transform));
         }
 
-        Ray meshRay = new(
-            Vector3.Transform(ray.Origin, inverse),
-            Vector3.TransformNormal(ray.Direction, inverse));
+        if (!IsFinite(ray) || !(ray.Direction.LengthSquared() > 0f)) {
+            return default;
+        }
+
+        Vector3 meshOrigin = Vector3.Transform(ray.Origin, inverse);
+        Vector3 meshDirection = Vector3.TransformNormal(ray.Direction, inverse);
+        double meshDirectionLength = Math.Sqrt(
+            ((double)meshDirection.X * meshDirection.X)
+            + ((double)meshDirection.Y * meshDirection.Y)
+            + ((double)meshDirection.Z * meshDirection.Z));
+        if (!IsFinite(meshOrigin)
+            || !IsFinite(meshDirection)
+            || !(meshDirectionLength > 0d)
+            || !double.IsFinite(meshDirectionLength)) {
+            return default;
+        }
+
+        Ray meshRay = new(meshOrigin, meshDirection);
 
         ReadOnlySpan<Vertex> vertices = mesh.Vertices.Span;
         ReadOnlySpan<uint> indices = mesh.Indices.Span;
@@ -502,8 +521,10 @@ public static class Collision {
 
         Vector3 normal = Vector3.Normalize(
             Vector3.TransformNormal(nearest.Normal, Matrix4x4.Transpose(inverse)));
+        // The mesh ray carries the normalized image of the unit world direction, so its parameter is
+        // the world parameter times the image's length; dividing reports the world-space distance.
         return new RayCollision(
-            nearest.Distance,
+            (float)(nearest.Distance / meshDirectionLength),
             Vector3.Transform(nearest.Point, transform),
             normal);
     }

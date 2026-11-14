@@ -309,6 +309,48 @@ public sealed class PrimitiveDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ConeSidesRenderTheirOutsideSurface() {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+        Color coneColor = new(0.9f, 0.2f, 0.1f, 1f);
+        Color probeColor = new(0.1f, 0.9f, 0.3f, 1f);
+        Vector2 uprightPixel = default;
+        Vector2 invertedPixel = default;
+        Vector2 unoccludedPixel = default;
+
+        harness.SubmitOrthographic(
+            camera => {
+                // Both cones have a 0.5 base radius and a 1.0 height, so at y = 0 each lateral
+                // radius is 0.25 and the near and far surfaces sit at z = +0.25 and z = -0.25.
+                camera.DrawCylinder(new Vector3(-0.9f, -0.5f, 0f), 0f, 0.5f, 1f, sides: 32, coneColor);
+                camera.DrawCylinder(new Vector3(0.9f, -0.5f, 0f), 0.5f, 0f, 1f, sides: 32, coneColor);
+                // The camera-facing probes at z = 0 sit between the two surfaces. With outward
+                // winding the near surface wins the depth test and the cone color stays; inward
+                // winding culls the near surface, so the probe would show through. The middle probe
+                // is outside both silhouettes and proves the probe path draws.
+                uprightPixel = camera.WorldToScreen(new Vector3(-0.9f, 0f, 0f));
+                invertedPixel = camera.WorldToScreen(new Vector3(0.9f, 0f, 0f));
+                unoccludedPixel = camera.WorldToScreen(Vector3.Zero);
+                camera.DrawPoint(new Vector3(-0.9f, 0f, 0f), probeColor, 0.2f);
+                camera.DrawPoint(new Vector3(0.9f, 0f, 0f), probeColor, 0.2f);
+                camera.DrawPoint(Vector3.Zero, probeColor, 0.2f);
+            },
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            clearColor: _clearColor,
+            height: 4f);
+
+        AssertColorNear(coneColor, harness.ReadColor(Pixel(uprightPixel.X), Pixel(uprightPixel.Y)));
+        AssertColorNear(coneColor, harness.ReadColor(Pixel(invertedPixel.X), Pixel(invertedPixel.Y)));
+        AssertColorNear(probeColor, harness.ReadColor(Pixel(unoccludedPixel.X), Pixel(unoccludedPixel.Y)));
+        RenderStats stats = harness.Host.Backend.Stats;
+        Assert.Equal(2, stats.DrawCalls);
+        Assert.Equal((32 * 2 * 2) + 3, stats.Instances);
+        Assert.Equal((32 * 2 * 2) + (3 * 2), stats.Triangles);
+        Assert.Equal(0, stats.CulledInstances);
+        Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void BillboardSamplesTheUploadedTexture() {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
         Color billboardColor = new(0.25f, 0.5f, 0.75f, 1f);

@@ -219,7 +219,12 @@ and adds a `Collision` helper plus a `RayCollision` result. `Ray` is the shared 
 ```csharp
 public readonly record struct BoundingBox(Vector3 Min, Vector3 Max);
 
-public readonly record struct Ray(Vector3 Origin, Vector3 Direction);
+public readonly record struct Ray {
+    public Ray(Vector3 origin, Vector3 direction);
+    public Vector3 Origin { get; init; }
+    public Vector3 Direction { get; init; }
+    public void Deconstruct(out Vector3 origin, out Vector3 direction);
+}
 
 public readonly struct BoundingFrustum {
     public BoundingFrustum(Matrix4x4 viewProjection);
@@ -234,8 +239,13 @@ public readonly struct BoundingFrustum {
 }
 ```
 
-- `Ray.Direction` is expected to be normalized. `Camera.ScreenToWorldRay` returns a normalized
-  direction.
+- The `Ray` constructor requires a finite origin and a finite, non-zero direction, and stores
+  `Direction` normalized to unit length. Assigning `Origin` or `Direction` through an `init`
+  accessor (an object initializer or a `with` expression) validates and normalizes the same way, so
+  a ray built through the constructor or an accessor has a unit direction.
+  `Camera.ScreenToWorldRay` returns such a ray.
+- `default(Ray)` and an object initializer that omits `Direction` have a zero direction and are not
+  valid rays. The collision queries report a miss for them and `Camera.DrawRay` records nothing.
 - `BoundingFrustum` extracts six inward-facing, normalized planes from a view-projection matrix in
   the engine's row-vector convention. `Contains` requires every signed plane distance to be
   non-negative. `Intersects` uses the positive-vertex test and is conservative: a box that only
@@ -278,14 +288,14 @@ public static class Collision {
   geometric normal `cross(b - a, c - a)`, which is not flipped toward the ray; a degenerate triangle
   is a miss. `GetRayQuad` splits the quad into the triangles `(a, b, c)` and `(a, c, d)`, reuses the
   same double-sided triangle test, and returns the nearest non-negative hit; a hit on the shared
-  diagonal reports the `(a, b, c)` result, a degenerate quad is a miss, and the ray direction is not
-  required to be normalized. `GetRayPlane` normalizes `Plane.Normal` and misses when the ray is
-  parallel to the plane, including when it lies in the plane. Tangency and touching a face at `t = 0`
-  count as hits.
-- `RayCollision.Distance` is the ray parameter `t` in `origin + direction * t`: a world distance when
-  the direction is normalized. `Ray.Direction` is expected to be normalized and
-  `Camera.ScreenToWorldRay` returns a normalized direction, but the queries accept any non-zero
-  direction and then report `t` in that direction's units.
+  diagonal reports the `(a, b, c)` result and a degenerate quad is a miss. `GetRayPlane` normalizes
+  `Plane.Normal` and misses when the ray is parallel to the plane, including when it lies in the
+  plane. Tangency and touching a face at `t = 0` count as hits. A `default(Ray)` has a zero direction
+  and reports a miss.
+- `RayCollision.Distance` is the ray parameter `t` in `origin + direction * t`. `Ray.Direction` is
+  unit length, so it is a world distance, and `Camera.ScreenToWorldRay` returns such a ray.
+  `GetRayMesh` reports the world parameter even when the transform scales its internal mesh-space
+  direction.
 - A miss is `default(RayCollision)`: `Hit` is false and every other member is zero.
 - The `Check*` helpers and the primitive ray casts never throw for numeric input, including negative
   and non-finite values; a NaN input reports no collision or a miss. They are pure math,
@@ -297,7 +307,8 @@ public static class Collision {
   the row-vector convention: the query transforms the ray into mesh space, keeps the nearest triangle,
   and maps the point back with `Vector3.Transform(point, transform)` and the normal with the
   inverse-transpose (`Vector3.TransformNormal(normal, Matrix4x4.Transpose(inverse))`). `Distance` is
-  the mesh-space ray parameter, which equals the world parameter along the given world direction.
+  the world-space ray parameter along the unit world direction, so it is the world distance even when
+  the transform scales the direction.
 - `GetRayMesh` traverses the mesh's immutable collision acceleration structure when it has one and
   tests every retained triangle otherwise; both paths return the same nearest hit. A mesh built with
   `MeshBuilder.GenerateCollisions()` and a mesh loaded from a pack whose descriptor names a baked

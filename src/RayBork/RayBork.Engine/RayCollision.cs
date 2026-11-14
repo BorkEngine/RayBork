@@ -8,7 +8,8 @@ namespace RayBork;
 /// <remarks>
 /// A miss is <c>default(RayCollision)</c>: <see cref="Hit"/> is <c>false</c> and the other members
 /// are zero. <see cref="Distance"/> is the ray parameter <c>t</c> in
-/// <c>origin + direction * t</c>; it is a world distance only when the ray direction is normalized.
+/// <c>origin + direction * t</c>; <see cref="Ray.Direction"/> is unit length, so it is a world
+/// distance. <c>default(Ray)</c> has a zero direction and every ray query reports a miss for it.
 /// </remarks>
 public readonly struct RayCollision {
     /// <summary>

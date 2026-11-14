@@ -37,6 +37,7 @@ public sealed class Camera : IDisposable {
     private const string MESH_TEXTURE_BINDING = "mainTexture";
     private const int CIRCLE_SEGMENTS = 36;
     private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
+    private const float RAY_DRAW_DISTANCE = 1_000_000f;
 
     private static readonly (int Start, int End)[] _boxEdges = [
         (0, 1),
@@ -752,17 +753,22 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
-    /// Records a ray as one line segment from <see cref="Ray.Origin"/> to
-    /// <see cref="Ray.Origin"/> plus <see cref="Ray.Direction"/>.
+    /// Records a ray as a long world-space line segment along its unit direction.
     /// </summary>
     /// <param name="ray">The world-space ray.</param>
     /// <param name="color">The linear line color.</param>
     /// <remarks>
-    /// The segment has the direction's length because the direction is not normalized, matching the
-    /// ray parameter used by the collision queries. A zero direction records nothing.
+    /// <para>
+    /// A ray is infinite; the draw approximates it with the segment from <see cref="Ray.Origin"/> to
+    /// <see cref="Ray.Origin"/> plus <see cref="Ray.Direction"/> times <c>1,000,000</c> world units.
+    /// The segment is clipped by the view and the depth range like any other world-space line, so it
+    /// reads as an infinite ray while every buffer coordinate stays finite. The ray stores a unit
+    /// direction, so the far endpoint is exactly that distance away.
+    /// </para>
+    /// <para>A <c>default(Ray)</c> has a zero direction and records nothing.</para>
     /// </remarks>
     /// <exception cref="ArgumentException">
-    /// A component of the origin or direction is not finite, or the endpoint is not finite.
+    /// A component of the origin is not finite, or the far endpoint is not finite.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// The camera service has no primitive assets, or the caller is not the tick thread.
@@ -772,11 +778,12 @@ public sealed class Camera : IDisposable {
         EnsureDrawable(nameof(DrawRay));
         ValidateFinite(ray.Origin, nameof(ray));
         ValidateFinite(ray.Direction, nameof(ray));
-        Vector3 end = ray.Origin + ray.Direction;
-        ValidateFinite(end, nameof(ray));
-        if (!((end - ray.Origin).LengthSquared() > 0f)) {
+        if (!(ray.Direction.LengthSquared() > 0f)) {
             return;
         }
+
+        Vector3 end = ray.Origin + (ray.Direction * RAY_DRAW_DISTANCE);
+        ValidateFinite(end, nameof(ray));
 
         PrimitiveAssets primitives = RequirePrimitives();
         Shader material = primitives.PrimitiveMaterial;
@@ -3345,10 +3352,12 @@ public sealed class Camera : IDisposable {
                 Vector3 capStart = GetCylinderPoint(radiusTop, height, side, sides);
                 Vector3 capEnd = GetCylinderPoint(radiusTop, height, side + 1, sides);
                 if (hasBottom) {
+                    // Wound like the tapered side triangles: apex, then the ring points in the
+                    // outward-triangle order, so the outside of the cone is the front face.
                     triangleMatrices[side] = CreateTriangleMatrix(
                         topCenter,
-                        ringStart,
                         ringEnd,
+                        ringStart,
                         outer);
                     triangleMatrices[sides + side] = CreateTriangleMatrix(
                         Vector3.Zero,
@@ -3357,10 +3366,11 @@ public sealed class Camera : IDisposable {
                         Vector3.Cross(ringStart, ringEnd),
                         -Vector3.UnitY) * outer;
                 } else {
+                    // The inverted cone is the same side triangle with the apex at the bottom.
                     triangleMatrices[side] = CreateTriangleMatrix(
                         Vector3.Zero,
-                        capEnd,
                         capStart,
+                        capEnd,
                         outer);
                     triangleMatrices[sides + side] = CreateTriangleMatrix(
                         topCenter,

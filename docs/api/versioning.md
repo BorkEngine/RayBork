@@ -39,6 +39,19 @@ opt-in, `Collision.GetRayQuad` adds the four-corner query, and `Mesh.HasCollisio
 whether a mesh carries the structure, without changing `Mesh`, `MeshBuilder.BuildAsync`, or `Load<T>`
 semantics. A mesh without a structure keeps working through the brute-force ray/mesh path.
 
+The M5 visual-review fixes correct the cone side winding and the ray contract. Cone side triangles are
+now wound outward like the tapered and equal-radius cylinder sides, so a cone's exterior is
+front-facing instead of back-face culled; the base caps are unchanged, and the fix applies to an
+upright cone and to an inverted cone. `Ray` now validates a finite origin and a finite, non-zero
+direction and stores the direction normalized, and `DrawRay` draws a ray as a 1,000,000-unit segment
+along that unit direction instead of the short `origin + direction` segment. `Ray.Direction` is
+therefore always unit length
+and `RayCollision.Distance` is always a world distance; a caller that constructed a ray with a
+non-unit direction now gets the normalized direction back from `Ray.Direction`. `default(Ray)` still
+has a zero direction and is invalid: the collision queries report a miss and `DrawRay` records
+nothing. This is a 0.x preview change and this paragraph is its migration note; after 1.0 the same
+change would need the obsolete/migration cycle above.
+
 The rest of the M5 camera surface is additive: `DrawCapsule`, `DrawWireCapsule`, `DrawCircle`,
 `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawWireCylinder`, the shape/position,
 tessellation, start/end, and `Transform` overloads of the cube, sphere, plane, cylinder, wire cube,

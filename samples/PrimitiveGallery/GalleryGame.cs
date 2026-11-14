@@ -277,9 +277,9 @@ internal sealed class GalleryGame : IGame {
             ],
             Color.DarkOrange);
 
-        // The ray starts just below and left of the box and points through its center. DrawRay draws
-        // the ray along its direction, so the box sits mid-ray and the line keeps going past it
-        // instead of stopping inside the box.
+        // The ray starts just below and left of the box and points through its center. A ray is
+        // infinite; DrawRay draws a long segment along its unit direction, so the box sits mid-ray
+        // and the line continues well past it instead of stopping inside the box.
         Vector3 boxCenter = Station(5f, 5.5f);
         Vector3 rayOrigin = boxCenter - (_galleryRight * 1f) - (Vector3.UnitY * 0.6f);
         camera.DrawBoundingBox(

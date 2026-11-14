@@ -132,13 +132,13 @@ public sealed class CollisionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GetRaySphereUsesTheRayParameterForANonNormalizedDirection() {
-        RayCollision hit = Collision.GetRaySphere(
-            new Ray(new Vector3(0f, 0f, 5f), new Vector3(0f, 0f, -2f)),
-            Vector3.Zero,
-            1f);
+    public void GetRaySphereNormalizesTheDirectionAndReportsTheWorldDistance() {
+        Ray ray = new(new Vector3(0f, 0f, 5f), new Vector3(0f, 0f, -2f));
+        RayCollision hit = Collision.GetRaySphere(ray, Vector3.Zero, 1f);
 
-        AssertHit(hit, 2f, new Vector3(0f, 0f, 1f), Vector3.UnitZ);
+        Assert.Equal(1f, ray.Direction.Length(), 1e-6f);
+        AssertVector(-Vector3.UnitZ, ray.Direction);
+        AssertHit(hit, 4f, new Vector3(0f, 0f, 1f), Vector3.UnitZ);
     }
 
     [Fact]
@@ -150,10 +150,6 @@ public sealed class CollisionTests {
         AssertMiss(Collision.GetRaySphere(ray, Vector3.Zero, -1f));
         AssertMiss(Collision.GetRaySphere(ray, Vector3.Zero, float.NaN));
         AssertMiss(Collision.GetRaySphere(ray, Vector3.Zero, float.PositiveInfinity));
-        AssertMiss(Collision.GetRaySphere(
-            new Ray(new Vector3(float.NaN, 0f, 0f), -Vector3.UnitZ),
-            Vector3.Zero,
-            1f));
         AssertMiss(Collision.GetRaySphere(
             ray,
             new Vector3(float.PositiveInfinity, 0f, 0f),
@@ -299,15 +295,14 @@ public sealed class CollisionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GetRayQueriesMissForNonFiniteInput() {
-        Ray nanOrigin = new(new Vector3(float.NaN, 0f, 0f), -Vector3.UnitZ);
-        Ray nanDirection = new(Vector3.Zero, new Vector3(float.NaN, 0f, 0f));
+    public void GetRayQueriesMissForADefaultRay() {
         Plane plane = new(Vector3.UnitZ, 0f);
 
-        AssertMiss(Collision.GetRaySphere(nanOrigin, Vector3.Zero, 1f));
-        AssertMiss(Collision.GetRayBox(nanOrigin, _unitBox));
-        AssertMiss(Collision.GetRayTriangle(nanDirection, Vector3.Zero, Vector3.UnitX, Vector3.UnitY));
-        AssertMiss(Collision.GetRayPlane(nanOrigin, plane));
+        Assert.Equal(Vector3.Zero, default(Ray).Direction);
+        AssertMiss(Collision.GetRaySphere(default, Vector3.Zero, 1f));
+        AssertMiss(Collision.GetRayBox(default, _unitBox));
+        AssertMiss(Collision.GetRayTriangle(default, Vector3.Zero, Vector3.UnitX, Vector3.UnitY));
+        AssertMiss(Collision.GetRayPlane(default, plane));
     }
 
     [Fact]
@@ -412,6 +407,9 @@ public sealed class CollisionTests {
                 mesh,
                 transform);
 
+            // The transform's 2x X scale makes the transformed mesh-space direction half as long as
+            // the unit world direction; the query still reports the world distance, not the
+            // normalized mesh-space parameter.
             AssertHit(hit, 1f, new Vector3(10f, 0.25f, -1f), Vector3.UnitX);
         } finally {
             mesh.Dispose();
@@ -431,6 +429,9 @@ public sealed class CollisionTests {
 
             AssertMiss(miss);
             Assert.Equal(default, miss);
+
+            // A default ray has a zero direction and is a miss, never a throw.
+            AssertMiss(Collision.GetRayMesh(default, mesh, Matrix4x4.Identity));
         } finally {
             mesh.Dispose();
         }
