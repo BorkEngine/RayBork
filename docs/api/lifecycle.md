@@ -109,12 +109,21 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > during `Tick`. A camera left undisposed when `Tick` returns is an `InvalidOperationException`
 > naming it, and the frame is not published.
 
-> **M5 subset.** M5 adds the runtime tone-mapping surface: `WithAgxWhite` and `WithAgxContrast` set
-> the startup AgX defaults, and `EngineContext.Tonemapping` exposes the app-lifetime settings that a
-> game changes during `Setup`, `Tick`, or `Shutdown`. The values are frame-global and are snapshotted
-> into the frame packet when the frame is sealed. M5 also replaces the M4 AgX and its separate HDR
-> highlight path with Godot 4.7's HDR-aware AgX curve; `WithTonemapping` still fixes the
-> mode at startup, and `WithExposure` keeps its meaning.
+> **M5 subset.** M5 adds the primitive, billboard, and wireframe-model helpers and the collision
+> queries described in §7. The app preloads the built-in `/shaders/primitive` and `/shaders/mesh`
+> programs, their two engine materials, and the eight primitive meshes before `IGame.Setup`, so the
+> first tick can record a primitive draw. `DrawWireModel` records on the tick thread like
+> `DrawModel`; its polygon-mode-line pipeline needs the device's `fillModeNonSolid` feature, and a
+> device without it fails the frame with `GraphicsException` `RB3001` rather than falling back.
+> `Collision` and `RayCollision` are pure CPU queries, and `MeshBuilder.GenerateCollisions()` plus
+> the nine `Generate*` factories are ordinary builder steps available in `Setup` and `Tick`.
+> `DrawTexture` is not part of M5; it moves to M7 with the orthographic sprite path. M5 also adds
+> the runtime tone-mapping surface: `WithAgxWhite` and `WithAgxContrast` set the startup AgX
+> defaults, and `EngineContext.Tonemapping` exposes the app-lifetime settings that a game changes
+> during `Setup`, `Tick`, or `Shutdown`. The values are frame-global and are snapshotted into the
+> frame packet when the frame is sealed. M5 replaces the M4 AgX and its separate HDR highlight path
+> with Godot 4.7's HDR-aware AgX curve; `WithTonemapping` still fixes the mode at startup, and
+> `WithExposure` keeps its meaning.
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -290,8 +299,11 @@ that target and can be sampled by a later camera.
    c. Render thread starts: create the instance, request the native surface through the main-thread
       channel, create the device and swapchain, and publish Info.
    d. The asset catalog mounts the built-in pack (and any user packs) and starts the loader; the app
-      preloads `EngineContext.Defaults` (the `/shaders/mesh` program and the white/error textures).
-   e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info and Defaults.
+      preloads `EngineContext.Defaults` (the `/shaders/mesh` program and the white/error textures) and
+      then the engine's primitive assets (the `/shaders/primitive` program, its material, and the
+      eight primitive meshes).
+   e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info, Defaults, and a
+      ready primitive draw path.
    f. IGame.Setup(ctx) is awaited on the tick thread.
    g. Loop: input snapshot, clock, IGame.Tick, frame publish; render consumes previous frame.
    h. Exit: stop accepting ticks. The tick thread publishes the final frame and runs
@@ -299,15 +311,17 @@ that target and can be sampled by a later camera.
    i. Join the tick thread and complete the frame ring; the render thread drains and presents the
       final frame, disposes the GPU objects, and destroys the native surface through the channel
       while the main thread services it.
-   j. The app releases the engine defaults, stops the asset catalog, closes the surface channel,
-      disposes the platform (window, SDL3, Vulkan loader), and releases the remaining engine state.
+   j. The app releases the engine defaults and the primitive assets, stops the asset catalog, closes
+      the surface channel, disposes the platform (window, SDL3, Vulkan loader), and releases the
+      remaining engine state.
 3. Run returns; Dispose releases the app object.
 ```
 
 The surface handshake is bounded: a render-thread surface request and the main-thread wait for the
 renderer each time out after 30 seconds. The tick thread does not start before the renderer is
 ready, so `Setup` can read `Info` and `Defaults`. M3 inserts the asset loader after (a); M4 inserts
-the engine-defaults preload between the catalog start and the tick thread start.
+the engine-defaults preload between the catalog start and the tick thread start; M5 adds the
+primitive-asset preload after the defaults.
 
 Failure behavior:
 

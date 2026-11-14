@@ -35,9 +35,31 @@ The custom loader registration API is additive: `IAssetLoader<T>`, `AssetLoadCon
 changing `Load<T>`, and `WithAssetType<T>()` remains the MessagePack custom-data sugar.
 
 The M5 collision surface is additive as well: `MeshBuilder.GenerateCollisions` adds the procedural
-opt-in, and `Mesh.HasCollisionAcceleration` exposes whether a mesh carries the structure, without
-changing `Mesh`, `MeshBuilder.BuildAsync`, or `Load<T>` semantics. A mesh without a structure keeps
-working through the brute-force ray/mesh path.
+opt-in, `Collision.GetRayQuad` adds the four-corner query, and `Mesh.HasCollisionAcceleration` exposes
+whether a mesh carries the structure, without changing `Mesh`, `MeshBuilder.BuildAsync`, or `Load<T>`
+semantics. A mesh without a structure keeps working through the brute-force ray/mesh path.
+
+The rest of the M5 camera surface is additive: `DrawCapsule`, `DrawWireCapsule`, `DrawCircle`,
+`DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawWireCylinder`, the shape/position,
+tessellation, start/end, and `Transform` overloads of the cube, sphere, plane, cylinder, wire cube,
+and wire sphere families, the source-rectangle, `Transform`, and origin `DrawBillboard` overloads,
+and `DrawWireModel` are new members. The nine `MeshBuilder.Generate*` factories (poly, plane, cube,
+sphere, hemisphere, cylinder, cone, torus, and knot) are additive builder methods; existing
+`MeshBuilder` data and `BuildAsync` semantics are unchanged. Existing draw calls keep their meaning.
+
+Two optional parameters are split into explicit overloads. `DrawCylinder(..., int sides = 16)` becomes
+a four-argument convenience overload that uses the default 16 sides plus a five-argument overload
+that takes `sides` explicitly. `DrawBillboard(..., bool faceCamera = true)` becomes a four-argument
+camera-facing convenience overload plus a five-argument overload with an explicit `faceCamera`. A
+call that passed `sides` or `faceCamera` still compiles and keeps its behavior; only reflection or
+binary consumers of the optional parameter defaults observe the change.
+
+`DrawTexture` is removed from the M5 surface. The preview screen-space overlay helper is re-homed to
+M7, where it arrives with the orthographic/sprite contract and destination rectangles instead of the
+M5 unprojected-overlay path. A game written against an M5 preview that called
+`camera.DrawTexture(texture, destination, tint)` should draw a textured quad with `DrawMesh` or wait
+for the M7 helper. These M5 surface changes are 0.x preview changes; each paragraph here is its
+migration note, and after 1.0 the same changes would need the obsolete/migration cycle above.
 
 The runtime tone-mapping surface is additive too: `TonemappingSettings` and
 `EngineContext.Tonemapping` expose the exposure, AgX white, and AgX contrast for the app lifetime, and

@@ -162,10 +162,13 @@ orientation directly. The non-facing `Vector3` form keeps the vertical billboard
 `DrawCylinder`, `DrawWireCylinder`, `DrawCapsule`, `DrawWireCapsule`, `DrawPlane`, and `DrawCircle`
 each cover their scalar, tessellation, start/end, and `Transform` forms by overload.
 
-**Transform composition.** Every world shape has a `Transform` overload in addition to the simple
-and shape/position forms. The transform supplies the world position, rotation, and scale, and the
-shape dimensions stay explicit. The instance matrix is `local * transform.ToMatrix()` under the
-row-vector convention, where `local` builds the shape dimensions in local space:
+**Transform composition.** Every transformable solid or wire shape (cube, sphere, plane, cylinder,
+capsule, circle, wire cube, and wire sphere) has a `Transform` overload in addition to the simple and
+shape/position forms. The line, point, triangle, strip, ray, bounding box, and grid helpers are
+world-space draws without a `Transform` form. The transform supplies the world position, rotation,
+and scale, and the shape dimensions stay explicit. The instance matrix is
+`local * transform.ToMatrix()` under the row-vector convention, where `local` builds the shape
+dimensions in local space:
 `CreateScale(size)`, `CreateScale(radius)`, or `CreateScale(size.X, 1, size.Y)` for the box, sphere,
 or plane; the local cylinder or capsule basis for those shapes. The transform scale therefore
 multiplies the shape dimensions, and an identity rotation with unit scale reproduces the matching

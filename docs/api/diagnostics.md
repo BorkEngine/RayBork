@@ -113,13 +113,20 @@ M1 ships `RayBorkException`, `GameException`, `PlatformException`, and `WindowEx
 `GraphicsDeviceLostException` derives from it. M3 ships `AssetException` and its four sealed
 subtypes. M4 ships the camera and draw path without a new exception type: shader interface
 mismatches that escape the bake surface as `AssetLoadException` `RB1008` at load, and draw
-misuse uses the standard exceptions in the table below. M5 ships the primitive helpers and the
-collision queries without a new exception type either: helper argument and lifecycle misuse uses the
-standard exceptions in the table below (including `NotSupportedException`), a corrupt, missing, or
-mismatched baked collision payload fails the mesh load as `AssetLoadException` `RB1008`, and
-`Collision.GetRayMesh` throws `NotSupportedException` for a line or point topology and
-`ArgumentException` for a singular transform. `ShaderException` remains a contract for a later
-milestone.
+misuse uses the standard exceptions in the table below. M5 ships the primitive, billboard, and
+wireframe-model helpers and the collision queries without a new exception type either: helper
+argument and lifecycle misuse uses the standard exceptions in the table below (including
+`NotSupportedException`), a corrupt, missing, or mismatched baked collision payload fails the mesh
+load as `AssetLoadException` `RB1008`, and `Collision.GetRayMesh` throws `NotSupportedException` for
+a line or point topology and `ArgumentException` for a singular transform. A `DrawWireModel` frame
+on a device without `fillModeNonSolid` fails on the render thread with `GraphicsException` `RB3001`
+naming the device and the feature; there is no CPU line-geometry fallback. The nine
+`MeshBuilder.Generate*` factories and `GenerateCollisions` validate their arguments with
+`ArgumentOutOfRangeException`/`NotSupportedException`/`ObjectDisposedException` like the rest of the
+builder API, and `Collision.GetRayQuad` is a pure numeric query that reports a miss instead of
+throwing for numeric input. `EngineContext.Tonemapping` is copied into each sealed frame; the render
+thread and the present pass read that snapshot, never the live settings object. `ShaderException`
+remains a contract for a later milestone.
 
 Game and platform diagnostic codes (M1, M2):
 
@@ -134,7 +141,7 @@ Graphics diagnostic codes (M2):
 
 | Code | Exception | Meaning |
 | --- | --- | --- |
-| `RB3001` | `GraphicsException` | Graphics initialization or device creation failed, or the Vulkan validation layer reported an error. Fatal. |
+| `RB3001` | `GraphicsException` | Graphics initialization or device creation failed, the Vulkan validation layer reported an error, or a wireframe model draw needed `fillModeNonSolid` on a device that does not support it. Fatal. |
 | `RB3002` | `GraphicsDeviceLostException` | A bounded recovery failed or the consecutive-recovery limit was reached. Fatal. |
 | `RB3003` | `GraphicsException` | An unrecoverable Vulkan acquire or present failure stopped the app. Fatal. |
 
@@ -213,7 +220,8 @@ semantics:
   fullscreen triangle. A frame with no camera passes reports `0`.
 - `Instances` counts instances that survived culling and were submitted; `Triangles` counts
   submitted triangles after instancing (`0` for line and point topologies); `CulledInstances`
-  counts frustum rejections.
+  counts frustum rejections. A `DrawWireModel` record contributes its recorded triangle count even
+  though the polygon-mode-line pipeline rasterizes edges: the topology and index count do not change.
 - `PipelineCount` counts distinct scene pipelines and excludes the present pipeline.
 - `TextureCount` counts live bindless slots including the reserved white slot at slot 0. A texture
   allocates its slot when its GPU upload completes and releases it only when its GPU resource is

@@ -171,6 +171,7 @@ public sealed class Camera : IDisposable {
         Vector2 origin,
         Color color,
         bool faceCamera);
+    public void DrawTexture(Texture texture, Rect destination, Color? tint = null);
     public void DrawText(
         Font font,
         ReadOnlySpan<char> text,
@@ -217,15 +218,18 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
   is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
-> **M5 subset.** `Camera` ships the raylib-style primitive helpers: `DrawLine`, `DrawLines`,
-> `DrawPoint`, `DrawTriangle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawCube`,
-> `DrawWireCube`, `DrawSphere`, `DrawWireSphere`, `DrawCylinder`, `DrawWireCylinder`, `DrawCapsule`,
-> `DrawWireCapsule`, `DrawPlane`, `DrawCircle`, `DrawGrid`, and `DrawBillboard`, with the shape,
-> tessellation, and `Transform` overloads listed above. Their geometry, programs, render states,
+> **M5 subset.** `Camera` ships the raylib-style helper surface: the line, point, and triangle helpers
+> (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
+> `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`, `DrawCapsule`/`DrawWireCapsule`,
+> `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawWireCube`, `DrawWireSphere`,
+> and `DrawGrid`), and the eight `DrawBillboard` overloads, with the shape, position, tessellation,
+> start/end, and `Transform` overloads listed above. Their geometry, programs, render states,
 > validation, and batching are specified in §7.9. The model helpers are `DrawModel`,
 > `DrawModelInstanced`, and `DrawWireModel`; the wireframe helper is specified below. The `Target`
 > property and the `target` parameter arrive with `RenderTexture` in M8; `DrawText` and
-> `DrawTextBillboard` arrive with runtime text in M6. The camera always records into the app's linear
+> `DrawTextBillboard` arrive with runtime text in M6. `DrawTexture` is not part of M5: it moves to M7
+> with the orthographic/sprite contract, where the destination rectangle is in render pixels and the
+> texture is sampled with its own point/linear filter. The camera always records into the app's linear
 > HDR scene target, and the present pass applies AgX after all cameras finish.
 
 Properties:
@@ -331,9 +335,11 @@ records two instanced draws for equal radii. The four-argument `DrawCylinder` co
 uses the default 16 sides; the five-argument form takes `sides` explicitly.
 
 **Primitive overloads and Transform composition.** The primitive families use ordinary C# overloads;
-the engine has no `Ex`, `Rec`, `Pro`, or `V` suffixes. Every world shape has a raylib-compatible
-shape/position overload, and every world shape has a `Transform` overload in addition to its simple
-overload. The transform supplies the world position, rotation, and scale; the shape dimensions stay
+the engine has no `Ex`, `Rec`, `Pro`, or `V` suffixes. Every transformable solid or wire shape (cube,
+sphere, plane, cylinder, capsule, circle, wire cube, and wire sphere) has a raylib-compatible
+shape/position overload and a `Transform` overload in addition to its simple overload. The line,
+point, triangle, strip, ray, bounding box, and grid helpers are world-space draws without a `Transform`
+form. The transform supplies the world position, rotation, and scale; the shape dimensions stay
 explicit arguments. The instance matrix is `local * transform.ToMatrix()` under the row-vector
 convention, where `local` builds the shape dimensions in local space. The transform scale therefore
 multiplies the shape dimensions, and an identity rotation with unit scale reproduces the matching
@@ -392,6 +398,12 @@ camera-facing, full-texture, centered quad. The other forms add a normalized sou
   immediately afterwards, so the shared material never keeps a game texture. The recorded frame
   retains the texture until the renderer releases the slot, so a texture disposed after the call
   stays alive for the recorded frame.
+
+**DrawTexture (M7).** The screen-space texture helper is not part of M5. It returns in M7 as the
+sprite helper for an orthographic camera: `destination` is a render-pixel rectangle relative to the
+camera viewport (top-left origin, Y downward), `tint` is linear, and the texture's own sampler
+selects point or linear filtering. It draws an alpha-blended textured quad on the normal draw path;
+the M5 unprojected-overlay implementation is not part of the shipped surface.
 
 **Ray/quad collision.** `Collision.GetRayQuad(ray, a, b, c, d)` splits the quad into the triangles
 `(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the nearest
