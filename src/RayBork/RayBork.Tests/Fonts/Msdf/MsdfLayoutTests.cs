@@ -88,6 +88,84 @@ public sealed class MsdfLayoutTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ANonSquareLayoutHasExactEmMetrics() {
+        // The fitted content is 28 by 10 pixels inside a 32 by 14 padded texture. The content height
+        // ceil leaves 0.676 pixels of extra top padding, so the content's bottom sits at pixel row 12.
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 333),
+            unitsPerEm: 1000);
+
+        Assert.Equal(32, layout.TextureWidth);
+        Assert.Equal(14, layout.TextureHeight);
+        Assert.Equal(0.028f, layout.Scale, 6);
+        Assert.Equal(2f, layout.OriginX);
+        Assert.Equal(12f, layout.OriginY);
+        Assert.Equal(-0.07142857f, layout.BearingXEm, 5);
+        Assert.Equal(-0.07142857f, layout.BearingYEm, 5);
+        Assert.Equal(32f / 28f, layout.WidthEm, 5);
+        Assert.Equal(0.5f, layout.HeightEm, 5);
+        Assert.Equal(32f / (layout.Scale * 1000f), layout.WidthEm, 5);
+        Assert.Equal(14f / (layout.Scale * 1000f), layout.HeightEm, 5);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheBottomPaddingIsExactForANegativeYMin() {
+        // YMin = -50 moves the font origin down: the content's bottom padding must still be exactly
+        // 2 pixels, so the origin y is 2 + 10 - 50 * 0.028 = 10.6, not the top-aligned 0.6.
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(-100, -50, 900, 283),
+            unitsPerEm: 1000);
+
+        Assert.Equal(32, layout.TextureWidth);
+        Assert.Equal(14, layout.TextureHeight);
+        Assert.Equal(4.8f, layout.OriginX, 5);
+        Assert.Equal(10.6f, layout.OriginY, 5);
+        Assert.Equal(-0.17142857f, layout.BearingXEm, 5);
+        Assert.Equal(-0.12142857f, layout.BearingYEm, 5);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheSmallestPixelSizesLayOut(int pixelSize) {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000,
+            pixelSize: pixelSize,
+            padding: 0);
+
+        Assert.Equal(pixelSize, layout.TextureWidth);
+        Assert.Equal(pixelSize, layout.TextureHeight);
+        Assert.Equal(pixelSize, Math.Max(layout.TextureWidth, layout.TextureHeight));
+        Assert.Equal(pixelSize / 1000f, layout.Scale, 6);
+        Assert.Equal(0f, layout.OriginX);
+        Assert.Equal(pixelSize, layout.OriginY);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AContentSideSmallerThanThePaddingStillLaysOut() {
+        // The fitted glyph content is one pixel while each padding is eight pixels.
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 10, 10),
+            unitsPerEm: 10,
+            pixelSize: 17,
+            padding: 8);
+
+        Assert.Equal(17, layout.TextureWidth);
+        Assert.Equal(17, layout.TextureHeight);
+        Assert.Equal(0.1f, layout.Scale, 6);
+        Assert.Equal(8f, layout.OriginX);
+        Assert.Equal(9f, layout.OriginY);
+        Assert.Equal(17f, layout.WidthEm, 5);
+        Assert.Equal(17f, layout.HeightEm, 5);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void AnAllZeroBoxYieldsTheEmptyLayout() {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 0, 0),

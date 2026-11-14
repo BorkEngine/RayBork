@@ -6,7 +6,8 @@ namespace RayBork.Tests.Fonts.Msdf;
 /// <summary>
 /// Tests the deterministic MSDF edge colouring: every flattened edge carries exactly two channels,
 /// consecutive edges of a contour differ and share exactly one channel, the closing edge is fixed
-/// when the cycle would repeat the first pair, and a degenerate single-edge contour still flattens.
+/// when the cycle would repeat the first pair, each contour restarts the cycle, two-edge contours
+/// cycle two pairs, and capped curves still flatten to the documented maximum.
 /// </summary>
 public sealed class MsdfEdgeColoringTests {
     [Fact]
@@ -53,6 +54,81 @@ public sealed class MsdfEdgeColoringTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ATwoEdgeContourCyclesTwoPairs() {
+        OutlinePath outline = MsdfTestShapes.CreatePath(
+            new OutlineContour(
+                new Vector2(100f, 100f),
+                new OutlineSegment[] {
+                    OutlineSegment.Line(new Vector2(900f, 100f)),
+                    OutlineSegment.Line(new Vector2(100f, 100f)),
+                }));
+
+        MsdfEdge[] edges = Flatten(outline);
+
+        Assert.Equal(2, edges.Length);
+        Assert.Equal(MsdfOutlineFlattener.YELLOW, edges[0].ColorMask);
+        Assert.Equal(MsdfOutlineFlattener.CYAN, edges[1].ColorMask);
+        Assert.Equal(1, BitOperations.PopCount((uint)(edges[0].ColorMask & edges[1].ColorMask)));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void EachContourRestartsTheColourCycle() {
+        var first = new OutlineContour(
+            new Vector2(0f, 0f),
+            new OutlineSegment[] {
+                OutlineSegment.Line(new Vector2(400f, 0f)),
+                OutlineSegment.Line(new Vector2(400f, 400f)),
+                OutlineSegment.Line(new Vector2(0f, 400f)),
+                OutlineSegment.Line(new Vector2(0f, 0f)),
+            });
+        var second = new OutlineContour(
+            new Vector2(600f, 0f),
+            new OutlineSegment[] {
+                OutlineSegment.Line(new Vector2(1000f, 0f)),
+                OutlineSegment.Line(new Vector2(1000f, 400f)),
+                OutlineSegment.Line(new Vector2(600f, 400f)),
+                OutlineSegment.Line(new Vector2(600f, 0f)),
+            });
+
+        MsdfEdge[] edges = Flatten(MsdfTestShapes.CreatePath(first, second));
+
+        Assert.Equal(8, edges.Length);
+        Assert.Equal(MsdfOutlineFlattener.YELLOW, edges[0].ColorMask);
+        Assert.Equal(MsdfOutlineFlattener.CYAN, edges[3].ColorMask);
+        Assert.Equal(MsdfOutlineFlattener.YELLOW, edges[4].ColorMask);
+        Assert.Equal(MsdfOutlineFlattener.CYAN, edges[7].ColorMask);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ACurveAtTheSubdivisionCapProducesTheMaximumSegments() {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000);
+        OutlinePath outline = MsdfTestShapes.CreatePath(
+            new OutlineContour(
+                Vector2.Zero,
+                new OutlineSegment[] {
+                    OutlineSegment.Cubic(
+                        new Vector2(300_000f, 0f),
+                        new Vector2(0f, 300_000f),
+                        Vector2.Zero),
+                }));
+
+        int count = MsdfOutlineFlattener.CountEdges(outline, layout);
+        MsdfEdge[] edges = new MsdfEdge[count];
+        MsdfOutlineFlattener.Flatten(outline, layout, edges);
+
+        Assert.Equal(MsdfOutlineFlattener.MAXIMUM_SEGMENTS_PER_CURVE, count);
+        foreach (MsdfEdge edge in edges) {
+            Assert.Equal(2, BitOperations.PopCount((uint)edge.ColorMask));
+            Assert.NotEqual(edge.Start, edge.End);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ACurvedContourFlattensToColouredLines() {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
@@ -73,20 +149,6 @@ public sealed class MsdfEdgeColoringTests {
         }
 
         Assert.Equal(edges[0].Start, edges[^1].End);
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ASingleEdgeContourKeepsTheFirstColourPair() {
-        OutlinePath outline = MsdfTestShapes.CreatePath(
-            new OutlineContour(
-                Vector2.Zero,
-                new OutlineSegment[] { OutlineSegment.Line(Vector2.Zero) }));
-
-        MsdfEdge[] edges = Flatten(outline);
-
-        MsdfEdge edge = Assert.Single(edges);
-        Assert.Equal(MsdfOutlineFlattener.YELLOW, edge.ColorMask);
     }
 
     private static MsdfEdge[] Flatten(OutlinePath outline) {

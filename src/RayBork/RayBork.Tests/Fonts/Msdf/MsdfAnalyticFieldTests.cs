@@ -30,6 +30,7 @@ public sealed class MsdfAnalyticFieldTests {
 
         MsdfTestField.AssertNotConstant(bitmap);
         MsdfTestField.AssertMatchesContours(bitmap, layout, [corners]);
+        MsdfTestField.AssertMatchesEvenOddContours(bitmap, layout, [corners]);
     }
 
     [Fact]
@@ -49,6 +50,7 @@ public sealed class MsdfAnalyticFieldTests {
 
         MsdfTestField.AssertNotConstant(bitmap);
         MsdfTestField.AssertMatchesContours(bitmap, layout, [corners]);
+        MsdfTestField.AssertMatchesEvenOddContours(bitmap, layout, [corners]);
     }
 
     [Fact]
@@ -69,6 +71,7 @@ public sealed class MsdfAnalyticFieldTests {
 
         MsdfTestField.AssertNotConstant(bitmap);
         MsdfTestField.AssertMatchesContours(bitmap, layout, [pixelVertices]);
+        MsdfTestField.AssertMatchesEvenOddContours(bitmap, layout, [pixelVertices]);
     }
 
     [Fact]
@@ -94,7 +97,7 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TextureRowsRunFromTheOutlineMaximumYDownward() {
+    public void TextureRowsAreTopDownFromTheQuadUpperEdge() {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
             unitsPerEm: 1000);
@@ -106,6 +109,91 @@ public sealed class MsdfAnalyticFieldTests {
 
         Assert.True(MsdfTestField.MedianAt(bitmap, layout, 16, 4) < 0.5f);
         Assert.True(MsdfTestField.MedianAt(bitmap, layout, 16, 26) > 0.5f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheContentIsBottomAlignedForANonSquareLayout() {
+        // Fitted content: x in [2, 30], y in [2.676, 12]. The bottom padding is exactly two pixels;
+        // the ceil remainder (0.676 pixels) is extra top padding. The hard-coded rows and the direct
+        // pixel rectangle share neither the layout transform nor the production winding rule.
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 333),
+            unitsPerEm: 1000);
+        OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 333f);
+
+        byte[] bitmap = MsdfGenerator.Generate(outline, layout);
+
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 16, 2) < 0.5f);
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 16, 3) > 0.5f);
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 16, 11) > 0.5f);
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 16, 12) < 0.5f);
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 16, 13) < 0.5f);
+        MsdfTestField.AssertMatchesPixelRectangle(bitmap, layout, 2f, 2.676f, 30f, 12f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AGlyphSmallerThanItsPaddingIsPlacedCorrectly() {
+        // One pixel of content with eight pixels of padding on every side; the content must still be
+        // bottom-aligned at row eight.
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 10, 10),
+            unitsPerEm: 10,
+            pixelSize: 17,
+            padding: 8);
+        OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 10f, 10f);
+
+        byte[] bitmap = MsdfGenerator.Generate(outline, layout);
+
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 8, 8) > 0.5f);
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 8, 7) < 0.5f);
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 8, 9) < 0.5f);
+        MsdfTestField.AssertMatchesPixelRectangle(bitmap, layout, 8f, 8f, 9f, 9f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ARangeLargerThanTheTextureSidePreservesTheDistances() {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000,
+            pixelSize: 8,
+            padding: 0,
+            range: 100);
+        OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
+        Vector2[] corners = [
+            layout.ToPixel(new Vector2(0f, 0f)),
+            layout.ToPixel(new Vector2(1000f, 0f)),
+            layout.ToPixel(new Vector2(1000f, 1000f)),
+            layout.ToPixel(new Vector2(0f, 1000f)),
+        ];
+
+        byte[] bitmap = MsdfGenerator.Generate(outline, layout);
+
+        Assert.Equal(8, layout.TextureWidth);
+        Assert.Equal(8, layout.TextureHeight);
+        Assert.Equal(100, layout.Range);
+        // No texel is farther than the 50 texel half range, so nothing saturates at this range.
+        MsdfTestField.AssertMatchesContours(bitmap, layout, [corners]);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void APixelSizeOfOneTexelProducesAValidField() {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000,
+            pixelSize: 1,
+            padding: 0);
+        OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
+
+        byte[] bitmap = MsdfGenerator.Generate(outline, layout);
+
+        Assert.Equal(4, bitmap.Length);
+        Assert.Equal(255, bitmap[3]);
+        // The single texel centre is inside the full-bounds rectangle, half a texel from its edge.
+        Assert.True(MsdfTestField.MedianAt(bitmap, layout, 0, 0) > 0.5f);
     }
 
     [Fact]

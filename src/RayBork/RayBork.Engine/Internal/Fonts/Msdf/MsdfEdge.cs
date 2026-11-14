@@ -8,7 +8,7 @@ namespace RayBork.Internal;
 /// <remarks>
 /// <para>
 /// <see cref="Start"/> and <see cref="End"/> are in the top-down pixel space of the glyph texture
-/// (row zero is the outline's maximum y). <see cref="ColorMask"/> is a two-bit mask over the red,
+/// (row zero is the quad's upper edge). <see cref="ColorMask"/> is a two-bit mask over the red,
 /// green, and blue distance channels: one of <see cref="MsdfOutlineFlattener.YELLOW"/>,
 /// <see cref="MsdfOutlineFlattener.CYAN"/>, and <see cref="MsdfOutlineFlattener.MAGENTA"/>. Every
 /// edge carries two of the three channels, and any two different masks share exactly one channel.

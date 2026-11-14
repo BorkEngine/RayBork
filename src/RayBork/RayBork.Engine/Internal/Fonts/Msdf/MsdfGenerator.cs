@@ -14,17 +14,19 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// The output is byte-identical for the same input bytes: there is no randomness, no parallel
-/// reduction, no culture-dependent formatting, and no hash-order dependency. One retained allocation
-/// (the result buffer) plus one pooled edge array are made per generated glyph.
+/// reduction, no culture-dependent formatting, and no hash-order dependency. A generated glyph retains
+/// its result buffer and rents one pooled edge array while it runs; the empty paths allocate only the
+/// result buffer, or nothing at all when the layout is empty.
 /// </para>
 /// <para>
 /// The field contract is the one the built-in MSDF fragment shader assumes: <c>0.5</c> is the glyph
 /// edge, the authored range maps to <c>[0, 1]</c>, values above <c>0.5</c> are inside, and the alpha
 /// channel is 255. The texture is <c>Rgba8Unorm</c>, linear-filtered and clamp-wrapped, with row zero
-/// at the outline's maximum y (top-down, matching the engine's top-left UV convention). The field is
-/// the exact nearest-edge distance per channel; it does not extend edges past their endpoints, so
-/// texel centres reconstruct the exact distance at corners but bilinear filtering between texels can
-/// round a sharp corner at the texel scale.
+/// at the quad's upper edge (top-down, matching the engine's top-left UV convention); the outline
+/// content is bottom-aligned inside the fitted box. The field is the exact nearest-edge distance per
+/// channel; it does not extend edges past their endpoints, so texel centres reconstruct the exact
+/// distance at corners but bilinear filtering between texels can round a sharp corner at the texel
+/// scale.
 /// </para>
 /// </remarks>
 internal static class MsdfGenerator {
@@ -78,7 +80,9 @@ internal static class MsdfGenerator {
     /// glyph box has its longest side at <c>pixelSize - 2 * padding</c> pixels. Each texture side is
     /// <c>ceil(boundsExtent * scale) + 2 * padding</c>, so the padded texture's longest side is exactly
     /// <paramref name="pixelSize"/> and its shorter side is at most that; a zero extent still keeps at
-    /// least one texel.
+    /// least one texel. The content is left- and bottom-aligned in the fitted box: the pixel that the
+    /// ceil adds to a side stays in the right or top padding, so the outline's minimum x and minimum y
+    /// sit exactly <paramref name="padding"/> pixels inside the texture's left and bottom edges.
     /// </para>
     /// <para>
     /// The quad metrics are <c>bearingXEm = (XMin - padding / scale) / unitsPerEm</c>,
@@ -86,16 +90,17 @@ internal static class MsdfGenerator {
     /// <c>widthEm = textureWidth / (scale * unitsPerEm)</c>, and
     /// <c>heightEm = textureHeight / (scale * unitsPerEm)</c>. The bearings are the quad's lower-left
     /// corner relative to the pen position on the baseline, and the width and height include the
-    /// padding. The texture is top-down: row zero is the outline's maximum y, so <c>v = 0</c> samples
-    /// the quad's upper edge and matches the engine's top-left UV convention.
+    /// padding. The texture is top-down: row zero is the quad's upper edge (the top padding), so
+    /// <c>v = 0</c> samples the quad's upper edge and matches the engine's top-left UV convention.
     /// </para>
     /// <para>
     /// The parser encodes a glyph without an outline as an all-zero box; that box yields the empty
     /// layout with a zero texture size, a zero scale, and all-zero metrics. Any other box with a zero
     /// extent is degenerate but still yields a valid layout. A box with both extents zero is fitted as
     /// a one-font-unit extent so that the scale is defined, and its texture is the full
-    /// <paramref name="pixelSize"/> square. The operation is O(1) and allocation-free. Font bounds are
-    /// integral, so they are always finite; only an inverted box is invalid.
+    /// <paramref name="pixelSize"/> square with the point at the bottom padding line. The operation is
+    /// O(1) and allocation-free. Font bounds are integral, so they are always finite; only an inverted
+    /// box is invalid.
     /// </para>
     /// </remarks>
     internal static MsdfGlyphLayout ComputeLayout(
@@ -175,13 +180,18 @@ internal static class MsdfGenerator {
         float bearingXEm = (bounds.XMin - paddingInFontUnits) / unitsPerEm;
         float bearingYEm = (bounds.YMin - paddingInFontUnits) / unitsPerEm;
         float pixelsPerEm = scaleValue * unitsPerEm;
+
+        // The fitted content is left- and bottom-aligned. The ceil remainder stays in the right and top
+        // padding, so the content's minimum y sits exactly padding above the texture's bottom edge and
+        // the quad's lower-left derived from BearingYEm is exact.
+        long verticalSpan = textureHeight - (2L * padding);
         return new MsdfGlyphLayout(
             (int)textureWidth,
             (int)textureHeight,
             scaleValue,
             range,
             padding - (bounds.XMin * scaleValue),
-            padding + (bounds.YMax * scaleValue),
+            padding + verticalSpan + (bounds.YMin * scaleValue),
             bearingXEm,
             bearingYEm,
             textureWidth / pixelsPerEm,
@@ -197,8 +207,9 @@ internal static class MsdfGenerator {
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="outline"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">
-    /// <paramref name="layout"/> has no texture while the outline has contours, or it is not a valid
-    /// non-empty layout.
+    /// <paramref name="layout"/> has a negative texture side, has no texture while the outline has
+    /// contours, or is not a valid non-empty layout: its scale is not positive and finite, an origin is
+    /// not finite, or its range is not positive.
     /// </exception>
     /// <exception cref="MsdfLimitException">
     /// The texture exceeds <see cref="MAX_TEXELS"/>, the outline flattens to more than
@@ -213,6 +224,12 @@ internal static class MsdfGenerator {
     /// </remarks>
     internal static byte[] Generate(OutlinePath outline, in MsdfGlyphLayout layout) {
         ArgumentNullException.ThrowIfNull(outline);
+        if (layout.TextureWidth < 0 || layout.TextureHeight < 0) {
+            throw new ArgumentException(
+                "The layout must not have a negative texture size.",
+                nameof(layout));
+        }
+
         if (layout.IsEmpty) {
             if (outline.IsEmpty) {
                 return [];
@@ -223,9 +240,13 @@ internal static class MsdfGenerator {
                 nameof(layout));
         }
 
-        if (!(layout.Scale > 0f) || layout.Range <= 0) {
+        if (!(layout.Scale > 0f)
+            || !float.IsFinite(layout.Scale)
+            || !float.IsFinite(layout.OriginX)
+            || !float.IsFinite(layout.OriginY)
+            || layout.Range <= 0) {
             throw new ArgumentException(
-                "The layout must have a positive scale and distance range.",
+                "The layout must have a positive finite scale, finite origins, and a positive distance range.",
                 nameof(layout));
         }
 

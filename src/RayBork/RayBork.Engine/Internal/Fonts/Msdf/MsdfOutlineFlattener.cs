@@ -12,24 +12,32 @@ namespace RayBork.Internal;
 /// error bound of a C2 parametric curve: a quadratic's maximum deviation is a quarter of its second
 /// difference and a cubic's is three quarters of its largest second difference, and a uniform
 /// subdivision into <c>n</c> pieces divides the deviation by <c>n²</c>. The count therefore keeps
-/// every chord within <see cref="FLATTEN_TOLERANCE_PX"/> output pixels of the curve, and is capped at
-/// <see cref="MAXIMUM_SEGMENTS_PER_CURVE"/> per segment.
+/// every chord within <see cref="FLATTEN_TOLERANCE_PX"/> output pixels of the curve. The count is
+/// capped at <see cref="MAXIMUM_SEGMENTS_PER_CURVE"/> per segment; when that cap binds, the curve is
+/// accepted at 256 pieces and may flatten coarser than the tolerance. Computing the count costs one
+/// square root for a quadratic and two for a cubic.
+/// </para>
+/// <para>
+/// A segment whose start and end map to the same pixel and whose flattening is a single chord
+/// contributes no edge: that chord would be zero-length, adds no boundary, and never changes the
+/// winding number.
 /// </para>
 /// <para>
 /// Each flattened edge carries two of the three distance channels: yellow is red and green, cyan is
-/// green and blue, and magenta is red and blue. Every edge must carry two channels because the median
-/// reconstruction needs two channels to agree along an edge; with a single channel the median would
-/// pick a far edge over the nearest one. The pairs cycle over the flattened edges of a contour in
-/// order, so any two consecutive edges carry different pairs that share exactly one channel. When the
-/// closing edge would repeat the first edge's pair (a contour with <c>3n + 1</c> edges so the cycle
-/// lands on yellow again), it takes cyan, the pair that differs from both the first edge and its own
-/// predecessor.
+/// green and blue, and magenta is red and blue. The nearest edge must feed two of the three values
+/// that the median sees, so that the third value is farther and cannot move the median; the same pair
+/// also keeps the reconstructed edge stable when neighbouring texels are linearly interpolated. The
+/// pairs cycle over the flattened edges of a contour in order, so any two consecutive edges carry
+/// different pairs that share exactly one channel. When the closing edge would repeat the first edge's
+/// pair (a contour with <c>3n + 1</c> edges so the cycle lands on yellow again), it takes cyan, the
+/// pair that differs from both the first edge and its own predecessor.
 /// </para>
 /// <para>
-/// Colouring is per contour. A contour that flattens to a single edge keeps yellow; it is degenerate
-/// and cannot differ from itself. Two contours that cross (which a valid font outline never does) are
-/// coloured independently, so a texel whose three nearest edges all belong to different contours may
-/// not carry its nearest edge in two channels and the median can deviate there.
+/// Colouring is per contour, and every contour restarts the cycle at yellow. Crossing contours (which
+/// a valid font outline never has) still reconstruct the nearest edge at texel centres because that
+/// edge feeds two channels; under bilinear filtering, however, the same channel can interpolate
+/// between nearest edges of different contours and disturb the median, and the global non-zero winding
+/// sign is only meaningful for the non-overlapping regions a real font uses.
 /// </para>
 /// </remarks>
 internal static class MsdfOutlineFlattener {
@@ -95,7 +103,8 @@ internal static class MsdfOutlineFlattener {
             OutlineContour contour = contours[contourIndex];
             ReadOnlySpan<OutlineSegment> segments = contour.Segments.Span;
             // The closing edge's colour depends on the contour's flattened edge count, so count the
-            // contour before emitting it. The count costs one square root per curved segment.
+            // contour before emitting it. The count costs one square root per quadratic segment and two
+            // per cubic segment.
             int contourEdgeCount = 0;
             Vector2 from = layout.ToPixel(contour.Start);
             for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++) {
@@ -137,11 +146,13 @@ internal static class MsdfOutlineFlattener {
         in OutlineSegment segment,
         Vector2 end,
         in MsdfGlyphLayout layout) {
+        int divisions;
         switch (segment.Kind) {
             case OutlineSegmentKind.Quadratic: {
                 Vector2 control = layout.ToPixel(segment.Control1);
                 Vector2 secondDifference = start - (2f * control) + end;
-                return GetDivisionCount(secondDifference.Length(), QUADRATIC_ERROR_FACTOR);
+                divisions = GetDivisionCount(secondDifference.Length(), QUADRATIC_ERROR_FACTOR);
+                break;
             }
 
             case OutlineSegmentKind.Cubic: {
@@ -149,12 +160,18 @@ internal static class MsdfOutlineFlattener {
                 Vector2 control2 = layout.ToPixel(segment.Control2);
                 float first = (start - (2f * control1) + control2).Length();
                 float second = (control1 - (2f * control2) + end).Length();
-                return GetDivisionCount(MathF.Max(first, second), CUBIC_ERROR_FACTOR);
+                divisions = GetDivisionCount(MathF.Max(first, second), CUBIC_ERROR_FACTOR);
+                break;
             }
 
             default:
-                return 1;
+                divisions = 1;
+                break;
         }
+
+        // A segment that starts and ends at the same pixel and flattens to a single chord has no
+        // extent; it would emit one zero-length edge, which contributes no boundary and no winding.
+        return (start == end && divisions <= 1) ? 0 : divisions;
     }
 
     private static int GetDivisionCount(float deviation, double errorFactor) {

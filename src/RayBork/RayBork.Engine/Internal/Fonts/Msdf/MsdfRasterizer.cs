@@ -15,11 +15,11 @@ namespace RayBork.Internal;
 /// channels are 255.
 /// </para>
 /// <para>
-/// Distances are in texture pixels and measured from texel centres. Row zero is the outline's maximum-y
-/// row, so the image is top-down and <c>v = 0</c> samples the outline's top; this matches the engine's
+/// Distances are in texture pixels and measured from texel centres. Row zero is the quad's upper edge,
+/// so the image is top-down and <c>v = 0</c> samples the quad's upper edge; this matches the engine's
 /// top-left UV convention. A channel with no edge at all has a positive infinite distance and
-/// saturates at the extreme for the texel's side; the median is unaffected because the nearest edge
-/// always feeds the other two channels with the same value.
+/// saturates at the extreme for the texel's side. The median is unaffected: the nearest edge feeds its
+/// two channels with the same value, and the third channel's nearest edge is at least as far away.
 /// </para>
 /// <para>
 /// The field stores the exact distance to the nearest edge of each colour and does not extend an edge

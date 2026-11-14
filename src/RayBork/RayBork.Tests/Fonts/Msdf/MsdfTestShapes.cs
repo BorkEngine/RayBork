@@ -186,6 +186,34 @@ internal static class MsdfTestShapes {
         return winding != 0 ? distance : -distance;
     }
 
+    /// <summary>
+    /// Computes the signed distance to a set of closed polylines using the even-odd fill rule, which is
+    /// independent of the production non-zero winding test. The analytic test shapes are simple or
+    /// nested, so both rules classify them identically.
+    /// </summary>
+    internal static float SignedDistanceToEvenOddContours(Vector2[][] contours, Vector2 point) {
+        float squared = float.PositiveInfinity;
+        bool inside = false;
+        for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++) {
+            Vector2[] vertices = contours[contourIndex];
+            for (int index = 0; index < vertices.Length; index++) {
+                Vector2 start = vertices[index];
+                Vector2 end = vertices[(index + 1) % vertices.Length];
+                float edgeDistance = SquaredDistanceToSegment(start, end, point);
+                if (edgeDistance < squared) {
+                    squared = edgeDistance;
+                }
+
+                if (CrossesToTheRight(start, end, point)) {
+                    inside = !inside;
+                }
+            }
+        }
+
+        float distance = MathF.Sqrt(squared);
+        return inside ? distance : -distance;
+    }
+
     /// <summary>Computes the squared distance from a point to a line segment.</summary>
     internal static float SquaredDistanceToSegment(Vector2 start, Vector2 end, Vector2 point) {
         Vector2 edge = end - start;
@@ -231,5 +259,14 @@ internal static class MsdfTestShapes {
         }
 
         return 0;
+    }
+
+    private static bool CrossesToTheRight(Vector2 start, Vector2 end, Vector2 point) {
+        if ((start.Y > point.Y) == (end.Y > point.Y)) {
+            return false;
+        }
+
+        float crossingX = start.X + (((point.Y - start.Y) * (end.X - start.X)) / (end.Y - start.Y));
+        return point.X < crossingX;
     }
 }

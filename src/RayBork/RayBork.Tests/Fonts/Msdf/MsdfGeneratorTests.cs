@@ -87,6 +87,129 @@ public sealed class MsdfGeneratorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void NegativeOrNonFiniteLayoutsAreRejected() {
+        OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
+
+        AssertLayoutRejected(() => MsdfGenerator.Generate(
+            outline,
+            new MsdfGlyphLayout(-1, 4, 1f, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
+        AssertLayoutRejected(() => MsdfGenerator.Generate(
+            outline,
+            new MsdfGlyphLayout(4, -1, 1f, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
+        AssertLayoutRejected(() => MsdfGenerator.Generate(
+            outline,
+            new MsdfGlyphLayout(4, 4, float.PositiveInfinity, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
+        AssertLayoutRejected(() => MsdfGenerator.Generate(
+            outline,
+            new MsdfGlyphLayout(4, 4, float.NaN, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
+        AssertLayoutRejected(() => MsdfGenerator.Generate(
+            outline,
+            new MsdfGlyphLayout(4, 4, 1f, 4, float.NaN, 0f, 0f, 0f, 0f, 0f)));
+        AssertLayoutRejected(() => MsdfGenerator.Generate(
+            outline,
+            new MsdfGlyphLayout(4, 4, 1f, 4, 0f, float.PositiveInfinity, 0f, 0f, 0f, 0f)));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ADegenerateSegmentContributesNoEdge() {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000);
+        var start = new Vector2(500f, 500f);
+        OutlinePath outline = MsdfTestShapes.CreatePath(
+            new OutlineContour(
+                start,
+                new OutlineSegment[] {
+                    OutlineSegment.Line(start),
+                    OutlineSegment.Quadratic(start, start),
+                    OutlineSegment.Cubic(start, start, start),
+                }));
+
+        Assert.Equal(0, MsdfOutlineFlattener.CountEdges(outline, layout));
+        byte[] bitmap = MsdfGenerator.Generate(outline, layout);
+        MsdfTestField.AssertAllOutside(bitmap);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AContourOfDegenerateSegmentsProducesTheOutsideField() {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000);
+        var start = new Vector2(500f, 500f);
+        OutlinePath outline = MsdfTestShapes.CreatePath(
+            new OutlineContour(
+                start,
+                new OutlineSegment[] {
+                    OutlineSegment.Line(start),
+                    OutlineSegment.Line(start),
+                    OutlineSegment.Line(start),
+                }));
+
+        byte[] bitmap = MsdfGenerator.Generate(outline, layout);
+
+        Assert.Equal(layout.TextureWidth * layout.TextureHeight * 4, bitmap.Length);
+        MsdfTestField.AssertAllOutside(bitmap);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ADegenerateContourDoesNotChangeAValidField() {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000);
+        var rectangle = new OutlineContour(
+            new Vector2(100f, 100f),
+            new OutlineSegment[] {
+                OutlineSegment.Line(new Vector2(900f, 100f)),
+                OutlineSegment.Line(new Vector2(900f, 900f)),
+                OutlineSegment.Line(new Vector2(100f, 900f)),
+                OutlineSegment.Line(new Vector2(100f, 100f)),
+            });
+        var degenerate = new OutlineContour(
+            new Vector2(500f, 500f),
+            new OutlineSegment[] { OutlineSegment.Line(new Vector2(500f, 500f)) });
+
+        byte[] rectangleOnly = MsdfGenerator.Generate(MsdfTestShapes.CreatePath(rectangle), layout);
+        byte[] withDegenerate = MsdfGenerator.Generate(
+            MsdfTestShapes.CreatePath(rectangle, degenerate),
+            layout);
+
+        Assert.True(
+            rectangleOnly.AsSpan().SequenceEqual(withDegenerate),
+            "A degenerate contour changed the generated field.");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ATwoEdgeContourProducesAField() {
+        MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
+            new FontBounds(0, 0, 1000, 1000),
+            unitsPerEm: 1000);
+        OutlinePath outline = MsdfTestShapes.CreatePath(
+            new OutlineContour(
+                new Vector2(100f, 100f),
+                new OutlineSegment[] {
+                    OutlineSegment.Line(new Vector2(900f, 100f)),
+                    OutlineSegment.Line(new Vector2(100f, 100f)),
+                }));
+
+        byte[] bitmap = MsdfGenerator.Generate(outline, layout);
+
+        Assert.Equal(layout.TextureWidth * layout.TextureHeight * 4, bitmap.Length);
+        MsdfTestField.AssertOpaque(bitmap);
+        // The zero-area contour is outside everywhere, but its line still carries a distance.
+        MsdfTestField.AssertNotConstant(bitmap);
+    }
+
+    private static void AssertLayoutRejected(Action generate) {
+        ArgumentException exception = Assert.Throws<ArgumentException>(generate);
+        Assert.Equal("layout", exception.ParamName);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void AnOversizedTextureIsRejectedBeforeItIsAllocated() {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
