@@ -9,8 +9,7 @@ namespace RayBork.Tests.Graphics.Text;
 public sealed class TextLayoutBufferTests {
     private const string STEADY_STATE_TEXT = "abcde abcde abcde";
     private const int STEADY_STATE_GLYPHS = 17;
-    private const float WRAPPED_STEADY_STATE_MAX_WIDTH = 100f;
-    private const int WRAPPED_STEADY_STATE_GLYPHS = 71;
+    private const float WRAPPED_STEADY_STATE_MAX_WIDTH = 5f;
     private static readonly string _wrappedSteadyStateText = string.Join(" ", Enumerable.Repeat("abcde", 12));
 
     [Fact]
@@ -140,12 +139,16 @@ public sealed class TextLayoutBufferTests {
     }
 
     [Theory]
-    [InlineData(TextWrapping.Word)]
-    [InlineData(TextWrapping.Character)]
+    [InlineData(TextWrapping.Word, 60, 12)]
+    [InlineData(TextWrapping.Character, 71, 8)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SteadyStateWrappedArrangeAllocatesNothing(TextWrapping wrapping) {
+    public void SteadyStateWrappedArrangeAllocatesNothing(
+        TextWrapping wrapping,
+        int expectedGlyphs,
+        int expectedLines) {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
+        TextLayoutResult result = default;
         for (int i = 0; i < 100; i++) {
             TextLayoutEngine.Arrange(
                 metrics,
@@ -155,7 +158,7 @@ public sealed class TextLayoutBufferTests {
                 wrapping,
                 WRAPPED_STEADY_STATE_MAX_WIDTH,
                 buffer,
-                out _);
+                out result);
         }
         int capacityAfterWarmUp = buffer.Capacity;
 
@@ -169,13 +172,14 @@ public sealed class TextLayoutBufferTests {
                 wrapping,
                 WRAPPED_STEADY_STATE_MAX_WIDTH,
                 buffer,
-                out _);
+                out result);
         }
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.Equal(0L, allocated);
         Assert.Equal(capacityAfterWarmUp, buffer.Capacity);
-        Assert.Equal(WRAPPED_STEADY_STATE_GLYPHS, buffer.Count);
+        Assert.Equal(expectedGlyphs, buffer.Count);
+        Assert.Equal(expectedLines, result.LineCount);
     }
 
     private static int Arrange(FakeTextMetrics metrics, string text, TextLayoutBuffer buffer) {

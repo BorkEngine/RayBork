@@ -353,7 +353,7 @@ public sealed class TextLayoutWrappingTests {
             .Kerning(TextLayoutTestData.GLYPH_A, TextLayoutTestData.GLYPH_B, 0.25f);
         TextLayoutBuffer buffer = new();
 
-        int count = ArrangeAtSize(metrics, "ab", buffer, 2f, TextWrapping.None, 0f, out TextLayoutResult result);
+        int count = Arrange(metrics, "ab", buffer, TextWrapping.None, 0f, out TextLayoutResult result, size: 2f);
 
         Assert.Equal(2, count);
         Assert.Equal(1, result.LineCount);
@@ -372,7 +372,7 @@ public sealed class TextLayoutWrappingTests {
         TextLayoutBuffer scaled = new();
 
         Arrange(metrics, "ab cd", unscaled, TextWrapping.Word, 3f, out TextLayoutResult unscaledResult);
-        ArrangeAtSize(metrics, "ab cd", scaled, 2f, TextWrapping.Word, 3f, out TextLayoutResult scaledResult);
+        Arrange(metrics, "ab cd", scaled, TextWrapping.Word, 3f, out TextLayoutResult scaledResult, size: 2f);
 
         Assert.Equal(1, unscaledResult.LineCount);
         Assert.Equal(5, unscaled.Count);
@@ -390,7 +390,7 @@ public sealed class TextLayoutWrappingTests {
         TextLayoutBuffer scaled = new();
 
         Arrange(metrics, "abcd", unscaled, TextWrapping.Character, 3f, out TextLayoutResult unscaledResult);
-        ArrangeAtSize(metrics, "abcd", scaled, 2f, TextWrapping.Character, 3f, out TextLayoutResult scaledResult);
+        Arrange(metrics, "abcd", scaled, TextWrapping.Character, 3f, out TextLayoutResult scaledResult, size: 2f);
 
         Assert.Equal(1, unscaledResult.LineCount);
         Assert.Equal(4, unscaled.Count);
@@ -405,11 +405,10 @@ public sealed class TextLayoutWrappingTests {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = ArrangeAtSize(
+        int count = Arrange(
             metrics,
             "a\U0001F600b",
             buffer,
-            1f,
             TextWrapping.Character,
             0.5f,
             out TextLayoutResult result);
@@ -429,7 +428,7 @@ public sealed class TextLayoutWrappingTests {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = ArrangeAtSize(metrics, "a b", buffer, 1f, TextWrapping.Character, 0.5f, out TextLayoutResult result);
+        int count = Arrange(metrics, "a b", buffer, TextWrapping.Character, 0.5f, out TextLayoutResult result);
 
         Assert.Equal(3, count);
         Assert.Equal(3, result.LineCount);
@@ -476,32 +475,69 @@ public sealed class TextLayoutWrappingTests {
         AssertGlyph(buffer.Glyphs[3], TextLayoutTestData.GLYPH_D, 0.5f, -2.5f);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CarriageReturnInsideAParagraphDoesNotBreakAWord() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        int count = Arrange(metrics, "ab\rcd", buffer, TextWrapping.Word, 1f, out TextLayoutResult result);
+
+        // \r is ignored, so "ab\rcd" stays one word and overflows as one line. Without the word-scan
+        // carriage-return guard, "ab" and "cd" become separate words and wrap into two lines.
+        Assert.Equal(4, count);
+        Assert.Equal(1, result.LineCount);
+        AssertGlyph(buffer.Glyphs[0], TextLayoutTestData.GLYPH_A, 0f, -1f);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_B, 0.5f, -1f);
+        AssertGlyph(buffer.Glyphs[2], TextLayoutTestData.GLYPH_C, 1f, -1f);
+        AssertGlyph(buffer.Glyphs[3], TextLayoutTestData.GLYPH_D, 1.5f, -1f);
+        AssertVector(new Vector2(1.5f, 0f), result.BoundsMax);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CarriageReturnInsideAParagraphIsNotAGlyph() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
+        TextLayoutBuffer buffer = new();
+
+        int count = Arrange(metrics, "ab\rcd", buffer, TextWrapping.Character, 100f, out TextLayoutResult result);
+
+        // The fake maps \r, so a fifth glyph record would appear if the read path did not skip it.
+        Assert.Equal(4, count);
+        Assert.Equal(1, result.LineCount);
+        AssertGlyph(buffer.Glyphs[0], TextLayoutTestData.GLYPH_A, 0f, -1f);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_B, 0.5f, -1f);
+        AssertGlyph(buffer.Glyphs[2], TextLayoutTestData.GLYPH_C, 1f, -1f);
+        AssertGlyph(buffer.Glyphs[3], TextLayoutTestData.GLYPH_D, 1.5f, -1f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CharacterWrapBreakCandidateIncludesKerning() {
+        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+            .Kerning(TextLayoutTestData.GLYPH_B, TextLayoutTestData.GLYPH_C, -0.5f);
+        TextLayoutBuffer buffer = new();
+
+        int count = Arrange(metrics, "abc", buffer, TextWrapping.Character, 1.2f, out TextLayoutResult result);
+
+        // The b-to-c kern pulls c back to b's pen; the line ends at 1.0 and fits. A candidate that
+        // ignored kerning would measure 1.5, break after b, and produce two lines.
+        Assert.Equal(3, count);
+        Assert.Equal(1, result.LineCount);
+        AssertGlyph(buffer.Glyphs[0], TextLayoutTestData.GLYPH_A, 0f, -1f);
+        AssertGlyph(buffer.Glyphs[1], TextLayoutTestData.GLYPH_B, 0.5f, -1f);
+        AssertGlyph(buffer.Glyphs[2], TextLayoutTestData.GLYPH_C, 0.5f, -1f);
+        AssertVector(new Vector2(1f, 1.5f), TextLayoutEngine.Measure(metrics, "abc", 1f));
+    }
+
     private static int Arrange(
         FakeTextMetrics metrics,
         string text,
         TextLayoutBuffer buffer,
         TextWrapping wrapping,
         float maxWidth,
-        out TextLayoutResult result) {
-        return TextLayoutEngine.Arrange(
-            metrics,
-            text,
-            1f,
-            TextAlignment.Left,
-            wrapping,
-            maxWidth,
-            buffer,
-            out result);
-    }
-
-    private static int ArrangeAtSize(
-        FakeTextMetrics metrics,
-        string text,
-        TextLayoutBuffer buffer,
-        float size,
-        TextWrapping wrapping,
-        float maxWidth,
-        out TextLayoutResult result) {
+        out TextLayoutResult result,
+        float size = 1f) {
         return TextLayoutEngine.Arrange(
             metrics,
             text,

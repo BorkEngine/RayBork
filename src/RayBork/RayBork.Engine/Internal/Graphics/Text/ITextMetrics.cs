@@ -10,8 +10,11 @@ namespace RayBork.Internal;
 /// <para>
 /// The engine never parses a font and never needs a glyph texture. The runtime <c>Font</c> exposes an
 /// internal adapter class that implements this interface; the adapter is a reference type, so an
-/// interface call never boxes it. This interface is internal because the architecture tests keep
-/// internal types out of the public surface, which stays limited to the documented <c>Font</c> members.
+/// interface call never boxes it. C# itself would allow a public class to implement this internal
+/// interface, but the engine assembly's architecture policy rejects a public type whose implemented
+/// interfaces live in <c>RayBork.Internal</c>: <c>EnginePublicSurfaceExposesNoBackendTypes</c> audits
+/// every exported type with <c>PublicSurfaceInspector</c>. The adapter is therefore a design choice
+/// forced by the repository's architecture policy, not a compiler requirement.
 /// </para>
 /// <para>
 /// Metrics exist for every mapped rune whether or not the rune's glyph texture has been generated.

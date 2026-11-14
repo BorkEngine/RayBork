@@ -76,6 +76,7 @@ public sealed class TextLayoutMeasurementTests {
     public void MeasureIgnoresCarriageReturn() {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
+        // The fake maps \r with a 0.5 em advance, so "a\rb" would measure 1.5 without the read guard.
         Vector2 size = TextLayoutEngine.Measure(metrics, "a\rb", 1f);
 
         AssertVector(new Vector2(1f, 1.5f), size);

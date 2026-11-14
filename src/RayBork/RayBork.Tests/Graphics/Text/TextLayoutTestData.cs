@@ -17,6 +17,7 @@ internal static class TextLayoutTestData {
     internal const int GLYPH_D = 4;
     internal const int GLYPH_E = 5;
     internal const int GLYPH_F = 7;
+    internal const int GLYPH_CR = 8;
     internal const int GLYPH_SPACE = 6;
     internal const int GLYPH_EMOJI = 50;
     internal const int GLYPH_REPLACEMENT = 99;
@@ -30,6 +31,7 @@ internal static class TextLayoutTestData {
             .Glyph('e', GLYPH_E, ADVANCE)
             .Glyph('f', GLYPH_F, ADVANCE)
             .Glyph(' ', GLYPH_SPACE, ADVANCE)
+            .Glyph('\r', GLYPH_CR, ADVANCE)
             .Glyph('\uFFFD', GLYPH_REPLACEMENT, ADVANCE)
             .Glyph(new Rune(0x1F600), GLYPH_EMOJI, 1f);
     }

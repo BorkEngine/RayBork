@@ -7,8 +7,8 @@ namespace RayBork.Internal;
 /// <para>
 /// The buffer owns a single array that grows geometrically and never shrinks. In steady state the
 /// layout engine writes into the existing storage and allocates nothing. The app-lifetime
-/// <c>CameraService</c> owns one buffer and reuses it for every camera and text draw it records, so
-/// the buffer warms up across frames.
+/// <c>CameraService</c> will own one buffer and reuse it for every camera and text draw it records, so
+/// the buffer will warm up across frames.
 /// </para>
 /// <para>
 /// A buffer is not thread-safe and must not be shared between recording contexts. The span returned by
