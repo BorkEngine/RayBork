@@ -49,8 +49,9 @@ MSDF is generated deterministically on demand: one texture per glyph, a complete
 px on its longest side by default (`msdf_range` 4, `msdf_padding` 2), msdfgen-style two-channel edge
 colouring, a normalized field where `0.5` is the edge, and derivative-based screen-space
 antialiasing in `/shaders/msdf`. The app-lifetime `RayBork.Font` thread generates and uploads glyphs
-asynchronously, so the tick thread never waits; a glyph whose texture is not ready is skipped for
-that call while its advance stays, and it appears on a later frame. Each font hard-caches 512 glyph
+asynchronously, so the tick thread never waits for glyph generation; a glyph whose texture is not
+ready is skipped for that call while its advance stays, and it appears on a later frame. Each font
+hard-caches 512 glyph
 textures with LRU eviction, and `Acquire` adds the frame hold atomically so an eviction cannot destroy
 a texture a recorded frame still references. The CPU-only `Font` asset is shared and
 reference-counted: `Load<Font>` parses the whole face and generates no glyph texture, and there is no
@@ -61,8 +62,10 @@ centers a camera-facing block. Both record one draw record per call with one ins
 and a per-instance bindless glyph texture, so text batches across calls and fonts. The built-in Fira
 Sans Regular face (OFL 1.1, Latin/Cyrillic/Greek) is at `/fonts/fira-sans` in the built-in pack and
 is exposed as `EngineDefaults.DefaultFont`; `samples/Text` is the M6 sample and AOT gate, and the
-Castle and PrimitiveGallery samples now draw the text status overlays they had deferred.
-The suite is 2,594 tests, 102 of them GPU integration tests, and every sample builds. The Windows
+Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics text overlays. The
+samples set no tick target and request FIFO presentation, so the display refresh paces the tick
+thread; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
+The suite is 2,619 tests, 106 of them GPU integration tests, and every sample builds. The Windows
 hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
 host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
@@ -94,8 +97,9 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
 ## Design snapshot
 
 - Right-handed, Y-up, `-Z` forward; reverse-Z depth; user-facing angles are degrees.
-- Dedicated tick thread; main thread pumps the window; a render thread draws the previous completed
-  tick at full rate, or 30 FPS when minimized/unfocused.
+- Dedicated tick thread; main thread pumps the window; a render thread draws the newest completed
+  tick. FIFO presentation paces the tick thread to the display refresh, while Mailbox and Immediate
+  leave it decoupled; minimized/unfocused windows cap it at 30 FPS.
 - No scene graph and no ECS. The game owns its objects and transforms.
 - No public `Material`. A `Shader` is a material instance with its own uniform cursor and texture
   bindings, backed by one internal cached GPU program. `Load<Shader>` returns a new independent

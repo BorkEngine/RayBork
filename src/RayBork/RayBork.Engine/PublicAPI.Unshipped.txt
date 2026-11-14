@@ -715,7 +715,7 @@ RayBork.RenderStats.CpuFrameMilliseconds.get -> double
 RayBork.RenderStats.CpuFrameMilliseconds.init -> void
 RayBork.RenderStats.CulledInstances.get -> int
 RayBork.RenderStats.CulledInstances.init -> void
-RayBork.RenderStats.Deconstruct(out long FrameIndex, out int DrawCalls, out int Instances, out int Triangles, out int CulledInstances, out int PipelineCount, out int TextureCount, out int SampleCount, out bool HdrOutput, out double CpuFrameMilliseconds, out double GpuFrameMilliseconds, out int FramesInFlight, out int RecoveryCount) -> void
+RayBork.RenderStats.Deconstruct(out long FrameIndex, out long PresentedFrames, out int DrawCalls, out int Instances, out int Triangles, out int CulledInstances, out int PipelineCount, out int TextureCount, out int SampleCount, out bool HdrOutput, out double CpuFrameMilliseconds, out double GpuFrameMilliseconds, out int FramesInFlight, out int RecoveryCount) -> void
 RayBork.RenderStats.DrawCalls.get -> int
 RayBork.RenderStats.DrawCalls.init -> void
 RayBork.RenderStats.Equals(RayBork.RenderStats other) -> bool
@@ -731,10 +731,12 @@ RayBork.RenderStats.Instances.get -> int
 RayBork.RenderStats.Instances.init -> void
 RayBork.RenderStats.PipelineCount.get -> int
 RayBork.RenderStats.PipelineCount.init -> void
+RayBork.RenderStats.PresentedFrames.get -> long
+RayBork.RenderStats.PresentedFrames.init -> void
 RayBork.RenderStats.RecoveryCount.get -> int
 RayBork.RenderStats.RecoveryCount.init -> void
 RayBork.RenderStats.RenderStats() -> void
-RayBork.RenderStats.RenderStats(long FrameIndex, int DrawCalls, int Instances, int Triangles, int CulledInstances, int PipelineCount, int TextureCount, int SampleCount, bool HdrOutput, double CpuFrameMilliseconds, double GpuFrameMilliseconds, int FramesInFlight, int RecoveryCount) -> void
+RayBork.RenderStats.RenderStats(long FrameIndex, long PresentedFrames, int DrawCalls, int Instances, int Triangles, int CulledInstances, int PipelineCount, int TextureCount, int SampleCount, bool HdrOutput, double CpuFrameMilliseconds, double GpuFrameMilliseconds, int FramesInFlight, int RecoveryCount) -> void
 RayBork.RenderStats.SampleCount.get -> int
 RayBork.RenderStats.SampleCount.init -> void
 RayBork.RenderStats.TextureCount.get -> int

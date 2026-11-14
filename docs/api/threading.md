@@ -21,7 +21,7 @@
 | `IAssetCatalog` | Any thread | Thread-safe load/cache; custom data is caller-owned |
 | `MeshBuilder`/`TextureBuilder` | Any thread | The factory and build may run on any thread; one builder instance is not thread-safe |
 | `ILoggerFactory` | Any thread | App-owned; create category loggers |
-| `RenderStats` | Render thread writes | Any thread reads a snapshot |
+| `RenderStats` | Render thread writes | Any thread reads a snapshot; `PresentedFrames` is cumulative and monotonic |
 | Renderer backend objects | Render thread | Never exposed; the backend is replaceable internally |
 
 The render thread never reads a live tick-thread object. `EngineContext.Tonemapping` is copied into a
@@ -89,6 +89,8 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 ```text
 1. The main thread stops accepting new ticks and waits for the current tick to finish.
 2. The tick thread publishes the final frame and runs IGame.Shutdown on the tick thread, then exits.
+   A tick that is waiting for FIFO presentation is released by the stop request, so the wait cannot
+   delay shutdown; frame-ring completion also releases it.
 3. The main thread joins the tick thread (pumping the platform while it waits), releases the engine
    defaults and the primitive assets, then stops the asset catalog: it stops the glyph generation
    service while the render thread still services the GPU upload bridge, stops the procedural asset

@@ -15,7 +15,7 @@ internal static class Program {
     private const string DEFAULT_PACK_FILE_NAME = "hello.pck";
     private const LogLevel DEFAULT_LOG_LEVEL = LogLevel.Information;
     private const int DEFAULT_MSAA = 4;
-    private const PresentMode DEFAULT_PRESENT_MODE = PresentMode.Mailbox;
+    private const PresentMode DEFAULT_PRESENT_MODE = PresentMode.Fifo;
     private const TonemappingMode DEFAULT_TONEMAPPING = TonemappingMode.AgX;
     private const float DEFAULT_EXPOSURE = 0f;
 
@@ -35,7 +35,7 @@ internal static class Program {
           --msaa N          Requested MSAA sample count; positive (default: 4).
           --present-mode NAME
                             Presentation mode: Mailbox, Fifo, or Immediate, case-insensitive
-                            (default: Mailbox; falls back to Fifo when unsupported).
+                            (default: Fifo; Mailbox falls back to Fifo when unsupported).
           --tonemapping NAME
                             Tone mapping: AgX or None, case-insensitive (default: AgX).
           --exposure EV     Exposure in stops before tone mapping; finite (default: 0).
@@ -107,7 +107,6 @@ internal static class Program {
                 .WithTitle(options.Title)
                 .WithSize(options.Width, options.Height)
                 .WithResizable(true)
-                .WithTargetFps(60)
                 .WithMaxDeltaTime(0.25)
                 .WithMSAA(options.Msaa)
                 .WithPresentMode(options.PresentMode)

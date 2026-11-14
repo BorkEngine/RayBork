@@ -296,7 +296,10 @@ not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryTyp
 and excludes the present triangle; `Instances` counts instances that survived culling;
 `Triangles` counts submitted triangles after instancing; `CulledInstances` counts frustum
 rejections; `PipelineCount` counts distinct scene pipelines; `TextureCount` counts live bindless
-texture slots, including the reserved white slot. A frame with no camera passes and no draws reports
+texture slots, including the reserved white slot. `PresentedFrames` counts successful presentations
+since startup and is cumulative, so a presented frame-rate overlay differences it over a window;
+`CpuFrameMilliseconds` covers only planning, recording, and submission and excludes the frame fence
+wait, the swapchain acquire, and presentation. A frame with no camera passes and no draws reports
 zero for the draw counters. Textures allocate a bindless slot when their GPU upload completes; slot
 0 is always the built-in white fallback, and a full table fails the upload with
 `AssetLoadException` `RB1010`. The bindless table has exactly 2048 slots matching the shader ABI's
@@ -316,19 +319,22 @@ them GPU integration tests, and every sample solution built.
 the checked-in Lora face and copies it beside the sample executable, so the sample has no `--assets`
 argument. It draws the built-in Fira Sans and the custom Lora face at several sizes, rotations,
 alignments, and wrapping modes, with Latin and Cyrillic paragraphs, a camera-facing billboard, a
-lazily generated Greek line, a world-space status line, orbit/zoom controls, and the `--frames` and
-`--help` options. The published `win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with
-zero AOT/trim warnings, on the Windows hardware driver and on WSLg's dzn hardware device. The M6
-suite is 2,594 tests, 102 of them GPU integration tests, and every sample solution builds. The Text
+lazily generated Greek line, a world-space status line showing presented FPS, the tick rate, render
+CPU time, draw calls, and instances, orbit/zoom controls, and the `--frames` and `--help` options.
+The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
+thread; the engine default remains Mailbox for games that want the decoupled path. The published
+`win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
+Windows hardware driver and on WSLg's dzn hardware device. The M6
+suite is 2,619 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
 executable out of process, bakes `/models/obj/castle` and `/models/obj/castle_diffuse` into
 `castle.pck`, and copies the pack beside the sample executable, so the published hosts load it
 without a manual bake or an `--assets` argument. The model parts use the built-in mesh material, the
-pass draws the castle, `DrawGrid(20, 10f, Color.Gray)`, and now a world-space FPS/render-statistics
-status line, and the sample ray-casts the pointer against the model bounds and mesh with
-`Collision.GetRayBox` and `Collision.GetRayMesh`, drawing `Camera.DrawBoundingBox` and a small hit
+pass draws the castle, `DrawGrid(20, 10f, Color.Gray)`, and now a world-space presented-FPS and
+render-statistics status line, and the sample ray-casts the pointer against the model bounds and mesh
+with `Collision.GetRayBox` and `Collision.GetRayMesh`, drawing `Camera.DrawBoundingBox` and a small hit
 sphere while hovered. The hosts exit `0`. It is not the AOT gate. The Windows hardware path, the
 conformant lavapipe Linux path, and the WSLg dzn hardware path all pass. `samples/HelloInterop`
 remains the M1-M3 diagnostic host; it is not the AOT gate.

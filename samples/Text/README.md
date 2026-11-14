@@ -26,7 +26,8 @@ own point in front of the wall.
 
 Every text call records through the same built-in MSDF program, quad, and render state, so the whole
 scene batches into one text draw call regardless of face, size, or string. `ctx.Stats` reports that
-draw and the submitted glyph instances in the status line.
+draw, the submitted glyph instances, and the render CPU time in the status line; the presented rate
+comes from `ctx.Stats.PresentedFrames` and the tick rate from `ctx.Fps`.
 
 ## Layout demonstration
 
@@ -68,9 +69,13 @@ the whole Greek alphabet used by the line.
 
 ## Status line
 
-The built-in face draws FPS, the tick frame time, and the last completed frame's `DrawCalls` and
-`Instances` from `ctx.Stats` at the top-right of the wall. The status line is ordinary world-space text
-on the same wall, not a screen-space HUD.
+The built-in face draws the presented frames per second, the tick rate, the render CPU time, and the
+last completed frame's `DrawCalls` and `Instances` from `ctx.Stats` at the top-right of the wall. The
+presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
+presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`. The render time is
+`ctx.Stats.CpuFrameMilliseconds`, which measures only the render thread's planning, recording, and
+submission and excludes the fence, acquire, and present waits. The status block is ordinary
+world-space text on the same wall, not a screen-space HUD.
 
 ## Assets
 
@@ -100,9 +105,10 @@ is **not** covered by RayBork's MIT license; see [THIRD-PARTY-NOTICES.md](THIRD-
 | `--frames N` | Run `N` ticks, then request exit. `0` runs until the window closes. Default `0`. |
 | `--help` | Print usage and exit `0`. |
 
-The sample uses a 1280x720 resizable window, a 60 FPS target, a `0.25` second delta clamp, and the
-engine's default renderer settings. It loads `text.pck` from beside the executable, so it has no
-`--assets` argument. A missing pack prints an error and exits `1`.
+The sample uses a 1280x720 resizable window, a `0.25` second delta clamp, and the engine's default
+renderer settings, and it sets no tick target. It requests FIFO presentation, so the display refresh
+paces the tick thread. It loads `text.pck` from beside the executable, so it has no `--assets`
+argument. A missing pack prints an error and exits `1`.
 
 ## Controls
 
@@ -157,6 +163,12 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   HUD text, sprites, and `DrawTexture` with pixel rectangles arrive in M7. The sample's status line is
   drawn on the wall for that reason, and a game that needs a HUD today follows the same world-space
   pattern the other samples use.
+- **Tick recording cost.** The scene records 1,196 glyph instances in one draw call, but the
+  per-glyph tick work (layout, metrics lookup, cache acquire, and frame retention) measures about
+  10-13 ms per tick in Debug (~80 ticks/s) and 2.7-3 ms per tick in Release (~300 ticks/s) on the
+  reference machine. The render thread's plan, record, and submit is about 1-2 ms, and the GPU is
+  not the bottleneck. This is a measured observation, not a target; optimizing the text recording
+  path is deferred to the M10 optimization milestone.
 - **Variable fonts load their default instance.** The bake packs the face file, and the runtime renders
   the face's default instance; named variation axes are not exposed.
 - **No shaping.** Ligatures, contextual shaping (Arabic, Indic), bidi ordering, font fallback, color

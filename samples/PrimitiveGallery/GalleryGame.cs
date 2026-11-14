@@ -41,6 +41,7 @@ internal sealed class GalleryGame : IGame {
     private readonly int _frameLimit;
     private readonly Vector3 _galleryRight;
     private readonly Vector3 _galleryView;
+    private readonly StatusOverlay _overlay = new();
 
     private Texture? _texture;
     private Shader? _meshShader;
@@ -152,8 +153,8 @@ internal sealed class GalleryGame : IGame {
 
         DrawGallery(camera);
 
-        // A small FPS and render-statistics line at the top-left of the view. It is recorded last
-        // and, like every other text draw in M6, is world-space text.
+        // A small presented-FPS and render-statistics line at the top-left of the view. It is
+        // recorded last and, like every other text draw in M6, is world-space text.
         DrawStatusOverlay(camera, context);
 
         _frameCount++;
@@ -348,13 +349,14 @@ internal sealed class GalleryGame : IGame {
         (_galleryRight * offset) + (Vector3.UnitY * height);
 
     /// <summary>
-    /// Draws the FPS, frame-time, draw-call, and instance line at the top-left of the view.
+    /// Draws the presented-FPS, tick-rate, render-time, draw-call, and instance line at the top-left
+    /// of the view.
     /// </summary>
     /// <remarks>
     /// Screen-space text arrives in M7. Until then the line is world-space text on a camera-facing
     /// plane one unit in front of the camera, positioned and oriented with the camera's own axes.
     /// </remarks>
-    private static void DrawStatusOverlay(Camera camera, EngineContext context) {
+    private void DrawStatusOverlay(Camera camera, EngineContext context) {
         // One render pixel spans worldPerPixel world units at the overlay distance. The text size is
         // an em height in world units, so a 14-pixel line uses 14 * worldPerPixel.
         float halfHeight = OVERLAY_DISTANCE * MathF.Tan(camera.FieldOfView * (MathF.PI / 180f) * 0.5f);
@@ -371,11 +373,9 @@ internal sealed class GalleryGame : IGame {
             + (camera.Transform.Up * (halfHeight - margin))
             - (camera.Transform.Right * (halfWidth - margin));
 
-        string status = FormattableString.Invariant(
-            $"FPS {context.Fps:0.0}   frame {context.DeltaTime * 1000.0:0.0} ms   draw calls {context.Stats.DrawCalls}   instances {context.Stats.Instances}");
         camera.DrawText(
             context.Defaults.DefaultFont,
-            status,
+            _overlay.Build(context),
             new Transform(position, camera.Transform.Rotation, Vector3.One),
             OVERLAY_PIXEL_HEIGHT * worldPerPixel,
             Color.White);

@@ -233,5 +233,12 @@ semantics:
   allocates its slot when its GPU upload completes and releases it only when its GPU resource is
   destroyed, after every frame that can reference it has completed.
 - `GpuFrameMilliseconds` is `0` because GPU timestamps are not collected in v1.
+- `CpuFrameMilliseconds` measures the render thread's planning, recording, and submission work. It
+  starts after the frame fence wait and the swapchain acquire and excludes presentation, so a
+  vsync or acquire stall is never reported as render CPU time.
+- `PresentedFrames` counts successful presentations since startup. It advances only after
+  `vkQueuePresentKHR` succeeds (including a suboptimal result), and a skipped minimized frame, a
+  dropped recovery frame, and a present with nothing pending do not count. Difference it over a
+  window for presented frames per second; `EngineContext.Fps` is the tick rate.
 - A frame that idles on a minimized or zero-extent surface reports zero for the draw counters and
-  `TextureCount`, with zero CPU and GPU time.
+  `TextureCount`, with zero CPU and GPU time, and leaves `PresentedFrames` unchanged.

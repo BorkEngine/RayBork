@@ -88,6 +88,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private Semaphore _pendingRenderFinished;
     private bool _swapchainOutOfDate;
     private bool _suboptimalRecoveryPending;
+    private long _presentedFrames;
     private int _recoveryCount;
     private int _consecutiveRecoveries;
     private int _deviceGeneration;
@@ -274,7 +275,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             return;
         }
 
-        long startTimestamp = Stopwatch.GetTimestamp();
         WindowSurfaceState state = _options!.WindowStateProvider();
         if (state.IsMinimized || state.RenderWidth <= 0 || state.RenderHeight <= 0) {
             _stats = CreateZeroDrawStats(frame.FrameIndex);
@@ -299,9 +299,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Device deviceHandle = _device.Device;
         ThrowIfFailed(vulkan.WaitForFences(deviceHandle, 1, &fence, true, WAIT_TIMEOUT), "vkWaitForFences");
 
-        FramePlan plan = new BatchPlanner().Plan(frame);
-
         Semaphore imageAvailable = _imageAvailableSemaphores[frameSlot];
+        BeforeAcquireForTests?.Invoke();
         SwapchainResult acquire = _swapchain.Acquire(frameSlot, imageAvailable, out uint imageIndex);
         if (acquire == SwapchainResult.OutOfDate) {
             RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
@@ -321,6 +320,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 "The swapchain image acquisition was suboptimal; the presentation path is recreated after the present.");
         }
 
+        // CPU frame time covers only planning, recording, and submission. It starts after the fence
+        // wait and the swapchain acquire, both of which are blocking waits on the GPU or display, and
+        // stops after the queue submission, so it never reports a presentation or acquire stall as
+        // render CPU work.
+        long startTimestamp = Stopwatch.GetTimestamp();
+        FramePlan plan = new BatchPlanner().Plan(frame);
         ulong instanceBytes = ComputeInstanceBytes(plan);
         _frameResources!.EnsureSlot((int)frameSlot, instanceBytes, frame.FrameIndex);
 
@@ -391,6 +396,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         double cpuMilliseconds = (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / Stopwatch.Frequency;
         _stats = new RenderStats(
             frame.FrameIndex,
+            _presentedFrames,
             plan.DrawCalls,
             plan.Instances,
             plan.Triangles,
@@ -539,6 +545,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// through <see cref="Recover"/>. Test-only; it is not part of the renderer seam.
     /// </summary>
     internal void SimulateSwapchainOutOfDateForTests() => _swapchainOutOfDate = true;
+
+    /// <summary>
+    /// Gets or sets a hook invoked immediately before the swapchain acquire. Test-only; it is not
+    /// part of the renderer seam. The CPU-time test uses it to hold the acquire long enough to prove
+    /// that <see cref="RenderStats.CpuFrameMilliseconds"/> excludes the wait.
+    /// </summary>
+    internal Action? BeforeAcquireForTests { get; set; }
 
     /// <summary>
     /// Gets whether no submitted frame can still reference a GPU asset resource.
@@ -1576,6 +1589,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private static void WriteUInt32(Span<byte> destination, int offset, uint value)
         => BinaryPrimitives.WriteUInt32LittleEndian(destination[offset..], value);
 
+    /// <summary>
+    /// Gets whether a presentation result means the image reached the presentation engine. A
+    /// suboptimal result still presented; an out-of-date or lost surface did not.
+    /// </summary>
+    /// <param name="result">The result of <c>vkQueuePresentKHR</c>.</param>
+    /// <returns><see langword="true"/> when the presentation succeeded.</returns>
+    internal static bool CountsAsPresented(SwapchainResult result) =>
+        result is SwapchainResult.Success or SwapchainResult.Suboptimal;
+
     private void PresentPending() {
         if (!_pendingPresent) {
             return;
@@ -1586,11 +1608,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _pendingPresent = false;
         _pendingRenderFinished = default;
         _instance!.ThrowIfValidationError("presenting a frame");
-        if (result is SwapchainResult.Success or SwapchainResult.Suboptimal) {
+        if (CountsAsPresented(result)) {
             // The image reached the presentation engine, so a frame completed. A suboptimal hint is a
-            // routine driver notification and must not count toward the recovery bound.
+            // routine driver notification and must not count toward the recovery bound, but the
+            // presentation itself succeeded and is counted. An out-of-date, lost, or recreated
+            // presentation is not.
             _lastPresentedImageIndex = presentedImageIndex;
+            _presentedFrames++;
             _consecutiveRecoveries = 0;
+            _stats = _stats with { PresentedFrames = _presentedFrames };
         }
 
         bool recoverSuboptimal = _suboptimalRecoveryPending;
@@ -1628,6 +1654,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     private RenderStats CreateZeroDrawStats(long frameIndex) => new(
         frameIndex,
+        _presentedFrames,
         0,
         0,
         0,

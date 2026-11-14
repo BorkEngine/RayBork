@@ -64,7 +64,7 @@ internal static class Program {
                 .WithTitle(WINDOW_TITLE)
                 .WithSize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
                 .WithResizable(true)
-                .WithTargetFps(60)
+                .WithPresentMode(PresentMode.Fifo)
                 .WithMaxDeltaTime(0.25)
                 .WithAssetsPack(packPath)
                 .Build();

@@ -306,7 +306,9 @@ public sealed class EngineContext {
     public long FrameCount { get; private set; }
 
     /// <summary>
-    /// Gets the smoothed number of ticks per second. Read it on the tick thread.
+    /// Gets the smoothed number of ticks per second. It is the tick rate, not the presented frame
+    /// rate: difference <see cref="RenderStats.PresentedFrames"/> over a window for presented
+    /// frames per second. Read it on the tick thread.
     /// </summary>
     public double Fps { get; private set; }
 

@@ -5,10 +5,25 @@ namespace RayBork.Internal;
 /// input, and produces frames for the <see cref="FrameRing"/>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The app creates one runner per run. The constructor runs on the main thread, <see cref="Start"/>
 /// starts the tick thread, and <see cref="Stop"/> may be called from any thread. The thread records
 /// failures in <see cref="Failure"/> instead of letting them escape, so an abandoned tick thread can
 /// never crash the process. Read <see cref="Failure"/> after <see cref="Join"/>.
+/// </para>
+/// <para>
+/// Presentation pacing follows the effective <see cref="PresentMode"/> read from the live
+/// <see cref="EngineContext.Info"/>: in <see cref="PresentMode.Fifo"/> mode one tick waits until the
+/// render loop finishes with the frame it published (normally its presentation), so the tick rate
+/// follows the display refresh; in <see cref="PresentMode.Mailbox"/> and
+/// <see cref="PresentMode.Immediate"/> mode the tick stays decoupled and the renderer presents the
+/// newest completed frame. A frame dropped by minimization or recovery, or a failed render attempt,
+/// also releases the wait; only <see cref="RenderStats.PresentedFrames"/> counts successful
+/// presentations. A configured tick target still adds its remaining interval after the wait. The
+/// wait uses the stop token, and the frame ring's completion also releases it. A render-thread exit
+/// is observed by the app as a render-loop failure, and the main thread's <see cref="Stop"/> request
+/// cancels the token and releases the wait; the render loop does not signal the ring on exit.
+/// </para>
 /// </remarks>
 internal sealed class TickRunner {
     private const string THREAD_NAME = "RayBork.Tick";
@@ -291,6 +306,17 @@ internal sealed class TickRunner {
             } catch (Exception exception) {
                 TryAbandon(lease.Value);
                 return new TickFailure(WrapRingFailure("publishing a frame", exception), IsGameCallback: false);
+            }
+
+            // FIFO couples one tick to one finished render attempt, normally one presentation, so
+            // the tick rate follows the display refresh. MAILBOX and IMMEDIATE stay decoupled: the
+            // renderer presents the newest completed frame instead. A dropped frame, a recovered
+            // presentation failure, and a thrown render failure also release the wait because the
+            // render loop marks the finished attempt on every path. The mark is not the successful
+            // presentation count, which RenderStats.PresentedFrames owns.
+            if (_context.Info.PresentMode == PresentMode.Fifo
+                && !_frameRing.WaitForPresentation(lease.Value.FrameIndex, stopToken)) {
+                return null;
             }
 
             if (_stopSignal.IsSet || _context.IsExiting) {
