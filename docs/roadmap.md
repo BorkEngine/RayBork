@@ -70,7 +70,7 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M2 | Renderer foundation | Backend seam, swapchain, HDR/AgX/MSAA, reverse-Z, recovery | M1 |
 | M3 | Asset pipeline | Pack v1, assets executable, processors, typed loaders | M1 |
 | M4 | Core 3D renderer | Models, shaders, bindless textures, instancing, camera draws | M2, M3 |
-| M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, collision queries, HDR AgX rework | M4 |
+| M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, collision queries, HDR AgX rework, restored linearized Bork2d color presets | M4 |
 | M6 | Text and MSDF | TTF/OTF, runtime MSDF, layout, world-space text | M4 |
 | M7 | 2D and orthographic rendering | Sprites, 2D shapes, pixel mapping, Pong | M4 |
 | M8 | Render targets and multiple cameras | HDR/MSAA targets, readback, split-screen | M4 |
@@ -476,8 +476,8 @@ device selection instead of clamping silently.
 - Native AOT publish runs the gallery on Windows and Linux.
 
 **As-built notes.** M5 shipped the planned primitive and collision scope, the approved ray-mesh
-acceleration structure with its baked payload, and the combined HDR AgX rework with runtime tone
-mapping and sRGB color helpers:
+acceleration structure with its baked payload, the combined HDR AgX rework with runtime tone mapping
+and sRGB color helpers, and the restored Bork2d/Unity color preset set:
 
 - **Primitive helpers and representation.** `Camera` ships 13 helpers. `DrawLine` maps the engine's
   unit line mesh from `(0,0,0)`–`(1,0,0)` to the segment. `DrawLines` records one instance per
@@ -603,11 +603,17 @@ mapping and sRGB color helpers:
   thread snapshots the values into the frame packet at `CameraService.EndFrame`, the values in effect
   when the frame is sealed apply to that frame's present, and the render thread never reads the live
   settings object. The scene frame block's exposure field is written from the same snapshot.
-- **sRGB color helpers.** `Color.FromSrgb(float r, float g, float b, float a = 1f)`,
-  `Color.FromSrgbBytes(byte r, byte g, byte b, byte a = 255)`, and `Color.ToSrgb()` convert between
-  display-encoded sRGB and linear `Color` values. `Color` and its named constants remain linear:
-  `Color.Gray` is linear `0.5` and appears light, and `Color.FromSrgb(0.5f, 0.5f, 0.5f)` is the
-  display mid-gray. Named constants did not change.
+- **sRGB color helpers and the restored preset set.** `Color.FromSrgb(float r, float g, float b,
+  float a = 1f)`, `Color.FromSrgbBytes(byte r, byte g, byte b, byte a = 255)`, and `Color.ToSrgb()`
+  convert between display-encoded sRGB and linear `Color` values. The full Bork2d/Unity preset set is
+  restored with its Bork2d names, and every preset is defined from its authored sRGB source through
+  the same piecewise EOTF as `FromSrgb`, so the type stays linear. The corrected display values are
+  `Color.Gray`/`Color.Grey` at linear `0.214041`, `Color.WhiteSmoke` at `0.913099`,
+  `Color.Yellow` at `(1, 0.8307699, 0.0012141)`, and `Color.DarkCyan` at
+  `(0, 0.2581829, 0.2581829)`; the primaries and `Clear`/`Transparent` are unchanged, `Grey` aliases
+  `Gray`, `Transparent` aliases `Clear`, and `YellowNice` follows the new `Yellow`.
+  `Color.WhiteSmoke` is the Castle background. The Castle and `PrimitiveGallery` samples draw named
+  presets instead of hand-written color constants.
 - **Primitive gallery AOT gate.** `samples/PrimitiveGallery` is a single-project self-contained
   solution, `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It
   has no assets executable and no pack; `Setup` builds its one `128x128` `Rgba8Srgb` checker texture
@@ -905,7 +911,7 @@ The matrix is the scope contract.
 | Audio | Post | A1-A3 | AAC in engine, FFmpeg bake, mixer, 3D sources, HRTF, Doppler. |
 | VR | Post | — | Not in 1.0. |
 | Math | Covered | M1 | `System.Numerics` + `Transform` + degree-based Unity-style extensions. |
-| Colors | Covered | M1, M5 | Linear HDR `Color`, Unity palette, OkLab, sRGB conversion helpers, AgX output. |
+| Colors | Covered | M1, M5 | Linear HDR `Color`, restored Bork2d/Unity sRGB-authored preset palette, OkLab, sRGB conversion helpers, AgX output. |
 
 "Covered" means the API exists and has a sample/test gate. "Partial" means the common case is
 covered and the missing part is documented. "Post" means deliberately after 1.0.

@@ -22,7 +22,6 @@ internal sealed class CastleGame : IGame {
 
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
-    private static readonly Color _background = new(0.913f, 0.913f, 0.913f, 1f);
 
     private readonly int _frameLimit;
 
@@ -86,7 +85,7 @@ internal sealed class CastleGame : IGame {
             projection: CameraProjection.Perspective,
             fieldOfView: FIELD_OF_VIEW_DEGREES,
             clearMode: ClearMode.ColorAndDepth,
-            clearColor: _background,
+            clearColor: Color.WhiteSmoke,
             near: NEAR_PLANE,
             far: float.PositiveInfinity);
 

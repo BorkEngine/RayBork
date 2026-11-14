@@ -472,7 +472,7 @@ seal slot, publish as newest ready
   convert at the boundary.
 - Color is linear float RGBA with HDR values allowed. There is no 8-bit `Color` in the public API.
   `Color.FromSrgb`, `Color.FromSrgbBytes`, and `Color.ToSrgb` are the explicit sRGB conversions;
-  `Color` and its named constants stay linear.
+  `Color` stays linear, and its named presets are the Bork2d/Unity sRGB colors converted to linear.
 - The scene target uses `R16G16B16A16_SFLOAT` color and `D32_SFLOAT` depth. The present pass
   samples the resolved color and applies exposure, `TonemappingMode`, and the output encoding.
 - MSAA defaults to 4x; scene color is resolved to a single-sample image before presentation, and

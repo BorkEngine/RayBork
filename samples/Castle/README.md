@@ -49,8 +49,9 @@ missing pack prints an error and exits `1`.
 | Escape | Request exit. |
 
 The camera starts at `(50, 50, 50)`, looks at `(0, 12, 0)`, and uses a 45 degree vertical field of
-view with a `0.01` near plane and an infinite far plane. The background is a warm off-white
-(`#F5F5F5`, about `0.913` per channel).
+view with a `0.01` near plane and an infinite far plane. The background is the `Color.WhiteSmoke`
+preset: the Bork2d/Unity sRGB `#F5F5F5`, stored linear as `0.913099` per channel. The grid uses
+`Color.Gray`, the sRGB display mid-gray stored linear as `0.214041`.
 
 ## Scene
 

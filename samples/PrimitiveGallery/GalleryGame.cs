@@ -29,25 +29,6 @@ internal sealed class GalleryGame : IGame {
 
     private static readonly Vector3 _orbitCenter = new(0f, 2.4f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(8f, 6.2f, 12.5f);
-    private static readonly Color _background = new(0.04f, 0.05f, 0.07f, 1f);
-
-    private static readonly Color _gridColor = new(0.22f, 0.25f, 0.30f, 1f);
-    private static readonly Color _lineColor = new(0.90f, 0.15f, 0.12f, 1f);
-    private static readonly Color _polylineColor = new(0.95f, 0.50f, 0.08f, 1f);
-    private static readonly Color _pointColor = new(0.95f, 0.88f, 0.15f, 1f);
-    private static readonly Color _triangleColor = new(0.20f, 0.80f, 0.30f, 1f);
-    private static readonly Color _cubeColor = new(0.10f, 0.65f, 0.70f, 1f);
-    private static readonly Color _sphereColor = new(0.15f, 0.35f, 0.95f, 1f);
-    private static readonly Color _cylinderColor = new(0.60f, 0.25f, 0.90f, 1f);
-    private static readonly Color _planeColor = new(0.70f, 0.20f, 0.50f, 1f);
-    private static readonly Color _wireCubeColor = new(1.00f, 0.55f, 0.15f, 1f);
-    private static readonly Color _wireSphereColor = new(0.25f, 0.90f, 0.85f, 1f);
-    private static readonly Color _billboardColor = new(1.00f, 0.92f, 0.82f, 1f);
-
-    private static readonly Color _textureWarmLight = new(0.95f, 0.58f, 0.16f, 1f);
-    private static readonly Color _textureWarmDark = new(0.42f, 0.18f, 0.05f, 1f);
-    private static readonly Color _textureCoolLight = new(0.26f, 0.62f, 1.00f, 1f);
-    private static readonly Color _textureCoolDark = new(0.04f, 0.18f, 0.48f, 1f);
 
     private readonly int _frameLimit;
     private readonly Vector3 _galleryRight;
@@ -93,10 +74,10 @@ internal sealed class GalleryGame : IGame {
                 bool light = (((x / CHECKER_SIZE) + (y / CHECKER_SIZE)) & 1) == 0;
                 bool warm = x < TEXTURE_SIZE / 2;
                 pixels[(y * TEXTURE_SIZE) + x] = (warm, light) switch {
-                    (true, true) => _textureWarmLight,
-                    (true, false) => _textureWarmDark,
-                    (false, true) => _textureCoolLight,
-                    _ => _textureCoolDark,
+                    (true, true) => Color.GoldenRod,
+                    (true, false) => Color.SaddleBrown,
+                    (false, true) => Color.CornflowerBlue,
+                    _ => Color.MidnightBlue,
                 };
             }
         }
@@ -128,7 +109,7 @@ internal sealed class GalleryGame : IGame {
             projection: CameraProjection.Perspective,
             fieldOfView: FIELD_OF_VIEW_DEGREES,
             clearMode: ClearMode.ColorAndDepth,
-            clearColor: _background,
+            clearColor: Color.Gray3,
             near: NEAR_PLANE,
             far: float.PositiveInfinity);
 
@@ -152,12 +133,12 @@ internal sealed class GalleryGame : IGame {
     private void DrawGallery(Camera camera) {
         // The reference grid sits on the ground plane and gives the floating rows a frame of
         // reference. It is always centered on the world origin.
-        camera.DrawGrid(slices: 20, spacing: 1f, _gridColor);
+        camera.DrawGrid(slices: 20, spacing: 1f, Color.Gray5);
 
         // The lower row holds the solid helpers. Each one starts on or just above the grid.
-        camera.DrawCube(Station(-8.5f, 0.8f), new Vector3(1.6f), _cubeColor);
-        camera.DrawSphere(Station(-5.1f, 0.8f), 0.8f, _sphereColor);
-        camera.DrawCylinder(Station(-1.7f, 0f), 0.7f, 1.8f, _cylinderColor);
+        camera.DrawCube(Station(-8.5f, 0.8f), new Vector3(1.6f), Color.LightSeaGreen);
+        camera.DrawSphere(Station(-5.1f, 0.8f), 0.8f, Color.RoyalBlue);
+        camera.DrawCylinder(Station(-1.7f, 0f), 0.7f, 1.8f, Color.Purple);
 
         // The triangle is built in the row's vertical plane and faces the initial camera, so its
         // front face and counter-clockwise winding are visible from the starting view.
@@ -167,16 +148,16 @@ internal sealed class GalleryGame : IGame {
             triangleCenter - triangleHalfWidth - (Vector3.UnitY * 0.9f),
             triangleCenter + triangleHalfWidth - (Vector3.UnitY * 0.9f),
             triangleCenter + (Vector3.UnitY * 0.9f),
-            _triangleColor);
+            Color.LimeGreen);
 
-        camera.DrawPoint(Station(5.1f, 1f), _pointColor, size: 0.7f);
-        camera.DrawPlane(Station(8.5f, 0.05f), new Vector2(2.6f, 2.6f), _planeColor);
+        camera.DrawPoint(Station(5.1f, 1f), Color.Yellow, size: 0.7f);
+        camera.DrawPlane(Station(8.5f, 0.05f), new Vector2(2.6f, 2.6f), Color.MediumVioletRed);
 
         // The upper row floats above the solids: the two wire helpers, the line helpers, and the
         // world-space textured billboard that faces the orbiting camera.
-        camera.DrawWireCube(Station(-8.5f, 4.7f), new Vector3(1.8f), _wireCubeColor);
-        camera.DrawWireSphere(Station(-5.1f, 4.7f), 1f, _wireSphereColor);
-        camera.DrawLine(Station(-2.6f, 3.7f), Station(-0.8f, 5.5f), _lineColor);
+        camera.DrawWireCube(Station(-8.5f, 4.7f), new Vector3(1.8f), Color.Orange);
+        camera.DrawWireSphere(Station(-5.1f, 4.7f), 1f, Color.Turquoise);
+        camera.DrawLine(Station(-2.6f, 3.7f), Station(-0.8f, 5.5f), Color.SoftRed);
         camera.DrawLines(
             [
                 Station(0.4f, 4.1f),
@@ -184,8 +165,8 @@ internal sealed class GalleryGame : IGame {
                 Station(1.8f, 4.1f),
                 Station(2.5f, 5.3f),
             ],
-            _polylineColor);
-        camera.DrawBillboard(_texture!, Station(5.1f, 4.7f), new Vector2(2.2f), _billboardColor);
+            Color.DarkOrange);
+        camera.DrawBillboard(_texture!, Station(5.1f, 4.7f), new Vector2(2.2f), Color.Beige);
     }
 
     private void DrawOverlay(Camera camera, EngineContext context) {

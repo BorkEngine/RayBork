@@ -101,7 +101,10 @@ Transform world = local.WithParent(parent); // Position == (1, 1, 0)
 Components are normally in `[0, 1]`, but HDR rendering deliberately allows values above `1`.
 There is no 8-bit sRGB `Color` and no implicit gamma conversion; use the explicit `FromSrgb`,
 `FromSrgbBytes`, and `ToSrgb` helpers when a display-encoded value crosses the API boundary. The
-present pass applies Godot 4.7's HDR-aware AgX curve and then the output transfer function.
+present pass applies Godot 4.7's HDR-aware AgX curve and then the output transfer function. `Color`
+also carries the full Bork2d/Unity preset set. The presets are authored as sRGB and stored linear
+through the same explicit conversion, so `Color.Gray` is the display mid-gray (linear `0.214041`),
+not a linear `0.5` value.
 
 ```csharp
 public readonly struct Color : IEquatable<Color>, IFormattable {
@@ -150,9 +153,12 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     public static readonly Color Green;
     public static readonly Color Blue;
     public static readonly Color Yellow;
-    public static readonly Color DarkCyan;
+    public static readonly Color Gray;
+    public static readonly Color Grey;
     public static readonly Color Transparent;
-    // The full Unity palette is provided as static readonly fields.
+    // Plus the full Bork2d/Unity preset families: the web colors (AliceBlue through YellowGreen),
+    // Gray1-Gray9, SoftRed/SoftBlue/SoftGreen/SoftYellow, DarkCyan, YellowNice, and the other
+    // named shades. Every preset stores its authored sRGB source linearized.
 }
 ```
 
@@ -161,10 +167,17 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
 - `HSVToRGB` uses Unity-style HSV components with `h`, `s`, and `v` in `[0, 1]`. Hue wraps around
   the color wheel, saturation is clamped to `[0, 1]`, and `v` is clamped to `[0, 1]` only when
   `hdr` is false. With `hdr: true`, values above `1` are preserved for HDR colors.
-- `Color` is **linear**: its components are light intensities, not display-encoded values, and every
-  named constant is linear as well. `Color.Gray` is linear `0.5` and therefore appears light, not as
-  mid-gray; `Color.FromSrgb(0.5f, 0.5f, 0.5f)` decodes the display mid-gray to linear `0.21404114`,
-  which appears as mid-gray. `Color.DarkCyan` is `(0, 0.5, 0.5, 1)`, not an sRGB byte triple.
+- `Color` is **linear**: its components are light intensities, not display-encoded values. The named
+  presets are the Bork2d/Unity sRGB colors converted to linear by exactly the `FromSrgb` EOTF, so the
+  type stays linear while the names describe display-authored colors. `Color.Gray` and `Color.Grey`
+  are the display mid-gray (sRGB `0.5`, stored linear as `0.214041`); `Color.WhiteSmoke` is sRGB
+  `#F5F5F5`, stored linear as `0.913099` (the Castle background); `Color.Yellow` is sRGB
+  `(1, 235/255, 4/255)`, stored linear as `(1, 0.8307699, 0.0012141)`; and `Color.DarkCyan` is sRGB
+  `(0, 0.5450981, 0.5450981)`, stored linear as `(0, 0.2581829, 0.2581829)`. Black, white, red,
+  green, blue, cyan, and magenta keep their exact primary values. Alpha is never gamma-encoded:
+  `Color.Clear` and `Color.Transparent` keep alpha `0`, and every other preset is opaque.
+  `Color.Grey` aliases `Color.Gray`, `Color.Transparent` aliases `Color.Clear`, and
+  `Color.YellowNice` aliases `Color.Yellow`.
 - `FromSrgb(float r, float g, float b, float a = 1f)` treats red, green, and blue as sRGB-encoded
   components in `[0, 1]` and decodes each with the standard piecewise sRGB EOTF
   (`c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055)^2.4`). Alpha is passed through unchanged
