@@ -60,9 +60,10 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(tickMaterial!.IsDisposed);
 
         // The two materials were preloaded without a second program upload, and everything the engine
-        // owns (the defaults plus the primitive program and meshes) is released by shutdown.
-        Assert.Equal(12, worker.UploadCallCount);
-        Assert.Equal(12, worker.DestroyCalls.Count);
+        // owns (the defaults plus the three primitive programs and the eight meshes) is released by
+        // shutdown.
+        Assert.Equal(13, worker.UploadCallCount);
+        Assert.Equal(13, worker.DestroyCalls.Count);
         Assert.True(defaults!.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.White);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.Error);
@@ -192,9 +193,9 @@ public sealed class EngineDefaultsAppTests {
 
         Assert.NotNull(setupPrimitives);
         Assert.Same(setupPrimitives, tickPrimitives);
-        // The three defaults, the primitive program, and the eight primitive meshes upload before
-        // Setup; nothing is destroyed until shutdown.
-        Assert.Equal(12, uploadCountAtSetup);
+        // The three defaults, the three primitive programs, and the eight primitive meshes upload
+        // before Setup; nothing is destroyed until shutdown.
+        Assert.Equal(13, uploadCountAtSetup);
         Assert.Equal(0, destroyCountAtSetup);
         Assert.Equal(0, destroyCountInTick);
         Assert.True(meshesUsableInTick);
@@ -205,10 +206,10 @@ public sealed class EngineDefaultsAppTests {
         Assert.Throws<ObjectDisposedException>(() => _ = created.Cube);
         Assert.Throws<ObjectDisposedException>(() => _ = created.PrimitiveMaterial);
         Assert.Null(app.Cameras!.Primitives);
-        Assert.Equal(12, worker.DestroyCalls.Count);
+        Assert.Equal(13, worker.DestroyCalls.Count);
 
         created.Dispose();
-        Assert.Equal(12, worker.DestroyCalls.Count);
+        Assert.Equal(13, worker.DestroyCalls.Count);
     }
 
     [Fact]
@@ -247,10 +248,51 @@ public sealed class EngineDefaultsAppTests {
         Assert.Equal(0, game.SetupCount);
         Assert.Equal(0, game.TickCount);
         Assert.Equal(0, game.ShutdownCount);
-        // The three defaults, the primitive program, and two completed primitive meshes were created
-        // before the third mesh upload failed. The mesh program is shared with the defaults, so only
-        // six resources exist and every one of them is released by the failed startup.
-        Assert.Equal(7, worker.UploadCallCount);
-        Assert.Equal(6, worker.DestroyCalls.Count);
+        // The three defaults, the three primitive programs, and two completed primitive meshes were
+        // created before the third mesh upload failed. The mesh program is shared with the defaults, so
+        // only seven resources exist and every one of them is released by the failed startup.
+        Assert.Equal(8, worker.UploadCallCount);
+        Assert.Equal(7, worker.DestroyCalls.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AMissingMsdfProgramFailsStartupAndNamesTheBuiltInAsset() {
+        FakeAssetGpuWorker worker = new();
+        worker.UploadHandler = upload => {
+            if (upload.Kind == AssetGpuUploadKind.Shader
+                && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal)) {
+                throw new InvalidOperationException("Injected missing built-in msdf program.");
+            }
+
+            return new FakeGpuAssetResource(upload, worker.NextHandle());
+        };
+        FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
+        FakeEnginePlatform platform = new();
+        ScriptedGame game = new() {
+            TickHandler = context => context.RequestExit(),
+        };
+
+        RayBorkApp app = new RayBorkAppBuilder()
+            .WithGame(game)
+            .WithTargetFps(2)
+            .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .Build(_ => platform, () => renderer, TimeProvider.System);
+        AssetLoadException thrown;
+        try {
+            thrown = Assert.Throws<AssetLoadException>(app.Run);
+        } finally {
+            app.Dispose();
+        }
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("/shaders/msdf", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(0, game.SetupCount);
+        Assert.Equal(0, game.TickCount);
+        Assert.Equal(0, game.ShutdownCount);
+        // The three defaults and the primitive program were created before the msdf program failed;
+        // every one of them is released by the failed startup.
+        Assert.Equal(5, worker.UploadCallCount);
+        Assert.Equal(4, worker.DestroyCalls.Count);
     }
 }

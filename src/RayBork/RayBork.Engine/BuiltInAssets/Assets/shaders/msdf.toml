@@ -1,0 +1,12 @@
+[shader]
+vertex = "msdf.vert"
+fragment = "msdf.frag"
+
+[[shader.textures]]
+name = "mainTexture"
+
+[shader.render_state]
+blend = "alpha"
+cull = "none"
+depth_test = "greater_equal"
+depth_write = false
