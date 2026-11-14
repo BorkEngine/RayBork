@@ -53,6 +53,66 @@ public sealed class PrimitiveDrawGpuTests {
                 camera.DrawPlane(new Vector3(1.5f, -0.5f, -4f), Vector2.One, color);
                 camera.DrawWireCube(new Vector3(-1f, 1.3f, -4f), new Vector3(0.6f), color);
                 camera.DrawWireSphere(new Vector3(1f, 1.3f, -4f), 0.5f, color);
+                camera.DrawSphere(
+                    new Transform(new Vector3(3.4f, -1.3f, -4f)),
+                    0.25f,
+                    rings: 3,
+                    slices: 4,
+                    color);
+                camera.DrawCylinder(
+                    new Vector3(-2.6f, -1.3f, -4f),
+                    new Vector3(-2.2f, -1f, -4f),
+                    0.2f,
+                    0.25f,
+                    sides: 4,
+                    color);
+                camera.DrawCapsule(
+                    new Vector3(0.4f, -1.5f, -4f),
+                    new Vector3(0.4f, -0.9f, -4f),
+                    0.25f,
+                    rings: 3,
+                    slices: 4,
+                    color);
+                camera.DrawWireCylinder(
+                    new Vector3(-3.4f, -1.2f, -4f),
+                    0.25f,
+                    0.15f,
+                    0.6f,
+                    sides: 4,
+                    color);
+                camera.DrawWireCapsule(
+                    new Vector3(1.4f, -1.4f, -4f),
+                    new Vector3(1.4f, -0.8f, -4f),
+                    0.25f,
+                    rings: 2,
+                    slices: 4,
+                    color);
+                camera.DrawWireSphere(
+                    new Vector3(2.4f, 0.7f, -4f),
+                    0.3f,
+                    rings: 3,
+                    slices: 4,
+                    color);
+                camera.DrawCircle(
+                    new Transform(new Vector3(-2.6f, 1.2f, -4f)),
+                    0.4f,
+                    color);
+                camera.DrawTriangleStrip(
+                    [
+                        new Vector3(3f, -1f, -4f),
+                        new Vector3(3.4f, -1f, -4f),
+                        new Vector3(3.1f, -0.6f, -4f),
+                        new Vector3(3.5f, -0.6f, -4f),
+                    ],
+                    color);
+                camera.DrawRay(
+                    new Ray(new Vector3(1.6f, 0.4f, -4f), new Vector3(0.25f, 0.2f, 0f)),
+                    color);
+                camera.DrawBoundingBox(
+                    new BoundingBox(
+                        new Vector3(0.7f, 0.8f, -4.3f),
+                        new Vector3(1.1f, 1.2f, -3.9f)),
+                    color);
                 camera.DrawBillboard(texture, new Vector3(2.8f, 1.3f, -4f), new Vector2(0.5f), Color.White);
             },
             firstTransform: null,
@@ -60,13 +120,14 @@ public sealed class PrimitiveDrawGpuTests {
             secondTransform: new Transform(new Vector3(0f, 0f, 10f)),
             clearColor: _clearColor);
 
-        // The first pass records eight primitive-program batches (cube, sphere, plane, point plus
-        // cylinder sides, triangle plus cylinder caps, lines, wire cube, wire sphere) and one mesh
-        // program batch (the billboard). The second pass adds one grid line batch.
+        // The first pass records nine primitive-program batches (the merged line instances, the
+        // merged quad instances, the merged triangle instances, cube, sphere, plane, wire cube, wire
+        // sphere, plus the mesh-program billboard) and the second pass adds one grid line batch. The
+        // shape and Transform overloads add instances to the existing line/quad/triangle batches.
         RenderStats stats = harness.Host.Backend.Stats;
         Assert.Equal(10, stats.DrawCalls);
-        Assert.Equal(29, stats.Instances);
-        Assert.Equal(995, stats.Triangles);
+        Assert.Equal(224, stats.Instances);
+        Assert.Equal(1077, stats.Triangles);
         Assert.Equal(0, stats.CulledInstances);
         Assert.Equal(3, stats.PipelineCount);
         Assert.Equal(harness.Host.Backend.Info.SampleCount, stats.SampleCount);
@@ -74,6 +135,10 @@ public sealed class PrimitiveDrawGpuTests {
 
         FramePlan plan = new BatchPlanner().Plan(packet);
         Assert.Equal(2, plan.Passes.Count);
+        Assert.Equal(9, plan.Passes[0].Batches.Count);
+        Assert.Equal(120, plan.Passes[0].Batches[0].InstanceCount);
+        Assert.Equal(9, plan.Passes[0].Batches[1].InstanceCount);
+        Assert.Equal(83, plan.Passes[0].Batches[2].InstanceCount);
         PlannedBatch gridBatch = Assert.Single(plan.Passes[1].Batches);
         Assert.Equal(PrimitiveTopology.LineList, gridBatch.Topology);
         Assert.Equal(6, gridBatch.InstanceCount);
@@ -157,6 +222,42 @@ public sealed class PrimitiveDrawGpuTests {
             clearColor: _clearColor,
             height: 4f);
         AssertColorNear(_clearColor, harness.ReadColor(harness.Width / 2, harness.Height / 2));
+        Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void TransformAndTessellatedShapesRenderTheirTint() {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+        Color sphereColor = new(0.2f, 0.8f, 0.4f, 1f);
+        Color capsuleColor = new(0.8f, 0.4f, 0.2f, 1f);
+        Vector2 spherePixel = default;
+        Vector2 capsulePixel = default;
+
+        harness.SubmitOrthographic(
+            camera => {
+                spherePixel = camera.WorldToScreen(new Vector3(-1.2f, 0f, 0f));
+                capsulePixel = camera.WorldToScreen(new Vector3(1.2f, 0f, 0f));
+                camera.DrawSphere(
+                    new Transform(new Vector3(-1.2f, 0f, 0f)),
+                    0.5f,
+                    rings: 6,
+                    slices: 8,
+                    sphereColor);
+                camera.DrawCapsule(
+                    new Transform(new Vector3(1.2f, 0f, 0f)),
+                    0.4f,
+                    1.2f,
+                    rings: 3,
+                    slices: 8,
+                    capsuleColor);
+            },
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            clearColor: _clearColor,
+            height: 4f);
+
+        AssertColorNear(sphereColor, harness.ReadColor(Pixel(spherePixel.X), Pixel(spherePixel.Y)));
+        AssertColorNear(capsuleColor, harness.ReadColor(Pixel(capsulePixel.X), Pixel(capsulePixel.Y)));
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 

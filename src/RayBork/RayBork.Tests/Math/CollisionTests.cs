@@ -642,6 +642,76 @@ public sealed class CollisionTests {
         }
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GetRayQuadHitsBothHalvesWithTheQuadNormal() {
+        Vector3 a = Vector3.Zero;
+        Vector3 b = Vector3.UnitX;
+        Vector3 c = Vector3.UnitX + Vector3.UnitY;
+        Vector3 d = Vector3.UnitY;
+        Ray fromFront = new(new Vector3(0.75f, 0.25f, 1f), -Vector3.UnitZ);
+        Ray fromBack = new(new Vector3(0.25f, 0.75f, -1f), Vector3.UnitZ);
+
+        AssertHit(
+            Collision.GetRayQuad(fromFront, a, b, c, d),
+            1f,
+            new Vector3(0.75f, 0.25f, 0f),
+            Vector3.UnitZ);
+        AssertHit(
+            Collision.GetRayQuad(fromBack, a, b, c, d),
+            1f,
+            new Vector3(0.25f, 0.75f, 0f),
+            Vector3.UnitZ);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GetRayQuadReturnsTheNearestNonPlanarTriangle() {
+        Vector3 a = Vector3.Zero;
+        Vector3 b = new(2f, 2f, 0f);
+        Vector3 c = new(2f, 0f, 1f);
+        Vector3 d = new(0f, 2f, 0f);
+        Ray ray = new(new Vector3(1f, 0.5f, 5f), -Vector3.UnitZ);
+
+        RayCollision hit = Collision.GetRayQuad(ray, a, b, c, d);
+
+        // Triangle (a, c, d) is in front of triangle (a, b, c) at this point.
+        AssertHit(
+            hit,
+            4.5f,
+            new Vector3(1f, 0.5f, 0.5f),
+            Vector3.Normalize(new Vector3(-2f, 0f, 4f)));
+        Assert.Equal(Collision.GetRayTriangle(ray, a, c, d).Distance, hit.Distance, 4);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GetRayQuadMissesOutsideAndDegenerateQuads() {
+        Vector3 a = Vector3.Zero;
+        Vector3 b = Vector3.UnitX;
+        Vector3 c = Vector3.UnitX + Vector3.UnitY;
+        Vector3 d = Vector3.UnitY;
+
+        AssertMiss(Collision.GetRayQuad(
+            new Ray(new Vector3(2f, 2f, 1f), -Vector3.UnitZ),
+            a,
+            b,
+            c,
+            d));
+        AssertMiss(Collision.GetRayQuad(
+            new Ray(new Vector3(0.25f, 0f, 1f), -Vector3.UnitZ),
+            Vector3.Zero,
+            Vector3.UnitX,
+            new Vector3(2f, 0f, 0f),
+            new Vector3(3f, 0f, 0f)));
+        AssertMiss(Collision.GetRayQuad(
+            new Ray(new Vector3(0.25f, 0.25f, 1f), -Vector3.UnitZ),
+            new Vector3(float.NaN, 0f, 0f),
+            b,
+            c,
+            d));
+    }
+
     private static void AssertSameCollision(RayCollision expected, RayCollision actual) {
         Assert.Equal(expected.Hit, actual.Hit);
         if (!expected.Hit) {

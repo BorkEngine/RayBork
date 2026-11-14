@@ -49,13 +49,105 @@ public sealed class Camera : IDisposable {
     public void DrawLines(ReadOnlySpan<Vector3> points, Color color);
     public void DrawPoint(Vector3 position, Color color, float size = 1f);
     public void DrawTriangle(Vector3 a, Vector3 b, Vector3 c, Color color);
+    public void DrawTriangleStrip(ReadOnlySpan<Vector3> points, Color color);
+    public void DrawRay(Ray ray, Color color);
+    public void DrawBoundingBox(BoundingBox box, Color color);
+
     public void DrawCube(Vector3 position, Vector3 size, Color color);
-    public void DrawSphere(Vector3 center, float radius, Color color);
-    public void DrawCylinder(Vector3 position, float radius, float height, Color color, int sides = 16);
-    public void DrawPlane(Vector3 center, Vector2 size, Color color);
-    public void DrawGrid(int slices, float spacing, Color color);
+    public void DrawCube(Vector3 position, float width, float height, float length, Color color);
+    public void DrawCube(Transform transform, Vector3 size, Color color);
     public void DrawWireCube(Vector3 position, Vector3 size, Color color);
+    public void DrawWireCube(Vector3 position, float width, float height, float length, Color color);
+    public void DrawWireCube(Transform transform, Vector3 size, Color color);
+
+    public void DrawSphere(Vector3 center, float radius, Color color);
+    public void DrawSphere(Vector3 center, float radius, int rings, int slices, Color color);
+    public void DrawSphere(Transform transform, float radius, Color color);
+    public void DrawSphere(Transform transform, float radius, int rings, int slices, Color color);
     public void DrawWireSphere(Vector3 center, float radius, Color color);
+    public void DrawWireSphere(Vector3 center, float radius, int rings, int slices, Color color);
+    public void DrawWireSphere(Transform transform, float radius, Color color);
+    public void DrawWireSphere(Transform transform, float radius, int rings, int slices, Color color);
+
+    public void DrawCylinder(Vector3 position, float radius, float height, Color color);
+    public void DrawCylinder(Vector3 position, float radius, float height, Color color, int sides);
+    public void DrawCylinder(
+        Vector3 position,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color);
+    public void DrawCylinder(
+        Vector3 start,
+        Vector3 end,
+        float startRadius,
+        float endRadius,
+        int sides,
+        Color color);
+    public void DrawCylinder(
+        Transform transform,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color);
+    public void DrawWireCylinder(
+        Vector3 position,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color);
+    public void DrawWireCylinder(
+        Vector3 start,
+        Vector3 end,
+        float startRadius,
+        float endRadius,
+        int sides,
+        Color color);
+    public void DrawWireCylinder(
+        Transform transform,
+        float radiusTop,
+        float radiusBottom,
+        float height,
+        int sides,
+        Color color);
+
+    public void DrawCapsule(
+        Vector3 start,
+        Vector3 end,
+        float radius,
+        int rings,
+        int slices,
+        Color color);
+    public void DrawCapsule(
+        Transform transform,
+        float radius,
+        float height,
+        int rings,
+        int slices,
+        Color color);
+    public void DrawWireCapsule(
+        Vector3 start,
+        Vector3 end,
+        float radius,
+        int rings,
+        int slices,
+        Color color);
+    public void DrawWireCapsule(
+        Transform transform,
+        float radius,
+        float height,
+        int rings,
+        int slices,
+        Color color);
+
+    public void DrawPlane(Vector3 center, Vector2 size, Color color);
+    public void DrawPlane(Transform transform, Vector2 size, Color color);
+    public void DrawCircle(Vector3 center, float radius, Vector3 rotationAxis, float rotationAngle, Color color);
+    public void DrawCircle(Transform transform, float radius, Color color);
+    public void DrawGrid(int slices, float spacing, Color color);
     public void DrawBillboard(
         Texture texture,
         Vector3 position,
@@ -108,13 +200,15 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
   is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
-> **M5 subset.** `Camera` ships all 12 primitive helpers: `DrawLine`, `DrawLines`, `DrawPoint`,
-> `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`,
-> `DrawWireSphere`, and `DrawBillboard`. Their geometry, programs, render states, validation, and
-> batching are specified in §7.9. The `Target` property and the `target` parameter arrive with
-> `RenderTexture` in M8; `DrawText` and `DrawTextBillboard` arrive with runtime text in M6. The camera
-> always records into the app's linear HDR scene target, and the present pass applies AgX after all
-> cameras finish.
+> **M5 subset.** `Camera` ships the raylib-style primitive helpers: `DrawLine`, `DrawLines`,
+> `DrawPoint`, `DrawTriangle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawCube`,
+> `DrawWireCube`, `DrawSphere`, `DrawWireSphere`, `DrawCylinder`, `DrawWireCylinder`, `DrawCapsule`,
+> `DrawWireCapsule`, `DrawPlane`, `DrawCircle`, `DrawGrid`, and `DrawBillboard`, with the shape,
+> tessellation, and `Transform` overloads listed above. Their geometry, programs, render states,
+> validation, and batching are specified in §7.9. The `Target` property and the `target` parameter
+> arrive with `RenderTexture` in M8; `DrawText` and `DrawTextBillboard` arrive with runtime text in
+> M6. The camera always records into the app's linear HDR scene target, and the present pass applies
+> AgX after all cameras finish.
 
 Properties:
 
@@ -177,17 +271,53 @@ this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of
 `DrawModel` and `DrawModelInstanced` have no per-draw state override; they use each part's
 `ModelPart.RenderState`.
 
-**Primitive helpers.** `DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`,
-`DrawCylinder`, `DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, and `DrawBillboard` record
-engine primitive meshes through the built-in `/shaders/primitive` and `/shaders/mesh` programs; §7.9
-has the exact geometry, program, render-state, and batching contract. All 12 are tick-thread only and
-validate before recording: a non-finite argument is `ArgumentException`, a negative extent, radius,
-height, width, or point size is `ArgumentOutOfRangeException`, an exactly zero one records nothing,
-`sides < 3`, `slices < 1`, and `spacing <= 0` are `ArgumentOutOfRangeException`, a null texture is
+**Primitive helpers.** The primitive helpers record engine primitive meshes through the built-in
+`/shaders/primitive` and `/shaders/mesh` programs; §7.9 has the exact geometry, program, render-state,
+and batching contract. They are tick-thread only and validate before recording: a non-finite argument
+is `ArgumentException`, a negative radius, height, size, extent, or point size is
+`ArgumentOutOfRangeException`, an exactly zero extent, radius, height, or start/end segment records
+nothing, `sides < 3`, `rings < 2`, `slices < 3`, `slices < 1` for `DrawGrid`, and `spacing <= 0` are
+`ArgumentOutOfRangeException`, a zero `rotationAxis` is `ArgumentException`, a null texture is
 `ArgumentNullException`, and a disposed camera, texture, or primitive asset is
 `ObjectDisposedException`. Colors are linear; each helper writes its color as the per-instance tint.
 Lines are one pixel wide, wire shapes are line geometry, and `DrawCylinder` records two instanced
-draws.
+draws for equal radii. The four-argument `DrawCylinder` convenience overload uses the default 16
+sides; the five-argument form takes `sides` explicitly.
+
+**Primitive overloads and Transform composition.** The primitive families use ordinary C# overloads;
+the engine has no `Ex`, `Rec`, `Pro`, or `V` suffixes. Every world shape has a raylib-compatible
+shape/position overload, and every world shape has a `Transform` overload in addition to its simple
+overload. The transform supplies the world position, rotation, and scale; the shape dimensions stay
+explicit arguments. The instance matrix is `local * transform.ToMatrix()` under the row-vector
+convention, where `local` builds the shape dimensions in local space. The transform scale therefore
+multiplies the shape dimensions, and an identity rotation with unit scale reproduces the matching
+simple overload at `Transform.Position`. A zero transform scale component records nothing; a negative
+scale or a non-finite transform component is rejected like any other invalid argument.
+
+Anchors: the cube, wire cube, sphere, wire sphere, plane, and circle are centered at the transform
+origin; the cylinder and wire cylinder put their bottom cap/ring at the transform origin with local
+`+Y` as their axis; the capsule and wire capsule are centered at the transform origin with local `+Y`
+as their axis and their cap centers at `±height/2`. The circle lies in the local `XZ` plane with local
+`+Y` as its normal, matching `DrawPlane` and `DrawGrid`. The axis-angle circle form rotates that same
+base circle around `rotationAxis` by `rotationAngle` degrees before translating it to `center`.
+
+`DrawCylinder(start, end, startRadius, endRadius, sides, color)` treats `start` and `end` as the cap
+centers and orients the local `+Y` axis between them; `DrawCapsule(start, end, radius, rings, slices,
+color)` treats `start` and `end` as the spherical cap centers, so the cap-center distance is the
+cylinder height. The capsule `Transform` form instead takes that distance explicitly as `height`.
+The full cylinder and wire-cylinder overloads accept unequal radii; a zero radius at one end makes a
+cone and omits the degenerate cap. The tessellated sphere and wire-sphere overloads compose the
+requested `rings` by `slices` surface instead of instancing the fixed engine mesh; the fixed engine
+sphere and wire-sphere meshes remain the default for the shorter forms. A triangle strip is
+decomposed into `points.Length - 2` triangles with alternating winding; a zero-area triangle records
+nothing.
+
+**Ray/quad collision.** `Collision.GetRayQuad(ray, a, b, c, d)` splits the quad into the triangles
+`(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the nearest
+non-negative hit. Its normal is the normalized geometric triangle normal and is not flipped toward
+the ray; a hit on the shared diagonal reports the `(a, b, c)` result. A degenerate quad, a
+non-finite input, or a hit behind the ray origin reports a miss, and the ray direction is not
+required to be normalized.
 
 **Error model.**
 
