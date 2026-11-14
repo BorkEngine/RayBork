@@ -59,6 +59,16 @@ public sealed class MeshBuilder {
     public BoundingBox ComputeBounds();
     public void GenerateCollisions();
 
+    public void GeneratePoly(int sides, float radius);
+    public void GeneratePlane(float width, float length, int resX, int resZ);
+    public void GenerateCube(float width, float height, float length);
+    public void GenerateSphere(float radius, int rings, int slices);
+    public void GenerateHemiSphere(float radius, int rings, int slices);
+    public void GenerateCylinder(float radius, float height, int slices);
+    public void GenerateCone(float radius, float height, int slices);
+    public void GenerateTorus(float radius, float size, int radSeg, int sides);
+    public void GenerateKnot(float radius, float size, int radSeg, int sides);
+
     public Task<Mesh> BuildAsync(CancellationToken cancellationToken = default);
 }
 
@@ -145,6 +155,14 @@ builder.ComputeTangents();
 Mesh mesh = await builder.BuildAsync();
 ```
 
+A named generator fills the geometry, normals, and first UV set in one call:
+
+```csharp
+MeshBuilder builder = ctx.CreateMeshBuilder();
+builder.GenerateCube(2f, 2f, 2f);
+Mesh mesh = await builder.BuildAsync();
+```
+
 - `BuildAsync` snapshots the lists, validates the topology/index counts/ranges and finite
   attributes, computes bounds when `ComputeBounds` was not called, uploads through the
   non-blocking GPU bridge, and returns only after the GPU resource is ready. A failed or canceled
@@ -176,6 +194,54 @@ Mesh mesh = await builder.BuildAsync();
   never lets a later geometry change affect a structure already attached to a mesh. Only
   triangle-list and triangle-strip builders accept it; any other topology throws
   `NotSupportedException`.
+- The nine `Generate*` methods are the procedural counterparts of raylib's `GenMesh*` factories. Each
+  replaces the builder's vertices and indices with one named primitive, sets `Topology` to
+  `TriangleList`, discards explicit bounds, and fills outward normals and the first UV set directly.
+  They are pure CPU and need no GPU, tick thread, or async path: `BuildAsync` uploads the generated
+  geometry like any other builder content, and `ComputeBounds` recomputes bounds from it. Every
+  generated triangle winds counter-clockwise around its outward normal. The methods generate normals
+  but not tangents; call `ComputeTangents` after generation when a tangent basis is needed.
+- `GeneratePoly(sides, radius)` is a regular polygon disc centered at the origin in the XZ plane with
+  its front face toward +Y: a center vertex plus one perimeter vertex per side, and `sides * 3`
+  indices. All normals are +Y. UVs map the disc into the unit square with the center at
+  `(0.5, 0.5)` and the first corner, on +Z, at `(0.5, 0)`.
+- `GeneratePlane(width, length, resX, resZ)` is an XZ grid centered at the origin with `resX` by
+  `resZ` quads and +Y normals. UV `u` runs 0..1 from -X to +X and `v` runs 0..1 from -Z to +Z.
+- `GenerateCube(width, height, length)` is a box centered at the origin with 24 vertices and 36
+  indices: four independent vertices per face carry the face's outward normal. Each face's UVs cover
+  0..1 with the origin at the face's top-left corner and V increasing downward, matching the engine's
+  top-left UV convention.
+- `GenerateSphere(radius, rings, slices)` is a UV sphere with its poles on +Y and -Y. `rings` counts
+  the latitude bands from pole to pole and `slices` the longitude segments. Each pole is one vertex
+  and the seam duplicates the first meridian at `u = 1`; normals equal the position divided by
+  `radius`. UV `u` runs around +Y from +Z toward +X, and `v` runs 0 at the +Y pole to 1 at the -Y
+  pole.
+- `GenerateHemiSphere(radius, rings, slices)` is the +Y half of that sphere, from the pole down to the
+  equator at `y = 0`. `rings` counts the bands from pole to equator. The equator is open: there is no
+  bottom cap, so the underside is visible from below. Normals and UVs match the full sphere, with the
+  equator at `v = 1`.
+- `GenerateCylinder(radius, height, slices)` has its base at `y = 0`, its top at `y = height`, and its
+  axis on +Y. It has side quads and a cap at each end; side normals are horizontal and the caps are
+  ±Y. Side UV `u` runs around the axis from +Z toward +X and `v` runs 0 at the top to 1 at the base.
+  Each cap uses a planar disc mapping centered at `(0.5, 0.5)`.
+- `GenerateCone(radius, height, slices)` has its base circle at `y = 0` and its apex at
+  `(0, height, 0)`. The side is smooth and its normals slant outward and up; the base cap normal is
+  -Y. Side UV `u` runs around the axis from +Z toward +X and `v` runs 0 at the apex to 1 at the base.
+- `GenerateTorus(radius, size, radSeg, sides)` is a torus centered at the origin in the XZ plane with
+  its hole along +Y. `radius` is the major radius to the tube center and `size` the tube radius, so
+  the outer radius is `radius + size`. `radSeg` segments the major ring and `sides` the tube. UV `u`
+  runs around the major ring from +Z toward +X and `v` runs around the tube from the outer equator
+  toward +Y.
+- `GenerateKnot(radius, size, radSeg, sides)` is a trefoil-knot tube centered at the origin: the loop
+  lies in the XZ plane, the lobes rise along ±Y, and every vertex is within `radius + size` of the
+  origin. `radius` is the winding radius of the center line and `size` the tube radius. `radSeg`
+  segments the closed curve and `sides` the tube. UV `u` runs along the curve and `v` runs around the
+  tube.
+- The generators validate their arguments before replacing any geometry: `sides`, `rings`, `slices`,
+  and `radSeg` are at least 3, `resX` and `resZ` are at least 1, and every dimension, radius, and
+  size is positive and finite. An invalid value throws `ArgumentOutOfRangeException` with the
+  offending parameter name; there is no silent clamping or default tessellation. After app shutdown
+  every generator throws `ObjectDisposedException`.
 - `Model` is a flat list of parts. It has no node hierarchy in v1; glTF node transforms are baked
   into each part's `LocalTransform`. `Bounds` is the union of the part bounds. glTF 2.0 and OBJ are
   converted to this packed engine format by the bake; the runtime never parses them.
