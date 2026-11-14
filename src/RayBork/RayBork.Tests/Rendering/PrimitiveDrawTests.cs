@@ -1048,7 +1048,7 @@ public sealed class PrimitiveDrawTests {
             camera.DrawWireCapsule(Transform.Identity, 1f, 0f, rings: 2, slices: 4, _color);
             camera.DrawCircle(Transform.Identity, 0f, _color);
             camera.DrawCircle(Vector3.Zero, 0f, Vector3.UnitY, 0f, _color);
-            camera.DrawRay(new Ray(Vector3.Zero, Vector3.Zero), _color);
+            camera.DrawRay(default, _color);
         }
 
         harness.Host.EndFrame();
@@ -1276,8 +1276,6 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawTriangleStrip(
                 [Vector3.Zero, Vector3.UnitX, new Vector3(0f, float.NaN, 0f)],
                 _color));
-        Assert.Throws<ArgumentException>(
-            () => camera.DrawRay(new Ray(new Vector3(float.NaN, 0f, 0f), Vector3.UnitZ), _color));
         Assert.Throws<ArgumentException>(
             () => camera.DrawBoundingBox(
                 new BoundingBox(Vector3.Zero, new Vector3(float.NaN, 1f, 1f)),
@@ -1849,6 +1847,55 @@ public sealed class PrimitiveDrawTests {
             1e-4f);
     }
 
+    [Theory]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    [InlineData(0f, 1.5f)]
+    [InlineData(1.5f, 0f)]
+    public async Task DrawConeSideTrianglesAreWoundOutward(float radiusTop, float radiusBottom) {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Vector3 position = new(0f, 0f, -5f);
+        const float height = 2f;
+        const int sides = 8;
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawCylinder(position, radiusTop, radiusBottom, height, sides, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        CameraPass pass = packet.Passes[0];
+        Assert.Equal(1, pass.DrawCount);
+        RenderDrawRecord record = pass.Draws[0];
+        Assert.Same(harness.Primitives.Triangle.Lifetime, record.Mesh);
+        Assert.Equal(sides * 2, record.InstanceCount);
+        bool apexOnTop = radiusTop == 0f;
+        ReadOnlySpan<Matrix4x4> matrices = record.GetWorldMatrices();
+        for (int side = 0; side < sides; side++) {
+            Matrix4x4 matrix = matrices[side];
+            Vector3 apex = Vector3.Transform(Vector3.Zero, matrix);
+            Vector3 ringStart = Vector3.Transform(Vector3.UnitX, matrix);
+            Vector3 ringEnd = Vector3.Transform(Vector3.UnitY, matrix);
+            Assert.Equal(apexOnTop ? position.Y + height : position.Y, apex.Y, TOLERANCE);
+            Assert.Equal(apexOnTop ? position.Y : position.Y + height, ringStart.Y, TOLERANCE);
+            Assert.Equal(apexOnTop ? position.Y : position.Y + height, ringEnd.Y, TOLERANCE);
+
+            // The triangle normal must point away from the axis and toward the visible end, which is
+            // the cone's outside; reversed winding would flip it inward.
+            Vector3 normal = NormalFromMatrix(matrix);
+            Vector3 centroid = (apex + ringStart + ringEnd) / 3f;
+            Vector3 radial = Vector3.Normalize(new Vector3(
+                centroid.X - position.X,
+                0f,
+                centroid.Z - position.Z));
+            Assert.True(Vector3.Dot(normal, radial) > 0.5f);
+            Assert.True(apexOnTop ? normal.Y > 0.5f : normal.Y < -0.5f);
+
+            // The remaining cap of a cone keeps its outward normal.
+            Matrix4x4 cap = matrices[sides + side];
+            Assert.Equal(apexOnTop ? -1f : 1f, NormalFromMatrix(cap).Y, 1e-4f);
+        }
+    }
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task DrawCylinderBetweenPointsOrientsTheAxis() {
@@ -2277,22 +2324,27 @@ public sealed class PrimitiveDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DrawRayRecordsOneSegmentWithTheDirectionLength() {
+    public async Task DrawRayRecordsTheUnitDirectionOverTheDocumentedFarDistance() {
         using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
         RenderFramePacket packet = harness.Host.BeginFrame();
-        Ray ray = new(new Vector3(1f, 2f, -5f), new Vector3(0f, 0f, -3f));
+        Ray ray = new(new Vector3(1f, 2f, -5f), new Vector3(0f, 0f, -5f));
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
             camera.DrawRay(ray, _color);
         }
 
         harness.Host.EndFrame();
 
+        Assert.Equal(1f, ray.Direction.Length(), 1e-6f);
         RenderDrawRecord record = packet.Passes[0].Draws[0];
         Assert.Same(harness.Primitives.Line.Lifetime, record.Mesh);
         Assert.Equal(1, record.InstanceCount);
         Matrix4x4 matrix = record.GetWorldMatrices()[0];
         AssertVector(ray.Origin, Vector3.Transform(Vector3.Zero, matrix));
-        AssertVector(ray.Origin + ray.Direction, Vector3.Transform(Vector3.UnitX, matrix));
+        // A ray is infinite; the draw approximates it with the documented 1,000,000 unit segment.
+        AssertVector(
+            ray.Origin + (ray.Direction * 1_000_000f),
+            Vector3.Transform(Vector3.UnitX, matrix));
+        AssertVector(ray.Direction, Vector3.Normalize(Axis(matrix, 0)));
     }
 
     [Fact]
@@ -2339,7 +2391,7 @@ public sealed class PrimitiveDrawTests {
         RenderFramePacket packet = harness.Host.BeginFrame();
         BoundingBox point = new(new Vector3(1f), new Vector3(1f));
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
-            camera.DrawRay(new Ray(Vector3.Zero, Vector3.Zero), _color);
+            camera.DrawRay(default, _color);
             camera.DrawBoundingBox(point, _color);
         }
 

@@ -88,7 +88,7 @@ and `Transform` overloads, and the eight `DrawBillboard` overloads. The M5 camer
 binding at all, and the alpha-blended mesh program used by billboards; the polygon-mode-line pipeline
 used by `DrawWireModel` is covered by the GPU tests because the gallery has no model asset. The sample
 is a plain user-facing example and contains no test-only draw assertion. Both publishes must finish
-with zero AOT/trim warnings. The M5 suite is 1,881 tests, 92 of them GPU integration tests, and every
+with zero AOT/trim warnings. The M5 suite is 1,896 tests, 93 of them GPU integration tests, and every
 sample solution builds.
 
 On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver

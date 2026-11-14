@@ -322,12 +322,12 @@ public sealed class MeshCollisionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TraversalMissesForANonFiniteRay() {
+    public void TraversalMissesForAZeroDirectionRay() {
         PrimitiveMeshData mesh = CreatePrimitive("cube");
         MeshCollisionData data = BuildCollision(mesh);
 
         bool hit = data.TryFindNearest(
-            new Ray(new Vector3(float.NaN, 0f, 0f), -Vector3.UnitZ),
+            default(Ray),
             mesh.Vertices,
             mesh.Indices,
             out int triangleId,

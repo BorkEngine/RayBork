@@ -637,14 +637,14 @@ RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).RotateTowards
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Slerp(System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).ToAngleAxis(out float angle, out System.Numerics.Vector3 axis) -> void
 RayBork.Ray
-RayBork.Ray.Deconstruct(out System.Numerics.Vector3 Origin, out System.Numerics.Vector3 Direction) -> void
+RayBork.Ray.Deconstruct(out System.Numerics.Vector3 origin, out System.Numerics.Vector3 direction) -> void
 RayBork.Ray.Direction.get -> System.Numerics.Vector3
 RayBork.Ray.Direction.init -> void
 RayBork.Ray.Equals(RayBork.Ray other) -> bool
 RayBork.Ray.Origin.get -> System.Numerics.Vector3
 RayBork.Ray.Origin.init -> void
 RayBork.Ray.Ray() -> void
-RayBork.Ray.Ray(System.Numerics.Vector3 Origin, System.Numerics.Vector3 Direction) -> void
+RayBork.Ray.Ray(System.Numerics.Vector3 origin, System.Numerics.Vector3 direction) -> void
 RayBork.RayBorkAppBuilder.WithAgxContrast(float contrast = 1.25) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAgxWhite(float white = 16.29) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetsPack(string! path) -> RayBork.RayBorkAppBuilder!

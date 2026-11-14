@@ -44,7 +44,7 @@ of M5; it moves to M7 with the orthographic sprite contract.
 `samples/PrimitiveGallery` is the M5 sample and AOT gate: it draws the M5 primitive helpers in one
 perspective pass with a runtime procedural texture, needs no asset pack, and publishes with Native
 AOT. `samples/Castle` keeps its orbitable castle scene and draws `DrawGrid` under the model.
-The suite is 1,881 tests, 92 of them GPU integration tests, and every sample builds. The Windows
+The suite is 1,896 tests, 93 of them GPU integration tests, and every sample builds. The Windows
 hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
 host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in

@@ -232,8 +232,8 @@ internal sealed class GalleryGame : IGame {
             ],
             Color.DarkOrange);
 
-        // The ray starts below the box and ends at its center, so the collision pair reads as one
-        // shape: the box is the helper's axis-aligned bounds and the ray is one line segment.
+        // The ray starts below the box and passes through its center. A ray is infinite, so the draw
+        // is a long segment along the unit direction and the box is one point on that ray.
         Vector3 boxCenter = Station(5.1f, 4.7f);
         Vector3 rayOrigin = boxCenter - (_galleryRight * 1.6f) - (Vector3.UnitY * 0.8f);
         camera.DrawBoundingBox(

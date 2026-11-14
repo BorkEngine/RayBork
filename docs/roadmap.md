@@ -499,7 +499,7 @@ mesh generation, and the collision queries a small game expects.
 - All helpers batch with the same rules as user draws; stats reflect it, and `RenderStats.Triangles`
   still counts recorded triangle primitives for a wireframe model draw.
 - Castle uses `DrawGrid` for the raylib reference grid; all sample solutions build.
-- The suite is 1,881 tests, 92 of them GPU integration tests.
+- The suite is 1,896 tests, 93 of them GPU integration tests.
 - Native AOT publish runs the gallery on Windows and Linux.
 
 **As-built notes.** M5 shipped the planned primitive and collision scope, the approved ray-mesh
@@ -516,9 +516,10 @@ color helpers, and the restored Bork2d/Unity color preset set:
   the unit reference triangle under the orientation-preserving affine map, so a triangle that is
   counter-clockwise as seen by the camera keeps its front face and a clockwise one is culled.
   `DrawTriangleStrip` decomposes `points.Length - 2` triangles with alternating winding and skips
-  zero-area triangles. `DrawRay` draws `ray.Origin` to `ray.Origin + ray.Direction` (the direction is
-  not normalized); `DrawBoundingBox` draws the twelve axis-aligned edges and skips the coincident
-  edges of a zero-extent box.
+  zero-area triangles. `DrawRay` draws an effectively infinite ray as one 1,000,000-unit segment from
+  `ray.Origin` along the unit `ray.Direction`; `Ray` validates a finite origin and a finite, non-zero
+  direction and stores it normalized. `DrawBoundingBox` draws the twelve axis-aligned edges and skips
+  the coincident edges of a zero-extent box.
   `DrawCube` and `DrawWireCube` scale the unit cube by `size` around `position`, with explicit
   width/height/length and `Transform` forms. `DrawSphere` instances the unit UV sphere (`32` slices by
   `16` rings, no LOD) or composes a tessellated `rings` by `slices` surface
@@ -526,9 +527,10 @@ color helpers, and the restored Bork2d/Unity color preset set:
   and `slices * (2 * rings - 1)` line instances in the tessellated form. `DrawCylinder` records
   `sides` side quads plus `2 * sides` cap triangles with the base cap at `position` and the axis along
   world `+Y`; the full form accepts unequal top/bottom radii (a tapered cylinder is one triangle draw
-  with `4 * sides` triangles, and a zero radius at one end is a cone with `2 * sides` triangles), and
-  the start/end form treats the endpoints as cap centers. `DrawWireCylinder` records one vertical edge
-  per side plus one closed ring per non-zero radius. `DrawCapsule` is `slices` side quads plus
+  with `4 * sides` triangles, and a zero radius at one end is a cone with `2 * sides` triangles and
+  outward-facing side winding), and the start/end form treats the endpoints as cap centers.
+  `DrawWireCylinder` records one vertical edge per side plus one closed ring per non-zero radius.
+  `DrawCapsule` is `slices` side quads plus
   `2 * slices * (2 * rings - 1)` cap triangles in two instanced draws; the start/end form treats
   `start` and `end` as spherical cap centers, and the `Transform` form takes the cap-center distance
   as `height`. `DrawWireCapsule` records `slices * (4 * rings + 1)` line instances. `DrawPlane`
@@ -628,10 +630,10 @@ color helpers, and the restored Bork2d/Unity color preset set:
   the normalized geometric normal, which is not flipped toward the ray; a degenerate triangle is a
   miss. `GetRayQuad` splits a quad into the triangles `(a, b, c)` and `(a, c, d)`, reuses the
   double-sided triangle test, returns the nearest non-negative hit, and reports the `(a, b, c)` result
-  on the shared diagonal; a degenerate quad is a miss, and the direction is not required to be
-  normalized. A ray/plane query normalizes the plane normal and misses when the ray is parallel,
-  including when it lies in the plane. `RayCollision.Distance` is the ray parameter, which is a world
-  distance only for a normalized direction, and a miss is `default(RayCollision)`. `GetRayMesh`
+  on the shared diagonal; a degenerate quad is a miss. A ray/plane query normalizes the plane normal
+  and misses when the ray is parallel, including when it lies in the plane. `Ray.Direction` is unit
+  length, so `RayCollision.Distance` is a world distance, and a miss is `default(RayCollision)`;
+  `default(Ray)` has a zero direction and every ray query misses. `GetRayMesh`
   supports triangle lists and strips, throws `NotSupportedException` for line and point topologies,
   `ArgumentException` for a singular transform, and `ArgumentNullException`/`ObjectDisposedException`
   for the mesh; it maps the hit through the row-vector mesh-to-world transform, uses the
@@ -720,7 +722,7 @@ color helpers, and the restored Bork2d/Unity color preset set:
   uses orbit controls, and accepts `--frames` and `--help`. The published `win-x64` and `linux-x64`
   hosts run from the publish directory with zero AOT/trim warnings, and the publish directory contains
   no bake tooling. The sample is a plain user-facing example and contains no test-only draw
-  assertion. The M5 suite is 1,881 tests, 92 of them GPU integration tests, and every sample solution
+  assertion. The M5 suite is 1,896 tests, 93 of them GPU integration tests, and every sample solution
   builds.
 - **DrawTexture boundary.** `DrawTexture` is not part of M5. The preview screen-space overlay helper
   is removed and re-homed to M7, where it returns with the orthographic/sprite contract and
@@ -1082,7 +1084,7 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   polygon-mode-line path: front-facing triangle edges without a filled interior, texture sampling on
   a wireframe fragment, and distinct filled/wireframe pipelines. The collision queries and the BVH
   are covered by deterministic unit tests, including accelerated-versus-brute-force equivalence, and
-  the baked payload by codec and loader tests. The M5 suite is 1,881 tests, 92 of them GPU
+  the baked payload by codec and loader tests. The M5 suite is 1,896 tests, 93 of them GPU
   integration tests; every sample solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

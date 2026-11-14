@@ -52,7 +52,7 @@ the ray/bounding-box pair and the two billboards on the right.
 | `DrawLine` | `Color.SoftRed` | Upper row, center. One diagonal line segment. |
 | `DrawLines` | `Color.DarkOrange` | Upper row, center. A four-point zigzag; three segments. |
 | `DrawBoundingBox` | `Color.Silver` | Upper row, center-right. The twelve edges of a world-space axis-aligned box. |
-| `DrawRay` | `Color.Gold` | Upper row, center-right. A ray that starts below the box and ends at its center. |
+| `DrawRay` | `Color.Gold` | Upper row, center-right. An effectively infinite ray that starts below the box and passes through its center; the draw is a long segment along the unit direction. |
 | `DrawBillboard` | `Color.Beige` tint | Upper row, right. A full-texture quad that faces the camera. |
 | `DrawBillboard` (source rect) | `Color.Beige` tint | Upper row, right. The same texture cropped to its warm left half through the `source` rectangle. |
 

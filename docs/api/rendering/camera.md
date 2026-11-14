@@ -261,12 +261,18 @@ must be finite and inside `(0, 180)` degrees. An orthographic camera requires a 
 and rejects `CameraProjection.Orthographic` with `ArgumentException` because it has no height
 parameter.
 
+`DrawRay` records a ray as one long world-space line segment. The ray itself is infinite; the draw
+uses the documented approximation from `ray.Origin` to `ray.Origin + ray.Direction * 1,000,000`
+world units, and the view and depth clipping make it read as infinite while every recorded coordinate
+stays finite. `Ray` stores a unit direction, so the segment follows the ray exactly. A
+`default(Ray)` has a zero direction and records nothing.
+
 `ScreenToWorldRay` takes **render pixels** with a top-left origin. `Input.MousePosition` is in
 window coordinates, so convert it with `ctx.Window.RenderWidth / (float)ctx.Window.Width` when
 `Width` is nonzero. `DpiScale` is the OS display scale, not the pixel ratio, and is not the
 conversion factor for this call. The ray starts at the camera position for a perspective camera and
-at the near-plane point for an orthographic camera, and its direction is normalized. A non-finite
-input is `ArgumentException`.
+at the near-plane point for an orthographic camera, and its unit direction is stored by the `Ray`
+constructor. A non-finite input is `ArgumentException`.
 
 `WorldToScreen` returns render pixels in the camera viewport with a top-left origin. A point behind
 the camera (`w <= 0`) has no finite screen position, so it returns `(float.NaN, float.NaN)`. A
@@ -409,8 +415,8 @@ the M5 unprojected-overlay implementation is not part of the shipped surface.
 `(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the nearest
 non-negative hit. Its normal is the normalized geometric triangle normal and is not flipped toward
 the ray; a hit on the shared diagonal reports the `(a, b, c)` result. A degenerate quad, a
-non-finite input, or a hit behind the ray origin reports a miss, and the ray direction is not
-required to be normalized.
+non-finite input, a hit behind the ray origin, or a `default(Ray)` (zero direction) reports a miss.
+The ray direction is unit length, so the hit distance is a world distance.
 
 **Error model.**
 
