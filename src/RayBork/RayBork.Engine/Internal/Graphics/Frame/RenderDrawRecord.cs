@@ -53,6 +53,17 @@ internal sealed class RenderDrawRecord {
     /// <summary>Gets the effective render state of this draw.</summary>
     internal RenderState RenderState { get; private set; }
 
+    /// <summary>
+    /// Gets whether the draw rasterizes its triangles with the polygon-mode-line state instead of
+    /// filling them.
+    /// </summary>
+    /// <remarks>
+    /// The flag is part of the batch key and the geometry pipeline key, so a wireframe draw never
+    /// merges with a filled draw over the same mesh, program, and render state. It is internal to the
+    /// draw record: <see cref="RenderState"/> stays the public depth, culling, and blending contract.
+    /// </remarks>
+    internal bool Wireframe { get; private set; }
+
     /// <summary>Gets the per-instance linear tint.</summary>
     internal Color Tint { get; private set; }
 
@@ -92,6 +103,10 @@ internal sealed class RenderDrawRecord {
     /// <param name="program">The internal shader program asset.</param>
     /// <param name="renderState">The effective render state.</param>
     /// <param name="tint">The linear tint.</param>
+    /// <param name="wireframe">
+    /// Whether to rasterize the triangles as lines instead of filling them. <c>false</c> draws the
+    /// regular filled geometry.
+    /// </param>
     /// <exception cref="ArgumentNullException">A required argument is <c>null</c>.</exception>
     internal void Begin(
         EngineAsset mesh,
@@ -100,7 +115,8 @@ internal sealed class RenderDrawRecord {
         int indexCount,
         EngineAsset program,
         RenderState renderState,
-        Color tint) {
+        Color tint,
+        bool wireframe = false) {
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentNullException.ThrowIfNull(program);
 
@@ -110,6 +126,7 @@ internal sealed class RenderDrawRecord {
         MeshBounds = meshBounds;
         IndexCount = indexCount;
         RenderState = renderState;
+        Wireframe = wireframe;
         Tint = tint;
         UvRect = new Vector4(0f, 0f, 1f, 1f);
         _instanceCount = 0;
@@ -186,6 +203,7 @@ internal sealed class RenderDrawRecord {
         MeshBounds = default;
         IndexCount = 0;
         RenderState = default;
+        Wireframe = false;
         Tint = default;
         UvRect = default;
     }

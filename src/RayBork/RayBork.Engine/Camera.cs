@@ -293,7 +293,67 @@ public sealed class Camera : IDisposable {
                 part,
                 part.RenderState,
                 effectiveTint,
-                part.LocalTransform.ToMatrix() * instanceMatrix);
+                part.LocalTransform.ToMatrix() * instanceMatrix,
+                wireframe: false);
+        }
+    }
+
+    /// <summary>
+    /// Records a model as wireframe: every part is drawn with its own material and the polygon-mode-line
+    /// state.
+    /// </summary>
+    /// <param name="model">The model to draw.</param>
+    /// <param name="transform">The model instance transform applied after each part's local transform.</param>
+    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
+    /// <remarks>
+    /// <para>
+    /// This is the raylib <c>DrawModelWires</c>/<c>DrawModelWiresEx</c> equivalent. It is
+    /// Transform-only by design: the transform supplies the position, rotation, and scale, and there
+    /// are no position, scale, or axis-angle overloads and no <c>Ex</c>/<c>Wires</c> suffix names.
+    /// </para>
+    /// <para>
+    /// The draw is <see cref="DrawModel"/> with a polygon-mode-line geometry pipeline: every part still
+    /// uses its own material snapshot (program, uniform cursor, and texture bindings at the call) and
+    /// its <see cref="ModelPart.RenderState"/>. Culling, depth test, depth write, and blending are
+    /// unchanged, so back faces stay culled and the visible triangle edges of front-facing geometry are
+    /// drawn. The tint, textures, and alpha behave exactly as in <see cref="DrawModel"/>: built-in
+    /// shaders multiply the tint into their output and sample the bound textures on the line
+    /// fragments. <c>world = part.LocalTransform.ToMatrix() * transform.ToMatrix()</c> under the
+    /// row-vector convention, and the transform scale and rotation apply to the part geometry.
+    /// </para>
+    /// <para>
+    /// The wireframe pipeline needs the device's <c>fillModeNonSolid</c> feature, which the renderer
+    /// enables when the device supports it. A device without the feature reports the draw as an
+    /// unsupported <see cref="GraphicsException"/> (<c>RB3001</c>) instead of silently drawing nothing;
+    /// M5 has no line-geometry fallback. Every wireframe pipeline is cached and keyed by the shader,
+    /// render state, mesh topology, and polygon mode, so it never merges with a filled draw over the
+    /// same mesh, program, and state.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, model, a part mesh, a part material, or a bound texture is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A part material lacks a stage, or the caller is not the tick thread.
+    /// </exception>
+    public void DrawWireModel(Model model, Transform transform, Color? tint = null) {
+        EnsureDrawable(nameof(DrawWireModel));
+        ArgumentNullException.ThrowIfNull(model);
+        ThrowIfModelDisposed(model);
+
+        IReadOnlyList<ModelPart> parts = model.Parts;
+        ValidateParts(parts);
+
+        Color effectiveTint = tint ?? Color.White;
+        Matrix4x4 instanceMatrix = transform.ToMatrix();
+        foreach (ModelPart part in parts) {
+            RecordPart(
+                part,
+                part.RenderState,
+                effectiveTint,
+                part.LocalTransform.ToMatrix() * instanceMatrix,
+                wireframe: true);
         }
     }
 
@@ -335,7 +395,8 @@ public sealed class Camera : IDisposable {
             mesh.IndexCount,
             shader.Program.Lifetime,
             renderState ?? shader.DefaultRenderState,
-            tint ?? Color.White);
+            tint ?? Color.White,
+            wireframe: false);
         record.SetShaderState(shader.InstanceData, textures);
         record.BeginInstances(1)[0] = transform.ToMatrix();
     }
@@ -382,7 +443,8 @@ public sealed class Camera : IDisposable {
             mesh.IndexCount,
             shader.Program.Lifetime,
             renderState ?? shader.DefaultRenderState,
-            tint ?? Color.White);
+            tint ?? Color.White,
+            wireframe: false);
         record.SetShaderState(shader.InstanceData, textures);
         Span<Matrix4x4> worldMatrices = record.BeginInstances(transforms.Length);
         for (int index = 0; index < transforms.Length; index++) {
@@ -440,7 +502,8 @@ public sealed class Camera : IDisposable {
                 part.Mesh.IndexCount,
                 material.Program.Lifetime,
                 part.RenderState,
-                effectiveTint);
+                effectiveTint,
+                wireframe: false);
             record.SetShaderState(material.InstanceData, textures);
             Span<Matrix4x4> worldMatrices = record.BeginInstances(instanceMatrices.Length);
             Matrix4x4 localMatrix = part.LocalTransform.ToMatrix();
@@ -2781,14 +2844,20 @@ public sealed class Camera : IDisposable {
         int indexCount,
         EngineAsset program,
         RenderState renderState,
-        Color tint) {
+        Color tint,
+        bool wireframe) {
         RenderDrawRecord record = _packet.RentDrawRecord();
-        record.Begin(mesh, topology, bounds, indexCount, program, renderState, tint);
+        record.Begin(mesh, topology, bounds, indexCount, program, renderState, tint, wireframe);
         _pass.Add(record);
         return record;
     }
 
-    private void RecordPart(ModelPart part, RenderState renderState, Color tint, Matrix4x4 worldMatrix) {
+    private void RecordPart(
+        ModelPart part,
+        RenderState renderState,
+        Color tint,
+        Matrix4x4 worldMatrix,
+        bool wireframe) {
         Shader material = part.Shader;
         ReadOnlySpan<Texture?> textures = material.TextureValues;
         _packet.Retention.Add(part.Mesh.Lifetime);
@@ -2800,7 +2869,8 @@ public sealed class Camera : IDisposable {
             part.Mesh.IndexCount,
             material.Program.Lifetime,
             renderState,
-            tint);
+            tint,
+            wireframe);
         record.SetShaderState(material.InstanceData, textures);
         record.BeginInstances(1)[0] = worldMatrix;
     }
@@ -2880,7 +2950,8 @@ public sealed class Camera : IDisposable {
             mesh.IndexCount,
             material.Program.Lifetime,
             renderState,
-            tint);
+            tint,
+            wireframe: false);
         record.SetShaderState(material.InstanceData, textures);
         record.SetUvRect(uvRect);
         return record.BeginInstances(instanceCount);

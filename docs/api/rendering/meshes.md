@@ -259,6 +259,16 @@ Mesh mesh = await builder.BuildAsync();
   defaults, and `DrawModel`/`DrawModelInstanced` snapshot the material's **current** uniform cursor and
   texture bindings at the call, so `SetUniform` before a draw changes it. `ModelPart.RenderState` is
   the effective state: a `null` constructor argument uses `shader.DefaultRenderState`.
+- `Camera.DrawWireModel(model, transform, tint)` draws the same parts and material snapshots as
+  `DrawModel`, but through a polygon-mode-line pipeline (`VK_POLYGON_MODE_LINE`), which is the raylib
+  `DrawModelWires`/`DrawModelWiresEx` equivalent. It is Transform-only: the transform supplies
+  position, rotation, and scale, with no position, scale, or axis-angle overloads and no suffix name.
+  Culling, depth test, depth write, blending, tint, textures, and alpha follow `DrawModel` and each
+  part's `ModelPart.RenderState`, so the wireframe shows the visible edges of front-facing triangles
+  with the part's material. The wireframe pipeline needs the device's `fillModeNonSolid` feature; the
+  renderer enables it when the device supports it, includes the polygon mode in the pipeline cache
+  key, and reports an unsupported `GraphicsException` (`RB3001`) instead of drawing nothing on a
+  device without the feature. M5 has no CPU line-geometry fallback.
 - Each part gets its own material. Two parts that name the same program path share the internal
   program but never a material, and two materials over one program batch together.
 - `Model` is not an animation asset. Skeletal and morph animation are post-1.0.

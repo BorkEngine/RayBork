@@ -8,15 +8,23 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A pipeline is keyed by the shader GPU resource, the effective <see cref="RenderState"/>, and the
-/// mesh topology. Every pipeline shares the one geometry pipeline layout and the fixed 88-byte vertex
-/// input layout, and is created against the current scene render pass and its sample count, so the
-/// cache is discarded when the scene target, render pass, or logical device is recreated.
+/// A pipeline is keyed by the shader GPU resource, the effective <see cref="RenderState"/>, the mesh
+/// topology, and the polygon mode. Every pipeline shares the one geometry pipeline layout and the fixed
+/// 88-byte vertex input layout, and is created against the current scene render pass and its sample
+/// count, so the cache is discarded when the scene target, render pass, or logical device is
+/// recreated.
+/// </para>
+/// <para>
+/// A wireframe pipeline uses <c>VK_POLYGON_MODE_LINE</c>, which Vulkan exposes only when the device
+/// advertises and the renderer enables the core <c>fillModeNonSolid</c> feature. The cache snapshots
+/// that feature from <see cref="VulkanDevice.Capabilities"/> at creation. A wireframe request on a
+/// device without it throws a clear <c>RB3001</c> error instead of drawing nothing; there is no CPU
+/// line-geometry fallback. Filled draws are unaffected: they never need the feature.
 /// </para>
 /// <para>
 /// The cache owns every pipeline it creates. A creation failure is a fatal <c>RB3001</c> error that
-/// names the shader, render state, topology, and sample count; the caller drops the frame instead of
-/// presenting a partial one. Every member is render-thread only.
+/// names the shader, render state, topology, polygon mode, and sample count; the caller drops the frame
+/// instead of presenting a partial one. Every member is render-thread only.
 /// </para>
 /// </remarks>
 internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
@@ -26,6 +34,8 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
     private readonly PipelineLayout _pipelineLayout;
     private readonly int _sampleCount;
     private readonly int _deviceGeneration;
+    private readonly string _deviceName;
+    private readonly bool _fillModeNonSolid;
     private readonly Dictionary<PipelineKey, Pipeline> _pipelines = [];
     private bool _disposed;
 
@@ -35,13 +45,17 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         RenderPass renderPass,
         PipelineLayout pipelineLayout,
         int sampleCount,
-        int deviceGeneration) {
+        int deviceGeneration,
+        string deviceName,
+        bool fillModeNonSolid) {
         _vulkan = vulkan;
         _device = device;
         _renderPass = renderPass;
         _pipelineLayout = pipelineLayout;
         _sampleCount = sampleCount;
         _deviceGeneration = deviceGeneration;
+        _deviceName = deviceName;
+        _fillModeNonSolid = fillModeNonSolid;
     }
 
     /// <summary>Gets the number of cached pipelines. Diagnostic, for tests and statistics.</summary>
@@ -50,6 +64,11 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
     /// <summary>
     /// Creates a cache for one scene render pass and sample count.
     /// </summary>
+    /// <remarks>
+    /// The cache snapshots the device's <c>fillModeNonSolid</c> support and name for the wireframe
+    /// pipelines it may create. A device recreated with different features gets a new cache because the
+    /// backend discards it with the scene render pass.
+    /// </remarks>
     /// <param name="device">The device that owns the pipelines.</param>
     /// <param name="renderPass">The scene render pass the pipelines render into.</param>
     /// <param name="pipelineLayout">The shared geometry pipeline layout.</param>
@@ -75,34 +94,51 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
             throw new ArgumentOutOfRangeException(nameof(sampleCount), sampleCount, "The sample count must be positive.");
         }
 
+        VulkanDeviceCapabilities capabilities = device.Capabilities;
         return new VulkanGeometryPipelineCache(
             device.Vulkan,
             device.Device,
             renderPass,
             pipelineLayout,
             sampleCount,
-            deviceGeneration);
+            deviceGeneration,
+            capabilities.DeviceName,
+            capabilities.FillModeNonSolid);
     }
 
     /// <summary>
-    /// Gets the pipeline for a shader, render state, and topology, creating it on first use.
+    /// Gets the pipeline for a shader, render state, topology, and polygon mode, creating it on first
+    /// use.
     /// </summary>
     /// <param name="shader">The shader GPU resource the pipeline uses.</param>
     /// <param name="renderState">The effective render state.</param>
     /// <param name="topology">The mesh topology.</param>
+    /// <param name="wireframe">Whether the pipeline rasterizes triangles as polygon-mode lines.</param>
     /// <returns>The cached pipeline.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shader"/> is <c>null</c>.</exception>
     /// <exception cref="GraphicsException">
-    /// The shader resource belongs to a destroyed device, its upload is not a shader upload, or pipeline
-    /// creation failed. The diagnostic code is <c>RB3001</c>.
+    /// The shader resource belongs to a destroyed device, its upload is not a shader upload, pipeline
+    /// creation failed, or <paramref name="wireframe"/> was requested on a device without
+    /// <c>fillModeNonSolid</c>. The diagnostic code is <c>RB3001</c>.
     /// </exception>
     internal Pipeline GetOrCreate(
         VulkanShaderAssetResource shader,
         RenderState renderState,
-        RayBork.PrimitiveTopology topology) {
+        RayBork.PrimitiveTopology topology,
+        bool wireframe = false) {
         ArgumentNullException.ThrowIfNull(shader);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        PipelineKey key = new(shader, renderState, topology);
+        if (wireframe && !_fillModeNonSolid) {
+            throw new GraphicsException(
+                $"The Vulkan device '{_deviceName}' does not support fillModeNonSolid, so the "
+                    + $"polygon-mode-line pipeline for shader '{AssetPath.ToPublic(shader.Upload.Path)}' "
+                    + "cannot be created. A wireframe model draw requires fillModeNonSolid; the renderer "
+                    + "has no CPU line-geometry fallback and reports this instead of drawing nothing.",
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                null);
+        }
+
+        PipelineKey key = new(shader, renderState, topology, wireframe);
         if (_pipelines.TryGetValue(key, out Pipeline cached)) {
             return cached;
         }
@@ -115,7 +151,7 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
                 null);
         }
 
-        Pipeline pipeline = CreatePipeline(shader, renderState, topology);
+        Pipeline pipeline = CreatePipeline(shader, renderState, topology, wireframe);
         _pipelines.Add(key, pipeline);
         return pipeline;
     }
@@ -142,7 +178,8 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
     private Pipeline CreatePipeline(
         VulkanShaderAssetResource shader,
         RenderState renderState,
-        RayBork.PrimitiveTopology topology) {
+        RayBork.PrimitiveTopology topology,
+        bool wireframe) {
         if (shader.Upload is not ShaderGpuUpload upload) {
             throw new GraphicsException(
                 $"The shader GPU resource '{AssetPath.ToPublic(shader.Upload.Path)}' does not carry a "
@@ -193,7 +230,7 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
             SType = StructureType.PipelineRasterizationStateCreateInfo,
             DepthClampEnable = false,
             RasterizerDiscardEnable = false,
-            PolygonMode = PolygonMode.Fill,
+            PolygonMode = wireframe ? PolygonMode.Line : PolygonMode.Fill,
             CullMode = ToCullMode(renderState.Cull),
             FrontFace = FrontFace.CounterClockwise,
             DepthBiasEnable = false,
@@ -276,7 +313,8 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
                 $"The geometry pipeline for shader '{AssetPath.ToPublic(shader.Upload.Path)}', "
                     + $"state (blend {renderState.Blend}, cull {renderState.Cull}, depth "
                     + $"{renderState.DepthTest}, write {renderState.DepthWrite}), topology {topology}, "
-                    + $"and {_sampleCount} sample(s) could not be created: {result}.",
+                    + $"polygon mode {(wireframe ? "line" : "fill")}, and {_sampleCount} sample(s) could "
+                    + $"not be created: {result}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
                 null);
         }
@@ -402,8 +440,12 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
             "The sample count is not a supported Vulkan sample count."),
     };
 
-    private readonly record struct PipelineKey(
+    /// <summary>
+    /// The geometry pipeline cache key. Tests assert that the polygon mode is part of it.
+    /// </summary>
+    internal readonly record struct PipelineKey(
         VulkanShaderAssetResource Shader,
         RenderState RenderState,
-        RayBork.PrimitiveTopology Topology);
+        RayBork.PrimitiveTopology Topology,
+        bool Wireframe);
 }

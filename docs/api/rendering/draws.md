@@ -12,7 +12,8 @@ sealed frame.
 1. the camera pass and render target;
 2. the mesh (vertex/index buffers and topology);
 3. the internal shader program;
-4. the effective `RenderState`.
+4. the effective `RenderState`;
+5. the polygon mode: filled or wireframe.
 
 A material instance is not part of the key: two different `Shader` materials over the same internal
 program batch together. Uniform values and texture bindings are **not** part of the key either. They
@@ -28,6 +29,11 @@ are written per instance. Consequently:
 - Model parts are separate meshes and each part draws with its own material snapshot. A model with
   three parts produces at most three batches per mesh/program/state, each with one instance per model
   draw. Two parts whose materials share a program and whose mesh and state match still batch together.
+- A wireframe model draw (`Camera.DrawWireModel`) uses a polygon-mode-line pipeline. The polygon mode
+  is part of the batch key, so a wireframe record never merges with a filled record over the same
+  mesh, program, and render state: the two produce separate batches and separate pipelines even though
+  every other key part matches. Repeated wireframe draws of the same model, mesh, program, and state
+  still merge into one instanced batch.
 - The planner splits a batch when it would exceed `MaxInstancesPerBatch` (default `16384`) or
   `MaxInstanceBytesPerBatch` (default 1 MiB, including the 96-byte instance header). Splitting
   preserves instance order and counts as separate draw calls. A single instance larger than the byte
@@ -70,8 +76,29 @@ batcher will merge them.
 `DrawInstanced` and `DrawModelInstanced` take `ReadOnlySpan<Transform>`, so the span must remain
 valid for the duration of the call; the engine copies the transforms into the frame packet.
 
+**Wireframe model draws.** `DrawWireModel` is the raylib `DrawModelWires`/`DrawModelWiresEx`
+equivalent. It records the model's parts exactly as `DrawModel` does — the same part meshes, material
+snapshots, part render states, tint, and `local * transform` matrices — and marks each draw record so
+the renderer creates its geometry pipeline with `VK_POLYGON_MODE_LINE` instead of
+`VK_POLYGON_MODE_FILL`. The rasterized triangle edges are one pixel wide (`LineWidth = 1`). Culling,
+depth test, depth write, and blending are unchanged, so back faces stay culled and only the visible
+edges of front-facing triangles are drawn; the tint, bound textures, and alpha apply to the line
+fragments exactly as they do to filled fragments. A triangle split into two triangles also draws its
+shared diagonal.
+
+The polygon mode is internal to the model draw: `RenderState` remains the public depth, culling, and
+blending contract, and there is no public wireframe flag. It is part of the batch key and the geometry
+pipeline cache key, so a wireframe batch never reuses a filled pipeline. The wireframe pipeline needs
+the device's core **`fillModeNonSolid`** feature. The renderer enables it at device creation when the
+physical device advertises it; a device without it fails the frame with `GraphicsException` `RB3001`
+naming the device and the feature, instead of silently drawing nothing, and M5 has no CPU
+line-geometry fallback. Filled model draws never request the feature. `RenderStats.Triangles` still
+counts the recorded triangle primitives: polygon-mode line changes the rasterization, not the draw
+record's topology or index count.
+
 **Threading.** All `Draw*` calls and `Camera.Dispose` are tick-thread only. Recording a draw does
-not block on the GPU and does not submit a command buffer.
+not block on the GPU and does not submit a command buffer. The `fillModeNonSolid` support check runs
+on the render thread when the wireframe pipeline is created, not at the tick-thread draw call.
 
 ### 7.9 Built-in primitives, lines, and billboards
 
@@ -184,8 +211,9 @@ merges into the shared engine mesh batch for its program and render state.
 
 **Lines and wire shapes.** Lines are one pixel wide. The engine draws them as `LineList` geometry
 and never requests the `wideLines` device feature, so v1 has no thick-line option and no per-line
-width argument. Wire shapes are line geometry, not polygon-mode rasterization; the engine never
-changes the polygon mode.
+width argument. The primitive helpers' wire shapes are line geometry, not polygon-mode rasterization;
+`DrawWireModel` is the one draw that requests the polygon-mode-line state, and it does so through its
+own cached pipeline rather than changing a filled pipeline.
 
 **Textured quads.** `DrawBillboard` samples the texture through the engine material's `mainTexture`
 binding. That material is shared by every billboard, so the binding is set immediately before the

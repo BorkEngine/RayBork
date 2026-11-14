@@ -26,6 +26,8 @@ public sealed class Camera : IDisposable {
 
     public void DrawModel(Model model, Transform transform, Color? tint = null);
 
+    public void DrawWireModel(Model model, Transform transform, Color? tint = null);
+
     public void DrawMesh(
         Mesh mesh,
         Transform transform,
@@ -220,10 +222,11 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > `DrawWireCube`, `DrawSphere`, `DrawWireSphere`, `DrawCylinder`, `DrawWireCylinder`, `DrawCapsule`,
 > `DrawWireCapsule`, `DrawPlane`, `DrawCircle`, `DrawGrid`, and `DrawBillboard`, with the shape,
 > tessellation, and `Transform` overloads listed above. Their geometry, programs, render states,
-> validation, and batching are specified in §7.9. The `Target` property and the `target` parameter
-> arrive with `RenderTexture` in M8; `DrawText` and `DrawTextBillboard` arrive with runtime text in
-> M6. The camera always records into the app's linear HDR scene target, and the present pass applies
-> AgX after all cameras finish.
+> validation, and batching are specified in §7.9. The model helpers are `DrawModel`,
+> `DrawModelInstanced`, and `DrawWireModel`; the wireframe helper is specified below. The `Target`
+> property and the `target` parameter arrive with `RenderTexture` in M8; `DrawText` and
+> `DrawTextBillboard` arrive with runtime text in M6. The camera always records into the app's linear
+> HDR scene target, and the present pass applies AgX after all cameras finish.
 
 Properties:
 
@@ -276,6 +279,28 @@ path for an imported multi-material model.
 local transform before each instance transform. The frame retains each part material's internal
 program and every bound texture; the material object itself is not an engine asset and is not
 retained.
+
+`DrawWireModel(model, transform, tint)` is the raylib `DrawModelWires`/`DrawModelWiresEx`
+equivalent. It records exactly the parts, material snapshots, and tint of `DrawModel`, but draws them
+through a polygon-mode-line variant of the geometry pipeline (`VK_POLYGON_MODE_LINE`). It is
+Transform-only by design: the transform supplies the position, rotation, and scale, there are no
+position, scale, or axis-angle overloads, and there is no `Ex`/`Wires` suffix name. Culling, depth
+test, depth write, and blending still come from the part's `ModelPart.RenderState`, so back faces stay
+culled and only the visible triangle edges of front-facing geometry are drawn; a triangle split into
+two triangles draws the diagonal it shares with its sibling. The tint, textures, and alpha behave as
+in `DrawModel`: the built-in shaders multiply `rbInstance.Color` into the line fragment and sample the
+material's textures there, so a textured wireframe still reads its texture. The instance matrix is
+`world = part.LocalTransform.ToMatrix() * transform.ToMatrix()` under the row-vector convention, and
+the transform's scale and rotation apply to the part geometry.
+
+The wireframe pipeline needs the device's core **`fillModeNonSolid`** feature. The renderer enables
+it at device creation when the physical device advertises it and includes the polygon mode in the
+geometry pipeline cache key, so a wireframe draw never reuses a filled pipeline; the extra pipeline is
+created on first use per shader, render state, and topology and cached for the rest of the scene
+target's lifetime. A device without `fillModeNonSolid` reports the draw as an unsupported
+`GraphicsException` with diagnostic code `RB3001` instead of silently drawing nothing: the error names
+the device and the feature, the frame is dropped, and the app stops with that exception. M5 has no
+CPU line-geometry fallback. Filled model draws never need the feature.
 
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
@@ -383,6 +408,9 @@ required to be normalized.
   `InvalidOperationException`.
 - A camera draw or `Dispose` from a thread other than the tick thread is
   `InvalidOperationException`.
+- A `DrawWireModel` frame on a device without `fillModeNonSolid` fails with an unsupported-feature
+  `GraphicsException` (`RB3001`); this is reported by the renderer, not by the tick-thread call,
+  because the camera does not query device capabilities.
 - A model part's `LocalTransform` is applied as
   `world = part.LocalTransform.ToMatrix() * instanceTransform.ToMatrix()`; the engine never composes
   it through `Transform.WithParent`, which can throw on shear.

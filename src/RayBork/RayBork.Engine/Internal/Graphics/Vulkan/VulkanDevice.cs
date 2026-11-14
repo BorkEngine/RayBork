@@ -18,10 +18,11 @@ namespace RayBork.Internal;
 /// M4 requires Vulkan 1.2 core, the descriptor-indexing subset in
 /// <see cref="VulkanBindlessFeatures"/>, and enough update-after-bind sampled images for the fixed
 /// <c>RayBorkTextures[2048]</c> array; a physical device without them is rejected. The optional
-/// <c>samplerAnisotropy</c> and <c>textureCompressionBC</c> features are enabled when the selected
-/// device advertises them, because the asset path samples BC-compressed textures and may request
-/// anisotropic filtering. Update-after-bind stays disabled for uniform and storage buffers, and
-/// variable descriptor counts are never used.
+/// <c>samplerAnisotropy</c>, <c>textureCompressionBC</c>, and <c>fillModeNonSolid</c> features are
+/// enabled when the selected device advertises them, because the asset path samples BC-compressed
+/// textures and may request anisotropic filtering, and <see cref="Camera.DrawWireModel"/> needs
+/// <c>fillModeNonSolid</c> to create its polygon-mode-line pipeline. Update-after-bind stays disabled
+/// for uniform and storage buffers, and variable descriptor counts are never used.
 /// </para>
 /// <para>
 /// Every member is render-thread only. Dispose the device before the surface and the instance.
@@ -432,12 +433,14 @@ internal sealed class VulkanDevice : IDisposable {
             };
             VulkanBindlessFeatures.Enable(ref vulkan12Features);
             // The M3 asset path samples BC-compressed textures and may request anisotropic
-            // filtering. Both are optional Vulkan 1.2 features, so enable each only when the
+            // filtering. Wireframe model draws need fillModeNonSolid for their polygon-mode-line
+            // pipelines. All three are optional Vulkan features, so enable each only when the
             // selected physical device advertises it. Every other feature stays disabled.
             PhysicalDeviceFeatures supportedFeatures = vulkan.GetPhysicalDeviceFeatures(physicalDevice);
             PhysicalDeviceFeatures enabledFeatures = new() {
                 SamplerAnisotropy = supportedFeatures.SamplerAnisotropy,
                 TextureCompressionBC = supportedFeatures.TextureCompressionBC,
+                FillModeNonSolid = supportedFeatures.FillModeNonSolid,
             };
             DeviceCreateInfo createInfo = new() {
                 SType = StructureType.DeviceCreateInfo,
