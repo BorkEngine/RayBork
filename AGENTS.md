@@ -92,6 +92,16 @@ public sealed class Counter {
 - A subagent is a **worker**. A worker owns exactly one task branch and one repository copy. It
   implements, tests, and commits that task. It does not create branches, merge, push, open pull
   requests, or edit files outside its task.
+- The lead chooses each subagent's `reasoning_effort`: `high` for design, rendering, public API, and
+  risky work; `low` for simple or mechanical tasks. Set it on the tool call, not in the prompt.
+- A **review subagent** is read-only: it does not edit, branch, or commit. After every implementing
+  worker reports, the lead runs a review subagent over the task diff. The review thoroughly inspects
+  the code for repetition, weak API or architecture decisions, hot-path allocations and other
+  performance problems (priority 1), and whether the engine stays generic, extensible, and easy to
+  use (priority 2); it also inspects the tests for missing behavior and edge cases and for
+  meaningless tests, and returns findings to the lead. The lead sends the findings to the
+  implementing worker for fixes and repeats until the review is clean. A review subagent is not a
+  worker and does not own a task branch.
 - The plan is the session task list. Do not create a planning, status, progress, report, or evidence
   document.
 - There is no time pressure. Split complex work into as many small, independently reviewable tasks
@@ -119,13 +129,16 @@ public sealed class Counter {
    explicit acceptance gates. Use the session task list as the plan.
 5. For each task, create the task branch from the milestone branch and a sibling worktree copy.
 6. Give one worker the complete task: goal, context, file ownership, constraints, acceptance
-   commands, and the branch to commit on. The worker works only in its copy.
-7. Validate the result in the task copy: read the diff, run the gates, and check scope, style,
-   tests, and docs. If it is incomplete, request fixes from the same worker and re-validate.
+   commands, and the branch to commit on. Choose the worker's reasoning effort per §3.1. The worker
+   works only in its copy.
+7. After the worker reports, run the review subagent over the task diff (§3.1). Send its findings to
+   the implementing worker and repeat until the review is clean. The worker runs the task's
+   acceptance commands itself; the lead does not rerun them for a single task.
 8. Merge the task branch into the milestone branch with `git merge --no-ff`. Remove the worktree and
    delete the task branch. If a merge conflict occurs, resolve it on the milestone branch and
    record the resolution in the PR body.
-9. After every merge, run the full gates on the milestone branch.
+9. Run the full gates only when merging task branches that ran in parallel, and after all tasks
+   before the work report. A single task's gates are the worker's responsibility.
 10. Before opening or updating a pull request, run the full gates, write a **work report** for the
     user (what changed, verification, docs, risks, follow-ups), and wait for the user's review.
     The user may add follow-up tasks.
