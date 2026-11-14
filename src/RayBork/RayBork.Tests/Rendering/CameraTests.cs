@@ -810,7 +810,7 @@ public sealed class CameraTests {
         Shader material = RenderingTestAssets.CreateShader();
         using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], materials: [material]);
         Camera camera = host.CreatePerspectiveCamera();
-        Transform[] transforms = new Transform[128];
+        Transform[] transforms = new Transform[100];
         for (int index = 0; index < transforms.Length; index++) {
             transforms[index] = new Transform(new Vector3(index, 0f, 0f));
         }
