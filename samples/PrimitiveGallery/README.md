@@ -19,23 +19,24 @@ dotnet run --project samples/PrimitiveGallery/PrimitiveGallery.csproj -c Debug -
 The scene has no lights: every helper is unlit and uses the built-in vertex-color or texture shader.
 The reference grid lies on the ground plane, and the helpers are arranged in two rows above it. The
 rows run along the initial camera's horizontal axis, so the composition reads left to right before
-the first orbit. Every helper gets its own linear color.
+the first orbit. Every helper uses a named `Color` preset, and each preset is the Bork2d/Unity sRGB
+color converted to linear.
 
 | Helper | Color | Placement |
 | --- | --- | --- |
-| `DrawGrid(20, 1.0f)` | dark gray | The reference grid on the ground plane, centered on the origin. |
-| `DrawCube` | teal | Lower row, left. A solid cube resting on the grid. |
-| `DrawSphere` | blue | Lower row, next to the cube. |
-| `DrawCylinder` | purple | Lower row, center-left. A capped cylinder standing on the grid. |
-| `DrawTriangle` | green | Lower row, center-right. A front-facing triangle in the row's vertical plane. |
-| `DrawPoint` | yellow | Lower row, center-right. A camera-facing quad of `0.7` world units. |
-| `DrawPlane` | magenta | Lower row, right. A `2.6 x 2.6` XZ plane just above the grid. |
-| `DrawWireCube` | amber | Upper row, left. |
-| `DrawWireSphere` | cyan | Upper row, next to the wire cube. |
-| `DrawLine` | red | Upper row, center-left. One diagonal line segment. |
-| `DrawLines` | orange | Upper row, center. A four-point zigzag; three segments. |
-| `DrawBillboard` | warm white tint | Upper row, right. A world-space textured quad that faces the camera. |
-| `DrawTexture` | white tint | A `160 x 90` screen-space overlay in the bottom-left corner, in render pixels. |
+| `DrawGrid(20, 1.0f)` | `Color.Gray5` | The reference grid on the ground plane, centered on the origin. |
+| `DrawCube` | `Color.LightSeaGreen` | Lower row, left. A solid cube resting on the grid. |
+| `DrawSphere` | `Color.RoyalBlue` | Lower row, next to the cube. |
+| `DrawCylinder` | `Color.Purple` | Lower row, center-left. A capped cylinder standing on the grid. |
+| `DrawTriangle` | `Color.LimeGreen` | Lower row, center-right. A front-facing triangle in the row's vertical plane. |
+| `DrawPoint` | `Color.Yellow` | Lower row, center-right. A camera-facing quad of `0.7` world units. |
+| `DrawPlane` | `Color.MediumVioletRed` | Lower row, right. A `2.6 x 2.6` XZ plane just above the grid. |
+| `DrawWireCube` | `Color.Orange` | Upper row, left. |
+| `DrawWireSphere` | `Color.Turquoise` | Upper row, next to the wire cube. |
+| `DrawLine` | `Color.SoftRed` | Upper row, center-left. One diagonal line segment. |
+| `DrawLines` | `Color.DarkOrange` | Upper row, center. A four-point zigzag; three segments. |
+| `DrawBillboard` | `Color.Beige` tint | Upper row, right. A world-space textured quad that faces the camera. |
+| `DrawTexture` | unmodified texture | A `160 x 90` screen-space overlay in the bottom-left corner, in render pixels. |
 
 The billboard and the overlay sample the same procedural texture. The triangle is single-sided, like
 the engine's primitive material, so it is culled when the camera orbits behind it.
@@ -44,8 +45,9 @@ the engine's primitive material, so it is culled when the camera orbits behind i
 
 `Setup` creates one `128 x 128` `Rgba8Srgb` texture with `EngineContext.CreateTextureBuilder`. A warm
 left half, a cool right half, and a 16-pixel checkerboard make the texture's orientation visible on
-both the billboard and the screen-space quad. The texture is uploaded with `BuildAsync` and disposed
-in `Shutdown`. It is the only asset the sample owns.
+both the billboard and the screen-space quad. The warm checker colors are `Color.GoldenRod` and
+`Color.SaddleBrown`; the cool pair is `Color.CornflowerBlue` and `Color.MidnightBlue`. The texture is
+uploaded with `BuildAsync` and disposed in `Shutdown`. It is the only asset the sample owns.
 
 ## Options
 
@@ -66,10 +68,10 @@ engine's default renderer settings. An unknown option prints the usage text and 
 | Escape | Request exit. |
 
 The camera starts at `(8, 6.2, 12.5)`, looks at `(0, 2.4, 0)`, and uses a 45 degree vertical field of
-view with a `0.05` near plane and an infinite far plane. The background is a dark blue-gray
-(`0.04, 0.05, 0.07` linear). The same camera pass draws the whole scene and the screen-space overlay;
-the overlay's `DrawTexture` call maps its destination rectangle to render pixels and ignores scene
-depth.
+view with a `0.05` near plane and an infinite far plane. The background is `Color.Gray3` (sRGB
+`#4D4D4D`, stored linear as `0.073239`) and the grid is `Color.Gray5` (sRGB `#808080`, stored linear
+as `0.214041`). The same camera pass draws the whole scene and the screen-space overlay; the
+overlay's `DrawTexture` call maps its destination rectangle to render pixels and ignores scene depth.
 
 ## Build and run
 

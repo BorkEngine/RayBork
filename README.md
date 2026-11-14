@@ -33,7 +33,9 @@ Rec.2020 to Rec.709 matrix. SDR uses an output maximum of `1`; the scRGB path us
 display headroom as the curve's output maximum and then scales by paper white, so the curve itself
 reaches the reported peak. M5 additionally ships runtime tone mapping through `ctx.Tonemapping`
 (`Exposure`, `AgxWhite`, `AgxContrast`, snapshotted into the sealed frame) and the
-`Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` helpers.
+`Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` helpers. M5 restores the full Bork2d/Unity
+color preset set converted from sRGB to linear, and the samples use those named presets instead of
+hand-written color constants.
 `samples/PrimitiveGallery` is the M5 gate: it draws every primitive helper in one perspective pass
 with a runtime procedural texture, needs no asset pack, and publishes with Native AOT.
 `samples/Castle` keeps its orbitable castle scene and now draws `DrawGrid` under the model.

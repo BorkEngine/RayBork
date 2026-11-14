@@ -46,9 +46,21 @@ keep their meaning, so a game that configures tone mapping only at startup conti
 unchanged.
 
 The sRGB color conversion helpers are additive as well: `Color.FromSrgb`, `Color.FromSrgbBytes`, and
-`Color.ToSrgb` convert between linear `Color` values and display-encoded components without changing
-`Color` or its named constants. `Color` remains linear, `Color.Gray` is still linear `0.5`, and the
-palette is unchanged.
+`Color.ToSrgb` convert between linear `Color` values and display-encoded components, and `Color`
+remains linear. The full Bork2d/Unity preset set is restored in the same change: every preset keeps
+its Bork2d name and is defined from its authored sRGB source with the same explicit piecewise EOTF.
+Restoring the names is additive, but the following existing preset values change:
+`Gray`/`Grey` move from linear `0.5` to `0.214041` (the display mid-gray), `Yellow` moves from
+`(1, 1, 0)` to `(1, 0.8307699, 0.0012141)`, and `DarkCyan` moves from `(0, 0.5, 0.5)` to
+`(0, 0.2581829, 0.2581829)`. `Black`, `White`, `Red`, `Green`, `Blue`, `Cyan`, `Magenta`, `Clear`,
+and `Transparent` keep their values and alpha. `Grey` aliases `Gray`, `Transparent` aliases `Clear`,
+and `YellowNice` aliases `Yellow`.
+
+The preset restoration is a 0.x preview change and this paragraph is its migration note. A game that
+used `Color.Gray` as an intentional linear `0.5` value should construct
+`new Color(0.5f, 0.5f, 0.5f)` or use `Color.FromSrgb(0.5f, 0.5f, 0.5f)` for the display mid-gray;
+the named presets now describe display-authored colors in linear storage. After 1.0 the same change
+would need the obsolete/migration cycle above.
 
 The M5 AgX rework is a behavior change, not a new option. At the same exposure, SDR output differs
 from the M4 curve, the separate HDR highlight path is gone, and the scRGB path uses

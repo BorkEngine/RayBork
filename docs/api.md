@@ -237,9 +237,11 @@ snapshots the values into the frame packet when it seals the frame, so a write d
 to that frame's present. The M5 present pass reworks the tone mapper to Godot 4.7's HDR-aware AgX
 curve with the `allenwp` curve and CPU-derived curve parameters; SDR uses an output maximum of `1`,
 and scRGB HDR uses the reported display headroom and then scales by paper white. `Color` remains a
-linear value and its named constants are unchanged; `Color.FromSrgb`, `Color.FromSrgbBytes`, and
-`Color.ToSrgb` add the explicit display-encoded conversions. `Camera.Target` and `DrawText` remain
-later milestones (M8 and M6).
+linear value; its full Bork2d/Unity preset set is authored as sRGB and stored linear through the same
+explicit conversion, so `Color.Gray` is the display mid-gray (linear `0.214041`) and
+`Color.WhiteSmoke` is `0.913099`. `Color.FromSrgb`, `Color.FromSrgbBytes`, and `Color.ToSrgb` add the
+explicit display-encoded conversions. `Camera.Target` and `DrawText` remain later milestones (M8 and
+M6).
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
