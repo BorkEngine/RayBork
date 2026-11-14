@@ -772,6 +772,10 @@ RayBork.ShaderUniformType.UInt = 2 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector2 = 4 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector3 = 5 -> RayBork.ShaderUniformType
 RayBork.ShaderUniformType.Vector4 = 6 -> RayBork.ShaderUniformType
+RayBork.TextAlignment
+RayBork.TextAlignment.Center = 1 -> RayBork.TextAlignment
+RayBork.TextAlignment.Left = 0 -> RayBork.TextAlignment
+RayBork.TextAlignment.Right = 2 -> RayBork.TextAlignment
 RayBork.Texture
 RayBork.Texture.Dispose() -> void
 RayBork.Texture.Format.get -> RayBork.TextureFormat
@@ -810,6 +814,10 @@ RayBork.TextureWrap
 RayBork.TextureWrap.Clamp = 1 -> RayBork.TextureWrap
 RayBork.TextureWrap.Mirror = 2 -> RayBork.TextureWrap
 RayBork.TextureWrap.Repeat = 0 -> RayBork.TextureWrap
+RayBork.TextWrapping
+RayBork.TextWrapping.Character = 2 -> RayBork.TextWrapping
+RayBork.TextWrapping.None = 0 -> RayBork.TextWrapping
+RayBork.TextWrapping.Word = 1 -> RayBork.TextWrapping
 RayBork.TonemappingMode
 RayBork.TonemappingMode.AgX = 0 -> RayBork.TonemappingMode
 RayBork.TonemappingMode.None = 1 -> RayBork.TonemappingMode
