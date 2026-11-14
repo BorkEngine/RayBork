@@ -32,6 +32,9 @@ namespace RayBork.Tests;
 /// </para>
 /// </remarks>
 internal sealed class PrimitiveDrawGpuHarness : IDisposable {
+    /// <summary>The texture binding name the built-in mesh program samples.</summary>
+    internal const string MESH_TEXTURE_BINDING = "mainTexture";
+
     private readonly BackendTestHost _host;
     private readonly AssetGpuUploadHarness _uploads;
     private readonly AssetCatalog _catalog;
@@ -66,6 +69,18 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
 
     /// <summary>Gets the linear scene target height in pixels.</summary>
     internal uint Height => _host.SceneTarget.Extent.Height;
+
+    /// <summary>
+    /// Gets the loaded engine primitive assets, so a test can build a <see cref="Model"/> over an
+    /// engine mesh and a material over an engine program.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The harness is disposed.</exception>
+    internal PrimitiveAssets Primitives {
+        get {
+            AssertNotDisposed();
+            return _primitives;
+        }
+    }
 
     /// <summary>
     /// Creates the backend and loads the real primitive assets, or skips the test when the GPU host is

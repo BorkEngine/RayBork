@@ -797,7 +797,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </summary>
     /// <remarks>
     /// Render-thread only. The caller disposes the previous cache before the scene render pass is
-    /// destroyed.
+    /// destroyed. The cache snapshots the device's <c>fillModeNonSolid</c> support for the wireframe
+    /// model pipelines.
     /// </remarks>
     private void CreateGeometryPipelines() {
         _geometryPipelines = VulkanGeometryPipelineCache.Create(
@@ -1263,7 +1264,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             foreach (PlannedBatch batch in passPlan.Batches) {
                 VulkanShaderAssetResource shader = RequireShaderResource(batch.Program);
                 VulkanMeshAssetResource mesh = RequireMeshResource(batch.Mesh);
-                Pipeline pipeline = _geometryPipelines!.GetOrCreate(shader, batch.RenderState, batch.Topology);
+                Pipeline pipeline = _geometryPipelines!.GetOrCreate(
+                    shader,
+                    batch.RenderState,
+                    batch.Topology,
+                    batch.Wireframe);
                 pipelines.Add(pipeline.Handle);
 
                 RenderDrawRecord first = batch.Instances[0].Record;

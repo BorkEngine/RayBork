@@ -79,6 +79,7 @@ RayBork.Camera.Dispose() -> void
 RayBork.Camera.DrawInstanced(RayBork.Mesh! mesh, RayBork.Shader! shader, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawMesh(RayBork.Mesh! mesh, RayBork.Transform transform, RayBork.Shader! shader, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawModel(RayBork.Model! model, RayBork.Transform transform, RayBork.Color? tint = null) -> void
+RayBork.Camera.DrawWireModel(RayBork.Model! model, RayBork.Transform transform, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawModelInstanced(RayBork.Model! model, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.Color? tint = null) -> void
 RayBork.Camera.Far.get -> float
 RayBork.Camera.FieldOfView.get -> float
