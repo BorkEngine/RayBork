@@ -3,39 +3,43 @@ using System.Text;
 namespace RayBork.Internal;
 
 /// <summary>
-/// A parsed sfnt (TTF or OTF) face: its table directory, metrics, Unicode cmap, TrueType outlines,
-/// and kerning data.
+/// A parsed sfnt (TTF or OTF) face: its table directory, metrics, Unicode cmap, outlines, and
+/// kerning data.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The instance retains the packed face bytes for its lifetime because glyphs, kerning values, and
-/// table spans are read on demand; the <c>loca</c>/<c>glyf</c> tables, cmap, and kerning lookups are
-/// parsed once and never copied. A face is immutable after <see cref="Parse"/> and safe to read from
-/// any thread without locks, provided the caller does not mutate the retained buffer. Every read that
-/// returns a value is allocation-free except <see cref="GetGlyph"/>, which allocates the resolved
-/// contour and segment arrays.
+/// table spans are read on demand; the <c>loca</c>/<c>glyf</c> tables, CFF container, cmap, and
+/// kerning lookups are parsed once and never copied. A face is immutable after <see cref="Parse"/> and
+/// safe to read from any thread without locks, provided the caller does not mutate the retained
+/// buffer. Every read that returns a value is allocation-free except <see cref="GetGlyph"/>, which
+/// allocates the resolved contour and segment arrays.
 /// </para>
 /// <para>
 /// The container accepts the <c>0x00010000</c> and <c>true</c> TrueType magic and the <c>OTTO</c>
 /// CFF magic; a TrueType Collection (<c>ttcf</c>) is rejected because one pack entry stores one face.
 /// A TrueType face must carry <c>head</c>, <c>maxp</c>, <c>hhea</c>, <c>hmtx</c>, <c>cmap</c>,
 /// <c>loca</c>, and <c>glyf</c>. A CFF face carries <c>CFF </c> or <c>CFF2</c> instead of
-/// <c>glyf</c>/<c>loca</c>; it parses structurally and exposes the CFF table span, but
-/// <see cref="GetGlyph"/> resolves only TrueType outlines. The 16-bit <c>numGlyphs</c> field caps a
-/// face at 65,535 glyphs.
+/// <c>glyf</c>/<c>loca</c>; a <c>CFF </c> table is parsed and its Type 2 outlines are resolved,
+/// while a CFF2 face parses structurally, exposes the CFF2 table span, and rejects glyph reads. The
+/// 16-bit <c>numGlyphs</c> field caps a face at 65,535 glyphs.
 /// </para>
 /// <para>
-/// The container, the required tables, the selected cmap subtable, and the optional kerning tables are
-/// validated by <see cref="Parse"/>. Glyph data is resolved and validated by <see cref="GetGlyph"/> on
-/// demand, so a face with a corrupt unused glyph still parses; resolving that glyph throws the same
-/// <see cref="FontFormatException"/>, including composite reference-cycle failures. A valid face
-/// outside the supported subset — CFF/CFF2 outlines, point-matched composite arguments, or any
-/// composite or defensive parser budget overrun — raises <see cref="FontUnsupportedException"/>.
+/// The container, the required tables, the selected cmap subtable, the optional kerning tables, and
+/// the CFF 1.0 container — header, INDEXes, Top DICT, charset, CharStrings INDEX, Private DICT, and a
+/// CID-keyed face's FDArray and FDSelect — are validated by <see cref="Parse"/>. Glyph data is
+/// resolved and validated by <see cref="GetGlyph"/> on demand, so a face with a corrupt unused glyph
+/// still parses; resolving that glyph throws the same <see cref="FontFormatException"/>, including
+/// composite reference-cycle and Type 2 charstring failures. A valid face outside the supported
+/// subset — CFF2 outlines, point-matched composite arguments, predefined Expert charsets, FDSelect
+/// format 4, an unresolvable or nested <c>seac</c>, or any composite or defensive parser budget
+/// overrun — raises <see cref="FontUnsupportedException"/>.
 /// </para>
 /// <para>
 /// Every structural failure, including truncation, an out-of-bounds table record, a bad metric, or a
-/// malformed glyph, cmap, kern, or GPOS structure, throws <see cref="FontFormatException"/> with a
-/// precise reason. Framework exceptions are never thrown for corrupt input.
+/// malformed glyph, CFF charstring, cmap, kern, or GPOS structure, throws
+/// <see cref="FontFormatException"/> with a precise reason. Framework exceptions are never thrown for
+/// corrupt input.
 /// </para>
 /// </remarks>
 internal sealed class SfntFace {
@@ -79,6 +83,7 @@ internal sealed class SfntFace {
     private readonly SfntOutlineKind _outlineKind;
     private readonly CmapTable _cmap;
     private readonly GlyphOutlineReader? _outlines;
+    private readonly CffFont? _cffOutlines;
     private readonly KerningReader _kerning;
 
     private SfntFace(
@@ -90,6 +95,7 @@ internal sealed class SfntFace {
         ReadOnlyMemory<byte> cff2,
         CmapTable cmap,
         GlyphOutlineReader? outlines,
+        CffFont? cffOutlines,
         KerningReader kerning) {
         _tables = tables;
         _hmtx = hmtx;
@@ -99,6 +105,7 @@ internal sealed class SfntFace {
         _cff2 = cff2;
         _cmap = cmap;
         _outlines = outlines;
+        _cffOutlines = cffOutlines;
         _kerning = kerning;
     }
 
@@ -145,11 +152,12 @@ internal sealed class SfntFace {
     /// <param name="data">The complete face bytes; they are retained for the face's lifetime.</param>
     /// <returns>The parsed face.</returns>
     /// <exception cref="FontFormatException">
-    /// The container, a required table, the selected cmap subtable, the <c>loca</c> offsets, or a
-    /// kerning table is malformed.
+    /// The container, a required table, the selected cmap subtable, the <c>loca</c> offsets, the CFF
+    /// 1.0 container or a CFF DICT/INDEX, or a kerning table is malformed.
     /// </exception>
     /// <exception cref="FontUnsupportedException">
-    /// A <c>kern</c> or <c>GPOS</c> table is valid but exceeds a documented defensive parser limit.
+    /// A <c>kern</c> or <c>GPOS</c> table is valid but exceeds a documented defensive parser limit,
+    /// or the CFF table is CFF2, uses a predefined Expert charset, or has an FDSelect format 4 table.
     /// </exception>
     internal static SfntFace Parse(ReadOnlyMemory<byte> data) {
         SfntReader face = new(data.Span, "the face");
@@ -204,6 +212,7 @@ internal sealed class SfntFace {
         ReadOnlyMemory<byte> cff = ReadOnlyMemory<byte>.Empty;
         ReadOnlyMemory<byte> cff2 = ReadOnlyMemory<byte>.Empty;
         GlyphOutlineReader? outlines = null;
+        CffFont? cffOutlines = null;
         if (trueType) {
             FontTable loca = RequireTable(directory, FontTableTag.Loca);
             FontTable glyf = RequireTable(directory, FontTableTag.Glyf);
@@ -224,6 +233,9 @@ internal sealed class SfntFace {
             outlineKind = cffTable is not null ? SfntOutlineKind.Cff : SfntOutlineKind.Cff2;
             cff = cffTable?.Data ?? ReadOnlyMemory<byte>.Empty;
             cff2 = cff2Table?.Data ?? ReadOnlyMemory<byte>.Empty;
+            if (cffTable is not null) {
+                cffOutlines = CffFont.Parse(cff, metrics.GlyphCount, metrics.UnitsPerEm);
+            }
         }
 
         CmapTable cmapTable = CmapTable.Parse(cmap.Data, metrics.GlyphCount);
@@ -242,6 +254,7 @@ internal sealed class SfntFace {
             cff2,
             cmapTable,
             outlines,
+            cffOutlines,
             kerning);
     }
 
@@ -305,21 +318,27 @@ internal sealed class SfntFace {
     /// <returns>The resolved glyph in font units; an empty result has zero bounds and no contours.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     /// <exception cref="FontFormatException">
-    /// The glyph data is malformed or has a composite reference cycle.
+    /// The glyph data is malformed or has a composite reference cycle; a CFF charstring, subroutine,
+    /// or <c>seac</c> component is malformed.
     /// </exception>
     /// <exception cref="FontUnsupportedException">
-    /// The glyph is valid but outside the supported subset: CFF/CFF2 outlines, point-matched
-    /// composite component arguments, more than 16 composite levels, more than 20,000 points, or
-    /// more than 4,096 component resolutions.
+    /// The glyph is valid but outside the supported subset: CFF2 outlines, point-matched composite
+    /// component arguments, more than 16 composite levels, more than 20,000 points, more than 4,096
+    /// component resolutions, or a Type 2 interpreter limit or unsupported CFF feature documented on
+    /// <see cref="CffType2Interpreter"/>.
     /// </exception>
     internal FontGlyph GetGlyph(int glyphId) {
         ThrowIfGlyphOutOfRange(glyphId, nameof(glyphId));
-        if (_outlines is null) {
-            throw new FontUnsupportedException(
-                "the face stores CFF or CFF2 outlines; only TrueType 'glyf' outlines are resolved");
+        if (_outlines is not null) {
+            return _outlines.ReadGlyph(glyphId);
         }
 
-        return _outlines.ReadGlyph(glyphId);
+        if (_cffOutlines is not null) {
+            return _cffOutlines.ReadGlyph(glyphId);
+        }
+
+        throw new FontUnsupportedException(
+            "the face stores CFF2 outlines; only TrueType 'glyf' and CFF 1.0 outlines are resolved");
     }
 
     /// <summary>Gets the kerning adjustment of one horizontal pair.</summary>
