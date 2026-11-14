@@ -113,8 +113,8 @@ policy.
 | `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same hosts on both RIDs. |
 | `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the backend | Exercised end to end by the M6 AOT gate: the published host creates the instance, device, swapchain, scene target, present pass, and the text draw path. |
 | `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by every AOT gate; the M6 gate decodes the built-in font, texture, and shader descriptors plus the sample's baked font descriptor through compiled shapes. |
-| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in and sample pack descriptor decode in every AOT gate, including the M6 font descriptor. |
-| `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the built-in and sample pack read in every AOT gate; no reflection or dynamic code. |
+| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the gates that mount a user pack (M3 `samples/HelloInterop`, M4 `samples/Castle`, and M6 `samples/Text`, including the M6 font descriptor). |
+| `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the built-in pack read in every AOT gate, and by a sample-pack read in the gates that mount a user pack; no reflection or dynamic code. |
 | `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M6 AOT gate on both RIDs. |
 | `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M6 AOT gate on both RIDs. |
 | `System.IO.Compression.Zstandard*` | in-box `net11.0` | Zstandard pack payload compression | Part of the .NET 11 shared framework; no package and no separate AOT gate. |
@@ -961,10 +961,13 @@ corner at very large sizes. The generator caps one texture at 4,194,304 texels a
 
 #### Glyph pipeline and thread
 
-`FontGlyphPipeline` is one per parsed face. The tick thread calls only `BeginFrame`, `Acquire`, and
-`GetMetrics`; the app-lifetime `GlyphGenerationService` runs on the `RayBork.Font` thread and is the
-only thread that inserts or evicts glyph textures. `BeginFrame` records the frame index once per
-camera and keeps the highest value, so a repeated or stale call never moves the cache clock backwards.
+`FontGlyphPipeline` is one per parsed face. The draw path calls only `BeginFrame`, `Acquire`, and
+`GetMetrics`; the public read-only `Font.TryGetGlyph` and `Font.CachedGlyphCount` also peek the cache
+through `TryGetTexture` and the cache count, without generating or waiting. The app-lifetime
+`GlyphGenerationService` runs on the `RayBork.Font` thread and is the only thread that inserts or
+evicts glyph textures. `BeginFrame` records the frame index once per camera and font (the camera
+service keeps a per-camera font set and passes the same frame index), and keeps the highest value, so
+a repeated or stale call never moves the cache clock backwards.
 `Acquire` first looks in the cache under the pipeline lock: a hit stamps the use and adds the
 texture's frame hold to the caller's `FrameAssetRetention` **while the lock is held**, so eviction
 cannot release the owner reference between the lookup and the hold; a miss marks the glyph pending,
@@ -1033,7 +1036,8 @@ settings, so the built-in pack has 18 entries. Fira Sans Regular is version 4.20
 SIL Open Font License 1.1, and covers Latin, Cyrillic, and Greek. The face is engine-owned and must
 not be disposed; its owner reference is released during shutdown. It is recorded in the
 bundled-assets section of [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md). The sample-only Lora
-face is baked into `samples/Text/text.pck` and keeps its own notice under `samples/Text/`.
+face is baked into `text.pck` beside the `samples/Text` executable and keeps its own notice under
+`samples/Text/`.
 
 #### Text layout and drawing
 
@@ -1240,10 +1244,12 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   publishable samples but are not the M6 gate, and `samples/HelloInterop` remains the M1-M3
   diagnostic host.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
-  built-in and sample pack descriptor decode in every gate; the pack reader and descriptor decoding
-  contain no reflection resolver. The M6 Text gate decodes the built-in font, texture, and shader
-  descriptors and the sample's baked `Font` descriptor, so the font entry type is covered end to end;
-  the M4 Castle gate covered the packed model, mesh, shader, and texture descriptors.
+  built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the
+  gates that mount a user pack (M3 `samples/HelloInterop`, M4 `samples/Castle`, and M6
+  `samples/Text`); the pack reader and descriptor decoding contain no reflection resolver. The M6
+  Text gate decodes the built-in font, texture, and shader descriptors and the sample's baked `Font`
+  descriptor, so the font entry type is covered end to end; the M4 Castle gate covered the packed
+  model, mesh, shader, and texture descriptors.
 - The Vulkan loader is loaded through `NativeLibrary` with a custom `INativeContext` instead of
   Silk.NET's path resolution, so the published host does not depend on a per-RID Silk.NET loader
   asset. The loader itself is a system/GPU-driver component and is not redistributed with the
@@ -1299,14 +1305,16 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   and accelerated-versus-brute-force equivalence, plus pack/codec and loader tests for the baked
   payload.
 - M6 adds the text draw suite (`TextDrawGpuTests`): it loads `/fonts/fira-sans` from the built-in pack
-  through the real catalog and generation service, records the production `Camera.DrawText` and
-  `Camera.DrawTextBillboard`, submits the sealed packet through `Vulkan12Backend`, and asserts
-  validation-layer cleanliness, one draw call with one instance per ready glyph and two triangles per
-  instance, and single-pixel linear scene-target probes for glyph orientation, ink coverage, batching
-  across calls, and occlusion behind opaque geometry. The glyph texture path is also covered by the
-  per-instance texture record and GPU suites. The font, layout, MSDF, and parser suites are
-  deterministic CPU tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The
-  suite is 2,594 tests, 102 of them GPU integration tests.
+  through the real catalog and generation service, records the production `Camera.DrawText` in three
+  tests (glyph orientation, occlusion, and batching), submits the sealed packet through
+  `Vulkan12Backend`, and asserts validation-layer cleanliness, one draw call with one instance per
+  ready glyph and two triangles per instance, and single-pixel linear scene-target probes for glyph
+  orientation, ink coverage, batching across calls, and occlusion behind opaque geometry.
+  `Camera.DrawTextBillboard` is covered by the unit suite `Tests/Rendering/TextDrawTests.cs` for its
+  centering, bounds union, and alignment. The glyph texture path is also covered by the per-instance
+  texture record and GPU suites. The font, layout, MSDF, and parser suites are deterministic CPU
+  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,594
+  tests, 102 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

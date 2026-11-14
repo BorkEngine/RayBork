@@ -53,9 +53,9 @@ Latin and Cyrillic paragraphs are drawn in both faces: `Fira Sans, Latin`, `Lora
 paragraph wraps inside a `3.9` world-unit box. Both faces map the Latin and Cyrillic codepoints
 directly; no fallback font is involved.
 
-The billboard label is drawn with `Camera.DrawTextBillboard` at `(2.3, -0.7, 1.5)`. It centers its
-layout box on that point and uses the camera's right and up axes as its plane, so it turns to face the
-orbiting camera instead of staying on the wall.
+The billboard label is drawn with `Camera.DrawTextBillboard` at `(2.3, -0.7, 1.5)`. It centers the
+union of the layout box and every glyph quad on that point and uses the camera's right and up axes as
+its plane, so it turns to face the orbiting camera instead of staying on the wall.
 
 ## Lazy glyphs
 
