@@ -717,6 +717,461 @@ public sealed class MeshBuilderTests {
         }
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GeneratePolyCreatesAnXzFanWithUpNormals() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GeneratePoly(4, 2f);
+
+        Assert.Equal(5, builder.Vertices.Count);
+        Assert.Equal(12, builder.Indices.Count);
+        Assert.Equal(PrimitiveTopology.TriangleList, builder.Topology);
+        AssertGeneratedMeshIsWellFormed(builder);
+        foreach (Vertex vertex in builder.Vertices) {
+            Assert.Equal(0f, vertex.Position.Y);
+            AssertVector(Vector3.UnitY, vertex.Normal);
+        }
+
+        BoundingBox bounds = builder.ComputeBounds();
+        AssertVector(new Vector3(-2f, 0f, -2f), bounds.Min);
+        AssertVector(new Vector3(2f, 0f, 2f), bounds.Max);
+        Assert.Equal(new Vector2(0.5f, 0f), builder.Vertices[1].Uv);
+        Assert.Equal(new Vector2(0.5f, 0.5f), builder.Vertices[0].Uv);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GeneratePlaneCreatesAnXzGridWithUpNormals() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GeneratePlane(2f, 4f, 2, 3);
+
+        Assert.Equal(12, builder.Vertices.Count);
+        Assert.Equal(36, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        foreach (Vertex vertex in builder.Vertices) {
+            AssertVector(Vector3.UnitY, vertex.Normal);
+        }
+
+        BoundingBox bounds = builder.ComputeBounds();
+        AssertVector(new Vector3(-1f, 0f, -2f), bounds.Min);
+        AssertVector(new Vector3(1f, 0f, 2f), bounds.Max);
+        Assert.Equal(new Vector2(0f, 0f), builder.Vertices[0].Uv);
+        Assert.Equal(new Vector2(1f, 1f), builder.Vertices[^1].Uv);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateCubeCreatesACenteredBoxWithPerFaceNormals() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateCube(2f, 4f, 6f);
+
+        Assert.Equal(24, builder.Vertices.Count);
+        Assert.Equal(36, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        Assert.Equal(4, builder.Vertices.Count(vertex => vertex.Normal == Vector3.UnitX));
+        Assert.Equal(4, builder.Vertices.Count(vertex => vertex.Normal == -Vector3.UnitX));
+        Assert.Equal(4, builder.Vertices.Count(vertex => vertex.Normal == Vector3.UnitY));
+        Assert.Equal(4, builder.Vertices.Count(vertex => vertex.Normal == -Vector3.UnitY));
+        Assert.Equal(4, builder.Vertices.Count(vertex => vertex.Normal == Vector3.UnitZ));
+        Assert.Equal(4, builder.Vertices.Count(vertex => vertex.Normal == -Vector3.UnitZ));
+        Assert.Equal(new Vector2(1f, 1f), builder.Vertices[0].Uv);
+
+        BoundingBox bounds = builder.ComputeBounds();
+        AssertVector(new Vector3(-1f, -2f, -3f), bounds.Min);
+        AssertVector(new Vector3(1f, 2f, 3f), bounds.Max);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateSphereCreatesAUvSphereWithYAxisPoles() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateSphere(2f, 8, 16);
+
+        Assert.Equal(2 + (7 * 17), builder.Vertices.Count);
+        Assert.Equal(6 * 16 * 7, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        foreach (Vertex vertex in builder.Vertices) {
+            Assert.Equal(2f, vertex.Position.Length(), 4);
+            AssertVector(Vector3.Normalize(vertex.Position), vertex.Normal);
+        }
+
+        BoundingBox bounds = builder.ComputeBounds();
+        AssertVector(new Vector3(-2f, -2f, -2f), bounds.Min);
+        AssertVector(new Vector3(2f, 2f, 2f), bounds.Max);
+        Assert.Equal(new Vector2(0.5f, 0f), builder.Vertices[0].Uv);
+        Assert.Equal(new Vector2(0.5f, 1f), builder.Vertices[^1].Uv);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateHemiSphereIsOpenAtTheEquator() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateHemiSphere(2f, 4, 8);
+
+        Assert.Equal(1 + (4 * 9), builder.Vertices.Count);
+        Assert.Equal(3 * 8 * 7, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        foreach (Vertex vertex in builder.Vertices) {
+            Assert.Equal(2f, vertex.Position.Length(), 4);
+            Assert.True(vertex.Position.Y >= 0f, "The hemisphere must not extend below the equator.");
+        }
+
+        BoundingBox bounds = builder.ComputeBounds();
+        Assert.Equal(0f, bounds.Min.Y, 4);
+        Assert.Equal(2f, bounds.Max.Y, 4);
+        Assert.Equal(2f, bounds.Max.X, 4);
+        Assert.Equal(2f, bounds.Max.Z, 4);
+        Assert.Equal(new Vector2(1f, 1f), builder.Vertices[^1].Uv);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateCylinderHasSideQuadsAndBothCaps() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateCylinder(1f, 2f, 8);
+
+        Assert.Equal((4 * 8) + 4, builder.Vertices.Count);
+        Assert.Equal(12 * 8, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        Assert.Equal(18, builder.Vertices.Count(vertex => vertex.Normal.Y == 0f));
+        Assert.Equal(9, builder.Vertices.Count(vertex => vertex.Normal == Vector3.UnitY));
+        Assert.Equal(9, builder.Vertices.Count(vertex => vertex.Normal == -Vector3.UnitY));
+
+        BoundingBox bounds = builder.ComputeBounds();
+        AssertVector(new Vector3(-1f, 0f, -1f), bounds.Min);
+        AssertVector(new Vector3(1f, 2f, 1f), bounds.Max);
+        Assert.Equal(0f, builder.Vertices[0].Uv.Y);
+        Assert.Equal(1f, builder.Vertices[1].Uv.Y);
+        Assert.Equal(8, CountCapTriangles(builder, Vector3.UnitY));
+        Assert.Equal(8, CountCapTriangles(builder, -Vector3.UnitY));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateConeHasASmoothSideAndABaseCap() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateCone(1f, 3f, 8);
+
+        Assert.Equal((3 * 8) + 3, builder.Vertices.Count);
+        Assert.Equal(6 * 8, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        Assert.Equal(9, builder.Vertices.Count(vertex => vertex.Position.Y == 3f));
+        Assert.Equal(18, builder.Vertices.Count(vertex => vertex.Normal.Y > 0f));
+        Assert.Equal(9, builder.Vertices.Count(vertex => vertex.Normal == -Vector3.UnitY));
+        Assert.Equal(8, CountCapTriangles(builder, -Vector3.UnitY));
+
+        BoundingBox bounds = builder.ComputeBounds();
+        AssertVector(new Vector3(-1f, 0f, -1f), bounds.Min);
+        AssertVector(new Vector3(1f, 3f, 1f), bounds.Max);
+        Assert.Equal(0f, builder.Vertices[0].Uv.Y);
+        Assert.Equal(1f, builder.Vertices[1].Uv.Y);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateTorusCreatesARingAroundTheYAxis() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateTorus(2f, 0.5f, 16, 8);
+
+        Assert.Equal(17 * 9, builder.Vertices.Count);
+        Assert.Equal(16 * 8 * 6, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        foreach (Vertex vertex in builder.Vertices) {
+            float radial = MathF.Sqrt(
+                (vertex.Position.X * vertex.Position.X) + (vertex.Position.Z * vertex.Position.Z));
+            float tubeDistance = MathF.Sqrt(
+                ((radial - 2f) * (radial - 2f)) + (vertex.Position.Y * vertex.Position.Y));
+            Assert.Equal(0.5f, tubeDistance, 4);
+            Vector3 closest = new(
+                vertex.Position.X / radial * 2f,
+                0f,
+                vertex.Position.Z / radial * 2f);
+            AssertVector(Vector3.Normalize(vertex.Position - closest), vertex.Normal);
+        }
+
+        BoundingBox bounds = builder.ComputeBounds();
+        AssertVector(new Vector3(-2.5f, -0.5f, -2.5f), bounds.Min);
+        AssertVector(new Vector3(2.5f, 0.5f, 2.5f), bounds.Max);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateKnotCreatesACenteredTrefoilTube() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateKnot(1f, 0.2f, 24, 8);
+
+        Assert.Equal(25 * 9, builder.Vertices.Count);
+        Assert.Equal(24 * 8 * 6, builder.Indices.Count);
+        AssertGeneratedMeshIsWellFormed(builder);
+        foreach (Vertex vertex in builder.Vertices) {
+            Assert.True(
+                vertex.Position.Length() <= 1.2f + 1e-4f,
+                "Every knot vertex must stay inside the winding radius plus the tube radius.");
+        }
+
+        BoundingBox bounds = builder.ComputeBounds();
+        Assert.True(bounds.Max.X > 0.5f && bounds.Max.X <= 1.2f + 1e-4f);
+        Assert.True(bounds.Min.X < -0.5f && bounds.Min.X >= -1.2f - 1e-4f);
+        Assert.True(bounds.Max.Y > 0.5f && bounds.Max.Y <= 1.2f + 1e-4f);
+        Assert.True(bounds.Min.Y < -0.5f && bounds.Min.Y >= -1.2f - 1e-4f);
+        Assert.True(bounds.Max.Z > 0.5f && bounds.Max.Z <= 1.2f + 1e-4f);
+        Assert.True(bounds.Min.Z < -0.5f && bounds.Min.Z >= -1.2f - 1e-4f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GeneratePlaneReplacesGeometryAndSwitchesToTriangleList() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder(PrimitiveTopology.LineList);
+        builder.SetVertices(CreateTrianglePositions());
+        builder.SetIndices([0u, 1u]);
+        Assert.Throws<NotSupportedException>(() => builder.ComputeNormals());
+
+        builder.GeneratePlane(2f, 2f, 1, 1);
+
+        Assert.Equal(PrimitiveTopology.TriangleList, builder.Topology);
+        Assert.Equal(4, builder.Vertices.Count);
+        Assert.Equal(6, builder.Indices.Count);
+        Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        try {
+            Assert.Equal(PrimitiveTopology.TriangleList, mesh.Topology);
+            Assert.Equal(4, mesh.VertexCount);
+            Assert.Equal(6, mesh.IndexCount);
+            Assert.Equal(1, harness.Worker.UploadCallCount);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GeneratedSphereBuildsThroughTheTestHost() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateSphere(1.5f, 4, 8);
+        Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        try {
+            Assert.StartsWith("/_procedural/mesh/", mesh.Path, StringComparison.Ordinal);
+            Assert.True(mesh.IsProcedural);
+            Assert.Equal(PrimitiveTopology.TriangleList, mesh.Topology);
+            Assert.Equal(builder.Vertices.Count, mesh.VertexCount);
+            Assert.Equal(builder.Indices.Count, mesh.IndexCount);
+            Assert.Equal(builder.ComputeBounds(), mesh.Bounds);
+            Assert.Equal(builder.Vertices[0].Position, mesh.Vertices.Span[0].Position);
+            Assert.Equal(builder.Vertices[0].Normal, mesh.Vertices.Span[0].Normal);
+            Assert.Equal(builder.Vertices[0].Uv, mesh.Vertices.Span[0].Uv);
+            Assert.Equal(builder.Indices[0], mesh.Indices.Span[0]);
+            Assert.Equal(1, harness.Worker.UploadCallCount);
+        } finally {
+            mesh.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GeneratedSphereSupportsTheExistingNormalAndTangentPasses() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        builder.GenerateSphere(1f, 6, 12);
+        builder.ComputeNormals();
+        builder.ComputeTangents();
+
+        bool anyTangent = false;
+        foreach (Vertex vertex in builder.Vertices) {
+            Vector3 tangent = new(vertex.Tangent.X, vertex.Tangent.Y, vertex.Tangent.Z);
+            Assert.True(float.IsFinite(tangent.X) && float.IsFinite(tangent.Y) && float.IsFinite(tangent.Z));
+            Assert.InRange(tangent.Length(), 0f, 1.0001f);
+            anyTangent |= tangent.LengthSquared() > 0f;
+        }
+
+        Assert.True(anyTangent, "The generated sphere must produce at least one tangent.");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateRejectsEveryShapeAfterTheAppStops() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        harness.Service.Stop();
+
+        Assert.Throws<ObjectDisposedException>(() => builder.GeneratePoly(3, 1f));
+        Assert.Throws<ObjectDisposedException>(() => builder.GeneratePlane(1f, 1f, 1, 1));
+        Assert.Throws<ObjectDisposedException>(() => builder.GenerateCube(1f, 1f, 1f));
+        Assert.Throws<ObjectDisposedException>(() => builder.GenerateSphere(1f, 3, 3));
+        Assert.Throws<ObjectDisposedException>(() => builder.GenerateHemiSphere(1f, 3, 3));
+        Assert.Throws<ObjectDisposedException>(() => builder.GenerateCylinder(1f, 1f, 3));
+        Assert.Throws<ObjectDisposedException>(() => builder.GenerateCone(1f, 1f, 3));
+        Assert.Throws<ObjectDisposedException>(() => builder.GenerateTorus(1f, 0.2f, 3, 3));
+        Assert.Throws<ObjectDisposedException>(() => builder.GenerateKnot(1f, 0.2f, 3, 3));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateValidatesPolyAndPlaneParameters() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+        builder.GeneratePoly(3, 1f);
+        int vertexCount = builder.Vertices.Count;
+
+        AssertOutOfRange("sides", () => builder.GeneratePoly(2, 1f));
+        AssertOutOfRange("radius", () => builder.GeneratePoly(3, 0f));
+        AssertOutOfRange("radius", () => builder.GeneratePoly(3, -1f));
+        AssertOutOfRange("radius", () => builder.GeneratePoly(3, float.NaN));
+        AssertOutOfRange("radius", () => builder.GeneratePoly(3, float.PositiveInfinity));
+        Assert.Equal(vertexCount, builder.Vertices.Count);
+
+        AssertOutOfRange("width", () => builder.GeneratePlane(0f, 1f, 1, 1));
+        AssertOutOfRange("length", () => builder.GeneratePlane(1f, -1f, 1, 1));
+        AssertOutOfRange("resX", () => builder.GeneratePlane(1f, 1f, 0, 1));
+        AssertOutOfRange("resZ", () => builder.GeneratePlane(1f, 1f, 1, 0));
+        AssertOutOfRange("width", () => builder.GeneratePlane(float.NaN, 1f, 1, 1));
+        AssertOutOfRange("length", () => builder.GeneratePlane(1f, float.PositiveInfinity, 1, 1));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateValidatesCubeParameters() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        AssertOutOfRange("width", () => builder.GenerateCube(0f, 1f, 1f));
+        AssertOutOfRange("height", () => builder.GenerateCube(1f, -1f, 1f));
+        AssertOutOfRange("length", () => builder.GenerateCube(1f, 1f, float.NaN));
+        AssertOutOfRange("width", () => builder.GenerateCube(float.PositiveInfinity, 1f, 1f));
+        AssertOutOfRange("height", () => builder.GenerateCube(1f, float.NegativeInfinity, 1f));
+        Assert.Empty(builder.Vertices);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateValidatesSphereAndHemiSphereParameters() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        AssertOutOfRange("radius", () => builder.GenerateSphere(0f, 3, 3));
+        AssertOutOfRange("radius", () => builder.GenerateSphere(float.NaN, 3, 3));
+        AssertOutOfRange("rings", () => builder.GenerateSphere(1f, 2, 3));
+        AssertOutOfRange("slices", () => builder.GenerateSphere(1f, 3, 2));
+        AssertOutOfRange("radius", () => builder.GenerateHemiSphere(-1f, 3, 3));
+        AssertOutOfRange("rings", () => builder.GenerateHemiSphere(1f, 2, 3));
+        AssertOutOfRange("slices", () => builder.GenerateHemiSphere(1f, 3, 2));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateValidatesCylinderAndConeParameters() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        AssertOutOfRange("radius", () => builder.GenerateCylinder(0f, 1f, 3));
+        AssertOutOfRange("height", () => builder.GenerateCylinder(1f, float.NaN, 3));
+        AssertOutOfRange("slices", () => builder.GenerateCylinder(1f, 1f, 2));
+        AssertOutOfRange("radius", () => builder.GenerateCone(float.PositiveInfinity, 1f, 3));
+        AssertOutOfRange("height", () => builder.GenerateCone(1f, 0f, 3));
+        AssertOutOfRange("slices", () => builder.GenerateCone(1f, 1f, 2));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void GenerateValidatesTorusAndKnotParameters() {
+        using ProceduralTestHarness harness = new();
+        MeshBuilder builder = harness.Service.CreateMeshBuilder();
+
+        AssertOutOfRange("radius", () => builder.GenerateTorus(0f, 0.2f, 3, 3));
+        AssertOutOfRange("size", () => builder.GenerateTorus(1f, -0.2f, 3, 3));
+        AssertOutOfRange("radSeg", () => builder.GenerateTorus(1f, 0.2f, 2, 3));
+        AssertOutOfRange("sides", () => builder.GenerateTorus(1f, 0.2f, 3, 2));
+        AssertOutOfRange("radius", () => builder.GenerateKnot(float.NaN, 0.2f, 3, 3));
+        AssertOutOfRange("size", () => builder.GenerateKnot(1f, float.PositiveInfinity, 3, 3));
+        AssertOutOfRange("radSeg", () => builder.GenerateKnot(1f, 0.2f, 2, 3));
+        AssertOutOfRange("sides", () => builder.GenerateKnot(1f, 0.2f, 3, 2));
+    }
+
+    private static void AssertGeneratedMeshIsWellFormed(MeshBuilder builder) {
+        Assert.True(builder.Vertices.Count > 0);
+        Assert.True(builder.Indices.Count >= 3);
+        Assert.Equal(0, builder.Indices.Count % 3);
+        Assert.Equal(PrimitiveTopology.TriangleList, builder.Topology);
+
+        foreach (Vertex vertex in builder.Vertices) {
+            Assert.True(float.IsFinite(vertex.Position.X)
+                && float.IsFinite(vertex.Position.Y)
+                && float.IsFinite(vertex.Position.Z));
+            Assert.True(float.IsFinite(vertex.Normal.X)
+                && float.IsFinite(vertex.Normal.Y)
+                && float.IsFinite(vertex.Normal.Z));
+            Assert.True(float.IsFinite(vertex.Uv.X) && float.IsFinite(vertex.Uv.Y));
+            Assert.Equal(1f, vertex.Normal.Length(), 4);
+            Assert.InRange(vertex.Uv.X, 0f, 1f);
+            Assert.InRange(vertex.Uv.Y, 0f, 1f);
+        }
+
+        BoundingBox bounds = builder.ComputeBounds();
+        Assert.True(bounds.Min.X <= bounds.Max.X);
+        Assert.True(bounds.Min.Y <= bounds.Max.Y);
+        Assert.True(bounds.Min.Z <= bounds.Max.Z);
+
+        for (int triangle = 0; triangle < builder.Indices.Count / 3; triangle++) {
+            int offset = triangle * 3;
+            int index0 = checked((int)builder.Indices[offset]);
+            int index1 = checked((int)builder.Indices[offset + 1]);
+            int index2 = checked((int)builder.Indices[offset + 2]);
+            Assert.InRange(index0, 0, builder.Vertices.Count - 1);
+            Assert.InRange(index1, 0, builder.Vertices.Count - 1);
+            Assert.InRange(index2, 0, builder.Vertices.Count - 1);
+            Vertex vertex0 = builder.Vertices[index0];
+            Vertex vertex1 = builder.Vertices[index1];
+            Vertex vertex2 = builder.Vertices[index2];
+            Vector3 face = Vector3.Cross(
+                vertex1.Position - vertex0.Position,
+                vertex2.Position - vertex0.Position);
+            Assert.True(face.LengthSquared() > 0f, $"Triangles {triangle} is degenerate.");
+            Vector3 averageNormal = Vector3.Normalize(vertex0.Normal + vertex1.Normal + vertex2.Normal);
+            Assert.True(
+                Vector3.Dot(Vector3.Normalize(face), averageNormal) > 0f,
+                $"Triangle {triangle} does not wind counter-clockwise around its normals.");
+        }
+    }
+
+    private static int CountCapTriangles(MeshBuilder builder, Vector3 normal) {
+        int count = 0;
+        for (int triangle = 0; triangle < builder.Indices.Count / 3; triangle++) {
+            int offset = triangle * 3;
+            if (builder.Vertices[(int)builder.Indices[offset]].Normal == normal
+                && builder.Vertices[(int)builder.Indices[offset + 1]].Normal == normal
+                && builder.Vertices[(int)builder.Indices[offset + 2]].Normal == normal) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    private static void AssertOutOfRange(string parameterName, Action action) {
+        ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(action);
+        Assert.Equal(parameterName, exception.ParamName);
+    }
+
     private static Vertex[] CreateQuadPositions() => [
         new Vertex(Vector3.Zero),
         new Vertex(new Vector3(1f, 0f, 0f)),
