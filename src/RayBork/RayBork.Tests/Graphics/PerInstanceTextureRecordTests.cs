@@ -222,6 +222,42 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheMaterialMustBeOverTheRecordsProgram() {
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        ShaderProgram program = RenderingTestAssets.CreateProgram("shaders/guard");
+        Shader recorded = program.CreateMaterial();
+        Shader sameProgram = program.CreateMaterial();
+        Shader otherProgram = RenderingTestAssets.CreateShader("shaders/guard-other");
+        try {
+            RenderFramePacket packet = CreatePacket();
+
+            RenderDrawRecord accepted = RentRecord(packet, mesh, recorded);
+            accepted.SetPerInstanceShaderState(sameProgram);
+            Assert.True(accepted.HasPerInstanceTextureBindings);
+
+            RenderDrawRecord rejected = RentRecord(packet, mesh, recorded);
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
+                () => rejected.SetPerInstanceShaderState(otherProgram));
+            Assert.Contains(
+                "is not over the program the draw record began with",
+                thrown.Message,
+                StringComparison.Ordinal);
+            Assert.False(rejected.HasPerInstanceTextureBindings);
+            Assert.True(rejected.InstanceTemplate.IsEmpty);
+
+            // A record that has not begun has no program to match.
+            RenderDrawRecord unbegun = packet.RentDrawRecord();
+            Assert.Throws<InvalidOperationException>(() => unbegun.SetPerInstanceShaderState(recorded));
+        } finally {
+            recorded.Dispose();
+            sameProgram.Dispose();
+            otherProgram.Dispose();
+            RenderingTestAssets.ReleaseProgram(program);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ASharedAndAPerInstanceTextureSetAreMutuallyExclusive() {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/exclusive");

@@ -433,10 +433,10 @@ The engine's primitive meshes are procedural assets built at engine startup, not
 the pack carries no primitive geometry. The error glyph is added with the runtime font work in M6.
 Pack v1 is unchanged by the M5 additions: the primitive program is an ordinary shader entry at a
 reserved built-in path, not a format change. The app preloads the mesh program into
-`EngineContext.Defaults` before `IGame.Setup` and keeps the primitive and MSDF programs, with one
-engine material over each, for the engine's primitive assets. A model part whose sidecar names no
-shader is baked with `shaders/mesh`, and the runtime requires every part descriptor to name a
-canonical shader path.
+`EngineContext.Defaults` before `IGame.Setup` and keeps the primitive, MSDF, and mesh programs, with
+one engine material over each, for the engine's primitive assets; the mesh program is already cached
+by the defaults, so only its material is new. A model part whose sidecar names no shader is baked
+with `shaders/mesh`, and the runtime requires every part descriptor to name a canonical shader path.
 
 The pack is generated at engine build time by `build/RayBork.BuiltInAssets`, a JIT-only generator
 that references `RayBork.Bake`. `build/RayBork.BuiltInAssets.targets` is imported by

@@ -224,19 +224,22 @@ internal sealed class RenderDrawRecord {
     /// </summary>
     /// <param name="material">
     /// The material whose cursor snapshot and declared texture bindings the record captures. It must not
-    /// be disposed.
+    /// be disposed, and its program must be the program the record began with.
     /// </param>
     /// <remarks>
     /// <para>
     /// A text draw records one instance per glyph and binds that glyph's bindless texture here, so
     /// glyphs with different textures still form one instanced draw. The template and the binding count
-    /// both come from the material, so a count that disagrees with the template cannot be recorded.
+    /// both come from the material, so a count that disagrees with the template cannot be recorded. The
+    /// material's program must be the program the record began with; a different program would write
+    /// another program's ABI into this pipeline's layout.
     /// </para>
     /// <para>
-    /// The record-level <see cref="UvRect"/> still applies: the per-instance form changes only which
-    /// texture each instance samples, never the UV rectangle. Text leaves it at the full-texture default
-    /// <c>(0, 0, 1, 1)</c> because one glyph is one padded texture sampled <c>0..1</c>; the padding is
-    /// part of the glyph quad, so no per-instance sub-rectangle is needed.
+    /// The per-instance form changes only which texture each instance samples. The MSDF program samples
+    /// the whole glyph texture and does not consume <see cref="UvRect"/>: one glyph is one padded
+    /// texture sampled <c>0..1</c>, with the padding part of the glyph quad. <see cref="UvRect"/> stays
+    /// the general per-instance sub-rectangle field for textured-quad shaders such as the billboard
+    /// material, and text leaves it at the default <c>(0, 0, 1, 1)</c>.
     /// </para>
     /// <para>
     /// The set is filled instance by instance through <see cref="BeginInstanceTextureBindings"/>. The
@@ -259,8 +262,9 @@ internal sealed class RenderDrawRecord {
     /// <exception cref="ArgumentNullException"><paramref name="material"/> is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">The material was disposed.</exception>
     /// <exception cref="InvalidOperationException">
-    /// The material's program declares no texture bindings, or the record already declared the shared
-    /// form. The record is left unchanged.
+    /// The material's program declares no texture bindings, the material's program is not the record's
+    /// program (including a record that has not begun), or the record already declared the shared form.
+    /// The record is left unchanged.
     /// </exception>
     internal void SetPerInstanceShaderState(Shader material) {
         ArgumentNullException.ThrowIfNull(material);
@@ -270,6 +274,13 @@ internal sealed class RenderDrawRecord {
             throw new InvalidOperationException(
                 $"The shader '{material.Path}' declares no texture bindings, so it has no per-instance "
                     + "texture set to fill. Record the draw with SetShaderState instead.");
+        }
+
+        if (!ReferenceEquals(material.Program.Lifetime, _program)) {
+            throw new InvalidOperationException(
+                $"The shader '{material.Path}' is not over the program the draw record began with. The "
+                    + "record's instance template is laid out for its own program, so the material must "
+                    + "be over that program; call Begin with the material's program first.");
         }
 
         SetPerInstanceShaderState(material.InstanceData, textureBindingCount);

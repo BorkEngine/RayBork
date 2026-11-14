@@ -46,7 +46,8 @@ Fonts are TTF/OTF assets. The bake copies the font file and its face metadata; t
 the face and generates MSDF glyph textures on demand.
 
 - One glyph is one small texture, 32 px on its longest side, with a baked distance range and
-  padding. There is no atlas. Glyph textures are bindless and are referenced per text instance.
+  padding. There is no atlas. Glyph textures are bindless, full-texture quads sampled `0..1`, and are
+  referenced per text instance.
 - `Load<Font>` parses the face and preloads ASCII (`U+0020..U+007E`) plus the replacement glyph.
   `Preload` generates any additional characters. `DrawText` generates missing glyphs on the tick
   thread before recording; the first draw of a new script may hitch. Preload known text in
@@ -68,7 +69,8 @@ the face and generates MSDF glyph textures on demand.
 - `DrawTextBillboard` lays out the text in a camera-facing plane. It is the same layout and
   batching path with a billboard transform.
 - Text batching uses the built-in MSDF shader. All text with the same font and render state can be
-  one instanced draw; each glyph instance carries its bindless texture index and UV rectangle.
+  one instanced draw; each glyph instance carries its bindless texture index as its per-instance
+  texture data, and the shader samples the whole glyph texture without a per-instance UV rectangle.
 - Fonts are shared assets. Disposing a font while a frame references it is safe; using the public
   object after `Dispose` is not.
 

@@ -173,10 +173,10 @@ preloaded programs, including the text material a later text draw API uses. `/sh
 material over either one for a game's own vertex-color meshes or distance-field quads.
 `/shaders/primitive` reflects no uniforms and no textures, so every `SetUniform` name is rejected and
 its material cursor stays empty. `/shaders/msdf` declares one `mainTexture` binding and no uniforms,
-and its glyph textures store a normalized distance field where `0.5` is the glyph edge and the
-authored distance range maps to `[0, 1]`; the fragment stage reconstructs the edge from the median of
-the rgb channels and derives its antialiasing band from the screen-space derivative, so the program
-needs no range, pixel-size, or per-font uniform.
+and its glyph textures store a normalized distance field where `0.5` is the glyph edge, the authored
+distance range maps to `[0, 1]`, and a value above `0.5` is inside the glyph; the fragment stage
+reconstructs the edge from the median of the rgb channels and derives its antialiasing band from the
+screen-space derivative, so the program needs no range, pixel-size, or per-font uniform.
 
 ### 7.4 Shader ABI
 

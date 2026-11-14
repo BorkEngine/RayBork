@@ -615,14 +615,16 @@ a new caller-owned material over the preloaded program; `White` and `Error` are 
 not be disposed by the game.
 
 The built-in pack also carries the MSDF text program at `/shaders/msdf`. It is an ordinary shader
-entry with one `mainTexture` binding and no uniforms, so its instance record is the fixed 96-byte
-header plus one texture index slot, and each glyph instance carries its own bindless texture. The
+entry with one `mainTexture` binding and no uniforms, so its per-instance template is the fixed
+96-byte header plus one texture index slot, rounded up to the 16-byte record alignment: 112 bytes for
+one texture and no uniforms. Each glyph instance carries its own bindless texture. The
 vertex stage reads position (location 0) and uv (location 2) and passes `rbInstance.Color`; the
 fragment stage reconstructs the glyph edge from the median of the sampled rgb distance channels and
 derives its antialiasing band from the screen-space derivative, so the program needs no range,
 pixel-size, or per-font uniform. Glyph textures store a normalized distance field where `0.5` is the
-glyph edge and the authored distance range maps to `[0, 1]`. Its render state is alpha blending, no
-culling, a `greater_equal` depth test, and no depth write.
+glyph edge, the authored distance range maps to `[0, 1]`, and a value above `0.5` is inside the
+glyph. Its render state is alpha blending, no culling, a `greater_equal` depth test, and no depth
+write.
 
 ## Primitive assets
 

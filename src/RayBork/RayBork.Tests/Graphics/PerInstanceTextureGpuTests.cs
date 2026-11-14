@@ -36,6 +36,15 @@ public sealed class PerInstanceTextureGpuTests {
     private const float CAMERA_HEIGHT = 2f;
     private const float INSTANCE_OFFSET = 1f;
 
+    /// <summary>The odd pixel width of the distance-ramp quad; odd keeps a middle pixel at its center.</summary>
+    private const int QUAD_PIXEL_WIDTH = 5;
+
+    /// <summary>
+    /// The window the half-coverage probe allows for filtering quantization. The pre-fix
+    /// <c>rgb * coverage</c> blend lands about 0.06 to 0.15 per channel outside the halfway color.
+    /// </summary>
+    private const float HALF_COVERAGE_TOLERANCE = 0.02f;
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void EachInstanceSamplesItsOwnTexture() {
@@ -120,12 +129,15 @@ public sealed class PerInstanceTextureGpuTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void APartiallyCoveredGlyphPixelBlendsTheTintOverTheClearColor() {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
-        Texture gradient = CreateDistanceGradient(harness);
+        Texture ramp = CreateDistanceRamp(harness);
         Shader material = harness.Primitives.MsdfMaterial;
         Color tint = new(0.25f, 0.5f, 0.75f, 1f);
-        // A half pixel in world units: the field's 1x1 quad spans one world unit, so this shifts the
-        // crossing at the quad center onto a pixel center.
-        float halfPixel = 0.5f * CAMERA_HEIGHT / harness.Height;
+        float worldPerPixel = CAMERA_HEIGHT / harness.Height;
+        // The quad covers five pixels with its center on a pixel center, so the middle pixel samples the
+        // ramp exactly between the two texels: the texel weights are 0.5, which every filter's subtexel
+        // precision represents exactly, and the sampled distance is exactly 0.5.
+        float quadWidth = QUAD_PIXEL_WIDTH * worldPerPixel;
+        float center = 0.5f * worldPerPixel;
         OrthographicView camera = CreateOrthographicView(harness.Width, harness.Height, CAMERA_HEIGHT);
         RenderFramePacket packet = BeginFrame();
         CameraPass pass = packet.BeginPass();
@@ -133,10 +145,11 @@ public sealed class PerInstanceTextureGpuTests {
 
         RenderDrawRecord record = RentRecord(packet, harness.Primitives.Quad, material, tint);
         record.SetPerInstanceShaderState(material);
-        record.BeginInstances(1)[0] = Matrix4x4.CreateTranslation(halfPixel, 0f, 0f);
-        record.BeginInstanceTextureBindings()[0] = gradient;
+        record.BeginInstances(1)[0] =
+            Matrix4x4.CreateScale(quadWidth, 1f, 1f) * Matrix4x4.CreateTranslation(center, 0f, 0f);
+        record.BeginInstanceTextureBindings()[0] = ramp;
         pass.Add(record);
-        Retain(packet, gradient);
+        Retain(packet, ramp);
         packet.Seal();
 
         Submit(harness.Host.Backend, packet);
@@ -146,45 +159,16 @@ public sealed class PerInstanceTextureGpuTests {
             (0.5f * tint.G) + (0.5f * _clearColor.G),
             (0.5f * tint.B) + (0.5f * _clearColor.B),
             1f);
-        (uint x, uint y) = PixelOf(new Vector3(halfPixel, 0f, 0f), camera.ViewProjection, harness.Width, harness.Height);
+        (uint x, uint y) = PixelOf(new Vector3(center, 0f, 0f), camera.ViewProjection, harness.Width, harness.Height);
         Assert.Equal(harness.Width / 2, x);
-        AssertColorNear(halfway, harness.ReadColor(x, y));
+        // A driver may round the filtered texel to UNORM8 (1/255 above 0.5) or quantize the subtexel
+        // weights, which moves the coverage by a few hundredths; the pre-fix rgb*coverage form is far
+        // outside this window.
+        AssertColorNear(halfway, harness.ReadColor(x, y), HALF_COVERAGE_TOLERANCE);
 
-        // The clamped ends of the gradient are fully outside and fully inside the field.
-        AssertColorNear(_clearColor, ReadColorAt(harness, halfPixel - 0.4f, camera));
-        AssertColorNear(tint, ReadColorAt(harness, halfPixel + 0.4f, camera));
-        Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TheDerivativeBandSpansOnePixelAcrossTheGlyphEdge() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
-        Texture gradient = CreateDistanceGradient(harness);
-        Shader material = harness.Primitives.MsdfMaterial;
-        Color tint = new(0.25f, 0.5f, 0.75f, 1f);
-        OrthographicView camera = CreateOrthographicView(harness.Width, harness.Height, CAMERA_HEIGHT);
-        RenderFramePacket packet = BeginFrame();
-        CameraPass pass = packet.BeginPass();
-        BeginCameraPass(pass, camera, harness.Width, harness.Height);
-
-        // The quad center is on a pixel boundary, so the 0.5 crossing sits exactly between two pixels.
-        // A half-width band puts the whole transition inside those two pixels, so both are saturated;
-        // a full-width band would leave both at roughly a quarter and three quarters of the tint.
-        RenderDrawRecord record = RentRecord(packet, harness.Primitives.Quad, material, tint);
-        record.SetPerInstanceShaderState(material);
-        record.BeginInstances(1)[0] = Matrix4x4.Identity;
-        record.BeginInstanceTextureBindings()[0] = gradient;
-        pass.Add(record);
-        Retain(packet, gradient);
-        packet.Seal();
-
-        Submit(harness.Host.Backend, packet);
-
-        (uint x, uint y) = PixelOf(Vector3.Zero, camera.ViewProjection, harness.Width, harness.Height);
-        Assert.Equal(harness.Width / 2, x);
-        AssertColorNear(_clearColor, harness.ReadColor(x - 1, y));
-        AssertColorNear(tint, harness.ReadColor(x, y));
+        // The clamped ends of the ramp are fully outside and fully inside the field.
+        AssertColorNear(_clearColor, ReadColorAt(harness, center - (1.5f * worldPerPixel), camera));
+        AssertColorNear(tint, ReadColorAt(harness, center + (1.5f * worldPerPixel), camera));
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
@@ -204,6 +188,7 @@ public sealed class PerInstanceTextureGpuTests {
         Texture red = harness.CreateTexture("textures/red", new Color(1f, 0f, 0f, 1f));
         Texture green = harness.CreateTexture("textures/green", new Color(0f, 1f, 0f, 1f));
         Texture blue = harness.CreateTexture("textures/blue", new Color(0f, 0f, 1f, 1f));
+        Texture black = harness.CreateTexture("textures/black", new Color(0f, 0f, 0f, 1f));
         Assert.Equal(2, material.Textures.Count);
 
         VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.OrthographicCamera(host, CAMERA_HEIGHT);
@@ -227,15 +212,16 @@ public sealed class PerInstanceTextureGpuTests {
         worldMatrices[0] = Matrix4x4.CreateTranslation(-INSTANCE_OFFSET, 0f, 0f);
         worldMatrices[1] = Matrix4x4.CreateTranslation(INSTANCE_OFFSET, 0f, 0f);
         Span<Texture?> bindings = record.BeginInstanceTextureBindings();
-        // The fragment stage reads slot 0 into red and slot 1 into green, so instance 0 (red, green) is
-        // yellow and instance 1 (blue, green) is green. The red channel therefore identifies the instance
-        // and the green channel proves the second slot was sampled at all.
+        // The fragment stage reads slot 0 into red and slot 1 into green. Instance 0 binds black in the
+        // second slot, whose green channel differs from the white fallback a never-written index slot
+        // resolves to, so its red probe proves the second slot was written. Instance 1 binds blue and
+        // green, so the red channel identifies the instance.
         bindings[0] = red;
-        bindings[1] = green;
+        bindings[1] = black;
         bindings[2] = blue;
         bindings[3] = green;
         pass.Add(record);
-        Retain(packet, red, green, blue);
+        Retain(packet, red, blue, black, green);
         packet.Seal();
 
         Submit(host.Backend, packet);
@@ -243,7 +229,7 @@ public sealed class PerInstanceTextureGpuTests {
         RenderStats stats = host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
         Assert.Equal(2, stats.Instances);
-        AssertColorNear(new Color(1f, 1f, 0f, 1f), ReadColorAt(harness, -INSTANCE_OFFSET, camera));
+        AssertColorNear(new Color(1f, 0f, 0f, 1f), ReadColorAt(harness, -INSTANCE_OFFSET, camera));
         AssertColorNear(new Color(0f, 1f, 0f, 1f), ReadColorAt(harness, INSTANCE_OFFSET, camera));
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
@@ -368,13 +354,15 @@ public sealed class PerInstanceTextureGpuTests {
         """;
 
     /// <summary>
-    /// Builds the two-texel linear distance gradient the glyph probes use. An 8-bit field cannot store
-    /// <c>0.5</c> exactly, but the midpoint of 125 and 130 is exactly <c>0.5</c>, so the sampled field
-    /// crosses the glyph edge at the center of a quad that spans the full texture.
+    /// Builds the two-texel linear distance ramp the glyph probes use. An 8-bit field cannot store
+    /// <c>0.5</c> exactly, but the midpoint of 64 and 191 is exactly <c>0.5</c>, and the 0.25/0.75 range
+    /// makes the derivative band roughly 0.1 in distance units, so a driver that rounds the filtered
+    /// texel to UNORM8 or quantizes subtexel weights to Vulkan's 4-bit minimum moves the sampled distance
+    /// by far less than one band.
     /// </summary>
-    private static Texture CreateDistanceGradient(PrimitiveDrawGpuHarness harness) {
-        float low = 125f / 255f;
-        float high = 130f / 255f;
+    private static Texture CreateDistanceRamp(PrimitiveDrawGpuHarness harness) {
+        float low = 64f / 255f;
+        float high = 191f / 255f;
         return harness.CreateTexture(
             2,
             1,
@@ -482,16 +470,19 @@ public sealed class PerInstanceTextureGpuTests {
         return harness.ReadColor(x, y);
     }
 
-    private static void AssertColorNear(Color expected, (float R, float G, float B) actual) {
+    private static void AssertColorNear(
+        Color expected,
+        (float R, float G, float B) actual,
+        float tolerance = COLOR_TOLERANCE) {
         Assert.True(
-            MathF.Abs(expected.R - actual.R) <= COLOR_TOLERANCE,
-            $"Red {actual.R} is not within {COLOR_TOLERANCE} of {expected.R}.");
+            MathF.Abs(expected.R - actual.R) <= tolerance,
+            $"Red {actual.R} is not within {tolerance} of {expected.R}.");
         Assert.True(
-            MathF.Abs(expected.G - actual.G) <= COLOR_TOLERANCE,
-            $"Green {actual.G} is not within {COLOR_TOLERANCE} of {expected.G}.");
+            MathF.Abs(expected.G - actual.G) <= tolerance,
+            $"Green {actual.G} is not within {tolerance} of {expected.G}.");
         Assert.True(
-            MathF.Abs(expected.B - actual.B) <= COLOR_TOLERANCE,
-            $"Blue {actual.B} is not within {COLOR_TOLERANCE} of {expected.B}.");
+            MathF.Abs(expected.B - actual.B) <= tolerance,
+            $"Blue {actual.B} is not within {tolerance} of {expected.B}.");
     }
 
     /// <summary>
