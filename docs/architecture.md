@@ -12,11 +12,14 @@ reference counting, the render-thread GPU upload bridge, the custom-data pipelin
 and the build-time built-in pack. M4 adds the frame-scoped camera and draw API, `Model` loading and
 parts, the shader ABI and uniform cursor, the bindless texture table, the geometry pipeline, sampler
 and batch caches, the batch planner with frustum culling and sorting, the geometry draw stats, the
-HDR AgX present path, and the Castle AOT gate. M5 adds the 12 `Camera` primitive helpers, the
-engine-owned primitive meshes and the built-in `/shaders/primitive` program, `Collision` and
-`RayCollision` with the ray-mesh BVH, the procedural collision opt-in, the baked `RBVC` collision
-payloads, the HDR-aware AgX rework with runtime tone mapping, the sRGB color helpers, and the
-Primitive Gallery AOT gate.
+HDR AgX present path, and the Castle AOT gate. M5 adds the line, point, and triangle helpers, the
+twelve shape helpers with their shape/position/tessellation, start/end, and `Transform` overloads,
+the eight `DrawBillboard` overloads, `DrawWireModel`, the engine-owned primitive meshes and the
+built-in `/shaders/primitive` program, `Collision` and `RayCollision` with `GetRayQuad` and the
+ray-mesh BVH, the procedural collision opt-in, the baked `RBVC` collision payloads, the nine
+`MeshBuilder.Generate*` factories, the HDR-aware AgX rework with runtime tone mapping, the sRGB color
+helpers, and the Primitive Gallery AOT gate. `DrawTexture` is not part of M5; it arrives in M7 with
+the orthographic sprite path, while `DrawText` is M6 and `RenderTexture` is M8.
 
 ## Goals
 
@@ -64,7 +67,7 @@ Samples (M11) ──────> RayBork.Engine
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
 | `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the AOT gate. |
 | `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
-| `samples/PrimitiveGallery` | M5 sample and Native AOT gate: draws every M5 primitive helper in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. |
+| `samples/PrimitiveGallery` | M5 sample and Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. |
 | `samples/Castle` | M4 sample, still buildable and publishable but no longer the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, and exits on Escape or `--frames`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
 | `samples/` | Pong, Text, Instancing, RenderTarget (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
@@ -126,7 +129,7 @@ SDL3 and logging are exercised end to end by every sample AOT gate. The M2 miles
 Silk.NET.Vulkan with the presenter; the M3 gate extended the host with a baked pack, a KTX2 texture
 upload, a mesh upload, a shader-module upload, and a MessagePack custom-data load; the M4 gate drew
 the castle model with the built-in mesh material; the M5 gate is `samples/PrimitiveGallery`, which
-draws every primitive helper through the built-in primitive and mesh programs and builds its only
+draws the M5 primitive helpers through the built-in primitive and mesh programs and builds its only
 texture procedurally, so it reads only the built-in pack and needs no assets executable. Both
 publishes must finish with zero AOT/trim warnings. The sample solutions are outside the engine
 solution, and a sample build bakes its pack beside the sample executable when it has one, so the JIT
@@ -619,13 +622,25 @@ meshes (cube, sphere, plane, quad, triangle, line, wire cube, wire sphere) from 
 `PrimitiveMeshFactory` CPU geometry through the catalog's procedural GPU bridge. The app builds this
 set on the main thread after the asset catalog starts and before the tick thread starts, attaches it
 to `CameraService`, and holds the two materials, one owner reference per program, and one owner
-reference per mesh. Primitive draw records are ordinary draw records, so frame retention keeps the
-engine mesh, the program, and a bound texture alive exactly like a user draw.
-`PrimitiveAssets.Dispose` is idempotent, disposes both materials, and releases every mesh and
-program owner reference; it runs on the main thread after the tick thread has joined. A startup
-failure releases everything already created and surfaces as `AssetLoadException`
+reference per mesh. The M5 helpers either instance one of those meshes directly (line, point,
+triangle, cube, wire cube, plane, grid, ray, bounding box, fixed sphere, fixed wire sphere,
+billboard) or compose their geometry from the unit quad, triangle, and line meshes (tessellated
+sphere and wire sphere, cylinder, wire cylinder, capsule, wire capsule, and circle). Primitive draw
+records are ordinary draw records, so frame retention keeps the engine mesh, the program, and a bound
+texture alive exactly like a user draw. `PrimitiveAssets.Dispose` is idempotent, disposes both
+materials, and releases every mesh and program owner reference; it runs on the main thread after the
+tick thread has joined. A
+startup failure releases everything already created and surfaces as `AssetLoadException`
 `ASSET_LOAD_FAILED`. The meshes and the two primitive materials have no public accessor, and
-`EngineDefaults` is unchanged.
+`EngineDefaults` is unchanged. `DrawTexture` is not built from this set in M5; it moves to M7 with the
+sprite path.
+
+The CPU collision surface is independent of the renderer. `Collision.GetRayQuad` splits a quad into
+the triangles `(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the
+nearest non-negative hit; the normal is the normalized geometric triangle normal and is not flipped
+toward the ray, and a hit on the shared diagonal reports the `(a, b, c)` result. `GetRayMesh` and the
+BVH it traverses are described under
+[Ray-mesh collision data](#ray-mesh-collision-data).
 
 ## Shader state, batching, and instancing
 
@@ -644,10 +659,10 @@ The program and the bake defaults are shared by every material over it; the curs
 bindings are not. Disposing one material releases only that material's program reference and texture
 references, so another material over the same program stays usable.
 
-Batching key: `(camera pass, mesh, internal program, effective render state)`; the mesh determines the
-topology. Uniform values and texture bindings are per-instance material data and do not split a batch,
-so materials over the same program batch together. A model with several parts is several mesh groups;
-each group is one instanced draw. The planner splits a group when it would exceed
+Batching key: `(camera pass, mesh, internal program, effective render state, polygon mode)`; the mesh
+determines the topology. Uniform values and texture bindings are per-instance material data and do not
+split a batch, so materials over the same program batch together. A model with several parts is
+several mesh groups; each group is one instanced draw. The planner splits a group when it would exceed
 `MaxInstancesPerBatch` (16,384) or `MaxInstanceBytesPerBatch` (1 MiB, including the 96-byte instance
 header); each split chunk is a separate draw call, and a single instance larger than the byte limit is
 still a batch of one. Opaque batches keep recording order; alpha, additive, and multiply batches sort
@@ -684,8 +699,13 @@ new batch.
 The shader ABI is generated by the bake so custom GLSL does not have to declare the plumbing: a
 256-byte frame uniform buffer in descriptor set 0 binding 0, a fixed-size bindless
 combined-image-sampler array in binding 1, and a per-instance storage buffer in binding 2 containing
-the transform, tint, UV rectangle, one bindless index per texture binding, and the reflected user
-uniforms. The array binding is `RayBorkTextures[2048]` in the shader and 2048 descriptors in the
+the transform, the tint, the normalized UV rectangle `UvRect`, one bindless index per texture binding,
+and the reflected user uniforms. `UvRect` is `(x, y, width, height)` in normalized texture space; the
+built-in `/shaders/mesh` vertex stage computes `vUv = UvRect.xy + uv * UvRect.zw`, so `(0, 0, 1, 1)`
+passes the authored mesh UVs through unchanged. The billboard source-rectangle overloads set a
+sub-rectangle; every other draw, including the line, point, triangle, and wireframe-model records,
+keeps `(0, 0, 1, 1)`. The rectangle is per-instance data and never joins or splits a batch. The array
+binding is `RayBorkTextures[2048]` in the shader and 2048 descriptors in the
 layout. v1 has one fixed
 vertex input layout: position, normal, uv, uv1, uv2, uv3, color, tangent. The geometry pipeline
 declares the full layout, so unconsumed attributes are ignored by the shader (the validation layer
@@ -699,9 +719,23 @@ partially bound arrays, sampled-image update-after-bind, and non-uniform indexin
 arrays. A device whose update-after-bind sampled-image limits are below 2048 is rejected during
 device selection. Slot 0 is always the built-in 1x1 white fallback. Samplers are cached per device by
 `(filter, wrap, anisotropy)`. Geometry pipelines are cached by the shader-state snapshot
-`(vertex module, fragment module, effective render state, topology)`, and the present pipeline is
-owned separately by the backend. `TextureCount` counts the live bindless slots including the white
-slot, and `PipelineCount` counts the distinct scene pipelines the frame used.
+`(vertex module, fragment module, effective render state, topology, polygon mode)`, and the present
+pipeline is owned separately by the backend. `TextureCount` counts the live bindless slots including
+the white slot, and `PipelineCount` counts the distinct scene pipelines the frame used.
+
+**Wireframe model draws.** `DrawWireModel` records the same parts, material snapshots, part render
+states, tint, and `local * transform` matrices as `DrawModel`, and sets the internal wireframe flag on
+each draw record. The flag is part of the batch key and the geometry pipeline cache key, so a
+wireframe record never merges with a filled record over the same mesh, program, and render state. The
+renderer creates the pipeline with `VK_POLYGON_MODE_LINE` and `LineWidth = 1`; culling, depth test,
+depth write, blending, tint, textures, and alpha are unchanged, so back faces stay culled and only
+the visible edges of front-facing triangles are drawn. `Wireframe` is not part of the public
+`RenderState`: the public depth, culling, and blending contract is unchanged, and there is no public
+wireframe flag. The polygon-mode-line pipeline needs the core **`fillModeNonSolid`** feature, which
+the renderer enables at device creation when the physical device advertises it. A device without the
+feature fails the frame with `GraphicsException` `RB3001` naming the device and the feature; M5 has no
+CPU line-geometry fallback. `RenderStats.Triangles` still counts the recorded triangle primitives,
+because the polygon mode changes rasterization, not the record's topology or index count.
 
 The render path writes **one 256-byte frame uniform block per frame slot**. All camera passes
 recorded in the same tick write that block, so a frame with more than one camera pass submits the
@@ -881,6 +915,13 @@ render thread; it never caches an asset or resolves a path.
 - The builders and `BuildAsync` are safe to call from any thread, including `Setup` and `Tick`.
   A builder instance is not thread-safe. The GPU copy still runs on the render thread through the
   bridge, and a build after app shutdown throws `ObjectDisposedException`.
+- `MeshBuilder` ships nine named `Generate*` factories: `GeneratePoly`, `GeneratePlane`,
+  `GenerateCube`, `GenerateSphere`, `GenerateHemiSphere`, `GenerateCylinder`, `GenerateCone`,
+  `GenerateTorus`, and `GenerateKnot`. Each is a pure CPU geometry replacement that sets the
+  triangle-list topology, fills outward normals and the first UV set, and validates its arguments
+  before replacing any data; tangents are left to `ComputeTangents`, and `BuildAsync` uploads the
+  result through the same bridge. The factories generate no GPU resource by themselves.
+  Heightmap and cubicmap generation are deferred until the engine has a CPU image type.
 - `MeshBuilder.GenerateCollisions()` opts a build into the ray-mesh collision structure described
   below. It is an idempotent builder step that changes no geometry, persists for later builds from
   the same builder, and accepts triangle topologies only. `BuildAsync` builds the structure from the
@@ -971,8 +1012,9 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   texture, a mesh, a shader, and a MessagePack custom-data value. M4 moved the gate to
   `samples/Castle`, which baked `castle.pck`, loaded the model and its texture, and drew the castle
   through the geometry pipeline. M5 moves the gate to `samples/PrimitiveGallery`: it has no assets
-  executable or pack, builds its only texture at runtime, draws every primitive helper through the
-  built-in primitive and mesh programs, and shuts down. `samples/Castle` remains a buildable and
+  executable or pack, builds its only texture at runtime, draws the M5 primitive helpers through the
+  built-in primitive and mesh programs, and shuts down. The M5 suite is 1,881 tests, 92 of them GPU
+  integration tests, and every sample solution builds. `samples/Castle` remains a buildable and
   publishable sample but is not the M5 gate, and `samples/HelloInterop` remains the M1-M3 diagnostic
   host.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
@@ -1020,15 +1062,19 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   disposed asset recorded into a frame stays alive until the frame completes; and the validation
   layer reports no errors for the draw path. There are no golden-image tests; the suite asserts
   counts, validation cleanliness, and explicit numeric readbacks with tolerances.
-- M5 adds the primitive draw suite (`PrimitiveDrawGpuTests`): the production `Camera` helpers record
-  over the real built-in primitive assets and submit through the Vulkan backend, and the tests
-  assert validation cleanliness, draw/instance/triangle statistics and plan topology, and
-  single-pixel linear scene-target probes for a one-pixel line row, a solid-shape tint, plane
-  back-face culling, triangle winding versus culling, billboard texture sampling, and billboard
-  occlusion behind opaque geometry. The helpers are also covered by unit tests for recorded matrices,
-  validation, batching, and retention, and the collision surface by deterministic unit tests for the
-  checks, ray queries, BVH invariants, and accelerated-versus-brute-force equivalence, plus
-  pack/codec and loader tests for the baked payload.
+- M5 adds the primitive draw suite (`PrimitiveDrawGpuTests`) and the model wireframe suite
+  (`ModelWireframeGpuTests`): the production `Camera` helpers record over the real built-in primitive
+  assets and submit through the Vulkan backend, and the tests assert validation cleanliness,
+  draw/instance/triangle statistics and plan topology, and single-pixel linear scene-target probes
+  for a one-pixel line row, a solid-shape tint, plane back-face culling, triangle winding versus
+  culling, billboard texture sampling, and billboard occlusion behind opaque geometry. The wireframe
+  suite checks that `DrawWireModel` rasterizes the front-facing triangle edges without filling the
+  face interior, that a wireframe line fragment samples the part material's texture, and that a
+  filled and a wireframe draw over the same mesh, program, and state use distinct pipelines. The
+  helpers are also covered by unit tests for recorded matrices, validation, batching, and retention,
+  and the collision surface by deterministic unit tests for the checks, ray queries, BVH invariants,
+  and accelerated-versus-brute-force equivalence, plus pack/codec and loader tests for the baked
+  payload. The suite is 1,881 tests, 92 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

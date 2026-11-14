@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M5 as-built**, 2026-11-13. M0-M5 are shipped. Milestones are ordered by
+Status: **v0.1 M5 as-built**, 2026-11-14. M0-M5 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -70,7 +70,7 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M2 | Renderer foundation | Backend seam, swapchain, HDR/AgX/MSAA, reverse-Z, recovery | M1 |
 | M3 | Asset pipeline | Pack v1, assets executable, processors, typed loaders | M1 |
 | M4 | Core 3D renderer | Models, shaders, bindless textures, instancing, camera draws | M2, M3 |
-| M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, collision queries, HDR AgX rework, restored linearized Bork2d color presets | M4 |
+| M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, wireframe models, mesh generators, collision queries, HDR AgX rework, restored linearized Bork2d color presets | M4 |
 | M6 | Text and MSDF | TTF/OTF, runtime MSDF, layout, world-space text | M4 |
 | M7 | 2D and orthographic rendering | Sprites, 2D shapes, pixel mapping, Pong | M4 |
 | M8 | Render targets and multiple cameras | HDR/MSAA targets, readback, split-screen | M4 |
@@ -414,8 +414,8 @@ automatic instancing, and per-instance textures/uniforms.
 - **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
   texture, an orbital camera, and the reference XZ grid. It deliberately leaves out features that
   need later milestones: model/texture drag-and-drop (post-1.0 platform work), click selection and a
-  wire-box overlay (the engine ships `Collision.GetRayBox` and `Camera.DrawWireCube`; there is no
-  public `DrawBoundingBox`, and the sample does not implement selection), and the
+  wire-box overlay (the engine ships `Collision.GetRayBox` and, from M5, `Camera.DrawBoundingBox` and
+  `Camera.DrawWireCube`; the sample does not implement selection), and the
   `DrawText`/`DrawFPS` overlay (runtime text arrives in M6). The grid is
   `DrawGrid(20, 10f, Color.Gray)` in the same opaque, depth-tested pass as the castle. The model and
   its diffuse texture are drawn with the built-in `/shaders/mesh` material that the loaded model
@@ -450,87 +450,189 @@ device selection instead of clamping silently.
 
 ### M5 — Primitives, lines, billboards, and collision
 
-**Goal.** Raylib-style 3D drawing helpers and the collision queries a small game expects.
+**Goal.** Raylib-style 3D drawing helpers, frame-scoped billboards, a wireframe model path, procedural
+mesh generation, and the collision queries a small game expects.
 
 **Scope.**
 
-- Built-in meshes: cube, sphere, cylinder, plane, grid, wire cube, wire sphere.
-- `DrawGrid` for raylib's reference XZ grid.
-- Line, line-strip, point (camera-facing quad), and triangle helpers.
-- Billboard and textured-quad helpers.
-- Default vertex-color/unlit shader; per-instance linear tint.
-- Collision: sphere/sphere, box/box, box/sphere, ray/sphere, ray/box, ray/triangle, ray/plane,
-  ray/mesh.
-- CPU mesh positions retained for raycasts; bounds for procedural primitives.
-- Tests for each shape's bounds, winding, and collision result.
+- Built-in primitive meshes and the built-in `/shaders/primitive` program.
+- Camera line, point, and triangle helpers: `DrawLine`, `DrawLines`, `DrawPoint`, and `DrawTriangle`.
+- Camera shape helpers with shape/position, tessellation, start/end, and `Transform` overloads:
+  `DrawCube`, `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`,
+  `DrawCapsule`/`DrawWireCapsule`, `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`,
+  `DrawWireCube`, `DrawWireSphere`, and `DrawGrid`.
+- Billboard and textured-quad helpers: full texture, source rectangle, origin pivot, `Transform`, and
+  `faceCamera`.
+- Wireframe model drawing: `DrawWireModel`, polygon-mode-line geometry, the `fillModeNonSolid` device
+  gate, and the `RB3001` unsupported-device path.
+- Default vertex-color/unlit shader; per-instance linear tint; per-instance UV rectangle.
+- Collision: sphere/sphere, box/box, box/sphere, ray/sphere, ray/box, ray/triangle, ray/quad,
+  ray/plane, ray/mesh.
+- CPU mesh positions retained for raycasts; bounds for procedural primitives; the deterministic
+  ray-mesh BVH and its baked `RBVC` payload.
+- `MeshBuilder` mesh factories: poly, plane, cube, sphere, hemisphere, cylinder, cone, torus, and
+  knot. Heightmap and cubicmap generation are deferred until a CPU image type exists.
+- Runtime tone mapping, the Godot 4.7 HDR-aware AgX, the sRGB color helpers, and the linearized
+  Bork2d/Unity preset set.
+- Tests for each shape's bounds, winding, draw counts, and collision result.
+- `DrawTexture` moves to M7; the M5 surface does not include the screen-space texture helper.
 
 **Exit criteria.**
 
-- A primitive gallery sample draws every helper in one frame with the built-in shader.
+- `samples/PrimitiveGallery` draws the M5 primitive helpers in one frame with the built-in shaders.
 - Lines render at 1 px without requiring the `wideLines` device feature.
-- Wire shapes are line geometry, not polygon-mode dependent.
-- Collision unit tests cover hit/miss, inside-origin rays, parallel rays, and degenerate triangles.
-- `GetRayMesh` hits a loaded mesh and returns the expected point/normal/distance.
-- All helpers batch with the same rules as user draws; stats reflect it.
-- Castle uses `DrawGrid` for the raylib reference grid.
+- Wire shapes are line geometry, not polygon-mode dependent; `DrawWireModel` uses a
+  polygon-mode-line pipeline gated on `fillModeNonSolid` and fails with `RB3001` on a device without
+  the feature (no CPU fallback).
+- Every transformable shape family (cube, sphere, plane, cylinder, capsule, circle, wire cube, and
+  wire sphere) has its shape/position and `Transform` forms; the tessellated sphere and wire sphere,
+  full and wire cylinder, capsule and wire capsule, and circle forms are covered by unit and GPU
+  tests. The line, strip, ray, bounding-box, and grid helpers are world-space forms.
+- The billboard source-rectangle, origin-pivot, `Transform`, and `faceCamera` contracts are covered,
+  including the world-oriented `faceCamera: false` identity case.
+- Collision unit tests cover hit/miss, inside-origin rays, parallel rays, degenerate triangles and
+  quads, and `GetRayQuad`'s shared-diagonal rule.
+- `GetRayMesh` hits a loaded mesh and returns the expected point/normal/distance; the BVH path and
+  the brute-force path agree.
+- `MeshBuilder.Generate*` produces the documented bounds, winding, normals, and UVs for every
+  factory.
+- All helpers batch with the same rules as user draws; stats reflect it, and `RenderStats.Triangles`
+  still counts recorded triangle primitives for a wireframe model draw.
+- Castle uses `DrawGrid` for the raylib reference grid; all sample solutions build.
+- The suite is 1,881 tests, 92 of them GPU integration tests.
 - Native AOT publish runs the gallery on Windows and Linux.
 
 **As-built notes.** M5 shipped the planned primitive and collision scope, the approved ray-mesh
-acceleration structure with its baked payload, the combined HDR AgX rework with runtime tone mapping
-and sRGB color helpers, and the restored Bork2d/Unity color preset set:
+acceleration structure with its baked payload, the full shape/Transform/billboard/wireframe surface,
+the nine `MeshBuilder` generators, the combined HDR AgX rework with runtime tone mapping and sRGB
+color helpers, and the restored Bork2d/Unity color preset set:
 
-- **Primitive helpers and representation.** `Camera` ships 12 helpers. `DrawLine` maps the engine's
-  unit line mesh from `(0,0,0)`–`(1,0,0)` to the segment. `DrawLines` records one instance per
-  non-zero consecutive point pair, so a polyline of `N` points records `N - 1` segments. `DrawPoint`
-  is a camera-facing quad of `size` world units, which avoids Vulkan point-size limits.
-  `DrawTriangle` maps the unit reference triangle under the affine map that preserves orientation,
-  so a triangle that is counter-clockwise as seen by the camera keeps its front face and a clockwise
-  one is culled. `DrawCube` and `DrawWireCube` scale the unit cube by `size` around `position`;
-  `DrawSphere` scales the unit UV sphere (`32` slices by `16` rings, no LOD); `DrawCylinder` records
-  `sides` side quads plus `2 * sides` cap triangles with the base cap at `position` and the axis
-  along world `+Y`; `DrawPlane` scales the `XZ` unit plane, whose front faces world `+Y`.
-  `DrawWireSphere` is three great circles of line geometry. `DrawBillboard` is a centered quad that
-  faces the camera, or keeps world up and the camera yaw when `faceCamera` is `false`. Every helper
-  works in world space; each mesh is a unit reference so the instance transform carries the shape.
-  The eight meshes are engine-owned, built once before `IGame.Setup` through the
-  procedural GPU bridge from deterministic CPU geometry, and are not public assets.
-- **Programs and render states.** Shapes and lines record against the built-in
-  `/shaders/primitive` program, which consumes vertex position and linear color only and has no
-  uniforms or textures; its vertex stage multiplies the vertex color by the per-instance tint and
-  its fragment stage writes that color. Its default state is opaque, back-face culling,
-  `greater_equal`, depth write. The billboard uses the built-in `/shaders/mesh` program with the
-  `RenderState.AlphaBlend` state override. The engine material's texture binding is set only around
-  the recorded call and cleared immediately afterwards, and the frame
-  record retains the texture. `EngineDefaults` is unchanged: it still exposes only
-  `CreateMeshShader`, `White`, and `Error`. `/shaders/primitive` is an ordinary built-in shader
-  entry, so a game can load a material over it by path for its own vertex-color meshes; the primitive
-  meshes have no public accessor.
+- **Primitive helper surface.** M5 ships 46 helper overloads over 17 helper families: the four
+  line/point/triangle helpers, the twelve shape families (34 overloads including the wire cylinder and
+  wire capsule forms), and the eight `DrawBillboard` overloads. `DrawLine` maps the engine's unit line
+  mesh from `(0,0,0)`–`(1,0,0)` to the segment. `DrawLines` records one instance per non-zero
+  consecutive point pair, so a polyline of `N` points records `N - 1` segments. `DrawPoint` is a
+  camera-facing quad of `size` world units, which avoids Vulkan point-size limits. `DrawTriangle` maps
+  the unit reference triangle under the orientation-preserving affine map, so a triangle that is
+  counter-clockwise as seen by the camera keeps its front face and a clockwise one is culled.
+  `DrawTriangleStrip` decomposes `points.Length - 2` triangles with alternating winding and skips
+  zero-area triangles. `DrawRay` draws `ray.Origin` to `ray.Origin + ray.Direction` (the direction is
+  not normalized); `DrawBoundingBox` draws the twelve axis-aligned edges and skips the coincident
+  edges of a zero-extent box.
+  `DrawCube` and `DrawWireCube` scale the unit cube by `size` around `position`, with explicit
+  width/height/length and `Transform` forms. `DrawSphere` instances the unit UV sphere (`32` slices by
+  `16` rings, no LOD) or composes a tessellated `rings` by `slices` surface
+  (`2 * slices * (rings - 1)` triangles); `DrawWireSphere` is three great circles in the simple form
+  and `slices * (2 * rings - 1)` line instances in the tessellated form. `DrawCylinder` records
+  `sides` side quads plus `2 * sides` cap triangles with the base cap at `position` and the axis along
+  world `+Y`; the full form accepts unequal top/bottom radii (a tapered cylinder is one triangle draw
+  with `4 * sides` triangles, and a zero radius at one end is a cone with `2 * sides` triangles), and
+  the start/end form treats the endpoints as cap centers. `DrawWireCylinder` records one vertical edge
+  per side plus one closed ring per non-zero radius. `DrawCapsule` is `slices` side quads plus
+  `2 * slices * (2 * rings - 1)` cap triangles in two instanced draws; the start/end form treats
+  `start` and `end` as spherical cap centers, and the `Transform` form takes the cap-center distance
+  as `height`. `DrawWireCapsule` records `slices * (4 * rings + 1)` line instances. `DrawPlane`
+  scales the `XZ` unit plane, whose front faces world `+Y`. `DrawCircle` is a closed 36-segment
+  circle in the local `XZ` plane with local `+Y` normal. `DrawGrid` is one instanced line draw with
+  `2 * (slices + 1)` instances spanning `slices * spacing` per axis. Every helper works in world
+  space; each mesh is a unit reference, and the instance transform carries the shape. The eight meshes
+  are engine-owned, built once before `IGame.Setup` through the procedural GPU bridge from
+  deterministic CPU geometry, and are not public assets. The tessellated sphere and wire sphere,
+  cylinder and wire cylinder, capsule and wire capsule, and circle compose their geometry from the
+  unit quad, triangle, and line meshes.
+- **Overloads and Transform composition.** The primitive families use ordinary C# overloads; the
+  engine has no `Ex`, `Rec`, `Pro`, or `V` suffix names. Every transformable solid or wire shape
+  (cube, sphere, plane, cylinder, capsule, circle, wire cube, and wire sphere) has a shape/position
+  overload and a `Transform` overload; the line, point, triangle, strip, ray, bounding box, and grid
+  helpers are world-space draws without a `Transform` form. The transform supplies position,
+  rotation, and scale while the shape dimensions stay explicit. The instance matrix is
+  `local * transform.ToMatrix()` under the row-vector convention, so the transform scale multiplies
+  the dimensions and an identity rotation with unit scale reproduces the simple overload at
+  `Transform.Position`. A zero transform scale component records nothing; a negative scale or a
+  non-finite transform component is rejected like any other invalid argument. Anchors: the cube,
+  wire cube, sphere, wire sphere, plane, and circle are centered at the origin; the cylinder and wire
+  cylinder put the bottom cap/ring at the origin with local `+Y` as the axis; the capsule and wire
+  capsule are centered with cap centers at `±height/2`. `DrawCylinder(start, end, ...)` and
+  `DrawCapsule(start, end, ...)` orient local `+Y` between the endpoints; the axis-angle
+  `DrawCircle` rotates the base circle around `rotationAxis` by `rotationAngle` degrees before
+  translating it to `center`. The billboard is the one exception: its non-facing `Transform`
+  overloads orient the quad in world space while the non-facing position overloads keep the
+  camera-relative vertical billboard.
+- **Billboard surface.** `DrawBillboard` records one engine quad through `/shaders/mesh` with
+  `RenderState.AlphaBlend`. The four-argument form is camera-facing, full-texture, and centered; the
+  other seven overloads add a normalized `source` rectangle, a `Transform`, an explicit normalized
+  `origin` pivot, or a combination of them. `source` is recorded as the per-instance
+  `rbInstance.UvRect = (X, Y, Width, Height)` and the mesh shader maps the authored UVs through it;
+  the default `(0, 0, 1, 1)` reproduces them. The rectangle is per-instance data, so billboards with
+  different source rectangles still batch together. `origin` places the normalized pivot at the
+  transform position and is not clamped; `(0.5, 0.5)` is centered. `faceCamera: true` uses the camera
+  basis and only the transform's in-plane roll; `faceCamera: false` on a `Transform` overload orients
+  the quad by `local * transform.ToMatrix()` in world space, so an identity transform gives a quad in
+  the local XY plane facing world `+Z`, intentionally different from the position overloads' vertical
+  billboard. The engine material's texture binding is set immediately before the recorded call and
+  cleared immediately afterwards; the frame retains the texture.
+- **Wireframe model drawing.** `DrawWireModel` is the raylib `DrawModelWires`/`DrawModelWiresEx`
+  equivalent. It records exactly the parts, material snapshots, render states, tint, and
+  `local * transform` matrices of `DrawModel`, and sets an internal wireframe flag on each draw
+  record. The renderer creates the geometry pipeline with `VK_POLYGON_MODE_LINE` and
+  `LineWidth = 1`; culling, depth test, depth write, blending, tint, textures, and alpha are
+  unchanged, so back faces stay culled and the visible edges of front-facing triangles are drawn. A
+  triangle split into two triangles also draws its shared diagonal. The flag is part of the batch key
+  and the geometry pipeline cache key, so a wireframe record never merges with a filled record over
+  the same mesh, program, and state. `Wireframe` is internal; `RenderState` stays the public
+  depth/culling/blending contract and there is no public wireframe flag. The polygon-mode-line
+  pipeline needs the core `fillModeNonSolid` feature, enabled at device creation when the physical
+  device advertises it. A device without it fails the frame with `GraphicsException` `RB3001` naming
+  the device and the feature; M5 has no CPU line-geometry fallback. `RenderStats.Triangles` still
+  counts the recorded triangle primitives, because the polygon mode changes rasterization, not the
+  record's topology or index count.
+- **Programs and render states.** Shapes and lines record against the built-in `/shaders/primitive`
+  program, which consumes vertex position and linear color only and has no uniforms or textures; its
+  vertex stage multiplies the vertex color by the per-instance tint and its fragment stage writes
+  that color. Its default state is opaque, back-face culling, `greater_equal`, depth write. The
+  billboard uses the built-in `/shaders/mesh` program with the `RenderState.AlphaBlend` state
+  override. The engine material's texture binding is set only around the recorded call and cleared
+  immediately afterwards, and the frame record retains the texture. `EngineDefaults` is unchanged: it
+  still exposes only `CreateMeshShader`, `White`, and `Error`. `/shaders/primitive` is an ordinary
+  built-in shader entry, so a game can load a material over it by path for its own vertex-color
+  meshes; the primitive meshes have no public accessor. `DrawTexture` is not built or shipped in M5;
+  the screen-space overlay path is re-homed to M7.
 - **Validation.** A non-finite numeric argument throws `ArgumentException`; a negative extent,
-  radius, height, width, or point size throws `ArgumentOutOfRangeException`; an exactly zero extent,
-  radius, height, or segment length records nothing. `sides < 3`,
-  `slices < 1`, and `spacing <= 0` throw `ArgumentOutOfRangeException`, and no helper substitutes a
-  default tessellation. A null texture is `ArgumentNullException`; a disposed texture, camera, or
-  primitive asset is `ObjectDisposedException`. A missing primitive-asset set is
-  `InvalidOperationException`, and every helper is tick-thread only. Colors are linear `Color`
-  values; the per-instance tint is `rbInstance.Color`, and the shader multiplies it into the vertex
-  color. Validation runs before any retention or record mutation, so a rejected call leaves the
-  frame packet untouched.
+  radius, height, width, point size, or transform scale component throws
+  `ArgumentOutOfRangeException`; an exactly zero extent, radius, height, start/end segment, or
+  transform scale component records nothing. `sides < 3`, `rings < 2`, `slices < 3`, `slices < 1`
+  for `DrawGrid`, and `spacing <= 0` throw `ArgumentOutOfRangeException`, and no helper substitutes a
+  default tessellation. A zero `rotationAxis` is `ArgumentException`. A null texture is
+  `ArgumentNullException`; a disposed texture, camera, or primitive asset is
+  `ObjectDisposedException`. A billboard source rectangle with a non-finite component is
+  `ArgumentException`; a non-positive width or height, or a rectangle outside `[0, 1]`, is
+  `ArgumentOutOfRangeException`. A non-finite billboard origin is `ArgumentException`; the origin is
+  not clamped. A missing primitive-asset set is `InvalidOperationException`, and every helper is
+  tick-thread only. Colors are linear `Color` values; the per-instance tint is `rbInstance.Color`, and
+  the shader multiplies it into the vertex color. Validation runs before any retention or record
+  mutation, so a rejected call leaves the frame packet untouched.
 - **Batching and statistics.** Helpers record ordinary draw records, so they batch under the existing
-  `(mesh, program, effective render state)` key and follow the same culling, sorting, and stats.
-  Line topology contributes zero triangles; `DrawPoint` is a camera-facing quad, so it contributes
-  the quad's two triangles. `DrawCylinder` is two instanced draws (side quads and cap triangles)
-  because the two shapes are different meshes. `DrawLines` and `DrawGrid` are one instanced line draw
-  each. The billboard's render state differs from the primitive program's state, so it never merges
-  with shape draws; reusing the same program does not merge different meshes.
+  `(mesh, program, effective render state, polygon mode)` key and follow the same culling, sorting,
+  splitting, and stats. Line topology contributes zero triangles; `DrawPoint` is a camera-facing
+  quad, so it contributes the quad's two triangles. `DrawLines`, `DrawGrid`, `DrawCircle`,
+  `DrawRay`, `DrawBoundingBox`, and the wire helpers are one instanced line draw each.
+  `DrawCylinder` is two instanced draws for equal positive radii (side quads and cap triangles)
+  because the two shapes are different meshes; a tapered cylinder is one triangle draw.
+  `DrawCapsule` is two instanced draws. Equal records merge: two `DrawCube` calls are one instanced
+  draw with two instances. The billboard's render state differs from the primitive program's state,
+  so it never merges with shape draws; reusing the same program does not merge different meshes.
 - **Collision contract.** `Collision.CheckSpheres`, `CheckBoxes`, and `CheckBoxSphere` are inclusive
   and allocation-free: touching counts, a zero radius is a point, and a negative radius or a NaN
   input reports no collision. Ray queries return the nearest `t >= 0`; an origin inside a sphere or
   box returns the exit point with the outward normal. Triangle queries are double-sided and report
   the normalized geometric normal, which is not flipped toward the ray; a degenerate triangle is a
-  miss. A ray/plane query normalizes the plane normal and misses when the ray is parallel, including
-  when it lies in the plane. `RayCollision.Distance` is the ray parameter, which is a world distance
-  only for a normalized direction, and a miss is `default(RayCollision)`. `GetRayMesh` supports
-  triangle lists and strips, throws `NotSupportedException` for line and point topologies,
+  miss. `GetRayQuad` splits a quad into the triangles `(a, b, c)` and `(a, c, d)`, reuses the
+  double-sided triangle test, returns the nearest non-negative hit, and reports the `(a, b, c)` result
+  on the shared diagonal; a degenerate quad is a miss, and the direction is not required to be
+  normalized. A ray/plane query normalizes the plane normal and misses when the ray is parallel,
+  including when it lies in the plane. `RayCollision.Distance` is the ray parameter, which is a world
+  distance only for a normalized direction, and a miss is `default(RayCollision)`. `GetRayMesh`
+  supports triangle lists and strips, throws `NotSupportedException` for line and point topologies,
   `ArgumentException` for a singular transform, and `ArgumentNullException`/`ObjectDisposedException`
   for the mesh; it maps the hit through the row-vector mesh-to-world transform, uses the
   inverse-transpose for the normal, and keeps the nearest hit. The collision helpers never throw for
@@ -543,7 +645,8 @@ and sRGB color helpers, and the restored Bork2d/Unity color preset set:
   nothing beyond a `stackalloc` traversal stack. `Collision.GetRayMesh` traverses the structure when
   the mesh has one and brute-forces the retained triangles otherwise; both paths select and report
   the same nearest triangle. `Mesh.HasCollisionAcceleration` reports whether a mesh has one and
-  throws after disposal; there is no public BVH type and no query API beyond `GetRayMesh`.
+  throws after disposal; there is no public BVH type and no query over the structure beyond
+  `GetRayMesh`.
 - **Baked collision payloads.** The model processor writes a sibling raw entry
   `<mesh path>-collision` for every triangle part by default and records it in the optional
   `MeshAssetDescriptor.CollisionPayload` member of that mesh's descriptor. A `[model]` sidecar with
@@ -567,18 +670,29 @@ and sRGB color helpers, and the restored Bork2d/Unity color preset set:
   `Mesh.HasCollisionAcceleration`. The method and the build accept triangle topologies only and
   throw `NotSupportedException` otherwise. A snapshot with no non-degenerate triangle builds without
   a structure, and a failed or canceled build creates no asset and leaves the builder reusable.
-- **HDR AgX rework (merged into M5).** M5 replaces the M2/M4 AgX and its separate paper-white
-  highlight stage with Godot 4.7's HDR-aware AgX. The present fragment shader applies the combined
-  Rec.709 to Rec.2020 and AgX inset matrix, the allenwp curve (crossover `0.18`; `toe_a`, `slope`,
-  and `w` derived on the CPU), a clamp to the output maximum, and the combined inverse outset and
-  Rec.2020 to Rec.709 matrix. The combined matrices preserve neutral gray, so a neutral scene color
-  stays neutral. SDR uses an output maximum of `1.0`; the scRGB path uses the reported display
-  headroom as the curve's output maximum, so the curve writes paper-white units up to the display
-  peak and the pass then multiplies by paper white. The old highlight stage, its scene/output
-  white-luminance shader constants, and the old curve are gone; `TonemappingMode.None` remains the
-  direct path. The shader's curve is mirrored by the CPU reference `AgxToneMap` with
-  `AgxCurveParameters`, covered by pinned unit tests; the renderer never calls the reference per
-  frame.
+- **MeshBuilder generators.** The nine `Generate*` factories are the procedural counterparts of
+  raylib's `GenMesh*`: `GeneratePoly` (XZ disc), `GeneratePlane` (XZ grid), `GenerateCube`,
+  `GenerateSphere` (UV sphere), `GenerateHemiSphere` (+Y half), `GenerateCylinder`, `GenerateCone`,
+  `GenerateTorus`, and `GenerateKnot` (trefoil tube). Each replaces the builder's vertices and
+  indices, sets `Topology` to `TriangleList`, discards explicit bounds, and fills outward normals and
+  the first UV set directly; every triangle winds counter-clockwise around its outward normal.
+  Tangents are left to `ComputeTangents`, and `BuildAsync` uploads the generated geometry through the
+  normal procedural path. The methods are pure CPU and validate their arguments before replacing any
+  geometry: `sides`, `rings`, `slices`, and `radSeg` are at least 3, `resX`/`resZ` are at least 1, and
+  every dimension, radius, and size is positive and finite. Heightmap and cubicmap generation are
+  deferred until the engine has a CPU image type.
+- **HDR AgX rework.** M2 shipped the first AgX curve without HDR headroom and M4 added a separate
+  paper-white highlight stage; M5 replaces both the M2/M4 curve and that stage with Godot 4.7's
+  HDR-aware AgX. The present fragment shader applies the combined Rec.709 to Rec.2020 and AgX inset
+  matrix, the allenwp curve (crossover `0.18`; `toe_a`, `slope`, and `w` derived on the CPU), a clamp
+  to the output maximum, and the combined inverse outset and Rec.2020 to Rec.709 matrix. The combined
+  matrices preserve neutral gray, so a neutral scene color stays neutral. SDR uses an output maximum
+  of `1.0`; the scRGB path uses the reported display headroom as the curve's output maximum, so the
+  curve writes paper-white units up to the display peak and the pass then multiplies by paper white.
+  The old highlight stage, its scene/output white-luminance shader constants, and the old curve are
+  gone; `TonemappingMode.None` remains the direct path. The shader's curve is mirrored by the CPU
+  reference `AgxToneMap` with `AgxCurveParameters`, covered by pinned unit tests; the renderer never
+  calls the reference per frame.
 - **Runtime tone mapping.** `EngineContext.Tonemapping` exposes the app-lifetime
   `TonemappingSettings`: `Exposure` in stops, `AgxWhite` (default `16.29`), and `AgxContrast`
   (default `1.25`). `WithExposure`, `WithAgxWhite`, and `WithAgxContrast` set the startup defaults;
@@ -588,22 +702,30 @@ and sRGB color helpers, and the restored Bork2d/Unity color preset set:
   settings object. The scene frame block's exposure field is written from the same snapshot.
 - **sRGB color helpers and the restored preset set.** `Color.FromSrgb(float r, float g, float b,
   float a = 1f)`, `Color.FromSrgbBytes(byte r, byte g, byte b, byte a = 255)`, and `Color.ToSrgb()`
-  convert between display-encoded sRGB and linear `Color` values. The full Bork2d/Unity preset set is
-  restored with its Bork2d names, and every preset is defined from its authored sRGB source through
-  the same piecewise EOTF as `FromSrgb`, so the type stays linear. The corrected display values are
-  `Color.Gray`/`Color.Grey` at linear `0.214041`, `Color.WhiteSmoke` at `0.913099`,
-  `Color.Yellow` at `(1, 0.8307699, 0.0012141)`, and `Color.DarkCyan` at
+  convert between display-encoded sRGB and linear `Color` values. The full 158-color Bork2d/Unity
+  preset set is restored with its Bork2d names, and every preset is defined from its authored sRGB
+  source through the same piecewise EOTF as `FromSrgb`, so the type stays linear. The corrected
+  display values are `Color.Gray`/`Color.Grey` at linear `0.214041`, `Color.WhiteSmoke` at
+  `0.913099`, `Color.Yellow` at `(1, 0.8307699, 0.0012141)`, and `Color.DarkCyan` at
   `(0, 0.2581829, 0.2581829)`; the primaries and `Clear`/`Transparent` are unchanged, `Grey` aliases
   `Gray`, `Transparent` aliases `Clear`, and `YellowNice` follows the new `Yellow`.
   `Color.WhiteSmoke` is the Castle background. The Castle and `PrimitiveGallery` samples draw named
-  presets instead of hand-written color constants.
+  presets instead of hand-written color constants. The `Gray`/`Grey`, `Yellow`, and `DarkCyan` values
+  are breaking 0.x preset changes relative to the earlier linear constants; the migration note is in
+  [Versioning](api/versioning.md#14-versioning-and-compatibility).
 - **Primitive gallery AOT gate.** `samples/PrimitiveGallery` is a single-project self-contained
   solution, `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It
   has no assets executable and no pack; `Setup` builds its one `128x128` `Rgba8Srgb` checker texture
-  with `CreateTextureBuilder`. It draws every M5 helper in one perspective pass at 800x450, uses
-  orbit controls, and accepts `--frames` and `--help`. The published `win-x64` and `linux-x64` hosts
-  run from the publish directory with zero AOT/trim warnings, and the publish directory contains no
-  bake tooling. The sample is a plain user-facing example and contains no test-only draw assertion.
+  with `CreateTextureBuilder`. It draws the M5 primitive helpers in one perspective pass at 800x450,
+  uses orbit controls, and accepts `--frames` and `--help`. The published `win-x64` and `linux-x64`
+  hosts run from the publish directory with zero AOT/trim warnings, and the publish directory contains
+  no bake tooling. The sample is a plain user-facing example and contains no test-only draw
+  assertion. The M5 suite is 1,881 tests, 92 of them GPU integration tests, and every sample solution
+  builds.
+- **DrawTexture boundary.** `DrawTexture` is not part of M5. The preview screen-space overlay helper
+  is removed and re-homed to M7, where it returns with the orthographic/sprite contract and
+  destination rectangles; the M5 surface has no screen-space texture draw. The migration note is in
+  [Versioning](api/versioning.md#14-versioning-and-compatibility).
 - **Expected validation warnings.** The validation layer reports two performance warnings on the
   gate path; neither is an error and neither fails the gate. The fixed vertex layout declares
   attributes a shader does not consume, and the primitive program's vertex stage writes the engine
@@ -611,16 +733,35 @@ and sRGB color helpers, and the restored Bork2d/Unity color preset set:
   per-instance data. The draw tests assert that no validation *errors* are recorded.
 - **Castle and the M4 forward references.** `samples/Castle` keeps its orbitable scene and adds
   `DrawGrid(20, 10f, Color.Gray)` under the model in the same opaque, depth-tested pass, so the
-  reference XZ grid is no longer deferred. Two M4 forward references are corrected: the grid ships
-  in M5, and the planned click-selection/`DrawBoundingBox` work does not — the engine ships
-  `Collision.GetRayBox` and `Camera.DrawWireCube`, but there is no public `DrawBoundingBox`, and the
-  sample does not implement selection. Castle remains a buildable and publishable sample; the M5 AOT
-  gate is the gallery. The M4 limitation of one `rbFrame` block per frame slot is unchanged by M5.
+  reference XZ grid is no longer deferred. Two M4 forward references are corrected: the grid ships in
+  M5, and `DrawBoundingBox` now ships as a public M5 helper. The Castle sample still does not
+  implement click selection, so it does not use the new helper. Castle remains a buildable and
+  publishable sample; the M5 AOT gate is the gallery. The M4 limitation of one `rbFrame` block per
+  frame slot is unchanged by M5.
 
-**Risks.** The collision structure is CPU memory retained for the mesh lifetime, about 20 bytes per
-non-degenerate triangle at a leaf size of four (32-byte nodes plus the canonical triangle ids). The
-`collisions = false` sidecar opt-out avoids that bake cost, and a mesh without a structure still
-queries correctly by brute-forcing the retained triangles.
+**Risks.**
+
+- **Wireframe device support.** `DrawWireModel` is the only M5 path that needs the core
+  `fillModeNonSolid` feature. A device without it fails the frame with the documented `RB3001`
+  unsupported-device error instead of drawing nothing, and M5 has no CPU line-geometry fallback.
+  Filled model draws and the primitive wire shapes are unaffected; the GPU suite covers the pipeline
+  split, and a host that cannot exercise the line pipeline reports the test as a skip with its
+  device name.
+- **HDR10/PQ is deferred.** HDR presentation is scRGB float with the reported display headroom;
+  `A2B10G10R10_UNORM_PACK32` with PQ output is never selected in M5. A display that only accepts PQ
+  HDR falls back to the SDR order and reports `HdrOutput = false`.
+- **SDR AgX differs from M4.** The HDR-aware curve changes the SDR image at the same exposure, so
+  content tuned against the M4 curve may need a new exposure or AgX white. The behavior is measured
+  by the pinned CPU-reference and presented-pixel tests, not by golden images.
+- **Preset values change.** The sRGB-authored palette moves `Gray`/`Grey` to linear `0.214041`,
+  `Yellow` to `(1, 0.8307699, 0.0012141)`, and `DarkCyan` to `(0, 0.2581829, 0.2581829)`. Code that
+  used those presets as raw linear constants must switch to an explicit `Color` constructor or accept
+  the display-authored value; see the migration note in
+  [Versioning](api/versioning.md#14-versioning-and-compatibility).
+- **Collision memory.** The collision structure is CPU memory retained for the mesh lifetime, about
+  20 bytes per non-degenerate triangle at a leaf size of four (32-byte nodes plus the canonical
+  triangle ids). The `collisions = false` sidecar opt-out avoids that bake cost, and a mesh without a
+  structure still queries correctly by brute-forcing the retained triangles.
 
 ### M6 — Text and runtime MSDF
 
@@ -664,7 +805,8 @@ path, which changes the AOT/native packaging story.
 
 - Orthographic camera whose visible height maps world units to pixels; pixel-perfect mapping for
   the default window size and DPI.
-- `DrawTexture` with destination rectangles, linear tint, and point/linear sampling.
+- `DrawTexture` with destination rectangles, linear tint, and point/linear sampling, re-homed from
+  M5 with the orthographic/sprite contract.
 - 2D primitives: lines, rectangles, circles, triangles, and grids, built on the same draw path.
 - 2D text through the M6 font path.
 - Sprite batching with bindless textures and per-instance UV/color.
@@ -879,22 +1021,22 @@ The matrix is the scope contract.
 | Gamepad | Covered | M1, M9 | Basic in M1; hotplug/rumble in M9. |
 | Touch | Post | — | Post-1.0. |
 | Text/fonts | Covered | M6 | Runtime MSDF; Latin-style shaping; no bidi/complex scripts. |
-| Textures | Covered | M3, M5, M8 | Loaded textures, billboard texture sampling, and HDR/MSAA render targets. |
+| Textures | Covered | M3, M5, M7, M8 | Loaded textures, billboard texture sampling, screen-space sprites, and HDR/MSAA render targets. |
 | Images | Partial | M3 | Bake decodes; no runtime image manipulation API. |
-| Models | Covered | M4 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes. |
+| Models | Covered | M4, M5 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes; wireframe model drawing. |
 | Custom data | Covered | M3 | TOML data with `[GenerateShape]`; `WithAssetType<T>` then `Load<T>`. |
-| Meshes | Covered | M3, M4, M5 | Loaded meshes, procedural `MeshBuilder` creation, and primitive meshes; fixed vertex layout. |
+| Meshes | Covered | M3, M4, M5 | Loaded meshes, procedural `MeshBuilder` creation including the nine `Generate*` factories, and primitive meshes; fixed vertex layout. |
 | Materials | Rethought | M4 | No `Material`; shader state + per-instance uniforms. |
 | Model animations | Post | — | Skeletal/morph post-1.0. |
-| 3D shapes | Covered | M5 | Lines, points, triangles, cube, sphere, cylinder, plane, grid, wires. |
-| Collision | Covered | M5 | Ray/sphere/box/triangle/plane/mesh queries. |
+| 3D shapes | Covered | M5 | Lines, points, triangles, strips, rays, bounding boxes, cube, sphere, plane, cylinder/wire cylinder, capsule/wire capsule, circle, grid, and wire shapes, with shape/position and `Transform` forms. |
+| Collision | Covered | M5 | Sphere/box checks and ray/sphere/box/triangle/quad/plane/mesh queries. |
 | HDR / AgX / MSAA | Covered | M2, M4, M5 | Linear scene target, Godot 4.7's HDR-aware AgX present, 4x default MSAA. |
 | Renderer backend | Covered | M2 | Vulkan 1.2 first; internal seam for future mobile/web backends. |
 | Device-loss recovery | Covered | M2, M10 | Recoverable failures retry; unrecoverable loss is fatal. |
 | Audio | Post | A1-A3 | AAC in engine, FFmpeg bake, mixer, 3D sources, HRTF, Doppler. |
 | VR | Post | — | Not in 1.0. |
 | Math | Covered | M1 | `System.Numerics` + `Transform` + degree-based Unity-style extensions. |
-| Colors | Covered | M1, M5 | Linear HDR `Color`, restored Bork2d/Unity sRGB-authored preset palette, OkLab, sRGB conversion helpers, AgX output. |
+| Colors | Covered | M1, M5 | Linear HDR `Color`, the restored 158-color Bork2d/Unity sRGB-authored preset palette, OkLab, sRGB conversion helpers, AgX output. |
 
 "Covered" means the API exists and has a sample/test gate. "Partial" means the common case is
 covered and the missing part is documented. "Post" means deliberately after 1.0.
@@ -936,9 +1078,12 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   backend. It asserts validation-layer cleanliness, draw/instance/triangle statistics and the plan's
   topology, and single-pixel linear scene-target probes for a one-pixel line row, solid-shape tint,
   plane back-face culling, triangle winding versus culling, billboard texture sampling, and billboard
-  occlusion behind opaque geometry. The collision queries and the BVH are covered by deterministic
-  unit tests, including
-  accelerated-versus-brute-force equivalence, and the baked payload by codec and loader tests.
+  occlusion behind opaque geometry. The model wireframe suite (`ModelWireframeGpuTests`) covers the
+  polygon-mode-line path: front-facing triangle edges without a filled interior, texture sampling on
+  a wireframe fragment, and distinct filled/wireframe pipelines. The collision queries and the BVH
+  are covered by deterministic unit tests, including accelerated-versus-brute-force equivalence, and
+  the baked payload by codec and loader tests. The M5 suite is 1,881 tests, 92 of them GPU
+  integration tests; every sample solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
   the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,
@@ -999,6 +1144,9 @@ removed from the release notes rather than weakened silently.
 | WSL Vulkan 1.2 feature gaps | Bindless/instancing unavailable on a target platform | Feature-probe early in M2; document required device features; test both native and WSL | M2 |
 | HDR swapchain variability | HDR path unavailable or inconsistent | Prefer HDR, fall back to sRGB; report `EngineInfo.HdrOutput`; test both | M2/M10 |
 | HDR tone mapping is display-dependent | HDR highlights are capped at the reported display headroom; HDR10/PQ output is deferred | The AgX curve's output maximum is the reported headroom on scRGB, so the curve itself reaches the display peak; HDR10/PQ remains deferred and is never selected; probe paper white and peak on an HDR display | M2/M4/M5 |
+| Wireframe needs `fillModeNonSolid` | `DrawWireModel` unavailable on a device without the feature | Feature-probe at device creation; `RB3001` names the device and feature; no silent fallback; GPU tests cover the pipeline split | M5 |
+| SDR AgX differs from the M4 image | Exposure or AgX white tuned against M4 changes the image | Pinned CPU-reference and presented-pixel tests; runtime exposure/white/contrast; migration note | M5 |
+| sRGB-authored preset values | `Gray`/`Grey`, `Yellow`, and `DarkCyan` change from their earlier linear constants | 0.x migration note; aliases; use `new Color` or `FromSrgb` for an intentional raw value | M5 |
 | MSAA + HDR resolve | Extra memory/bandwidth or resolve bugs | 4x default, 1/2/4/8 support or fallback; resolve tests; validation | M2/M8 |
 | Shader ABI complexity | Bake/runtime/sample churn; custom shaders hard to author | Prototype two shaders before M4 batching; explicit sidecar; publish ABI guide | M4 |
 | Per-instance uniform limits | Batches split unexpectedly; performance regressions | Size estimator, device-limit checks, documented split behavior, per-draw fallback | M4 |

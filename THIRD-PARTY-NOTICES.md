@@ -31,8 +31,8 @@ request.
 
 M5 status: the M5 primitive and collision surface is exercised end to end by the
 `samples/PrimitiveGallery` AOT gate, which opens a window, builds its only texture procedurally, and
-draws every M5 draw helper through the built-in `/shaders/primitive` and `/shaders/mesh` programs on
-`win-x64` and `linux-x64`. The gate mounts the engine's built-in pack and decodes its texture and
+draws the M5 primitive surface through the built-in `/shaders/primitive` and `/shaders/mesh` programs
+on `win-x64` and `linux-x64`. The gate mounts the engine's built-in pack and decodes its texture and
 shader descriptors; it does not load a user pack or custom data, so that coverage remains with the
 M3 and M4 gates and in the unit and GPU suites. The M5 present pass also carries the HDR-aware AgX
 rework; its derived source is recorded under [Derived shader source](#derived-shader-source). The

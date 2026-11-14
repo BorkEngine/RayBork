@@ -201,6 +201,7 @@ Mesh mesh = await builder.BuildAsync();
   geometry like any other builder content, and `ComputeBounds` recomputes bounds from it. Every
   generated triangle winds counter-clockwise around its outward normal. The methods generate normals
   but not tangents; call `ComputeTangents` after generation when a tangent basis is needed.
+  Heightmap and cubicmap generation are deferred until the engine has a CPU image type.
 - `GeneratePoly(sides, radius)` is a regular polygon disc centered at the origin in the XZ plane with
   its front face toward +Y: a center vertex plus one perimeter vertex per side, and `sides * 3`
   indices. All normals are +Y. UVs map the disc into the unit square with the center at

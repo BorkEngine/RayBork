@@ -77,11 +77,19 @@ the shaderc native libraries, or the glTF packages.
 
 Both gate publishes must start, load the assets the sample needs, draw, and shut down. AOT publish
 is a per-milestone gate, not a release-only check. The M5 gate is `samples/PrimitiveGallery`: the
-published hosts open a window, build their procedural texture, draw all 12 primitive helpers through
-the built-in `/shaders/primitive` and `/shaders/mesh` programs, and must exit `0`. The gate path
-exercises the zero-uniform primitive program, which has no texture binding at all. The sample is a
-plain user-facing example and contains no test-only draw assertion. Both publishes must finish with
-zero AOT/trim warnings.
+published hosts open a window, build their procedural texture, draw the M5 primitive helpers through
+the built-in `/shaders/primitive` and `/shaders/mesh` programs, and must exit `0`. The M5 helper
+surface is 46 overloads over 17 helper families: the line, point, and triangle helpers, the twelve
+shape helpers (`DrawCube`, `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`,
+`DrawCapsule`/`DrawWireCapsule`, `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`,
+`DrawWireCube`, `DrawWireSphere`, and `DrawGrid`) with their shape, position, tessellation, start/end,
+and `Transform` overloads, and the eight `DrawBillboard` overloads. The M5 camera also ships
+`DrawWireModel`. The gate path exercises the zero-uniform primitive program, which has no texture
+binding at all, and the alpha-blended mesh program used by billboards; the polygon-mode-line pipeline
+used by `DrawWireModel` is covered by the GPU tests because the gallery has no model asset. The sample
+is a plain user-facing example and contains no test-only draw assertion. Both publishes must finish
+with zero AOT/trim warnings. The M5 suite is 1,881 tests, 92 of them GPU integration tests, and every
+sample solution builds.
 
 On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver
 (`Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)`) and prints "dzn is not a conformant Vulkan

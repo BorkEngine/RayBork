@@ -102,9 +102,9 @@ Components are normally in `[0, 1]`, but HDR rendering deliberately allows value
 There is no 8-bit sRGB `Color` and no implicit gamma conversion; use the explicit `FromSrgb`,
 `FromSrgbBytes`, and `ToSrgb` helpers when a display-encoded value crosses the API boundary. The
 present pass applies Godot 4.7's HDR-aware AgX curve and then the output transfer function. `Color`
-also carries the full Bork2d/Unity preset set. The presets are authored as sRGB and stored linear
-through the same explicit conversion, so `Color.Gray` is the display mid-gray (linear `0.214041`),
-not a linear `0.5` value.
+also carries the full 158-color Bork2d/Unity preset set. The presets are authored as sRGB and stored
+linear through the same explicit conversion, so `Color.Gray` is the display mid-gray (linear
+`0.214041`), not a linear `0.5` value.
 
 ```csharp
 public readonly struct Color : IEquatable<Color>, IFormattable {
@@ -264,6 +264,7 @@ public static class Collision {
     public static RayCollision GetRaySphere(Ray ray, Vector3 center, float radius);
     public static RayCollision GetRayBox(Ray ray, BoundingBox box);
     public static RayCollision GetRayTriangle(Ray ray, Vector3 a, Vector3 b, Vector3 c);
+    public static RayCollision GetRayQuad(Ray ray, Vector3 a, Vector3 b, Vector3 c, Vector3 d);
     public static RayCollision GetRayPlane(Ray ray, Plane plane);
     public static RayCollision GetRayMesh(Ray ray, Mesh mesh, Matrix4x4 transform);
 }
@@ -275,8 +276,12 @@ public static class Collision {
 - Every ray query returns the nearest hit with `t >= 0`. An origin inside a sphere or a box returns
   the exit point with the outward normal. `GetRayTriangle` is double-sided and reports the normalized
   geometric normal `cross(b - a, c - a)`, which is not flipped toward the ray; a degenerate triangle
-  is a miss. `GetRayPlane` normalizes `Plane.Normal` and misses when the ray is parallel to the plane,
-  including when it lies in the plane. Tangency and touching a face at `t = 0` count as hits.
+  is a miss. `GetRayQuad` splits the quad into the triangles `(a, b, c)` and `(a, c, d)`, reuses the
+  same double-sided triangle test, and returns the nearest non-negative hit; a hit on the shared
+  diagonal reports the `(a, b, c)` result, a degenerate quad is a miss, and the ray direction is not
+  required to be normalized. `GetRayPlane` normalizes `Plane.Normal` and misses when the ray is
+  parallel to the plane, including when it lies in the plane. Tangency and touching a face at `t = 0`
+  count as hits.
 - `RayCollision.Distance` is the ray parameter `t` in `origin + direction * t`: a world distance when
   the direction is normalized. `Ray.Direction` is expected to be normalized and
   `Camera.ScreenToWorldRay` returns a normalized direction, but the queries accept any non-zero

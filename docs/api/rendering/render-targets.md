@@ -51,7 +51,8 @@ using (var screen = ctx.CreateOrthographicCamera(
 ```
 
 The snippet is inside `Tick`; `CreateRenderTextureAsync` would normally be awaited in `Setup`
-and the target stored in a field.
+and the target stored in a field. `DrawTexture` is the M7 sprite helper and is not part of the M5
+surface; its destination is in render pixels relative to the camera viewport.
 
 - `CreateRenderTextureAsync` returns after the render thread has allocated the image. It is legal
   in `Setup` and `Tick`.

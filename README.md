@@ -21,28 +21,34 @@ material instance over an internal program with `SetUniform`/`ResetUniforms`, a 
 bindless texture table with sampler and pipeline caches, automatic batch planning with frustum
 culling and opaque/transparency sorting, per-instance uniforms and textures, and the HDR AgX present
 path.
-M5 adds the raylib-style primitive surface and the collision queries: the 12 `Camera` helpers
-(`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`, `DrawCube`, `DrawSphere`, `DrawCylinder`,
-`DrawPlane`, `DrawGrid`, `DrawWireCube`, `DrawWireSphere`, and `DrawBillboard`), engine-owned primitive
-meshes drawn by the built-in `/shaders/primitive` program, `Collision`/`RayCollision` with a
-deterministic ray-mesh BVH that is either generated procedurally or baked into the pack, and the
-reference XZ grid in the castle scene. M5 also reworks the tone mapper
-to Godot 4.7's HDR-aware AgX: the combined Rec.709 to Rec.2020 and AgX inset matrix, the `allenwp`
-curve with CPU-derived parameters, a clamp to the output maximum, and the combined inverse outset and
-Rec.2020 to Rec.709 matrix. SDR uses an output maximum of `1`; the scRGB path uses the reported
-display headroom as the curve's output maximum and then scales by paper white, so the curve itself
-reaches the reported peak. M5 additionally ships runtime tone mapping through `ctx.Tonemapping`
-(`Exposure`, `AgxWhite`, `AgxContrast`, snapshotted into the sealed frame) and the
-`Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` helpers. M5 restores the full Bork2d/Unity
-color preset set converted from sRGB to linear, and the samples use those named presets instead of
-hand-written color constants.
-`samples/PrimitiveGallery` is the M5 gate: it draws every primitive helper in one perspective pass
-with a runtime procedural texture, needs no asset pack, and publishes with Native AOT.
-`samples/Castle` keeps its orbitable castle scene and now draws `DrawGrid` under the model.
-The Windows hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path
-all pass. The host, window, input, time, and logging surface shipped in M1; the renderer foundation
-shipped in M2. The rest of the API reference remains the 1.0 contract and is delivered by the
-milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability).
+M5 adds the raylib-style primitive surface: the line, point, and triangle helpers, the twelve shape
+helpers (`DrawCube`, `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`,
+`DrawCapsule`/`DrawWireCapsule`, `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`,
+`DrawWireCube`, `DrawWireSphere`, and `DrawGrid`) with their shape, position, tessellation, start/end,
+and `Transform` overloads, the eight `DrawBillboard` overloads, and `DrawWireModel`. Shapes and lines
+draw engine-owned primitive meshes through the built-in `/shaders/primitive` program; billboards use
+`/shaders/mesh`, and `DrawWireModel` draws model parts through a polygon-mode-line pipeline gated on
+the `fillModeNonSolid` device feature (`RB3001` when it is absent). `Collision`/`RayCollision` ship
+the checks and ray queries, including `GetRayQuad`, with a deterministic ray-mesh BVH that is either
+generated procedurally or baked into the pack. `MeshBuilder` gains the nine raylib-style `Generate*`
+factories. M5 also reworks the tone mapper to Godot 4.7's HDR-aware AgX: the combined Rec.709 to
+Rec.2020 and AgX inset matrix, the `allenwp` curve with CPU-derived parameters, a clamp to the output
+maximum, and the combined inverse outset and Rec.2020 to Rec.709 matrix. SDR uses an output maximum
+of `1`; the scRGB path uses the reported display headroom as the curve's output maximum and then
+scales by paper white, so the curve itself reaches the reported peak. M5 additionally ships runtime
+tone mapping through `ctx.Tonemapping` (`Exposure`, `AgxWhite`, `AgxContrast`, snapshotted into the
+sealed frame) and the `Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` helpers. M5 restores the
+full 158-color Bork2d/Unity preset set converted from sRGB to linear, and the samples use those named
+presets instead of hand-written color constants. The screen-space `DrawTexture` helper is not part
+of M5; it moves to M7 with the orthographic sprite contract.
+`samples/PrimitiveGallery` is the M5 sample and AOT gate: it draws the M5 primitive helpers in one
+perspective pass with a runtime procedural texture, needs no asset pack, and publishes with Native
+AOT. `samples/Castle` keeps its orbitable castle scene and draws `DrawGrid` under the model.
+The suite is 1,881 tests, 92 of them GPU integration tests, and every sample builds. The Windows
+hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
+host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
+The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
+[API reference §1.6](docs/api.md#16-milestone-availability).
 
 ## Documents
 
@@ -78,8 +84,8 @@ milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability
   material every call; every draw captures an immutable snapshot, so later cursor changes affect
   later draws only. Per-instance uniforms and textures let different materials over one program
   batch together. A `Camera` is a frame-scoped recorder: create it in `Tick`, record
-  `DrawModel`/`DrawMesh`/`DrawInstanced`/`DrawModelInstanced` and the primitive, line, and billboard
-  helpers, and dispose it before `Tick` returns. Draws batch by
+  `DrawModel`/`DrawMesh`/`DrawInstanced`/`DrawModelInstanced` and the primitive, line, billboard, and
+  wireframe-model helpers, and dispose it before `Tick` returns. Draws batch by
   `(mesh, program, effective render state)`.
 - Rendering is linear HDR with MSAA and reverse-Z. The present pass applies Godot 4.7's HDR-aware
   AgX; `TonemappingMode.None` is the direct path. Tone mapping is frame-global: `ctx.Tonemapping`
@@ -88,16 +94,21 @@ milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability
   `Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` for display-encoded values.
 - The primitive helpers draw engine-owned unit meshes through two built-in programs. Shapes and lines
   use `/shaders/primitive`, which reads vertex position and color and has no uniforms or textures;
-  billboards use `/shaders/mesh` with an alpha render-state override. The eight
-  primitive meshes (cube, sphere, plane, quad, triangle, line, wire cube, wire sphere) are built once
-  before `IGame.Setup` through the procedural GPU bridge, are internal, and are not exposed as public
-  assets. `EngineDefaults` still exposes only `CreateMeshShader`, `White`, and `Error`; a game can
-  load a material over `/shaders/primitive` for its own vertex-color meshes.
+  billboards use `/shaders/mesh` with an alpha render-state override. `DrawWireModel` draws model
+  parts through a polygon-mode-line variant of the geometry pipeline; it needs the device's
+  `fillModeNonSolid` feature and reports `GraphicsException` `RB3001` instead of drawing a fallback
+  when the feature is missing. The eight primitive meshes (cube, sphere, plane, quad, triangle, line,
+  wire cube, wire sphere) are built once before `IGame.Setup` through the procedural GPU bridge, are
+  internal, and are not exposed as public assets; the tessellated sphere, cylinder, capsule, and
+  circle helpers compose their geometry from those unit meshes. `EngineDefaults` still exposes only
+  `CreateMeshShader`, `White`, and `Error`; a game can load a material over `/shaders/primitive` for
+  its own vertex-color meshes.
 - `Collision` and `RayCollision` are allocation-free, thread-safe queries: sphere/sphere, box/box,
-  box/sphere, and ray/sphere, ray/box, ray/triangle, ray/plane, and ray/mesh. `GetRayMesh` traverses
-  an immutable, deterministic AABB BVH when the mesh has one and tests the retained CPU triangles
-  otherwise; both paths return the same nearest hit. `MeshBuilder.GenerateCollisions()` opts a
-  procedural mesh in, and the bake writes an `RBVC` v1 collision payload for every triangle mesh by
+  box/sphere, and ray/sphere, ray/box, ray/triangle, ray/quad, ray/plane, and ray/mesh. `GetRayQuad`
+  splits its quad into two double-sided triangles and returns the nearest non-negative hit. `GetRayMesh`
+  traverses an immutable, deterministic AABB BVH when the mesh has one and tests the retained CPU
+  triangles otherwise; both paths return the same nearest hit. `MeshBuilder.GenerateCollisions()` opts
+  a procedural mesh in, and the bake writes an `RBVC` v1 collision payload for every triangle mesh by
   default (`[model] collisions = false` opts out).
 - `Mesh` and `Texture` are reference-counted engine assets loaded from one or more `RAYBORKP` packs
   produced by the bake. Custom TOML data uses `[GenerateShape]`, `WithAssetType<T>()`, and the same
@@ -112,6 +123,10 @@ milestones listed in [API reference §1.6](docs/api.md#16-milestone-availability
 - Games can create procedural meshes and textures with `ctx.CreateMeshBuilder()` and
   `ctx.CreateTextureBuilder(...)`. Builders expose CPU vertices/indices, compute normals, tangents,
   and bounds, and `BuildAsync` returns an immutable asset only after the GPU upload finishes.
+  `MeshBuilder` also ships nine `Generate*` factories (poly, plane, cube, sphere, hemisphere,
+  cylinder, cone, torus, and knot); heightmap and cubicmap generation wait for a CPU image type.
+- `DrawTexture` is not part of M5. It arrives in M7 with the orthographic sprite path; `DrawText`
+  arrives in M6, and `RenderTexture` in M8.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, and
@@ -138,7 +153,7 @@ src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
-samples/PrimitiveGallery/     M5 sample and Native AOT gate (every primitive helper, no pack)
+samples/PrimitiveGallery/     M5 sample and Native AOT gate (primitive gallery, no pack)
   PrimitiveGallery.slnx       sample-owned solution (single project)
 samples/Castle/               castle scene sample (orbitable model, texture, and reference grid)
   Castle.slnx                 sample-owned solution (sample + assets executable)
@@ -185,4 +200,5 @@ native shaderc package; they do not need the Vulkan SDK.
 
 M6 adds world-space text: TTF/OTF face parsing, runtime MSDF generation, layout, and
 `DrawText`/`DrawTextBillboard`. It builds on the M5 primitive draw path and the M4 camera; the shipped
-surface is listed in [API reference §1.6](docs/api.md#16-milestone-availability).
+surface is listed in [API reference §1.6](docs/api.md#16-milestone-availability). M7 follows with the
+orthographic and sprite path, including the re-homed `DrawTexture` helper.
