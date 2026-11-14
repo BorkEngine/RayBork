@@ -86,6 +86,7 @@ internal sealed class TextGame : IGame {
         Quaternion.CreateFromAxisAngle(Vector3.UnitY, 10f * (MathF.PI / 180f));
 
     private readonly int _frameLimit;
+    private readonly StatusOverlay _overlay = new();
 
     private Font? _loraFont;
     private float _yawDegrees;
@@ -200,11 +201,12 @@ internal sealed class TextGame : IGame {
             LABEL_SIZE,
             Color.Gray7);
 
-        // The status line is ordinary world-space text too; it reports the last completed frame's
-        // render statistics, so on the first frame the draw and instance counts are still zero.
+        // The status line is ordinary world-space text too; it reports the presented rate, the tick
+        // rate, and the last completed frame's render statistics, so on the first frame the draw,
+        // instance, and presented-frame values are still zero.
         camera.DrawText(
             firaSans,
-            BuildStatusLine(context),
+            _overlay.Build(context),
             new Transform(new Vector3(STATUS_X, STATUS_TOP_Y, 0f)),
             STATUS_SIZE,
             Color.LightGreen,
@@ -331,16 +333,6 @@ internal sealed class TextGame : IGame {
             TextAlignment.Left,
             TextWrapping.Word,
             BODY_MAX_WIDTH);
-    }
-
-    private static string BuildStatusLine(EngineContext context) {
-        // Stats is the last completed frame; it is the documented diagnostics source for an overlay.
-        double frameMilliseconds = context.DeltaTime * 1000.0;
-        string frameLine = FormattableString.Invariant(
-            $"FPS {context.Fps:0.0}    frame {frameMilliseconds:0.0} ms");
-        string drawLine = FormattableString.Invariant(
-            $"draw calls {context.Stats.DrawCalls}    instances {context.Stats.Instances}");
-        return string.Concat(frameLine, "\n", drawLine);
     }
 
     private void UpdateOrbit(IInput input) {

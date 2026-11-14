@@ -10,6 +10,10 @@ namespace RayBork;
 /// diagnostics and overlays, not for synchronization.
 /// </remarks>
 /// <param name="FrameIndex">The tick frame this snapshot describes.</param>
+/// <param name="PresentedFrames">
+/// The number of successful presentations since startup. It is cumulative across frames and
+/// recoveries and counts a frame only after it reached the presentation engine.
+/// </param>
 /// <param name="DrawCalls">The number of draw commands submitted for the frame.</param>
 /// <param name="Instances">The number of instances that survived culling and were submitted.</param>
 /// <param name="Triangles">The submitted triangle count after instancing.</param>
@@ -21,7 +25,8 @@ namespace RayBork;
 /// Whether the frame presented through an HDR-capable swapchain format.
 /// </param>
 /// <param name="CpuFrameMilliseconds">
-/// The render-thread CPU time spent planning and recording the frame.
+/// The render-thread CPU time spent planning, recording, and submitting the frame. It excludes the
+/// frame fence wait, the swapchain acquire wait, and presentation.
 /// </param>
 /// <param name="GpuFrameMilliseconds">
 /// The GPU timestamp delta for the frame, or <c>0</c> when timestamps are unavailable.
@@ -34,6 +39,7 @@ namespace RayBork;
 /// </param>
 public readonly record struct RenderStats(
     long FrameIndex,
+    long PresentedFrames,
     int DrawCalls,
     int Instances,
     int Triangles,

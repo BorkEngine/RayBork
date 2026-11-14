@@ -149,6 +149,7 @@ public sealed class RenderLoopAssetGpuTests {
                     0,
                     0,
                     0,
+                    0,
                     4,
                     false,
                     0,

@@ -443,6 +443,9 @@ text batches together regardless of the font, size, or string; uniform values an
 are not part of the batch key. The plan sorts text batches back-to-front with the other alpha batches.
 `Instances` counts the submitted glyph instances after frustum culling, and `Triangles` is two per
 submitted instance. A call with no ready glyph adds no draw record and no draw call.
+`CpuFrameMilliseconds` measures only the render thread's planning, recording, and submission and
+excludes the fence, acquire, and present waits. `PresentedFrames` counts successful presentations
+since startup; it is not the tick rate, which `EngineContext.Fps` reports.
 
 Validation runs before any retention or record mutation. A null font is `ArgumentNullException`; a
 disposed camera or font is `ObjectDisposedException`; a non-finite transform position, rotation, scale,
@@ -684,7 +687,11 @@ own `SampleCount` (M8).
 not advertise it; a requested `Fifo` falls back to `Mailbox` when FIFO is unavailable. `Immediate` is
 used only when explicitly selected, and an unavailable `Immediate` mode fails startup with `RB3001`
 instead of falling back. Mailbox is not a guarantee of tearing-free presentation on every driver;
-the selected mode is reported by `EngineInfo.PresentMode`.
+the selected mode is reported by `EngineInfo.PresentMode`. The effective mode also sets the tick
+pacing: `Fifo` makes the tick thread wait for the presentation of the frame it published, so the tick
+rate follows the display refresh, while `Mailbox` and `Immediate` keep the tick decoupled and the
+renderer presents the newest completed frame. A target set with `WithTargetFps` still caps the tick
+loop and sleeps longer after the presentation wait when the target is below the refresh.
 
 **Reverse-Z.** The scene target clears depth to `0.0`. Depth-tested pipelines use `GreaterOrEqual`,
 enable depth test and depth write, and use the `[0, 1]` depth range. The present triangle is not

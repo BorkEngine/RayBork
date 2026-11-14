@@ -75,7 +75,7 @@ public sealed class RayBorkAppBuilder {
 | `WithExposure` | `0` EV | The startup exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. The game can change it at runtime through `ctx.Tonemapping.Exposure`. |
 | `WithAgxWhite` | `16.29` | The startup scene-linear AgX white, before the display headroom scaling. Finite and at least `2`. The game can change it at runtime through `ctx.Tonemapping.AgxWhite`. |
 | `WithAgxContrast` | `1.25` | The startup AgX curve contrast. Finite and at least `1`. The game can change it at runtime through `ctx.Tonemapping.AgxContrast`. |
-| `WithTargetFps` | `0` (uncapped) | Caps the tick loop when vsync/mailbox is not throttling. `0` means no cap. |
+| `WithTargetFps` | `0` (uncapped) | Caps the tick loop. With FIFO presentation the display refresh paces ticks first, so a target below the refresh sleeps longer and a target above it has no effect; with Mailbox or Immediate the target caps the decoupled tick loop directly. `0` means no cap. |
 | `WithValidation` | `true` in Debug, `false` in Release | If the validation layer is unavailable, the app logs a warning and continues without it. |
 | `WithLoggerFactory` | default ZLogger console factory | A caller-supplied factory is not disposed by the app. `EngineContext.LoggerFactory` always returns a usable factory. |
 | `WithLogLevel` | `Information` | Minimum level for the default ZLogger provider. Ignored when a caller-supplied factory already filters. |
@@ -257,11 +257,11 @@ public sealed class EngineContext {
 | `DeltaTime` | Tick | Clamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
 | `UnscaledDeltaTime` | Tick | Unclamped seconds since the previous tick; `0` in `Setup` and on the first tick. |
 | `FrameCount` | Tick | `0` in `Setup`; `1` during the first `Tick`. |
-| `Fps` | Tick | Ticks per second averaged over a 1-second sliding window; `0` before two ticks. |
+| `Fps` | Tick | Ticks per second averaged over a 1-second sliding window; `0` before two ticks. This is the tick rate, not a presented frame rate: difference `Stats.PresentedFrames` over a window for presented FPS, as the samples do. |
 | `IsFirstTick` | Tick | `true` only during the first `Tick`. |
 | `IsExiting` | Tick | `true` after `RequestExit`, a window close, or an engine stop request. |
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
-| `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. |
+| `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. `PresentedFrames` is cumulative and monotonic; `CpuFrameMilliseconds` excludes the fence, acquire, and present waits. |
 | `Tonemapping` | Tick | App-lifetime runtime tone-mapping settings, initialized from the builder defaults. Read or write them on the tick thread. A write during `Tick` applies to the frame that tick records. |
 | `CreateCamera` | Tick | Perspective camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateOrthographicCamera` | Tick | Orthographic camera. `height` is the visible world-space height. |

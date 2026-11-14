@@ -6,7 +6,8 @@ strip, point), the wire shapes (wire cube, wire sphere, wire cylinder, wire caps
 the line and curve helpers (line, polyline, ray, circle), a reference grid, two billboards, and a row
 of meshes generated with `MeshBuilder.Generate*` and drawn with the built-in mesh shader. It builds
 its texture and its generated meshes at runtime, so it needs no asset pack, no manual bake, and no
-`--assets` argument. It also draws a small FPS and render-statistics line at the top-left of the view.
+`--assets` argument. It also draws a small presented-FPS and render-statistics line at the top-left
+of the view.
 
 The sample was the M5 Native AOT gate and remains buildable and publishable; it contains no test-only
 logic: it opens a window, draws the gallery, and exits cleanly. Build and run it from the repository
@@ -106,14 +107,18 @@ disposed in `Shutdown`, together with the generated meshes and the mesh material
 ## Status overlay
 
 `DrawStatusOverlay` records one more world-space draw: a `14`-pixel line in the built-in Fira Sans font
-showing FPS, frame time, draw calls, and instances. Screen-space text arrives in M7, so the line is
-text on a camera-facing plane one unit in front of the camera rather than an orthographic HUD. At that
-distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so the text's em size is
-`14 * worldPerPixel`. The camera's right and up axes place the layout origin at the top-left corner,
-inset by an 8-pixel margin, and the transform reuses the camera rotation: the line stays upright,
-faces the camera, and remains fixed to the view as the camera orbits or the window resizes. The line
-is `Color.White` against the `Color.Gray3` background, and because it is depth-tested world-space text,
-geometry closer than one unit to the camera can still occlude it.
+showing presented frames per second, the tick rate, the render CPU time, draw calls, and instances.
+The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
+presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`. The render time is
+`ctx.Stats.CpuFrameMilliseconds`, which measures only the render thread's planning, recording, and
+submission and excludes the fence, acquire, and present waits. Screen-space text arrives in M7, so
+the line is text on a camera-facing plane one unit in front of the camera rather than an
+orthographic HUD. At that distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so
+the text's em size is `14 * worldPerPixel`. The camera's right and up axes place the layout origin at
+the top-left corner, inset by an 8-pixel margin, and the transform reuses the camera rotation: the
+line stays upright, faces the camera, and remains fixed to the view as the camera orbits or the
+window resizes. The line is `Color.White` against the `Color.Gray3` background, and because it is
+depth-tested world-space text, geometry closer than one unit to the camera can still occlude it.
 
 ## Options
 
@@ -122,8 +127,10 @@ geometry closer than one unit to the camera can still occlude it.
 | `--frames N` | Run `N` ticks, then request exit. `0` runs until the window closes. Default `0`. |
 | `--help` | Print usage and exit `0`. |
 
-The sample uses an 800x450 resizable window, a 60 FPS target, a `0.25` second delta clamp, and the
-engine's default renderer settings. An unknown option prints the usage text and exits `2`.
+The sample uses an 800x450 resizable window, a `0.25` second delta clamp, and the engine's default
+renderer settings, and it sets no tick target. FIFO presentation paces the tick thread to the
+display refresh; Mailbox and Immediate leave the tick decoupled. An unknown option prints the usage
+text and exits `2`.
 
 ## Controls
 

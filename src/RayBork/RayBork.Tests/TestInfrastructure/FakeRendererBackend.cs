@@ -242,6 +242,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         if (PublishFrameStats) {
             Stats = new RenderStats(
                 frame.FrameIndex,
+                0,
                 1,
                 0,
                 0,

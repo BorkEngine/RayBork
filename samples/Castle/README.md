@@ -3,9 +3,9 @@
 `Castle` is a small RayBork sample: an orbitable castle scene with a model, a diffuse texture, an
 orbital perspective camera, and the reference XZ grid. It loads the model and texture, binds the
 texture on the model's materials, draws the castle solid and the grid every tick, outlines the castle
-with a surface hit point when the pointer is over it, and draws a small FPS and render-statistics line
-at the top-left of the view. The source is kept small and commented so the scene can be read and
-adapted as a starting point.
+with a surface hit point when the pointer is over it, and draws a small presented-FPS and
+render-statistics line at the top-left of the view. The source is kept small and commented so the
+scene can be read and adapted as a starting point.
 
 `samples/Text` is the M6 Native AOT gate. This sample remains a buildable and publishable
 example, and it contains no test-only logic: it opens the window, draws the scene, and exits cleanly.
@@ -39,8 +39,9 @@ are sample-only and are **not** covered by RayBork's MIT license; see
 | `--frames N` | Run `N` ticks, then request exit. `0` runs until the window closes. Default `0`. |
 | `--help` | Print usage and exit `0`. |
 
-The sample uses an 800x450 window, a 60 FPS target, and the engine's default renderer settings. A
-missing pack prints an error and exits `1`.
+The sample uses an 800x450 window and the engine's default renderer settings, and it sets no tick
+target. FIFO presentation paces the tick thread to the display refresh; Mailbox and Immediate leave
+the tick decoupled. A missing pack prints an error and exits `1`.
 
 ## Controls
 
@@ -119,9 +120,14 @@ model, so geometry in front of them occludes them.
 ### Status overlay
 
 `DrawStatusOverlay` records one more world-space draw: a `14`-pixel line in the built-in Fira Sans font
-showing FPS, frame time, draw calls, and instances. Screen-space text arrives in M7, so the line is
-text on a camera-facing plane one unit in front of the camera rather than an orthographic HUD. At that
-distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so the text's em size is
+showing presented frames per second, the tick rate, the render CPU time, draw calls, and instances.
+The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
+presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`, because it is not the
+presented rate. The render time is `ctx.Stats.CpuFrameMilliseconds`, which measures only the render
+thread's planning, recording, and submission and excludes the fence, acquire, and present waits.
+Screen-space text arrives in M7, so the line is text on a camera-facing plane one unit in front of
+the camera rather than an orthographic HUD. At that distance,
+`worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so the text's em size is
 `14 * worldPerPixel`. The camera's right and up axes place the layout origin at the top-left corner,
 inset by an 8-pixel margin, and the transform reuses the camera rotation: the line stays upright,
 faces the camera, and remains fixed to the view as the camera orbits or the window resizes.

@@ -75,10 +75,10 @@ Samples (M7, M11) -> RayBork.Engine
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
 | `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the AOT gate. |
 | `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
-| `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It now also draws a world-space FPS/render-statistics status line. |
+| `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It now also draws a world-space presented-FPS/render-statistics status line. |
 | `samples/Text` | M6 sample and Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans face and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both faces, a camera-facing billboard, a lazily generated Greek line, a status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
 | `samples/Text/Text.Assets` | M6 assets executable: bakes `text.pck` from the checked-in Lora face at sample build time. JIT only. |
-| `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, draws a world-space status line, and, when the pointer ray hits the model bounds, adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
+| `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, draws a world-space presented-FPS status line, and, when the pointer ray hits the model bounds, adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
 | `samples/` | Pong, Instancing, RenderTarget (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
 
@@ -310,7 +310,7 @@ seam; the tick thread never touches them.
 | Thread | Owns | Notes |
 | --- | --- | --- |
 | Main / window thread | SDL3 initialization, window, event pump, monitor and clipboard snapshots, queued window commands, gamepad reconciliation, native Vulkan surface | Runs `RayBorkApp.Run`. The process main thread. Services `MainThreadSurfaceChannel` during startup, the main loop, and shutdown. No game callbacks. |
-| Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; input snapshot; frame publication | Dedicated thread. Starts only after the renderer published `Info`, so `Setup` can read it. The game-facing engine state is tick-thread affine. |
+| Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; input snapshot; frame publication | Dedicated thread. Starts only after the renderer published `Info`, so `Setup` can read it. The game-facing engine state is tick-thread affine. In FIFO presentation mode it waits for the presentation of the frame it published; MAILBOX and IMMEDIATE leave it decoupled. |
 | Render thread | Backend, instance, device, queues, swapchain, scene target, present pipeline, the newest published frame lease | Creates the Vulkan objects, consumes the newest frame, submits and presents, recovers, and disposes. Never calls user code and never touches the window directly. |
 | Asset loader | Pack I/O, decompression, descriptor decode, registered-load dispatch, MessagePack custom data | Dedicated `RayBork.Asset` thread added in M3. Runs the synchronous part of every registered `IAssetLoader<T>`; it never calls SDL, Vulkan, or tick-thread APIs. It queues engine-asset GPU uploads and continues serving the next request instead of waiting for the copy. |
 | Font generation | Per-font glyph pipelines and their glyph texture cache | Dedicated `RayBork.Font` thread added in M6. App lifetime: the asset catalog starts it with its loader thread before the tick thread starts, and stops it at the start of `AssetCatalog.Stop` while the render thread still services the GPU upload bridge. It reads parsed faces and generates CPU MSDF bitmaps, then blocks on the GPU texture upload; the render thread completes the copy, and the font thread never calls SDL or Vulkan. |
@@ -378,7 +378,9 @@ Startup runs on the main thread and interleaves with the render thread:
 Shutdown unwinds in the opposite direction:
 
 1. The main thread stops accepting ticks and waits for the current tick to finish; the tick thread
-   publishes the final frame and runs `IGame.Shutdown` on that thread, then exits.
+   publishes the final frame and runs `IGame.Shutdown` on that thread, then exits. A tick waiting
+   for FIFO presentation is released by the stop request, so an unpresented final frame cannot stall
+   shutdown; the frame ring's completion releases such a wait as well.
 2. The main thread joins the tick thread (pumping the platform while it waits), then releases the
    engine defaults and the primitive assets. The primitive assets are detached from the camera service
    before their owner references are released, so no later camera can reach a disposed primitive mesh.
@@ -435,7 +437,8 @@ continuation.
 
 The tick and render threads run concurrently. The tick thread publishes a sealed frame; the render
 thread consumes the newest frame and runs it through the backend's submit/present path. The
-handoff is unchanged from M1 except that the consumer now owns a GPU backend.
+handoff is unchanged from M1 except that the consumer now owns a GPU backend and the producer can
+be paced by FIFO presentation.
 
 ```text
 tick thread                                  render thread
@@ -444,15 +447,33 @@ wait for a free slot
 snapshot input / advance clock
 IGame.Tick(ctx)
 seal slot, publish as newest ready
-                                              wait for newest ready
-                                              take the newest ready frame
-                                              submit and present it
-                                              release the slot
+wait for that frame to be presented          wait for newest ready
+  (FIFO mode only)                           take the newest ready frame
+                                             submit, present, mark the frame presented
+                                             release the slot
 ```
 
 - The ring has three slots. A tick blocks only when all three are occupied; this bounds run-ahead.
 - A newer publish supersedes an older `Ready` slot, never a slot that is being consumed.
 - The consumer always takes the newest completed tick. It does not queue a backlog of stale frames.
+- Presentation pacing follows the effective `EngineInfo.PresentMode`, read from the live
+  `EngineContext.Info` so a recovery or HDR switch that changes the mode takes effect on the next
+  tick. With `Fifo`, the tick thread waits for the presentation of the frame it published before it
+  records the next tick, so one tick maps to one presented image and the tick rate follows the
+  display refresh. With `Mailbox` or `Immediate`, the tick stays decoupled and the render thread
+  presents the newest completed frame; a tick target below the display refresh still sleeps longer.
+- The render loop marks the packet's frame index presented after every present attempt, on success,
+  on a recovered presentation failure, and on a thrown render failure, before it releases the
+  lease. The ring keeps the highest presented index, so a newer presentation satisfies an older
+  wait because the superseded frame no longer needs to be shown. Ring completion and the tick stop
+  token also release the wait, so shutdown cannot deadlock on a frame that is never presented, and
+  a recovered or dropped frame cannot leave the tick waiting forever.
+- `RenderStats.PresentedFrames` counts successful presentations since startup and is updated only
+  after the image reaches the presentation engine. It is cumulative across recoveries and is the
+  truthful source for a presented-rate overlay; `EngineContext.Fps` is the tick rate.
+- `RenderStats.CpuFrameMilliseconds` is the render thread's planning, recording, and submission
+  time. It starts after the frame fence wait and the swapchain acquire, so it never reports a
+  blocking wait as render CPU work.
 - A tick that requests exit still publishes its final frame before `IGame.Shutdown` runs. The render
   thread drains and presents it during teardown before the backend is disposed.
 - Frames carry the camera passes and the recorded draw records: mesh, internal shader program,
@@ -466,17 +487,24 @@ seal slot, publish as newest ready
   settings object. A write during `Tick` is in effect for that frame, and a published frame keeps
   the values it was sealed with.
 - The frame slot retains every engine asset recorded into it and releases the hold when the render
-  thread releases the slot after present. The camera draw recorder calls the retention set for every
-  mesh, internal shader program, and bound texture; an asset disposed after recording a draw stays
-  alive until the consuming frame completes. A model and a material are not engine assets and add no
-  hold; materials are value snapshots in the record, and a model draw retains the internal program of
-  each part material.
+  thread releases the slot after the present attempt. The camera draw recorder calls the retention
+  set for every mesh, internal shader program, and bound texture; an asset disposed after recording a
+  draw stays alive until the consuming frame completes. A model and a material are not engine assets
+  and add no hold; materials are value snapshots in the record, and a model draw retains the internal
+  program of each part material.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
   starts in `Setup` completes without waiting for the first tick and does not stall frame
   presentation.
 - The engine does not interpolate between ticks in v1. Movement at a tick rate below the display
   rate will show discrete steps. Fixed timestep with interpolation is a later milestone.
+- The tick cost is the game's `Tick` plus the engine's frame recording. In M6 the Text sample records
+  1,196 glyph instances in one draw call and its tick-thread recording work (layout, metrics lookup,
+  cache acquire, and frame retention) measures about **10-13 ms per tick in Debug** (~80 ticks/s)
+  and **2.7-3 ms per tick in Release** (~300 ticks/s) on the reference machine. The render thread's
+  plan, record, and submit is about 1-2 ms, and the GPU is not the bottleneck. These are measured
+  observations, not targets. The per-glyph text recording path is the cost, and optimizing it is
+  deferred to the M10 optimization milestone.
 - When the window is minimized or unfocused, the tick loop continues at a **30 FPS cap**. The M2
   renderer skips image acquisition and presentation while the surface has no extent and keeps the
   last presentation path for the restore.
@@ -491,7 +519,9 @@ seal slot, publish as newest ready
 - `EngineContext.UnscaledDeltaTime` is the unclamped value.
 - The first tick reports `DeltaTime = 0` and `UnscaledDeltaTime = 0`.
 - `EngineContext.Fps` is the tick rate averaged over a 1-second sliding window. It is `0` before
-  two ticks have been sampled.
+  two ticks have been sampled. It is not a presented frame rate; difference
+  `RenderStats.PresentedFrames` over a one-second window for presented frames per second. In FIFO
+  mode the two converge; with MAILBOX or IMMEDIATE the presented rate can differ from the tick rate.
 - `MaxDeltaTime` is configured on the builder and defaults to `0.25` seconds.
 - `Time` continues across a long stall; `DeltaTime` does not. Games that need a stall-free clock
   should accumulate `DeltaTime` themselves.
@@ -1111,9 +1141,9 @@ be retried after recovery.
 
 A frame slot owns an engine-asset retention set. The camera draw recorder retains every mesh,
 internal shader program, and bound texture it records; the frame ring releases the set after the
-render thread releases the slot following present. An asset disposed while a recorded frame still
-references it becomes pending, and its GPU destruction is queued only when the last frame hold is
-gone.
+render thread marks the frame presented and releases the slot following the present attempt. An
+asset disposed while a recorded frame still references it becomes pending, and its GPU destruction
+is queued only when the last frame hold is gone.
 
 ### Procedural assets
 
@@ -1239,7 +1269,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   and the custom Lora face, generates glyph textures on demand, draws the text scene, and shuts down.
   The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim warnings, contained
   `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows hardware driver and
-  on WSLg's dzn hardware device. The suite is 2,594 tests, 102 of them GPU integration tests, and
+  on WSLg's dzn hardware device. The suite is 2,609 tests, 105 of them GPU integration tests, and
   every sample solution builds. `samples/Castle` and `samples/PrimitiveGallery` remain buildable and
   publishable samples but are not the M6 gate, and `samples/HelloInterop` remains the M1-M3
   diagnostic host.
@@ -1313,8 +1343,8 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `Camera.DrawTextBillboard` is covered by the unit suite `Tests/Rendering/TextDrawTests.cs` for its
   centering, bounds union, and alignment. The glyph texture path is also covered by the per-instance
   texture record and GPU suites. The font, layout, MSDF, and parser suites are deterministic CPU
-  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,594
-  tests, 102 of them GPU integration tests.
+  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,609
+  tests, 105 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

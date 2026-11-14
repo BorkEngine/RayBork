@@ -391,7 +391,9 @@ public sealed class RayBorkAppBuilder {
     }
 
     /// <summary>
-    /// Sets the tick cap.
+    /// Sets the tick cap. In FIFO presentation mode the display refresh paces the tick loop first: a
+    /// lower cap still sleeps longer, and a cap above the refresh has no effect. Mailbox and Immediate
+    /// presentation leave the tick decoupled, so the cap sets its cadence directly.
     /// </summary>
     /// <param name="framesPerSecond">The cap, or zero for an uncapped loop. It must not be negative.</param>
     /// <returns>This builder.</returns>
