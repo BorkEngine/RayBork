@@ -33,6 +33,8 @@ internal sealed class SyntheticGpos {
 
     internal bool AliasLookupSubtables { get; set; }
 
+    internal bool AliasLookupListEntries { get; set; }
+
     internal int ValueFormat1 { get; set; } = 0x0004;
 
     internal int ValueFormat2 { get; set; }
@@ -56,8 +58,16 @@ internal sealed class SyntheticGpos {
     }
 
     /// <summary>Adds an explicit lookup with its own pairs.</summary>
-    internal SyntheticGpos AddLookup(params (int Left, int Right, int XAdvance)[] pairs) {
-        _lookups.Add(new SyntheticLookup([.. pairs.Select(pair => (pair.Left, pair.Right, pair.XAdvance, 0))]));
+    internal SyntheticGpos AddLookup(params (int Left, int Right, int XAdvance)[] pairs) =>
+        AddLookup(0, pairs);
+
+    /// <summary>Adds an explicit lookup with a per-lookup subtable count (0 uses the shared option).</summary>
+    internal SyntheticGpos AddLookup(
+        int subtableCount,
+        params (int Left, int Right, int XAdvance)[] pairs) {
+        _lookups.Add(new SyntheticLookup(
+            [.. pairs.Select(pair => (pair.Left, pair.Right, pair.XAdvance, 0))],
+            subtableCount));
         return this;
     }
 
@@ -83,7 +93,7 @@ internal sealed class SyntheticGpos {
                 throw new InvalidOperationException("A synthetic GPOS needs at least one pair.");
             }
 
-            lookups = [new SyntheticLookup(Pairs)];
+            lookups = [new SyntheticLookup(Pairs, 0)];
             features = [new SyntheticFeature(FeatureTag, [0])];
             scripts = [new SyntheticScript(ScriptTag, [0])];
         } else {
@@ -149,7 +159,8 @@ internal sealed class SyntheticGpos {
         List<byte[]> lookupTables = [];
         foreach (SyntheticLookup lookup in lookups) {
             byte[] pairPositioning = BuildPairPositioning(lookup.Pairs);
-            byte[][] subtables = new byte[SubtablesPerLookup][];
+            int subtableCount = lookup.SubtableCount > 0 ? lookup.SubtableCount : SubtablesPerLookup;
+            byte[][] subtables = new byte[subtableCount][];
             for (int index = 0; index < subtables.Length; index++) {
                 subtables[index] = pairPositioning;
             }
@@ -160,17 +171,34 @@ internal sealed class SyntheticGpos {
         byte[] lookupList = BuildLookupList(lookupTables);
         byte[] featureList = BuildFeatureList(features);
         byte[] scriptList = BuildScriptList(scripts);
-        byte[] gpos = new byte[10 + lookupList.Length + scriptList.Length + featureList.Length];
+
+        // The three list offsets are 16-bit, so the largest list goes last and the small lists keep
+        // every offset inside 64 KB.
+        (int Kind, byte[] Data)[] lists = [
+            (0, scriptList),
+            (1, featureList),
+            (2, lookupList),
+        ];
+        Array.Sort(lists, static (first, second) => {
+            int byLength = first.Data.Length.CompareTo(second.Data.Length);
+            return byLength != 0 ? byLength : first.Kind.CompareTo(second.Kind);
+        });
+        int[] offsets = new int[3];
+        int position = 10;
+        foreach ((int kind, byte[] data) in lists) {
+            offsets[kind] = position;
+            position += data.Length;
+        }
+
+        byte[] gpos = new byte[position];
         BinaryPrimitives.WriteUInt16BigEndian(gpos, 1);
         BinaryPrimitives.WriteUInt16BigEndian(gpos.AsSpan(2), 0);
-        BinaryPrimitives.WriteUInt16BigEndian(gpos.AsSpan(4), (ushort)(10 + lookupList.Length));
-        BinaryPrimitives.WriteUInt16BigEndian(
-            gpos.AsSpan(6),
-            (ushort)(10 + lookupList.Length + scriptList.Length));
-        BinaryPrimitives.WriteUInt16BigEndian(gpos.AsSpan(8), 10);
-        lookupList.CopyTo(gpos, 10);
-        scriptList.CopyTo(gpos, 10 + lookupList.Length);
-        featureList.CopyTo(gpos, 10 + lookupList.Length + scriptList.Length);
+        BinaryPrimitives.WriteUInt16BigEndian(gpos.AsSpan(4), (ushort)offsets[0]);
+        BinaryPrimitives.WriteUInt16BigEndian(gpos.AsSpan(6), (ushort)offsets[1]);
+        BinaryPrimitives.WriteUInt16BigEndian(gpos.AsSpan(8), (ushort)offsets[2]);
+        scriptList.CopyTo(gpos, offsets[0]);
+        featureList.CopyTo(gpos, offsets[1]);
+        lookupList.CopyTo(gpos, offsets[2]);
         return gpos;
     }
 
@@ -360,7 +388,19 @@ internal sealed class SyntheticGpos {
         return lookup;
     }
 
-    private static byte[] BuildLookupList(IReadOnlyList<byte[]> lookups) {
+    private byte[] BuildLookupList(IReadOnlyList<byte[]> lookups) {
+        if (AliasLookupListEntries) {
+            int aliasedOffset = 2 + (2 * lookups.Count);
+            byte[] aliased = new byte[aliasedOffset + lookups[0].Length];
+            BinaryPrimitives.WriteUInt16BigEndian(aliased, (ushort)lookups.Count);
+            for (int index = 0; index < lookups.Count; index++) {
+                BinaryPrimitives.WriteUInt16BigEndian(aliased.AsSpan(2 + (2 * index)), (ushort)aliasedOffset);
+            }
+
+            lookups[0].CopyTo(aliased, aliasedOffset);
+            return aliased;
+        }
+
         int offset = 2 + (2 * lookups.Count);
         byte[] lookupList = new byte[offset + TotalLength(lookups)];
         BinaryPrimitives.WriteUInt16BigEndian(lookupList, (ushort)lookups.Count);
@@ -563,11 +603,15 @@ internal sealed class SyntheticGpos {
 
     private readonly struct SyntheticLookup {
         internal SyntheticLookup(
-            IReadOnlyList<(int Left, int Right, int XAdvance, int SecondXAdvance)> pairs) {
+            IReadOnlyList<(int Left, int Right, int XAdvance, int SecondXAdvance)> pairs,
+            int subtableCount) {
             Pairs = pairs;
+            SubtableCount = subtableCount;
         }
 
         internal IReadOnlyList<(int Left, int Right, int XAdvance, int SecondXAdvance)> Pairs { get; }
+
+        internal int SubtableCount { get; }
     }
 
     private readonly struct SyntheticFeature {

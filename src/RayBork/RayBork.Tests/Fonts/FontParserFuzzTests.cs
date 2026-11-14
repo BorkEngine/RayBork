@@ -111,6 +111,7 @@ public sealed class FontParserFuzzTests {
             try {
                 face = SfntFace.Parse(faceBytes);
             } catch (FontFormatException) {
+            } catch (FontUnsupportedException) {
             }
 
             long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -160,7 +161,9 @@ public sealed class FontParserFuzzTests {
     public void HostileGposMutationsAreControlled() {
         byte[][] faces = [
             HostileFontFaces.CreateAliasedGposFace(),
+            HostileFontFaces.CreateAliasedLookupListFace(),
             HostileFontFaces.CreateAliasedPositioningFace(),
+            HostileFontFaces.CreateCompositeFanoutFace(),
             HostileFontFaces.CreateDenseCmapFace(),
         ];
         var random = new Random(SEED + 4);

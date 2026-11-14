@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using RayBork.Internal;
 
 namespace RayBork.Tests.Fonts;
@@ -228,6 +229,42 @@ public sealed class KerningTests {
         SfntFace face = SfntFace.Parse(builder.WithRawKern(kern).Build());
 
         Assert.Equal(50, face.GetKerning(a, v));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void KernPairCountBeyondTheCapIsUnsupported() {
+        (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateKerningBuilder();
+        byte[] kern = BuildOversizedKernTable();
+        byte[] faceBytes = builder.WithRawKern(kern).Build();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => SfntFace.Parse(faceBytes));
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Contains("kern", exception.Reason, StringComparison.Ordinal);
+        Assert.Contains("1000000", exception.Reason, StringComparison.Ordinal);
+        Assert.True(allocated < 16 * 1024 * 1024, $"The rejected kern parse allocated {allocated} bytes.");
+    }
+
+    private static byte[] BuildOversizedKernTable() {
+        const int subtableCount = 92;
+        const int pairCount = 10_920;
+        int subtableLength = 14 + (6 * pairCount);
+        byte[] kern = new byte[4 + (subtableCount * subtableLength)];
+        BinaryPrimitives.WriteUInt16BigEndian(kern, 0);
+        BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(2), (ushort)subtableCount);
+        int position = 4;
+        for (int index = 0; index < subtableCount; index++) {
+            BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position), 0);
+            BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 2), (ushort)subtableLength);
+            BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 4), 0x0001);
+            BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 6), (ushort)pairCount);
+            position += subtableLength;
+        }
+
+        return kern;
     }
 
     private static (SyntheticFontBuilder Builder, int A, int V, int T, int O) CreateKerningBuilder() {

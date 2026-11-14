@@ -404,6 +404,27 @@ public sealed class CmapTests {
         AssertUnmapped(face, 'A');
     }
 
+    [Theory]
+    [InlineData(0u, false, 0)]
+    [InlineData(2u, true, 2)]
+    [InlineData(3u, false, 0)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void Format12GlyphIdentifierBoundariesAreEnforced(
+        uint startGlyph,
+        bool expectedMapped,
+        int expectedGlyph) {
+        (SyntheticFontBuilder builder, int _, int _) = CreateMappableBuilder();
+        byte[] faceBytes = builder
+            .WithRawCmap(BuildRawFormat12(0x41, startGlyph))
+            .Build();
+
+        SfntFace face = SfntFace.Parse(faceBytes);
+
+        Assert.Equal(expectedMapped, face.TryGetGlyphId(new Rune('A'), out int glyphId));
+        Assert.Equal(expectedGlyph, glyphId);
+        Assert.Equal(expectedMapped ? 1 : 0, face.MappedGlyphCount);
+    }
+
     private static byte[] BuildRawFormat12(int codepoint, uint startGlyph) {
         byte[] cmap = new byte[40];
         BinaryPrimitives.WriteUInt16BigEndian(cmap, 0);

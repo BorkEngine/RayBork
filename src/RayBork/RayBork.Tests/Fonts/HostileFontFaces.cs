@@ -10,7 +10,9 @@ namespace RayBork.Tests.Fonts;
 internal static class HostileFontFaces {
     internal static IReadOnlyList<(string Name, byte[] Face)> All() => [
         ("aliased-gpos", CreateAliasedGposFace()),
+        ("aliased-lookup-list", CreateAliasedLookupListFace()),
         ("aliased-positionings", CreateAliasedPositioningFace()),
+        ("composite-fanout", CreateCompositeFanoutFace()),
         ("too-many-lookups", CreateTooManyLookupFace()),
         ("dense-cmap", CreateDenseCmapFace()),
         ("dense-kern", CreateDenseKernFace()),
@@ -26,6 +28,42 @@ internal static class HostileFontFaces {
         gpos.AddFeature("kern", Enumerable.Repeat(0, 32_768).ToArray());
         gpos.AddScript("latn", 0);
         return builder.WithGpos(gpos).Build();
+    }
+
+    /// <summary>
+    /// A lookup list whose 64 entries all point at one lookup, that lookup holding 8,192 aliased
+    /// subtable records. The parser dedupes the entries by offset and the subtables by offset.
+    /// </summary>
+    internal static byte[] CreateAliasedLookupListFace() {
+        (SyntheticFontBuilder builder, int a, int v) = CreateBaseFace();
+        var gpos = new SyntheticGpos {
+            SubtablesPerLookup = 8192,
+            AliasLookupSubtables = true,
+            AliasLookupListEntries = true,
+        };
+        for (int index = 0; index < 64; index++) {
+            gpos.AddLookup((a, v, -10));
+        }
+
+        gpos.AddFeature("kern", [.. Enumerable.Range(0, 64)]);
+        gpos.AddScript("latn", 0);
+        return builder.WithGpos(gpos).Build();
+    }
+
+    /// <summary>Fifteen levels of eight-way composites over an empty leaf glyph.</summary>
+    internal static byte[] CreateCompositeFanoutFace() {
+        var builder = SyntheticFontBuilder.Create();
+        int glyph = builder.AddEmpty(300);
+        for (int level = 0; level < 15; level++) {
+            SyntheticComponent[] components = new SyntheticComponent[8];
+            for (int component = 0; component < components.Length; component++) {
+                components[component] = SyntheticComponent.Translate(glyph, component * 5, 0);
+            }
+
+            glyph = builder.AddComposite(700, 10, components);
+        }
+
+        return builder.WithCmap(4, (0x41, glyph)).Build();
     }
 
     internal static byte[] CreateAliasedPositioningFace() {

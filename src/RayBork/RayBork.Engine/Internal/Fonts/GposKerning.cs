@@ -24,11 +24,15 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// Parsing is bounded for hostile tables: the kern feature may reference at most 64 distinct
-/// lookups and list at most 65,536 lookup references, the pair lookups may declare at most 65,536
+/// lookups and list at most 65,536 lookup references, the pair lookups may declare at most 32,768
 /// subtable records, at most 256 distinct pair-positioning subtables are stored, and at most 65,536
-/// pair sets and 1,000,000 pair records are validated. Lookup references, lookups, and positioning
-/// subtables are deduplicated by absolute table offset, so aliased offsets are parsed and stored
-/// once; exceeding a cap throws <see cref="FontFormatException"/>.
+/// pair sets, 1,000,000 pair records, and 262,144 coverage or class definition entries are
+/// validated. The subtable-record cap is lower than the 16-bit offset space because a lookup's
+/// subtable offsets, and the lookup-list offsets that reach it, are themselves 16-bit; real fonts are
+/// three orders of magnitude below it. Lookup references, lookups, positioning subtables, and pair
+/// sets are deduplicated by absolute table offset, so aliased offsets are parsed and stored once;
+/// exceeding a cap raises <see cref="FontUnsupportedException"/> because the face is valid but
+/// outside the parser's supported size.
 /// </para>
 /// <para>
 /// The instance is immutable after construction and safe to read from any thread. Lookups allocate
@@ -54,10 +58,11 @@ internal sealed class GposKerning {
     private const int VERSION_1_1_HEADER_LENGTH = 14;
     private const int MAX_REFERENCED_LOOKUPS = 64;
     private const int MAX_FEATURE_LOOKUP_STEPS = 65536;
-    private const int MAX_LOOKUP_SUBTABLES = 65536;
+    private const int MAX_LOOKUP_SUBTABLES = 32768;
     private const int MAX_PAIR_POSITIONINGS = 256;
     private const int MAX_VALIDATED_PAIR_SETS = 65536;
     private const long MAX_VALIDATED_PAIR_RECORDS = 1_000_000;
+    private const int MAX_VALIDATED_GLYPH_CLASS_ENTRIES = 262_144;
     private const string CONTEXT = "the 'GPOS' table";
 
     private readonly ReadOnlyMemory<byte> _data;
@@ -76,6 +81,11 @@ internal sealed class GposKerning {
     /// <c>kern</c> pair positioning or an unsupported major/minor version.
     /// </returns>
     /// <exception cref="FontFormatException">The <c>GPOS</c> structure or a pair lookup is malformed.</exception>
+    /// <exception cref="FontUnsupportedException">
+    /// The table exceeds one of the documented defensive limits for referenced lookups, lookup
+    /// references, lookup subtables, pair-positioning subtables, pair sets, pair records, or coverage
+    /// and class definition entries.
+    /// </exception>
     internal static GposKerning? TryParse(ReadOnlyMemory<byte> gpos, int glyphCount) {
         SfntReader reader = new(gpos.Span, CONTEXT);
         if (reader.Length < BASE_HEADER_LENGTH) {
@@ -146,7 +156,7 @@ internal sealed class GposKerning {
             for (int lookup = 0; lookup < lookupIndexCount; lookup++) {
                 budget.FeatureLookupSteps++;
                 if (budget.FeatureLookupSteps > MAX_FEATURE_LOOKUP_STEPS) {
-                    throw new FontFormatException(
+                    throw new FontUnsupportedException(
                         $"the 'GPOS' kern feature lists more than {MAX_FEATURE_LOOKUP_STEPS} lookup references");
                 }
 
@@ -167,7 +177,7 @@ internal sealed class GposKerning {
                 }
 
                 if (referencedLookupOffsets.Count > MAX_REFERENCED_LOOKUPS) {
-                    throw new FontFormatException(
+                    throw new FontUnsupportedException(
                         $"the 'GPOS' kern feature references more than {MAX_REFERENCED_LOOKUPS} distinct lookups");
                 }
 
@@ -299,7 +309,7 @@ internal sealed class GposKerning {
         for (int index = 0; index < subtableCount; index++) {
             budget.LookupSubtables++;
             if (budget.LookupSubtables > MAX_LOOKUP_SUBTABLES) {
-                throw new FontFormatException(
+                throw new FontUnsupportedException(
                     $"the 'GPOS' pair lookups declare more than {MAX_LOOKUP_SUBTABLES} subtable records");
             }
 
@@ -331,7 +341,7 @@ internal sealed class GposKerning {
             }
 
             if (positionings.Count >= MAX_PAIR_POSITIONINGS) {
-                throw new FontFormatException(
+                throw new FontUnsupportedException(
                     $"the 'GPOS' kern feature positions more than {MAX_PAIR_POSITIONINGS} distinct subtable offsets");
             }
 
@@ -362,7 +372,7 @@ internal sealed class GposKerning {
             ? -1
             : ((valueFormat1 & X_PLACEMENT) != 0 ? 2 : 0)
                 + ((valueFormat1 & Y_PLACEMENT) != 0 ? 2 : 0);
-        int coverageCount = ValidateCoverage(reader, coverageOffset, glyphCount);
+        int coverageCount = ValidateCoverage(reader, coverageOffset, glyphCount, budget);
         if (format == PAIR_POS_FORMAT_1) {
             reader.Require(subtableOffset + 8, 2);
             int pairSetCount = reader.ReadUInt16(subtableOffset + 8);
@@ -382,7 +392,7 @@ internal sealed class GposKerning {
 
                 budget.PairSets++;
                 if (budget.PairSets > MAX_VALIDATED_PAIR_SETS) {
-                    throw new FontFormatException(
+                    throw new FontUnsupportedException(
                         $"the 'GPOS' pair positioning validates more than {MAX_VALIDATED_PAIR_SETS} pair sets");
                 }
 
@@ -390,7 +400,7 @@ internal sealed class GposKerning {
                 int pairCount = reader.ReadUInt16(pairSetOffset);
                 budget.PairRecords += pairCount;
                 if (budget.PairRecords > MAX_VALIDATED_PAIR_RECORDS) {
-                    throw new FontFormatException(
+                    throw new FontUnsupportedException(
                         $"the 'GPOS' pair positioning declares more than {MAX_VALIDATED_PAIR_RECORDS} pair records");
                 }
 
@@ -437,8 +447,8 @@ internal sealed class GposKerning {
 
         int classRecordLength = valueSize1 + valueSize2;
         reader.Require(subtableOffset + 16, (long)class1Count * class2Count * classRecordLength);
-        ValidateClassDef(reader, classDef1Offset, class1Count, glyphCount, "first");
-        ValidateClassDef(reader, classDef2Offset, class2Count, glyphCount, "second");
+        ValidateClassDef(reader, classDef1Offset, class1Count, glyphCount, "first", budget);
+        ValidateClassDef(reader, classDef2Offset, class2Count, glyphCount, "second", budget);
         return new PairPositioning(
             format,
             subtableOffset,
@@ -451,11 +461,16 @@ internal sealed class GposKerning {
             class2Count);
     }
 
-    private static int ValidateCoverage(SfntReader reader, int coverageOffset, int glyphCount) {
+    private static int ValidateCoverage(
+        SfntReader reader,
+        int coverageOffset,
+        int glyphCount,
+        ParseBudget budget) {
         reader.Require(coverageOffset, 4);
         int format = reader.ReadUInt16(coverageOffset);
         if (format == COVERAGE_FORMAT_1) {
             int glyphCountInCoverage = reader.ReadUInt16(coverageOffset + 2);
+            ChargeGlyphClassEntries(budget, glyphCountInCoverage);
             reader.Require(coverageOffset + 4, (long)glyphCountInCoverage * 2);
             int previous = -1;
             for (int index = 0; index < glyphCountInCoverage; index++) {
@@ -495,6 +510,7 @@ internal sealed class GposKerning {
                     $"the 'GPOS' coverage at offset {coverageOffset} has overlapping or unsorted ranges");
             }
 
+            ChargeGlyphClassEntries(budget, end - start + 1);
             if (end >= glyphCount) {
                 throw new FontFormatException(
                     $"the 'GPOS' coverage at offset {coverageOffset} references glyph {end}; the face has {glyphCount} glyph(s)");
@@ -512,18 +528,28 @@ internal sealed class GposKerning {
         return coverageCount;
     }
 
+    private static void ChargeGlyphClassEntries(ParseBudget budget, int entries) {
+        budget.GlyphClassEntries += entries;
+        if (budget.GlyphClassEntries > MAX_VALIDATED_GLYPH_CLASS_ENTRIES) {
+            throw new FontUnsupportedException(
+                $"the 'GPOS' table validates more than {MAX_VALIDATED_GLYPH_CLASS_ENTRIES} coverage or class definition entries");
+        }
+    }
+
     private static void ValidateClassDef(
         SfntReader reader,
         int classDefOffset,
         int classCount,
         int glyphCount,
-        string which) {
+        string which,
+        ParseBudget budget) {
         reader.Require(classDefOffset, 4);
         int format = reader.ReadUInt16(classDefOffset);
         if (format == CLASS_DEF_FORMAT_1) {
             reader.Require(classDefOffset + 2, 4);
             int startGlyph = reader.ReadUInt16(classDefOffset + 2);
             int glyphCountInClassDef = reader.ReadUInt16(classDefOffset + 4);
+            ChargeGlyphClassEntries(budget, glyphCountInClassDef);
             reader.Require(classDefOffset + 6, (long)glyphCountInClassDef * 2);
             if (startGlyph + glyphCountInClassDef > glyphCount) {
                 throw new FontFormatException(
@@ -563,6 +589,7 @@ internal sealed class GposKerning {
                     $"the 'GPOS' {which} class definition at offset {classDefOffset} covers glyphs past the face's {glyphCount}");
             }
 
+            ChargeGlyphClassEntries(budget, end - start + 1);
             if (classValue >= classCount) {
                 throw new FontFormatException(
                     $"the 'GPOS' {which} class definition at offset {classDefOffset} declares a class outside {classCount}");
@@ -724,5 +751,6 @@ internal sealed class GposKerning {
         internal int LookupSubtables;
         internal int PairSets;
         internal long PairRecords;
+        internal int GlyphClassEntries;
     }
 }

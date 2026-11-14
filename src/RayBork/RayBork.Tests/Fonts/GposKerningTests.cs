@@ -136,7 +136,7 @@ public sealed class GposKerningTests {
         gpos.AddFeature("kern", [.. Enumerable.Range(0, 65)]);
         gpos.AddScript("latn", 0);
 
-        AssertControlledFailure(builder.WithGpos(gpos).Build(), "distinct lookups");
+        AssertUnsupported(builder.WithGpos(gpos).Build(), "distinct lookups");
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public sealed class GposKerningTests {
         gpos.AddFeature("kern", Enumerable.Repeat(0, 65_535).ToArray());
         gpos.AddScript("latn", 0, 1);
 
-        AssertControlledFailure(builder.WithGpos(gpos).Build(), "lookup references");
+        AssertUnsupported(builder.WithGpos(gpos).Build(), "lookup references");
     }
 
     [Fact]
@@ -197,6 +197,34 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AliasedLookupListAndSubtableRecordsAreDeduplicated() {
+        byte[] faceBytes = HostileFontFaces.CreateAliasedLookupListFace();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        SfntFace face = SfntFace.Parse(faceBytes);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(
+            allocated < ALLOCATION_BOUND,
+            $"The aliased lookup-list parse allocated {allocated} bytes.");
+        Assert.Equal(-10, face.GetKerning(1, 2));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TooManyLookupSubtableRecordsAreRejected() {
+        (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateGlyphBuilder();
+        var gpos = new SyntheticGpos { AliasLookupSubtables = true };
+        gpos.AddLookup(17);
+        gpos.AddLookup(32_760);
+        gpos.AddFeature("kern", 1, 0);
+        gpos.AddScript("latn", 0);
+
+        AssertUnsupported(builder.WithGpos(gpos).Build(), "subtable records");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void TooManyPairPositioningsAreRejected() {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos { SubtablesPerLookup = 200 };
@@ -205,7 +233,7 @@ public sealed class GposKerningTests {
         gpos.AddFeature("kern", 0, 1);
         gpos.AddScript("latn", 0);
 
-        AssertControlledFailure(builder.WithGpos(gpos).Build(), "distinct subtable offsets");
+        AssertUnsupported(builder.WithGpos(gpos).Build(), "distinct subtable offsets");
     }
 
     private static int ScriptKerning(params (string Tag, int XAdvance)[] variants) {
@@ -227,9 +255,9 @@ public sealed class GposKerningTests {
         return face.GetKerning(a, v);
     }
 
-    private static void AssertControlledFailure(byte[] faceBytes, string reason) {
+    private static void AssertUnsupported(byte[] faceBytes, string reason) {
         long before = GC.GetAllocatedBytesForCurrentThread();
-        FontFormatException exception = Assert.Throws<FontFormatException>(
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
             () => SfntFace.Parse(faceBytes));
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 

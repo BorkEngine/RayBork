@@ -11,11 +11,13 @@ namespace RayBork.Internal;
 /// explicit quadratic segments; consecutive off-curve points produce the implied on-curve midpoint,
 /// a contour without an on-curve point gets the implied start point, and every contour is closed.
 /// Composite glyphs apply each component's translation and optional 2x2 transform, concatenate the
-/// component contours in component order, and reject reference cycles and nesting deeper than
-/// <see cref="MAX_COMPOSITE_DEPTH"/> composite levels. A resolved glyph carries at most
-/// <see cref="MAX_POINTS_PER_GLYPH"/> source points; the limit is enforced before the point arrays
-/// are allocated. Point-matched component arguments are a valid font feature outside the supported
-/// subset and raise <see cref="FontUnsupportedException"/>.
+/// component contours in component order, and reject reference cycles as malformed. Valid outlines
+/// that exceed a defensive parser limit — more than <see cref="MAX_COMPOSITE_DEPTH"/> composite
+/// levels, more than <see cref="MAX_POINTS_PER_GLYPH"/> source points, or more than
+/// <see cref="MAX_COMPONENT_RESOLUTIONS"/> component resolutions including empty leaves — raise
+/// <see cref="FontUnsupportedException"/> because the face is valid but outside the supported size.
+/// The point and component budgets are checked before the point arrays or the fanout work grow.
+/// Point-matched component arguments are also a valid font feature outside the supported subset.
 /// </para>
 /// <para>
 /// The reader is immutable and safe to read from any thread. Each resolution allocates only the
@@ -29,6 +31,9 @@ internal sealed class GlyphOutlineReader {
 
     /// <summary>The maximum number of source points one resolved glyph may carry.</summary>
     internal const int MAX_POINTS_PER_GLYPH = 20000;
+
+    /// <summary>The maximum number of composite component resolutions one glyph may perform.</summary>
+    internal const int MAX_COMPONENT_RESOLUTIONS = 4096;
 
     private const int GLYPH_HEADER_LENGTH = 10;
     private const short COMPOSITE_CONTOUR_MARKER = -1;
@@ -105,7 +110,8 @@ internal sealed class GlyphOutlineReader {
     /// <exception cref="FontFormatException">The glyph data is malformed or exceeds a documented limit.</exception>
     /// <exception cref="FontUnsupportedException">
     /// The glyph uses a valid feature outside the supported subset, currently point-matched composite
-    /// component arguments.
+    /// component arguments or more composite component resolutions than
+    /// <see cref="MAX_COMPONENT_RESOLUTIONS"/>.
     /// </exception>
     internal FontGlyph ReadGlyph(int glyphId) {
         if ((uint)glyphId >= (uint)_glyphCount) {
@@ -131,6 +137,7 @@ internal sealed class GlyphOutlineReader {
         private readonly GlyphOutlineReader _reader;
         private readonly int[] _active = new int[MAX_COMPOSITE_DEPTH];
         private int _activeCount;
+        private int _componentResolutions;
         private int _pointCount;
 
         internal GlyphResolution(GlyphOutlineReader reader) {
@@ -203,7 +210,7 @@ internal sealed class GlyphOutlineReader {
             int pointCount = previousEnd + 1;
             _pointCount += pointCount;
             if (_pointCount > MAX_POINTS_PER_GLYPH) {
-                throw new FontFormatException(
+                throw new FontUnsupportedException(
                     $"the glyph {glyphId} resolves to more than {MAX_POINTS_PER_GLYPH} points");
             }
 
@@ -373,7 +380,7 @@ internal sealed class GlyphOutlineReader {
 
         private OutlineContour[] ReadCompositeGlyph(SfntReader glyph, int glyphId, int depth) {
             if (depth >= MAX_COMPOSITE_DEPTH) {
-                throw new FontFormatException(
+                throw new FontUnsupportedException(
                     $"the composite glyph {glyphId} nests more than {MAX_COMPOSITE_DEPTH} composite levels");
             }
 
@@ -429,6 +436,12 @@ internal sealed class GlyphOutlineReader {
                 if (IsActive(componentGlyph)) {
                     throw new FontFormatException(
                         $"the composite glyph {glyphId} has a reference cycle through glyph {componentGlyph}");
+                }
+
+                _componentResolutions++;
+                if (_componentResolutions > MAX_COMPONENT_RESOLUTIONS) {
+                    throw new FontUnsupportedException(
+                        $"the glyph resolves more than {MAX_COMPONENT_RESOLUTIONS} composite components");
                 }
 
                 float offsetX = argument1;

@@ -1,13 +1,20 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// A controlled failure for a valid font feature that the runtime cannot express yet.
+/// A controlled failure for a valid font feature outside the parser's supported subset.
 /// </summary>
 /// <remarks>
-/// This is separate from <see cref="FontFormatException"/>: the face is not corrupt, the feature is
-/// outside the supported subset. Point-matched composite component arguments are the current case. A
-/// consumer that surfaces this as an asset error reports it as an unsupported feature rather than a
-/// corrupt face.
+/// <para>
+/// This is separate from <see cref="FontFormatException"/>: the face is not corrupt. It covers valid
+/// features the runtime cannot express (point-matched composite component arguments, CFF/CFF2
+/// outlines) and valid faces that exceed a documented defensive parser limit (composite
+/// component-resolution fanout, kern pair count, and the GPOS work caps).
+/// </para>
+/// <para>
+/// The font loader maps this to <see cref="AssetLoadException"/> with the <c>RB1011</c> code and an
+/// "unsupported feature" message; <see cref="FontFormatException"/> keeps the "invalid face" message
+/// for the same code.
+/// </para>
 /// </remarks>
 internal sealed class FontUnsupportedException : Exception {
     /// <summary>Initializes an unsupported-feature failure.</summary>

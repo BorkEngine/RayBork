@@ -30,7 +30,10 @@ internal sealed class KerningReader {
     /// <param name="gpos">The complete <c>GPOS</c> table bytes, or empty when absent.</param>
     /// <param name="glyphCount">The face's <c>numGlyphs</c>.</param>
     /// <returns>The kerning lookup; it never returns <see langword="null"/>.</returns>
-    /// <exception cref="FontFormatException">A present table is structurally invalid.</exception>
+    /// <exception cref="FontFormatException">A present table is malformed.</exception>
+    /// <exception cref="FontUnsupportedException">
+    /// A present table is valid but exceeds a documented defensive parser limit.
+    /// </exception>
     internal static KerningReader Parse(
         ReadOnlyMemory<byte> kern,
         ReadOnlyMemory<byte> gpos,

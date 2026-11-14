@@ -206,7 +206,8 @@ public sealed class SfntFaceContainerTests {
         Assert.Equal(2, face.GlyphCount);
         Assert.Equal(700, face.GetAdvanceWidth(glyph));
         Assert.False(face.TryGetGlyphId(new Rune('B'), out _));
-        Assert.Throws<NotSupportedException>(() => face.GetGlyph(glyph));
+        FontUnsupportedException cff = Assert.Throws<FontUnsupportedException>(() => face.GetGlyph(glyph));
+        Assert.Contains("CFF", cff.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -223,7 +224,8 @@ public sealed class SfntFaceContainerTests {
         Assert.Equal(SfntOutlineKind.Cff2, face.OutlineKind);
         Assert.Equal(cff2Data, face.Cff2Table.ToArray());
         Assert.True(face.CffTable.IsEmpty);
-        Assert.Throws<NotSupportedException>(() => face.GetGlyph(0));
+        FontUnsupportedException cff2 = Assert.Throws<FontUnsupportedException>(() => face.GetGlyph(0));
+        Assert.Contains("CFF2", cff2.Reason, StringComparison.Ordinal);
     }
 
     [Fact]

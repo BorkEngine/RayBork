@@ -16,6 +16,9 @@ namespace RayBork.Internal;
 /// </para>
 /// </remarks>
 internal sealed class KernPairs {
+    /// <summary>The maximum number of horizontal pairs the legacy table may declare.</summary>
+    internal const int MAX_PAIR_COUNT = 1_000_000;
+
     private readonly uint[] _keys;
     private readonly int[] _values;
 
@@ -29,6 +32,9 @@ internal sealed class KernPairs {
     /// <param name="glyphCount">The face's <c>numGlyphs</c>.</param>
     /// <returns>The pair lookup, or <see langword="null"/> when no supported pairs contribute.</returns>
     /// <exception cref="FontFormatException">An applicable subtable is malformed.</exception>
+    /// <exception cref="FontUnsupportedException">
+    /// The table declares more than <see cref="MAX_PAIR_COUNT"/> pairs.
+    /// </exception>
     internal static KernPairs? TryParse(ReadOnlyMemory<byte> kern, int glyphCount) {
         SfntReader reader = new(kern.Span, "the 'kern' table");
         if (reader.Length < 4) {
@@ -67,8 +73,9 @@ internal sealed class KernPairs {
                 }
 
                 pairCount += pairs;
-                if (pairCount > int.MaxValue) {
-                    throw new FontFormatException("the 'kern' table declares more pairs than can be indexed");
+                if (pairCount > MAX_PAIR_COUNT) {
+                    throw new FontUnsupportedException(
+                        $"the 'kern' table declares more than {MAX_PAIR_COUNT} pairs");
                 }
             }
 

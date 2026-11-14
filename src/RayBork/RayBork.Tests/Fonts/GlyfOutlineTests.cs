@@ -423,7 +423,7 @@ public sealed class GlyfOutlineTests {
     public void CompositeDepthLimitRejectsSeventeenLevels() {
         (SfntFace face, int[] chain) = CreateCompositeChain();
 
-        FontTestData.AssertGlyphFailure(face, chain[16], "nests more than 16 composite levels");
+        FontTestData.AssertGlyphUnsupported(face, chain[16], "nests more than 16 composite levels");
     }
 
     [Fact]
@@ -481,7 +481,7 @@ public sealed class GlyfOutlineTests {
         int glyph = builder.AddSimple(600, 0, CreatePoints(GlyphOutlineReader.MAX_POINTS_PER_GLYPH + 1));
         SfntFace face = Parse(builder, glyph);
 
-        FontTestData.AssertGlyphFailure(face, glyph, "more than 20000 points");
+        FontTestData.AssertGlyphUnsupported(face, glyph, "more than 20000 points");
     }
 
     [Fact]
@@ -497,7 +497,33 @@ public sealed class GlyfOutlineTests {
             SyntheticComponent.Translate(second, 100, 0));
         SfntFace face = Parse(builder, glyph);
 
-        FontTestData.AssertGlyphFailure(face, glyph, "more than 20000 points");
+        FontTestData.AssertGlyphUnsupported(face, glyph, "more than 20000 points");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CompositeFanoutPastTheResolutionBudgetIsUnsupported() {
+        var builder = SyntheticFontBuilder.Create();
+        int glyph = builder.AddEmpty(300);
+        for (int level = 0; level < 15; level++) {
+            SyntheticComponent[] components = new SyntheticComponent[8];
+            for (int component = 0; component < components.Length; component++) {
+                components[component] = SyntheticComponent.Translate(glyph, component * 5, 0);
+            }
+
+            glyph = builder.AddComposite(700, 10, components);
+        }
+
+        SfntFace face = Parse(builder, glyph);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => face.GetGlyph(glyph));
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.Contains("4096", exception.Reason, StringComparison.Ordinal);
+        Assert.True(
+            allocated < 16 * 1024 * 1024,
+            $"The rejected fanout resolution allocated {allocated} bytes.");
     }
 
     [Fact]
