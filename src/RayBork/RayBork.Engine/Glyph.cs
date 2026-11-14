@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Text;
-using RayBork.Internal;
 
 namespace RayBork;
 
@@ -10,13 +9,14 @@ namespace RayBork;
 /// <remarks>
 /// <para>
 /// All size values are in em units: multiply by the requested text size to get world units. The quad
-/// is the final padded glyph box, so <see cref="Size"/> includes the MSDF padding. <see cref="Uv0"/>
-/// and <see cref="Uv1"/> are always <c>(0, 0)</c> and <c>(1, 1)</c> because one glyph is one whole
-/// texture; there is no atlas.
+/// is the final padded glyph box, so <see cref="Size"/> includes the MSDF padding. For a glyph returned
+/// by <see cref="Font.TryGetGlyph"/>, <see cref="Uv0"/> is <c>(0, 0)</c> and <see cref="Uv1"/> is
+/// <c>(1, 1)</c> because one glyph is one whole texture; there is no atlas.
 /// </para>
 /// <para>
 /// A <see cref="Glyph"/> value is only produced by <see cref="Font.TryGetGlyph"/> for a glyph whose
-/// MSDF texture is already generated. The default value has a zero-size quad and no rune.
+/// MSDF texture is already generated. The default value is not a usable glyph: it has a zero
+/// <see cref="Rune"/> (U+0000), zero vectors, and zero UVs.
 /// </para>
 /// </remarks>
 public readonly struct Glyph {
@@ -58,14 +58,16 @@ public readonly struct Glyph {
     public Vector2 Size { get; }
 
     /// <summary>
-    /// Gets the texture coordinate of the quad's bottom-left corner. It is always <c>(0, 0)</c> because
-    /// the glyph texture holds only this glyph.
+    /// Gets the texture coordinate of the quad's bottom-left corner. For a glyph returned by
+    /// <see cref="Font.TryGetGlyph"/> it is always <c>(0, 0)</c> because the glyph texture holds only
+    /// this glyph.
     /// </summary>
     public Vector2 Uv0 { get; }
 
     /// <summary>
-    /// Gets the texture coordinate of the quad's top-right corner. It is always <c>(1, 1)</c> because
-    /// the glyph texture holds only this glyph.
+    /// Gets the texture coordinate of the quad's top-right corner. For a glyph returned by
+    /// <see cref="Font.TryGetGlyph"/> it is always <c>(1, 1)</c> because the glyph texture holds only
+    /// this glyph.
     /// </summary>
     public Vector2 Uv1 { get; }
 }

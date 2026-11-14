@@ -139,12 +139,12 @@ NuGet packages and are not downloaded at run time; the full license text is repr
 | --- | --- | --- | --- |
 | Fira Sans Regular, `src/RayBork/RayBork.Engine/BuiltInAssets/Assets/fonts/fira-sans.ttf` (upstream `FiraSans-Regular.ttf`) | SIL Open Font License 1.1 | Built-in default font at the canonical path `/fonts/fira-sans`, exposed as `EngineContext.Defaults.DefaultFont` | Committed source asset; the build bakes it into the engine's embedded built-in pack, and the runtime never fetches it from the network |
 
-Copyright (c) 2012-2015, The Mozilla Foundation and Telefonica S.A.
+Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A.
 
 ### SIL Open Font License 1.1 text (Fira Sans)
 
 ```text
-Copyright (c) 2012-2015, The Mozilla Foundation and Telefonica S.A.
+Digitized data copyright 2012-2016, The Mozilla Foundation and Telefonica S.A.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

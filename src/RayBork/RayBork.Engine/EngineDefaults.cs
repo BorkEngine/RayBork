@@ -92,9 +92,8 @@ public sealed class EngineDefaults {
     /// cache. The engine owns it; do not dispose it.
     /// </summary>
     /// <remarks>
-    /// The default font is a CPU-only engine asset, so preloading it issues no GPU upload and opening
-    /// it generates no glyph textures. Its <see cref="Font.CachedGlyphCount"/> grows as text draws need
-    /// glyphs.
+    /// The default font is a CPU-only engine asset, so preloading it issues no GPU upload and generates
+    /// no glyph textures. Its <see cref="Font.CachedGlyphCount"/> grows as text draws need glyphs.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
     public Font DefaultFont {
@@ -152,7 +151,6 @@ public sealed class EngineDefaults {
             ReleaseQuietly(meshShader);
             ReleaseQuietly(white);
             ReleaseQuietly(error);
-            ReleaseQuietly(defaultFont);
             throw new AssetLoadException(
                 $"The engine's built-in default assets are missing or corrupt: the mesh shader "
                     + $"program '{MESH_SHADER_PATH}', the white texture '{WHITE_TEXTURE_PATH}', the "

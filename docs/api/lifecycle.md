@@ -127,8 +127,9 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 
 > **M6 subset.** `Load<Font>` returns the shared, reference-counted `Font` asset and
 > `EngineDefaults.DefaultFont` exposes the built-in Fira Sans Regular face. A font load parses the
-> whole packed face and is CPU-only: it queues no GPU upload, and a freshly loaded font caches no
-> glyph texture. `Setup` can therefore preload any number of fonts without startup uploads; glyph
+> whole packed face and is CPU-only: it queues no GPU upload, and the font object that load creates
+> caches no glyph texture (a repeated load shares the object and its cache). `Setup` can therefore
+> preload any number of fonts without startup uploads; glyph
 > generation starts on demand on the app-lifetime `RayBork.Font` thread that the catalog starts before
 > the tick thread runs. The `Glyph` value, `TryGetGlyph`, and `Measure` are part of
 > [Rendering: text](rendering/text.md#710-fonts-and-text).
@@ -319,12 +320,16 @@ that target and can be sampled by a later camera.
    g. Loop: input snapshot, clock, IGame.Tick, frame publish; render consumes previous frame.
    h. Exit: stop accepting ticks. The tick thread publishes the final frame and runs
       IGame.Shutdown, then exits.
-   i. Join the tick thread and complete the frame ring; the render thread drains and presents the
-      final frame, disposes the GPU objects, and destroys the native surface through the channel
-      while the main thread services it.
-   j. The app releases the engine defaults and the primitive assets, stops the asset catalog, closes
-      the surface channel, disposes the platform (window, SDL3, Vulkan loader), and releases the
-      remaining engine state.
+   i. Join the tick thread (pumping the platform while it waits), then release the engine defaults and
+      the primitive assets. The primitive assets are detached from the camera service before their
+      owner references are released. `AssetCatalog.Stop` then stops the glyph generation service,
+      stops the procedural asset service, cancels and joins the asset loader, and force-disposes the
+      cached assets, while the render thread still services the GPU upload bridge.
+   j. Complete the frame ring; the render thread drains and presents the final frame, services the
+      pending GPU destructions, disposes the backend, and destroys the native surface through the
+      channel while the main thread services it.
+   k. The app joins the render thread, closes the surface channel, runs the deferred main-thread
+      teardown, and disposes the platform (window, SDL3, Vulkan loader).
 3. Run returns; Dispose releases the app object.
 ```
 

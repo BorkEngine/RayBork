@@ -7,8 +7,9 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// The whole face is packed; there is no preload range. The runtime parses the face and generates an
-/// MSDF glyph texture on demand for any mapped glyph. A pack baked before M6 carries the removed
-/// <c>Ranges</c> member and must be rebaked.
+/// MSDF glyph texture on demand for any mapped glyph. The removed M3 <c>Ranges</c> member is simply an
+/// unknown descriptor member now, so a font pack baked before M6 still loads; only an old TOML
+/// sidecar that still declares <c>ranges</c> fails the bake with an unknown-key error.
 /// </remarks>
 [GenerateShape]
 internal sealed partial class FontAssetDescriptor {

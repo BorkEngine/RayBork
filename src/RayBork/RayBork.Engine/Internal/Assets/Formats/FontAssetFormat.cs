@@ -11,10 +11,12 @@ namespace RayBork.Internal;
 /// <c>Load&lt;Font&gt;</c> is therefore CPU-only and completes without a GPU upload.
 /// </para>
 /// <para>
-/// Every rejection is <see cref="AssetLoadException"/> <c>RB1011</c> and names the cause: an
-/// unavailable or wrong-length face payload, an invalid face, an unsupported outline source or parser
-/// feature, or invalid MSDF settings. The runtime supports TrueType <c>glyf</c> and CFF 1.0 outlines;
-/// a CFF2 face parses structurally but cannot resolve glyphs, so it is rejected at load with an
+/// A face, payload, outline-source, or settings rejection is <see cref="AssetLoadException"/>
+/// <c>RB1011</c> and names the cause: an unavailable or wrong-length face payload, an invalid face, an
+/// unsupported outline source or parser feature, or invalid MSDF settings. A descriptor payload that
+/// MessagePack cannot deserialize is reported as <c>RB1008</c> by the catalog instead, because it never
+/// reaches the font validation. The runtime supports TrueType <c>glyf</c> and CFF 1.0 outlines; a CFF2
+/// face parses structurally but cannot resolve glyphs, so it is rejected at load with an
 /// unsupported-feature message instead of failing every glyph later.
 /// </para>
 /// </remarks>
@@ -69,11 +71,13 @@ internal sealed class FontAssetFormat : IEngineAssetFormat<Font> {
         try {
             return context.ReadRawPayload(descriptor.FacePayload, "font face");
         } catch (AssetLoadException exception) {
-            throw new AssetLoadException(
-                $"The asset '{AssetPath.ToPublic(context.CanonicalPath)}' could not be loaded: the font "
-                    + $"face payload '{descriptor.FacePayload}' is unavailable: {exception.Message}",
-                DiagnosticCodes.FONT_LOAD_FAILED,
-                exception);
+            // ReadRawPayload already prefixes the asset path and names the payload kind and path; keep
+            // that reason so the wrapped failure reports each fact once.
+            string prefix = $"The asset '{AssetPath.ToPublic(context.CanonicalPath)}' could not be loaded: ";
+            string reason = exception.Message.StartsWith(prefix, StringComparison.Ordinal)
+                ? exception.Message[prefix.Length..]
+                : exception.Message;
+            throw CreateFailure(context.CanonicalPath, reason, exception);
         }
     }
 

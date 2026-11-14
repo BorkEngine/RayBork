@@ -11,9 +11,10 @@ namespace RayBork.Internal;
 /// as <see cref="FontUnsupportedException"/>.
 /// </para>
 /// <para>
-/// This parser guarantees only that classification and <see cref="Reason"/>; how the runtime surfaces
-/// it as an asset diagnostic is owned by the future font loader task. The exception is not
-/// serializable and carries no state beyond the reason.
+/// This parser guarantees only that classification and <see cref="Reason"/>;
+/// <see cref="FontAssetFormat"/> surfaces it as an <see cref="AssetLoadException"/> with the
+/// <c>RB1011</c> font diagnostic. The exception is not serializable and carries no state beyond the
+/// reason.
 /// </para>
 /// </remarks>
 internal sealed class FontFormatException : Exception {

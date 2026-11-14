@@ -1,10 +1,13 @@
+using System.Text;
 using RayBork.Internal;
+using RayBork.Tests.Fonts.Glyph;
 
 namespace RayBork.Tests.Assets.Catalog;
 
 /// <summary>
 /// Tests the app-owned <see cref="EngineDefaults"/> preload: the built-in mesh shader program, the white
-/// texture, and the error texture are loaded once, handed to the game, and released during shutdown.
+/// and error textures, and the default font are loaded once, handed to the game, and released during
+/// shutdown.
 /// </summary>
 public sealed class EngineDefaultsTests {
     private const string MESH_SHADER_PATH = "/shaders/mesh";
@@ -133,16 +136,90 @@ public sealed class EngineDefaultsTests {
         Assert.False(harness.Catalog.Exists(MESH_SHADER_PATH));
     }
 
-    private static byte[] BuildDefaultsPack() => CatalogTestData.BuildPack([
-        ("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor())),
-        ("shaders/basic-vert", AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
-        ("shaders/basic-frag", AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()),
-        ("textures/white", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/white-ktx2"))),
-        ("textures/white-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
-        ("textures/error", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/error-ktx2"))),
-        ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
-        .. CatalogTestData.CreateFontEntries(),
-    ]);
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DisposeReleasesTheDefaultFontAndAReloadCreatesANewFont() {
+        using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack()]);
+        EngineDefaults defaults = await EngineDefaults.LoadAsync(harness.Catalog);
+        Font first = defaults.DefaultFont;
+
+        defaults.Dispose();
+
+        Assert.True(first.IsDisposed);
+        Assert.Throws<ObjectDisposedException>(() => _ = first.LineHeight);
+
+        Font second = await harness.Catalog.Load<Font>(FONT_PATH, TestContext.Current.CancellationToken);
+        try {
+            Assert.NotSame(first, second);
+            Assert.False(second.IsDisposed);
+            Assert.Equal(1, second.GlyphCount);
+            Assert.Equal(0, second.CachedGlyphCount);
+        } finally {
+            second.Dispose();
+        }
+
+        Assert.True(second.IsDisposed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task GlyphTexturesGeneratedBeforeShutdownAreDestroyedWithTheDefaults() {
+        using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack()]);
+        EngineDefaults defaults = await EngineDefaults.LoadAsync(harness.Catalog);
+        Font font = defaults.DefaultFont;
+
+        font.BeginFrame(1);
+        FrameAssetRetention probe = new();
+        Assert.Null(font.AcquireGlyphTexture(CatalogTestData.FONT_GLYPH_ID, probe));
+        probe.Release();
+        await font.WhenGlyphSettledAsync(CatalogTestData.FONT_GLYPH_ID)
+            .WaitAsync(GlyphPipelineTestHarness.TIMEOUT, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, font.CachedGlyphCount);
+        Assert.Equal(4, harness.Worker.UploadCallCount);
+
+        defaults.Dispose();
+
+        Assert.True(font.IsDisposed);
+        AssetCatalogLoadTests.WaitUntil(
+            () => harness.Worker.DestroyCalls.Count == 4,
+            "The default font's glyph texture is destroyed with the other defaults.");
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task APackMissingOnlyTheFontFailsAndNamesIt() {
+        using CatalogTestHarness harness = new(userPacks: [BuildDefaultsPack(includeFont: false)]);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => EngineDefaults.LoadAsync(harness.Catalog));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains(FONT_PATH, thrown.Message, StringComparison.Ordinal);
+        Assert.IsType<AssetNotFoundException>(thrown.InnerException);
+        AssetCatalogLoadTests.WaitUntil(
+            () => harness.Worker.DestroyCalls.Count == 3,
+            "The program and both textures must be released when the font load fails.");
+        Assert.Equal(0, harness.Bridge.LiveResourceCount);
+    }
+
+    private static byte[] BuildDefaultsPack(bool includeFont = true) {
+        (string Path, AssetEntryType Type, byte[] Payload)[] entries = [
+            ("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor())),
+            ("shaders/basic-vert", AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
+            ("shaders/basic-frag", AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()),
+            ("textures/white", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/white-ktx2"))),
+            ("textures/white-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
+            ("textures/error", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/error-ktx2"))),
+            ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
+        ];
+        if (!includeFont) {
+            return CatalogTestData.BuildPack(entries);
+        }
+
+        return CatalogTestData.BuildPack([.. entries, .. CatalogTestData.CreateFontEntries()]);
+    }
 
     private static TextureAssetDescriptor CreateTextureDescriptor(string payload) => new() {
         Payload = payload,

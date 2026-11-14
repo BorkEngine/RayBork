@@ -49,8 +49,9 @@ parses the face once and generates MSDF glyph textures on demand. There is no pr
   padding. There is no atlas. Glyph textures are bindless, full-texture quads sampled `0..1`, and are
   referenced per text instance.
 - `Load<Font>` is a CPU-only engine asset load: it parses the face and generates no glyph texture, so it
-  performs no GPU upload and `CachedGlyphCount` is `0` when it completes. A shared font keeps one cache
-  for its lifetime.
+  performs no GPU upload and the font object that load creates reports `CachedGlyphCount` `0`. A shared
+  font keeps one cache for its lifetime, so a repeated load returns the shared object, whose count
+  reflects the glyphs earlier draws already requested.
 - Glyph generation is asynchronous: the engine's `RayBork.Font` thread generates and uploads textures
   while the tick thread keeps running. `DrawText` never waits: a glyph whose texture is not ready is
   skipped for that call and appears on a later frame, while the pen still advances from the face
@@ -58,16 +59,18 @@ parses the face once and generates MSDF glyph textures on demand. There is no pr
   its glyph texture's GPU resource alive through the frame.
 - An unmapped rune falls back to glyph id 0 (`.notdef`), so every rune still advances the pen and draws
   the missing-glyph quad once that texture is ready.
-- `GlyphCount` is the number of mapped glyphs in the face. `CachedGlyphCount` is the number with a
-  generated MSDF texture; it grows as draws request glyphs and can fall when the per-font texture cache
-  evicts its least recently used entries.
+- `GlyphCount` is the number of Unicode codepoints the face's cmap maps to a real glyph; it counts
+  mapped codepoints, not distinct glyph ids. `CachedGlyphCount` is the number with a generated MSDF
+  texture; it grows as draws request glyphs and can fall when the per-font texture cache evicts its
+  least recently used entries.
 - `TryGetGlyph` returns only cached glyphs; an empty glyph such as a space has no texture and is not
   returned. `Measure` works from face metrics and kerning without generating textures.
 - `Glyph` values are in em units. `Advance` is the horizontal pen advance. `Bearing` is the padded
   quad's bottom-left corner relative to the pen position on the baseline. `Size` is the padded quad
-  size. `Uv0` is `(0, 0)` and `Uv1` is `(1, 1)` because one glyph is one whole texture. `Rune`
-  echoes the rune that produced the value; for an unmapped rune it is the requested rune while the
-  geometry comes from `.notdef`.
+  size. For a glyph returned by `TryGetGlyph`, `Uv0` is `(0, 0)` and `Uv1` is `(1, 1)` because one
+  glyph is one whole texture. `Rune` echoes the rune that produced the value; for an unmapped rune it
+  is the requested rune while the geometry comes from `.notdef`. A `default(Glyph)` value is not a
+  usable glyph: it has a zero rune, zero vectors, and zero UVs.
 - Metrics (`LineHeight`, `Ascent`, `Descent`) are in em units:
   `(ascender - descender + lineGap) / unitsPerEm`, `ascender / unitsPerEm`, and
   `-descender / unitsPerEm` from the `hhea`/`head` tables. `Measure` and `DrawText` multiply them by

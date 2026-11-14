@@ -1051,11 +1051,11 @@ validators, and writes one MessagePack `Data` entry. The runtime `Load<T>` deser
 registered `[GenerateShape]` shape; there is no reflection resolver and no runtime TOML parser.
 
 The runtime exposes the `Model` loader. The model processor emits a `Model` descriptor plus one
-`Mesh` part per primitive; the font processor emits a `Font` descriptor plus the face payload.
-Font parsing and MSDF generation arrive in M6. M3 baked and validated both entry types before the
-runtime types existed; the runtime `Model` load path and the model/part ownership are described
-above, and each mesh descriptor may carry the baked collision payload described in the previous
-section.
+`Mesh` part per primitive; the font processor emits a `Font` descriptor plus the face payload. The
+runtime parses the font face and generates MSDF glyphs on demand; M3 baked and validated both entry
+types before the runtime types existed, and the runtime `Model` load path and the model/part ownership
+are described above. Each mesh descriptor may carry the baked collision payload described in the
+previous section.
 
 ### Bake tooling and the built-in pack
 

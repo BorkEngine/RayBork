@@ -18,6 +18,28 @@ internal sealed partial class CatalogTestSettings {
 }
 
 /// <summary>
+/// The pre-M6 font descriptor shape: the runtime descriptor plus the removed <c>Ranges</c> member. A
+/// legacy pack serialized this shape, and the runtime must still load it because unknown descriptor
+/// members are ignored.
+/// </summary>
+[GenerateShape]
+internal sealed partial class LegacyFontAssetDescriptor {
+    public required string FacePayload { get; init; }
+
+    public required string Format { get; init; }
+
+    public required uint ByteLength { get; init; }
+
+    public required string[] Ranges { get; init; }
+
+    public required int MsdfPixelSize { get; init; }
+
+    public required int MsdfRange { get; init; }
+
+    public required int MsdfPadding { get; init; }
+}
+
+/// <summary>
 /// Deterministic descriptors and pack inputs shared by the catalog tests.
 /// </summary>
 internal static class CatalogTestData {
@@ -42,9 +64,6 @@ internal static class CatalogTestData {
 
     /// <summary>The glyph id of the square <c>A</c> glyph the font test face maps.</summary>
     internal const int FONT_GLYPH_ID = 1;
-
-    /// <summary>The <c>.notdef</c> glyph id.</summary>
-    internal const int FONT_NOTDEF_GLYPH_ID = 0;
 
     internal const uint MESH_VERTEX_COUNT = 3;
     internal const uint MESH_INDEX_COUNT = 3;
@@ -181,6 +200,28 @@ internal static class CatalogTestData {
             (FONT_PAYLOAD_PATH, AssetEntryType.Raw, resolvedFace),
         ];
     }
+
+    /// <summary>
+    /// Serializes the pre-M6 font descriptor shape, including its removed <c>Ranges</c> member, for the
+    /// legacy-pack regression test.
+    /// </summary>
+    internal static byte[] CreateLegacyFontDescriptorPayload(byte[] face) {
+        ArgumentNullException.ThrowIfNull(face);
+
+        return AssetSerialization.Serialize(new LegacyFontAssetDescriptor {
+            FacePayload = FONT_PAYLOAD_PATH,
+            Format = "ttf",
+            ByteLength = (uint)face.Length,
+            Ranges = ["U+0020-007E"],
+            MsdfPixelSize = 32,
+            MsdfRange = 4,
+            MsdfPadding = 2,
+        });
+    }
+
+    /// <summary>Opens a pack archive over the standard synthetic font entries.</summary>
+    internal static PackArchive OpenFontArchive()
+        => PackArchive.Open(BuildPack(CreateFontEntries()), "font-format.pck");
 
     internal static byte[] CreatePattern(int length, int seed) {
         byte[] payload = new byte[length];

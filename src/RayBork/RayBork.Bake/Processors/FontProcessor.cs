@@ -16,9 +16,11 @@ namespace RayBork.Bake.Processors;
 /// </para>
 /// <para>
 /// The container must be a single sfnt face: <c>0x00010000</c> or <c>true</c> for TTF, and
-/// <c>OTTO</c> for OTF with CFF or CFF2 outlines. A TrueType Collection is rejected. Every table
-/// directory record must lie inside the file. An invalid container or setting is <c>RB4010</c> and
-/// emits no outputs.
+/// <c>OTTO</c> for OTF with CFF or CFF2 outlines. A TrueType Collection is rejected, and a CFF2 face
+/// is rejected because the runtime resolves TrueType <c>glyf</c> and CFF 1.0 outlines only. Every
+/// table directory record must lie inside the file. The processor mirrors the runtime's MSDF
+/// constraints: the pixel size must be greater than twice the padding. An invalid container, outline
+/// source, or setting is <c>RB4010</c> and emits no outputs.
 /// </para>
 /// </remarks>
 internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
@@ -74,10 +76,18 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
             return;
         }
 
-        if (!SfntValidator.TryValidate(face, out string format, out string? reason)) {
+        if (!SfntValidator.TryValidate(face, out string format, out bool cff2, out string? reason)) {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
                 $"Font source '{context.RelativePath}' is not a valid sfnt face: {reason}.");
+            return;
+        }
+
+        if (cff2) {
+            context.Diagnostics.Error(
+                FontDiagnosticCodes.FONT_INVALID,
+                $"Font source '{context.RelativePath}' stores CFF2 outlines; only TrueType 'glyf' and "
+                    + "CFF 1.0 outlines are supported.");
             return;
         }
 
@@ -124,6 +134,15 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
                 FontDiagnosticCodes.FONT_INVALID,
                 $"Font source '{context.RelativePath}' declares msdf_padding {padding}; it must be "
                     + "non-negative.");
+            return false;
+        }
+
+        if (pixelSize <= (2L * padding)) {
+            context.Diagnostics.Error(
+                FontDiagnosticCodes.FONT_INVALID,
+                $"Font source '{context.RelativePath}' declares msdf_pixel_size {pixelSize} with "
+                    + $"msdf_padding {padding}; the pixel size must be greater than twice the padding "
+                    + "so that a glyph box remains.");
             return false;
         }
 

@@ -170,10 +170,13 @@ packed KTX2 payload. KTX2 source passthrough is a later addition, not a supporte
 
 `Font` is a CPU-only engine asset. The bake packs the whole face file and the MSDF settings; there is
 no preload range and no `ranges` sidecar key. `Load<Font>` parses the face and creates one per-font
-glyph pipeline, so it completes without queueing a GPU upload, and a freshly loaded font has no cached
-glyph texture. Glyph textures are small procedural textures that the engine's `RayBork.Font` thread
-creates and uploads asynchronously when a draw first needs a glyph. A font pack baked before M6 has a
-different descriptor shape (it carries the removed `Ranges` member) and must be rebaked.
+glyph pipeline, so it completes without queueing a GPU upload, and the font object that load creates
+has no cached glyph texture; a repeated load returns the shared object, whose cache reflects the glyphs
+earlier draws already requested. Glyph textures are small procedural textures that the engine's
+`RayBork.Font` thread creates and uploads asynchronously when a draw first needs a glyph. A pack baked
+before M6 still loads: its descriptor carries the removed `Ranges` member, and unknown descriptor
+members are ignored. Only an old TOML sidecar that still declares `ranges` fails the bake with the
+unknown-key error `RB4002`.
 
 `RenderTexture` is created at runtime and is not a pack asset. `AudioClip` is post-1.0.
 
@@ -356,8 +359,9 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
   the font into `EngineContext.Defaults` before `IGame.Setup`. The bake
   writes `shaders/mesh` when a model part has no authored `[model] shader`, and the model loader
   requires every part to carry a canonical shader path. Primitive meshes arrive with M5.
-- A font pack baked before M6 carries the removed `Ranges` descriptor member and must be rebaked; the
-  built-in pack is regenerated on every engine build.
+- A font pack baked before M6 still loads: its descriptor carries the removed `Ranges` member, and
+  unknown descriptor members are ignored. Only a TOML sidecar that still declares `ranges` is a bake
+  error (`RB4002`); the built-in pack is regenerated on every engine build.
 - `WithAssetsPack` mounts user packs in call order after the built-in pack. Later packs shadow
   earlier packs for the same canonical path.
 - The winning entry is the last mounted pack that contains the path. A shadowed entry is never
@@ -412,8 +416,8 @@ LevelText levelText = await ctx.Assets.Load<LevelText>("/data/level-text");
 
 The registration maps `typeof(T)` to the loader. `EntryType` must match the packed entry; the catalog
 rejects a different type with `AssetTypeMismatchException` before the loader runs. Each type may be
-registered only once, and built-in engine asset types (`Mesh`, `Texture`, `Shader`, `Model`) are
-already registered, so registering one fails at `Build`. `WithAssetType<T>` and
+registered only once, and built-in engine asset types (`Mesh`, `Texture`, `Font`, `Shader`, `Model`)
+are already registered, so registering one fails at `Build`. `WithAssetType<T>` and
 `WithAssetLoader<T>` are mutually exclusive for one type: there is no override.
 
 `AssetLoadContext` is valid only during the `LoadAsync` call that received it:

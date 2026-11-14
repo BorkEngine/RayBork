@@ -222,8 +222,14 @@ public sealed class FontTests {
         internal FakeGlyphTextureFactory Factory { get; }
 
         public void Dispose() {
-            // A test may have disposed the font already; disposing the pipeline again is a no-op. The
-            // harness stops the generation service before it disposes its pipelines.
+            // Release the font's owner reference even when a test forgot to dispose it, so the harness
+            // never leaks the lifetime. Disposing the pipeline again through the glyph harness is a
+            // no-op, and the glyph harness stops the generation service before it disposes its
+            // pipelines.
+            if (!Font.IsDisposed) {
+                Font.Dispose();
+            }
+
             _glyphs.Dispose();
         }
     }

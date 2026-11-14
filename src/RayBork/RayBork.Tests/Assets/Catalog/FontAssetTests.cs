@@ -155,6 +155,30 @@ public sealed class FontAssetTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task APreM6DescriptorWithRangesStillLoads() {
+        byte[] face = CatalogTestData.CreateFontFace();
+        byte[] pack = CatalogTestData.BuildPack(
+            (CatalogTestData.FONT_PATH,
+                AssetEntryType.Font,
+                CatalogTestData.CreateLegacyFontDescriptorPayload(face)),
+            (CatalogTestData.FONT_PAYLOAD_PATH, AssetEntryType.Raw, face));
+        using CatalogTestHarness harness = new(userPacks: [pack]);
+
+        Font font = await harness.Catalog.Load<Font>(_fontPath, TestContext.Current.CancellationToken);
+
+        try {
+            Assert.False(font.IsDisposed);
+            Assert.Equal(1, font.GlyphCount);
+            Assert.Equal(1f, font.LineHeight);
+            Assert.Equal(0, font.CachedGlyphCount);
+            Assert.Equal(0, harness.Worker.UploadCallCount);
+        } finally {
+            font.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task ACorruptFaceIsAFontLoadFailure() {
         byte[] corrupt = [0x00, 0x01, 0x00, 0x00];
         AssetLoadException thrown = await LoadFailureAsync(CatalogTestData.CreateFontEntries(face: corrupt));
@@ -238,6 +262,97 @@ public sealed class FontAssetTests {
 
         Assert.Equal(0, harness.Worker.UploadCallCount);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ACanceledFontLoadAcquiresNoReferenceAndARetrySucceeds() {
+        using CatalogTestHarness harness = new(userPacks: [BuildFontPack()]);
+        using CancellationTokenSource canceled = new();
+        canceled.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => harness.Catalog.Load<Font>(_fontPath, canceled.Token));
+
+        Font retry = await harness.Catalog.Load<Font>(_fontPath, TestContext.Current.CancellationToken);
+        try {
+            Assert.False(retry.IsDisposed);
+            Assert.Equal(1, retry.GlyphCount);
+            Assert.Equal(0, retry.CachedGlyphCount);
+            Assert.Equal(0, harness.Worker.UploadCallCount);
+        } finally {
+            retry.Dispose();
+        }
+
+        Assert.True(retry.IsDisposed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheDecodedFontReleaseDisposesThePipelineAndIsIdempotent() {
+        // This is the catalog's stop-after-decode cleanup: a decoded font whose lifetime is never
+        // committed is released directly, and that release must dispose the glyph pipeline.
+        using PackArchive archive = CatalogTestData.OpenFontArchive();
+        Dictionary<string, VisibleAsset> visible = [];
+        foreach (PackEntry entry in archive.Entries) {
+            visible[entry.Path] = new VisibleAsset(archive, entry);
+        }
+
+        using GlyphGenerationService service =
+            new(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance);
+        FakeGlyphTextureFactory factory = new();
+        Assert.True(archive.TryGetEntry(CatalogTestData.FONT_PATH, out PackEntry? descriptorEntry));
+        AssetFormatContext context = new(
+            CatalogTestData.FONT_PATH,
+            archive.ReadPayload(descriptorEntry!),
+            visible,
+            service,
+            factory,
+            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance.CreateLogger("RayBork.Font"));
+        DecodedAsset<Font> decoded = FontAssetFormat.Instance.Decode(context);
+        Assert.Null(decoded.Upload);
+        Assert.NotNull(decoded.Release);
+
+        decoded.Release!();
+
+        EngineAsset asset = new(
+            _fontPath,
+            resource: null,
+            static _ => { },
+            static () => { },
+            release: null);
+        asset.AddOwnerReference();
+        Font font = decoded.Create(asset);
+        try {
+            Assert.False(font.IsDisposed);
+            Assert.Equal(1, font.GlyphCount);
+            // The release disposed the pipeline, so the metrics path that reads it rejects the font.
+            Assert.Equal(1f, font.LineHeight);
+            Assert.Throws<ObjectDisposedException>(() => font.Measure("A", 1f));
+
+            // The release is idempotent: a repeated cleanup neither throws nor resurrects the pipeline.
+            decoded.Release!();
+            Assert.Throws<ObjectDisposedException>(() => font.Measure("A", 1f));
+        } finally {
+            font.Dispose();
+        }
+
+        Assert.True(font.IsDisposed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheGlyphServiceRunsWithTheCatalogAndStopsWithIt() {
+        CatalogTestHarness harness = new(userPacks: []);
+        try {
+            Assert.True(harness.Catalog.GlyphService.IsRunning);
+
+            harness.Catalog.Stop();
+
+            Assert.False(harness.Catalog.GlyphService.IsRunning);
+        } finally {
+            harness.Dispose();
+        }
     }
 
     private static async Task<AssetLoadException> LoadFailureAsync(

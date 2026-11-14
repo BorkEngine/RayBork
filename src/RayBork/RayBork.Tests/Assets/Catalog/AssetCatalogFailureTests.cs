@@ -290,6 +290,28 @@ public sealed class AssetCatalogFailureTests {
         Assert.Contains("the registered loader returned no value", thrown.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AFailedStartLeavesTheGlyphServiceStopped() {
+        using TempPackDirectory directory = new();
+        string path = directory.GetPath("truncated-glyph.pck");
+        File.WriteAllBytes(path, CatalogTestData.BuildStandardPack()[..16]);
+        (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([path]);
+
+        try {
+            Assert.False(catalog.GlyphService.IsRunning);
+
+            Assert.Throws<AssetPackException>(catalog.Start);
+
+            Assert.False(catalog.GlyphService.IsRunning);
+        } finally {
+            catalog.Stop();
+            bridge.Close(null);
+        }
+
+        Assert.False(catalog.GlyphService.IsRunning);
+    }
+
     private static (GpuAssetBridge Bridge, AssetCatalog Catalog) CreateUnstartedCatalog(string[] paths) {
         GpuAssetBridge bridge = new();
         bridge.AttachWorker(new FakeAssetGpuWorker());

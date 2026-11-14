@@ -11,11 +11,12 @@ namespace RayBork;
 /// <para>
 /// A font is a shared, reference-counted engine asset: <c>Load&lt;Font&gt;</c> parses the face and
 /// returns the same object for a repeated load of the same path. It owns no GPU resource of its own.
-/// Loading a font generates no glyph textures, so a just-loaded font reports
-/// <see cref="CachedGlyphCount"/> <c>0</c>; the engine's <c>RayBork.Font</c> thread generates and
-/// uploads one small MSDF texture per glyph when a draw first needs it. Drawing never waits for that
-/// work: a glyph whose texture is not ready yet is skipped for that call and appears on a later frame,
-/// while the pen still advances from the face metrics.
+/// Loading a font generates no glyph textures, so the object created by that load reports
+/// <see cref="CachedGlyphCount"/> <c>0</c>; a repeated load returns the shared object, whose count
+/// reflects the glyphs earlier draws already requested. The engine's <c>RayBork.Font</c> thread
+/// generates and uploads one small MSDF texture per glyph when a draw first needs it. Drawing never
+/// waits for that work: a glyph whose texture is not ready yet is skipped for that call and appears on
+/// a later frame, while the pen still advances from the face metrics.
 /// </para>
 /// <para>
 /// Every Unicode rune maps through the face's cmap. A rune the cmap does not map falls back to glyph id
@@ -109,8 +110,10 @@ public sealed class Font : IAsset {
     /// Gets the number of Unicode codepoints that the face's cmap maps to a real glyph.
     /// </summary>
     /// <remarks>
-    /// It is a property of the face, not of the generated cache: the number does not change while the
-    /// font is used, and an unmapped rune falls back to <c>.notdef</c> instead of increasing it.
+    /// It counts mapped codepoints, not distinct glyph ids: two codepoints that map to the same glyph
+    /// both count. It is a property of the face, not of the generated cache, so the number does not
+    /// change while the font is used; an unmapped rune falls back to <c>.notdef</c> instead of
+    /// increasing it.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
     public int GlyphCount {
@@ -124,9 +127,10 @@ public sealed class Font : IAsset {
     /// Gets the number of glyphs with a generated MSDF texture cached by this font.
     /// </summary>
     /// <remarks>
-    /// A freshly loaded font reports <c>0</c>. The value grows as the font thread generates glyphs for
-    /// draws and stays hard-capped by the per-font texture budget, so it can also fall when the cache
-    /// evicts the least recently used glyph textures.
+    /// The object created by a font load reports <c>0</c>; a repeated load returns the shared object,
+    /// whose count reflects the glyphs earlier draws already requested. The value grows as the font
+    /// thread generates glyphs for draws and stays hard-capped by the per-font texture budget, so it can
+    /// also fall when the cache evicts the least recently used glyph textures.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
     public int CachedGlyphCount {
