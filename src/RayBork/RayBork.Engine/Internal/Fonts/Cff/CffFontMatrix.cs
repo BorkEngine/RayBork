@@ -54,6 +54,17 @@ internal readonly struct CffFontMatrix {
         0,
         0);
 
+    /// <summary>Gets a value indicating whether the matrix maps charstring units to font units unchanged.</summary>
+    /// <param name="unitsPerEm">The face's <c>head</c> units per em.</param>
+    /// <returns><see langword="true"/> when the matrix is the identity at this scale.</returns>
+    internal bool IsIdentity(int unitsPerEm) =>
+        (_a * unitsPerEm) == 1
+            && (_d * unitsPerEm) == 1
+            && _b == 0
+            && _c == 0
+            && _e == 0
+            && _f == 0;
+
     /// <summary>Maps one charstring-space point to font units.</summary>
     /// <param name="point">The point in charstring coordinates.</param>
     /// <param name="unitsPerEm">The face's <c>head</c> units per em.</param>

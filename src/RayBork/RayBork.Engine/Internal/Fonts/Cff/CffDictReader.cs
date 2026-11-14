@@ -10,9 +10,10 @@ namespace RayBork.Internal;
 /// A DICT stores numbers and operators, and every operator consumes the operands that precede it.
 /// <see cref="TryRead"/> yields one operator code together with its operand count; the operands are
 /// read through <see cref="Operand"/> before the next call. The reader validates every byte, rejects
-/// the reserved bytes and nibbles, rejects a trailing operand run that no operator consumes, and
-/// bounds the operand stack at <see cref="MAX_OPERANDS"/>. All failures are
-/// <see cref="FontFormatException"/>, never a framework exception.
+/// the reserved bytes and nibbles, requires at least one mantissa digit in a real operand, rejects a
+/// trailing operand run that no operator consumes, and bounds the operand stack at
+/// <see cref="MAX_OPERANDS"/>. All failures are <see cref="FontFormatException"/>, never a framework
+/// exception.
 /// </para>
 /// <para>
 /// Operator codes are the single-byte value for a one-byte operator and
@@ -223,15 +224,15 @@ internal sealed class CffDictReader {
                         negative = true;
                         break;
                     default:
+                        if (!seenDigit) {
+                            throw MalformedReal();
+                        }
+
                         if (seenExponent && !exponentDigit) {
                             throw MalformedReal();
                         }
 
-                        if (!seenDigit && !seenDot && (negative || seenExponent)) {
-                            throw MalformedReal();
-                        }
-
-                        double value = seenDigit ? mantissa : 0;
+                        double value = mantissa;
                         if (fractionalDigits > 0) {
                             value /= Math.Pow(10, fractionalDigits);
                         }

@@ -13,7 +13,6 @@ public sealed class CffReaderTests {
 
         CffIndex index = CffIndex.Parse(table, 0, "the synthetic INDEX", out int end);
 
-        Assert.True(index.IsEmpty);
         Assert.Equal(0, index.Count);
         Assert.Equal(2, end);
     }
@@ -131,8 +130,8 @@ public sealed class CffReaderTests {
             30, 0x0A, 0x00, 0x1F, // 0.001
             30, 0x0A, 0x14, 0x05, 0x41, 0xC3, 0xFF, // 0.140541E-3
             30, 0x1B, 0x2F, // 1E2
-            30, 0xAF, // "."
-            30, 0xFF, // empty real
+            30, 0x0F, // 0
+            30, 0x2F, // 2.
             0
         ];
 
@@ -145,7 +144,7 @@ public sealed class CffReaderTests {
         Assert.Equal(0.000140541, operands[3], 15);
         Assert.Equal(100, operands[4], 12);
         Assert.Equal(0, operands[5], 12);
-        Assert.Equal(0, operands[6], 12);
+        Assert.Equal(2, operands[6], 12);
     }
 
     [Fact]
@@ -191,6 +190,8 @@ public sealed class CffReaderTests {
     [InlineData(new byte[] { 30, 0x1B, 0xFF })]
     [InlineData(new byte[] { 30, 0xBE, 0x5F })]
     [InlineData(new byte[] { 30, 0xB1, 0xE5, 0xFF })]
+    [InlineData(new byte[] { 30, 0xFF })]
+    [InlineData(new byte[] { 30, 0xAF })]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void RejectsMalformedRealEncodings(byte[] dict) {
         Assert.Throws<FontFormatException>(() => ReadDict(dict));
@@ -247,15 +248,15 @@ public sealed class CffReaderTests {
             builder.CharsetOffset,
             "the synthetic charset");
 
-        Assert.Equal(sids.Length + 1, charset.Count);
-        Assert.Equal(0, charset.GetSid(0));
         for (int index = 0; index < sids.Length; index++) {
-            Assert.Equal(sids[index], charset.GetSid(index + 1));
+            Assert.True(charset.TryGetGlyphId(sids[index], out int glyphId));
+            Assert.Equal(index + 1, glyphId);
         }
 
-        Assert.True(charset.TryGetGlyphId(40, out int glyphId));
-        Assert.Equal(4, glyphId);
+        Assert.True(charset.TryGetGlyphId(40, out int matchingGlyph));
+        Assert.Equal(4, matchingGlyph);
         Assert.False(charset.TryGetGlyphId(999, out _));
+        Assert.False(charset.TryGetGlyphId(39, out _));
     }
 
     [Fact]
@@ -267,10 +268,13 @@ public sealed class CffReaderTests {
             0,
             "the synthetic charset");
 
-        Assert.Equal(3, charset.Count);
-        Assert.Equal(0, charset.GetSid(0));
-        Assert.Equal(1, charset.GetSid(1));
-        Assert.Equal(2, charset.GetSid(2));
+        Assert.True(charset.TryGetGlyphId(0, out int notdef));
+        Assert.Equal(0, notdef);
+        Assert.True(charset.TryGetGlyphId(1, out int first));
+        Assert.Equal(1, first);
+        Assert.True(charset.TryGetGlyphId(2, out int second));
+        Assert.Equal(2, second);
+        Assert.False(charset.TryGetGlyphId(3, out _));
     }
 
     [Theory]
@@ -475,6 +479,168 @@ public sealed class CffReaderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AcceptsAType2CharstringType() {
+        SyntheticCff builder = CreateGlyphTable(2)
+            .WithTopDictExtra(SyntheticCff.DictEscapeKey(6, 2));
+
+        SfntFace face = SfntFace.Parse(builder.BuildFace());
+
+        Assert.Equal(SfntOutlineKind.Cff, face.OutlineKind);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsACharstringTypeOtherThanTwo() {
+        SyntheticCff builder = CreateGlyphTable(2)
+            .WithTopDictExtra(SyntheticCff.DictEscapeKey(6, 1));
+
+        AssertFaceUnsupported(builder.BuildFace(), "CharstringType");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AcceptsAFilledPaintTypeAndAZeroStrokeWidth() {
+        SyntheticCff builder = CreateGlyphTable(2)
+            .WithTopDictExtra(SyntheticCff.DictEscapeKey(5, 0))
+            .WithTopDictExtra(SyntheticCff.DictEscapeKey(8, 0));
+
+        SfntFace face = SfntFace.Parse(builder.BuildFace());
+
+        Assert.Equal(SfntOutlineKind.Cff, face.OutlineKind);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsAStrokedPaintType() {
+        SyntheticCff builder = CreateGlyphTable(2)
+            .WithTopDictExtra(SyntheticCff.DictEscapeKey(5, 1));
+
+        AssertFaceUnsupported(builder.BuildFace(), "PaintType");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsANonZeroStrokeWidth() {
+        SyntheticCff builder = CreateGlyphTable(2)
+            .WithTopDictExtra(SyntheticCff.DictEscapeKey(8, 1));
+
+        AssertFaceUnsupported(builder.BuildFace(), "StrokeWidth");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsSyntheticBase() {
+        SyntheticCff builder = CreateGlyphTable(2)
+            .WithTopDictExtra(SyntheticCff.DictEscapeKey(20, 0));
+
+        AssertFaceUnsupported(builder.BuildFace(), "SyntheticBase");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ReadsFdSelectFormatThreeStartingAtTheLastGlyph() {
+        SyntheticCff builder = CreateCidTable(4, fontDictCount: 2)
+            .WithFdSelectFormat3((0, 0), (3, 1));
+        byte[] table = builder.Build();
+
+        CffFdSelect select = CffFdSelect.Parse(
+            table,
+            4,
+            2,
+            builder.FdSelectOffset,
+            "the synthetic FDSelect");
+
+        Assert.Equal(0, select.GetFontDictIndex(2));
+        Assert.Equal(1, select.GetFontDictIndex(3));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ReadsFdSelectFormatThreeWithOneRangePerGlyph() {
+        SyntheticCff builder = CreateCidTable(3, fontDictCount: 2)
+            .WithFdSelectFormat3((0, 0), (1, 0), (2, 1));
+        byte[] table = builder.Build();
+
+        CffFdSelect select = CffFdSelect.Parse(
+            table,
+            3,
+            2,
+            builder.FdSelectOffset,
+            "the synthetic FDSelect");
+
+        Assert.Equal(0, select.GetFontDictIndex(0));
+        Assert.Equal(0, select.GetFontDictIndex(1));
+        Assert.Equal(1, select.GetFontDictIndex(2));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsAnFdSelectRangeThatStartsAtTheGlyphCount() {
+        SyntheticCff builder = CreateCidTable(3, fontDictCount: 1)
+            .WithRawFdSelect([3, 0, 2, 0, 0, 0, 0, 3, 0, 0, 3]);
+        byte[] table = builder.Build();
+
+        FontFormatException exception = Assert.Throws<FontFormatException>(
+            () => CffFdSelect.Parse(table, 3, 1, builder.FdSelectOffset, "the synthetic FDSelect"));
+        Assert.Contains("starts a range", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsMoreThan256FontDicts() {
+        SyntheticCff builder = CreateGlyphTable(2).AsCid();
+        int first = builder.AddFontDict();
+        while (builder.FontDictCount <= CffFont.MAX_FONT_DICTS) {
+            builder.AddSharedFontDict(first);
+        }
+
+        builder.WithFdSelectFormat0(0, 0);
+
+        AssertFaceUnsupported(builder.BuildFace(), "256");
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ParsesSharedFontDictPrivateDataOnce() {
+        byte[][] subrs = new byte[32768][];
+        for (int index = 0; index < subrs.Length; index++) {
+            subrs[index] = SyntheticCffCharStrings.Return();
+        }
+
+        subrs[0] = SyntheticCffCharStrings.Concat(
+            SyntheticCffCharStrings.RMoveTo(5, 6),
+            SyntheticCffCharStrings.RLineTo(10, 0),
+            SyntheticCffCharStrings.Return());
+        SyntheticCff builder = SyntheticCff.Create();
+        builder.AddGlyph(SyntheticCffCharStrings.EndChar());
+        builder.AsCid();
+        int first = builder.AddFontDict(subrs);
+        while (builder.FontDictCount < CffFont.MAX_FONT_DICTS) {
+            builder.AddSharedFontDict(first);
+        }
+
+        builder.WithFdSelectFormat0(0, 0, 255);
+        builder.AddGlyph(SyntheticCffCharStrings.Concat(
+            SyntheticCffCharStrings.CallSubr(-1131),
+            SyntheticCffCharStrings.EndChar()));
+        builder.AddGlyph(SyntheticCffCharStrings.Concat(
+            SyntheticCffCharStrings.CallSubr(-1131),
+            SyntheticCffCharStrings.EndChar()));
+        byte[] faceBytes = builder.BuildFace();
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        SfntFace face = SfntFace.Parse(faceBytes);
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(
+            allocated < 8 * 1024 * 1024,
+            $"Parsing 256 shared Font DICTs allocated {allocated} bytes.");
+        Assert.Equal(new System.Numerics.Vector2(5, 6), face.GetGlyph(1).Outline.Contours.Span[0].Start);
+        Assert.Equal(new System.Numerics.Vector2(5, 6), face.GetGlyph(2).Outline.Contours.Span[0].Start);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void RejectsAnEncodingOffsetPastTheTable() {
         SyntheticCff builder = CreateGlyphTable(2)
             .WithTopDictExtra(SyntheticCff.DictKey(16, 100000));
@@ -622,6 +788,12 @@ public sealed class CffReaderTests {
     private static void AssertCffFailure(byte[] table, string reason) {
         FontFormatException exception = Assert.Throws<FontFormatException>(
             () => CffFont.Parse(table, 1, 1000));
+        Assert.Contains(reason, exception.Reason, StringComparison.Ordinal);
+    }
+
+    private static void AssertFaceUnsupported(byte[] face, string reason) {
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => SfntFace.Parse(face));
         Assert.Contains(reason, exception.Reason, StringComparison.Ordinal);
     }
 

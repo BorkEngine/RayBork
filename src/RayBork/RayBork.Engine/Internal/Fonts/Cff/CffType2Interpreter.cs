@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Numerics;
 
@@ -22,13 +23,17 @@ namespace RayBork.Internal;
 /// Defensive limits are checked before the outline or the operand stack grows, and all raise
 /// <see cref="FontUnsupportedException"/> with the limit named: operand stack depth
 /// <see cref="MAX_OPERAND_STACK"/>, subroutine nesting <see cref="MAX_SUBROUTINE_NESTING"/>, total
-/// subroutine calls <see cref="MAX_SUBROUTINE_CALLS"/>, points per glyph
+/// subroutine calls <see cref="MAX_SUBROUTINE_CALLS"/>, executed charstring tokens
+/// <see cref="MAX_EXECUTED_TOKENS"/>, hint zones <see cref="MAX_HINT_COUNT"/>, points per glyph
 /// <see cref="MAX_POINTS_PER_GLYPH"/>, and contours per glyph <see cref="MAX_CONTOURS_PER_GLYPH"/>.
-/// The counters are shared with <c>seac</c> components, so a composite cannot multiply them.
-/// Malformed instructions — unknown operators, stack underflow, a transient index outside its fixed
-/// <see cref="TRANSIENT_ARRAY_SIZE"/>-entry array, a subroutine index outside its INDEX, a
-/// <c>hintmask</c> whose mask bytes are past the end, a drawing operator before the first
-/// <c>moveto</c>, and unsupported operand counts — raise <see cref="FontFormatException"/>.
+/// The executed-token budget counts every number and operator decoded, including arithmetic-only
+/// subroutines that add no outline data, so a runaway charstring cannot burn CPU while leaving the
+/// point and contour counters untouched. The counters are shared with <c>seac</c> components, so a
+/// composite cannot multiply them. Malformed instructions — unknown operators, stack underflow, a
+/// transient index outside its fixed <see cref="TRANSIENT_ARRAY_SIZE"/>-entry array, a subroutine
+/// index outside its INDEX, a <c>hintmask</c> whose mask bytes are past the end, a drawing operator
+/// before the first <c>moveto</c>, and unsupported operand counts — raise
+/// <see cref="FontFormatException"/>.
 /// </para>
 /// <para>
 /// <c>index</c> clamps a negative depth to the top of the stack and rejects a depth past the stack;
@@ -41,6 +46,8 @@ namespace RayBork.Internal;
 /// is accepted and treated as a stack-clearing no-op. <c>endchar</c> ends the glyph even when it
 /// appears in a called subroutine, because some real fonts terminate from a shared subroutine; bytes
 /// after it are ignored. The instance is mutable and single-use; it is never shared across threads.
+/// Its operand-stack and transient scratch arrays are rented from the shared array pool and returned
+/// when <see cref="Run"/> completes.
 /// </para>
 /// </remarks>
 internal sealed class CffType2Interpreter {
@@ -61,6 +68,12 @@ internal sealed class CffType2Interpreter {
 
     /// <summary>The maximum number of contours one glyph resolution may start.</summary>
     internal const int MAX_CONTOURS_PER_GLYPH = 4096;
+
+    /// <summary>The maximum number of charstring tokens one glyph resolution may decode.</summary>
+    internal const int MAX_EXECUTED_TOKENS = 1000000;
+
+    /// <summary>The maximum number of hint zones one glyph resolution may declare.</summary>
+    internal const int MAX_HINT_COUNT = 65536;
 
     /// <summary>The fixed value that <c>random</c> pushes, keeping glyph generation reproducible.</summary>
     internal const double DETERMINISTIC_RANDOM_VALUE = 0.5;
@@ -122,8 +135,9 @@ internal sealed class CffType2Interpreter {
     private readonly CffIndex _localSubrs;
     private readonly bool _allowSeac;
     private readonly string _context;
-    private readonly double[] _stack = new double[MAX_OPERAND_STACK];
-    private readonly double[] _transient = new double[TRANSIENT_ARRAY_SIZE];
+    private readonly double[] _stack;
+    private readonly double[] _transient;
+    private bool _arraysReturned;
     private readonly List<OutlineContour> _contours = [];
     private List<OutlineSegment>? _segments;
     private Vector2 _current;
@@ -132,7 +146,7 @@ internal sealed class CffType2Interpreter {
     private bool _widthParsed;
     private bool _glyphEnded;
     private int _stackCount;
-    private int _hintCount;
+    private long _hintCount;
     private int _subroutineNesting;
 
     /// <summary>Initializes one glyph-resolution interpreter.</summary>
@@ -155,6 +169,9 @@ internal sealed class CffType2Interpreter {
         _localSubrs = privateDict.LocalSubrs;
         _allowSeac = allowSeac;
         _context = $"the CFF charstring of glyph {glyphId}";
+        _stack = ArrayPool<double>.Shared.Rent(MAX_OPERAND_STACK);
+        _transient = ArrayPool<double>.Shared.Rent(TRANSIENT_ARRAY_SIZE);
+        Array.Clear(_transient, 0, TRANSIENT_ARRAY_SIZE);
     }
 
     /// <summary>Gets the Type 2 subroutine bias for one subroutine count.</summary>
@@ -172,14 +189,28 @@ internal sealed class CffType2Interpreter {
     /// <exception cref="FontFormatException">The charstring or a called subroutine is malformed.</exception>
     /// <exception cref="FontUnsupportedException">The glyph exceeds an interpreter limit or uses an unsupported feature.</exception>
     internal OutlineContour[] Run(ReadOnlyMemory<byte> charString) {
-        Execute(charString.Span, isSubroutine: false);
-        FinishContour();
-        return _contours.Count == 0 ? [] : [.. _contours];
+        try {
+            Execute(charString.Span, isSubroutine: false);
+            FinishContour();
+            return _contours.Count == 0 ? [] : [.. _contours];
+        } finally {
+            if (!_arraysReturned) {
+                _arraysReturned = true;
+                ArrayPool<double>.Shared.Return(_stack);
+                ArrayPool<double>.Shared.Return(_transient);
+            }
+        }
     }
 
     private void Execute(ReadOnlySpan<byte> charString, bool isSubroutine) {
         int position = 0;
         while (position < charString.Length && !_glyphEnded) {
+            _budget.ExecutedTokens++;
+            if (_budget.ExecutedTokens > MAX_EXECUTED_TOKENS) {
+                throw new FontUnsupportedException(
+                    $"{_context} exceeds the {MAX_EXECUTED_TOKENS} executed-token limit");
+            }
+
             byte value = charString[position++];
             if (value >= 32) {
                 Push(ReadNumber(charString, ref position, value));
@@ -870,22 +901,33 @@ internal sealed class CffType2Interpreter {
     }
 
     private void ConsumeStemOperands() {
-        int count = TakeStemOperands();
-        _hintCount += count / 2;
+        AddHints(TakeStemOperands());
         ClearStack();
     }
 
     private int ConsumeHintMask(ReadOnlySpan<byte> charString, int position) {
-        int count = TakeStemOperands();
-        _hintCount += count / 2;
+        AddHints(TakeStemOperands());
         ClearStack();
-        long maskBytes = ((long)_hintCount + 7) / 8;
+        long maskBytes = (_hintCount + 7) / 8;
+        if (maskBytes < 0) {
+            throw new FontFormatException(
+                $"{_context} computes the negative hint mask length {maskBytes}");
+        }
+
         if (maskBytes > charString.Length - position) {
             throw new FontFormatException(
                 $"{_context} ends before its {maskBytes}-byte hint mask");
         }
 
         return (int)maskBytes;
+    }
+
+    private void AddHints(int operandCount) {
+        _hintCount += operandCount / 2;
+        if (_hintCount > MAX_HINT_COUNT) {
+            throw new FontUnsupportedException(
+                $"{_context} exceeds the {MAX_HINT_COUNT} hint limit");
+        }
     }
 
     private int TakeStemOperands() {

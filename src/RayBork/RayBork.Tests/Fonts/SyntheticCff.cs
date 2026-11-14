@@ -65,6 +65,9 @@ internal sealed class SyntheticCff {
     /// <summary>Gets the number of charstrings added so far.</summary>
     internal int GlyphCount => _charStrings.Count;
 
+    /// <summary>Gets the number of Font DICTs added so far.</summary>
+    internal int FontDictCount => _fontDicts.Count;
+
     /// <summary>Gets the CharStrings INDEX offset of the last <see cref="Build"/>.</summary>
     internal int CharStringsOffset { get; private set; }
 
@@ -199,6 +202,21 @@ internal sealed class SyntheticCff {
         return _fontDicts.Count - 1;
     }
 
+    /// <summary>Adds a Font DICT that reuses another Font DICT's Private DICT and local subroutines.</summary>
+    /// <param name="fontDictIndex">The Font DICT to share.</param>
+    /// <returns>The new Font DICT index.</returns>
+    internal int AddSharedFontDict(int fontDictIndex) {
+        if ((uint)fontDictIndex >= (uint)_fontDicts.Count) {
+            throw new ArgumentOutOfRangeException(
+                nameof(fontDictIndex),
+                fontDictIndex,
+                $"The table has {_fontDicts.Count} Font DICT(s).");
+        }
+
+        _fontDicts.Add(_fontDicts[fontDictIndex]);
+        return _fontDicts.Count - 1;
+    }
+
     /// <summary>Builds an FDSelect format 0 table from one Font DICT index per glyph.</summary>
     internal SyntheticCff WithFdSelectFormat0(params byte[] fontDictIndices) {
         _fdSelect = [(byte)FD_SELECT_FORMAT_0, .. fontDictIndices];
@@ -279,23 +297,33 @@ internal sealed class SyntheticCff {
             ? EncodeIndex(_localSubrs)
             : [];
 
+        Dictionary<SyntheticCffFontDict, int> uniqueFontDictIndices = new(ReferenceEqualityComparer.Instance);
+        List<SyntheticCffFontDict> uniqueFontDicts = [];
+        List<int> uniquePrivateLengths = [];
+        List<int> uniqueSubrLengths = [];
+        int[] fontDictUnique = new int[_fontDicts.Count];
         int[] fontDictLengths = new int[_fontDicts.Count];
-        int[] fontDictPrivateLengths = new int[_fontDicts.Count];
-        int[] fontDictSubrLengths = new int[_fontDicts.Count];
         int fontDictDataLength = 0;
         for (int index = 0; index < _fontDicts.Count; index++) {
             SyntheticCffFontDict fontDict = _fontDicts[index];
-            int privateLength = PrivateDictLength(
-                fontDict.PrivateDictExtra,
-                null,
-                null,
-                fontDict.LocalSubrs.Count > 0);
-            fontDictPrivateLengths[index] = privateLength;
-            fontDictLengths[index] = privateLength == 0 ? 0 : FONT_DICT_PRIVATE_LENGTH;
-            fontDictDataLength += fontDictLengths[index];
-            fontDictSubrLengths[index] = fontDict.LocalSubrs.Count > 0
-                ? EncodeIndex(fontDict.LocalSubrs).Length
-                : 0;
+            if (!uniqueFontDictIndices.TryGetValue(fontDict, out int unique)) {
+                unique = uniqueFontDicts.Count;
+                uniqueFontDictIndices.Add(fontDict, unique);
+                uniqueFontDicts.Add(fontDict);
+                uniquePrivateLengths.Add(PrivateDictLength(
+                    fontDict.PrivateDictExtra,
+                    null,
+                    null,
+                    fontDict.LocalSubrs.Count > 0));
+                uniqueSubrLengths.Add(fontDict.LocalSubrs.Count > 0
+                    ? EncodeIndex(fontDict.LocalSubrs).Length
+                    : 0);
+            }
+
+            fontDictUnique[index] = unique;
+            int length = uniquePrivateLengths[unique] == 0 ? 0 : FONT_DICT_PRIVATE_LENGTH;
+            fontDictLengths[index] = length;
+            fontDictDataLength += length;
         }
 
         byte[] probeTopDict = EncodeTopDict(
@@ -329,17 +357,17 @@ internal sealed class SyntheticCff {
 
         int fdArrayOffset = 0;
         int fdSelectOffset = 0;
-        int[] fontDictPrivateOffsets = new int[_fontDicts.Count];
+        int[] uniquePrivateOffsets = new int[uniqueFontDicts.Count];
         if (_isCid) {
             fdArrayOffset = offset;
             offset += IndexLength(_fontDicts.Count, fontDictDataLength);
-            for (int index = 0; index < _fontDicts.Count; index++) {
-                if (fontDictPrivateLengths[index] == 0) {
+            for (int unique = 0; unique < uniqueFontDicts.Count; unique++) {
+                if (uniquePrivateLengths[unique] == 0) {
                     continue;
                 }
 
-                fontDictPrivateOffsets[index] = offset;
-                offset += fontDictPrivateLengths[index] + fontDictSubrLengths[index];
+                uniquePrivateOffsets[unique] = offset;
+                offset += uniquePrivateLengths[unique] + uniqueSubrLengths[unique];
             }
 
             fdSelectOffset = offset;
@@ -393,29 +421,30 @@ internal sealed class SyntheticCff {
         if (_isCid) {
             byte[][] fontDicts = new byte[_fontDicts.Count][];
             for (int index = 0; index < _fontDicts.Count; index++) {
+                int unique = fontDictUnique[index];
                 fontDicts[index] = fontDictLengths[index] == 0
                     ? []
-                    : EncodeFontDict(fontDictPrivateLengths[index], fontDictPrivateOffsets[index]);
+                    : EncodeFontDict(uniquePrivateLengths[unique], uniquePrivateOffsets[unique]);
             }
 
             WriteBlock(table, fdArrayOffset, EncodeIndex(fontDicts));
-            for (int index = 0; index < _fontDicts.Count; index++) {
-                if (fontDictPrivateLengths[index] == 0) {
+            for (int unique = 0; unique < uniqueFontDicts.Count; unique++) {
+                if (uniquePrivateLengths[unique] == 0) {
                     continue;
                 }
 
-                SyntheticCffFontDict fontDict = _fontDicts[index];
+                SyntheticCffFontDict fontDict = uniqueFontDicts[unique];
                 byte[] privateDict = EncodePrivateDict(
                     fontDict.PrivateDictExtra,
                     null,
                     null,
                     fontDict.LocalSubrs.Count > 0,
-                    fontDictPrivateLengths[index]);
-                WriteBlock(table, fontDictPrivateOffsets[index], privateDict);
+                    uniquePrivateLengths[unique]);
+                WriteBlock(table, uniquePrivateOffsets[unique], privateDict);
                 if (fontDict.LocalSubrs.Count > 0) {
                     WriteBlock(
                         table,
-                        fontDictPrivateOffsets[index] + fontDictPrivateLengths[index],
+                        uniquePrivateOffsets[unique] + uniquePrivateLengths[unique],
                         EncodeIndex(fontDict.LocalSubrs));
                 }
             }

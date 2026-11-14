@@ -12,9 +12,9 @@ namespace RayBork.Internal;
 /// supported subset and raise <see cref="FontUnsupportedException"/>.
 /// </para>
 /// <para>
-/// The instance is immutable and safe to read from any thread. The reverse SID lookup used by the
-/// deprecated <c>seac</c> form is a linear scan because a <c>seac</c> glyph is rare and resolving one
-/// is already allocating an outline; it keeps the charset free of a second per-face index.
+/// The instance is immutable and safe to read from any thread. <see cref="TryGetGlyphId"/> resolves
+/// the deprecated <c>seac</c> form through a SID-sorted lookup built once at parse, so a face with
+/// many <c>seac</c> glyphs is O(log glyphs) per component instead of a linear scan.
 /// </para>
 /// </remarks>
 internal sealed class CffCharset {
@@ -29,14 +29,20 @@ internal sealed class CffCharset {
     private const int PREDEFINED_EXPERT_SUBSET = 2;
     private const int MAX_SID = 0xFFFF;
 
-    private readonly ReadOnlyMemory<ushort> _sids;
+    private readonly ReadOnlyMemory<SidGlyph> _lookup;
 
-    private CffCharset(ReadOnlyMemory<ushort> sids) {
-        _sids = sids;
+    private CffCharset(ushort[] sids) {
+        SidGlyph[] lookup = new SidGlyph[sids.Length];
+        for (int glyphId = 0; glyphId < sids.Length; glyphId++) {
+            lookup[glyphId] = new SidGlyph(sids[glyphId], (ushort)glyphId);
+        }
+
+        Array.Sort(lookup, static (first, second) => {
+            int bySid = first.Sid.CompareTo(second.Sid);
+            return bySid != 0 ? bySid : first.GlyphId.CompareTo(second.GlyphId);
+        });
+        _lookup = lookup;
     }
-
-    /// <summary>Gets the number of mapped glyphs.</summary>
-    internal int Count => _sids.Length;
 
     /// <summary>Parses the charset of a face.</summary>
     /// <param name="table">The complete <c>CFF </c> table.</param>
@@ -139,25 +145,51 @@ internal sealed class CffCharset {
         return new CffCharset(sids);
     }
 
-    /// <summary>Gets one glyph's SID or CID.</summary>
-    /// <param name="glyphId">The glyph identifier, in <c>[0, Count)</c>.</param>
-    /// <returns>The 16-bit SID or CID.</returns>
-    internal int GetSid(int glyphId) => _sids.Span[glyphId];
-
     /// <summary>Finds the first glyph that carries one SID.</summary>
     /// <param name="sid">The SID to resolve.</param>
     /// <param name="glyphId">The matching glyph identifier, or zero when none matches.</param>
     /// <returns><see langword="true"/> when the SID maps to a glyph.</returns>
     internal bool TryGetGlyphId(int sid, out int glyphId) {
-        ReadOnlySpan<ushort> sids = _sids.Span;
-        for (int index = 0; index < sids.Length; index++) {
-            if (sids[index] == sid) {
-                glyphId = index;
+        if ((uint)sid > MAX_SID) {
+            glyphId = 0;
+            return false;
+        }
+
+        ushort value = (ushort)sid;
+        ReadOnlySpan<SidGlyph> lookup = _lookup.Span;
+        int low = 0;
+        int high = lookup.Length - 1;
+        while (low <= high) {
+            int middle = low + ((high - low) / 2);
+            int comparison = lookup[middle].Sid.CompareTo(value);
+            if (comparison == 0) {
+                while (middle > 0 && lookup[middle - 1].Sid == value) {
+                    middle--;
+                }
+
+                glyphId = lookup[middle].GlyphId;
                 return true;
+            }
+
+            if (comparison < 0) {
+                low = middle + 1;
+            } else {
+                high = middle - 1;
             }
         }
 
         glyphId = 0;
         return false;
+    }
+
+    private readonly struct SidGlyph {
+        internal SidGlyph(ushort sid, ushort glyphId) {
+            Sid = sid;
+            GlyphId = glyphId;
+        }
+
+        internal ushort Sid { get; }
+
+        internal ushort GlyphId { get; }
     }
 }

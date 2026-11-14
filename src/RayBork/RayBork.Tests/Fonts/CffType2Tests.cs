@@ -268,11 +268,17 @@ public sealed class CffType2Tests {
             RMoveTo(0, 0),
             Concat(Fixed(16.5), Number(10), Bytes(RLINETO)),
             Concat(Number(300), Number(0), Bytes(RLINETO)),
+            Concat(Number(2000), Number(0), Bytes(RLINETO)),
+            Concat(Number(-300), Number(-200), Bytes(RLINETO)),
+            Concat(Fixed(-16.5), Number(0), Bytes(RLINETO)),
             EndChar()));
 
         ReadOnlySpan<OutlineSegment> segments = glyph.Outline.Contours.Span[0].Segments.Span;
         AssertPoint(16.5f, 10, segments[0].End);
         AssertPoint(316.5f, 10, segments[1].End);
+        AssertPoint(2316.5f, 10, segments[2].End);
+        AssertPoint(2016.5f, -190, segments[3].End);
+        AssertPoint(2000, -190, segments[4].End);
     }
 
     [Fact]
@@ -481,6 +487,68 @@ public sealed class CffType2Tests {
         FontFormatException exception = Assert.Throws<FontFormatException>(
             () => Resolve(Concat(RMoveTo(0, 0), HStem(10))));
         Assert.Contains("odd number", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SkipsAHintMaskWithNoHintsAndNoWidth() {
+        FontGlyph glyph = Resolve(Concat(
+            HintMask([]),
+            RMoveTo(10, 20),
+            RLineTo(1, 0),
+            EndChar()));
+
+        AssertPoint(10, 20, SingleContour(glyph).Start);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ConsumesAWidthBeforeANonEmptyHintMask() {
+        FontGlyph glyph = Resolve(Concat(
+            WithWidth(300, Concat(Number(0), Number(10), HintMask([0x0F]))),
+            RMoveTo(10, 20),
+            RLineTo(1, 0),
+            EndChar()));
+
+        AssertPoint(10, 20, SingleContour(glyph).Start);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CountsExplicitAndImplicitStemsBeforeAHintMask() {
+        FontGlyph glyph = Resolve(Concat(
+            HStemHm(0, 10),
+            Numbers(20, 30),
+            HintMask([0x0F]),
+            RMoveTo(10, 20),
+            RLineTo(1, 0),
+            EndChar()));
+
+        AssertPoint(10, 20, SingleContour(glyph).Start);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AcceptsExactlyTheHintLimit() {
+        List<byte[]> parts = StemParts(65536);
+        parts.Add(RMoveTo(10, 20));
+        parts.Add(RLineTo(1, 0));
+        parts.Add(EndChar());
+
+        FontGlyph glyph = ResolveWith(Concat(parts.ToArray()));
+
+        AssertPoint(10, 20, SingleContour(glyph).Start);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsOneHintPastTheHintLimit() {
+        List<byte[]> parts = StemParts(65537);
+        parts.Add(EndChar());
+
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => ResolveWith(Concat(parts.ToArray())));
+        Assert.Contains("65536", exception.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -894,6 +962,25 @@ public sealed class CffType2Tests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AcceptsExactlyTheSubroutineCallBudget() {
+        SyntheticCff cff = SyntheticCff.Create();
+        cff.AddGlyph(EndChar());
+        cff.WithLocalSubrs(Return());
+        List<byte[]> calls = new(65537);
+        for (int index = 0; index < 65536; index++) {
+            calls.Add(CallSubr(-107));
+        }
+
+        calls.Add(EndChar());
+        int glyphId = cff.AddGlyph(Concat(calls.ToArray()));
+
+        FontGlyph glyph = SfntFace.Parse(cff.BuildFace()).GetGlyph(glyphId);
+
+        Assert.True(glyph.IsEmpty);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void RejectsMoreThanTheSubroutineCallBudget() {
         SyntheticCff cff = SyntheticCff.Create();
         cff.AddGlyph(EndChar());
@@ -909,6 +996,50 @@ public sealed class CffType2Tests {
         FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
             () => SfntFace.Parse(cff.BuildFace()).GetGlyph(glyphId));
         Assert.Contains("65536", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AcceptsExactlyTheExecutedTokenBudget() {
+        FontGlyph glyph = ResolveWith(BuildTokenCharString(999999));
+
+        Assert.True(glyph.IsEmpty);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsOneTokenPastTheExecutedTokenBudget() {
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => ResolveWith(BuildTokenCharString(1000000)));
+
+        Assert.Contains("1000000", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsAnArithmeticOnlySubroutineThatExceedsTheTokenBudget() {
+        SyntheticCff cff = SyntheticCff.Create();
+        cff.AddGlyph(EndChar());
+        List<byte[]> arithmetic = [];
+        for (int index = 0; index < 10; index++) {
+            arithmetic.Add(Concat(
+                Numbers(1, 1),
+                EscapeOperator(AND),
+                EscapeOperator(DROP)));
+        }
+
+        cff.WithLocalSubrs(Concat([.. arithmetic, Return()]));
+        List<byte[]> calls = new(65538);
+        for (int index = 0; index < 65537; index++) {
+            calls.Add(CallSubr(-107));
+        }
+
+        calls.Add(EndChar());
+        int glyphId = cff.AddGlyph(Concat(calls.ToArray()));
+
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => SfntFace.Parse(cff.BuildFace()).GetGlyph(glyphId));
+        Assert.Contains("1000000", exception.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1093,6 +1224,65 @@ public sealed class CffType2Tests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SharesTheContourBudgetAcrossSeacComponents() {
+        List<byte[]> baseParts = new(4097);
+        for (int index = 0; index < 4096; index++) {
+            baseParts.Add(RMoveTo(0, 0));
+        }
+
+        baseParts.Add(EndChar());
+        SyntheticCff cff = CreateSeacTable(
+            Concat(baseParts.ToArray()),
+            Concat(RMoveTo(1, 2), RLineTo(1, 0), EndChar()),
+            EndCharSeac(0, 0, 65, 66));
+
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => Resolve(cff, 3));
+        Assert.Contains("4096", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SharesThePointBudgetAcrossSeacComponents() {
+        List<byte[]> baseParts = new(6668) { RMoveTo(0, 0) };
+        for (int index = 0; index < 6666; index++) {
+            baseParts.Add(RRCurveTo(1, 1, 1, 1, 1, 1));
+        }
+
+        baseParts.Add(RLineTo(1, 0));
+        baseParts.Add(EndChar());
+        SyntheticCff cff = CreateSeacTable(
+            Concat(baseParts.ToArray()),
+            Concat(RMoveTo(1, 2), RLineTo(1, 0), EndChar()),
+            EndCharSeac(0, 0, 65, 66));
+
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => Resolve(cff, 3));
+        Assert.Contains("20000", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SharesTheSubroutineCallBudgetAcrossSeacComponents() {
+        List<byte[]> baseParts = new(65537);
+        for (int index = 0; index < 65536; index++) {
+            baseParts.Add(CallSubr(-107));
+        }
+
+        baseParts.Add(EndChar());
+        SyntheticCff cff = CreateSeacTable(
+            Concat(baseParts.ToArray()),
+            Concat(CallSubr(-107), EndChar()),
+            EndCharSeac(0, 0, 65, 66));
+        cff.WithLocalSubrs(Return());
+
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
+            () => Resolve(cff, 3));
+        Assert.Contains("65536", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ComputesBoundsFromTheControlPointHull() {
         FontGlyph glyph = Resolve(Concat(
             RMoveTo(10, 10),
@@ -1136,21 +1326,73 @@ public sealed class CffType2Tests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsAGlyphOverThePointLimit() {
-        List<byte[]> curves = new(6668) { RMoveTo(0, 0) };
-        for (int index = 0; index < 6667; index++) {
-            curves.Add(RRCurveTo(1, 1, 1, 1, 1, 1));
+    public void RejectsNonFiniteCoordinatesWithTheIdentityMatrix() {
+        List<byte[]> parts = [Number(32767)];
+        for (int index = 0; index < 70; index++) {
+            parts.Add(Number(32767));
+            parts.Add(EscapeOperator(MUL));
         }
 
-        curves.Add(EndChar());
+        parts.Add(Number(0));
+        parts.Add(Bytes(RMOVETO));
+        parts.Add(RLineTo(1, 0));
+        parts.Add(EndChar());
+
+        FontFormatException exception = Assert.Throws<FontFormatException>(
+            () => ResolveWith(Concat(parts.ToArray())));
+        Assert.Contains("not finite", exception.Reason, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AcceptsExactlyThePointLimit() {
+        List<byte[]> parts = new(6669) { RMoveTo(0, 0) };
+        for (int index = 0; index < 6666; index++) {
+            parts.Add(RRCurveTo(1, 1, 1, 1, 1, 1));
+        }
+
+        parts.Add(RLineTo(1, 0));
+        parts.Add(EndChar());
+
+        FontGlyph glyph = ResolveWith(Concat(parts.ToArray()));
+
+        Assert.False(glyph.IsEmpty);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsOnePointPastThePointLimit() {
+        List<byte[]> parts = new(6670) { RMoveTo(0, 0) };
+        for (int index = 0; index < 6666; index++) {
+            parts.Add(RRCurveTo(1, 1, 1, 1, 1, 1));
+        }
+
+        parts.Add(RLineTo(1, 0));
+        parts.Add(RLineTo(1, 0));
+        parts.Add(EndChar());
+
         FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
-            () => ResolveWith(Concat(curves.ToArray())));
+            () => ResolveWith(Concat(parts.ToArray())));
         Assert.Contains("20000", exception.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsAGlyphOverTheContourLimit() {
+    public void AcceptsExactlyTheContourLimit() {
+        List<byte[]> moves = new(4097);
+        for (int index = 0; index < 4096; index++) {
+            moves.Add(RMoveTo(0, 0));
+        }
+
+        moves.Add(EndChar());
+        FontGlyph glyph = ResolveWith(Concat(moves.ToArray()));
+
+        Assert.True(glyph.IsEmpty);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RejectsOneContourPastTheContourLimit() {
         List<byte[]> moves = new(4098);
         for (int index = 0; index < 4097; index++) {
             moves.Add(RMoveTo(0, 0));
@@ -1201,6 +1443,47 @@ public sealed class CffType2Tests {
         }
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ParsesAFaceWithACorruptUnusedCharString() {
+        SyntheticCff cff = SyntheticCff.Create();
+        cff.AddGlyph(EndChar());
+        cff.AddGlyph(Concat(RMoveTo(0, 0), RLineTo(10, 0), EndChar()));
+        cff.AddGlyph(Bytes(15));
+
+        SfntFace face = SfntFace.Parse(cff.BuildFace((0x41, 1), (0x42, 2)));
+
+        Assert.False(face.GetGlyph(1).IsEmpty);
+        Assert.Throws<FontFormatException>(() => face.GetGlyph(2));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ResolvesGlyphsConcurrently() {
+        SyntheticCff cff = CreateSeacTable(
+            Concat(RMoveTo(10, 20), RRCurveTo(100, 200, -50, -100, 20, 300), EndChar()));
+        cff.AddGlyph(Concat(
+            HStemHm(0, 20),
+            HintMask([0x01]),
+            RMoveTo(0, 0),
+            RLineTo(50, 0),
+            EndChar()));
+        cff.WithCharset(34, 35, 36, 37);
+        SfntFace face = SfntFace.Parse(cff.BuildFace());
+        FontGlyph[] expected = new FontGlyph[face.GlyphCount];
+        for (int glyphId = 0; glyphId < face.GlyphCount; glyphId++) {
+            expected[glyphId] = face.GetGlyph(glyphId);
+        }
+
+        Parallel.For(0, 8, worker => {
+            for (int iteration = 0; iteration < 64; iteration++) {
+                for (int glyphId = 0; glyphId < expected.Length; glyphId++) {
+                    AssertSameGlyph(expected[glyphId], face.GetGlyph(glyphId));
+                }
+            }
+        });
+    }
+
     [Theory]
     [InlineData(new byte[] { 247 })]
     [InlineData(new byte[] { 28, 1 })]
@@ -1244,14 +1527,69 @@ public sealed class CffType2Tests {
         return cff;
     }
 
-    private static SyntheticCff CreateSeacTable(byte[] compositeCharString) {
+    private static SyntheticCff CreateSeacTable(byte[] compositeCharString) => CreateSeacTable(
+        Concat(RMoveTo(10, 20), RLineTo(30, 0), EndChar()),
+        Concat(RMoveTo(1, 2), RLineTo(5, 0), EndChar()),
+        compositeCharString);
+
+    private static SyntheticCff CreateSeacTable(
+        byte[] baseCharString,
+        byte[] accentCharString,
+        byte[] compositeCharString) {
         SyntheticCff cff = SyntheticCff.Create();
         cff.AddGlyph(EndChar());
-        cff.AddGlyph(Concat(RMoveTo(10, 20), RLineTo(30, 0), EndChar()));
-        cff.AddGlyph(Concat(RMoveTo(1, 2), RLineTo(5, 0), EndChar()));
+        cff.AddGlyph(baseCharString);
+        cff.AddGlyph(accentCharString);
         cff.AddGlyph(compositeCharString);
         cff.WithCharset(34, 35, 36);
         return cff;
+    }
+
+    private static byte[] BuildTokenCharString(int hintMaskCount) {
+        byte[] charString = new byte[hintMaskCount + 1];
+        charString.AsSpan(0, hintMaskCount).Fill(HINTMASK);
+        charString[^1] = ENDCHAR;
+        return charString;
+    }
+
+    private static List<byte[]> StemParts(int hintCount) {
+        List<byte[]> parts = [];
+        int remaining = hintCount;
+        while (remaining > 0) {
+            int take = Math.Min(remaining, 24);
+            int[] arguments = new int[take * 2];
+            for (int index = 0; index < take; index++) {
+                arguments[index * 2] = 0;
+                arguments[index * 2 + 1] = 10;
+            }
+
+            parts.Add(HStem(arguments));
+            remaining -= take;
+        }
+
+        return parts;
+    }
+
+    private static void AssertSameGlyph(FontGlyph expected, FontGlyph actual) {
+        Assert.Equal(expected.Bounds.XMin, actual.Bounds.XMin);
+        Assert.Equal(expected.Bounds.YMin, actual.Bounds.YMin);
+        Assert.Equal(expected.Bounds.XMax, actual.Bounds.XMax);
+        Assert.Equal(expected.Bounds.YMax, actual.Bounds.YMax);
+        Assert.Equal(expected.Outline.Contours.Length, actual.Outline.Contours.Length);
+        for (int contourIndex = 0; contourIndex < expected.Outline.Contours.Length; contourIndex++) {
+            OutlineContour expectedContour = expected.Outline.Contours.Span[contourIndex];
+            OutlineContour actualContour = actual.Outline.Contours.Span[contourIndex];
+            Assert.Equal(expectedContour.Start, actualContour.Start);
+            Assert.Equal(expectedContour.Segments.Length, actualContour.Segments.Length);
+            for (int segmentIndex = 0; segmentIndex < expectedContour.Segments.Length; segmentIndex++) {
+                OutlineSegment expectedSegment = expectedContour.Segments.Span[segmentIndex];
+                OutlineSegment actualSegment = actualContour.Segments.Span[segmentIndex];
+                Assert.Equal(expectedSegment.Kind, actualSegment.Kind);
+                Assert.Equal(expectedSegment.Control1, actualSegment.Control1);
+                Assert.Equal(expectedSegment.Control2, actualSegment.Control2);
+                Assert.Equal(expectedSegment.End, actualSegment.End);
+            }
+        }
     }
 
     private static SyntheticCff CreateCidTable(bool withFdSelectFormat0, bool rangeFormat) {

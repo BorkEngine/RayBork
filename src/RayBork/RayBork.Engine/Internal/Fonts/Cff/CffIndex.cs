@@ -36,9 +36,6 @@ internal sealed class CffIndex {
     /// <summary>Gets the number of objects.</summary>
     internal int Count => _offsets.IsEmpty ? 0 : _offsets.Length - 1;
 
-    /// <summary>Gets a value indicating whether the INDEX has no objects.</summary>
-    internal bool IsEmpty => _offsets.IsEmpty;
-
     /// <summary>Parses one CFF INDEX at an offset inside a table.</summary>
     /// <param name="table">The table that contains the INDEX.</param>
     /// <param name="offset">The INDEX offset inside <paramref name="table"/>.</param>

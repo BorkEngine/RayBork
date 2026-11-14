@@ -157,7 +157,8 @@ internal sealed class SfntFace {
     /// </exception>
     /// <exception cref="FontUnsupportedException">
     /// A <c>kern</c> or <c>GPOS</c> table is valid but exceeds a documented defensive parser limit,
-    /// or the CFF table is CFF2, uses a predefined Expert charset, or has an FDSelect format 4 table.
+    /// or the CFF table is CFF2, uses a predefined Expert charset, has an FDSelect format 4 table,
+    /// declares a CFF Top DICT feature outside the supported subset, or exceeds a CFF parse limit.
     /// </exception>
     internal static SfntFace Parse(ReadOnlyMemory<byte> data) {
         SfntReader face = new(data.Span, "the face");

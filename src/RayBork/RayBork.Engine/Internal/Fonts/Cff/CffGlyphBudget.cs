@@ -15,6 +15,9 @@ internal sealed class CffGlyphBudget {
     /// <summary>Gets or sets the number of contours started so far.</summary>
     internal int Contours { get; set; }
 
+    /// <summary>Gets or sets the number of charstring tokens decoded so far.</summary>
+    internal int ExecutedTokens { get; set; }
+
     /// <summary>Gets or sets the number of subroutine calls executed so far.</summary>
     internal int SubroutineCalls { get; set; }
 }

@@ -104,7 +104,36 @@ public sealed class CffFuzzTests {
     private static byte[][] CreateFaces() => [
         CreateLatinFace(),
         CreateCidFace(),
+        CreateSharedFontDictFace(),
     ];
+
+    private static byte[] CreateSharedFontDictFace() {
+        byte[][] subrs = new byte[128][];
+        for (int index = 0; index < subrs.Length; index++) {
+            subrs[index] = SyntheticCffCharStrings.Return();
+        }
+
+        subrs[0] = SyntheticCffCharStrings.Concat(
+            SyntheticCffCharStrings.RMoveTo(1, 2),
+            SyntheticCffCharStrings.RLineTo(3, 4),
+            SyntheticCffCharStrings.Return());
+        SyntheticCff cff = SyntheticCff.Create();
+        cff.AddGlyph(SyntheticCffCharStrings.EndChar());
+        cff.AsCid();
+        int first = cff.AddFontDict(subrs);
+        for (int index = 1; index < 32; index++) {
+            cff.AddSharedFontDict(first);
+        }
+
+        cff.WithFdSelectFormat3((0, 0), (1, 0), (2, 1));
+        cff.AddGlyph(SyntheticCffCharStrings.Concat(
+            SyntheticCffCharStrings.CallSubr(-107),
+            SyntheticCffCharStrings.EndChar()));
+        cff.AddGlyph(SyntheticCffCharStrings.Concat(
+            SyntheticCffCharStrings.CallSubr(-107),
+            SyntheticCffCharStrings.EndChar()));
+        return cff.BuildFace((0x41, 1), (0x42, 2));
+    }
 
     private static byte[] CreateLatinFace() {
         SyntheticCff cff = SyntheticCff.Create();
