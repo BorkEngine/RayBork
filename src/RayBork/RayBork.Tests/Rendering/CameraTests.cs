@@ -803,6 +803,33 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DrawModelInstancedRecordsEveryTransformForLargeInstanceCounts() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        Shader material = RenderingTestAssets.CreateShader();
+        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], materials: [material]);
+        Camera camera = host.CreatePerspectiveCamera();
+        Transform[] transforms = new Transform[100];
+        for (int index = 0; index < transforms.Length; index++) {
+            transforms[index] = new Transform(new Vector3(index, 0f, 0f));
+        }
+
+        camera.DrawModelInstanced(model, transforms);
+        camera.Dispose();
+        host.EndFrame();
+
+        Assert.Equal(1, packet.Passes[0].DrawCount);
+        RenderDrawRecord record = packet.Passes[0].Draws[0];
+        Assert.Equal(transforms.Length, record.InstanceCount);
+        Assert.Equal(Vector3.Zero, Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[0]));
+        Assert.Equal(
+            new Vector3(transforms.Length - 1, 0f, 0f),
+            Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[transforms.Length - 1]));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void EmptyModelInstancedSpanRecordsNothing() {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
