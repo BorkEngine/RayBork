@@ -64,8 +64,9 @@ the face and generates MSDF glyph textures on demand.
 - `size` is the em height in world units. A `size` of `1` means one world unit per em.
 - Text is world space. `DrawText` lays the text in the transform's local XY plane, with +X to the
   right and +Y up; the readable face points toward local +Z.
-- Alignment and wrapping are applied within `maxWidth` when `wrapping` is not `None`. `maxWidth`
-  is in world units.
+- `maxWidth` is the alignment box width whenever it is positive, in every wrapping mode; it is in
+  world units at the requested `size`. `Word` and `Character` require `maxWidth > 0`. `None` with
+  `maxWidth == 0` aligns lines against the widest line.
 - `DrawTextBillboard` lays out the text in a camera-facing plane. It is the same layout and
   batching path with a billboard transform.
 - Text batching uses the built-in MSDF shader. All text with the same font and render state can be
