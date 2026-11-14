@@ -14,8 +14,9 @@ namespace RayBork.Tests;
 /// Every test loads <c>/fonts/fira-sans</c> from the built-in pack through the real catalog loader and
 /// warms the glyph textures through the real generation service. The waits pump the GPU upload bridge
 /// instead of sleeping, and the pixel probes read single pixels with explicit tolerances. A glyph
-/// texture is one padded quad, so the probe sits at the center of the capital <c>I</c> glyph's stem,
-/// where the MSDF coverage is fully inside the glyph.
+/// texture is one padded quad, so the probes sit on deterministic interior pixels: the capital L's
+/// bottom arm and its mirrored blank for the orientation check, and the capital I's stem center for the
+/// occlusion and batching checks.
 /// </para>
 /// <para>
 /// The tests join the serialized <c>SDL</c> collection because SDL and Vulkan initialization are process
@@ -33,23 +34,29 @@ public sealed class TextDrawGpuTests {
     private const float ORTHOGRAPHIC_HEIGHT = 2f;
     private const float TEXT_Z = -4f;
     private const string SAMPLE_TEXT = "HI";
+    private const string ORIENTATION_TEXT = "L";
     private const int BACKGROUND_MARGIN = 20;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DrawTextRendersItsGlyphsAtTheExpectedScreenArea() {
+    public void DrawTextRendersItsGlyphsAtTheExpectedScreenAreaAndOrientation() {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
         Font font = harness.LoadFont();
-        harness.WarmGlyphs(font, SAMPLE_TEXT);
-        (TextLayoutResult layout, TextGlyphInstance[] glyphs) = ArrangeText(font, SAMPLE_TEXT);
+        harness.WarmGlyphs(font, ORIENTATION_TEXT);
+        (TextLayoutResult layout, TextGlyphInstance[] glyphs) = ArrangeText(font, ORIENTATION_TEXT);
         Transform transform = CenteredTransform(layout, TEXT_Z);
-        InkArea area = default;
-        (uint X, uint Y) ink = default;
+        InkArea blockArea = default;
+        InkArea glyphArea = default;
         harness.SubmitOrthographic(
             camera => {
-                camera.DrawText(font, SAMPLE_TEXT, transform, TEXT_SIZE, _textColor);
-                area = ScreenArea(camera, harness, layout, transform);
-                ink = GlyphCenterPixel(camera, glyphs[1], transform);
+                camera.DrawText(font, ORIENTATION_TEXT, transform, TEXT_SIZE, _textColor);
+                blockArea = ScreenArea(camera, harness, layout.BoundsMin, layout.BoundsMax, transform);
+                glyphArea = ScreenArea(
+                    camera,
+                    harness,
+                    glyphs[0].Position,
+                    glyphs[0].Position + glyphs[0].Size,
+                    transform);
             },
             transform: null,
             clearColor: _clearColor,
@@ -61,23 +68,20 @@ public sealed class TextDrawGpuTests {
         Assert.Equal(glyphs.Length * 2, stats.Triangles);
         Assert.Equal(0, stats.CulledInstances);
 
-        // The capital I's stem covers the glyph quad's center and a quarter of its height either side.
-        AssertColorNear(_textColor, harness.ReadColor(ink.X, ink.Y), INK_TOLERANCE);
-        int quarterPixels = (int)MathF.Round((glyphs[1].Size.Y / 4f) * (harness.Height / ORTHOGRAPHIC_HEIGHT));
-        AssertColorNear(
-            _textColor,
-            harness.ReadColor(ink.X, checked((uint)((int)ink.Y - quarterPixels))),
-            INK_TOLERANCE);
-        AssertColorNear(
-            _textColor,
-            harness.ReadColor(ink.X, checked((uint)((int)ink.Y + quarterPixels))),
-            INK_TOLERANCE);
+        // L's horizontal arm is its bottom feature. A vertically flipped or transposed glyph texture
+        // would not put ink over the arm's far end, and the mirrored probe inside the same quad would
+        // not be blank.
+        uint inkX = Pixel(glyphArea.MinX + ((glyphArea.MaxX - glyphArea.MinX) * 0.7f));
+        uint inkY = Pixel(glyphArea.MaxY - ((glyphArea.MaxY - glyphArea.MinY) * 0.1f));
+        uint mirroredY = Pixel(glyphArea.MinY + ((glyphArea.MaxY - glyphArea.MinY) * 0.1f));
+        AssertColorNear(_textColor, harness.ReadColor(inkX, inkY), INK_TOLERANCE);
+        AssertColorNear(_clearColor, harness.ReadColor(inkX, mirroredY), INK_TOLERANCE);
 
         // The probes outside the text block stay the clear color.
-        uint backgroundX = area.MinX >= BACKGROUND_MARGIN
-            ? checked((uint)(area.MinX - BACKGROUND_MARGIN))
-            : checked((uint)(area.MaxX + BACKGROUND_MARGIN));
-        AssertColorNear(_clearColor, harness.ReadColor(backgroundX, ink.Y));
+        uint backgroundX = blockArea.MinX >= BACKGROUND_MARGIN
+            ? checked((uint)(blockArea.MinX - BACKGROUND_MARGIN))
+            : checked((uint)(blockArea.MaxX + BACKGROUND_MARGIN));
+        AssertColorNear(_clearColor, harness.ReadColor(backgroundX, inkY));
         AssertColorNear(_clearColor, harness.ReadColor(2, 2));
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
@@ -188,19 +192,20 @@ public sealed class TextDrawGpuTests {
     }
 
     /// <summary>
-    /// Gets the clamped screen-pixel rectangle of the layout bounds.
+    /// Gets the clamped screen-pixel rectangle of one local layout rectangle.
     /// </summary>
     private static InkArea ScreenArea(
         Camera camera,
         PrimitiveDrawGpuHarness harness,
-        TextLayoutResult layout,
+        Vector2 localMin,
+        Vector2 localMax,
         Transform transform) {
         Vector2 minimum = new(float.PositiveInfinity);
         Vector2 maximum = new(float.NegativeInfinity);
         for (int corner = 0; corner < 4; corner++) {
             Vector2 local = new(
-                (corner & 1) == 0 ? layout.BoundsMin.X : layout.BoundsMax.X,
-                (corner & 2) == 0 ? layout.BoundsMin.Y : layout.BoundsMax.Y);
+                (corner & 1) == 0 ? localMin.X : localMax.X,
+                (corner & 2) == 0 ? localMin.Y : localMax.Y);
             Vector2 screen = camera.WorldToScreen(transform.TransformPoint(new Vector3(local, 0f)));
             minimum = Vector2.Min(minimum, screen);
             maximum = Vector2.Max(maximum, screen);

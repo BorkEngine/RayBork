@@ -219,9 +219,9 @@ radii because its sides and caps use different meshes; a tapered cylinder is one
 merges into the shared engine mesh batch for its program and render state. Text follows the same rule
 with one addition: a text record carries one per-instance glyph texture per instance, so glyphs with
 different textures still form one instanced batch. All text over the quad, MSDF program, and text
-render state merges across calls, fonts, sizes, and strings. `Instances` counts the recorded glyph
-instances and `Triangles` is two per instance; a call with no ready glyph records nothing and adds no
-draw call.
+render state merges across calls, fonts, sizes, and strings. `Instances` counts the submitted glyph
+instances after frustum culling and `Triangles` is two per submitted instance; a call with no ready
+glyph records nothing and adds no draw call.
 
 **Lines and wire shapes.** Lines are one pixel wide. The engine draws them as `LineList` geometry
 and never requests the `wideLines` device feature, so v1 has no thick-line option and no per-line

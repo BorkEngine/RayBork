@@ -419,8 +419,9 @@ Every ready glyph is one instance with its own per-instance glyph texture in lay
 the per-instance UV rectangle at `(0, 0, 1, 1)`, because one glyph is one whole padded texture sampled
 `0..1`; there is no atlas and no glyph sub-rectangle.
 
-Glyph textures are generated asynchronously. A call that lays out glyphs calls `Font.BeginFrame` once
-and then `AcquireGlyphTexture` for each layout instance with a positive size. It never waits: a glyph whose
+Glyph textures are generated asynchronously. A text draw begins the font's frame clock once per
+camera, then calls `AcquireGlyphTexture` for each layout instance with a positive size. It never waits:
+a glyph whose
 texture is not generated yet, whose generation failed, or whose outline is empty is skipped for that
 call, while the pen still advances by the face metrics, so the remaining glyphs keep their layout
 positions and the glyph appears on a later frame. A call that records no ready glyph records nothing.
@@ -440,8 +441,8 @@ arrives with M7.
 Batching and statistics: every text draw records the same quad, MSDF program, and render state, so all
 text batches together regardless of the font, size, or string; uniform values and per-instance textures
 are not part of the batch key. The plan sorts text batches back-to-front with the other alpha batches.
-`Instances` counts the recorded glyph instances and `Triangles` is two per instance. A call with no
-ready glyph adds no draw record and no draw call.
+`Instances` counts the submitted glyph instances after frustum culling, and `Triangles` is two per
+submitted instance. A call with no ready glyph adds no draw record and no draw call.
 
 Validation runs before any retention or record mutation. A null font is `ArgumentNullException`; a
 disposed camera or font is `ObjectDisposedException`; a non-finite transform position, rotation, scale,

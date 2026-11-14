@@ -167,6 +167,47 @@ public sealed class TextDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AZeroTransformScaleComponentRecordsNothing() {
+        using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
+        Font font = harness.CreateFont(CreateTwoGlyphFace());
+        await harness.SettleGlyphsAsync(font, "A");
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            Transform flattened = new(
+                new Vector3(0f, 0f, -5f),
+                Quaternion.Identity,
+                new Vector3(0f, 1f, 1f));
+            camera.DrawText(font, "A", flattened, 1f, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+        Assert.Equal(0, harness.Host.Service.TextGlyphTextures.Length);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ThePerCallGlyphScratchDropsItsTextureReferences() {
+        using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
+        Font font = harness.CreateFont(CreateTwoGlyphFace());
+        await harness.SettleGlyphsAsync(font, "AB");
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawText(font, "AB", new Transform(new Vector3(0f, 0f, -5f)), 1f, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        Assert.Equal(2, packet.Passes[0].Draws[0].InstanceCount);
+        // The scratch must not keep the recorded glyph textures reachable after the call.
+        Assert.Equal(0, harness.Host.Service.TextGlyphTextures.Length);
+        Assert.Empty(harness.Host.Service.TextGlyphTextures.ToArray());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task ReadyGlyphsRecordOneDrawWithPerInstanceTexturesTintAndMatrices() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
@@ -195,6 +236,9 @@ public sealed class TextDrawTests {
         Assert.Equal(PrimitiveTopology.TriangleList, record.Topology);
         Assert.Equal(6, record.IndexCount);
         Assert.Equal(_textRenderState, record.RenderState);
+        // The recorded state must stay the MSDF program's declared state; a shader-state change would
+        // otherwise silently change the text batch key and depth/blend behavior.
+        Assert.Equal(harness.Primitives.MsdfMaterial.DefaultRenderState, record.RenderState);
         Assert.Equal(_color, record.Tint);
         Assert.Equal(2, record.InstanceCount);
         Assert.True(record.HasPerInstanceTextureBindings);
@@ -677,6 +721,47 @@ public sealed class TextDrawTests {
         Assert.Equal(leftover, XOffset(rightLayout, 1, leftLayout), TOLERANCE);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawTextBillboardCentersTheGlyphOverhangOutsideTheLayoutBox() {
+        using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
+        Font font = harness.CreateFont(CreateOverhangFace());
+        await harness.SettleGlyphsAsync(font, "AC");
+        Glyph glyphA = GlyphOf(font, 'A');
+        Glyph glyphC = GlyphOf(font, 'C');
+        ExpectedLayout layout = ExpectLayout(font, [[glyphA, glyphC]], 1f, TextAlignment.Left);
+        Vector2 unionCenter = (layout.BoundsMin + layout.BoundsMax) * 0.5f;
+        // C's outline rises above the ascent line, so the glyph-quad union is taller than the layout
+        // box; ignoring the overhang would center the block on the box instead.
+        Vector2 boxCenter = new(font.Measure("AC", 1f).X * 0.5f, -font.LineHeight * 0.5f);
+        Assert.True(
+            Vector2.Distance(unionCenter, boxCenter) > 0.03f,
+            $"The overhang must move the bounds center clear of the box center; got {unionCenter} and {boxCenter}.");
+        Vector3 position = new(0.5f, 0.25f, -8f);
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawTextBillboard(font, "AC", position, 1f, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        RenderDrawRecord record = packet.Passes[0].Draws[0];
+        AssertBillboardRecord(
+            record,
+            layout,
+            unionCenter,
+            position,
+            new Vector3(1f, 0f, 0f),
+            new Vector3(0f, 1f, 0f),
+            new Vector3(0f, 0f, 1f));
+        Matrix4x4 matrix = record.GetWorldMatrices()[0];
+        ExpectedGlyph first = layout.Glyphs[0];
+        AssertVector(position, MapLayoutPoint(matrix, first, unionCenter), 1e-4f);
+        Assert.True(
+            Vector3.Distance(position, MapLayoutPoint(matrix, first, boxCenter)) > 0.03f,
+            "The recorded block must not center on the layout box alone.");
+    }
+
     /// <summary>
     /// Asserts one billboard record's matrices: each glyph quad maps through the centered block offset
     /// and the camera-facing basis, the block center maps to <paramref name="position"/>, and the quad
@@ -716,16 +801,23 @@ public sealed class TextDrawTests {
 
             // The layout bounds center is the block origin, so the recorded glyph matrix maps it to the
             // billboard position.
-            Vector2 unit = new(
-                ((blockCenter.X - glyph.Position.X) / glyph.Size.X) - 0.5f,
-                ((blockCenter.Y - glyph.Position.Y) / glyph.Size.Y) - 0.5f);
-            AssertVector(position, Vector3.Transform(new Vector3(unit, 0f), matrix), 1e-4f);
+            AssertVector(position, MapLayoutPoint(matrix, glyph, blockCenter), 1e-4f);
 
             // The quad's local +Z is the camera-facing front.
             Vector3 normal = Vector3.Normalize(
                 Vector3.Cross(Axis(matrix, 0), Axis(matrix, 1)));
             AssertVector(front, normal);
         }
+    }
+
+    /// <summary>
+    /// Maps one point of the local layout plane through a recorded glyph matrix.
+    /// </summary>
+    private static Vector3 MapLayoutPoint(Matrix4x4 matrix, ExpectedGlyph glyph, Vector2 layoutPoint) {
+        Vector2 unit = new(
+            ((layoutPoint.X - glyph.Position.X) / glyph.Size.X) - 0.5f,
+            ((layoutPoint.Y - glyph.Position.Y) / glyph.Size.Y) - 0.5f);
+        return Vector3.Transform(new Vector3(unit, 0f), matrix);
     }
 
     private static float XOffset(ExpectedLayout layout, int glyphIndex, ExpectedLayout baseline) =>
@@ -848,6 +940,23 @@ public sealed class TextDrawTests {
         int glyphA = builder.AddSimple(600, 0, Square(500));
         int space = builder.AddEmpty(250);
         return SfntFace.Parse(builder.WithCmap(4, (0x41, glyphA), (0x20, space)).Build());
+    }
+
+    /// <summary>
+    /// Builds a face whose second glyph rises above the ascent line, so its padded quad extends outside
+    /// the layout box and contributes a real overhang to the block bounds.
+    /// </summary>
+    private static SfntFace CreateOverhangFace() {
+        SyntheticFontBuilder builder = SyntheticFontBuilder.Create();
+        int glyphA = builder.AddSimple(600, 0, Square(500));
+        int glyphC = builder.AddSimple(
+            300,
+            0,
+            new SyntheticPoint(0, 200),
+            new SyntheticPoint(300, 200),
+            new SyntheticPoint(300, 900),
+            new SyntheticPoint(0, 900));
+        return SfntFace.Parse(builder.WithCmap(4, (0x41, glyphA), (0x43, glyphC)).Build());
     }
 
     private static SyntheticPoint[] Square(int extent) => [

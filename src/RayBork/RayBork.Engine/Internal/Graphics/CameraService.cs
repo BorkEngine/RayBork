@@ -24,6 +24,7 @@ internal sealed class CameraService {
 
     private readonly IWindow _window;
     private readonly TextLayoutBuffer _textLayout = new();
+    private readonly HashSet<Font> _textFontsStarted = [];
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
     private PrimitiveAssets? _primitives;
@@ -145,6 +146,29 @@ internal sealed class CameraService {
 
         Array.Clear(_textGlyphTextures, 0, _textGlyphCount);
         _textGlyphCount = 0;
+    }
+
+    /// <summary>
+    /// Marks <paramref name="font"/> as begun for the camera that is recording and starts its glyph
+    /// cache clock once.
+    /// </summary>
+    /// <param name="font">The font recording text is about to acquire glyphs from.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="font"/> is <c>null</c>.</exception>
+    /// <exception cref="ObjectDisposedException"><paramref name="font"/> is disposed.</exception>
+    /// <exception cref="InvalidOperationException">No frame is recording.</exception>
+    /// <remarks>
+    /// The camera draw path calls this for every text draw it records, and the per-camera set makes the
+    /// actual <see cref="Font.BeginFrame"/> call happen once per camera and font. The pipeline keeps the
+    /// highest frame index, so a later camera in the same tick may pass the same index again without
+    /// moving the clock backwards.
+    /// </remarks>
+    internal void BeginTextFont(Font font) {
+        ArgumentNullException.ThrowIfNull(font);
+        RenderFramePacket packet = _packet
+            ?? throw new InvalidOperationException("A font's frame can begin only while a frame is recording.");
+        if (_textFontsStarted.Add(font)) {
+            font.BeginFrame(packet.FrameIndex);
+        }
     }
 
     /// <summary>
@@ -319,6 +343,8 @@ internal sealed class CameraService {
             clearMode,
             resolvedClearColor);
 
+        // Font frame clocks are begun once per camera and font, so a new camera starts a fresh set.
+        _textFontsStarted.Clear();
         Camera camera = new(
             this,
             packet,

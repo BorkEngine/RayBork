@@ -62,8 +62,8 @@ public sealed class Camera : IDisposable {
     /// <summary>
     /// The state every text draw records: source-over blending, no face culling, reverse-Z
     /// greater-or-equal depth testing, and no depth writes. It matches the declared state of the
-    /// built-in <c>/shaders/msdf</c> program, and its <see cref="RenderState.Cull"/> of
-    /// <see cref="CullMode.None"/> keeps a text draw out of the billboard batch.
+    /// built-in <c>/shaders/msdf</c> program. Text records that program, so a text record never merges
+    /// with a billboard record over the mesh program.
     /// </summary>
     private static readonly RenderState _textRenderState = new() {
         Blend = BlendMode.Alpha,
@@ -2958,20 +2958,30 @@ public sealed class Camera : IDisposable {
     /// the centered camera-facing block matrix for <see cref="DrawTextBillboard"/>.
     /// </param>
     /// <remarks>
-    /// Validation has already run; the only failure left is a disposed engine primitive asset. The
-    /// MSDF material is engine-owned, so its shared texture binding is not set per call: each glyph
-    /// instance carries its own texture in the record's per-instance set. Glyph textures are retained by
-    /// <see cref="Font.AcquireGlyphTexture"/> through the frame's retention set and are deliberately not
-    /// retained again here; the quad mesh and the material's program are retained explicitly.
+    /// Validation has already run; the remaining failures are engine-asset invariants: a disposed
+    /// primitive asset, or an MSDF material whose declared texture bindings no longer match the one
+    /// per-instance glyph texture this path records. The MSDF material is engine-owned, so its shared
+    /// texture binding is not set per call: each glyph instance carries its own texture in the record's
+    /// per-instance set. Glyph textures are retained by <see cref="Font.AcquireGlyphTexture"/> through
+    /// the frame's retention set and are deliberately not retained again here; the quad mesh and the
+    /// material's program are retained explicitly.
     /// </remarks>
     private void RecordText(Font font, TextLayoutBuffer layout, Color color, Matrix4x4 quadToWorld) {
         PrimitiveAssets primitives = RequirePrimitives();
         Shader material = primitives.MsdfMaterial;
+        int textureBindingCount = material.Textures.Count;
+        if (textureBindingCount != 1) {
+            throw new InvalidOperationException(
+                $"The engine MSDF material '{material.Path}' declares {textureBindingCount} texture "
+                    + "bindings; a text draw records exactly one per-instance glyph texture, so the "
+                    + "material and the text path disagree.");
+        }
+
         ReadOnlySpan<TextGlyphInstance> glyphs = layout.Glyphs;
         Span<Matrix4x4> matrices = _service.ReserveTextGlyphs(glyphs.Length);
         Span<Texture?> textures = _service.TextGlyphTextures;
         try {
-            font.BeginFrame(_packet.FrameIndex);
+            _service.BeginTextFont(font);
             int readyGlyphCount = 0;
             for (int index = 0; index < glyphs.Length; index++) {
                 TextGlyphInstance glyph = glyphs[index];
@@ -3006,6 +3016,8 @@ public sealed class Camera : IDisposable {
                 wireframe: false);
             record.SetPerInstanceShaderState(material);
             matrices[..readyGlyphCount].CopyTo(record.BeginInstances(readyGlyphCount));
+            // The binding-count guard above keeps the flat per-instance buffer instance-major: one
+            // glyph texture per instance.
             textures[..readyGlyphCount].CopyTo(record.BeginInstanceTextureBindings());
         } finally {
             _service.ClearTextGlyphs();
