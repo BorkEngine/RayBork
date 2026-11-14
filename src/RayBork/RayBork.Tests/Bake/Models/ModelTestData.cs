@@ -50,6 +50,19 @@ internal static class ModelTestData {
         return archive.ReadPayload(entry);
     }
 
+    internal static MeshCollisionData ReadCollision(
+        PackArchive archive,
+        string meshPath,
+        MeshAssetDescriptor mesh) {
+        Assert.NotNull(mesh.CollisionPayload);
+        byte[] payload = ReadPayload(archive, mesh.CollisionPayload!);
+        return MeshCollisionCodec.Decode(
+            payload,
+            mesh.Topology,
+            checked((int)mesh.IndexCount),
+            meshPath);
+    }
+
     internal static Vector3 PositionAt(byte[] payload, int vertexIndex)
         => new(
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88)),
@@ -154,6 +167,54 @@ internal static class ModelTestData {
         BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(40), 2);
         return buffer;
     }
+
+    internal static byte[] LineBufferData() {
+        var buffer = new byte[28];
+        WriteVector(buffer, 0, 0f, 0f, 0f);
+        WriteVector(buffer, 12, 1f, 0f, 0f);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(24), 0);
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(26), 1);
+        return buffer;
+    }
+
+    internal static string LineGltf()
+        => $$"""
+            {
+              "asset": { "version": "2.0" },
+              "scene": 0,
+              "scenes": [ { "nodes": [ 0 ] } ],
+              "nodes": [ { "name": "Edge", "mesh": 0 } ],
+              "meshes": [
+                {
+                  "name": "EdgeMesh",
+                  "primitives": [
+                    { "attributes": { "POSITION": 0 }, "indices": 1, "mode": 1 }
+                  ]
+                }
+              ],
+              "buffers": [
+                {
+                  "byteLength": 28,
+                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(LineBufferData())}}"
+                }
+              ],
+              "bufferViews": [
+                { "buffer": 0, "byteOffset": 0, "byteLength": 24, "target": 34962 },
+                { "buffer": 0, "byteOffset": 24, "byteLength": 4, "target": 34963 }
+              ],
+              "accessors": [
+                {
+                  "bufferView": 0,
+                  "componentType": 5126,
+                  "count": 2,
+                  "type": "VEC3",
+                  "min": [ 0, 0, 0 ],
+                  "max": [ 1, 0, 0 ]
+                },
+                { "bufferView": 1, "componentType": 5123, "count": 2, "type": "SCALAR" }
+              ]
+            }
+            """;
 
     internal static string EmbeddedTriangleGltf(string translation = "1, 2, 3")
         => $$"""

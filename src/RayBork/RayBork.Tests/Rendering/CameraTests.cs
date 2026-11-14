@@ -280,6 +280,8 @@ public sealed class CameraTests {
         Assert.Throws<ObjectDisposedException>(
             () => camera.DrawModel(model, Transform.Identity));
         Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawWireModel(model, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(
             () => camera.DrawModelInstanced(model, [Transform.Identity]));
         Assert.Throws<ObjectDisposedException>(
             () => camera.ScreenToWorldRay(new Vector2(0f, 0f)));
@@ -288,6 +290,41 @@ public sealed class CameraTests {
         Assert.True(camera.IsDisposed);
 
         host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void EndFrameCopiesTheAttachedRuntimeToneMappingIntoThePacket() {
+        using CameraTestHost host = new();
+        TonemappingSettings tonemapping = new(1f, 4f, 2f);
+        host.AttachTonemapping(tonemapping);
+        RenderFramePacket packet = host.BeginFrame();
+
+        // The tick thread owns the settings during the frame; the seal sees the final values.
+        tonemapping.Exposure = 2f;
+        tonemapping.AgxContrast = 3f;
+        host.EndFrame();
+
+        Assert.Equal(new TonemappingSnapshot(2f, 4f, 3f), packet.Tonemapping);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void EndFrameUsesTheDefaultSnapshotWithoutAttachedRuntimeSettings() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+
+        host.EndFrame();
+
+        Assert.Equal(TonemappingSnapshot.Default, packet.Tonemapping);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AttachTonemappingRejectsNull() {
+        using CameraTestHost host = new();
+
+        Assert.Throws<ArgumentNullException>(() => host.AttachTonemapping(null!));
     }
 
     [Fact]
@@ -604,6 +641,121 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DrawWireModelRecordsEveryPartWithTheWireframeState() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Mesh firstMesh = RenderingTestAssets.CreateMesh("meshes/wire-first");
+        Mesh secondMesh = RenderingTestAssets.CreateMesh("meshes/wire-second");
+        Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/wire-first", defaultValue: 0.25f);
+        Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/wire-second", defaultValue: 0.5f);
+        Transform local = new(new Vector3(1f, 0f, 0f));
+        using Model model = RenderingTestAssets.CreateModel(
+            meshes: [firstMesh, secondMesh],
+            materials: [firstMaterial, secondMaterial],
+            localTransform: local);
+        Camera camera = host.CreatePerspectiveCamera();
+        Color tint = new(0.5f, 0.25f, 0.125f, 1f);
+        Transform instance = new(
+            new Vector3(0f, 2f, 0f),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f),
+            new Vector3(2f));
+
+        camera.DrawWireModel(model, instance, tint);
+        camera.Dispose();
+        host.EndFrame();
+
+        Assert.Equal(2, packet.Passes[0].DrawCount);
+        RenderDrawRecord[] records = [.. packet.Passes[0].Draws];
+        Assert.Same(firstMaterial.Program.Lifetime, records[0].Program);
+        Assert.Same(secondMaterial.Program.Lifetime, records[1].Program);
+        foreach (RenderDrawRecord record in records) {
+            Assert.True(record.Wireframe);
+            Assert.Equal(tint, record.Tint);
+            Assert.Equal(local.ToMatrix() * instance.ToMatrix(), record.GetWorldMatrices()[0]);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DrawModelAndDrawWireModelUseSeparateBatches() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        Shader material = RenderingTestAssets.CreateShader();
+        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], materials: [material]);
+        Camera camera = host.CreatePerspectiveCamera();
+
+        camera.DrawModel(model, Transform.Identity);
+        camera.DrawWireModel(model, Transform.Identity);
+        camera.DrawWireModel(model, new Transform(new Vector3(2f, 0f, 0f)));
+        camera.Dispose();
+        host.EndFrame();
+
+        // The polygon mode is part of the batch key: the filled draw and the two wireframe draws
+        // share mesh, program, and render state but still need different pipelines.
+        FramePlan plan = new BatchPlanner().Plan(packet);
+        Assert.Equal(2, plan.Passes[0].Batches.Count);
+        Assert.Equal(2, plan.DrawCalls);
+        PlannedBatch filled = plan.Passes[0].Batches[0];
+        PlannedBatch wireframe = plan.Passes[0].Batches[1];
+        Assert.False(filled.Wireframe);
+        Assert.Equal(1, filled.InstanceCount);
+        Assert.True(wireframe.Wireframe);
+        Assert.Equal(2, wireframe.InstanceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DrawWireModelRejectsDisposedModelPartAssetsAndInvalidMaterials() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera();
+
+        Model disposedModel = RenderingTestAssets.CreateModel(
+            meshes: [RenderingTestAssets.CreateMesh("meshes/wire-disposed-model")],
+            materials: [RenderingTestAssets.CreateShader("shaders/wire-disposed-model")]);
+        disposedModel.Dispose();
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawWireModel(disposedModel, Transform.Identity));
+
+        Mesh disposedMesh = RenderingTestAssets.CreateMesh("meshes/wire-disposed-part");
+        Shader liveMaterial = RenderingTestAssets.CreateShader("shaders/wire-live-part");
+        using Model meshModel = new(new ModelPart("part", disposedMesh, liveMaterial));
+        disposedMesh.Lifetime.ForceDispose();
+        Assert.Throws<ObjectDisposedException>(() => camera.DrawWireModel(meshModel, Transform.Identity));
+
+        Mesh liveMesh = RenderingTestAssets.CreateMesh("meshes/wire-live-part");
+        Shader disposedMaterial = RenderingTestAssets.CreateShader("shaders/wire-disposed-material");
+        using Model materialModel = new(new ModelPart("part", liveMesh, disposedMaterial));
+        disposedMaterial.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => camera.DrawWireModel(materialModel, Transform.Identity));
+
+        Mesh texturedMesh = RenderingTestAssets.CreateMesh("meshes/wire-textured-part");
+        Shader texturedMaterial = RenderingTestAssets.CreateShader("shaders/wire-textured-part");
+        using Model texturedModel = new(new ModelPart("part", texturedMesh, texturedMaterial));
+        Texture disposedTexture = RenderingTestAssets.CreateTexture("textures/wire-disposed-part");
+        texturedMaterial.SetUniform(RenderingTestAssets.TEXTURE_BINDING, disposedTexture);
+        disposedTexture.Lifetime.ForceDispose();
+        Assert.Throws<ObjectDisposedException>(() => camera.DrawWireModel(texturedModel, Transform.Identity));
+
+        Shader vertexOnly = RenderingTestAssets.CreateShader(
+            "shaders/wire-vertex-only",
+            stages: ShaderStageMask.Vertex);
+        using Model invalidMaterialModel = new(
+            new ModelPart("part", RenderingTestAssets.CreateMesh("meshes/wire-invalid-part"), vertexOnly));
+        Assert.Throws<InvalidOperationException>(
+            () => camera.DrawWireModel(invalidMaterialModel, Transform.Identity));
+
+        // Validation runs before any part is recorded, so a bad part cannot leave frame holds behind.
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void DrawModelInstancedSnapshotsEachPartMaterialAndTransform() {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
@@ -647,6 +799,33 @@ public sealed class CameraTests {
                 secondMaterial,
                 records[1].InstanceTemplate,
                 RenderingTestAssets.VALUE_UNIFORM));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DrawModelInstancedRecordsEveryTransformForLargeInstanceCounts() {
+        using CameraTestHost host = new();
+        RenderFramePacket packet = host.BeginFrame();
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        Shader material = RenderingTestAssets.CreateShader();
+        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], materials: [material]);
+        Camera camera = host.CreatePerspectiveCamera();
+        Transform[] transforms = new Transform[100];
+        for (int index = 0; index < transforms.Length; index++) {
+            transforms[index] = new Transform(new Vector3(index, 0f, 0f));
+        }
+
+        camera.DrawModelInstanced(model, transforms);
+        camera.Dispose();
+        host.EndFrame();
+
+        Assert.Equal(1, packet.Passes[0].DrawCount);
+        RenderDrawRecord record = packet.Passes[0].Draws[0];
+        Assert.Equal(transforms.Length, record.InstanceCount);
+        Assert.Equal(Vector3.Zero, Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[0]));
+        Assert.Equal(
+            new Vector3(transforms.Length - 1, 0f, 0f),
+            Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[transforms.Length - 1]));
     }
 
     [Fact]
@@ -807,6 +986,26 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScreenToWorldRayExtrapolatesForAPositionOutsideTheViewport() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera(transform: new Transform(new Vector3(0f, 0f, 5f)));
+
+        Vector2 outside = new(-100f, 800f);
+        Ray ray = camera.ScreenToWorldRay(outside);
+        Vector2 screen = camera.WorldToScreen(ray.Origin + (ray.Direction * 10f));
+
+        Assert.Equal(new Vector3(0f, 0f, 5f), ray.Origin);
+        Assert.True(ray.Direction.X < 0f);
+        Assert.True(ray.Direction.Y < 0f);
+        Assert.Equal(outside.X, screen.X, 1e-3f);
+        Assert.Equal(outside.Y, screen.Y, 1e-3f);
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ScreenToWorldRayRoundTripsForAnOrthographicCamera() {
         using CameraTestHost host = new();
         host.BeginFrame();
@@ -868,6 +1067,7 @@ public sealed class CameraTests {
         Mesh mesh = RenderingTestAssets.CreateMesh();
 
         Assert.Throws<ArgumentNullException>(() => camera.DrawModel(null!, Transform.Identity));
+        Assert.Throws<ArgumentNullException>(() => camera.DrawWireModel(null!, Transform.Identity));
         Assert.Throws<ArgumentNullException>(
             () => camera.DrawModelInstanced(null!, [Transform.Identity]));
         Assert.Throws<ArgumentNullException>(() => camera.DrawMesh(null!, Transform.Identity, shader));

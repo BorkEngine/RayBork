@@ -56,6 +56,7 @@ internal sealed class VulkanDeviceCapabilities {
         bool samplerAnisotropy,
         float maxSamplerAnisotropy,
         bool textureCompressionBc,
+        bool fillModeNonSolid,
         bool swapchainColorSpaceExtensionEnabled,
         VulkanSwapchainSupport swapchain) {
         DeviceName = deviceName;
@@ -78,6 +79,7 @@ internal sealed class VulkanDeviceCapabilities {
         SamplerAnisotropy = samplerAnisotropy;
         MaxSamplerAnisotropy = maxSamplerAnisotropy;
         TextureCompressionBc = textureCompressionBc;
+        FillModeNonSolid = fillModeNonSolid;
         SwapchainColorSpaceExtensionEnabled = swapchainColorSpaceExtensionEnabled;
         Swapchain = swapchain;
     }
@@ -190,6 +192,13 @@ internal sealed class VulkanDeviceCapabilities {
     internal bool TextureCompressionBc { get; }
 
     /// <summary>
+    /// Gets whether the device supports the core <c>fillModeNonSolid</c> feature and the renderer
+    /// enables it. Wireframe model draws need it for <c>VK_POLYGON_MODE_LINE</c> pipelines; a device
+    /// without it reports an unsupported wireframe draw instead of rendering nothing.
+    /// </summary>
+    internal bool FillModeNonSolid { get; }
+
+    /// <summary>
     /// Gets whether <c>VK_EXT_swapchain_colorspace</c> was enabled on the instance.
     /// </summary>
     internal bool SwapchainColorSpaceExtensionEnabled { get; }
@@ -291,6 +300,7 @@ internal sealed class VulkanDeviceCapabilities {
             features.SamplerAnisotropy.Value != 0,
             properties.Limits.MaxSamplerAnisotropy,
             features.TextureCompressionBC.Value != 0,
+            features.FillModeNonSolid.Value != 0,
             swapchainColorSpaceExtensionEnabled,
             swapchain);
     }

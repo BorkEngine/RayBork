@@ -5,7 +5,8 @@ namespace Castle;
 
 /// <summary>
 /// A small orbitable castle scene: load a model and its texture, bind the texture to the model's
-/// materials, and draw the model with a camera that orbits a fixed point.
+/// materials, draw the model solid with a camera that orbits a fixed point, and outline and hit-test
+/// the castle under the mouse.
 /// </summary>
 internal sealed class CastleGame : IGame {
     private const string MODEL_PATH = "/models/obj/castle";
@@ -17,15 +18,20 @@ internal sealed class CastleGame : IGame {
     private const float MIN_DISTANCE = 5f;
     private const float MAX_DISTANCE = 500f;
     private const float MAX_PITCH_DEGREES = 89f;
+    private const int GRID_SLICES = 20;
+    private const float GRID_SPACING = 10f;
+    private const float HIT_POINT_RADIUS = 0.2f;
 
     private static readonly Vector3 _orbitCenter = new(0f, 12f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(50f, 50f, 50f);
-    private static readonly Color _background = new(0.913f, 0.913f, 0.913f, 1f);
+    private static readonly Color _hoverBoundsColor = Color.Cyan;
+    private static readonly Color _hitPointColor = Color.Red;
 
     private readonly int _frameLimit;
 
     private Model? _model;
     private Texture? _texture;
+    private BoundingBox _worldBounds;
     private float _yawDegrees;
     private float _pitchDegrees;
     private float _distance;
@@ -59,6 +65,11 @@ internal sealed class CastleGame : IGame {
         foreach (ModelPart part in _model.Parts) {
             part.Shader.SetUniform("mainTexture", _texture);
         }
+
+        // The castle is static and drawn with Transform.Identity, so its model-space bounds are its
+        // world-space bounds. Model.Bounds is the union of the part bounds, and each part bound is
+        // its mesh bounds after the part's local transform.
+        _worldBounds = _model.Bounds;
     }
 
     /// <inheritdoc/>
@@ -84,15 +95,61 @@ internal sealed class CastleGame : IGame {
             projection: CameraProjection.Perspective,
             fieldOfView: FIELD_OF_VIEW_DEGREES,
             clearMode: ClearMode.ColorAndDepth,
-            clearColor: _background,
+            clearColor: Color.WhiteSmoke,
             near: NEAR_PLANE,
             far: float.PositiveInfinity);
 
         camera.DrawModel(_model!, Transform.Identity, Color.White);
 
+        // raylib's reference grid: 20 slices 10 units apart, centered on the origin where the castle
+        // stands, drawn after the model in the same opaque, depth-tested pass.
+        camera.DrawGrid(GRID_SLICES, GRID_SPACING, Color.Gray);
+
+        DrawHoverOverlay(camera, context);
+
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
             context.RequestExit();
+        }
+    }
+
+    /// <summary>
+    /// Outlines the castle when the pointer ray hits its world bounds and marks the nearest mesh hit.
+    /// </summary>
+    private void DrawHoverOverlay(Camera camera, EngineContext context) {
+        // Input.MousePosition is in logical window units; ScreenToWorldRay takes render pixels in the
+        // target. RenderWidth / Width is the pixel ratio; DpiScale is the OS display scale and is not
+        // the conversion factor. ScreenToWorldRay applies the camera viewport itself.
+        Vector2 renderMouse = context.Input.MousePosition
+            * (context.Window.RenderWidth / (float)context.Window.Width);
+        Ray pointerRay = camera.ScreenToWorldRay(renderMouse);
+
+        if (!Collision.GetRayBox(pointerRay, _worldBounds).Hit) {
+            return;
+        }
+
+        // The box stays visible while the pointer is over the bounds, even when the ray passes through
+        // an opening and misses every triangle.
+        camera.DrawBoundingBox(_worldBounds, _hoverBoundsColor);
+
+        RayCollision nearest = default;
+        IReadOnlyList<ModelPart> parts = _model!.Parts;
+        // A part is drawn at LocalTransform * Transform.Identity, so the local transform alone maps
+        // its mesh to world space. Indexed iteration avoids the enumerator the interface's foreach
+        // would allocate every frame.
+        for (int index = 0; index < parts.Count; index++) {
+            ModelPart part = parts[index];
+            RayCollision hit = Collision.GetRayMesh(
+                pointerRay,
+                part.Mesh,
+                part.LocalTransform.ToMatrix());
+            if (hit.Hit && (!nearest.Hit || hit.Distance < nearest.Distance)) {
+                nearest = hit;
+            }
+        }
+
+        if (nearest.Hit) {
+            camera.DrawSphere(nearest.Point, HIT_POINT_RADIUS, _hitPointColor);
         }
     }
 

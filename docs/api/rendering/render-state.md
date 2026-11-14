@@ -58,3 +58,7 @@ public enum DepthTest {
   two-sided geometry and billboards.
 - Topology is a property of `Mesh`, not `RenderState`. The batching key includes the mesh topology
   implicitly.
+- Wireframe is not part of `RenderState`. `Camera.DrawWireModel` selects the polygon-mode-line state
+  internally, and the polygon mode is part of the batch and geometry-pipeline keys, so a wireframe
+  draw never merges with a filled draw over the same mesh, program, and state. `RenderState` remains
+  the public depth, culling, and blending contract.

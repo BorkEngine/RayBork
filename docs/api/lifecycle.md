@@ -47,6 +47,8 @@ public sealed class RayBorkAppBuilder {
     public RayBorkAppBuilder WithMSAA(int sampleCount = 4);
     public RayBorkAppBuilder WithTonemapping(TonemappingMode mode = TonemappingMode.AgX);
     public RayBorkAppBuilder WithExposure(float ev = 0f);
+    public RayBorkAppBuilder WithAgxWhite(float white = 16.29f);
+    public RayBorkAppBuilder WithAgxContrast(float contrast = 1.25f);
     public RayBorkAppBuilder WithTargetFps(int framesPerSecond);
     public RayBorkAppBuilder WithValidation(bool enabled = true);
     public RayBorkAppBuilder WithLoggerFactory(ILoggerFactory loggerFactory);
@@ -69,8 +71,10 @@ public sealed class RayBorkAppBuilder {
 | `WithAssetLoader<T>` | none | Registers an `IAssetLoader<T>` for `Load<T>`. `T` needs no `[GenerateShape]`. The loader's synchronous part runs on the `RayBork.Asset` loader thread, returns a fresh caller-owned value per load, and must not block or call SDL, Vulkan, or tick-thread APIs. One registration per type; a built-in engine type fails at `Build`. See §6.7. |
 | `WithPresentMode` | `Mailbox` | `Mailbox` is preferred; if unavailable, the engine falls back to `Fifo`. `Immediate` is available when the user explicitly chooses it. |
 | `WithMSAA` | `4` | Valid sample counts are 1, 2, 4, and 8, subject to device support. The renderer selects the highest supported sample count that does not exceed the request, and 1 if none is supported, logging a warning when the effective count differs. |
-| `WithTonemapping` | `AgX` | `AgX` maps linear HDR to the output; `None` is for custom output/presentation paths. |
-| `WithExposure` | `0` EV | Exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. |
+| `WithTonemapping` | `AgX` | The startup tone-mapping mode. `AgX` applies Godot 4.7's HDR-aware AgX curve to the linear HDR scene; `None` is for custom output/presentation paths. The mode is fixed for the app lifetime. |
+| `WithExposure` | `0` EV | The startup exposure in stops applied before AgX. `0` is neutral; `+1` doubles linear exposure. The game can change it at runtime through `ctx.Tonemapping.Exposure`. |
+| `WithAgxWhite` | `16.29` | The startup scene-linear AgX white, before the display headroom scaling. Finite and at least `2`. The game can change it at runtime through `ctx.Tonemapping.AgxWhite`. |
+| `WithAgxContrast` | `1.25` | The startup AgX curve contrast. Finite and at least `1`. The game can change it at runtime through `ctx.Tonemapping.AgxContrast`. |
 | `WithTargetFps` | `0` (uncapped) | Caps the tick loop when vsync/mailbox is not throttling. `0` means no cap. |
 | `WithValidation` | `true` in Debug, `false` in Release | If the validation layer is unavailable, the app logs a warning and continues without it. |
 | `WithLoggerFactory` | default ZLogger console factory | A caller-supplied factory is not disposed by the app. `EngineContext.LoggerFactory` always returns a usable factory. |
@@ -104,6 +108,22 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > target. Camera creation, draw recording, and camera disposal are legal only on the tick thread
 > during `Tick`. A camera left undisposed when `Tick` returns is an `InvalidOperationException`
 > naming it, and the frame is not published.
+
+> **M5 subset.** M5 adds the primitive, billboard, and wireframe-model helpers and the collision
+> queries described in §7. The app preloads the built-in `/shaders/primitive` and `/shaders/mesh`
+> programs, their two engine materials, and the eight primitive meshes before `IGame.Setup`, so the
+> first tick can record a primitive draw. `DrawWireModel` records on the tick thread like
+> `DrawModel`; its polygon-mode-line pipeline needs the device's `fillModeNonSolid` feature, and a
+> device without it fails the frame with `GraphicsException` `RB3001` rather than falling back.
+> `Collision` and `RayCollision` are pure CPU queries, and `MeshBuilder.GenerateCollisions()` plus
+> the nine `Generate*` factories are ordinary builder steps available in `Setup` and `Tick`.
+> `DrawTexture` is not part of M5; it moves to M7 with the orthographic sprite path. M5 also adds
+> the runtime tone-mapping surface: `WithAgxWhite` and `WithAgxContrast` set the startup AgX
+> defaults, and `EngineContext.Tonemapping` exposes the app-lifetime settings that a game changes
+> during `Setup`, `Tick`, or `Shutdown`. The values are frame-global and are snapshotted into the
+> frame packet when the frame is sealed. M5 replaces the M4 AgX and its separate HDR highlight path
+> with Godot 4.7's HDR-aware AgX curve; `WithTonemapping` still fixes the mode at startup, and
+> `WithExposure` keeps its meaning.
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -167,6 +187,8 @@ public sealed class EngineContext {
 
     public RenderStats Stats { get; }
 
+    public TonemappingSettings Tonemapping { get; }
+
     public Camera CreateCamera(
         Transform transform,
         CameraProjection projection,
@@ -228,6 +250,7 @@ public sealed class EngineContext {
 | `IsExiting` | Tick | `true` after `RequestExit`, a window close, or an engine stop request. |
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
 | `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. |
+| `Tonemapping` | Tick | App-lifetime runtime tone-mapping settings, initialized from the builder defaults. Read or write them on the tick thread. A write during `Tick` applies to the frame that tick records. |
 | `CreateCamera` | Tick | Perspective camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateOrthographicCamera` | Tick | Orthographic camera. `height` is the visible world-space height. |
 | `CreateRenderTextureAsync` | Tick | Creates an offscreen target and completes when the render thread has allocated it. Legal in `Setup` and `Tick`. |
@@ -238,6 +261,16 @@ public sealed class EngineContext {
 `EngineContext` is stable for the app lifetime, but its per-frame properties are only meaningful
 for the callback that observes them. Re-read `Time`, `DeltaTime`, and `Stats` each tick instead of
 caching them; `Setup` sees a changing `Time` but `DeltaTime` is `0`.
+
+`Tonemapping` is the exception: it is one app-lifetime settings object, not a per-frame snapshot.
+It starts from `WithExposure`, `WithAgxWhite`, and `WithAgxContrast` and can be changed from
+`Setup`, `Tick`, or `Shutdown`. `Exposure` is in stops, `AgxWhite` is the scene-linear AgX white
+before the display-headroom scaling, and `AgxContrast` is the curve contrast. Each write validates
+first: a non-finite exposure is `ArgumentOutOfRangeException`, and so is an AgX white below `2` or a
+contrast below `1`. A valid write from a thread other than the tick thread is
+`InvalidOperationException`. The values are read when the camera service seals the frame after
+`Tick` returns, so a write during `Tick` applies to that frame's present pass; a frame that was
+already published keeps the snapshot it was sealed with.
 
 `clearColor` is `null` by default, which means linear opaque black (`Color.Black`); HDR components
 above `1` are allowed and a non-finite component is `ArgumentException`. `near` must be positive and
@@ -250,10 +283,11 @@ A `viewport` of `null` means the full window render size. A non-null viewport is
 target; an invalid, non-finite, or empty result is `ArgumentException`. The camera's `Viewport`
 reports the clamped rectangle and the projection aspect uses it.
 
-In M4, `CreateCamera` and `CreateOrthographicCamera` have no `target` parameter and record into the
-app's HDR scene target. The present pass applies AgX and writes to the swapchain after the cameras
-finish. The `RenderTexture` target parameter arrives in M8; a camera with a `RenderTexture` target
-writes to that target and can be sampled by a later camera.
+`CreateCamera` and `CreateOrthographicCamera` have no `target` parameter and record into the app's
+HDR scene target. The present pass applies the frame's exposure and AgX settings and writes to the
+swapchain after the cameras finish; `ctx.Tonemapping` is frame-global, not per camera. The
+`RenderTexture` target parameter arrives in M8; a camera with a `RenderTexture` target writes to
+that target and can be sampled by a later camera.
 
 ### 3.5 Startup and shutdown sequence
 
@@ -265,8 +299,11 @@ writes to that target and can be sampled by a later camera.
    c. Render thread starts: create the instance, request the native surface through the main-thread
       channel, create the device and swapchain, and publish Info.
    d. The asset catalog mounts the built-in pack (and any user packs) and starts the loader; the app
-      preloads `EngineContext.Defaults` (the `/shaders/mesh` program and the white/error textures).
-   e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info and Defaults.
+      preloads `EngineContext.Defaults` (the `/shaders/mesh` program and the white/error textures) and
+      then the engine's primitive assets (the `/shaders/primitive` program, its material, and the
+      eight primitive meshes).
+   e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info, Defaults, and a
+      ready primitive draw path.
    f. IGame.Setup(ctx) is awaited on the tick thread.
    g. Loop: input snapshot, clock, IGame.Tick, frame publish; render consumes previous frame.
    h. Exit: stop accepting ticks. The tick thread publishes the final frame and runs
@@ -274,15 +311,17 @@ writes to that target and can be sampled by a later camera.
    i. Join the tick thread and complete the frame ring; the render thread drains and presents the
       final frame, disposes the GPU objects, and destroys the native surface through the channel
       while the main thread services it.
-   j. The app releases the engine defaults, stops the asset catalog, closes the surface channel,
-      disposes the platform (window, SDL3, Vulkan loader), and releases the remaining engine state.
+   j. The app releases the engine defaults and the primitive assets, stops the asset catalog, closes
+      the surface channel, disposes the platform (window, SDL3, Vulkan loader), and releases the
+      remaining engine state.
 3. Run returns; Dispose releases the app object.
 ```
 
 The surface handshake is bounded: a render-thread surface request and the main-thread wait for the
 renderer each time out after 30 seconds. The tick thread does not start before the renderer is
 ready, so `Setup` can read `Info` and `Defaults`. M3 inserts the asset loader after (a); M4 inserts
-the engine-defaults preload between the catalog start and the tick thread start.
+the engine-defaults preload between the catalog start and the tick thread start; M5 adds the
+primitive-asset preload after the defaults.
 
 Failure behavior:
 

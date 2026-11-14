@@ -28,6 +28,8 @@ internal sealed class CameraTestHost : IDisposable {
 
     internal RenderFramePacket Packet { get; private set; } = null!;
 
+    internal void AttachTonemapping(TonemappingSettings tonemapping) => Service.AttachTonemapping(tonemapping);
+
     internal RenderFramePacket BeginFrame(long frameIndex = 1, double time = 1.0, double deltaTime = 1.0 / 60.0) {
         if (!_attached) {
             TickThread.Attach();

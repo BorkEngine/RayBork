@@ -13,6 +13,8 @@
 | `Shader` uniform cursor | Tick thread | `SetUniform`/`ResetUniforms` |
 | `Font` glyph cache | Tick thread | `Preload`, lazy glyph generation |
 | `RenderTexture` handle | Tick thread | Create/dispose/resize; GPU work is deferred |
+| `EngineContext.Tonemapping` | Tick thread | Read/write during `Setup`, `Tick`, or `Shutdown`; the values are sealed into each frame |
+| `Collision`/`RayCollision` | Any thread | Pure CPU queries; no locks; a mesh must not be disposed while a `GetRayMesh` query reads it |
 | `IInput` | Tick thread | Read the current snapshot |
 | `IWindow` setters | Any thread | Queued to the main thread |
 | `IWindow` getters | Any thread | Last confirmed snapshot |
@@ -21,6 +23,18 @@
 | `ILoggerFactory` | Any thread | App-owned; create category loggers |
 | `RenderStats` | Render thread writes | Any thread reads a snapshot |
 | Renderer backend objects | Render thread | Never exposed; the backend is replaceable internally |
+
+The render thread never reads a live tick-thread object. `EngineContext.Tonemapping` is copied into a
+`TonemappingSnapshot` in the sealed frame packet; the present push constants and the scene frame
+block's exposure come from that snapshot, not from the app-lifetime settings object. A draw record
+likewise captures its per-instance UV rectangle: only the billboard source-rectangle overloads set a
+sub-rectangle, and every other draw records the full `(0, 0, 1, 1)` value. The render thread reads
+that value from the instance record; it never reads a live material cursor or camera.
+
+`DrawWireModel` is a tick-thread record call like `DrawModel`. The `fillModeNonSolid` support check
+and the polygon-mode-line pipeline creation happen on the render thread when the batch is submitted,
+so a device without the feature fails the frame with `GraphicsException` `RB3001` instead of throwing
+from the camera call. M5 has no CPU line-geometry fallback.
 
 ### 11.2 The "join before Tick returns" rule
 

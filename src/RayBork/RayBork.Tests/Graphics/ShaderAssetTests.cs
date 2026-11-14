@@ -97,6 +97,12 @@ public sealed class ShaderAssetTests {
         Assert.DoesNotContain("aNormal", fragment, StringComparison.Ordinal);
         Assert.DoesNotContain("vNormal", fragment, StringComparison.Ordinal);
         Assert.Contains("vColor = aColor;", vertex, StringComparison.Ordinal);
+        // The per-instance UV rectangle offsets and scales the authored UVs; the default
+        // (0, 0, 1, 1) reproduces them exactly.
+        Assert.Contains(
+            "vUv = rbInstance.UvRect.xy + (aUv * rbInstance.UvRect.zw);",
+            vertex,
+            StringComparison.Ordinal);
         Assert.DoesNotContain("rbInstance.Color", vertex, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(fragment, "rbInstance.Color"));
         Assert.Contains("texture(mainTexture, vUv) * vColor * uTint * rbInstance.Color", fragment);

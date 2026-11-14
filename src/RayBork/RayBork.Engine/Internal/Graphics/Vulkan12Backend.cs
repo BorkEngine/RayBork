@@ -343,17 +343,26 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             pipelines);
 
         RenderSettings settings = _options.Settings;
+
+        // The present pass is frame-global and uses the frame's tone-mapping snapshot, not the live
+        // runtime settings object: the render thread never reads the game's settings.
+        TonemappingSnapshot tonemapping = frame.Tonemapping;
         float paperWhite = state.Hdr.HdrEnabled ? state.Hdr.SdrWhiteLevel : 1f;
-        float peak = paperWhite * (state.Hdr.HdrEnabled ? state.Hdr.HdrHeadroom : 1f);
         PresentEncoding encoding = _swapchainFormat.Encoding;
+        float outputMax = encoding == PresentEncoding.ScRgbHdr && state.Hdr.HdrEnabled
+            ? state.Hdr.HdrHeadroom
+            : 1f;
+        AgxCurveParameters agx = AgxCurveParameters.Create(tonemapping.AgxWhite, tonemapping.AgxContrast, outputMax);
         PresentPushConstants pushConstants = new() {
-            ExposureMultiplier = MathF.Pow(2f, settings.Exposure),
+            ExposureMultiplier = MathF.Pow(2f, tonemapping.Exposure),
             HdrWhiteScale = paperWhite,
-            HdrPeakScale = peak,
-            AgxWhiteSceneLuminance = (float)AgxToneMap.AGX_WHITE_SCENE_LUMINANCE,
+            OutputMaxValue = (float)agx.OutputMax,
+            AwpContrast = (float)agx.Contrast,
+            AwpToeA = (float)agx.ToeA,
+            AwpSlope = (float)agx.Slope,
+            AwpW = (float)agx.W,
             Tonemapping = settings.Tonemapping == TonemappingMode.AgX ? 0 : 1,
             Encoding = (int)encoding,
-            HdrHighlight = AgxToneMap.IsHdrHighlightActive(encoding, settings.Tonemapping, state.Hdr) ? 1 : 0,
             Reserved = 0,
         };
         _presentPipeline!.Record(vulkan, commandBuffer, imageIndex, pushConstants);
@@ -788,7 +797,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </summary>
     /// <remarks>
     /// Render-thread only. The caller disposes the previous cache before the scene render pass is
-    /// destroyed.
+    /// destroyed. The cache snapshots the device's <c>fillModeNonSolid</c> support for the wireframe
+    /// model pipelines.
     /// </remarks>
     private void CreateGeometryPipelines() {
         _geometryPipelines = VulkanGeometryPipelineCache.Create(
@@ -1202,7 +1212,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Extent2D extent,
         HashSet<ulong> pipelines) {
         VulkanSceneTarget target = _sceneTarget!;
-        RenderSettings settings = _options!.Settings;
         Rect2D renderArea = new() {
             Offset = new Offset2D { X = 0, Y = 0 },
             Extent = extent,
@@ -1247,7 +1256,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
             // ClearMode.Stencil has no attachment in M4; the flag is a documented no-op.
 
-            WriteFrameBlock(frameSlot, pass, frame, settings, viewport);
+            WriteFrameBlock(frameSlot, pass, frame, viewport);
             if (passPlan.Batches.Count == 0) {
                 continue;
             }
@@ -1255,7 +1264,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             foreach (PlannedBatch batch in passPlan.Batches) {
                 VulkanShaderAssetResource shader = RequireShaderResource(batch.Program);
                 VulkanMeshAssetResource mesh = RequireMeshResource(batch.Mesh);
-                Pipeline pipeline = _geometryPipelines!.GetOrCreate(shader, batch.RenderState, batch.Topology);
+                Pipeline pipeline = _geometryPipelines!.GetOrCreate(
+                    shader,
+                    batch.RenderState,
+                    batch.Topology,
+                    batch.Wireframe);
                 pipelines.Add(pipeline.Handle);
 
                 RenderDrawRecord first = batch.Instances[0].Record;
@@ -1366,7 +1379,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         int frameSlot,
         CameraPass pass,
         RenderFramePacket frame,
-        RenderSettings settings,
         Viewport viewport) {
         Span<byte> block = _frameResources!.GetFrameBlockSpan(frameSlot);
         WriteMatrix(block, ShaderAbiFrame.VIEW_PROJECTION_OFFSET, pass.ViewProjection);
@@ -1392,7 +1404,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             new Vector4(
                 _sceneTarget!.Extent.Width,
                 _sceneTarget.Extent.Height,
-                MathF.Pow(2f, settings.Exposure),
+                // The scene shader and the present pass must apply the same frame exposure.
+                MathF.Pow(2f, frame.Tonemapping.Exposure),
                 0f));
     }
 

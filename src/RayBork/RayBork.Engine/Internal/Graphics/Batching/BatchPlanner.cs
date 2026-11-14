@@ -7,9 +7,12 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The batch key is <c>(pass, mesh, internal shader program, effective render state, topology)</c>.
+/// The batch key is
+/// <c>(pass, mesh, internal shader program, effective render state, topology, wireframe)</c>.
 /// Uniform values and texture bindings are per-instance material data and never split a batch, so two
-/// materials over the same program always batch together. Within one camera pass every
+/// materials over the same program always batch together. The wireframe flag is part of the key
+/// because it selects a different geometry pipeline for the same mesh, program, and render state.
+/// Within one camera pass every
 /// instance is frustum-culled against the pass view-projection using the mesh-space bounds transformed
 /// to a world-space AABB; a draw whose record was recorded with a model part transform already carries
 /// the combined world matrix, so the same test covers every draw kind.
@@ -104,7 +107,12 @@ internal sealed class BatchPlanner {
                     continue;
                 }
 
-                BatchKey key = new(record.Mesh, record.Program, record.RenderState, record.Topology);
+                BatchKey key = new(
+                    record.Mesh,
+                    record.Program,
+                    record.RenderState,
+                    record.Topology,
+                    record.Wireframe);
                 if (!batchesByKey.TryGetValue(key, out PendingBatch? batch)) {
                     batch = new PendingBatch(key, bytesPerInstance, trianglesPerInstance);
                     batchesByKey.Add(key, batch);
@@ -141,6 +149,7 @@ internal sealed class BatchPlanner {
                     batch.Key.Program,
                     batch.Key.RenderState,
                     batch.Key.Topology,
+                    batch.Key.Wireframe,
                     chunk,
                     nearestDepth);
                 if (batch.IsOpaque) {
@@ -209,7 +218,8 @@ internal sealed class BatchPlanner {
         EngineAsset Mesh,
         EngineAsset Program,
         RenderState RenderState,
-        PrimitiveTopology Topology);
+        PrimitiveTopology Topology,
+        bool Wireframe);
 
     private sealed class PendingBatch {
         internal PendingBatch(BatchKey key, int bytesPerInstance, int trianglesPerInstance) {

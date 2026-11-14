@@ -60,9 +60,9 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(tickMaterial!.IsDisposed);
 
         // The two materials were preloaded without a second program upload, and everything the engine
-        // owns is released by shutdown.
-        Assert.Equal(3, worker.UploadCallCount);
-        Assert.Equal(3, worker.DestroyCalls.Count);
+        // owns (the defaults plus the primitive program and meshes) is released by shutdown.
+        Assert.Equal(12, worker.UploadCallCount);
+        Assert.Equal(12, worker.DestroyCalls.Count);
         Assert.True(defaults!.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.White);
         Assert.Throws<ObjectDisposedException>(() => _ = defaults.Error);
@@ -134,5 +134,123 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(sawProgramOnTheRecord);
         Assert.True(material!.IsDisposed);
         Assert.True(mesh!.IsDisposed);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PrimitiveAssetsArePreloadedBeforeSetupAndReleasedAfterShutdown() {
+        FakeAssetGpuWorker worker = new();
+        FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
+        FakeEnginePlatform platform = new();
+        PrimitiveAssets? setupPrimitives = null;
+        PrimitiveAssets? tickPrimitives = null;
+        int uploadCountAtSetup = 0;
+        int destroyCountAtSetup = -1;
+        int destroyCountInTick = -1;
+        bool meshesUsableInTick = false;
+        bool materialsUsableInTick = false;
+        RayBorkApp? app = null;
+        ScriptedGame game = new();
+        game.SetupHandler = context => {
+            setupPrimitives = app!.Cameras?.Primitives;
+            uploadCountAtSetup = worker.UploadCallCount;
+            destroyCountAtSetup = worker.DestroyCalls.Count;
+            return Task.CompletedTask;
+        };
+        game.TickHandler = context => {
+            tickPrimitives = app!.Cameras?.Primitives;
+            destroyCountInTick = worker.DestroyCalls.Count;
+            meshesUsableInTick = tickPrimitives is not null
+                && !tickPrimitives.Cube.IsDisposed
+                && !tickPrimitives.Sphere.IsDisposed
+                && !tickPrimitives.Plane.IsDisposed
+                && !tickPrimitives.Quad.IsDisposed
+                && !tickPrimitives.Triangle.IsDisposed
+                && !tickPrimitives.Line.IsDisposed
+                && !tickPrimitives.WireCube.IsDisposed
+                && !tickPrimitives.WireSphere.IsDisposed
+                && tickPrimitives.Cube.IsProcedural
+                && tickPrimitives.Cube.Topology == PrimitiveTopology.TriangleList;
+            materialsUsableInTick = tickPrimitives is not null
+                && tickPrimitives.PrimitiveMaterial.Path == "/shaders/primitive"
+                && tickPrimitives.MeshMaterial.Path == "/shaders/mesh"
+                && !tickPrimitives.PrimitiveMaterial.IsDisposed
+                && !tickPrimitives.MeshMaterial.IsDisposed;
+            context.RequestExit();
+        };
+
+        app = new RayBorkAppBuilder()
+            .WithGame(game)
+            .WithTargetFps(2)
+            .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .Build(_ => platform, () => renderer, TimeProvider.System);
+        try {
+            app.Run();
+        } finally {
+            app.Dispose();
+        }
+
+        Assert.NotNull(setupPrimitives);
+        Assert.Same(setupPrimitives, tickPrimitives);
+        // The three defaults, the primitive program, and the eight primitive meshes upload before
+        // Setup; nothing is destroyed until shutdown.
+        Assert.Equal(12, uploadCountAtSetup);
+        Assert.Equal(0, destroyCountAtSetup);
+        Assert.Equal(0, destroyCountInTick);
+        Assert.True(meshesUsableInTick);
+        Assert.True(materialsUsableInTick);
+
+        PrimitiveAssets created = Assert.IsType<PrimitiveAssets>(setupPrimitives);
+        Assert.True(created.IsDisposed);
+        Assert.Throws<ObjectDisposedException>(() => _ = created.Cube);
+        Assert.Throws<ObjectDisposedException>(() => _ = created.PrimitiveMaterial);
+        Assert.Null(app.Cameras!.Primitives);
+        Assert.Equal(12, worker.DestroyCalls.Count);
+
+        created.Dispose();
+        Assert.Equal(12, worker.DestroyCalls.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AFailedPrimitiveMeshUploadFailsStartupAndReleasesThePartialLoad() {
+        FakeAssetGpuWorker worker = new();
+        int meshUploads = 0;
+        worker.UploadHandler = upload => {
+            if (upload.Kind == AssetGpuUploadKind.Mesh
+                && Interlocked.Increment(ref meshUploads) == 3) {
+                throw new InvalidOperationException("Injected primitive mesh upload failure.");
+            }
+
+            return new FakeGpuAssetResource(upload, worker.NextHandle());
+        };
+        FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
+        FakeEnginePlatform platform = new();
+        ScriptedGame game = new() {
+            TickHandler = context => context.RequestExit(),
+        };
+
+        RayBorkApp app = new RayBorkAppBuilder()
+            .WithGame(game)
+            .WithTargetFps(2)
+            .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
+            .Build(_ => platform, () => renderer, TimeProvider.System);
+        AssetLoadException thrown;
+        try {
+            thrown = Assert.Throws<AssetLoadException>(app.Run);
+        } finally {
+            app.Dispose();
+        }
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("/shaders/primitive", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(0, game.SetupCount);
+        Assert.Equal(0, game.TickCount);
+        Assert.Equal(0, game.ShutdownCount);
+        // The three defaults, the primitive program, and two completed primitive meshes were created
+        // before the third mesh upload failed. The mesh program is shared with the defaults, so only
+        // six resources exist and every one of them is released by the failed startup.
+        Assert.Equal(7, worker.UploadCallCount);
+        Assert.Equal(6, worker.DestroyCalls.Count);
     }
 }

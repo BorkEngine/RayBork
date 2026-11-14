@@ -99,8 +99,12 @@ Transform world = local.WithParent(parent); // Position == (1, 1, 0)
 `Color` is RayBork's port of the linear `Color` type from
 `Bork2d.Engine/Rendering/Color.cs`. It is an immutable linear RGBA value stored as a `Vector4`.
 Components are normally in `[0, 1]`, but HDR rendering deliberately allows values above `1`.
-There is no 8-bit sRGB `Color` and no implicit gamma conversion; the present pass applies AgX and
-the output transfer function.
+There is no 8-bit sRGB `Color` and no implicit gamma conversion; use the explicit `FromSrgb`,
+`FromSrgbBytes`, and `ToSrgb` helpers when a display-encoded value crosses the API boundary. The
+present pass applies Godot 4.7's HDR-aware AgX curve and then the output transfer function. `Color`
+also carries the full 158-color Bork2d/Unity preset set. The presets are authored as sRGB and stored
+linear through the same explicit conversion, so `Color.Gray` is the display mid-gray (linear
+`0.214041`), not a linear `0.5` value.
 
 ```csharp
 public readonly struct Color : IEquatable<Color>, IFormattable {
@@ -128,6 +132,10 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     public static Color HSVToRGB(float h, float s, float v, bool hdr = true);
     public static void RGBToHSV(Color rgb, out float h, out float s, out float v);
 
+    public static Color FromSrgb(float r, float g, float b, float a = 1f);
+    public static Color FromSrgbBytes(byte r, byte g, byte b, byte a = 255);
+    public Vector4 ToSrgb();
+
     public static Color operator +(Color a, Color b);
     public static Color operator -(Color a, Color b);
     public static Color operator *(Color a, Color b);
@@ -145,9 +153,12 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     public static readonly Color Green;
     public static readonly Color Blue;
     public static readonly Color Yellow;
-    public static readonly Color DarkCyan;
+    public static readonly Color Gray;
+    public static readonly Color Grey;
     public static readonly Color Transparent;
-    // The full Unity palette is provided as static readonly fields.
+    // Plus the full Bork2d/Unity preset families: the web colors (AliceBlue through YellowGreen),
+    // Gray1-Gray9, SoftRed/SoftBlue/SoftGreen/SoftYellow, DarkCyan, YellowNice, and the other
+    // named shades. Every preset stores its authored sRGB source linearized.
 }
 ```
 
@@ -156,10 +167,32 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
 - `HSVToRGB` uses Unity-style HSV components with `h`, `s`, and `v` in `[0, 1]`. Hue wraps around
   the color wheel, saturation is clamped to `[0, 1]`, and `v` is clamped to `[0, 1]` only when
   `hdr` is false. With `hdr: true`, values above `1` are preserved for HDR colors.
-- `Color` values are **authored in linear space**; every preset field is a linear value. For example
-  `Color.DarkCyan` is `(0, 0.5, 0.5, 1)`, not an sRGB byte triple.
-- The final output path applies AgX tone mapping and then the swapchain transfer function. Sampling
-  an sRGB texture decodes to linear before lighting. Sampling a linear texture stays linear.
+- `Color` is **linear**: its components are light intensities, not display-encoded values. The named
+  presets are the Bork2d/Unity sRGB colors converted to linear by exactly the `FromSrgb` EOTF, so the
+  type stays linear while the names describe display-authored colors. `Color.Gray` and `Color.Grey`
+  are the display mid-gray (sRGB `0.5`, stored linear as `0.214041`); `Color.WhiteSmoke` is sRGB
+  `#F5F5F5`, stored linear as `0.913099` (the Castle background); `Color.Yellow` is sRGB
+  `(1, 235/255, 4/255)`, stored linear as `(1, 0.8307699, 0.0012141)`; and `Color.DarkCyan` is sRGB
+  `(0, 0.5450981, 0.5450981)`, stored linear as `(0, 0.2581829, 0.2581829)`. Black, white, red,
+  green, blue, cyan, and magenta keep their exact primary values. Alpha is never gamma-encoded:
+  `Color.Clear` and `Color.Transparent` keep alpha `0`, and every other preset is opaque.
+  `Color.Grey` aliases `Color.Gray`, `Color.Transparent` aliases `Color.Clear`, and
+  `Color.YellowNice` aliases `Color.Yellow`.
+- `FromSrgb(float r, float g, float b, float a = 1f)` treats red, green, and blue as sRGB-encoded
+  components in `[0, 1]` and decodes each with the standard piecewise sRGB EOTF
+  (`c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055)^2.4`). Alpha is passed through unchanged
+  because it is not gamma-encoded. Components must be finite and in `[0, 1]`; otherwise the method
+  throws `ArgumentOutOfRangeException`.
+- `FromSrgbBytes(byte r, byte g, byte b, byte a = 255)` divides each channel by `255` and decodes
+  red, green, and blue with the same EOTF; alpha is stored as `a / 255`. The conversion is exact and
+  deterministic for a given byte quadruple.
+- `ToSrgb()` encodes each linear channel with the standard piecewise sRGB OETF
+  (`c <= 0.0031308 ? 12.92 * c : 1.055 * c^(1/2.4) - 0.055`) and returns `(r, g, b, a)` as a
+  `Vector4`, not a `Color`, because the result is display-encoded rather than linear. It does not
+  clamp: values above `1` and negative values extrapolate through the same formula, so callers that
+  write to a display or an 8-bit target must clamp.
+- The final output path applies the HDR-aware AgX tone map and then the swapchain transfer function.
+  Sampling an sRGB texture decodes to linear before lighting. Sampling a linear texture stays linear.
 
 ### 5.4 `Rect`
 
@@ -181,14 +214,17 @@ Screen rectangles use a top-left origin.
 ### 5.5 Rays, bounds, and collision
 
 RayBork uses `System.Numerics.Plane` and the engine's own `RayBork.BoundingBox` value type directly,
-and adds a small `Collision` helper plus a `RayCollision` result. M4 ships `Ray` and
-`BoundingFrustum`; the M5 collision milestone adds the ray and sphere helpers and any additional
-bounds types it needs.
+and adds a `Collision` helper plus a `RayCollision` result. `Ray` is the shared ray value type.
 
 ```csharp
 public readonly record struct BoundingBox(Vector3 Min, Vector3 Max);
 
-public readonly record struct Ray(Vector3 Origin, Vector3 Direction);
+public readonly record struct Ray {
+    public Ray(Vector3 origin, Vector3 direction);
+    public Vector3 Origin { get; init; }
+    public Vector3 Direction { get; init; }
+    public void Deconstruct(out Vector3 origin, out Vector3 direction);
+}
 
 public readonly struct BoundingFrustum {
     public BoundingFrustum(Matrix4x4 viewProjection);
@@ -203,8 +239,13 @@ public readonly struct BoundingFrustum {
 }
 ```
 
-- `Ray.Direction` is expected to be normalized. `Camera.ScreenToWorldRay` returns a normalized
-  direction.
+- The `Ray` constructor requires a finite origin and a finite, non-zero direction, and stores
+  `Direction` normalized to unit length. Assigning `Origin` or `Direction` through an `init`
+  accessor (an object initializer or a `with` expression) validates and normalizes the same way, so
+  a ray built through the constructor or an accessor has a unit direction.
+  `Camera.ScreenToWorldRay` returns such a ray.
+- `default(Ray)` and an object initializer that omits `Direction` have a zero direction and are not
+  valid rays. The collision queries report a miss for them and `Camera.DrawRay` records nothing.
 - `BoundingFrustum` extracts six inward-facing, normalized planes from a view-projection matrix in
   the engine's row-vector convention. `Contains` requires every signed plane distance to be
   non-negative. `Intersects` uses the positive-vertex test and is conservative: a box that only
@@ -215,7 +256,7 @@ public readonly struct BoundingFrustum {
 - A default `BoundingFrustum` has six zero planes and accepts every point; construct it from a real
   projection before culling with it.
 
-The M5 collision contract adds the ray and sphere helpers. `Ray` is the shared ray value type.
+`Collision` adds the checks and ray casts:
 
 ```csharp
 public readonly struct RayCollision {
@@ -233,16 +274,47 @@ public static class Collision {
     public static RayCollision GetRaySphere(Ray ray, Vector3 center, float radius);
     public static RayCollision GetRayBox(Ray ray, BoundingBox box);
     public static RayCollision GetRayTriangle(Ray ray, Vector3 a, Vector3 b, Vector3 c);
+    public static RayCollision GetRayQuad(Ray ray, Vector3 a, Vector3 b, Vector3 c, Vector3 d);
     public static RayCollision GetRayPlane(Ray ray, Plane plane);
     public static RayCollision GetRayMesh(Ray ray, Mesh mesh, Matrix4x4 transform);
 }
 ```
 
-`GetRayMesh` requires the mesh's CPU positions. v1 retains CPU positions for loaded meshes;
-procedural primitives may expose bounds only until their CPU data is wired in. If a mesh has no CPU
-positions, `GetRayMesh` throws `NotSupportedException` rather than returning a false miss.
-
-Collision helpers are pure math and thread-safe. They do not query the renderer or the scene.
+- `CheckSpheres`, `CheckBoxes`, and `CheckBoxSphere` are inclusive: touching counts as a collision,
+  and a zero radius is a point. A negative radius or a NaN input reports `false`. A center inside the
+  box always collides.
+- Every ray query returns the nearest hit with `t >= 0`. An origin inside a sphere or a box returns
+  the exit point with the outward normal. `GetRayTriangle` is double-sided and reports the normalized
+  geometric normal `cross(b - a, c - a)`, which is not flipped toward the ray; a degenerate triangle
+  is a miss. `GetRayQuad` splits the quad into the triangles `(a, b, c)` and `(a, c, d)`, reuses the
+  same double-sided triangle test, and returns the nearest non-negative hit; a hit on the shared
+  diagonal reports the `(a, b, c)` result and a degenerate quad is a miss. `GetRayPlane` normalizes
+  `Plane.Normal` and misses when the ray is parallel to the plane, including when it lies in the
+  plane. Tangency and touching a face at `t = 0` count as hits. A `default(Ray)` has a zero direction
+  and reports a miss.
+- `RayCollision.Distance` is the ray parameter `t` in `origin + direction * t`. `Ray.Direction` is
+  unit length, so it is a world distance, and `Camera.ScreenToWorldRay` returns such a ray.
+  `GetRayMesh` reports the world parameter even when the transform scales its internal mesh-space
+  direction.
+- A miss is `default(RayCollision)`: `Hit` is false and every other member is zero.
+- The `Check*` helpers and the primitive ray casts never throw for numeric input, including negative
+  and non-finite values; a NaN input reports no collision or a miss. They are pure math,
+  allocation-free, and safe on any thread. They do not query the renderer or the scene. `GetRayMesh`
+  validates its mesh and transform as described below and throws for those contract violations.
+- `GetRayMesh` supports triangle-list and triangle-strip meshes. It throws `NotSupportedException` for
+  a line, line-strip, or point topology, `ArgumentException` for a singular transform, and
+  `ArgumentNullException`/`ObjectDisposedException` for the mesh. The transform is mesh-to-world under
+  the row-vector convention: the query transforms the ray into mesh space, keeps the nearest triangle,
+  and maps the point back with `Vector3.Transform(point, transform)` and the normal with the
+  inverse-transpose (`Vector3.TransformNormal(normal, Matrix4x4.Transpose(inverse))`). `Distance` is
+  the world-space ray parameter along the unit world direction, so it is the world distance even when
+  the transform scales the direction.
+- `GetRayMesh` traverses the mesh's immutable collision acceleration structure when it has one and
+  tests every retained triangle otherwise; both paths return the same nearest hit. A mesh built with
+  `MeshBuilder.GenerateCollisions()` and a mesh loaded from a pack whose descriptor names a baked
+  `RBVC` v1 collision payload have one; `Mesh.HasCollisionAcceleration` reports it, and a mesh
+  without one still supports `GetRayMesh` through the brute-force path. The structure is CPU-only,
+  immutable, and safe to query from any thread.
 
 ### 5.6 Vector and quaternion extensions
 

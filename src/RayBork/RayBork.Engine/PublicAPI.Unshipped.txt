@@ -79,6 +79,7 @@ RayBork.Camera.Dispose() -> void
 RayBork.Camera.DrawInstanced(RayBork.Mesh! mesh, RayBork.Shader! shader, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawMesh(RayBork.Mesh! mesh, RayBork.Transform transform, RayBork.Shader! shader, RayBork.RenderState? renderState = null, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawModel(RayBork.Model! model, RayBork.Transform transform, RayBork.Color? tint = null) -> void
+RayBork.Camera.DrawWireModel(RayBork.Model! model, RayBork.Transform transform, RayBork.Color? tint = null) -> void
 RayBork.Camera.DrawModelInstanced(RayBork.Model! model, System.ReadOnlySpan<RayBork.Transform> transforms, RayBork.Color? tint = null) -> void
 RayBork.Camera.Far.get -> float
 RayBork.Camera.FieldOfView.get -> float
@@ -117,6 +118,7 @@ RayBork.Color.MaxColorComponent.get -> float
 RayBork.Color.R.get -> float
 RayBork.Color.this[int index].get -> float
 RayBork.Color.ToOkLab(out float l, out float a, out float b) -> void
+RayBork.Color.ToSrgb() -> System.Numerics.Vector4
 RayBork.Color.ToString(string? format, System.IFormatProvider? formatProvider) -> string!
 RayBork.CullMode
 RayBork.CullMode.Back = 2 -> RayBork.CullMode
@@ -152,6 +154,7 @@ RayBork.EngineContext.MaxDeltaTime.get -> double
 RayBork.EngineContext.RequestExit() -> void
 RayBork.EngineContext.Stats.get -> RayBork.RenderStats
 RayBork.EngineContext.Time.get -> double
+RayBork.EngineContext.Tonemapping.get -> RayBork.TonemappingSettings!
 RayBork.EngineContext.UnscaledDeltaTime.get -> double
 RayBork.EngineContext.Window.get -> RayBork.IWindow!
 RayBork.EngineDefaults
@@ -634,14 +637,16 @@ RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).RotateTowards
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).Slerp(System.Numerics.Quaternion target, float t) -> System.Numerics.Quaternion
 RayBork.QuaternionExtensions.extension(System.Numerics.Quaternion).ToAngleAxis(out float angle, out System.Numerics.Vector3 axis) -> void
 RayBork.Ray
-RayBork.Ray.Deconstruct(out System.Numerics.Vector3 Origin, out System.Numerics.Vector3 Direction) -> void
+RayBork.Ray.Deconstruct(out System.Numerics.Vector3 origin, out System.Numerics.Vector3 direction) -> void
 RayBork.Ray.Direction.get -> System.Numerics.Vector3
 RayBork.Ray.Direction.init -> void
 RayBork.Ray.Equals(RayBork.Ray other) -> bool
 RayBork.Ray.Origin.get -> System.Numerics.Vector3
 RayBork.Ray.Origin.init -> void
 RayBork.Ray.Ray() -> void
-RayBork.Ray.Ray(System.Numerics.Vector3 Origin, System.Numerics.Vector3 Direction) -> void
+RayBork.Ray.Ray(System.Numerics.Vector3 origin, System.Numerics.Vector3 direction) -> void
+RayBork.RayBorkAppBuilder.WithAgxContrast(float contrast = 1.25) -> RayBork.RayBorkAppBuilder!
+RayBork.RayBorkAppBuilder.WithAgxWhite(float white = 16.29) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetsPack(string! path) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetsPacks(params string![]! paths) -> RayBork.RayBorkAppBuilder!
 RayBork.RayBorkAppBuilder.WithAssetLoader<T>(RayBork.IAssetLoader<T>! loader) -> RayBork.RayBorkAppBuilder!
@@ -808,6 +813,13 @@ RayBork.TextureWrap.Repeat = 0 -> RayBork.TextureWrap
 RayBork.TonemappingMode
 RayBork.TonemappingMode.AgX = 0 -> RayBork.TonemappingMode
 RayBork.TonemappingMode.None = 1 -> RayBork.TonemappingMode
+RayBork.TonemappingSettings
+RayBork.TonemappingSettings.AgxContrast.get -> float
+RayBork.TonemappingSettings.AgxContrast.set -> void
+RayBork.TonemappingSettings.AgxWhite.get -> float
+RayBork.TonemappingSettings.AgxWhite.set -> void
+RayBork.TonemappingSettings.Exposure.get -> float
+RayBork.TonemappingSettings.Exposure.set -> void
 RayBork.Transform
 RayBork.Transform.Forward.get -> System.Numerics.Vector3
 RayBork.Transform.Inverse() -> RayBork.Transform
@@ -870,6 +882,8 @@ RayBork.WindowState.Normal = 0 -> RayBork.WindowState
 static RayBork.BoundingBox.operator !=(RayBork.BoundingBox left, RayBork.BoundingBox right) -> bool
 static RayBork.BoundingBox.operator ==(RayBork.BoundingBox left, RayBork.BoundingBox right) -> bool
 static RayBork.Color.FromOkLab(float l, float a, float b, float alpha = 1) -> RayBork.Color
+static RayBork.Color.FromSrgb(float r, float g, float b, float a = 1) -> RayBork.Color
+static RayBork.Color.FromSrgbBytes(byte r, byte g, byte b, byte a = 255) -> RayBork.Color
 static RayBork.Color.HSVToRGB(float h, float s, float v) -> RayBork.Color
 static RayBork.Color.HSVToRGB(float h, float s, float v, bool hdr) -> RayBork.Color
 static RayBork.Color.implicit operator RayBork.Color(System.Numerics.Vector4 value) -> RayBork.Color
@@ -951,19 +965,164 @@ static RayBork.Vector3Extensions.SignedAngle(this System.Numerics.Vector3 value,
 static RayBork.Vector3Extensions.WithX(this System.Numerics.Vector3 value, float x) -> System.Numerics.Vector3
 static RayBork.Vector3Extensions.WithY(this System.Numerics.Vector3 value, float y) -> System.Numerics.Vector3
 static RayBork.Vector3Extensions.WithZ(this System.Numerics.Vector3 value, float z) -> System.Numerics.Vector3
+static readonly RayBork.Color.AliceBlue -> RayBork.Color
+static readonly RayBork.Color.AntiqueWhite -> RayBork.Color
+static readonly RayBork.Color.Aquamarine -> RayBork.Color
+static readonly RayBork.Color.Azure -> RayBork.Color
+static readonly RayBork.Color.Beige -> RayBork.Color
+static readonly RayBork.Color.Bisque -> RayBork.Color
 static readonly RayBork.Color.Black -> RayBork.Color
+static readonly RayBork.Color.BlanchedAlmond -> RayBork.Color
 static readonly RayBork.Color.Blue -> RayBork.Color
+static readonly RayBork.Color.BlueViolet -> RayBork.Color
+static readonly RayBork.Color.Brown -> RayBork.Color
+static readonly RayBork.Color.Burlywood -> RayBork.Color
+static readonly RayBork.Color.CadetBlue -> RayBork.Color
+static readonly RayBork.Color.Chartreuse -> RayBork.Color
+static readonly RayBork.Color.Chocolate -> RayBork.Color
 static readonly RayBork.Color.Clear -> RayBork.Color
+static readonly RayBork.Color.Coral -> RayBork.Color
+static readonly RayBork.Color.CornflowerBlue -> RayBork.Color
+static readonly RayBork.Color.Cornsilk -> RayBork.Color
+static readonly RayBork.Color.Crimson -> RayBork.Color
 static readonly RayBork.Color.Cyan -> RayBork.Color
+static readonly RayBork.Color.DarkBlue -> RayBork.Color
 static readonly RayBork.Color.DarkCyan -> RayBork.Color
+static readonly RayBork.Color.DarkGoldenRod -> RayBork.Color
+static readonly RayBork.Color.DarkGray -> RayBork.Color
+static readonly RayBork.Color.DarkGreen -> RayBork.Color
+static readonly RayBork.Color.DarkKhaki -> RayBork.Color
+static readonly RayBork.Color.DarkMagenta -> RayBork.Color
+static readonly RayBork.Color.DarkOliveGreen -> RayBork.Color
+static readonly RayBork.Color.DarkOrange -> RayBork.Color
+static readonly RayBork.Color.DarkOrchid -> RayBork.Color
+static readonly RayBork.Color.DarkRed -> RayBork.Color
+static readonly RayBork.Color.DarkSalmon -> RayBork.Color
+static readonly RayBork.Color.DarkSeaGreen -> RayBork.Color
+static readonly RayBork.Color.DarkSlateBlue -> RayBork.Color
+static readonly RayBork.Color.DarkSlateGray -> RayBork.Color
+static readonly RayBork.Color.DarkTurquoise -> RayBork.Color
+static readonly RayBork.Color.DarkViolet -> RayBork.Color
+static readonly RayBork.Color.DeepPink -> RayBork.Color
+static readonly RayBork.Color.DeepSkyBlue -> RayBork.Color
+static readonly RayBork.Color.DimGray -> RayBork.Color
+static readonly RayBork.Color.DodgerBlue -> RayBork.Color
+static readonly RayBork.Color.Firebrick -> RayBork.Color
+static readonly RayBork.Color.FloralWhite -> RayBork.Color
+static readonly RayBork.Color.ForestGreen -> RayBork.Color
+static readonly RayBork.Color.Gainsboro -> RayBork.Color
+static readonly RayBork.Color.GhostWhite -> RayBork.Color
+static readonly RayBork.Color.Gold -> RayBork.Color
+static readonly RayBork.Color.GoldenRod -> RayBork.Color
 static readonly RayBork.Color.Gray -> RayBork.Color
+static readonly RayBork.Color.Gray1 -> RayBork.Color
+static readonly RayBork.Color.Gray2 -> RayBork.Color
+static readonly RayBork.Color.Gray3 -> RayBork.Color
+static readonly RayBork.Color.Gray4 -> RayBork.Color
+static readonly RayBork.Color.Gray5 -> RayBork.Color
+static readonly RayBork.Color.Gray6 -> RayBork.Color
+static readonly RayBork.Color.Gray7 -> RayBork.Color
+static readonly RayBork.Color.Gray8 -> RayBork.Color
+static readonly RayBork.Color.Gray9 -> RayBork.Color
 static readonly RayBork.Color.Green -> RayBork.Color
+static readonly RayBork.Color.GreenYellow -> RayBork.Color
 static readonly RayBork.Color.Grey -> RayBork.Color
+static readonly RayBork.Color.Honeydew -> RayBork.Color
+static readonly RayBork.Color.HotPink -> RayBork.Color
+static readonly RayBork.Color.IndianRed -> RayBork.Color
+static readonly RayBork.Color.Indigo -> RayBork.Color
+static readonly RayBork.Color.Ivory -> RayBork.Color
+static readonly RayBork.Color.Khaki -> RayBork.Color
+static readonly RayBork.Color.Lavender -> RayBork.Color
+static readonly RayBork.Color.LavenderBlush -> RayBork.Color
+static readonly RayBork.Color.LawnGreen -> RayBork.Color
+static readonly RayBork.Color.LemonChiffon -> RayBork.Color
+static readonly RayBork.Color.LightBlue -> RayBork.Color
+static readonly RayBork.Color.LightCoral -> RayBork.Color
+static readonly RayBork.Color.LightCyan -> RayBork.Color
+static readonly RayBork.Color.LightGoldenRod -> RayBork.Color
+static readonly RayBork.Color.LightGoldenRodYellow -> RayBork.Color
+static readonly RayBork.Color.LightGray -> RayBork.Color
+static readonly RayBork.Color.LightGreen -> RayBork.Color
+static readonly RayBork.Color.LightPink -> RayBork.Color
+static readonly RayBork.Color.LightSalmon -> RayBork.Color
+static readonly RayBork.Color.LightSeaGreen -> RayBork.Color
+static readonly RayBork.Color.LightSkyBlue -> RayBork.Color
+static readonly RayBork.Color.LightSlateBlue -> RayBork.Color
+static readonly RayBork.Color.LightSlateGray -> RayBork.Color
+static readonly RayBork.Color.LightSteelBlue -> RayBork.Color
+static readonly RayBork.Color.LightYellow -> RayBork.Color
+static readonly RayBork.Color.LimeGreen -> RayBork.Color
+static readonly RayBork.Color.Linen -> RayBork.Color
 static readonly RayBork.Color.Magenta -> RayBork.Color
+static readonly RayBork.Color.Maroon -> RayBork.Color
+static readonly RayBork.Color.MediumAquamarine -> RayBork.Color
+static readonly RayBork.Color.MediumBlue -> RayBork.Color
+static readonly RayBork.Color.MediumOrchid -> RayBork.Color
+static readonly RayBork.Color.MediumPurple -> RayBork.Color
+static readonly RayBork.Color.MediumSeaGreen -> RayBork.Color
+static readonly RayBork.Color.MediumSlateBlue -> RayBork.Color
+static readonly RayBork.Color.MediumSpringGreen -> RayBork.Color
+static readonly RayBork.Color.MediumTurquoise -> RayBork.Color
+static readonly RayBork.Color.MediumVioletRed -> RayBork.Color
+static readonly RayBork.Color.MidnightBlue -> RayBork.Color
+static readonly RayBork.Color.MintCream -> RayBork.Color
+static readonly RayBork.Color.MistyRose -> RayBork.Color
+static readonly RayBork.Color.Moccasin -> RayBork.Color
+static readonly RayBork.Color.NavajoWhite -> RayBork.Color
+static readonly RayBork.Color.NavyBlue -> RayBork.Color
+static readonly RayBork.Color.OldLace -> RayBork.Color
+static readonly RayBork.Color.Olive -> RayBork.Color
+static readonly RayBork.Color.OliveDrab -> RayBork.Color
+static readonly RayBork.Color.Orange -> RayBork.Color
+static readonly RayBork.Color.OrangeRed -> RayBork.Color
+static readonly RayBork.Color.Orchid -> RayBork.Color
+static readonly RayBork.Color.PaleGoldenRod -> RayBork.Color
+static readonly RayBork.Color.PaleGreen -> RayBork.Color
+static readonly RayBork.Color.PaleTurquoise -> RayBork.Color
+static readonly RayBork.Color.PaleVioletRed -> RayBork.Color
+static readonly RayBork.Color.PapayaWhip -> RayBork.Color
+static readonly RayBork.Color.PeachPuff -> RayBork.Color
+static readonly RayBork.Color.Peru -> RayBork.Color
+static readonly RayBork.Color.Pink -> RayBork.Color
+static readonly RayBork.Color.Plum -> RayBork.Color
+static readonly RayBork.Color.PowderBlue -> RayBork.Color
+static readonly RayBork.Color.Purple -> RayBork.Color
+static readonly RayBork.Color.RebeccaPurple -> RayBork.Color
 static readonly RayBork.Color.Red -> RayBork.Color
+static readonly RayBork.Color.RosyBrown -> RayBork.Color
+static readonly RayBork.Color.RoyalBlue -> RayBork.Color
+static readonly RayBork.Color.SaddleBrown -> RayBork.Color
+static readonly RayBork.Color.Salmon -> RayBork.Color
+static readonly RayBork.Color.SandyBrown -> RayBork.Color
+static readonly RayBork.Color.SeaGreen -> RayBork.Color
+static readonly RayBork.Color.Seashell -> RayBork.Color
+static readonly RayBork.Color.Sienna -> RayBork.Color
+static readonly RayBork.Color.Silver -> RayBork.Color
+static readonly RayBork.Color.SkyBlue -> RayBork.Color
+static readonly RayBork.Color.SlateBlue -> RayBork.Color
+static readonly RayBork.Color.SlateGray -> RayBork.Color
+static readonly RayBork.Color.Snow -> RayBork.Color
+static readonly RayBork.Color.SoftBlue -> RayBork.Color
+static readonly RayBork.Color.SoftGreen -> RayBork.Color
+static readonly RayBork.Color.SoftRed -> RayBork.Color
+static readonly RayBork.Color.SoftYellow -> RayBork.Color
+static readonly RayBork.Color.SpringGreen -> RayBork.Color
+static readonly RayBork.Color.SteelBlue -> RayBork.Color
+static readonly RayBork.Color.Tan -> RayBork.Color
+static readonly RayBork.Color.Teal -> RayBork.Color
+static readonly RayBork.Color.Thistle -> RayBork.Color
+static readonly RayBork.Color.Tomato -> RayBork.Color
 static readonly RayBork.Color.Transparent -> RayBork.Color
+static readonly RayBork.Color.Turquoise -> RayBork.Color
+static readonly RayBork.Color.Violet -> RayBork.Color
+static readonly RayBork.Color.VioletRed -> RayBork.Color
+static readonly RayBork.Color.Wheat -> RayBork.Color
 static readonly RayBork.Color.White -> RayBork.Color
+static readonly RayBork.Color.WhiteSmoke -> RayBork.Color
 static readonly RayBork.Color.Yellow -> RayBork.Color
+static readonly RayBork.Color.YellowGreen -> RayBork.Color
+static readonly RayBork.Color.YellowNice -> RayBork.Color
 ~override RayBork.BoundingBox.Equals(object obj) -> bool
 ~override RayBork.BoundingBox.ToString() -> string
 ~override RayBork.EngineInfo.Equals(object obj) -> bool
@@ -1014,3 +1173,76 @@ RayBork.RayBorkAppBuilder.WithWindowState(RayBork.WindowState state) -> RayBork.
 ~override RayBork.ShaderTextureBinding.ToString() -> string
 ~override RayBork.ShaderUniform.Equals(object obj) -> bool
 ~override RayBork.ShaderUniform.ToString() -> string
+RayBork.Collision
+static RayBork.Collision.CheckBoxes(RayBork.BoundingBox a, RayBork.BoundingBox b) -> bool
+static RayBork.Collision.CheckBoxSphere(RayBork.BoundingBox box, System.Numerics.Vector3 center, float radius) -> bool
+static RayBork.Collision.CheckSpheres(System.Numerics.Vector3 centerA, float radiusA, System.Numerics.Vector3 centerB, float radiusB) -> bool
+static RayBork.Collision.GetRayBox(RayBork.Ray ray, RayBork.BoundingBox box) -> RayBork.RayCollision
+static RayBork.Collision.GetRayMesh(RayBork.Ray ray, RayBork.Mesh! mesh, System.Numerics.Matrix4x4 transform) -> RayBork.RayCollision
+static RayBork.Collision.GetRayPlane(RayBork.Ray ray, System.Numerics.Plane plane) -> RayBork.RayCollision
+static RayBork.Collision.GetRaySphere(RayBork.Ray ray, System.Numerics.Vector3 center, float radius) -> RayBork.RayCollision
+static RayBork.Collision.GetRayTriangle(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c) -> RayBork.RayCollision
+RayBork.RayCollision
+RayBork.RayCollision.Distance.get -> float
+RayBork.RayCollision.Hit.get -> bool
+RayBork.RayCollision.Normal.get -> System.Numerics.Vector3
+RayBork.RayCollision.Point.get -> System.Numerics.Vector3
+RayBork.RayCollision.RayCollision() -> void
+RayBork.Mesh.HasCollisionAcceleration.get -> bool
+RayBork.MeshBuilder.GenerateCollisions() -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Rect source, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Rect source, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, RayBork.Rect source, System.Numerics.Vector2 size, System.Numerics.Vector2 origin, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, RayBork.Rect source, System.Numerics.Vector2 size, System.Numerics.Vector2 origin, RayBork.Color color, bool faceCamera) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawBillboard(RayBork.Texture! texture, System.Numerics.Vector3 position, System.Numerics.Vector2 size, RayBork.Color color, bool faceCamera) -> void
+RayBork.Camera.DrawCube(System.Numerics.Vector3 position, System.Numerics.Vector3 size, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radius, float height, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radius, float height, RayBork.Color color, int sides) -> void
+RayBork.Camera.DrawGrid(int slices, float spacing, RayBork.Color color) -> void
+RayBork.Camera.DrawLine(System.Numerics.Vector3 start, System.Numerics.Vector3 end, RayBork.Color color) -> void
+RayBork.Camera.DrawLines(System.ReadOnlySpan<System.Numerics.Vector3> points, RayBork.Color color) -> void
+RayBork.Camera.DrawPlane(System.Numerics.Vector3 center, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawPoint(System.Numerics.Vector3 position, RayBork.Color color, float size = 1) -> void
+RayBork.Camera.DrawSphere(System.Numerics.Vector3 center, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawTriangle(System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCube(System.Numerics.Vector3 position, System.Numerics.Vector3 size, RayBork.Color color) -> void
+RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, RayBork.Color color) -> void
+RayBork.MeshBuilder.GenerateCone(float radius, float height, int slices) -> void
+RayBork.MeshBuilder.GenerateCube(float width, float height, float length) -> void
+RayBork.MeshBuilder.GenerateCylinder(float radius, float height, int slices) -> void
+RayBork.MeshBuilder.GenerateHemiSphere(float radius, int rings, int slices) -> void
+RayBork.MeshBuilder.GenerateKnot(float radius, float size, int radSeg, int sides) -> void
+RayBork.MeshBuilder.GeneratePlane(float width, float length, int resX, int resZ) -> void
+RayBork.MeshBuilder.GeneratePoly(int sides, float radius) -> void
+RayBork.MeshBuilder.GenerateSphere(float radius, int rings, int slices) -> void
+RayBork.MeshBuilder.GenerateTorus(float radius, float size, int radSeg, int sides) -> void
+RayBork.Camera.DrawBoundingBox(RayBork.BoundingBox box, RayBork.Color color) -> void
+RayBork.Camera.DrawCapsule(RayBork.Transform transform, float radius, float height, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawCapsule(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawCircle(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawCircle(System.Numerics.Vector3 center, float radius, System.Numerics.Vector3 rotationAxis, float rotationAngle, RayBork.Color color) -> void
+RayBork.Camera.DrawCube(RayBork.Transform transform, System.Numerics.Vector3 size, RayBork.Color color) -> void
+RayBork.Camera.DrawCube(System.Numerics.Vector3 position, float width, float height, float length, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(RayBork.Transform transform, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float startRadius, float endRadius, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawCylinder(System.Numerics.Vector3 position, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawPlane(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color) -> void
+RayBork.Camera.DrawRay(RayBork.Ray ray, RayBork.Color color) -> void
+RayBork.Camera.DrawSphere(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawSphere(RayBork.Transform transform, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawSphere(System.Numerics.Vector3 center, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawTriangleStrip(System.ReadOnlySpan<System.Numerics.Vector3> points, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCapsule(RayBork.Transform transform, float radius, float height, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCapsule(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCube(RayBork.Transform transform, System.Numerics.Vector3 size, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCube(System.Numerics.Vector3 position, float width, float height, float length, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCylinder(RayBork.Transform transform, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCylinder(System.Numerics.Vector3 start, System.Numerics.Vector3 end, float startRadius, float endRadius, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawWireCylinder(System.Numerics.Vector3 position, float radiusTop, float radiusBottom, float height, int sides, RayBork.Color color) -> void
+RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawWireSphere(RayBork.Transform transform, float radius, int rings, int slices, RayBork.Color color) -> void
+RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, int rings, int slices, RayBork.Color color) -> void
+static RayBork.Collision.GetRayQuad(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, System.Numerics.Vector3 d) -> RayBork.RayCollision

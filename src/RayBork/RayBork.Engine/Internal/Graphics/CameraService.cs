@@ -15,14 +15,16 @@ namespace RayBork.Internal;
 /// abandons the frame in both cases.
 /// </para>
 /// <para>
-/// Every member is tick-thread only. The service holds no GPU state; it only builds camera snapshots
-/// and forwards them into the frame packet.
+/// Every member is tick-thread only. The service holds no GPU state; it only builds camera and
+/// tone-mapping snapshots and forwards them into the frame packet.
 /// </para>
 /// </remarks>
 internal sealed class CameraService {
     private readonly IWindow _window;
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
+    private PrimitiveAssets? _primitives;
+    private TonemappingSettings? _tonemapping;
     private int _nextCameraNumber;
 
     /// <summary>
@@ -37,6 +39,52 @@ internal sealed class CameraService {
 
     /// <summary>Gets whether a frame is currently accepting cameras and draws.</summary>
     internal bool IsRecording => _packet is not null;
+
+    /// <summary>
+    /// Gets the app's engine primitive meshes and materials, or <see langword="null"/> before the app
+    /// attaches them and after it detaches them during shutdown.
+    /// </summary>
+    /// <remarks>
+    /// The app attaches the assets before <see cref="IGame.Setup"/> runs and detaches them after
+    /// <see cref="IGame.Shutdown"/> returned, so the primitive draw helpers may read them only while a
+    /// frame records. The service does not own the assets and never disposes them.
+    /// </remarks>
+    internal PrimitiveAssets? Primitives => _primitives;
+
+    /// <summary>
+    /// Attaches the app-lifetime primitive assets for the later camera draw helpers.
+    /// </summary>
+    /// <param name="primitives">The app's primitive assets.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="primitives"/> is <c>null</c>.</exception>
+    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    internal void AttachPrimitives(PrimitiveAssets primitives) {
+        ArgumentNullException.ThrowIfNull(primitives);
+        _primitives = primitives;
+    }
+
+    /// <summary>
+    /// Detaches the primitive assets before the app disposes them. Called on the main thread after the
+    /// tick thread joined.
+    /// </summary>
+    internal void DetachPrimitives() => _primitives = null;
+
+    /// <summary>
+    /// Attaches the app-lifetime runtime tone-mapping settings whose values every sealed frame
+    /// snapshots.
+    /// </summary>
+    /// <param name="tonemapping">The app's tone-mapping settings.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="tonemapping"/> is <c>null</c>.</exception>
+    /// <remarks>
+    /// Called by the app on the main thread before the tick thread starts. The service never mutates
+    /// the settings; it reads <see cref="TonemappingSettings.Snapshot"/> when
+    /// <see cref="EndFrame"/> seals a frame. Without an attach, a frame keeps
+    /// <see cref="TonemappingSnapshot.Default"/>, which is the path used by tests and GPU harnesses
+    /// that construct packets directly.
+    /// </remarks>
+    internal void AttachTonemapping(TonemappingSettings tonemapping) {
+        ArgumentNullException.ThrowIfNull(tonemapping);
+        _tonemapping = tonemapping;
+    }
 
     /// <summary>
     /// Starts recording a frame into <paramref name="packet"/>.
@@ -59,7 +107,8 @@ internal sealed class CameraService {
     }
 
     /// <summary>
-    /// Ends the recording phase and seals the packet.
+    /// Ends the recording phase and seals the packet. The frame snapshot of the attached runtime
+    /// tone-mapping settings is copied into the packet before it seals.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// A camera created during the frame was not disposed before the tick returned. The exception names
@@ -81,6 +130,9 @@ internal sealed class CameraService {
                     + "returns; the frame was not published.");
         }
 
+        // The frame-wide tone mapping is sealed with the frame: writes made anywhere in Tick are in
+        // effect here, so they apply to this frame's present pass.
+        packet.Tonemapping = _tonemapping?.Snapshot() ?? TonemappingSnapshot.Default;
         packet.Seal();
     }
 

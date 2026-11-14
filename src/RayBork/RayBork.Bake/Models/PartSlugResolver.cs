@@ -4,18 +4,21 @@ using RayBork.Internal;
 namespace RayBork.Bake.Models;
 
 /// <summary>
-/// Sanitizes part names and allocates deterministic, collision-free part and payload paths.
+/// Sanitizes part names and allocates deterministic, collision-free part, payload, and collision paths.
 /// </summary>
 /// <remarks>
-/// A part contributes two output paths: <c>&lt;base&gt;/&lt;slug&gt;</c> for its mesh descriptor and
-/// <c>&lt;base&gt;/&lt;slug&gt;-mesh</c> for its payload. A second part whose slug is
-/// <c>&lt;slug&gt;-mesh</c> would collide with the first part's payload, so both paths are reserved
-/// and checked together.
+/// A part contributes three output paths: <c>&lt;base&gt;/&lt;slug&gt;</c> for its mesh descriptor,
+/// <c>&lt;base&gt;/&lt;slug&gt;-mesh</c> for its vertex/index payload, and
+/// <c>&lt;base&gt;/&lt;slug&gt;-collision</c> for its baked ray-mesh collision payload. A second part
+/// whose slug is <c>&lt;slug&gt;-mesh</c> or <c>&lt;slug&gt;-collision</c> would collide with an
+/// earlier part's payload, so all three paths are reserved and checked together. The slug length cap
+/// leaves room for the longest suffix, <c>-collision</c>.
 /// </remarks>
 internal sealed class PartSlugResolver {
     private const int MAX_SLUG_LENGTH = 64;
     private const int MIN_SLUG_LENGTH = 8;
     private const string PAYLOAD_SUFFIX = "-mesh";
+    private const string COLLISION_SUFFIX = "-collision";
     private const string FALLBACK_SLUG = "part";
 
     private readonly string _basePath;
@@ -39,7 +42,7 @@ internal sealed class PartSlugResolver {
         ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
 
         resolver = null;
-        int available = AssetPath.MAX_PATH_BYTES - basePath.Length - 1 - PAYLOAD_SUFFIX.Length;
+        int available = AssetPath.MAX_PATH_BYTES - basePath.Length - 1 - COLLISION_SUFFIX.Length;
         if (available < MIN_SLUG_LENGTH) {
             reason = $"The model path '{basePath}' leaves no room for a part path.";
             return false;
@@ -50,27 +53,36 @@ internal sealed class PartSlugResolver {
         return true;
     }
 
-    /// <summary>Allocates the next part and payload paths.</summary>
+    /// <summary>Allocates the next part, payload, and collision paths.</summary>
     /// <param name="name">The source name, or <see langword="null"/> when unnamed.</param>
     /// <param name="meshPath">The canonical mesh descriptor path.</param>
     /// <param name="payloadPath">The canonical mesh payload path.</param>
+    /// <param name="collisionPath">The canonical ray-mesh collision payload path.</param>
     /// <returns>The canonical part slug, used as the part name.</returns>
-    internal string Allocate(string? name, out string meshPath, out string payloadPath) {
+    internal string Allocate(
+        string? name,
+        out string meshPath,
+        out string payloadPath,
+        out string collisionPath) {
         string stem = Sanitize(name, _maxSlugLength);
         for (int suffix = 1; ; suffix++) {
             string candidate = suffix == 1 ? stem : $"{stem}-{suffix}";
             string slug = Fit(candidate, _maxSlugLength);
             string candidateMeshPath = _basePath + "/" + slug;
             string candidatePayloadPath = candidateMeshPath + PAYLOAD_SUFFIX;
+            string candidateCollisionPath = candidateMeshPath + COLLISION_SUFFIX;
             if (_usedOutputPaths.Contains(candidateMeshPath)
-                || _usedOutputPaths.Contains(candidatePayloadPath)) {
+                || _usedOutputPaths.Contains(candidatePayloadPath)
+                || _usedOutputPaths.Contains(candidateCollisionPath)) {
                 continue;
             }
 
             _usedOutputPaths.Add(candidateMeshPath);
             _usedOutputPaths.Add(candidatePayloadPath);
+            _usedOutputPaths.Add(candidateCollisionPath);
             meshPath = candidateMeshPath;
             payloadPath = candidatePayloadPath;
+            collisionPath = candidateCollisionPath;
             return slug;
         }
     }

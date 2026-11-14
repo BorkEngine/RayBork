@@ -5,13 +5,13 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The 32-byte push-constant block the present fragment shader reads.
+/// The 40-byte push-constant block the present fragment shader reads.
 /// </summary>
 /// <remarks>
-/// The layout is the shader ABI: four floats at offsets 0, 4, 8, and 12, followed by four 32-bit
-/// integers at offsets 16, 20, 24, and 28, for a total of 32 bytes. The struct is sequential and
-/// contains only unmanaged fields so it can be passed to <c>vkCmdPushConstants</c> directly. Keep the
-/// field order; <c>Present.frag.glsl</c> declares the same block.
+/// The layout is the shader ABI: seven floats at offsets 0 through 24, followed by three 32-bit
+/// integers at offsets 28, 32, and 36, for a total of 40 bytes. The struct is sequential and contains
+/// only unmanaged fields so it can be passed to <c>vkCmdPushConstants</c> directly. Keep the field
+/// order; <c>Present.frag.glsl</c> declares the same block.
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
 internal struct PresentPushConstants {
@@ -25,15 +25,22 @@ internal struct PresentPushConstants {
     public float HdrWhiteScale;
 
     /// <summary>
-    /// The displayed peak in scRGB units: the paper white multiplied by the reported HDR headroom,
-    /// or one on an SDR window.
+    /// The AgX curve output maximum: <c>1.0</c> on the SDR paths, or the display headroom (peak
+    /// divided by paper white) on the scRGB HDR path.
     /// </summary>
-    public float HdrPeakScale;
+    public float OutputMaxValue;
 
-    /// <summary>
-    /// The AgX white point in scene-linear luminance after exposure; the highlight knee.
-    /// </summary>
-    public float AgxWhiteSceneLuminance;
+    /// <summary>The allenwp curve contrast parameter.</summary>
+    public float AwpContrast;
+
+    /// <summary>The allenwp toe intersection parameter, <c>(1 / 0.18 - 1) * 0.18^contrast</c>.</summary>
+    public float AwpToeA;
+
+    /// <summary>The allenwp shoulder slope at the <c>0.18</c> crossover point.</summary>
+    public float AwpSlope;
+
+    /// <summary>The allenwp shoulder width that places the AgX white at the output maximum.</summary>
+    public float AwpW;
 
     /// <summary>The tone mapping selector: <c>0</c> is AgX and <c>1</c> is none.</summary>
     public int Tonemapping;
@@ -41,10 +48,7 @@ internal struct PresentPushConstants {
     /// <summary>The encoding selector, as a <see cref="PresentEncoding"/> value.</summary>
     public int Encoding;
 
-    /// <summary>Whether the HDR highlight extension is active: <c>1</c> when it is, else <c>0</c>.</summary>
-    public int HdrHighlight;
-
-    /// <summary>Reserved padding, always <c>0</c>; keeps the block 32 bytes.</summary>
+    /// <summary>Reserved padding, always <c>0</c>; keeps the block 40 bytes.</summary>
     public int Reserved;
 }
 
@@ -201,7 +205,8 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
     /// <param name="commandBuffer">The command buffer to record into.</param>
     /// <param name="imageIndex">The acquired swapchain image index.</param>
     /// <param name="constants">
-    /// The exposure, paper white, peak, AgX knee, tone mapping, encoding, and highlight values.
+    /// The exposure, paper white, output maximum, AgX curve parameters, tone mapping, and encoding
+    /// values.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="imageIndex"/> has no framebuffer because <see cref="RecreateFramebuffers"/> has

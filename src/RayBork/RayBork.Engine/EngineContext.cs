@@ -5,12 +5,14 @@ namespace RayBork;
 
 /// <summary>
 /// The engine context: the asset catalog, engine defaults, window, input, logging, renderer status,
-/// frame clock, and exit control.
+/// frame clock, runtime tone mapping, and exit control.
 /// </summary>
 /// <remarks>
 /// The context is stable for the app lifetime, but its per-frame members are tick-thread snapshots.
 /// Read them from <see cref="IGame.Setup"/>, <see cref="IGame.Tick"/>, or <see cref="IGame.Shutdown"/>
-/// instead of caching them across frames.
+/// instead of caching them across frames. <see cref="Tonemapping"/> is the app-lifetime exception: it
+/// is one mutable settings object, and each frame records a snapshot of it when the tick seals the
+/// frame.
 /// </remarks>
 public sealed class EngineContext {
     private readonly IAppControl _appControl;
@@ -32,7 +34,8 @@ public sealed class EngineContext {
         double maxDeltaTime,
         Func<double> elapsedTime,
         RenderStatus renderStatus,
-        CameraService cameras) {
+        CameraService cameras,
+        TonemappingSettings tonemapping) {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(assets);
@@ -42,6 +45,7 @@ public sealed class EngineContext {
         ArgumentNullException.ThrowIfNull(elapsedTime);
         ArgumentNullException.ThrowIfNull(renderStatus);
         ArgumentNullException.ThrowIfNull(cameras);
+        ArgumentNullException.ThrowIfNull(tonemapping);
         if (assets is not IProceduralAssetProvider proceduralProvider) {
             throw new InvalidOperationException(
                 "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog.");
@@ -58,6 +62,7 @@ public sealed class EngineContext {
         Input = initialInput;
         LoggerFactory = loggerFactory;
         MaxDeltaTime = maxDeltaTime;
+        Tonemapping = tonemapping;
     }
 
     /// <summary>
@@ -332,6 +337,24 @@ public sealed class EngineContext {
     /// and overlays, not for synchronization.
     /// </remarks>
     public RenderStats Stats => _renderStatus.Stats;
+
+    /// <summary>
+    /// Gets the app-lifetime runtime tone-mapping settings. Read and write them on the tick thread.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The values start from the <see cref="RayBorkAppBuilder"/> configuration. Changing them during
+    /// <see cref="IGame.Tick"/> affects the frame that tick records: the tick thread copies the values
+    /// into the frame packet when it seals the frame, and the present pass is frame-global. A frame
+    /// that was already published keeps its own snapshot, so a write never reaches an earlier frame.
+    /// </para>
+    /// <para>
+    /// The instance is stable for the app lifetime and is the same object on every tick. It is not
+    /// disposable and not thread-safe; read and write it only from <see cref="IGame.Setup"/>,
+    /// <see cref="IGame.Tick"/>, or <see cref="IGame.Shutdown"/>.
+    /// </para>
+    /// </remarks>
+    public TonemappingSettings Tonemapping { get; }
 
     /// <summary>
     /// Requests a graceful exit. The current tick completes and the final frame is presented. Call it

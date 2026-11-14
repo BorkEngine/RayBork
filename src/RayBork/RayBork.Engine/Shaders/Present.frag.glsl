@@ -6,68 +6,73 @@
 // This source is compiled to Present.frag.spv by scripts/compile-shaders.ps1 and the committed
 // blob is embedded in RayBork.Engine. The runtime never compiles shaders.
 //
-// The SDR paths write display-referred [0,1], byte for byte as M2 did. The scRGB HDR path keeps AgX
-// for the SDR range, normalizes AgX's neutral white to display luminance 1.0, scales it to the
-// window's reported SDR white level (paper white), and extends scene luminance above the AgX white
-// point into the reported HDR headroom at constant chromaticity. HDR10/PQ presentation is
+// The AgX implementation and the allenwp curve are derived from Godot 4.7's tonemap.glsl (MIT): the
+// combined Rec.709 to Rec.2020 + AgX inset matrix, the combined inverse outset matrix, and the curve
+// are ported from it. The AgX base transform follows EaryChow's AgX LUT generator that Blender uses
+// (https://github.com/EaryChow/AgX_LUT_Gen), and the curve is allenwp's tonemapping curve
+// (https://allenwp.com/blog/2025/05/29/allenwp-tonemapping-curve/). HDR10/PQ presentation is
 // deliberately deferred: it would be another value of `pc.encoding` instead of a change to the
 // tone-mapping path below.
 
 layout(set = 0, binding = 0) uniform sampler2D uSceneColor;
 
 layout(push_constant) uniform PresentConstants {
-    float exposureMultiplier;      // 0  = pow(2.0, exposureEv), computed on the CPU
-    float hdrWhiteScale;           // 4  = paper white in scRGB units; 1.0 on the SDR paths
-    float hdrPeakScale;            // 8  = paper white * HDR headroom; 1.0 on the SDR paths
-    float agxWhiteSceneLuminance;  // 12 = AGX_WHITE_SCENE_LUMINANCE, the highlight knee
-    int tonemapping;               // 16 = 0 AgX, 1 none
-    int encoding;                  // 20 = 0 linear [0,1], 1 manual sRGB encode, 2 scRGB HDR linear
-    int hdrHighlight;              // 24 = 1 when the HDR highlight extension is active
-    int reserved;                  // 28 = 0, keeps the block 32 bytes
+    float exposureMultiplier;  // 0  = pow(2.0, exposureEv), computed on the CPU
+    float hdrWhiteScale;       // 4  = paper white in scRGB units; 1.0 on the SDR paths
+    float outputMaxValue;      // 8  = 1.0 SDR, or the HDR headroom (peak / paper white)
+    float awpContrast;         // 12 = allenwp curve contrast
+    float awpToeA;             // 16 = allenwp toe intersection parameter
+    float awpSlope;            // 20 = allenwp shoulder slope at the crossover
+    float awpW;                // 24 = allenwp shoulder width
+    int tonemapping;           // 28 = 0 AgX, 1 none
+    int encoding;              // 32 = 0 linear [0,1], 1 manual sRGB encode, 2 scRGB HDR linear
+    int reserved;              // 36 = 0, keeps the block 40 bytes
 } pc;
 
 layout(location = 0) in vec2 vUv;
 layout(location = 0) out vec4 outColor;
 
-// AgX base transform in linear display space: inset -> log2 range -> contrast polynomial -> outset.
-// There is no look transform. The sRGB transfer is applied by the encoding step below or by the
-// sRGB swapchain format, never inside this function. The constants are from the published minimal
-// AgX implementation.
-const mat3 AGX_INSET = mat3(
-    0.842479062253094, 0.0423282422610123, 0.0423756549057051,
-    0.0784335999999992, 0.878468636469772, 0.0784336,
-    0.0792237451477643, 0.0791661274605434, 0.879142973793104);
-const mat3 AGX_OUTSET = mat3(
-    1.19687900512017,  -0.0980208811401368, -0.0990297440797205,
-    -0.0528968517574562, 1.15190312990417,  -0.0989611768448433,
-    -0.0529716355144438, -0.0980434501171241, 1.15107367264116);
-const float AGX_MIN_EV = -12.47393;
-const float AGX_MAX_EV = 4.026069;
+// Combined Rec.709 to Rec.2020 and Blender AgX inset matrices, in GLSL mat3 column-major constructor
+// order. All coefficients are positive, so a non-negative scene color stays non-negative.
+const mat3 REC709_TO_REC2020_AGX_INSET = mat3(
+    0.544814746488245, 0.140416948464053, 0.0888104196149096,
+    0.373787398372697, 0.754137554567394, 0.178871756420858,
+    0.0813978551390581, 0.105445496968552, 0.732317823964232);
 
-// The Rec.709 luminance of AgX's neutral-white response for a very large scene luminance. The scRGB
-// path divides by it so AgX's display white becomes exactly 1.0 before the paper-white and highlight
-// scaling, which is about 1.7% brighter than the raw M2 AgX white response. This value must match
-// AgxToneMap.AGX_OUTPUT_WHITE_LUMINANCE in AgxToneMap.cs.
-const float AGX_OUTPUT_WHITE_LUMINANCE = 0.9829795037669735;
-const vec3 REC709_LUMINANCE_WEIGHTS = vec3(0.2126, 0.7152, 0.0722);
+// Combined inverse AgX outset matrix and Rec.2020 to Rec.709 matrices, in column-major order.
+const mat3 AGX_OUTSET_REC2020_TO_REC709 = mat3(
+    1.96488741169489, -0.299313364904742, -0.164352742528393,
+    -0.855988495690215, 1.32639796461980, -0.238183969428088,
+    -0.108898916004672, -0.0270845997150571, 1.40253671195648);
 
-vec3 AgXDefaultContrastApprox(vec3 x) {
-    vec3 x2 = x * x;
-    vec3 x4 = x2 * x2;
-    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4 - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+// 18% "middle gray" is perceptually 50% of the brightness of reference white. The toe below this
+// point and the Reinhard-like shoulder above it meet with matching value and slope.
+const float AWP_CROSSOVER_POINT = 0.18;
+
+// allenwp tonemapping curve. The toe is a power function through the crossover point, and the
+// shoulder reaches outputMaxValue at the AgX white. The parameters are derived on the CPU so the
+// shader and AgxToneMap use the same curve.
+vec3 AllenwpCurve(vec3 x) {
+    float shoulderMax = pc.outputMaxValue - AWP_CROSSOVER_POINT;
+    vec3 s = x - vec3(AWP_CROSSOVER_POINT);
+    vec3 slopeS = pc.awpSlope * s;
+    s = slopeS * (1.0 + (s / pc.awpW)) / (1.0 + (slopeS / shoulderMax));
+    s += vec3(AWP_CROSSOVER_POINT);
+
+    vec3 t = pow(x, vec3(pc.awpContrast));
+    t = t / (t + vec3(pc.awpToeA));
+
+    return mix(s, t, lessThan(x, vec3(AWP_CROSSOVER_POINT)));
 }
 
 vec3 AgX(vec3 color) {
-    color = AGX_INSET * color;
-    color = clamp(log2(max(color, 1e-10)), AGX_MIN_EV, AGX_MAX_EV);
-    color = (color - AGX_MIN_EV) / (AGX_MAX_EV - AGX_MIN_EV);
-    color = AgXDefaultContrastApprox(color);
-    color = AGX_OUTSET * color;
-    return max(color, 0.0);
-}
-
-float AgxLuminance(vec3 color) {
-    return dot(color, REC709_LUMINANCE_WEIGHTS);
+    color = REC709_TO_REC2020_AGX_INSET * color;
+    color = AllenwpCurve(color);
+    // Clipping to the output maximum is required to address a cyan colour that occurs with very
+    // bright inputs.
+    color = min(vec3(pc.outputMaxValue), color);
+    color = AGX_OUTSET_REC2020_TO_REC709 * color;
+    return color;
 }
 
 // Standard piecewise sRGB encode for a swapchain format with no hardware transfer function.
@@ -83,36 +88,14 @@ void main() {
     vec3 scene = max(texture(uSceneColor, vUv).rgb, vec3(0.0)) * pc.exposureMultiplier;
 
     if (pc.encoding == 2) {
-        vec3 display;
-        if (pc.tonemapping == 0) {
-            // AgX stays the SDR-referred curve. Normalize its white response to 1.0, then either
-            // scale to paper white or, above the knee, extend the scene luminance into the headroom.
-            vec3 tone = AgX(scene) / AGX_OUTPUT_WHITE_LUMINANCE;
-            float sceneLuminance = AgxLuminance(scene);
-            if (pc.hdrHighlight != 0 && pc.hdrPeakScale > pc.hdrWhiteScale
-                && sceneLuminance > pc.agxWhiteSceneLuminance) {
-                float ratio = sceneLuminance / pc.agxWhiteSceneLuminance;
-                float headroom = pc.hdrPeakScale / pc.hdrWhiteScale;
-                float progress = clamp((ratio - 1.0) / (headroom - 1.0), 0.0, 1.0);
-                float outputLuminance = pc.hdrWhiteScale + (pc.hdrPeakScale - pc.hdrWhiteScale) * progress;
-                // Tone the chromaticity by the ratio of the target luminance to the tone-mapped
-                // luminance, so the displayed luminance is exact and the channel ratios are kept.
-                float displayLuminance = max(AgxLuminance(tone), 1e-5);
-                display = tone * (outputLuminance / displayLuminance);
-            } else {
-                display = tone * pc.hdrWhiteScale;
-            }
-        } else {
-            // Direct HDR authoring: no tone curve and no clamp, so scene values above paper white
-            // use the display headroom literally.
-            display = scene * pc.hdrWhiteScale;
-        }
-
-        outColor = vec4(max(display, 0.0), 1.0);
+        // scRGB HDR: AgX uses the display headroom as its output maximum, so the curve output is in
+        // paper-white units up to the peak. Scale it to scRGB paper white and keep the headroom
+        // unclamped so the tone curve, not the encoder, sets the peak.
+        vec3 display = pc.tonemapping == 0 ? AgX(scene) : scene;
+        outColor = vec4(max(display * pc.hdrWhiteScale, 0.0), 1.0);
     } else {
-        // SDR encodings keep the M2 transform exactly: raw AgX (or the raw scene for no tone
-        // mapping), the optional manual sRGB encode, and a clamp to [0, 1]. The AgX normalization
-        // and the highlight extension are scRGB-only.
+        // SDR encodings: AgX with an output maximum of 1.0, the optional manual sRGB encode, and a
+        // clamp to [0, 1]. The None path skips the curve but keeps the same clamp and encoding.
         vec3 color = pc.tonemapping == 0 ? AgX(scene) : scene;
         if (pc.encoding == 1) {
             color = SrgbEncode(color);

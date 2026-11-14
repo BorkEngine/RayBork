@@ -53,10 +53,25 @@ internal sealed class RenderDrawRecord {
     /// <summary>Gets the effective render state of this draw.</summary>
     internal RenderState RenderState { get; private set; }
 
+    /// <summary>
+    /// Gets whether the draw rasterizes its triangles with the polygon-mode-line state instead of
+    /// filling them.
+    /// </summary>
+    /// <remarks>
+    /// The flag is part of the batch key and the geometry pipeline key, so a wireframe draw never
+    /// merges with a filled draw over the same mesh, program, and render state. It is internal to the
+    /// draw record: <see cref="RenderState"/> stays the public depth, culling, and blending contract.
+    /// </remarks>
+    internal bool Wireframe { get; private set; }
+
     /// <summary>Gets the per-instance linear tint.</summary>
     internal Color Tint { get; private set; }
 
-    /// <summary>Gets the per-instance UV rectangle. M4 always records <c>(0, 0, 1, 1)</c>.</summary>
+    /// <summary>
+    /// Gets the normalized UV rectangle written to every instance of this draw: <c>X</c> and <c>Y</c>
+    /// are the texture-space origin and <c>Z</c> and <c>W</c> are the size. Draws that do not sample a
+    /// sub-rectangle record <c>(0, 0, 1, 1)</c>.
+    /// </summary>
     internal Vector4 UvRect { get; private set; }
 
     /// <summary>Gets the number of recorded instances.</summary>
@@ -88,6 +103,10 @@ internal sealed class RenderDrawRecord {
     /// <param name="program">The internal shader program asset.</param>
     /// <param name="renderState">The effective render state.</param>
     /// <param name="tint">The linear tint.</param>
+    /// <param name="wireframe">
+    /// Whether to rasterize the triangles as lines instead of filling them. <c>false</c> draws the
+    /// regular filled geometry.
+    /// </param>
     /// <exception cref="ArgumentNullException">A required argument is <c>null</c>.</exception>
     internal void Begin(
         EngineAsset mesh,
@@ -96,7 +115,8 @@ internal sealed class RenderDrawRecord {
         int indexCount,
         EngineAsset program,
         RenderState renderState,
-        Color tint) {
+        Color tint,
+        bool wireframe = false) {
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentNullException.ThrowIfNull(program);
 
@@ -106,6 +126,7 @@ internal sealed class RenderDrawRecord {
         MeshBounds = meshBounds;
         IndexCount = indexCount;
         RenderState = renderState;
+        Wireframe = wireframe;
         Tint = tint;
         UvRect = new Vector4(0f, 0f, 1f, 1f);
         _instanceCount = 0;
@@ -135,6 +156,21 @@ internal sealed class RenderDrawRecord {
         textureBindings.CopyTo(_textureBindings);
         _textureCount = textureBindings.Length;
     }
+
+    /// <summary>
+    /// Sets the normalized UV rectangle written to every instance of this draw.
+    /// </summary>
+    /// <param name="uvRect">
+    /// The texture-space origin in <c>X</c> and <c>Y</c> and the size in <c>Z</c> and <c>W</c>. The
+    /// default full-texture rectangle is <c>(0, 0, 1, 1)</c>.
+    /// </param>
+    /// <remarks>
+    /// The rectangle is per-instance data, so it never splits or joins a batch. A shader that samples a
+    /// texture reads it as <c>rbInstance.UvRect</c>; the built-in mesh shader computes
+    /// <c>UvRect.xy + uv * UvRect.zw</c>. Only the billboard source-rectangle overloads set a
+    /// sub-rectangle; every other draw keeps the full-texture default.
+    /// </remarks>
+    internal void SetUvRect(Vector4 uvRect) => UvRect = uvRect;
 
     /// <summary>
     /// Ensures room for <paramref name="count"/> instances, marks them recorded, and returns the buffer
@@ -167,6 +203,7 @@ internal sealed class RenderDrawRecord {
         MeshBounds = default;
         IndexCount = 0;
         RenderState = default;
+        Wireframe = false;
         Tint = default;
         UvRect = default;
     }

@@ -51,7 +51,8 @@ using (var screen = ctx.CreateOrthographicCamera(
 ```
 
 The snippet is inside `Tick`; `CreateRenderTextureAsync` would normally be awaited in `Setup`
-and the target stored in a field.
+and the target stored in a field. `DrawTexture` is the M7 sprite helper and is not part of the M5
+surface; its destination is in render pixels relative to the camera viewport.
 
 - `CreateRenderTextureAsync` returns after the render thread has allocated the image. It is legal
   in `Setup` and `Tick`.
@@ -108,8 +109,8 @@ public readonly record struct RenderStats(
 | `SampleCount` | Effective MSAA sample count for the frame. |
 | `HdrOutput` | Whether the frame presented through the scRGB HDR path. |
 | `CpuFrameMilliseconds` | Render-thread CPU time for planning and recording. |
-| `GpuFrameMilliseconds` | GPU timestamp delta, or `0` when timestamps are unavailable. M4 does not collect timestamps and always reports `0`. |
-| `FramesInFlight` | Frames submitted but not yet retired at snapshot time; `0` to `3` in M4. |
+| `GpuFrameMilliseconds` | GPU timestamp delta, or `0` when timestamps are unavailable. GPU timestamps are not collected in v1, so this always reports `0`. |
+| `FramesInFlight` | Frames submitted but not yet retired at snapshot time; `0` to `3` (the frame ring has three slots). |
 | `RecoveryCount` | Device, surface, and swapchain recoveries completed since startup. |
 
 `ctx.Stats` is a snapshot of the last completed frame, not the frame currently being recorded. It

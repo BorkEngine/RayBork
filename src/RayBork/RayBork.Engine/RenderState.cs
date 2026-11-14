@@ -4,8 +4,8 @@ namespace RayBork;
 /// The immutable depth, culling, and blending state baked for a shader.
 /// </summary>
 /// <remarks>
-/// M3 ships this value type as shader metadata; the renderer consumes it when geometry pipelines
-/// arrive in M4. <see cref="Opaque"/> is the default.
+/// The geometry pipelines consume this value as their immutable depth, culling, and blending state.
+/// <see cref="Opaque"/> is the default.
 /// </remarks>
 public readonly record struct RenderState {
     /// <summary>Gets the blend preset.</summary>

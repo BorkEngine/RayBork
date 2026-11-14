@@ -45,6 +45,7 @@ public sealed class RayBorkApp : IDisposable {
 
     private TickRunner? _tickRunner;
     private RenderLoop? _renderLoop;
+    private CameraService? _cameraService;
     private volatile bool _exitRequested;
     private volatile bool _isRunning;
     private volatile bool _isDisposed;
@@ -103,6 +104,12 @@ public sealed class RayBorkApp : IDisposable {
     /// <see cref="Run"/> returns to observe that the thread has exited.
     /// </summary>
     internal Thread? TickThread => _tickRunner?.Thread;
+
+    /// <summary>
+    /// Gets the app-lifetime camera recording service, or <see langword="null"/> before the service is
+    /// created. Used by tests to observe the camera and primitive asset wiring.
+    /// </summary>
+    internal CameraService? Cameras => _cameraService;
 
     /// <summary>
     /// Gets the render thread, or <see langword="null"/> before <see cref="Run"/>.
@@ -220,6 +227,8 @@ public sealed class RayBorkApp : IDisposable {
         FrameRing? frameRing = null;
         AssetCatalog? assetCatalog = null;
         EngineDefaults? engineDefaults = null;
+        PrimitiveAssets? primitiveAssets = null;
+        CameraService? cameraService = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
         bool tickStarted = false;
@@ -230,7 +239,17 @@ public sealed class RayBorkApp : IDisposable {
         try {
             platform = CreatePlatform(loggerFactory);
             platform.Initialize(CreatePlatformOptions(configuration), RequestExit);
-            CameraService cameraService = new(platform.Window);
+            cameraService = new CameraService(platform.Window);
+
+            // One app-lifetime settings object is shared by the tick thread (live values) and the
+            // camera service (per-frame snapshot). It is created and attached on this thread before
+            // the tick thread exists, so neither side races the constructor.
+            TonemappingSettings tonemapping = new(
+                configuration.RenderSettings.Exposure,
+                configuration.RenderSettings.AgxWhite,
+                configuration.RenderSettings.AgxContrast);
+            cameraService.AttachTonemapping(tonemapping);
+            _cameraService = cameraService;
 
             // The platform owns the window, so the instance extensions and the native surface must be
             // obtained and created on this thread. The render thread owns the instance and is waiting
@@ -268,6 +287,12 @@ public sealed class RayBorkApp : IDisposable {
             // itself. They must be ready before Setup and stay referenced until shutdown.
             engineDefaults = LoadEngineDefaults(assetCatalog);
 
+            // The engine primitive meshes and materials are required built-ins too, and they must be
+            // recordable from the first tick. Attach them before the tick thread starts; the catalog
+            // already holds the shared programs, so only the primitive program and the meshes upload.
+            primitiveAssets = LoadPrimitiveAssets(assetCatalog);
+            cameraService.AttachPrimitives(primitiveAssets);
+
             EngineContext context = new(
                 platform,
                 loggerFactory,
@@ -278,7 +303,8 @@ public sealed class RayBorkApp : IDisposable {
                 configuration.MaxDeltaTime,
                 () => clock.Time,
                 _renderStatus,
-                cameraService);
+                cameraService,
+                tonemapping);
 
             tickRunner = new TickRunner(
                 platform,
@@ -335,6 +361,8 @@ public sealed class RayBorkApp : IDisposable {
             frameRing,
             assetCatalog,
             engineDefaults,
+            primitiveAssets,
+            cameraService,
             tickRunner,
             renderLoop,
             tickStarted,
@@ -451,6 +479,17 @@ public sealed class RayBorkApp : IDisposable {
     private static EngineDefaults LoadEngineDefaults(IAssetCatalog assets)
         => EngineDefaults.LoadAsync(assets).GetAwaiter().GetResult();
 
+    /// <summary>
+    /// Builds the engine-owned primitive meshes and materials before <see cref="IGame.Setup"/> runs.
+    /// </summary>
+    /// <remarks>
+    /// The tick thread has not started yet, so blocking the main thread on the loads is safe: the
+    /// loader and the render thread service the reads and uploads. A missing or corrupt built-in is
+    /// reported as an <see cref="AssetLoadException"/> by <see cref="PrimitiveAssets.LoadAsync"/>.
+    /// </remarks>
+    private static PrimitiveAssets LoadPrimitiveAssets(IAssetCatalog assets)
+        => PrimitiveAssets.LoadAsync(assets).GetAwaiter().GetResult();
+
     private static Exception? Cleanup(
         ILogger logger,
         IEnginePlatform? platform,
@@ -458,6 +497,8 @@ public sealed class RayBorkApp : IDisposable {
         FrameRing? frameRing,
         AssetCatalog? assetCatalog,
         EngineDefaults? engineDefaults,
+        PrimitiveAssets? primitiveAssets,
+        CameraService? cameraService,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
         bool tickStarted,
@@ -505,6 +546,19 @@ public sealed class RayBorkApp : IDisposable {
                 "releasing the engine default assets",
                 failure,
                 engineDefaults.Dispose);
+        }
+
+        // The primitive assets are engine-owned and required built-ins. Detach them from the camera
+        // service before releasing their owner references so no later camera can reach a disposed mesh.
+        if (primitiveAssets is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "releasing the engine primitive assets",
+                failure,
+                () => {
+                    cameraService?.DetachPrimitives();
+                    primitiveAssets.Dispose();
+                });
         }
 
         // Shutdown already ran on the tick thread, so no game callback can still load an asset. Stop

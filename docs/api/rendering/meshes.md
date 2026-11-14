@@ -14,6 +14,7 @@ public sealed class Mesh : IAsset {
     public int VertexCount { get; }
     public int IndexCount { get; }
     public BoundingBox Bounds { get; }
+    public bool HasCollisionAcceleration { get; }
     public bool IsDisposed { get; }
 
     public void Dispose();
@@ -56,6 +57,17 @@ public sealed class MeshBuilder {
     public void ComputeNormals(MeshNormalMode mode = MeshNormalMode.Smooth);
     public void ComputeTangents();
     public BoundingBox ComputeBounds();
+    public void GenerateCollisions();
+
+    public void GeneratePoly(int sides, float radius);
+    public void GeneratePlane(float width, float length, int resX, int resZ);
+    public void GenerateCube(float width, float height, float length);
+    public void GenerateSphere(float radius, int rings, int slices);
+    public void GenerateHemiSphere(float radius, int rings, int slices);
+    public void GenerateCylinder(float radius, float height, int slices);
+    public void GenerateCone(float radius, float height, int slices);
+    public void GenerateTorus(float radius, float size, int radSeg, int sides);
+    public void GenerateKnot(float radius, float size, int radSeg, int sides);
 
     public Task<Mesh> BuildAsync(CancellationToken cancellationToken = default);
 }
@@ -96,7 +108,7 @@ public enum PrimitiveTopology {
 }
 ```
 
-> **M4 realized.** M4 ships `Model` and `ModelPart` as a composition API: `IAssetCatalog.Load<Model>`
+> **As built.** `Model` and `ModelPart` are a composition API: `IAssetCatalog.Load<Model>`
 > loads a packed model descriptor and every part's mesh, creates one material per part over the cached
 > internal program, and returns a **new `Model` wrapper per call**. `Model` is not an `IAsset`: it has
 > no path, no catalog cache entry, and no shared identity. A part with no `[model] shader` in its
@@ -104,6 +116,11 @@ public enum PrimitiveTopology {
 > descriptor to carry a canonical shader path and has no runtime default, so a descriptor with a
 > missing or stale path fails to load. A model draw uses each part material's current uniform cursor
 > and texture bindings; there is no shader-override draw overload.
+>
+> A mesh's descriptor may also name a baked ray-mesh collision payload. The loader decodes and
+> validates it before the GPU upload and fails the load when it is missing or corrupt; a mesh whose
+> descriptor has no such member loads without an acceleration structure and brute-forces its
+> retained triangles.
 
 - `Mesh` is one primitive: one vertex/index buffer pair and one topology. It is immutable after load
   or build. `Bounds` is in mesh space. The fixed 88-byte vertex layout is position, normal, uv,
@@ -113,6 +130,14 @@ public enum PrimitiveTopology {
 - `Vertices` and `Indices` expose a read-only CPU copy for both loaded and procedural meshes. A
   loaded mesh decodes the arrays from the packed payload; a procedural mesh returns the builder's
   snapshot. The arrays stay valid until the mesh is disposed. Textures do not keep CPU pixels.
+- `HasCollisionAcceleration` reports whether the mesh carries an immutable ray-mesh acceleration
+  structure. A procedural mesh has one only when `GenerateCollisions` was called before the build
+  that produced it. A loaded mesh has one when its descriptor names a baked `RBVC` v1 collision
+  payload; the loader decodes and validates that payload before the GPU upload, and a missing,
+  corrupt, or mismatched payload fails the load with `AssetLoadException` `ASSET_LOAD_FAILED` naming
+  the mesh. A descriptor baked before the member existed loads with no structure and brute-forces.
+  The structure is immutable, is not disposed with the mesh, and is safe to query from any thread.
+  The property throws `ObjectDisposedException` after disposal.
 - `Mesh` is one-shot. Changing a `MeshBuilder` after `BuildAsync` does not change any mesh already
   built from it; the builder can be reused to build another mesh.
 
@@ -127,6 +152,14 @@ builder.Indices.AddRange([0u, 1u, 2u]);
 
 builder.ComputeNormals();
 builder.ComputeTangents();
+Mesh mesh = await builder.BuildAsync();
+```
+
+A named generator fills the geometry, normals, and first UV set in one call:
+
+```csharp
+MeshBuilder builder = ctx.CreateMeshBuilder();
+builder.GenerateCube(2f, 2f, 2f);
 Mesh mesh = await builder.BuildAsync();
 ```
 
@@ -152,6 +185,64 @@ Mesh mesh = await builder.BuildAsync();
   again after editing positions.
 - Normal and tangent generation support triangle topologies only. Line and point meshes are valid
   for `BuildAsync` but have no generated normals or tangents.
+- `GenerateCollisions()` opts a procedural build into a ray-mesh acceleration structure. It is an
+  imperative builder step like `ComputeNormals`: it changes no geometry, is idempotent, and the
+  selection persists for every later `BuildAsync` from that builder. `BuildAsync` builds the
+  structure from the same snapshot it validates and uploads, before the GPU upload, and returns a
+  mesh whose `HasCollisionAcceleration` is `true`. A snapshot with no non-degenerate triangle builds
+  without a structure. A failed or canceled build creates no asset, keeps the builder reusable, and
+  never lets a later geometry change affect a structure already attached to a mesh. Only
+  triangle-list and triangle-strip builders accept it; any other topology throws
+  `NotSupportedException`.
+- The nine `Generate*` methods are the procedural counterparts of raylib's `GenMesh*` factories. Each
+  replaces the builder's vertices and indices with one named primitive, sets `Topology` to
+  `TriangleList`, discards explicit bounds, and fills outward normals and the first UV set directly.
+  They are pure CPU and need no GPU, tick thread, or async path: `BuildAsync` uploads the generated
+  geometry like any other builder content, and `ComputeBounds` recomputes bounds from it. Every
+  generated triangle winds counter-clockwise around its outward normal. The methods generate normals
+  but not tangents; call `ComputeTangents` after generation when a tangent basis is needed.
+  Heightmap and cubicmap generation are deferred until the engine has a CPU image type.
+- `GeneratePoly(sides, radius)` is a regular polygon disc centered at the origin in the XZ plane with
+  its front face toward +Y: a center vertex plus one perimeter vertex per side, and `sides * 3`
+  indices. All normals are +Y. UVs map the disc into the unit square with the center at
+  `(0.5, 0.5)` and the first corner, on +Z, at `(0.5, 0)`.
+- `GeneratePlane(width, length, resX, resZ)` is an XZ grid centered at the origin with `resX` by
+  `resZ` quads and +Y normals. UV `u` runs 0..1 from -X to +X and `v` runs 0..1 from -Z to +Z.
+- `GenerateCube(width, height, length)` is a box centered at the origin with 24 vertices and 36
+  indices: four independent vertices per face carry the face's outward normal. Each face's UVs cover
+  0..1 with the origin at the face's top-left corner and V increasing downward, matching the engine's
+  top-left UV convention.
+- `GenerateSphere(radius, rings, slices)` is a UV sphere with its poles on +Y and -Y. `rings` counts
+  the latitude bands from pole to pole and `slices` the longitude segments. Each pole is one vertex
+  and the seam duplicates the first meridian at `u = 1`; normals equal the position divided by
+  `radius`. UV `u` runs around +Y from +Z toward +X, and `v` runs 0 at the +Y pole to 1 at the -Y
+  pole.
+- `GenerateHemiSphere(radius, rings, slices)` is the +Y half of that sphere, from the pole down to the
+  equator at `y = 0`. `rings` counts the bands from pole to equator. The equator is open: there is no
+  bottom cap, so the underside is visible from below. Normals and UVs match the full sphere, with the
+  equator at `v = 1`.
+- `GenerateCylinder(radius, height, slices)` has its base at `y = 0`, its top at `y = height`, and its
+  axis on +Y. It has side quads and a cap at each end; side normals are horizontal and the caps are
+  ±Y. Side UV `u` runs around the axis from +Z toward +X and `v` runs 0 at the top to 1 at the base.
+  Each cap uses a planar disc mapping centered at `(0.5, 0.5)`.
+- `GenerateCone(radius, height, slices)` has its base circle at `y = 0` and its apex at
+  `(0, height, 0)`. The side is smooth and its normals slant outward and up; the base cap normal is
+  -Y. Side UV `u` runs around the axis from +Z toward +X and `v` runs 0 at the apex to 1 at the base.
+- `GenerateTorus(radius, size, radSeg, sides)` is a torus centered at the origin in the XZ plane with
+  its hole along +Y. `radius` is the major radius to the tube center and `size` the tube radius, so
+  the outer radius is `radius + size`. `radSeg` segments the major ring and `sides` the tube. UV `u`
+  runs around the major ring from +Z toward +X and `v` runs around the tube from the outer equator
+  toward +Y.
+- `GenerateKnot(radius, size, radSeg, sides)` is a trefoil-knot tube centered at the origin: the loop
+  lies in the XZ plane, the lobes rise along ±Y, and every vertex is within `radius + size` of the
+  origin. `radius` is the winding radius of the center line and `size` the tube radius. `radSeg`
+  segments the closed curve and `sides` the tube. UV `u` runs along the curve and `v` runs around the
+  tube.
+- The generators validate their arguments before replacing any geometry: `sides`, `rings`, `slices`,
+  and `radSeg` are at least 3, `resX` and `resZ` are at least 1, and every dimension, radius, and
+  size is positive and finite. An invalid value throws `ArgumentOutOfRangeException` with the
+  offending parameter name; there is no silent clamping or default tessellation. After app shutdown
+  every generator throws `ObjectDisposedException`.
 - `Model` is a flat list of parts. It has no node hierarchy in v1; glTF node transforms are baked
   into each part's `LocalTransform`. `Bounds` is the union of the part bounds. glTF 2.0 and OBJ are
   converted to this packed engine format by the bake; the runtime never parses them.
@@ -169,6 +260,16 @@ Mesh mesh = await builder.BuildAsync();
   defaults, and `DrawModel`/`DrawModelInstanced` snapshot the material's **current** uniform cursor and
   texture bindings at the call, so `SetUniform` before a draw changes it. `ModelPart.RenderState` is
   the effective state: a `null` constructor argument uses `shader.DefaultRenderState`.
+- `Camera.DrawWireModel(model, transform, tint)` draws the same parts and material snapshots as
+  `DrawModel`, but through a polygon-mode-line pipeline (`VK_POLYGON_MODE_LINE`), which is the raylib
+  `DrawModelWires`/`DrawModelWiresEx` equivalent. It is Transform-only: the transform supplies
+  position, rotation, and scale, with no position, scale, or axis-angle overloads and no suffix name.
+  Culling, depth test, depth write, blending, tint, textures, and alpha follow `DrawModel` and each
+  part's `ModelPart.RenderState`, so the wireframe shows the visible edges of front-facing triangles
+  with the part's material. The wireframe pipeline needs the device's `fillModeNonSolid` feature; the
+  renderer enables it when the device supports it, includes the polygon mode in the pipeline cache
+  key, and reports an unsupported `GraphicsException` (`RB3001`) instead of drawing nothing on a
+  device without the feature. M5 has no CPU line-geometry fallback.
 - Each part gets its own material. Two parts that name the same program path share the internal
   program but never a material, and two materials over one program batch together.
 - `Model` is not an animation asset. Skeletal and morph animation are post-1.0.
@@ -187,4 +288,7 @@ Mesh mesh = await builder.BuildAsync();
   owner. A frame that recorded the model keeps the part meshes, internal programs, and bound textures
   alive through its frame retention set; the model and material objects are not engine assets and add
   no frame hold.
-- Meshes keep their CPU vertices for collision and bounds in v1. Textures do not keep CPU pixels.
+- Meshes keep their CPU vertices and indices for collision and bounds in v1;
+  `Collision.GetRayMesh` reads them directly when the mesh has no acceleration structure. The
+  collision structure and its baked payload are CPU-only: they add no GPU resource, frame hold, or
+  device-recovery work. Textures do not keep CPU pixels.

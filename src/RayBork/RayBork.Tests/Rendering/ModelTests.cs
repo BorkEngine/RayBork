@@ -26,6 +26,27 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PartBoundsEncloseTheMeshAfterARotatedLocalTransform() {
+        Mesh mesh = RenderingTestAssets.CreateMesh();
+        Shader material = RenderingTestAssets.CreateShader();
+        Transform local = new(
+            Vector3.Zero,
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 4f),
+            Vector3.One);
+        using Model model = new(new ModelPart("part", mesh, material, localTransform: local));
+
+        BoundingBox bounds = model.Bounds;
+        float halfDiagonal = MathF.Sqrt(2f);
+        Assert.Equal(-halfDiagonal, bounds.Min.X, 1e-5f);
+        Assert.Equal(-1f, bounds.Min.Y, 1e-5f);
+        Assert.Equal(-halfDiagonal, bounds.Min.Z, 1e-5f);
+        Assert.Equal(halfDiagonal, bounds.Max.X, 1e-5f);
+        Assert.Equal(1f, bounds.Max.Y, 1e-5f);
+        Assert.Equal(halfDiagonal, bounds.Max.Z, 1e-5f);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ModelBoundsAreTheUnionOfEveryPartBounds() {
         Mesh firstMesh = RenderingTestAssets.CreateMesh(
             "meshes/first",

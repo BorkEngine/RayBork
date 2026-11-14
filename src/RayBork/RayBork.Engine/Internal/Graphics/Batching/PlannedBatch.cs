@@ -1,7 +1,8 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// One submission-ready batch: every instance shares the mesh, internal shader program, render state, and topology.
+/// One submission-ready batch: every instance shares the mesh, internal shader program, render state,
+/// topology, and polygon mode.
 /// </summary>
 /// <remarks>
 /// A batch appears in <see cref="PassPlan.Batches"/> in submission order. Opaque batches keep their
@@ -19,6 +20,7 @@ internal sealed class PlannedBatch {
     /// <param name="program">The internal shader program asset shared by every instance.</param>
     /// <param name="renderState">The effective render state shared by every instance.</param>
     /// <param name="topology">The mesh topology.</param>
+    /// <param name="wireframe">Whether the batch rasterizes with the polygon-mode-line state.</param>
     /// <param name="instances">The ordered instances, already in submission order.</param>
     /// <param name="nearestDepth">The depth of the nearest instance in the batch.</param>
     /// <exception cref="ArgumentNullException">An asset is <c>null</c>.</exception>
@@ -27,6 +29,7 @@ internal sealed class PlannedBatch {
         EngineAsset program,
         RenderState renderState,
         PrimitiveTopology topology,
+        bool wireframe,
         List<PlannedInstance> instances,
         float nearestDepth) {
         ArgumentNullException.ThrowIfNull(mesh);
@@ -37,6 +40,7 @@ internal sealed class PlannedBatch {
         Program = program;
         RenderState = renderState;
         Topology = topology;
+        Wireframe = wireframe;
         _instances = instances;
         NearestDepth = nearestDepth;
     }
@@ -52,6 +56,12 @@ internal sealed class PlannedBatch {
 
     /// <summary>Gets the mesh topology.</summary>
     internal PrimitiveTopology Topology { get; }
+
+    /// <summary>
+    /// Gets whether the batch creates its geometry pipeline with the polygon-mode-line state instead
+    /// of the filled state.
+    /// </summary>
+    internal bool Wireframe { get; }
 
     /// <summary>Gets the number of instances in this batch.</summary>
     internal int InstanceCount => _instances.Count;

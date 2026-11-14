@@ -12,12 +12,12 @@ namespace RayBork.Bake.Processors;
 /// <remarks>
 /// <para>
 /// The optional <c>[model]</c> sidecar supplies a positive uniform <c>scale</c>, the source's
-/// <c>front</c> axis, and an optional canonical <c>shader</c> path. <c>front</c> is the source's
-/// forward direction; the processor applies the rotation that maps it to RayBork's <c>-Z</c> forward
-/// direction. The exact axis table is documented on <see cref="ModelOrientation"/>: <c>-z</c> is
-/// identity, <c>+z</c> is 180 degrees about <c>+Y</c>, <c>+x</c> is +90 degrees about <c>+Y</c>,
-/// <c>-x</c> is -90 degrees about <c>+Y</c>, <c>+y</c> is -90 degrees about <c>+X</c>, and
-/// <c>-y</c> is +90 degrees about <c>+X</c>.
+/// <c>front</c> axis, an optional canonical <c>shader</c> path, and a <c>collisions</c> toggle.
+/// <c>front</c> is the source's forward direction; the processor applies the rotation that maps it to
+/// RayBork's <c>-Z</c> forward direction. The exact axis table is documented on
+/// <see cref="ModelOrientation"/>: <c>-z</c> is identity, <c>+z</c> is 180 degrees about <c>+Y</c>,
+/// <c>+x</c> is +90 degrees about <c>+Y</c>, <c>-x</c> is -90 degrees about <c>+Y</c>, <c>+y</c> is
+/// -90 degrees about <c>+X</c>, and <c>-y</c> is +90 degrees about <c>+X</c>.
 /// </para>
 /// <para>
 /// The scale and rotation correct the mesh geometry, normals, and tangents before bounds and payloads
@@ -27,9 +27,21 @@ namespace RayBork.Bake.Processors;
 /// duplicate names receive numeric suffixes. A part with no <c>[model] shader</c> defaults to the
 /// built-in canonical path <c>shaders/mesh</c>. Every error is <c>RB4009</c> and emits no outputs.
 /// </para>
+/// <para>
+/// Collision baking is on by default for triangle parts. The processor builds the BVH from the exact
+/// finalized geometry it writes to the mesh payload, encodes it as the sibling raw entry
+/// <c>&lt;mesh path&gt;-collision</c>, and records that path on the mesh descriptor. Line and point
+/// parts and parts with no non-degenerate triangle get no collision entry. <c>collisions = false</c>
+/// in the sidecar disables collision baking for every part of the source. A collision payload above
+/// <see cref="COLLISION_PAYLOAD_WARNING_BYTES"/> emits an <c>RB4009</c> warning that names the part
+/// and the opt-out.
+/// </para>
 /// </remarks>
 internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
     private const float DEFAULT_SCALE = 1f;
+
+    /// <summary>The collision payload size above which the processor warns, in bytes.</summary>
+    internal const int COLLISION_PAYLOAD_WARNING_BYTES = 4 * 1024 * 1024;
 
     /// <summary>The built-in shader path a part uses when the sidecar names no shader.</summary>
     internal const string DEFAULT_SHADER_PATH = "shaders/mesh";
@@ -88,7 +100,14 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
         }
 
         try {
-            Emit(context, parts, resolver, scale, orientation, shaderPath);
+            Emit(
+                context,
+                parts,
+                resolver,
+                scale,
+                orientation,
+                shaderPath,
+                sidecar.Collisions ?? true);
         } catch (ModelReadException exception) {
             context.Diagnostics.Error(ModelDiagnosticCodes.MODEL_INVALID, exception.Message);
         }
@@ -100,12 +119,17 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
         PartSlugResolver resolver,
         float scale,
         Quaternion orientation,
-        string shaderPath) {
+        string shaderPath,
+        bool generateCollisions) {
         var partAssets = new List<ModelPartAsset>(parts.Count);
         var partBounds = new List<float[]>(parts.Count);
 
         foreach (ModelPartSource part in parts) {
-            string slug = resolver.Allocate(part.Name, out string meshPath, out string payloadPath);
+            string slug = resolver.Allocate(
+                part.Name,
+                out string meshPath,
+                out string payloadPath,
+                out string collisionPath);
             MeshData mesh = ModelGeometryTransform.ApplyAuthoring(part.Mesh, orientation, scale);
             float[] meshBounds;
             float[] bounds;
@@ -127,8 +151,27 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
 
             byte[] payload = VertexLayoutWriter.Write(mesh);
             context.Outputs.AddData(payloadPath, payload, alignment: 16);
+
+            string? collisionEntryPath = null;
+            if (generateCollisions && IsTriangleTopology(mesh.Topology)) {
+                MeshCollisionData? collision = BuildCollision(mesh);
+                if (collision is not null) {
+                    byte[] collisionPayload = MeshCollisionCodec.Encode(collision);
+                    context.Outputs.AddData(collisionPath, collisionPayload, alignment: 16);
+                    collisionEntryPath = collisionPath;
+                    if (collisionPayload.Length > COLLISION_PAYLOAD_WARNING_BYTES) {
+                        context.Diagnostics.Warning(
+                            ModelDiagnosticCodes.MODEL_INVALID,
+                            $"Model part '{slug}' baked a {collisionPayload.Length}-byte ray-mesh "
+                                + $"collision payload at '{collisionPath}'; set 'collisions = false' "
+                                + "in the [model] sidecar to skip collision baking for this source.");
+                    }
+                }
+            }
+
             context.Outputs.AddAsset(meshPath, new MeshAssetDescriptor {
                 Payload = payloadPath,
+                CollisionPayload = collisionEntryPath,
                 VertexCount = (uint)mesh.Vertices.Count,
                 IndexCount = (uint)mesh.Indices.Count,
                 Bounds = meshBounds,
@@ -149,6 +192,19 @@ internal sealed class ModelProcessor : AssetProcessor<ModelSidecar> {
             Parts = [.. partAssets],
             Bounds = MeshBounds.Union(partBounds),
         });
+    }
+
+    private static bool IsTriangleTopology(PrimitiveTopology topology)
+        => topology is PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip;
+
+    private static MeshCollisionData? BuildCollision(MeshData mesh) {
+        Vector3[] positions = new Vector3[mesh.Vertices.Count];
+        for (int index = 0; index < positions.Length; index++) {
+            positions[index] = mesh.Vertices[index].Position;
+        }
+
+        uint[] indices = [.. mesh.Indices];
+        return MeshCollisionBuilder.Build(positions, indices, mesh.Topology);
     }
 
     private static bool TryResolveSettings(

@@ -24,9 +24,86 @@ A model descriptor requires a canonical shader path on every part. The pre-relea
 retired default model shader and the runtime null-path default are removed, so repack older model
 packs; the bake writes `shaders/mesh` for a part with no authored `[model] shader`.
 
+The ray-mesh collision payload is additive to pack v1. A mesh descriptor may carry the optional
+`CollisionPayload` member naming a sibling `<mesh>-collision` raw entry in the `RBVC` v1 format;
+both the member and the entry are optional, and the entry is an ordinary raw payload, so v1 remains
+the only pack format. A pack baked without the member loads normally: its meshes have no collision
+acceleration structure, and `Collision.GetRayMesh` brute-forces the retained CPU triangles.
+
 The custom loader registration API is additive: `IAssetLoader<T>`, `AssetLoadContext`,
 `AssetEntryType`, and `RayBorkAppBuilder.WithAssetLoader<T>` extend the asset surface without
 changing `Load<T>`, and `WithAssetType<T>()` remains the MessagePack custom-data sugar.
+
+The M5 collision surface is additive as well: `MeshBuilder.GenerateCollisions` adds the procedural
+opt-in, `Collision.GetRayQuad` adds the four-corner query, and `Mesh.HasCollisionAcceleration` exposes
+whether a mesh carries the structure, without changing `Mesh`, `MeshBuilder.BuildAsync`, or `Load<T>`
+semantics. A mesh without a structure keeps working through the brute-force ray/mesh path.
+
+The M5 visual-review fixes correct the cone side winding and the ray contract. Cone side triangles are
+now wound outward like the tapered and equal-radius cylinder sides, so a cone's exterior is
+front-facing instead of back-face culled; the base caps are unchanged, and the fix applies to an
+upright cone and to an inverted cone. `Ray` now validates a finite origin and a finite, non-zero
+direction and stores the direction normalized, and `DrawRay` draws a ray as a 1,000,000-unit segment
+along that unit direction instead of the short `origin + direction` segment. `Ray.Direction` is
+therefore always unit length
+and `RayCollision.Distance` is always a world distance; a caller that constructed a ray with a
+non-unit direction now gets the normalized direction back from `Ray.Direction`. `default(Ray)` still
+has a zero direction and is invalid: the collision queries report a miss and `DrawRay` records
+nothing. This is a 0.x preview change and this paragraph is its migration note; after 1.0 the same
+change would need the obsolete/migration cycle above.
+
+The rest of the M5 camera surface is additive: `DrawCapsule`, `DrawWireCapsule`, `DrawCircle`,
+`DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawWireCylinder`, the shape/position,
+tessellation, start/end, and `Transform` overloads of the cube, sphere, plane, cylinder, wire cube,
+and wire sphere families, the source-rectangle, `Transform`, and origin `DrawBillboard` overloads,
+and `DrawWireModel` are new members. The nine `MeshBuilder.Generate*` factories (poly, plane, cube,
+sphere, hemisphere, cylinder, cone, torus, and knot) are additive builder methods; existing
+`MeshBuilder` data and `BuildAsync` semantics are unchanged. Existing draw calls keep their meaning.
+
+Two optional parameters are split into explicit overloads. `DrawCylinder(..., int sides = 16)` becomes
+a four-argument convenience overload that uses the default 16 sides plus a five-argument overload
+that takes `sides` explicitly. `DrawBillboard(..., bool faceCamera = true)` becomes a four-argument
+camera-facing convenience overload plus a five-argument overload with an explicit `faceCamera`. A
+call that passed `sides` or `faceCamera` still compiles and keeps its behavior; only reflection or
+binary consumers of the optional parameter defaults observe the change.
+
+`DrawTexture` is removed from the M5 surface. The preview screen-space overlay helper is re-homed to
+M7, where it arrives with the orthographic/sprite contract and destination rectangles instead of the
+M5 unprojected-overlay path. A game written against an M5 preview that called
+`camera.DrawTexture(texture, destination, tint)` should draw a textured quad with `DrawMesh` or wait
+for the M7 helper. These M5 surface changes are 0.x preview changes; each paragraph here is its
+migration note, and after 1.0 the same changes would need the obsolete/migration cycle above.
+
+The runtime tone-mapping surface is additive too: `TonemappingSettings` and
+`EngineContext.Tonemapping` expose the exposure, AgX white, and AgX contrast for the app lifetime, and
+`WithAgxWhite` and `WithAgxContrast` add their startup defaults. `WithExposure` and `WithTonemapping`
+keep their meaning, so a game that configures tone mapping only at startup continues to work
+unchanged.
+
+The sRGB color conversion helpers are additive as well: `Color.FromSrgb`, `Color.FromSrgbBytes`, and
+`Color.ToSrgb` convert between linear `Color` values and display-encoded components, and `Color`
+remains linear. The full Bork2d/Unity preset set is restored in the same change: every preset keeps
+its Bork2d name and is defined from its authored sRGB source with the same explicit piecewise EOTF.
+Restoring the names is additive, but the following existing preset values change:
+`Gray`/`Grey` move from linear `0.5` to `0.214041` (the display mid-gray), `Yellow` moves from
+`(1, 1, 0)` to `(1, 0.8307699, 0.0012141)`, and `DarkCyan` moves from `(0, 0.5, 0.5)` to
+`(0, 0.2581829, 0.2581829)`. `Black`, `White`, `Red`, `Green`, `Blue`, `Cyan`, `Magenta`, `Clear`,
+and `Transparent` keep their values and alpha. `Grey` aliases `Gray`, `Transparent` aliases `Clear`,
+and `YellowNice` aliases `Yellow`.
+
+The preset restoration is a 0.x preview change and this paragraph is its migration note. A game that
+used `Color.Gray` as an intentional linear `0.5` value should construct
+`new Color(0.5f, 0.5f, 0.5f)` or use `Color.FromSrgb(0.5f, 0.5f, 0.5f)` for the display mid-gray;
+the named presets now describe display-authored colors in linear storage. After 1.0 the same change
+would need the obsolete/migration cycle above.
+
+The M5 AgX rework is a behavior change, not a new option. At the same exposure, SDR output differs
+from the M4 curve, the separate HDR highlight path is gone, and the scRGB path uses
+the reported display headroom as the AgX curve's output maximum. `TonemappingMode` and
+`WithExposure` keep their names and meanings, so a game that configures tone mapping at startup
+still builds and runs; re-check exposure and AgX white if it tuned against the M4 image. This is a
+0.x preview change and this paragraph is its migration note; after 1.0 the same change would need the
+obsolete/migration cycle above.
 
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a
@@ -80,7 +157,7 @@ The following are deliberate exclusions, not forgotten features. The roadmap pla
 | `WithAssetsPack(packPath)` | unchanged | Relative paths resolve next to the executable. |
 | `MaxDeltaTime = 0.25` | unchanged | Seconds. |
 | `Quaternion.CreateFromAxisAngle` | `Quaternion.Euler` / `Quaternion.AngleAxis` | User-facing rotations use degrees. |
-| `Color` from sRGB bytes | linear `Color` | HDR rendering and AgX output; `Color` components are linear floats. |
+| `Color` from sRGB bytes | linear `Color`, with `Color.FromSrgbBytes` for encoded byte input | HDR rendering and AgX output; `Color` components are linear floats. |
 | Custom data via ad-hoc files | `Load<T>` / `LoadData` | Compiled `[GenerateShape]` data, custom loaders, and raw bytes; register with `WithAssetType<T>()` or `WithAssetLoader<T>()`. |
 | Logger injected as a custom interface | `ctx.LoggerFactory` | `Microsoft.Extensions.Logging` + ZLogger. |
 
@@ -113,6 +190,7 @@ disposed first.
 | `Shader`, `ShaderStageMask`, `ShaderUniform`, `ShaderUniformType`, `ShaderTextureBinding` | §7.3 |
 | `RenderState`, `BlendMode`, `CullMode`, `DepthTest` | §7.7 |
 | `Camera`, `CameraProjection`, `ClearMode`, `TonemappingMode` | §7.1, §7.2 |
+| `TonemappingSettings` | §3.4, §7.2 |
 | `Shader`, `ShaderUniform`, `ShaderTextureBinding` | §7.3 |
 | `Font`, `Glyph`, `TextAlignment`, `TextWrapping` | §7.10 |
 | `RenderTexture`, `RenderTextureDescription` | §7.11 |
