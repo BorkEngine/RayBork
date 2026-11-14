@@ -370,7 +370,8 @@ public sealed class VulkanDrawTests {
         Shader shader = CreateTexturedShader(harness);
         Mesh quad = harness.CreateQuad();
         Texture texture = harness.CreateTexture("textures/deferred-destroy", new Color(1f, 0.5f, 0.25f, 1f));
-        GpuAssetResource resource = texture.Lifetime.Resource;
+        GpuAssetResource resource = texture.Lifetime.Resource
+            ?? throw new InvalidOperationException("The texture has no GPU resource.");
         uint releasedSlot = ((VulkanTextureAssetResource)resource).BindlessSlot;
         Assert.Equal(1u, releasedSlot);
         int liveBefore = harness.TextureCount;
@@ -399,7 +400,9 @@ public sealed class VulkanDrawTests {
         Assert.Equal(0u, ((VulkanTextureAssetResource)resource).BindlessSlot);
 
         Texture replacement = harness.CreateTexture("textures/reused-slot", Color.White);
-        uint replacementSlot = ((VulkanTextureAssetResource)replacement.Lifetime.Resource).BindlessSlot;
+        GpuAssetResource replacementResource = replacement.Lifetime.Resource
+            ?? throw new InvalidOperationException("The replacement texture has no GPU resource.");
+        uint replacementSlot = ((VulkanTextureAssetResource)replacementResource).BindlessSlot;
         Assert.Equal(releasedSlot, replacementSlot);
         Assert.Equal(liveBefore, harness.TextureCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());

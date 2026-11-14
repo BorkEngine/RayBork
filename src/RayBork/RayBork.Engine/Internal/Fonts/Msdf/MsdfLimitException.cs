@@ -11,8 +11,9 @@ namespace RayBork.Internal;
 /// per-curve subdivision cap is a clamp rather than a failure, so it never raises this exception.
 /// </para>
 /// <para>
-/// The exception carries no state beyond <see cref="Reason"/> and is not serializable. The future font
-/// loader decides how to surface it as an asset diagnostic.
+/// The exception carries no state beyond <see cref="Reason"/> and is not serializable.
+/// <see cref="FontGlyphPipeline"/> treats it as a font-data failure: the glyph metrics fall back to
+/// the face advance with a zero quad and the glyph is never generated.
 /// </para>
 /// </remarks>
 internal sealed class MsdfLimitException : Exception {

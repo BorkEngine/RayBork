@@ -6,26 +6,34 @@ namespace RayBork.Internal;
 /// <remarks>
 /// <para>
 /// The catalog owns one instance per cached <c>(canonical path, engine asset type)</c> key and hands
-/// it to the public <see cref="Mesh"/>, <see cref="Texture"/>, or <see cref="Shader"/> wrapper. Owner
-/// references are acquired by the catalog for every successful load and released by the public
-/// <c>Dispose</c>. Frame holds are acquired by the M4 draw recorder and released by the frame ring
-/// after the consuming frame completes.
+/// it to the public <see cref="Mesh"/>, <see cref="Texture"/>, <see cref="Shader"/>, or
+/// <see cref="Font"/> wrapper. Owner references are acquired by the catalog for every successful load
+/// and released by the public <c>Dispose</c>. Frame holds are acquired by the M4 draw recorder and
+/// released by the frame ring after the consuming frame completes.
+/// </para>
+/// <para>
+/// A CPU-only asset such as <see cref="Font"/> has no GPU resource of its own, so
+/// <see cref="Resource"/> is <see langword="null"/> and no GPU destruction is queued. Its CPU state
+/// is disposed through the optional release callback, which runs exactly once at the same transition
+/// as the GPU destruction would. Every mesh, texture, and shader asset keeps a resource and is
+/// unchanged.
 /// </para>
 /// <para>
 /// The owner count, frame-hold count, disposed flag, and destruction decision are guarded by one
 /// internal lock, so a cache-hit retain can never interleave with the transition to zero owners. An
 /// owner reference or a frame hold added after disposal throws <see cref="ObjectDisposedException"/>.
-/// The asset becomes disposed exactly when the owner count reaches zero; GPU destruction is claimed
+/// The asset becomes disposed exactly when the owner count reaches zero; the teardown is claimed
 /// exactly once and only after both the owner count and the frame-hold count are zero. The catalog
-/// callback and the bridge destruction request run outside the lock, so a waiter or a public
-/// <c>Dispose</c> never blocks the render thread on asset bookkeeping.
+/// callback, the CPU-only release, and the bridge destruction request run outside the lock, so a
+/// waiter or a public <c>Dispose</c> never blocks the render thread on asset bookkeeping.
 /// </para>
 /// </remarks>
 internal sealed class EngineAsset : IAssetRetentionTarget {
     private readonly Lock _gate = new();
-    private readonly GpuAssetResource _resource;
+    private readonly GpuAssetResource? _resource;
     private readonly Action<GpuAssetResource> _queueDestruction;
     private readonly Action _onOwnersReleased;
+    private readonly Action? _release;
     private int _ownerCount;
     private int _frameHoldCount;
     private bool _disposed;
@@ -35,24 +43,32 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
     /// Initializes the lifetime state for one uploaded asset.
     /// </summary>
     /// <param name="publicPath">The canonical path with a leading slash.</param>
-    /// <param name="resource">The GPU resource created for the asset.</param>
+    /// <param name="resource">
+    /// The GPU resource created for the asset, or <see langword="null"/> for a CPU-only asset that owns
+    /// no GPU resource.
+    /// </param>
     /// <param name="queueDestruction">
-    /// Queues the resource for destruction on the render thread. It is called exactly once, after the
-    /// last owner reference and frame hold are gone.
+    /// Queues a GPU resource for destruction on the render thread. It is called exactly once, after the
+    /// last owner reference and frame hold are gone, and only when <paramref name="resource"/> is not
+    /// <see langword="null"/>.
     /// </param>
     /// <param name="onOwnersReleased">
     /// Removes the asset from the catalog cache when the last owner reference is released. It is
     /// called exactly once and must not throw.
     /// </param>
+    /// <param name="release">
+    /// The CPU-only teardown to run exactly once when the asset is destroyed, or <see langword="null"/>
+    /// when the asset has no CPU state beyond the public object.
+    /// </param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     /// <exception cref="ArgumentException"><paramref name="publicPath"/> is not canonical.</exception>
     internal EngineAsset(
         string publicPath,
-        GpuAssetResource resource,
+        GpuAssetResource? resource,
         Action<GpuAssetResource> queueDestruction,
-        Action onOwnersReleased) {
+        Action onOwnersReleased,
+        Action? release = null) {
         ArgumentNullException.ThrowIfNull(publicPath);
-        ArgumentNullException.ThrowIfNull(resource);
         ArgumentNullException.ThrowIfNull(queueDestruction);
         ArgumentNullException.ThrowIfNull(onOwnersReleased);
 
@@ -60,6 +76,7 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
         _resource = resource;
         _queueDestruction = queueDestruction;
         _onOwnersReleased = onOwnersReleased;
+        _release = release;
     }
 
     /// <summary>
@@ -68,9 +85,10 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
     internal string Path { get; }
 
     /// <summary>
-    /// Gets the GPU resource behind the asset. It is valid until the destruction request is queued.
+    /// Gets the GPU resource behind the asset, or <see langword="null"/> for a CPU-only asset that owns
+    /// no GPU resource. It is valid until the destruction request is queued.
     /// </summary>
-    internal GpuAssetResource Resource => _resource;
+    internal GpuAssetResource? Resource => _resource;
 
     /// <summary>
     /// Gets whether the asset was disposed. It stays readable after disposal.
@@ -99,12 +117,13 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
 
     /// <summary>
     /// Releases one owner reference. The transition to zero disposes the asset and removes it from the
-    /// catalog cache; GPU destruction waits for every frame hold.
+    /// catalog cache; the CPU-only release runs and GPU destruction is queued only when every frame
+    /// hold is gone.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The owner count is already zero.</exception>
     internal void ReleaseOwnerReference() {
         bool notifyOwnersReleased;
-        bool queueDestruction;
+        bool destroy;
         lock (_gate) {
             if (_disposed || _ownerCount <= 0) {
                 throw new ObjectDisposedException(nameof(EngineAsset));
@@ -116,15 +135,15 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
                 _disposed = true;
             }
 
-            queueDestruction = notifyOwnersReleased && TryClaimDestructionLocked();
+            destroy = notifyOwnersReleased && TryClaimDestructionLocked();
         }
 
         if (notifyOwnersReleased) {
             NotifyOwnersReleased();
         }
 
-        if (queueDestruction) {
-            _queueDestruction(_resource);
+        if (destroy) {
+            Destroy();
         }
     }
 
@@ -133,7 +152,7 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
     /// shutdown so a game that leaked a reference cannot keep a GPU resource alive past the app.
     /// </summary>
     internal void ForceDispose() {
-        bool queueDestruction;
+        bool destroy;
         lock (_gate) {
             if (_disposed) {
                 return;
@@ -141,13 +160,13 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
 
             _disposed = true;
             _ownerCount = 0;
-            queueDestruction = TryClaimDestructionLocked();
+            destroy = TryClaimDestructionLocked();
         }
 
         NotifyOwnersReleased();
 
-        if (queueDestruction) {
-            _queueDestruction(_resource);
+        if (destroy) {
+            Destroy();
         }
     }
 
@@ -166,7 +185,7 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">The frame-hold count is already zero.</exception>
     public void ReleaseFrameHold() {
-        bool queueDestruction;
+        bool destroy;
         lock (_gate) {
             if (_frameHoldCount <= 0) {
                 throw new InvalidOperationException(
@@ -174,11 +193,11 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
             }
 
             _frameHoldCount--;
-            queueDestruction = TryClaimDestructionLocked();
+            destroy = TryClaimDestructionLocked();
         }
 
-        if (queueDestruction) {
-            _queueDestruction(_resource);
+        if (destroy) {
+            Destroy();
         }
     }
 
@@ -189,6 +208,16 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
 
         _destructionQueued = true;
         return true;
+    }
+
+    private void Destroy() {
+        try {
+            _release?.Invoke();
+        } finally {
+            if (_resource is not null) {
+                _queueDestruction(_resource);
+            }
+        }
     }
 
     private void NotifyOwnersReleased() {

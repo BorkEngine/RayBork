@@ -6,13 +6,13 @@ namespace RayBork.Internal;
 /// The packed descriptor of a font asset. Its payload is the original TTF or OTF face bytes.
 /// </summary>
 /// <remarks>
-/// M3 packages the face and the authoring settings; the runtime font parser and runtime MSDF
-/// generation arrive in M6.
+/// The whole face is packed; there is no preload range. The runtime parses the face and generates an
+/// MSDF glyph texture on demand for any mapped glyph. The removed M3 <c>Ranges</c> member is simply an
+/// unknown descriptor member now, so a font pack baked before M6 still loads; only an old TOML
+/// sidecar that still declares <c>ranges</c> fails the bake with an unknown-key error.
 /// </remarks>
 [GenerateShape]
 internal sealed partial class FontAssetDescriptor {
-
-
     /// <summary>Gets the canonical path of the face payload entry.</summary>
     public required string FacePayload { get; init; }
 
@@ -21,9 +21,6 @@ internal sealed partial class FontAssetDescriptor {
 
     /// <summary>Gets the face payload length in bytes.</summary>
     public required uint ByteLength { get; init; }
-
-    /// <summary>Gets the preload codepoint ranges.</summary>
-    public required string[] Ranges { get; init; }
 
     /// <summary>Gets the authored MSDF pixel size.</summary>
     public required int MsdfPixelSize { get; init; }

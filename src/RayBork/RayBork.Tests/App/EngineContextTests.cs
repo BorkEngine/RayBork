@@ -47,14 +47,16 @@ public sealed class EngineContextTests {
             cameras,
             tonemapping);
 
-    private static byte[] BuildEngineDefaultsPack() => CatalogTestData.BuildPack(
+    private static byte[] BuildEngineDefaultsPack() => CatalogTestData.BuildPack([
         ("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor())),
         ("shaders/basic-vert", AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
         ("shaders/basic-frag", AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()),
         ("textures/white", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/white-ktx2"))),
         ("textures/white-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
         ("textures/error", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor("textures/error-ktx2"))),
-        ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));
+        ("textures/error-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
+        .. CatalogTestData.CreateFontEntries(),
+    ]);
 
     private static TextureAssetDescriptor CreateTextureDescriptor(string payload) => new() {
         Payload = payload,

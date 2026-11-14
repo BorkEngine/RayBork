@@ -27,7 +27,10 @@ public sealed class BuiltInPackTests {
     private const string MSDF_SHADER_PATH = "shaders/msdf";
     private const string MSDF_VERTEX_PAYLOAD_PATH = "shaders/msdf-vert";
     private const string MSDF_FRAGMENT_PAYLOAD_PATH = "shaders/msdf-frag";
-    private const int ENTRY_COUNT = 16;
+    private const string FONT_PATH = "fonts/fira-sans";
+    private const string FONT_FACE_PAYLOAD_PATH = "fonts/fira-sans-face";
+    private const int ENTRY_COUNT = 18;
+    private const uint FONT_BYTE_LENGTH = 456996;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
 
     private static readonly byte[] _ktx2Identifier =
@@ -47,6 +50,8 @@ public sealed class BuiltInPackTests {
     ];
 
     private static readonly byte[] _spirvMagic = [0x03, 0x02, 0x23, 0x07];
+
+    private static readonly byte[] _trueTypeMagic = [0x00, 0x01, 0x00, 0x00];
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
@@ -83,6 +88,26 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, MSDF_SHADER_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, MSDF_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, MSDF_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, FONT_PATH, AssetEntryType.Font, isGpuPayload: false);
+        AssertEntry(archive, FONT_FACE_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ContainsTheDefaultFiraSansFontDescriptorAndFacePayload() {
+        using PackArchive archive = OpenBuiltInPack();
+        FontAssetDescriptor descriptor = ReadFontDescriptor(archive, FONT_PATH);
+
+        Assert.Equal(FONT_FACE_PAYLOAD_PATH, descriptor.FacePayload);
+        Assert.Equal("ttf", descriptor.Format);
+        Assert.Equal(FONT_BYTE_LENGTH, descriptor.ByteLength);
+        Assert.Equal(32, descriptor.MsdfPixelSize);
+        Assert.Equal(4, descriptor.MsdfRange);
+        Assert.Equal(2, descriptor.MsdfPadding);
+
+        byte[] face = ReadRawPayload(archive, descriptor.FacePayload);
+        Assert.Equal((int)FONT_BYTE_LENGTH, face.Length);
+        Assert.Equal(_trueTypeMagic, face.AsSpan(0, _trueTypeMagic.Length).ToArray());
     }
 
     [Fact]
@@ -245,6 +270,11 @@ public sealed class BuiltInPackTests {
     private static ShaderAssetDescriptor ReadShaderDescriptor(PackArchive archive, string path) {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
         return AssetSerialization.Deserialize<ShaderAssetDescriptor>(archive.ReadPayload(entry));
+    }
+
+    private static FontAssetDescriptor ReadFontDescriptor(PackArchive archive, string path) {
+        Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
+        return AssetSerialization.Deserialize<FontAssetDescriptor>(archive.ReadPayload(entry));
     }
 
     private static void AssertKtx2Payload(PackArchive archive, string path) {

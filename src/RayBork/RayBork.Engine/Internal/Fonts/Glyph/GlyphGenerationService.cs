@@ -27,6 +27,14 @@ namespace RayBork.Internal;
 /// or from the factory's completion thread, which would deadlock the join the factory is needed for.
 /// </para>
 /// <para>
+/// A pipeline may be disposed before <see cref="Stop"/>: a game can dispose a font at any time, and the
+/// catalog stops the service only when the app shuts down. Early disposal is supported.
+/// <see cref="FontGlyphPipeline.Dispose"/> calls <see cref="Unregister"/>, which removes that pipeline's
+/// queued requests and settles their waiters; a request that was already generating finishes and its
+/// late texture is disposed by the pipeline's insert path instead of being cached. The service never
+/// enqueues new work for a disposed pipeline.
+/// </para>
+/// <para>
 /// A generation or upload failure is logged at warning level and marks the glyph failed for the font's
 /// lifetime; the service never retries it and the rest of the text keeps rendering. One font-data
 /// failure is reported once per glyph: when the metrics path already logged it, the service does not
@@ -45,8 +53,8 @@ namespace RayBork.Internal;
 /// settles the waiters of queued requests, joins the font thread, settles the idle waiters, and
 /// releases the service resources. It is idempotent, holds no lock across the join, and throws
 /// <see cref="InvalidOperationException"/> when called from the font thread instead of deadlocking on a
-/// self-join. A second concurrent caller waits for the first join to finish. Stop every service before
-/// disposing its pipelines, because a queued request points at a live pipeline's cache.
+/// self-join. A second concurrent caller waits for the first join to finish. A pipeline disposed
+/// earlier already unregistered itself, so no queued request can point at it when the service stops.
 /// </para>
 /// </remarks>
 internal sealed class GlyphGenerationService : IDisposable {

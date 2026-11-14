@@ -15,8 +15,9 @@ namespace RayBork.Bake.Fonts;
 /// <para>
 /// Every table directory record must lie inside the file. A TrueType face must contain <c>head</c>,
 /// <c>maxp</c>, <c>hhea</c>, <c>hmtx</c>, <c>cmap</c>, and <c>glyf</c>; a CFF face replaces
-/// <c>glyf</c> with <c>CFF </c> or <c>CFF2</c>. M3 does not parse glyphs or tables beyond their
-/// bounds.
+/// <c>glyf</c> with <c>CFF </c> or <c>CFF2</c>. The validator reports a <c>CFF2</c> outline source so
+/// the processor can reject it: the runtime resolves TrueType <c>glyf</c> and CFF 1.0 outlines only.
+/// It does not parse glyphs or tables beyond their bounds.
 /// </para>
 /// </remarks>
 internal static class SfntValidator {
@@ -30,13 +31,16 @@ internal static class SfntValidator {
     /// <summary>Validates a complete face byte array.</summary>
     /// <param name="face">The original face bytes.</param>
     /// <param name="format">The container format, <c>ttf</c> or <c>otf</c>.</param>
+    /// <param name="cff2">Whether the face carries a <c>CFF2</c> table.</param>
     /// <param name="reason">The failure reason when the face is invalid.</param>
     /// <returns><see langword="true"/> when the container and table directory are valid.</returns>
     internal static bool TryValidate(
         ReadOnlySpan<byte> face,
         out string format,
+        out bool cff2,
         out string? reason) {
         format = string.Empty;
+        cff2 = false;
         if (face.Length < OFFSET_TABLE_LENGTH) {
             reason = "the file is shorter than the 12-byte sfnt offset table";
             return false;
@@ -147,6 +151,7 @@ internal static class SfntValidator {
             return false;
         }
 
+        cff2 = foundCff2;
         reason = null;
         return true;
     }

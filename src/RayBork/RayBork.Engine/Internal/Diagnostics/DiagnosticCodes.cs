@@ -90,6 +90,11 @@ internal static class DiagnosticCodes {
     public const string ASSET_GPU_UPLOAD_FAILED = "RB1010";
 
     /// <summary>
+    /// A font face or its MSDF settings could not be loaded.
+    /// </summary>
+    public const string FONT_LOAD_FAILED = "RB1011";
+
+    /// <summary>
     /// The bake configuration is invalid.
     /// </summary>
     public const string BAKE_CONFIGURATION_INVALID = "RB4001";

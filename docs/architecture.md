@@ -303,7 +303,7 @@ seam; the tick thread never touches them.
 | Tick thread | `IGame.Setup`, `Tick`, `Shutdown`; input snapshot; frame publication | Dedicated thread. Starts only after the renderer published `Info`, so `Setup` can read it. The game-facing engine state is tick-thread affine. |
 | Render thread | Backend, instance, device, queues, swapchain, scene target, present pipeline, the newest published frame lease | Creates the Vulkan objects, consumes the newest frame, submits and presents, recovers, and disposes. Never calls user code and never touches the window directly. |
 | Asset loader | Pack I/O, decompression, descriptor decode, registered-load dispatch, MessagePack custom data | Dedicated `RayBork.Asset` thread added in M3. Runs the synchronous part of every registered `IAssetLoader<T>`; it never calls SDL, Vulkan, or tick-thread APIs. It queues engine-asset GPU uploads and continues serving the next request instead of waiting for the copy. |
-| Font generation | Per-font glyph pipelines and their glyph texture cache | Dedicated `RayBork.Font` thread added in M6. App lifetime: it starts before the tick thread starts and stops after the tick thread exits, before the asset catalog stops, while the render thread still services the GPU upload bridge. It reads parsed faces and generates CPU MSDF bitmaps, then blocks on the GPU texture upload; the render thread completes the copy, and the font thread never calls SDL or Vulkan. |
+| Font generation | Per-font glyph pipelines and their glyph texture cache | Dedicated `RayBork.Font` thread added in M6. App lifetime: the asset catalog starts it with its loader thread before the tick thread starts, and stops it at the start of `AssetCatalog.Stop` while the render thread still services the GPU upload bridge. It reads parsed faces and generates CPU MSDF bitmaps, then blocks on the GPU texture upload; the render thread completes the copy, and the font thread never calls SDL or Vulkan. |
 | Sound thread | Audio mixer (post-1.0) | Not present in v1. |
 
 Thread names are set for debuggers: `RayBork.Main`, `RayBork.Tick`, `RayBork.Render`,
@@ -350,15 +350,16 @@ Startup runs on the main thread and interleaves with the render thread:
    marshalled through the channel; the render thread blocks on it while the main thread services
    the channel and pumps. The main thread also waits for the backend to publish `Info`, bounded to
    30 seconds; the surface request has the same 30-second bound.
-4. The main thread mounts the built-in pack and every configured user pack, then starts the asset
-   loader thread. A pack failure is a startup failure and no game callback runs. The loader is ready
-   before `Setup`, so `Setup` can await engine-asset loads.
-5. The main thread preloads `EngineDefaults` and then the engine's primitive assets: the
+4. The main thread mounts the built-in pack and every configured user pack. `AssetCatalog.Start`
+   starts the app-lifetime glyph generation service and then the asset loader thread. A pack failure
+   is a startup failure and no game callback runs. The loader is ready before `Setup`, so `Setup` can
+   await engine-asset loads and enqueue glyph generation for a font it loads.
+5. The main thread preloads `EngineDefaults` — the mesh shader program, the white and error textures,
+   and the built-in default font at `/fonts/fira-sans` — and then the engine's primitive assets: the
    `/shaders/primitive` and `/shaders/mesh` programs, the `/shaders/msdf` text program, their three
    engine materials, and the eight primitive meshes built through the procedural GPU bridge. The
    camera service holds them for the app lifetime, so the first tick can record a primitive draw. The
-   main thread also creates and starts the app-lifetime glyph generation service before the tick
-   thread starts, so a font loaded from `Setup` can enqueue generation.
+   font load is CPU-only and queues no GPU upload; opening the face generates no glyph texture.
 6. The tick thread starts and `IGame.Setup` runs. Because the tick thread starts only after the
    renderer is ready, `Setup` observes a valid `EngineContext.Info`.
 7. The main loop services the surface channel, pumps events, and checks for exit, tick completion,
@@ -368,13 +369,14 @@ Shutdown unwinds in the opposite direction:
 
 1. The main thread stops accepting ticks and waits for the current tick to finish; the tick thread
    publishes the final frame and runs `IGame.Shutdown` on that thread, then exits.
-2. The main thread joins the tick thread (pumping the platform while it waits), then stops the glyph
-   generation service and joins `RayBork.Font` while the render thread still services the GPU upload
-   bridge. It then releases the engine defaults and the primitive assets. The primitive assets are
-   detached from the camera service before their owner references are released, so no later camera can
-   reach a disposed primitive mesh. The asset loader is then canceled and joined, and the catalog
-   releases its public assets and queues their GPU destruction on the render thread through the upload
-   bridge.
+2. The main thread joins the tick thread (pumping the platform while it waits), then releases the
+   engine defaults and the primitive assets. The primitive assets are detached from the camera service
+   before their owner references are released, so no later camera can reach a disposed primitive mesh.
+   `AssetCatalog.Stop` then first stops the glyph generation service and joins `RayBork.Font` while
+   the render thread still services the GPU upload bridge; next it stops the procedural asset service,
+   cancels and joins the asset loader, and force-disposes its cached assets, queueing their GPU
+   destruction on the render thread through the upload bridge. A disposed font's CPU-only release
+   disposes its glyph pipeline and cached glyph textures at the same transition.
 3. The main thread completes the frame ring. The complete ring still drains its last ready frame.
    The render thread services the pending GPU destructions before it disposes the backend.
 4. The main thread joins the render thread while it services the surface channel and pumps. The
@@ -387,9 +389,12 @@ Shutdown unwinds in the opposite direction:
 
 The `RayBork.Font` thread blocks on the glyph texture factory task, so exactly one glyph uploads at a
 time. The task must complete on a thread that never waits for `RayBork.Font`; the production path is
-the GPU upload bridge completed by the render thread. Shutdown stops the service before the asset
-catalog stops and before the render loop joins, so the bridge can still complete or cancel an
-in-flight glyph upload.
+the GPU upload bridge completed by the render thread. `AssetCatalog.Stop` stops the service before the
+procedural asset service and before it force-disposes its cached assets, and the catalog stops before
+the frame ring completes and before the render loop joins, so the bridge can still complete or cancel
+an in-flight glyph upload. A font disposed earlier in the run disposes its pipeline while the service
+is still running; the pipeline unregisters its queued requests and a late generated texture is
+disposed by the pipeline's insert path instead of leaking.
 
 The render thread never blocks on the platform directly and the main thread never blocks
 unboundedly on the render thread. A renderer initialization failure before `Setup` is a startup
@@ -643,6 +648,13 @@ glyph edge, the authored distance range maps to `[0, 1]`, and a value above `0.5
 glyph. Its render state is alpha blending, no culling, a `greater_equal` depth test, and no depth
 write.
 
+The built-in pack also carries the default font at `/fonts/fira-sans`. It is Fira Sans Regular (SIL
+Open Font License 1.1; see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md)) baked by the ordinary
+font processor with the default 32/4/2 MSDF settings and the sibling `/fonts/fira-sans-face` raw
+payload, so the built-in pack has 18 entries. The runtime exposes the face as
+`EngineContext.Defaults.DefaultFont`. The font descriptor and face payload are ordinary entries; the
+pack format is unchanged and the runtime generates glyph textures on demand.
+
 ## Primitive assets
 
 The engine's primitive geometry is not in the pack. `PrimitiveAssets` loads the `/shaders/primitive`,
@@ -663,7 +675,8 @@ materials, and releases every mesh and program owner reference; it runs on the m
 tick thread has joined. A
 startup failure releases everything already created and surfaces as `AssetLoadException`
 `ASSET_LOAD_FAILED`. The meshes and the three primitive materials have no public accessor, and
-`EngineDefaults` is unchanged. `DrawTexture` is not built from this set in M5; it moves to M7 with the
+`EngineDefaults` gains only the default font in M6; the primitive assets stay unexposed.
+`DrawTexture` is not built from this set in M5; it moves to M7 with the
 sprite path.
 
 The CPU collision surface is independent of the renderer. `Collision.GetRayQuad` splits a quad into
@@ -835,7 +848,7 @@ resume on the thread pool, so a loader must not block and must not call SDL, Vul
 APIs. An engine-asset request is deferred: the loader queues its GPU upload and immediately serves the
 next request, so custom data and `LoadData` do not wait behind a GPU copy.
 
-Engine assets (`Mesh`, `Texture`, and the internal shader program) are cached by
+Engine assets (`Mesh`, `Texture`, `Font`, and the internal shader program) are cached by
 `(canonical path, engine asset type)` and reference-counted:
 
 - the first successful load creates the object and returns it with one reference;
@@ -844,19 +857,22 @@ Engine assets (`Mesh`, `Texture`, and the internal shader program) are cached by
 - a later load increments the count and returns the same object;
 - `Dispose` releases one reference; at zero the public object is marked disposed and its GPU
   resource destruction is queued on the render thread;
+- `Font` is CPU-only: it has no GPU resource of its own, so a font load skips the upload and its
+  last release disposes the glyph pipeline and the cached glyph textures instead;
 - a caller that cancels its wait acquires no reference and does not cancel the shared load for
   other callers;
 - a failed load is not cached, so a retry is allowed.
 
-A load for an engine asset completes only after the GPU upload succeeds, so the first draw never
-triggers a hidden upload. The completion is a deferred loader item: the loader starts the upload and
-keeps serving queued requests, and the asset is constructed and committed when the upload finishes.
-A `WithAssetType<T>` value is a MessagePack custom-data payload decoded through the compiled shape; a
-`WithAssetLoader<T>` value runs the caller's loader over the entry payload. Neither is an `IAsset`,
-neither is cached, and both return a fresh caller-owned instance per call. A loader's nested loads
-are queued on the same loader thread, and the load chain rejects a loader that requests the asset
-type and path it is currently loading. `LoadData` returns a fresh copy of the decompressed entry
-payload.
+A load for an engine asset with a GPU resource completes only after the GPU upload succeeds, so the
+first draw never triggers a hidden upload. The completion is a deferred loader item: the loader starts
+the upload and keeps serving queued requests, and the asset is constructed and committed when the
+upload finishes. A format that decodes without an upload, such as `FontAssetFormat`, completes
+immediately after its CPU decode. A `WithAssetType<T>` value is a MessagePack custom-data payload
+decoded through the compiled shape; a `WithAssetLoader<T>` value runs the caller's loader over the
+entry payload. Neither is an `IAsset`, neither is cached, and both return a fresh caller-owned
+instance per call. A loader's nested loads are queued on the same loader thread, and the load chain
+rejects a loader that requests the asset type and path it is currently loading. `LoadData` returns a
+fresh copy of the decompressed entry payload.
 
 The public `Shader` is not in the engine-asset cache. `Load<Shader>` resolves the internal
 `ShaderProgram` through the engine-asset path, then creates a material and transfers one program
@@ -884,6 +900,39 @@ never share the wrapper. Disposing the model disposes its part materials and rel
 references; a frame that recorded the model keeps the programs, meshes, and bound textures alive
 through its retention set. `Model` is not an `IAsset` and has no path or lifetime of its own. `Model`
 is static: no skeletal or morph animation in v1.
+
+### Fonts
+
+`Font` is the engine's first CPU-only engine asset. `FontAssetFormat` reads the `Font` descriptor,
+reads the sibling `<base>-face` raw payload, checks it against the descriptor's `ByteLength`, parses
+the sfnt face once with `SfntFace`, and builds the per-font `FontGlyphSettings` and
+`FontGlyphPipeline`. It rejects an unavailable or wrong-length face, an invalid face, an unsupported
+outline source (CFF2) or parser feature, and invalid MSDF settings with `AssetLoadException` `RB1011`
+naming the cause. It returns a `DecodedAsset<Font>` with no GPU upload.
+
+The catalog's engine-asset path accepts that: `DecodedAsset<T>` may carry a null upload,
+`LoadEngineObjectAsync` skips the bridge, and `EngineAsset` accepts a null `GpuAssetResource` and
+queues no GPU destruction. A CPU-only asset passes a release callback instead, which the lifetime
+invokes exactly once at the same transition as a GPU destruction would; for a font it disposes the
+glyph pipeline and with it the cached glyph textures. The mesh, texture, and shader paths are
+unchanged. A failed or stopped font load releases the just-created pipeline before it faults.
+
+The runtime never generates glyph textures during the load. A draw calls the pipeline's `Acquire` on
+the tick thread; a miss marks the glyph pending, enqueues one request on the app-lifetime
+`GlyphGenerationService`, and draws nothing for that glyph until a later frame. The `RayBork.Font`
+thread generates the MSDF bitmap and calls `ProceduralGlyphTextureFactory`, which uploads one
+procedural `Rgba8Unorm`, linear, clamp-sampled texture with no mip chain through the catalog's
+`ProceduralAssetService` and blocks on the bridge completion. Glyph textures are ordinary
+engine-owned procedural textures, so the frame retention and destruction path is the same as any
+other texture. The `Font` public object keeps only tick-thread metrics and acquisition members;
+`Path` and `IsDisposed` stay readable after disposal.
+
+The catalog owns the `GlyphGenerationService` and the `ProceduralGlyphTextureFactory` for the app
+lifetime. `AssetCatalog.Start` starts the service with the loader thread, and `AssetCatalog.Stop`
+stops it before the procedural asset service and before it force-disposes the cached assets, while
+the render thread still services the bridge. `EngineDefaults` preloads the built-in Fira Sans Regular
+face from `/fonts/fira-sans` last, so `EngineContext.Defaults.DefaultFont` is available before
+`IGame.Setup` without adding a startup GPU upload.
 
 ### GPU upload bridge and frame retention
 
@@ -1002,11 +1051,11 @@ validators, and writes one MessagePack `Data` entry. The runtime `Load<T>` deser
 registered `[GenerateShape]` shape; there is no reflection resolver and no runtime TOML parser.
 
 The runtime exposes the `Model` loader. The model processor emits a `Model` descriptor plus one
-`Mesh` part per primitive; the font processor emits a `Font` descriptor plus the face payload.
-Font parsing and MSDF generation arrive in M6. M3 baked and validated both entry types before the
-runtime types existed; the runtime `Model` load path and the model/part ownership are described
-above, and each mesh descriptor may carry the baked collision payload described in the previous
-section.
+`Mesh` part per primitive; the font processor emits a `Font` descriptor plus the face payload. The
+runtime parses the font face and generates MSDF glyphs on demand; M3 baked and validated both entry
+types before the runtime types existed, and the runtime `Model` load path and the model/part ownership
+are described above. Each mesh descriptor may carry the baked collision payload described in the
+previous section.
 
 ### Bake tooling and the built-in pack
 
@@ -1136,10 +1185,11 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
 10. The engine's built-in pack is always mounted first; it supplies the present shader pair, the
     built-in mesh draw shader program at `/shaders/mesh`, the primitive program at
-    `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, and the white/error textures. The
-    app preloads the mesh program and both textures into `EngineContext.Defaults` and builds the
-    primitive assets, including their three engine materials, before `IGame.Setup`, and releases them
-    during shutdown.
+    `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, the white/error textures, and the
+    default font at `/fonts/fira-sans`. The
+    app preloads the mesh program, both textures, and the default font into `EngineContext.Defaults`
+    and builds the primitive assets, including their three engine materials, before `IGame.Setup`, and
+    releases them during shutdown. The font load is CPU-only and adds no startup GPU upload.
 11. Only one RayBork app runs per process in v1.
 12. A GPU resource is created, re-created after a device recovery, and destroyed only on the render
     thread, and only after every frame that references it has completed.

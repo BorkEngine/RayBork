@@ -5,7 +5,7 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The later <c>Font</c> asset creates one instance from the baked font descriptor: the face's
+/// The <c>Font</c> asset creates one instance from the baked font descriptor: the face's
 /// <c>head</c> <c>unitsPerEm</c> plus the authored MSDF pixel size, range, and padding.
 /// <see cref="UnitsPerEm"/> must equal the parsed face's unit, and <see cref="FontGlyphPipeline"/>
 /// rejects a mismatch instead of silently producing wrong metrics.

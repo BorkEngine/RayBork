@@ -17,6 +17,7 @@ internal static class BuiltInAssetLoaders {
     internal static IReadOnlyList<AssetTypeRegistration> CreateDefault() => [
         new EngineAssetTypeRegistration<Mesh>(MeshAssetFormat.Instance),
         new EngineAssetTypeRegistration<Texture>(TextureAssetFormat.Instance),
+        new EngineAssetTypeRegistration<Font>(FontAssetFormat.Instance),
         new EngineAssetTypeRegistration<ShaderProgram>(ShaderProgramAssetFormat.Instance),
         new LoaderAssetTypeRegistration<Shader>(ShaderMaterialLoader.Instance),
         new LoaderAssetTypeRegistration<Model>(ModelAssetLoader.Instance),

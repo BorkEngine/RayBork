@@ -70,8 +70,9 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 - `RenderTexture.Dispose` is deferred; frames that sample it keep it alive.
 - Engine asset `Dispose` releases a reference; frames and pending GPU work retain their own
   references.
-- The app-lifetime glyph generation service is stopped after the tick thread exits and before the
-  asset catalog stops; it joins `RayBork.Font`. A `Font` disposal does not stop the service.
+- The app-lifetime glyph generation service is owned by the asset catalog. `AssetCatalog.Stop` stops
+  it after the tick thread exits and before the procedural asset service and the cached assets are
+  released; it joins `RayBork.Font`. A `Font` disposal does not stop the service.
 - `Load<T>` and `LoadData` results for custom data are caller-owned and are not disposed by the
   engine.
 - `RayBorkApp.Dispose` stops a running app, joins threads, and releases native resources. It is
@@ -84,21 +85,27 @@ and resumes. It does not call game code. If recovery fails, the app stops as des
 ### 11.4 Shutdown order
 
 ```text
-1. Stop accepting new ticks; finish the current tick if one is running.
+1. The main thread stops accepting new ticks and waits for the current tick to finish.
 2. The tick thread publishes the final frame and runs IGame.Shutdown on the tick thread, then exits.
-3. Join the tick thread, stop the glyph generation service while the render thread still services the
-   GPU upload bridge, and complete the frame ring.
-4. The render thread drains and presents the final frame, disposes the backend, and destroys the
-   native surface through the surface channel.
-5. Join the render thread while the main thread services the surface channel and pumps, then close
-   the channel.
-6. Dispose the platform: window, SDL3, Vulkan loader. Join every thread.
+3. The main thread joins the tick thread (pumping the platform while it waits), releases the engine
+   defaults and the primitive assets, then stops the asset catalog: it stops the glyph generation
+   service while the render thread still services the GPU upload bridge, stops the procedural asset
+   service, cancels and joins the asset loader, and force-disposes the cached assets.
+4. The main thread completes the frame ring. The render thread drains and presents the final frame,
+   services the pending GPU destructions, disposes the backend, and destroys the native surface through
+   the surface channel.
+5. The main thread joins the render thread while it services the surface channel and pumps, then
+   closes the channel.
+6. The main thread runs the deferred main-thread teardown and disposes the platform: window, SDL3,
+   Vulkan loader. Every thread is joined.
 ```
 
 The order is deliberate: `Shutdown` runs while the renderer is still alive, but it cannot draw.
 GPU resources are not destroyed until after `Shutdown` returns, so a final readback or save is
-possible. The glyph service stop runs before the asset catalog stops and before the render loop joins,
-so the bridge can still complete or cancel an in-flight glyph upload.
+possible. `AssetCatalog.Stop` runs on the main thread after the tick thread joined: the glyph service
+stop happens first, before the procedural asset service and the cached assets are released and before
+the render loop joins, so the bridge can still
+complete or cancel an in-flight glyph upload.
 
 M2 has a real renderer: the main thread services surface requests until the render thread exits,
 then disposes the platform. The shutdown join is bounded to 30 seconds for the render thread; the

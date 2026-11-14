@@ -8,7 +8,7 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The later <c>Font</c> asset owns one pipeline per parsed face. The tick thread calls only
+/// The <c>Font</c> asset owns one pipeline per parsed face. The tick thread calls only
 /// <see cref="BeginFrame"/>, <see cref="Acquire"/>, and <see cref="GetMetrics"/>; the font thread of the
 /// generation service is the only thread that inserts and evicts textures. It resolves outlines,
 /// generates MSDF bitmaps, and inserts finished textures. The tick thread updates the use stamps, the
@@ -47,10 +47,15 @@ namespace RayBork.Internal;
 /// pipeline's disposed flag; no path takes the pipeline lock while taking the service lock.
 /// <see cref="Acquire"/> may hold the pipeline lock while adding a frame hold, so that order is
 /// pipeline, then <see cref="FrameAssetRetention"/>, then the asset's own lock. No path takes the
-/// pipeline lock while holding either of those. <see cref="GlyphGenerationService.Stop"/> must run
-/// before a pipeline is disposed; the reverse order would leave queued work pointing at a disposed
-/// texture owner. Disposal is idempotent, unregisters the pipeline from the service, disposes every
-/// cached texture exactly once, and settles every pending waiter.
+/// pipeline lock while holding either of those.
+/// </para>
+/// <para>
+/// A pipeline may be disposed while the service is still running, for example when a game disposes a
+/// font before shutdown. <see cref="Dispose"/> unregisters the pipeline, so queued requests for it are
+/// dropped and their waiters settle as failed; a request that was already generating finishes and its
+/// late texture reaches <see cref="Insert"/>, which disposes that texture instead of caching it. After
+/// disposal the service never enqueues new work for the pipeline. Disposal is idempotent, disposes
+/// every cached texture exactly once, and settles every pending waiter.
 /// </para>
 /// </remarks>
 internal sealed class FontGlyphPipeline : IDisposable {

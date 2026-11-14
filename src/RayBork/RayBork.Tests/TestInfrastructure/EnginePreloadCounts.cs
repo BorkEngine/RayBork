@@ -6,8 +6,10 @@ namespace RayBork.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The app first preloads <see cref="DEFAULTS"/> assets into <see cref="EngineDefaults"/>: the
-/// <c>/shaders/mesh</c> program plus the white and error textures. The engine primitive assets then add
+/// The app first preloads <see cref="DEFAULTS"/> GPU-uploaded assets into <see cref="EngineDefaults"/>:
+/// the <c>/shaders/mesh</c> program plus the white and error textures. The app also preloads the
+/// default font there, but a font load is CPU-only: it queues no upload and no destroy, so it adds
+/// nothing to these counts. The engine primitive assets then add
 /// <see cref="ADDITIONAL_PRIMITIVE_PROGRAMS"/> programs (the <c>/shaders/primitive</c> and
 /// <c>/shaders/msdf</c> programs; the mesh program is already cached) and
 /// <see cref="PRIMITIVE_MESHES"/> procedural mesh uploads.
@@ -18,7 +20,7 @@ namespace RayBork.Tests;
 /// </para>
 /// </remarks>
 internal static class EnginePreloadCounts {
-    /// <summary>The assets preloaded into <see cref="EngineDefaults"/>.</summary>
+    /// <summary>The GPU-uploaded assets preloaded into <see cref="EngineDefaults"/>.</summary>
     internal const int DEFAULTS = 3;
 
     /// <summary>The primitive-asset programs the defaults do not already hold.</summary>

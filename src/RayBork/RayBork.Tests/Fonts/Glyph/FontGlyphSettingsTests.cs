@@ -3,7 +3,7 @@ using RayBork.Internal;
 namespace RayBork.Tests.Fonts.Glyph;
 
 /// <summary>
-/// Tests the validated per-font MSDF settings the later <c>Font</c> creates from the face descriptor.
+/// Tests the validated per-font MSDF settings the <c>Font</c> creates from the face descriptor.
 /// </summary>
 public sealed class FontGlyphSettingsTests {
     [Fact]

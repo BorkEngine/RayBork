@@ -39,9 +39,13 @@ namespace RayBork.Internal;
 /// the render thread can still service the queued GPU destructions.
 /// </para>
 /// <para>
-/// The catalog also owns the app's <see cref="ProceduralAssetService"/>. Procedural assets are never
-/// cached or resolved by this catalog; the service only borrows the same GPU upload bridge. The
-/// reserved <c>_procedural</c> path prefix is reported as missing instead of resolving a pack entry.
+/// The catalog also owns the app's <see cref="ProceduralAssetService"/>, the app-lifetime
+/// <see cref="GlyphGenerationService"/>, and the <see cref="IGlyphTextureFactory"/> over the
+/// procedural bridge. A <see cref="Font"/> is a CPU-only engine asset: its decode parses the face and
+/// creates a glyph pipeline, but it queues no GPU upload and its glyph textures are created on demand
+/// later. Procedural assets are never cached or resolved by this catalog; the service only borrows the
+/// same GPU upload bridge. The reserved <c>_procedural</c> path prefix is reported as missing instead
+/// of resolving a pack entry.
 /// </para>
 /// </remarks>
 internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
@@ -60,8 +64,11 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     private const string BUILT_IN_DISPLAY_PATH = "<built-in>";
 
     private readonly ILogger _logger;
+    private readonly ILogger _fontLogger;
     private readonly GpuAssetBridge _bridge;
     private readonly ProceduralAssetService _proceduralAssets;
+    private readonly GlyphGenerationService _glyphService;
+    private readonly ProceduralGlyphTextureFactory _glyphTextures;
     private readonly ReadOnlyMemory<byte> _builtInPack;
     private readonly string[] _userPackPaths;
     private readonly AssetTypeRegistry _registry;
@@ -103,8 +110,11 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         ArgumentNullException.ThrowIfNull(assetTypes);
 
         _logger = loggerFactory.CreateLogger(LOGGER_CATEGORY);
+        _fontLogger = loggerFactory.CreateLogger(GlyphGenerationService.LOGGER_CATEGORY);
         _bridge = bridge;
         _proceduralAssets = new ProceduralAssetService(bridge);
+        _glyphService = new GlyphGenerationService(loggerFactory);
+        _glyphTextures = new ProceduralGlyphTextureFactory(_proceduralAssets);
         _builtInPack = builtInPack;
         _userPackPaths = [.. userPackPaths];
         _registry = new AssetTypeRegistry([.. BuiltInAssetLoaders.CreateDefault(), .. assetTypes]);
@@ -127,6 +137,12 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     /// procedural asset cannot shadow or be shadowed by a pack path.
     /// </remarks>
     ProceduralAssetService IProceduralAssetProvider.ProceduralAssets => _proceduralAssets;
+
+    /// <summary>
+    /// Gets the app-lifetime glyph generation service. The catalog starts it with the loader and stops
+    /// it before the procedural asset service during shutdown.
+    /// </summary>
+    internal GlyphGenerationService GlyphService => _glyphService;
 
     /// <inheritdoc/>
     public bool Exists(string path) {
@@ -201,9 +217,13 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     }
 
     /// <summary>
-    /// Mounts the built-in pack and every configured user pack, publishes the visible stack, and
-    /// starts the loader thread.
+    /// Mounts the built-in pack and every configured user pack, starts the glyph generation service,
+    /// publishes the visible stack, and starts the loader thread.
     /// </summary>
+    /// <remarks>
+    /// The glyph generation service starts before the loader thread, so a font loaded from
+    /// <see cref="IGame.Setup"/> can enqueue glyph generation. A failed mount starts neither thread.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">The catalog was already started.</exception>
     /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
     /// <exception cref="AssetPackException">
@@ -221,6 +241,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         }
 
         List<PackArchive> mounted = [];
+        bool glyphServiceStarted = false;
         try {
             if (_builtInPack.Length > 0) {
                 mounted.Add(OpenPack(_builtInPack, BUILT_IN_DISPLAY_PATH));
@@ -250,6 +271,8 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
                 _packs = [.. mounted];
                 _visible = visible;
+                _glyphService.Start();
+                glyphServiceStarted = true;
                 Thread loader = new(LoaderLoop) {
                     IsBackground = true,
                     Name = LOADER_THREAD_NAME,
@@ -258,6 +281,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                 loader.Start();
             }
         } catch {
+            if (glyphServiceStarted) {
+                _glyphService.Stop();
+            }
+
             foreach (PackArchive archive in mounted) {
                 archive.Dispose();
             }
@@ -272,10 +299,16 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     }
 
     /// <summary>
-    /// Stops the loader, fails every pending load, releases every cached engine asset, and disposes the
-    /// mounted packs. Idempotent. Runs before the frame ring completes so the render thread still
-    /// services the queued GPU destructions.
+    /// Stops the glyph generation service and the loader, fails every pending load, releases every
+    /// cached engine asset, and disposes the mounted packs. Idempotent. Runs before the frame ring
+    /// completes so the render thread still services the queued GPU destructions.
     /// </summary>
+    /// <remarks>
+    /// The glyph generation service stops before the procedural asset service and before the cached
+    /// assets are force-disposed: its font thread must not still be generating for a pipeline the
+    /// catalog is about to dispose. The render thread still services the GPU upload bridge at this
+    /// point, so an in-flight glyph upload completes or observes the stop token.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">Called on the loader thread.</exception>
     internal void Stop() {
         Thread? loader;
@@ -309,6 +342,11 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
         _stopSource.Cancel();
         _workAvailable.Set();
+
+        // The tick thread has returned, so no draw can request a glyph any more. Stop the font thread
+        // before the procedural service and before the cached assets are force-disposed: the render
+        // thread still services the bridge, so an in-flight glyph upload completes or cancels.
+        _glyphService.Stop();
 
         // The tick thread has returned, so no game callback can create or build a procedural asset any
         // more. A build already waiting on an upload fails when the render thread closes the bridge.
@@ -511,14 +549,16 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     }
 
     /// <summary>
-    /// Decodes one engine asset on the loader thread, starts its GPU upload, and constructs the public
-    /// asset when the upload completes.
+    /// Decodes one engine asset on the loader thread, starts its GPU upload when the format has one, and
+    /// constructs the public asset when the upload completes or immediately for a CPU-only asset.
     /// </summary>
     /// <remarks>
-    /// The method returns an incomplete task while the GPU copy runs, so the loader can serve the next
-    /// queued request. The upload uses the catalog stop token, never a caller token, so one canceled
-    /// waiter never cancels the shared load. A stop or a failure removes the pending cache entry and
-    /// destroys the just-created resource before the task faults.
+    /// The method returns an incomplete task while a GPU copy runs, so the loader can serve the next
+    /// queued request. A format may decode without an upload; <see cref="Font"/> is CPU-only, so its
+    /// load skips the bridge entirely. The upload uses the catalog stop token, never a caller token, so
+    /// one canceled waiter never cancels the shared load. A stop or a failure removes the pending cache
+    /// entry, runs the format's CPU-only release exactly once, and destroys the just-created GPU
+    /// resource before the task faults.
     /// </remarks>
     private async Task<object> LoadEngineObjectAsync<T>(
         EngineCacheEntry entry,
@@ -527,6 +567,8 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         EngineAssetTypeRegistration<T> registration,
         CancellationToken stopToken) {
         GpuAssetResource? resource = null;
+        EngineAsset? lifetime = null;
+        Action? release = null;
         try {
             if (descriptorEntry.Entry.Type != registration.EntryType) {
                 throw AssetLoadErrors.CreateTypeMismatch(
@@ -536,22 +578,41 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             }
 
             byte[] descriptorPayload = descriptorEntry.Archive.ReadPayload(descriptorEntry.Entry);
-            AssetFormatContext context = new(descriptorEntry.Entry.Path, descriptorPayload, visibleStack);
+            AssetFormatContext context = new(
+                descriptorEntry.Entry.Path,
+                descriptorPayload,
+                visibleStack,
+                _glyphService,
+                _glyphTextures,
+                _fontLogger);
             DecodedAsset<T> decoded = registration.Format.Decode(context);
-            resource = await _bridge.UploadAsync(decoded.Upload, stopToken).ConfigureAwait(false);
+            release = decoded.Release;
+            if (decoded.Upload is not null) {
+                resource = await _bridge.UploadAsync(decoded.Upload, stopToken).ConfigureAwait(false);
+            }
+
             stopToken.ThrowIfCancellationRequested();
 
-            EngineAsset lifetime = new(
+            lifetime = new EngineAsset(
                 AssetPath.ToPublic(descriptorEntry.Entry.Path),
                 resource,
                 QueueDestruction,
-                () => OnOwnersReleased(entry));
+                () => OnOwnersReleased(entry),
+                decoded.Release);
             object asset = decoded.Create(lifetime)!;
             CommitEngineAsset(entry, lifetime, asset);
             return asset;
         } catch (Exception exception) {
-            if (resource is not null) {
-                QueueDestruction(resource);
+            if (lifetime is not null) {
+                // The lifetime exists, so its release and any GPU destruction run exactly once here.
+                lifetime.ForceDispose();
+            } else {
+                // The decode may have created CPU state that never got a lifetime, for example when the
+                // catalog stopped between the decode and the commit.
+                release?.Invoke();
+                if (resource is not null) {
+                    QueueDestruction(resource);
+                }
             }
 
             RemoveEngineEntry(entry);
