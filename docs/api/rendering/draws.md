@@ -34,9 +34,11 @@ are written per instance. Consequently:
   limit is still a batch of one.
 
 **Per-instance data.** Each instance carries the world transform, the tint, a UV rectangle for
-sprite/text-style shaders, and the reflected uniform/texture data. Built-in shaders consume the
-fields they need; custom shaders see them through the generated ABI. Uniform values and texture
-bindings never split a batch.
+sprite/text-style shaders, and the reflected uniform/texture data. The rectangle is
+`(u0, v0, du, dv)` in normalized texture coordinates: `DrawBillboard`'s source form writes it and
+every other draw writes `(0, 0, 1, 1)`, so a shader that does not opt into a sub-rectangle samples
+the authored mesh UVs unchanged. Uniform values and texture bindings never split a batch, and the UV
+rectangle is per-instance data too.
 
 **Culling.** Instances are frustum-culled against the pass view-projection. The planner transforms the
 mesh-space bounds to a world-space AABB and tests it against the six normalized frustum planes; an
@@ -98,7 +100,7 @@ engine assets with no public accessor, built once before `IGame.Setup`.
 | `DrawPlane` | Engine plane | `XZ` plane centered at `center`, front face toward world `+Y`, `size` is width along `X` and depth along `Z`; the `Transform` form centers it at the transform origin and local `+Y` is its normal. |
 | `DrawCircle` | Engine line mesh | A closed 36-segment circle. The axis-angle form starts from the local `XZ` plane with local `+Y` as its normal, rotates it by `rotationAngle` degrees around `rotationAxis`, and translates it to `center`. The `Transform` form uses the local `XZ` plane and the transform rotation and scale. A zero rotation axis is `ArgumentException`; zero radius records nothing. |
 | `DrawGrid` | Engine line mesh | `XZ` grid centered at the world origin with `slices` cells per axis, one uniform color, and `spacing` world units between lines. It has `slices + 1` lines per axis, so it is one instanced draw with `2 * (slices + 1)` instances spanning `slices * spacing` per axis. |
-| `DrawBillboard` | Engine quad | Centered textured quad. `faceCamera` true faces along the camera's view direction; false keeps world up and applies only the camera's yaw. |
+| `DrawBillboard` | Engine quad | One textured, alpha-blended quad. The four-argument form is camera-facing, centered, and samples the full texture. A `source` rectangle samples a normalized sub-rectangle, `origin` pins a normalized pivot to the transform position, and a `Transform` supplies position/rotation/scale. |
 
 **Programs and render states.** Shapes and lines record against the built-in `/shaders/primitive`
 program: vertex position at location 0, linear vertex color at location 6, no uniforms and no
@@ -117,13 +119,16 @@ shader sees the same field and must apply it itself.
 **Instance composition.** Each helper records one world matrix per instance that maps the unit mesh
 into world space: scale and translation for the cube, sphere, plane, wire cube, and wire sphere; a
 line basis built from the segment endpoints for `DrawLine`, every `DrawLines` pair, and every circle
-or wire segment; a camera-facing basis for `DrawPoint` and `DrawBillboard`; the affine
-reference-triangle map for `DrawTriangle`, `DrawTriangleStrip`, the tessellated sphere, and the
+or wire segment; a camera-facing basis for `DrawPoint` and the facing `DrawBillboard` forms; the
+affine reference-triangle map for `DrawTriangle`, `DrawTriangleStrip`, the tessellated sphere, and the
 cylinder and capsule caps; a side-quad basis for equal-radius cylinder sides and capsule sides; two
 reference-triangle maps per tapered cylinder side segment; and one line matrix per grid, wire, ray,
 or bounding-box segment. A transformed overload applies the same `local * transform.ToMatrix()`
 composition to every one of those matrices. The mesh bounds are transformed by the same matrix for
-frustum culling.
+frustum culling. For `DrawBillboard`, `local` is the unit quad translated so the normalized `origin`
+pivot sits at the local origin and scaled by `size`; the facing form then applies the transform's
+in-plane roll and the camera basis, and the non-facing `Transform` form applies the transform
+orientation directly. The non-facing `Vector3` form keeps the vertical billboard basis instead.
 
 **No suffix names.** The primitive families use ordinary C# overloads. The engine has no `Ex`, `Rec`,
 `Pro`, or `V` suffix variants: `DrawCube`, `DrawWireCube`, `DrawSphere`, `DrawWireSphere`,
@@ -155,6 +160,10 @@ centered at the transform origin along local `+Y` with its cap centers at `±hei
   `ArgumentOutOfRangeException`; no helper substitutes a default tessellation.
 - A zero `rotationAxis` on `DrawCircle` throws `ArgumentException`; the axis-angle form has no plane
   without it.
+- A billboard source rectangle with a non-finite component throws `ArgumentException`; a non-positive
+  width or height, or a rectangle outside the normalized `[0, 1]` texture rectangle, throws
+  `ArgumentOutOfRangeException`. A non-finite billboard origin throws `ArgumentException`; the origin
+  is not clamped.
 - A `null` texture throws `ArgumentNullException`; a disposed texture is `ObjectDisposedException`.
 - A camera whose app has no primitive assets attached throws `InvalidOperationException`. Game code
   does not hit this case: the app attaches the primitive assets before `IGame.Setup`.
@@ -184,5 +193,23 @@ draw is recorded and cleared immediately afterwards. The recorded frame retains 
 the render thread releases the slot, so the shared material never keeps a game texture and a
 texture disposed after the call stays alive for the recorded frame. To shade a quad with a custom
 material, draw a quad mesh instead.
+
+The `source` overloads record a normalized `Rect` as the per-instance UV rectangle:
+`rbInstance.UvRect = (source.X, source.Y, source.Width, source.Height)`. The built-in mesh shader
+computes `vUv = UvRect.xy + uv * UvRect.zw`, so the default `(0, 0, 1, 1)` passes the quad's
+authored UVs through unchanged. `origin` is the normalized pivot in the billboard's local quad:
+`(0, 0)` is the bottom-left corner, `(1, 1)` is the top-right corner, and `(0.5, 0.5)` is the
+centered default. It moves the pivot to the transform position and is not clamped. The transform
+scale multiplies `size` on the local X and Y axes; a zero size component or a zero transform scale
+component records nothing.
+
+`faceCamera: true` faces the quad at the camera and uses only the transform rotation's in-plane roll
+(its twist about the billboard's local `+Z` plane normal); pitch and yaw do not tilt the plane.
+`faceCamera: false` does not face the camera: the `Vector3` overloads keep the existing vertical
+billboard (world up and the camera's yaw), while the `Transform` overloads are world-oriented by
+`local * transform.ToMatrix()`. An identity transform on a `Transform` overload therefore gives a
+world-space quad in the local XY plane facing world `+Z`; this is intentionally different from the
+`Vector3` overloads' vertical orientation. The source rectangle is per-instance data, so billboards
+with different source rectangles still share one batch.
 
 `DrawText` and `DrawTextBillboard` are M6 and are not part of this surface.

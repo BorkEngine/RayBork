@@ -257,6 +257,11 @@ order, then the reflected user uniforms in declaration order:
 | 96 | `uint <name>Index` for each texture binding in order (4 bytes each) |
 | after the texture slots | reflected uniforms in declaration order |
 
+`UvRect` is the normalized texture-space origin in `X` and `Y` and the size in `Z` and `W`. The
+built-in `/shaders/mesh` vertex stage computes `vUv = UvRect.xy + uv * UvRect.zw`, so the default
+`(0, 0, 1, 1)` passes the authored mesh UVs through unchanged. Only `DrawBillboard`'s
+source-rectangle overloads record a sub-rectangle; every other draw records `(0, 0, 1, 1)`.
+
 Uniform members follow GLSL std430:
 
 | Declared type | Alignment | Size |

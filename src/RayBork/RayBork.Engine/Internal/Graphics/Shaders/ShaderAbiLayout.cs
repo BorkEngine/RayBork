@@ -9,7 +9,9 @@ namespace RayBork.Internal;
 /// The layout is derived only from the sidecar declaration order captured in the shader descriptor.
 /// The record starts with the engine header (<c>mat4 Transform</c> at 0, <c>vec4 Color</c> at 64, and
 /// <c>vec4 UvRect</c> at 80), followed by one <c>uint &lt;name&gt;Index</c> texture slot per texture
-/// binding, followed by the reflected uniforms in declaration order. Offsets follow GLSL std430:
+/// binding, followed by the reflected uniforms in declaration order. <c>UvRect</c> is the normalized
+/// texture-space origin in <c>X</c> and <c>Y</c> and the size in <c>Z</c> and <c>W</c>; a draw that
+/// does not sample a sub-rectangle records <c>(0, 0, 1, 1)</c>. Offsets follow GLSL std430:
 /// scalar and boolean members are 4-byte aligned, <c>vec2</c> is 8-byte aligned, and <c>vec3</c>,
 /// <c>vec4</c>, and <c>mat4</c> are 16-byte aligned. A <c>vec3</c> occupies 12 bytes, so a following
 /// scalar packs at offset + 12. The complete record is rounded up to a 16-byte multiple.
@@ -30,7 +32,8 @@ internal sealed class ShaderAbiLayout {
     /// <summary>The offset of the instance <c>vec4 Color</c>.</summary>
     internal const int COLOR_OFFSET = 64;
 
-    /// <summary>The offset of the instance <c>vec4 UvRect</c>.</summary>
+    /// <summary>The offset of the instance <c>vec4 UvRect</c>: the normalized UV origin (X, Y) and
+    /// size (Z, W).</summary>
     internal const int UV_RECT_OFFSET = 80;
 
     /// <summary>The offset of the first texture index slot.</summary>

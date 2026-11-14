@@ -546,6 +546,472 @@ public sealed class PrimitiveDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawBillboardTransformFaceCameraFalseOrientsThePlaneByTheTransform() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Quaternion yaw = Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f);
+        Transform rotated = new(new Vector3(1f, 2f, -5f), yaw, new Vector3(2f, 3f, 1f));
+        using (Camera camera = harness.Host.CreatePerspectiveCamera(
+            transform: new Transform(new Vector3(0f, 0f, 5f), yaw, Vector3.One))) {
+            // The position overload keeps the camera-yaw vertical billboard: with a 90 degree yaw the
+            // plane is vertical, faces +X, and keeps world up.
+            camera.DrawBillboard(texture, Vector3.Zero, new Vector2(2f, 4f), _color, faceCamera: false);
+            // The transform overload is world-oriented instead, and an identity transform gives a
+            // world-space quad in the local XY plane facing +Z.
+            camera.DrawBillboard(texture, Transform.Identity, new Vector2(2f, 4f), _color, faceCamera: false);
+            camera.DrawBillboard(texture, rotated, new Vector2(2f, 4f), _color, faceCamera: false);
+        }
+
+        harness.Host.EndFrame();
+
+        Matrix4x4 vertical = packet.Passes[0].Draws[0].GetWorldMatrices()[0];
+        AssertVector(new Vector3(0f, 0f, -2f), Axis(vertical, 0));
+        AssertVector(new Vector3(0f, 4f, 0f), Axis(vertical, 1));
+        AssertVector(Vector3.UnitX, Axis(vertical, 2));
+        AssertVector(Vector3.Zero, MatrixPosition(vertical));
+
+        Matrix4x4 identity = packet.Passes[0].Draws[1].GetWorldMatrices()[0];
+        AssertVector(new Vector3(2f, 0f, 0f), Axis(identity, 0));
+        AssertVector(new Vector3(0f, 4f, 0f), Axis(identity, 1));
+        AssertVector(Vector3.UnitZ, Axis(identity, 2));
+        AssertVector(Vector3.Zero, MatrixPosition(identity));
+
+        Matrix4x4 oriented = packet.Passes[0].Draws[2].GetWorldMatrices()[0];
+        AssertVector(new Vector3(0f, 0f, -4f), Axis(oriented, 0));
+        AssertVector(new Vector3(0f, 12f, 0f), Axis(oriented, 1));
+        AssertVector(Vector3.UnitX, Axis(oriented, 2));
+        AssertVector(new Vector3(1f, 2f, -5f), MatrixPosition(oriented));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task EveryBillboardOverloadRecordsOneTexturedQuad() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect source = new(0.25f, 0.125f, 0.5f, 0.25f);
+        Transform transform = new(
+            new Vector3(1f, 2f, -5f),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitZ, 0.5f),
+            new Vector3(2f, 3f, 1f));
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawBillboard(texture, Vector3.Zero, new Vector2(2f), _color);
+            camera.DrawBillboard(texture, Vector3.Zero, new Vector2(2f), _color, faceCamera: true);
+            camera.DrawBillboard(texture, transform, new Vector2(2f), _color);
+            camera.DrawBillboard(texture, transform, new Vector2(2f), _color, faceCamera: true);
+            camera.DrawBillboard(texture, source, Vector3.Zero, new Vector2(2f), _color);
+            camera.DrawBillboard(texture, source, Vector3.Zero, new Vector2(2f), _color, faceCamera: true);
+            camera.DrawBillboard(texture, transform, source, new Vector2(2f), new Vector2(0f, 1f), _color);
+            camera.DrawBillboard(
+                texture,
+                transform,
+                source,
+                new Vector2(2f),
+                new Vector2(0f, 1f),
+                _color,
+                faceCamera: false);
+        }
+
+        harness.Host.EndFrame();
+
+        CameraPass pass = packet.Passes[0];
+        Assert.Equal(8, pass.DrawCount);
+        Vector4 fullTexture = new(0f, 0f, 1f, 1f);
+        Vector4 subRectangle = new(0.25f, 0.125f, 0.5f, 0.25f);
+        for (int index = 0; index < pass.DrawCount; index++) {
+            RenderDrawRecord record = pass.Draws[index];
+            Assert.Same(harness.Primitives.Quad.Lifetime, record.Mesh);
+            Assert.Same(harness.Primitives.MeshMaterial.Program.Lifetime, record.Program);
+            Assert.Equal(PrimitiveTopology.TriangleList, record.Topology);
+            Assert.Equal(RenderState.AlphaBlend, record.RenderState);
+            Assert.Equal(_color, record.Tint);
+            Assert.Equal(1, record.InstanceCount);
+            Assert.Same(texture, record.GetTextureBindings()[0]);
+            Assert.Equal(index < 4 ? fullTexture : subRectangle, record.UvRect);
+        }
+
+        // The shared engine material must not keep the game texture after the calls.
+        Assert.Null(harness.Primitives.MeshMaterial.TextureValues[0]);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawBillboardSourceRectIsPerInstanceDataAndStillBatches() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect leftHalf = new(0f, 0f, 0.5f, 1f);
+        Rect rightHalf = new(0.5f, 0f, 0.5f, 1f);
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawBillboard(texture, leftHalf, new Vector3(0f, 0f, -5f), new Vector2(2f), _color);
+            camera.DrawBillboard(texture, rightHalf, new Vector3(0f, 0f, -5f), new Vector2(2f), _color);
+        }
+
+        harness.Host.EndFrame();
+
+        // The UV rectangle is per-instance data, so two different source rectangles still merge into
+        // one draw and keep their own rectangle.
+        FramePlan plan = new BatchPlanner().Plan(packet);
+        Assert.Equal(1, plan.DrawCalls);
+        Assert.Equal(2, plan.Instances);
+        Assert.Equal(4, plan.Triangles);
+        PlannedBatch batch = Assert.Single(plan.Passes[0].Batches);
+        Assert.Equal(2, batch.InstanceCount);
+        Assert.Equal(new Vector4(0f, 0f, 0.5f, 1f), batch.Instances[0].Record.UvRect);
+        Assert.Equal(new Vector4(0.5f, 0f, 0.5f, 1f), batch.Instances[1].Record.UvRect);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawBillboardOriginPlacesThePivotAtTheTransformPosition() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Vector3 position = new(1f, 2f, -5f);
+        Vector2 size = new(4f, 2f);
+        Transform transform = new(position);
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawBillboard(
+                texture,
+                transform,
+                Rect.FromSize(1f, 1f),
+                size,
+                new Vector2(0f, 0f),
+                _color);
+            camera.DrawBillboard(
+                texture,
+                transform,
+                Rect.FromSize(1f, 1f),
+                size,
+                new Vector2(1f, 1f),
+                _color);
+            camera.DrawBillboard(
+                texture,
+                transform,
+                Rect.FromSize(1f, 1f),
+                size,
+                new Vector2(0.5f, 0.5f),
+                _color);
+        }
+
+        harness.Host.EndFrame();
+
+        // The engine quad is the unit square centered on the origin, so (0, 0) pins its bottom-left
+        // corner and (1, 1) pins its top-right corner to the transform position.
+        Matrix4x4 bottomLeft = packet.Passes[0].Draws[0].GetWorldMatrices()[0];
+        AssertVector(position, Vector3.Transform(new Vector3(-0.5f, -0.5f, 0f), bottomLeft));
+        AssertVector(position + new Vector3(4f, 2f, 0f), Vector3.Transform(new Vector3(0.5f, 0.5f, 0f), bottomLeft));
+
+        Matrix4x4 topRight = packet.Passes[0].Draws[1].GetWorldMatrices()[0];
+        AssertVector(position, Vector3.Transform(new Vector3(0.5f, 0.5f, 0f), topRight));
+        AssertVector(position - new Vector3(4f, 2f, 0f), Vector3.Transform(new Vector3(-0.5f, -0.5f, 0f), topRight));
+
+        Matrix4x4 center = packet.Passes[0].Draws[2].GetWorldMatrices()[0];
+        AssertVector(position, Vector3.Transform(Vector3.Zero, center));
+        AssertVector(position - new Vector3(2f, 1f, 0f), Vector3.Transform(new Vector3(-0.5f, -0.5f, 0f), center));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawBillboardTransformScaleAndRollCompose() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Vector3 position = new(1f, 2f, -5f);
+        Transform transform = new(
+            position,
+            Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2f),
+            new Vector3(2f, 3f, 4f));
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawBillboard(
+                texture,
+                transform,
+                Rect.FromSize(1f, 1f),
+                new Vector2(2f, 4f),
+                new Vector2(0.5f, 0.5f),
+                _color,
+                faceCamera: true);
+        }
+
+        harness.Host.EndFrame();
+
+        // The transform scale multiplies the width and height (2 * 2 and 4 * 3) and the 90 degree roll
+        // swaps the quad's local X and Y into the camera's up and right axes.
+        Matrix4x4 matrix = packet.Passes[0].Draws[0].GetWorldMatrices()[0];
+        AssertVector(new Vector3(0f, 4f, 0f), Axis(matrix, 0));
+        AssertVector(new Vector3(-12f, 0f, 0f), Axis(matrix, 1));
+        AssertVector(Vector3.UnitZ, Axis(matrix, 2));
+        AssertVector(position, MatrixPosition(matrix));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawBillboardFaceCameraTrueIgnoresPitchAndYawForThePlane() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Quaternion pitch = Quaternion.CreateFromAxisAngle(Vector3.UnitX, -MathF.PI / 4f);
+        Quaternion yaw = Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f);
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawBillboard(
+                texture,
+                new Transform(new Vector3(0f, 0f, -5f), pitch, Vector3.One),
+                Rect.FromSize(1f, 1f),
+                new Vector2(2f, 3f),
+                new Vector2(0.5f, 0.5f),
+                _color,
+                faceCamera: true);
+            camera.DrawBillboard(
+                texture,
+                new Transform(new Vector3(0f, 0f, -5f), yaw, Vector3.One),
+                Rect.FromSize(1f, 1f),
+                new Vector2(2f, 3f),
+                new Vector2(0.5f, 0.5f),
+                _color,
+                faceCamera: true);
+        }
+
+        harness.Host.EndFrame();
+
+        // Only the twist about the local plane normal is a roll, so a pure pitch or yaw leaves the
+        // plane facing the camera with the authored size.
+        foreach (CameraPass pass in packet.Passes) {
+            Matrix4x4 matrix = pass.Draws[0].GetWorldMatrices()[0];
+            AssertVector(new Vector3(2f, 0f, 0f), Axis(matrix, 0));
+            AssertVector(new Vector3(0f, 3f, 0f), Axis(matrix, 1));
+            AssertVector(Vector3.UnitZ, Axis(matrix, 2));
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task InvalidBillboardSourceRectanglesThrowAndRecordNothing() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        using Camera camera = harness.Host.CreatePerspectiveCamera();
+
+        Rect[] nonPositive = [
+            new(0f, 0f, 0f, 1f),
+            new(0f, 0f, 1f, 0f),
+            new(0f, 0f, -0.5f, 1f),
+            new(0f, 0f, 1f, -0.5f),
+        ];
+        foreach (Rect source in nonPositive) {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => camera.DrawBillboard(texture, source, Vector3.Zero, Vector2.One, _color));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => camera.DrawBillboard(
+                    texture,
+                    Transform.Identity,
+                    source,
+                    Vector2.One,
+                    new Vector2(0.5f),
+                    _color));
+        }
+
+        Rect[] outOfBounds = [
+            new(-0.1f, 0f, 0.5f, 1f),
+            new(0.6f, 0f, 0.5f, 1f),
+            new(0f, -0.1f, 1f, 0.5f),
+            new(0f, 0.6f, 1f, 0.5f),
+            new(0f, 0f, 1.2f, 1f),
+        ];
+        foreach (Rect source in outOfBounds) {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => camera.DrawBillboard(texture, source, Vector3.Zero, Vector2.One, _color));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => camera.DrawBillboard(
+                    texture,
+                    Transform.Identity,
+                    source,
+                    Vector2.One,
+                    new Vector2(0.5f),
+                    _color));
+        }
+
+        Rect[] nonFinite = [
+            new(float.NaN, 0f, 0.5f, 1f),
+            new(0f, float.PositiveInfinity, 0.5f, 1f),
+            new(0f, 0f, float.NaN, 1f),
+            new(0f, 0f, 0.5f, float.NegativeInfinity),
+        ];
+        foreach (Rect source in nonFinite) {
+            Assert.Throws<ArgumentException>(
+                () => camera.DrawBillboard(texture, source, Vector3.Zero, Vector2.One, _color));
+            Assert.Throws<ArgumentException>(
+                () => camera.DrawBillboard(
+                    texture,
+                    Transform.Identity,
+                    source,
+                    Vector2.One,
+                    new Vector2(0.5f),
+                    _color));
+        }
+
+        camera.Dispose();
+        harness.Host.EndFrame();
+
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task BillboardOriginTransformAndSizeValidationThrows() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect source = Rect.FromSize(1f, 1f);
+        Transform nanRotation = new() {
+            Position = Vector3.Zero,
+            Scale = Vector3.One,
+            Rotation = new Quaternion(float.NaN, 0f, 0f, 1f),
+        };
+        Transform negativeScale = new(Vector3.Zero, Quaternion.Identity, new Vector3(-1f, 1f, 1f));
+        using Camera camera = harness.Host.CreatePerspectiveCamera();
+
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                Transform.Identity,
+                source,
+                Vector2.One,
+                new Vector2(float.NaN, 0.5f),
+                _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                Transform.Identity,
+                source,
+                Vector2.One,
+                new Vector2(0.5f, float.PositiveInfinity),
+                _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                Transform.Identity,
+                source,
+                new Vector2(float.NaN, 1f),
+                new Vector2(0.5f),
+                _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                nanRotation,
+                source,
+                Vector2.One,
+                new Vector2(0.5f),
+                _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                new Transform(new Vector3(float.NaN, 0f, 0f)),
+                Vector2.One,
+                _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawBillboard(
+                texture,
+                negativeScale,
+                source,
+                Vector2.One,
+                new Vector2(0.5f),
+                _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawBillboard(
+                texture,
+                new Transform(Vector3.Zero, Quaternion.Identity, Vector3.One),
+                source,
+                new Vector2(-1f, 1f),
+                new Vector2(0.5f),
+                _color));
+
+        camera.Dispose();
+        harness.Host.EndFrame();
+
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task BillboardsWithZeroSizeOrTransformScaleRecordNothing() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect source = Rect.FromSize(1f, 1f);
+        Transform zeroX = new(Vector3.Zero, Quaternion.Identity, new Vector3(0f, 1f, 1f));
+        Transform zeroY = new(Vector3.Zero, Quaternion.Identity, new Vector3(1f, 0f, 1f));
+        Transform zeroZ = new(Vector3.Zero, Quaternion.Identity, new Vector3(1f, 1f, 0f));
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawBillboard(texture, Vector3.Zero, new Vector2(0f, 1f), _color);
+            camera.DrawBillboard(texture, Vector3.Zero, new Vector2(1f, 0f), _color, faceCamera: false);
+            camera.DrawBillboard(texture, source, Vector3.Zero, new Vector2(0f, 1f), _color);
+            camera.DrawBillboard(texture, zeroX, new Vector2(1f), _color);
+            camera.DrawBillboard(texture, zeroY, new Vector2(1f), _color, faceCamera: false);
+            camera.DrawBillboard(texture, zeroZ, new Vector2(1f), _color);
+            camera.DrawBillboard(texture, zeroZ, source, new Vector2(1f), new Vector2(0.5f), _color);
+        }
+
+        harness.Host.EndFrame();
+
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task NewBillboardOverloadsRejectNullAndDisposedTextures() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        harness.Host.BeginFrame();
+        Rect source = Rect.FromSize(1f, 1f);
+        using Camera camera = harness.Host.CreatePerspectiveCamera();
+
+        Assert.Throws<ArgumentNullException>(
+            () => camera.DrawBillboard(null!, new Vector3(0f, 0f, -5f), Vector2.One, _color));
+        Assert.Throws<ArgumentNullException>(
+            () => camera.DrawBillboard(null!, Transform.Identity, Vector2.One, _color));
+        Assert.Throws<ArgumentNullException>(
+            () => camera.DrawBillboard(
+                null!,
+                source,
+                new Vector3(0f, 0f, -5f),
+                Vector2.One,
+                _color));
+        Assert.Throws<ArgumentNullException>(
+            () => camera.DrawBillboard(
+                null!,
+                Transform.Identity,
+                source,
+                Vector2.One,
+                new Vector2(0.5f),
+                _color));
+
+        Texture disposedTexture = RenderingTestAssets.CreateTexture();
+        disposedTexture.Dispose();
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawBillboard(
+                disposedTexture,
+                source,
+                new Vector3(0f, 0f, -5f),
+                Vector2.One,
+                _color));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawBillboard(
+                disposedTexture,
+                Transform.Identity,
+                source,
+                Vector2.One,
+                new Vector2(0.5f),
+                _color));
+
+        camera.Dispose();
+        harness.Host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task ZeroExtentsRecordNothing() {
         using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
         RenderFramePacket packet = harness.Host.BeginFrame();
@@ -615,6 +1081,15 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawWireSphere(Vector3.Zero, -1f, _color));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => camera.DrawBillboard(texture, Vector3.Zero, new Vector2(-1f, 1f), _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawBillboard(texture, Transform.Identity, new Vector2(1f, -1f), _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawBillboard(
+                texture,
+                Rect.FromSize(1f, 1f),
+                Vector3.Zero,
+                new Vector2(1f, -1f),
+                _color));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => camera.DrawCube(Vector3.Zero, -1f, 1f, 1f, _color));
         Assert.Throws<ArgumentOutOfRangeException>(
@@ -723,6 +1198,27 @@ public sealed class PrimitiveDrawTests {
                 texture,
                 Vector3.Zero,
                 new Vector2(float.NaN, 1f),
+                _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                Transform.Identity,
+                Rect.FromSize(1f, 1f),
+                Vector2.One,
+                new Vector2(float.NaN, 0.5f),
+                _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                new Transform(new Vector3(0f, float.NaN, 0f)),
+                Vector2.One,
+                _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(
+                texture,
+                new Rect(0f, 0f, float.NaN, 1f),
+                Vector3.Zero,
+                Vector2.One,
                 _color));
         Assert.Throws<ArgumentException>(
             () => camera.DrawCube(Vector3.Zero, float.NaN, 1f, 1f, _color));
@@ -1858,6 +2354,8 @@ public sealed class PrimitiveDrawTests {
     public async Task TransformOverloadsValidateTheTransform() {
         using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
         RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect source = Rect.FromSize(1f, 1f);
         using Camera camera = harness.Host.CreatePerspectiveCamera();
         Transform negativeScale = new(Vector3.Zero, Quaternion.Identity, new Vector3(-1f, 1f, 1f));
         Transform nanPosition = new(new Vector3(float.NaN, 0f, 0f));
@@ -1892,6 +2390,22 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawCircle(negativeScale, 1f, _color));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => camera.DrawWireSphere(negativeScale, 1f, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawBillboard(texture, negativeScale, Vector2.One, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(texture, nanPosition, Vector2.One, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(texture, nanScale, Vector2.One, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawBillboard(texture, nanRotation, Vector2.One, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawBillboard(
+                texture,
+                negativeScale,
+                source,
+                Vector2.One,
+                new Vector2(0.5f),
+                _color));
 
         camera.Dispose();
         harness.Host.EndFrame();

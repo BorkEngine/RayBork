@@ -56,7 +56,11 @@ internal sealed class RenderDrawRecord {
     /// <summary>Gets the per-instance linear tint.</summary>
     internal Color Tint { get; private set; }
 
-    /// <summary>Gets the per-instance UV rectangle. M4 always records <c>(0, 0, 1, 1)</c>.</summary>
+    /// <summary>
+    /// Gets the normalized UV rectangle written to every instance of this draw: <c>X</c> and <c>Y</c>
+    /// are the texture-space origin and <c>Z</c> and <c>W</c> are the size. Draws that do not sample a
+    /// sub-rectangle record <c>(0, 0, 1, 1)</c>.
+    /// </summary>
     internal Vector4 UvRect { get; private set; }
 
     /// <summary>Gets the number of recorded instances.</summary>
@@ -135,6 +139,21 @@ internal sealed class RenderDrawRecord {
         textureBindings.CopyTo(_textureBindings);
         _textureCount = textureBindings.Length;
     }
+
+    /// <summary>
+    /// Sets the normalized UV rectangle written to every instance of this draw.
+    /// </summary>
+    /// <param name="uvRect">
+    /// The texture-space origin in <c>X</c> and <c>Y</c> and the size in <c>Z</c> and <c>W</c>. The
+    /// default full-texture rectangle is <c>(0, 0, 1, 1)</c>.
+    /// </param>
+    /// <remarks>
+    /// The rectangle is per-instance data, so it never splits or joins a batch. A shader that samples a
+    /// texture reads it as <c>rbInstance.UvRect</c>; the built-in mesh shader computes
+    /// <c>UvRect.xy + uv * UvRect.zw</c>. Only the billboard source-rectangle overloads set a
+    /// sub-rectangle; every other draw keeps the full-texture default.
+    /// </remarks>
+    internal void SetUvRect(Vector4 uvRect) => UvRect = uvRect;
 
     /// <summary>
     /// Ensures room for <paramref name="count"/> instances, marks them recorded, and returns the buffer
