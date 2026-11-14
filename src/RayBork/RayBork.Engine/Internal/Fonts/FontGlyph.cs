@@ -1,13 +1,14 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// One resolved glyph: its stored bounds and its font-unit, y-up outline.
+/// One resolved glyph: its bounds and its font-unit, y-up outline.
 /// </summary>
 /// <remarks>
-/// <see cref="Bounds"/> is the stored glyph-header box for a glyph with a non-empty resolved outline.
-/// <see cref="IsEmpty"/> means the resolved glyph has no non-empty outline; such a glyph has an
-/// all-zero box and <see cref="OutlinePath.Empty"/> as its outline, even when the source glyph record
-/// carries a non-zero header box. The instance is immutable and safe to read from any thread.
+/// <see cref="Bounds"/> is the stored glyph-header box for a TrueType glyph and the outward-rounded
+/// control-point hull computed from the outline for a CFF glyph. <see cref="IsEmpty"/> means the
+/// resolved glyph has no non-empty outline; such a glyph has an all-zero box and
+/// <see cref="OutlinePath.Empty"/> as its outline, even when the source glyph record carries a
+/// non-zero header box. The instance is immutable and safe to read from any thread.
 /// </remarks>
 internal readonly struct FontGlyph {
     /// <summary>Initializes a resolved glyph.</summary>

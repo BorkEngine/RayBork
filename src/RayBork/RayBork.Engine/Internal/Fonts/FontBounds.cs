@@ -1,11 +1,13 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The stored bounding box of one glyph, in font units and y-up coordinates.
+/// The bounding box of one glyph, in font units and y-up coordinates.
 /// </summary>
 /// <remarks>
-/// The values are the <c>xMin</c>, <c>yMin</c>, <c>xMax</c>, and <c>yMax</c> fields of the glyph
-/// header. A glyph without outline data has an all-zero box.
+/// For a TrueType glyph the values are the <c>xMin</c>, <c>yMin</c>, <c>xMax</c>, and <c>yMax</c>
+/// fields of the glyph header. For a CFF glyph the CFF reader computes them as the outward-rounded
+/// integer control-point hull of the resolved outline, so the box contains the whole outline. A glyph
+/// without outline data has an all-zero box.
 /// </remarks>
 internal readonly struct FontBounds {
     /// <summary>Initializes a bounds box.</summary>

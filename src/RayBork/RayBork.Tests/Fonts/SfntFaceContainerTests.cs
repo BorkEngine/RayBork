@@ -184,7 +184,10 @@ public sealed class SfntFaceContainerTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void AcceptsACffFaceStructurally() {
-        byte[] cffData = [1, 0, 4, 1, 0, 0, 0, 0];
+        SyntheticCff cff = SyntheticCff.Create();
+        cff.AddGlyph(SyntheticCffCharStrings.EndChar());
+        cff.AddGlyph(SyntheticCffCharStrings.EndChar());
+        byte[] cffData = cff.Build();
         var builder = SyntheticFontBuilder.Create();
         int glyph = builder.AddSimple(
             700,
@@ -206,8 +209,7 @@ public sealed class SfntFaceContainerTests {
         Assert.Equal(2, face.GlyphCount);
         Assert.Equal(700, face.GetAdvanceWidth(glyph));
         Assert.False(face.TryGetGlyphId(new Rune('B'), out _));
-        FontUnsupportedException cff = Assert.Throws<FontUnsupportedException>(() => face.GetGlyph(glyph));
-        Assert.Contains("CFF", cff.Reason, StringComparison.Ordinal);
+        Assert.True(face.GetGlyph(glyph).IsEmpty);
     }
 
     [Fact]
