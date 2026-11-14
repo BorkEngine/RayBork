@@ -43,8 +43,9 @@ presets instead of hand-written color constants. The screen-space `DrawTexture` 
 of M5; it moves to M7 with the orthographic sprite contract.
 `samples/PrimitiveGallery` is the M5 sample and AOT gate: it draws the M5 primitive helpers in one
 perspective pass with a runtime procedural texture, needs no asset pack, and publishes with Native
-AOT. `samples/Castle` keeps its orbitable castle scene and draws `DrawGrid` under the model.
-The suite is 1,896 tests, 93 of them GPU integration tests, and every sample builds. The Windows
+AOT. `samples/Castle` keeps its orbitable castle scene, draws `DrawGrid` under the model, and outlines
+the castle bounds and nearest surface hit under the pointer.
+The suite is 1,898 tests, 93 of them GPU integration tests, and every sample builds. The Windows
 hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
 host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
@@ -155,7 +156,7 @@ src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
 samples/PrimitiveGallery/     M5 sample and Native AOT gate (primitive gallery, no pack)
   PrimitiveGallery.slnx       sample-owned solution (single project)
-samples/Castle/               castle scene sample (orbitable model, texture, and reference grid)
+samples/Castle/               castle scene sample (orbitable model, texture, grid, and hover outline)
   Castle.slnx                 sample-owned solution (sample + assets executable)
   Castle.Assets/              JIT assets executable (bakes castle.pck at sample build time)
 samples/HelloInterop/         M1-M3 diagnostic host (window/input/time/logging/assets; no draws)

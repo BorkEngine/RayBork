@@ -104,17 +104,20 @@ RayCollision hit = Collision.GetRayMesh(
 The mesh transform is the part's `LocalTransform` alone because the draw's instance transform is
 `Transform.Identity`. The nearest hit across the parts wins, and `Camera.DrawSphere(hit.Point, 0.2f,
 Color.Red)` marks it; the radius is `0.2` world units. `Color.Cyan` separates the bounds from the
-`Color.Gray` grid and the `Color.WhiteSmoke` background.
+`Color.Gray` grid and the `Color.WhiteSmoke` background. The sample assumes the castle's parts are
+triangle meshes with invertible local transforms, the two requirements `Collision.GetRayMesh`
+enforces; it has no per-part fallback for a part that violates either assumption.
 
 `GetRayBox` is an axis-aligned box test, so it also hits empty space inside the box, such as the gap
 above the battlements or the open courtyard. The triangle cast reports no hit there, and the sample
 draws only the box. Both overlays are ordinary depth-tested draws in the same opaque pass as the
 model, so geometry in front of them occludes them.
 
-The per-frame path allocates nothing outside the camera's own draw records: the bounds are computed
-once, the box and mesh queries are allocation-free static math, and the part loop is indexed so the
-`IReadOnlyList<ModelPart>` enumerator is not allocated. The bundled pack's castle mesh carries the
-`RBVC` collision structure, so `GetRayMesh` traverses it instead of testing every triangle.
+The sample's own per-frame code does not allocate: the bounds are computed once, the box and mesh
+queries are allocation-free static math, and the part loop is indexed so the `IReadOnlyList<ModelPart>`
+enumerator is not allocated. The camera's draw helpers add the engine's draw records, and the bundled
+pack's castle mesh carries the `RBVC` collision structure, so `GetRayMesh` traverses it instead of
+testing every triangle.
 
 ## Build and run
 

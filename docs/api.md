@@ -280,13 +280,15 @@ assets executable and no pack: `Setup` builds its only texture with `CreateTextu
 sample draws the M5 primitive helpers in one perspective pass at 800x450 with orbit controls and the
 `--frames` and `--help` options. The published `win-x64` and `linux-x64` hosts run from the publish
 directory with zero AOT/trim warnings, and the publish directory contains no bake tooling. The M5
-suite is 1,896 tests, 93 of them GPU integration tests, and every sample solution builds.
+suite is 1,898 tests, 93 of them GPU integration tests, and every sample solution builds.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
 executable out of process, bakes `/models/obj/castle` and `/models/obj/castle_diffuse` into
 `castle.pck`, and copies the pack beside the sample executable, so the published hosts load it
 without a manual bake or an `--assets` argument. The model parts use the built-in mesh material, the
-pass draws the castle and `DrawGrid(20, 10f, Color.Gray)`, and the hosts exit `0`. It is not the M5
+pass draws the castle and `DrawGrid(20, 10f, Color.Gray)`, and the sample ray-casts the pointer
+against the model bounds and mesh with `Collision.GetRayBox` and `Collision.GetRayMesh`, drawing
+`Camera.DrawBoundingBox` and a small hit sphere while hovered. The hosts exit `0`. It is not the M5
 gate. The Windows hardware path, the conformant lavapipe Linux path, and the WSLg dzn hardware path
 all pass. `samples/HelloInterop` remains the M1-M3 diagnostic host; it is not the AOT gate.
 
