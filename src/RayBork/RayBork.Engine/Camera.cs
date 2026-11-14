@@ -289,7 +289,8 @@ public sealed class Camera : IDisposable {
 
         Color effectiveTint = tint ?? Color.White;
         Matrix4x4 instanceMatrix = transform.ToMatrix();
-        foreach (ModelPart part in parts) {
+        for (int index = 0; index < parts.Count; index++) {
+            ModelPart part = parts[index];
             RecordPart(
                 part,
                 part.RenderState,
@@ -348,7 +349,8 @@ public sealed class Camera : IDisposable {
 
         Color effectiveTint = tint ?? Color.White;
         Matrix4x4 instanceMatrix = transform.ToMatrix();
-        foreach (ModelPart part in parts) {
+        for (int index = 0; index < parts.Count; index++) {
+            ModelPart part = parts[index];
             RecordPart(
                 part,
                 part.RenderState,
@@ -491,7 +493,8 @@ public sealed class Camera : IDisposable {
             instanceMatrices[index] = transforms[index].ToMatrix();
         }
 
-        foreach (ModelPart part in parts) {
+        for (int partIndex = 0; partIndex < parts.Count; partIndex++) {
+            ModelPart part = parts[partIndex];
             Shader material = part.Shader;
             ReadOnlySpan<Texture?> textures = material.TextureValues;
             _packet.Retention.Add(part.Mesh.Lifetime);
@@ -3783,7 +3786,8 @@ public sealed class Camera : IDisposable {
     }
 
     private static void ValidateParts(IReadOnlyList<ModelPart> parts) {
-        foreach (ModelPart part in parts) {
+        for (int index = 0; index < parts.Count; index++) {
+            ModelPart part = parts[index];
             ValidateMesh(part.Mesh);
             ValidateShader(part.Shader);
             ValidateTextures(part.Shader.TextureValues);
