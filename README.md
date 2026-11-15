@@ -200,9 +200,6 @@ samples/PrimitiveGallery/     M5 primitive sample (was the M5 AOT gate; no pack)
 samples/Castle/               castle scene sample (orbitable model, texture, grid, and hover outline)
   Castle.slnx                 sample-owned solution (sample + assets executable)
   Castle.Assets/              JIT assets executable (bakes castle.pck at sample build time)
-samples/HelloInterop/         M1-M3 diagnostic host (window/input/time/logging/assets; no draws)
-  HelloInterop.slnx           sample-owned solution (host + assets executable)
-  HelloInterop.Assets/        JIT assets executable (bakes hello.pck at sample build time)
 samples/                      Pong, Instancing, RenderTarget (M11)
 docs/                         API reference (overview + section pages), roadmap, architecture
 .github/                      GitHub Actions CI and PR template
@@ -237,9 +234,7 @@ Use `--help` for the available options. [samples/Text/README.md](samples/Text/RE
 text scene, its layout demonstration, its Native AOT publish and run commands, and its controls;
 [samples/PrimitiveGallery/README.md](samples/PrimitiveGallery/README.md) covers the gallery scene, its
 publish commands, and its controls, and [samples/Castle/README.md](samples/Castle/README.md) covers
-the castle scene's publish commands, controls, and omitted features. `samples/HelloInterop` remains
-the M1-M3 diagnostic host for window, input, time, logging, renderer, and asset-loading metadata; its
-build also bakes `hello.pck` beside the host and mounts it automatically. Built-in shader SPIR-V is
+the castle scene's publish commands, controls, and omitted features. Built-in shader SPIR-V is
 regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; a normal build and CI use the
 committed blobs. The bake, the built-in pack generator, and the sample builds compile their GLSL with
 the pinned native shaderc package; they do not need the Vulkan SDK.
