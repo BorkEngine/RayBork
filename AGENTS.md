@@ -176,6 +176,32 @@ git diff --check
 - Shader SPIR-V is regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; CI and
   normal builds consume the committed blobs and never need `glslc`.
 
+### 4.1 Parallel build scheduling
+
+Post-task verification runs independent build groups concurrently instead of one command at a time:
+
+- **Windows:** start the engine `Debug` and `Release` builds together. After the Debug build, build
+  every sample solution concurrently. After those builds, run the Debug sample hosts concurrently.
+  Build `RayBork.Engine` once for `win-x64` Release, then publish every AOT sample concurrently with
+  `-p:BuildProjectReferences=false`; run the published hosts concurrently.
+- **WSL:** keep a persistent repository clone on the Linux filesystem at `$HOME/raybork` and sync the
+  Windows checkout with
+  `rsync -a --delete --exclude bin/ --exclude obj/ <windows-checkout>/ "$HOME/raybork/"`. Use
+  `$HOME/.dotnet/dotnet`; the default `/usr/bin/dotnet` may be an older SDK. Run the same Debug,
+  Release, sample, `linux-x64` AOT, and host-run groups in the clone. The WSL group runs concurrently
+  with the Windows group.
+- Never build the same project and configuration twice in one output tree. Sample builds require a
+  current engine build first; AOT publishes require the engine `Release` build for that RID first.
+  Pass `-p:BuildProjectReferences=false` only after that prerequisite build. Parallel sample or AOT
+  builds that rebuild a shared project reference fail with file locks (`CS2012`, SourceLink `.json`).
+- Never build the `/mnt/d` checkout from WSL, and never run Windows and WSL builds against the same
+  checkout. The WSL clone is the build tree; the Windows checkout is only the sync source.
+- Run tests, `dotnet format --verify-no-changes`, the docs check, and `git diff --check` after the
+  builds that produce their inputs. The four sample format checks are independent and run
+  concurrently. The engine format check runs after the engine build.
+- Start every independent group together (`Start-Job`/`Start-Process` on Windows, `&`/`wait` in WSL),
+  wait for all of them, and report any failed group before continuing.
+
 ## 5. Testing
 
 - xUnit v3 and Moq. Every behavior change gets a test; every bug fix gets a regression test.
