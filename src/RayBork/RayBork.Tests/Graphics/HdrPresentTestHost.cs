@@ -93,7 +93,7 @@ internal sealed class HdrPresentTestHost : IDisposable {
         int sampleCount = 4) {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason)) {
+        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
             return false;
         }
 

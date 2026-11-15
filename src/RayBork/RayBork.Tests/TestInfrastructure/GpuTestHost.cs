@@ -86,7 +86,7 @@ internal sealed class GpuTestHost : IDisposable {
         bool requestValidation = true) {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? createdHost, out skipReason)) {
+        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? createdHost, out skipReason, minimalTestMode: true)) {
             return false;
         }
 

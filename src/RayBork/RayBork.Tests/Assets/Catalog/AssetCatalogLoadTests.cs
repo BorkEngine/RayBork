@@ -400,6 +400,7 @@ public sealed class AssetCatalogLoadTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task BuiltInPackIsMountedBelowUserPacks() {
         byte[] builtIn = CatalogTestData.BuildPack(
+            PackCompressionPolicy.Release,
             ("textures/shared", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(8))),
             ("textures/shared-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
             ("textures/builtin-only", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(16))),

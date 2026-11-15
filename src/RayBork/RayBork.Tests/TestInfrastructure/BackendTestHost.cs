@@ -138,7 +138,7 @@ internal sealed class BackendTestHost : IDisposable {
         WindowHdrState? hdr = null) {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason)) {
+        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
             return false;
         }
 

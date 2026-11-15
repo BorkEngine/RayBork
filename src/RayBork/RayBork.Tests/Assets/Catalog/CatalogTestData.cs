@@ -266,9 +266,14 @@ internal static class CatalogTestData {
 
     internal static byte[] BuildStandardPack() => CreateStandardBuilder().Build();
 
-    internal static byte[] BuildPack(params (string Path, AssetEntryType Type, byte[] Payload)[] entries) {
+    internal static byte[] BuildPack(params (string Path, AssetEntryType Type, byte[] Payload)[] entries)
+        => BuildPack(PackCompressionPolicy.Debug, entries);
+
+    internal static byte[] BuildPack(
+        PackCompressionPolicy policy,
+        params (string Path, AssetEntryType Type, byte[] Payload)[] entries) {
         // See CreateStandardBuilder: these fixtures exercise catalog semantics, not compression.
-        var builder = new PackBuilder("test.pck", PackCompressionPolicy.Debug);
+        var builder = new PackBuilder("test.pck", policy);
         foreach ((string path, AssetEntryType type, byte[] payload) in entries) {
             builder.Add(path, type, payload);
         }

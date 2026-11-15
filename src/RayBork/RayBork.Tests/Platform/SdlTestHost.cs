@@ -6,8 +6,10 @@ namespace RayBork.Tests;
 /// <summary>
 /// Owns one SDL platform for one test. <see cref="Create"/> initializes the dummy video driver;
 /// <see cref="CreateVulkan"/> uses the real video driver because the dummy driver cannot create a
-/// Vulkan window. The video driver hint is process global; <see cref="SdlPlatform"/> serializes hint
-/// changes, initialization, and disposal across parallel test classes.
+/// Vulkan window. The video driver hint is process global; <see cref="SdlPlatform"/> applies the
+/// hint and initializes under one process gate, and serializes disposal across parallel test
+/// classes. Dummy-driver hosts still belong to the non-parallel <c>SDL</c> collection so they never
+/// overlap a real-driver GPU window.
 /// </summary>
 internal sealed class SdlTestHost : IDisposable {
     private const string DUMMY_VIDEO_DRIVER = "dummy";
@@ -26,17 +28,30 @@ internal sealed class SdlTestHost : IDisposable {
 
     internal SdlWindow Window => (SdlWindow)Platform.Window;
 
-    internal static SdlTestHost Create(Action? onExitRequested = null, WindowState windowState = WindowState.Normal) {
-        SdlPlatform.SetVideoDriverHint(DUMMY_VIDEO_DRIVER);
-        return CreateHost(onExitRequested, windowState, enableVulkan: false);
+    internal static SdlTestHost Create(
+        Action? onExitRequested = null,
+        WindowState windowState = WindowState.Normal,
+        bool initializeGamepads = false) {
+        return CreateHost(
+            onExitRequested,
+            windowState,
+            enableVulkan: false,
+            videoDriverHint: DUMMY_VIDEO_DRIVER,
+            initializeGamepads,
+            minimalTestMode: false);
     }
 
     /// <summary>
     /// Creates a platform on the real video driver with a Vulkan-capable window. The window starts
     /// hidden, and the test is skipped when the host has no video device or Vulkan loader.
     /// </summary>
-    internal static SdlTestHost CreateVulkan(Action? onExitRequested = null) {
-        if (!TryCreateVulkan(out SdlTestHost? host, out string skipReason, onExitRequested)) {
+    /// <param name="onExitRequested">Invoked when the platform requests a graceful exit.</param>
+    /// <param name="minimalTestMode">
+    /// Whether to skip monitor, text-input, and HDR refresh work. GPU hosts pass <see langword="true"/>;
+    /// unit tests that inspect window HDR state must keep the full behavior.
+    /// </param>
+    internal static SdlTestHost CreateVulkan(Action? onExitRequested = null, bool minimalTestMode = false) {
+        if (!TryCreateVulkan(out SdlTestHost? host, out string skipReason, onExitRequested, minimalTestMode)) {
             Assert.Skip(skipReason);
         }
 
@@ -49,17 +64,40 @@ internal sealed class SdlTestHost : IDisposable {
     /// <param name="host">The created host, or <see langword="null"/> when the host is unavailable.</param>
     /// <param name="skipReason">A specific reason when <paramref name="host"/> is <see langword="null"/>.</param>
     /// <param name="onExitRequested">Invoked when the platform requests a graceful exit.</param>
+    /// <param name="minimalTestMode">Whether to skip monitor, text-input, and HDR refresh work.</param>
     /// <returns><see langword="true"/> when the host was created.</returns>
     internal static bool TryCreateVulkan(
         out SdlTestHost? host,
         out string skipReason,
-        Action? onExitRequested = null) {
-        SdlPlatform.SetVideoDriverHint(null);
-        return TryCreateHost(onExitRequested, WindowState.Hidden, enableVulkan: true, out host, out skipReason);
+        Action? onExitRequested = null,
+        bool minimalTestMode = false) {
+        return TryCreateHost(
+            onExitRequested,
+            WindowState.Hidden,
+            enableVulkan: true,
+            videoDriverHint: null,
+            initializeGamepads: false,
+            minimalTestMode,
+            out host,
+            out skipReason);
     }
 
-    private static SdlTestHost CreateHost(Action? onExitRequested, WindowState windowState, bool enableVulkan) {
-        if (!TryCreateHost(onExitRequested, windowState, enableVulkan, out SdlTestHost? host, out string skipReason)) {
+    private static SdlTestHost CreateHost(
+        Action? onExitRequested,
+        WindowState windowState,
+        bool enableVulkan,
+        string? videoDriverHint,
+        bool initializeGamepads,
+        bool minimalTestMode) {
+        if (!TryCreateHost(
+            onExitRequested,
+            windowState,
+            enableVulkan,
+            videoDriverHint,
+            initializeGamepads,
+            minimalTestMode,
+            out SdlTestHost? host,
+            out string skipReason)) {
             Assert.Skip(skipReason);
         }
 
@@ -70,11 +108,14 @@ internal sealed class SdlTestHost : IDisposable {
         Action? onExitRequested,
         WindowState windowState,
         bool enableVulkan,
+        string? videoDriverHint,
+        bool initializeGamepads,
+        bool minimalTestMode,
         out SdlTestHost? host,
         out string skipReason) {
         host = null;
         skipReason = string.Empty;
-        SdlPlatform platform = new(NullLoggerFactory.Instance, initializeGamepads: false, minimalTestMode: enableVulkan);
+        SdlPlatform platform = new(NullLoggerFactory.Instance, initializeGamepads, minimalTestMode);
         try {
             platform.Initialize(
                 new PlatformOptions {
@@ -85,10 +126,9 @@ internal sealed class SdlTestHost : IDisposable {
                     WindowState = windowState,
                     EnableVulkan = enableVulkan,
                 },
-                onExitRequested ?? (() => { }));
+                onExitRequested ?? (() => { }),
+                videoDriverHint);
         } catch (Exception ex) when (ex is PlatformException or WindowException) {
-            platform.Dispose();
-            SdlPlatform.SetVideoDriverHint(null);
             string driver = enableVulkan ? "Vulkan video driver initialization" : "SDL dummy video driver initialization";
             skipReason = $"{driver} failed: {ex.Message}";
             return false;
@@ -105,6 +145,5 @@ internal sealed class SdlTestHost : IDisposable {
 
         _disposed = true;
         Platform.Dispose();
-        SdlPlatform.SetVideoDriverHint(null);
     }
 }

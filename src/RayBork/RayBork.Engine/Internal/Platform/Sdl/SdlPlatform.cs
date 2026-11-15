@@ -5,11 +5,18 @@ using SDL3;
 namespace RayBork.Internal;
 
 /// <summary>
-/// The SDL3 platform backend. <see cref="Initialize"/>, <see cref="Pump"/>, and window command
+/// The SDL3 platform backend. <see cref="Initialize(PlatformOptions, Action)"/>, <see cref="Pump"/>, and window command
 /// application run on the process main thread; <see cref="CaptureInput"/> runs on the tick thread.
 /// Vibration calls run on the tick thread and only enqueue work for the main thread, so SDL is never
 /// touched from the tick thread.
 /// </summary>
+/// <remarks>
+/// SDL's video subsystem, event queue, video-driver hint, and Vulkan loader are process global.
+/// Initialization, disposal, pumping, and Vulkan surface calls are serialized by a process-wide
+/// gate, and the SDL and Vulkan-loader lifetimes are reference counted. Production creates one
+/// platform on the process main thread; the test host creates independent platforms on test threads
+/// and routes window-scoped events back to the owning platform.
+/// </remarks>
 internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     private const double GAMEPAD_POLL_SECONDS = 0.25;
     private const string SDL_VIDEO_DRIVER_HINT = "SDL_VIDEO_DRIVER";
@@ -52,8 +59,8 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     // A test host creates one platform per test, so initialization and every SDL call that touches
     // process state are serialized and the SDL/Vulkan lifetimes are reference counted. Production
     // creates one platform, so these gates are uncontended there.
-    private static readonly Lock _sdlGate = new();
     private static readonly Lock _videoGate = new();
+    private static readonly Dictionary<uint, SdlPlatform> _windowOwners = [];
     private static int _sdlUsers;
     private static int _vulkanUsers;
 
@@ -74,6 +81,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     private WindowHdrState _windowHdrState = WindowHdrState.Sdr;
     private long _lastGamepadPollTimestamp;
     private bool _sdlInitialized;
+    private bool _videoDriverHintSet;
     private bool _textInputStarted;
     private bool _vulkanEnabled;
     private bool _vulkanLoaderLoaded;
@@ -114,24 +122,44 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         }
     }
 
+    /// <inheritdoc />
+    public void Initialize(PlatformOptions options, Action onExitRequested)
+        => Initialize(options, onExitRequested, videoDriverHint: null);
+
     /// <summary>
-    /// Sets or clears the process-global SDL video-driver hint under the platform video gate.
+    /// Initializes the test host with an optional process-global video-driver hint. The hint is set
+    /// and the platform initialized under one gate so no other platform can observe a half-applied
+    /// hint. A failed initialization disposes the partial platform and releases the SDL refcount.
     /// </summary>
-    /// <param name="driver">The driver name, or <see langword="null"/> to clear the hint.</param>
-    internal static void SetVideoDriverHint(string? driver) {
+    /// <param name="options">The platform options.</param>
+    /// <param name="onExitRequested">Invoked when the platform requests a graceful exit.</param>
+    /// <param name="videoDriverHint">The SDL video driver, or <see langword="null"/> for the default.</param>
+    internal void Initialize(PlatformOptions options, Action onExitRequested, string? videoDriverHint) {
+        ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(onExitRequested);
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_initialized) {
+            throw new InvalidOperationException("The platform has already been initialized.");
+        }
+
         lock (_videoGate) {
-            if (driver is null) {
-                SDL.ResetHint(SDL_VIDEO_DRIVER_HINT);
-            } else {
-                SDL.SetHint(SDL_VIDEO_DRIVER_HINT, driver);
+            ApplyVideoDriverHint(videoDriverHint);
+            try {
+                InitializeCore(options, onExitRequested);
+            } catch {
+                DisposeCore();
+                throw;
             }
         }
     }
 
-    /// <inheritdoc />
-    public void Initialize(PlatformOptions options, Action onExitRequested) {
-        lock (_videoGate) {
-            InitializeCore(options, onExitRequested);
+    private void ApplyVideoDriverHint(string? videoDriverHint) {
+        if (videoDriverHint is null) {
+            SDL.ResetHint(SDL_VIDEO_DRIVER_HINT);
+            _videoDriverHintSet = false;
+        } else {
+            SDL.SetHint(SDL_VIDEO_DRIVER_HINT, videoDriverHint);
+            _videoDriverHintSet = true;
         }
     }
 
@@ -148,19 +176,18 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
             initFlags |= SDL.InitFlags.Gamepad;
         }
 
-        lock (_sdlGate) {
-            if (_sdlUsers == 0) {
-                if (!SDL.Init(initFlags)) {
-                    throw new PlatformException(
-                        $"SDL initialization failed: {SDL.GetError()}",
-                        DiagnosticCodes.PLATFORM_INITIALIZATION_FAILED,
-                        null);
-                }
+        // The caller holds _videoGate; the process-wide counters are protected by it.
+        if (_sdlUsers == 0) {
+            if (!SDL.Init(initFlags)) {
+                throw new PlatformException(
+                    $"SDL initialization failed: {SDL.GetError()}",
+                    DiagnosticCodes.PLATFORM_INITIALIZATION_FAILED,
+                    null);
             }
-
-            _sdlUsers++;
-            _sdlInitialized = true;
         }
+
+        _sdlUsers++;
+        _sdlInitialized = true;
 
         _vulkanEnabled = options.EnableVulkan;
         SDL.WindowFlags windowFlags = 0;
@@ -188,6 +215,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         }
 
         _window = new SdlWindow(_windowHandle, _monitors, _windowLogger, options.Title, options.Width, options.Height, onExitRequested);
+        _windowOwners[_window.WindowId] = this;
         _textInputStarted = !_minimalTestMode && SDL.StartTextInput(_windowHandle);
         if (!_minimalTestMode && !_textInputStarted) {
             _windowLogger.LogWarning("SDL failed to start text input: {Error}", SDL.GetError());
@@ -293,20 +321,18 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         }
 
         if (!_vulkanLoaderLoaded) {
-            lock (_sdlGate) {
-                if (_vulkanUsers == 0) {
-                    // SDL treats a null path as "load the platform default Vulkan loader".
-                    if (!SDL.VulkanLoadLibrary(null!)) {
-                        throw new PlatformException(
-                            $"SDL failed to load the Vulkan loader: {SDL.GetError()}",
-                            DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
-                            null);
-                    }
+            // The caller holds _videoGate; _vulkanUsers is protected by it.
+            if (_vulkanUsers == 0) {
+                // SDL treats a null path as "load the platform default Vulkan loader".
+                if (!SDL.VulkanLoadLibrary(null!)) {
+                    throw new PlatformException(
+                        $"SDL failed to load the Vulkan loader: {SDL.GetError()}",
+                        DiagnosticCodes.VULKAN_SURFACE_CREATION_FAILED,
+                        null);
                 }
-
-                _vulkanUsers++;
             }
 
+            _vulkanUsers++;
             _vulkanLoaderLoaded = true;
         }
 
@@ -408,6 +434,10 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         _initialized = false;
         try {
             CloseGamepads();
+            if (_window is not null) {
+                _windowOwners.Remove(_window.WindowId);
+            }
+
             if (_windowHandle != IntPtr.Zero) {
                 if (_textInputStarted) {
                     SDL.StopTextInput(_windowHandle);
@@ -424,13 +454,17 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
 
             _vulkanSurfaces.Clear();
         } finally {
+            if (_videoDriverHintSet) {
+                SDL.ResetHint(SDL_VIDEO_DRIVER_HINT);
+                _videoDriverHintSet = false;
+            }
+
             if (_sdlInitialized) {
                 if (_vulkanLoaderLoaded) {
-                    lock (_sdlGate) {
-                        _vulkanUsers--;
-                        if (_vulkanUsers == 0) {
-                            SDL.VulkanUnloadLibrary();
-                        }
+                    // The caller holds _videoGate; _vulkanUsers is protected by it.
+                    _vulkanUsers--;
+                    if (_vulkanUsers == 0) {
+                        SDL.VulkanUnloadLibrary();
                     }
 
                     _vulkanLoaderLoaded = false;
@@ -443,11 +477,10 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     }
 
     private static void ReleaseSdl() {
-        lock (_sdlGate) {
-            _sdlUsers--;
-            if (_sdlUsers == 0) {
-                SDL.Quit();
-            }
+        // The caller holds _videoGate.
+        _sdlUsers--;
+        if (_sdlUsers == 0) {
+            SDL.Quit();
         }
     }
 
@@ -460,6 +493,17 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
 
     private void HandleEvent(in SDL.Event sdlEvent) {
         SDL.EventType type = (SDL.EventType)sdlEvent.Type;
+        if (IsWindowScopedEvent(type)) {
+            uint eventWindowId = GetEventWindowId(sdlEvent, type);
+            if (eventWindowId != 0 && eventWindowId != _window!.WindowId) {
+                if (_windowOwners.TryGetValue(eventWindowId, out SdlPlatform? owner)) {
+                    owner.HandleEvent(sdlEvent);
+                }
+
+                return;
+            }
+        }
+
         switch (type) {
             case SDL.EventType.WindowResized:
             case SDL.EventType.WindowPixelSizeChanged:
@@ -515,6 +559,42 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
                 break;
         }
     }
+
+    private static bool IsWindowScopedEvent(SDL.EventType type) => type switch {
+        SDL.EventType.KeyDown
+            or SDL.EventType.KeyUp
+            or SDL.EventType.TextInput
+            or SDL.EventType.MouseMotion
+            or SDL.EventType.MouseButtonDown
+            or SDL.EventType.MouseButtonUp
+            or SDL.EventType.MouseWheel => true,
+        SDL.EventType.WindowResized
+            or SDL.EventType.WindowPixelSizeChanged
+            or SDL.EventType.WindowMoved
+            or SDL.EventType.WindowDisplayChanged
+            or SDL.EventType.WindowDisplayScaleChanged
+            or SDL.EventType.WindowHDRStateChanged
+            or SDL.EventType.WindowMinimized
+            or SDL.EventType.WindowMaximized
+            or SDL.EventType.WindowRestored
+            or SDL.EventType.WindowShown
+            or SDL.EventType.WindowHidden
+            or SDL.EventType.WindowEnterFullscreen
+            or SDL.EventType.WindowLeaveFullscreen
+            or SDL.EventType.WindowFocusGained
+            or SDL.EventType.WindowFocusLost
+            or SDL.EventType.WindowCloseRequested => true,
+        _ => false,
+    };
+
+    private static uint GetEventWindowId(in SDL.Event sdlEvent, SDL.EventType type) => type switch {
+        SDL.EventType.KeyDown or SDL.EventType.KeyUp => sdlEvent.Key.WindowID,
+        SDL.EventType.TextInput => sdlEvent.Text.WindowID,
+        SDL.EventType.MouseMotion => sdlEvent.Motion.WindowID,
+        SDL.EventType.MouseButtonDown or SDL.EventType.MouseButtonUp => sdlEvent.Button.WindowID,
+        SDL.EventType.MouseWheel => sdlEvent.Wheel.WindowID,
+        _ => sdlEvent.Window.WindowID,
+    };
 
     private void RefreshWindowHdrState() {
         uint properties = SDL.GetWindowProperties(_windowHandle);

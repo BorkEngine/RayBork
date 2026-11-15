@@ -15,7 +15,7 @@ public sealed class SdlPlatformTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void InitializeCreatesWindowMonitorsAndInput() {
-        using SdlTestHost host = SdlTestHost.Create();
+        using SdlTestHost host = SdlTestHost.Create(initializeGamepads: true);
         IWindow window = host.Platform.Window;
 
         Assert.Equal(320, window.Width);
@@ -115,25 +115,38 @@ public sealed class SdlPlatformTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WindowCloseEventInvokesTheExitCallback() {
-        int exitRequests = 0;
-        using SdlTestHost host = SdlTestHost.Create(() => exitRequests++);
-        SdlWindow window = host.Window;
+    public void WindowCloseEventIsRoutedToItsOwningWindow() {
+        int firstExitRequests = 0;
+        int secondExitRequests = 0;
+        using SdlTestHost first = SdlTestHost.Create(() => firstExitRequests++);
+        using SdlTestHost second = SdlTestHost.Create(() => secondExitRequests++);
 
-        SDL.Event closeEvent = new() {
-            Type = (uint)SDL.EventType.WindowCloseRequested,
-            Window = new SDL.WindowEvent {
-                Type = SDL.EventType.WindowCloseRequested,
-                WindowID = window.WindowId,
-            },
-        };
-        Assert.True(SDL.PushEvent(ref closeEvent));
+        SDL.Event secondClose = CloseEvent(second.Window.WindowId);
+        Assert.True(SDL.PushEvent(ref secondClose));
+        first.Platform.Pump(TimeSpan.Zero);
 
-        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(first.Window.CloseRequested);
+        Assert.Equal(0, firstExitRequests);
+        Assert.True(second.Window.CloseRequested);
+        Assert.Equal(1, secondExitRequests);
 
-        Assert.True(window.CloseRequested);
-        Assert.Equal(1, exitRequests);
+        SDL.Event firstClose = CloseEvent(first.Window.WindowId);
+        Assert.True(SDL.PushEvent(ref firstClose));
+        first.Platform.Pump(TimeSpan.Zero);
+
+        Assert.True(first.Window.CloseRequested);
+        Assert.Equal(1, firstExitRequests);
     }
+
+    // This class is in the non-parallel SDL collection, so pushing directly into the process event
+    // queue cannot race a GPU test's pump.
+    private static SDL.Event CloseEvent(uint windowId) => new() {
+        Type = (uint)SDL.EventType.WindowCloseRequested,
+        Window = new SDL.WindowEvent {
+            Type = SDL.EventType.WindowCloseRequested,
+            WindowID = windowId,
+        },
+    };
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
@@ -444,12 +457,19 @@ public sealed class SdlPlatformTests {
         Task<SdlTestHost> firstTask = Task.Run(() => SdlTestHost.Create());
         Task<SdlTestHost> secondTask = Task.Run(() => SdlTestHost.Create());
 
-        using SdlTestHost first = await firstTask;
-        using SdlTestHost second = await secondTask;
+        SdlTestHost? first = null;
+        SdlTestHost? second = null;
+        try {
+            first = await firstTask;
+            second = await secondTask;
 
-        Assert.NotEqual(first.Window.WindowId, second.Window.WindowId);
-        first.Platform.Pump(TimeSpan.Zero);
-        second.Platform.Pump(TimeSpan.Zero);
+            Assert.NotEqual(first.Window.WindowId, second.Window.WindowId);
+            first.Platform.Pump(TimeSpan.Zero);
+            second.Platform.Pump(TimeSpan.Zero);
+        } finally {
+            first?.Dispose();
+            second?.Dispose();
+        }
     }
 
     [Fact]
