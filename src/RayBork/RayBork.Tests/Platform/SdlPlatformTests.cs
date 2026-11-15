@@ -169,8 +169,12 @@ public sealed class SdlPlatformTests {
         Assert.False(first.Platform.CaptureInput().IsKeyDown(Key.W));
         Assert.True(second.Platform.CaptureInput().IsKeyDown(Key.W));
         Assert.Equal(0f, first.Platform.CaptureInput().MousePosition.X);
-        Assert.Equal(10f, second.Platform.CaptureInput().MousePosition.X);
-        Assert.Equal(20f, second.Platform.CaptureInput().MousePosition.Y);
+        // The routed position is scaled to render pixels, so derive the expected value from the
+        // window instead of hard-coding it; a high-density test display would use a different ratio.
+        float pixelScaleX = second.Window.RenderWidth / (float)second.Window.Width;
+        float pixelScaleY = second.Window.RenderHeight / (float)second.Window.Height;
+        Assert.Equal(10f * pixelScaleX, second.Platform.CaptureInput().MousePosition.X);
+        Assert.Equal(20f * pixelScaleY, second.Platform.CaptureInput().MousePosition.Y);
 
         SDL.Event unknownClose = CloseEvent(uint.MaxValue);
         Assert.True(SDL.PushEvent(ref unknownClose));

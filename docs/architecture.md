@@ -165,8 +165,8 @@ The implementation:
   gamepads. It runs those operations on the process main thread.
 - The window is created with `SDL_WINDOW_HIGH_PIXEL_DENSITY`. The renderer sizes the swapchain from
   `RenderWidth`/`RenderHeight`, so a high-density display renders at its physical pixel size.
-  `Width`/`Height` and mouse positions stay in window coordinates; camera and viewport APIs take
-  render pixels.
+  `Width`/`Height` stay in window coordinates; `Input.MousePosition`/`Input.MouseDelta` and camera
+  and viewport APIs use render pixels.
 - When `PlatformOptions.EnableVulkan` is set, the window is created with SDL's Vulkan flag.
   `GetVulkanInstanceExtensions` returns the de-duplicated, ordinal-sorted extension names SDL
   requires and fails with `PlatformException` `RB2003` when SDL reports none or omits
@@ -191,12 +191,12 @@ The implementation:
 - `SdlInput` writes keyboard, mouse, text, and gamepad events into `InputState` under a `Lock`.
   SDL reports mouse position and relative motion in window coordinates, so `SdlInput` scales both
   axes by the window snapshot's `RenderWidth / Width` and `RenderHeight / Height` ratios at
-  ingestion; a non-positive window extent or a non-finite ratio falls back to `1`. The public
-  `Input.MousePosition` and `Input.MouseDelta` are therefore render pixels, the units
-  `Camera.ScreenToWorldRay` and `Camera.WorldToScreen` use. `CaptureInput` runs on the tick thread,
-  clones the level and edge arrays, and clears the per-tick text, mouse delta, wheel, and edge sets in
-  the same critical section. A gamepad handle is stable per SDL instance id; `Input.Gamepads` contains
-  the pads connected for the current tick.
+  ingestion; a non-positive window or render extent, or a non-finite/non-positive ratio, falls back
+  to `1`. The public `Input.MousePosition` and `Input.MouseDelta` are therefore render pixels, the
+  units `Camera.ScreenToWorldRay` and `Camera.WorldToScreen` use. `CaptureInput` runs on the tick
+  thread, clones the level and edge arrays, and clears the per-tick text, mouse delta, wheel, and edge
+  sets in the same critical section. A gamepad handle is stable per SDL instance id; `Input.Gamepads`
+  contains the pads connected for the current tick.
 - Gamepad hotplug is reconciled on SDL gamepad-added/removed events and polled every 0.25 seconds.
   Buttons, sticks, and triggers are seeded from the initial device poll; vibration requests are
   queued to the main thread, so the tick thread never calls SDL directly.

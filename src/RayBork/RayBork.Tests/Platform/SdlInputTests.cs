@@ -12,7 +12,7 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void KeyEventsTranslateDownRepeatAndUp() {
-        SdlInput input = new(new TestGamepadVibrationSink());
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
 
         input.HandleEvent(KeyboardEvent(SDL.Scancode.W, down: true, repeat: false));
         IInput pressed = input.Capture();
@@ -34,7 +34,7 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void TextInputEventsAppendUtf16InOrder() {
-        SdlInput input = new(new TestGamepadVibrationSink());
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         IntPtr first = Marshal.StringToCoTaskMemUTF8("hé");
         IntPtr second = Marshal.StringToCoTaskMemUTF8("llo");
         try {
@@ -51,18 +51,9 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void MouseEventsTranslatePositionDeltaButtonsAndWheel() {
-        SdlInput input = new(new TestGamepadVibrationSink());
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
 
-        input.HandleEvent(new SDL.Event {
-            Type = (uint)SDL.EventType.MouseMotion,
-            Motion = new SDL.MouseMotionEvent {
-                Type = SDL.EventType.MouseMotion,
-                X = 10f,
-                Y = 20f,
-                XRel = 1.5f,
-                YRel = -2.5f,
-            },
-        });
+        input.HandleEvent(MouseMotionEvent(10f, 20f, 1.5f, -2.5f));
         input.HandleEvent(MouseButtonEvent(1, down: true));
         input.HandleEvent(MouseButtonEvent(3, down: true));
         input.HandleEvent(new SDL.Event {
@@ -86,25 +77,13 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void MouseMotionScalesPositionAndDeltaToRenderPixels() {
-        SdlInput input = new(new TestGamepadVibrationSink(), () => new Vector2(1.5f, 2f));
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => new Vector2(1.5f, 2f));
 
         input.HandleEvent(MouseMotionEvent(10f, 20f, 1.5f, -2.5f));
 
         IInput snapshot = input.Capture();
         Assert.Equal(new Vector2(15f, 40f), snapshot.MousePosition);
         Assert.Equal(new Vector2(2.25f, -5f), snapshot.MouseDelta);
-    }
-
-    [Fact]
-    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MouseMotionWithIdentityPixelScaleKeepsWindowValues() {
-        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
-
-        input.HandleEvent(MouseMotionEvent(10f, 20f, 1.5f, -2.5f));
-
-        IInput snapshot = input.Capture();
-        Assert.Equal(new Vector2(10f, 20f), snapshot.MousePosition);
-        Assert.Equal(new Vector2(1.5f, -2.5f), snapshot.MouseDelta);
     }
 
     [Theory]
@@ -124,7 +103,11 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void PixelScaleUsesEachAxisRatioWithoutRounding() {
-        Vector2 scale = SdlInput.ComputePixelScale(renderWidth: 1200f, renderHeight: 800f, width: 800f, height: 600f);
+        Vector2 scale = SdlInput.ComputePixelScale(
+            renderWidth: 1200f,
+            renderHeight: 800f,
+            windowWidth: 800f,
+            windowHeight: 600f);
 
         Assert.Equal(1.5f, scale.X);
         Assert.Equal(4f / 3f, scale.Y);
@@ -132,8 +115,20 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PixelScaleFallsBackPerAxis() {
+        Vector2 scale = SdlInput.ComputePixelScale(
+            renderWidth: 1600f,
+            renderHeight: 0f,
+            windowWidth: 800f,
+            windowHeight: 600f);
+
+        Assert.Equal(new Vector2(2f, 1f), scale);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void UnsupportedMouseButtonsAreIgnored() {
-        SdlInput input = new(new TestGamepadVibrationSink());
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
 
         input.HandleEvent(MouseButtonEvent(6, down: true));
         input.HandleEvent(MouseButtonEvent(0, down: true));
@@ -146,7 +141,7 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void GamepadButtonAndAxisEventsTranslateToTheRawState() {
-        SdlInput input = new(new TestGamepadVibrationSink());
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         input.State.ConnectGamepad(
             GAMEPAD_INSTANCE_ID,
             "Pad",
@@ -172,7 +167,7 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void UnsupportedGamepadButtonsAreIgnored() {
-        SdlInput input = new(new TestGamepadVibrationSink());
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         input.State.ConnectGamepad(
             GAMEPAD_INSTANCE_ID,
             "Pad",
@@ -189,7 +184,7 @@ public sealed class SdlInputTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void CaptureClearsEdgesButKeepsLevels() {
-        SdlInput input = new(new TestGamepadVibrationSink());
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         input.HandleEvent(KeyboardEvent(SDL.Scancode.Space, down: true, repeat: false));
         input.HandleEvent(MouseButtonEvent(1, down: true));
 

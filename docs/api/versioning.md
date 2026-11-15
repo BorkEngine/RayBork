@@ -135,10 +135,14 @@ directly. Remove any `RenderWidth / Width` conversion and any other window-to-re
 mouse code; on a 1x display `Width` and `RenderWidth` are equal, so such a game sees no change there,
 while on a scaled display its pointer would otherwise be scaled twice. `MouseWheel`, the mouse
 buttons, `Window.Width`/`Height`, `Window.SetSize`, and `Window.Bounds` keep their existing values and
-units. A game that kept mouse positions in window coordinates must convert them
-with `RenderWidth / Width` (or `RenderHeight / Height`) before comparing them with window sizes. This
-is a 0.x preview change and this paragraph is its migration note; after 1.0 the same change would
-need the obsolete/migration cycle above.
+units. A game that kept other state in window coordinates converts a mouse position back with
+`position * (Window.Width / (float)Window.RenderWidth)` (equivalently
+`position / (RenderWidth / Width)`, and the same for Y) before comparing it with window sizes or
+coordinates; that conversion is only for window-space comparisons. Drag and look sensitivity
+expressed per render pixel, such as an `ORBIT_DEGREES_PER_PIXEL` constant, now scales with the pixel
+ratio too: re-check it and divide the rotation by the ratio where scale-independent sensitivity is
+wanted. This is a 0.x preview change and this paragraph is its migration note; after 1.0 the same
+change would need the obsolete/migration cycle above.
 
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a
