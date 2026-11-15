@@ -17,6 +17,9 @@ internal sealed class CastleGame : IGame {
     private const float ZOOM_PER_WHEEL_STEP = 1.15f;
     private const float MIN_DISTANCE = 5f;
     private const float MAX_DISTANCE = 500f;
+    // The orthographic far plane must stay beyond the maximum orbit distance plus the scene, so it
+    // scales with the zoom range instead of pinning a distance the controls could outgrow.
+    private const float ORTHO_FAR = MAX_DISTANCE * 2f;
     private const float MAX_PITCH_DEGREES = 89f;
     private const int GRID_SLICES = 20;
     private const float GRID_SPACING = 10f;
@@ -121,7 +124,7 @@ internal sealed class CastleGame : IGame {
             clearMode: ClearMode.ColorAndDepth,
             clearColor: Color.WhiteSmoke,
             near: NEAR_PLANE,
-            far: orthographic ? 1000f : float.PositiveInfinity);
+            far: orthographic ? ORTHO_FAR : float.PositiveInfinity);
 
         camera.DrawModel(_model!, Transform.Identity, Color.White);
 
@@ -180,23 +183,24 @@ internal sealed class CastleGame : IGame {
     }
 
     /// <summary>
-    /// Draws the presented-FPS, tick-rate, render-time, draw-call, instance, and projection line at
-    /// the top-left of the view.
+    /// Draws the presented-FPS, tick-rate, render-time, draw-call, and instance statistics and the
+    /// current projection at the top-left of the view.
     /// </summary>
     /// <remarks>
-    /// The line is same-pass, screen-aligned text: it is drawn on a plane
+    /// The text is same-pass, screen-aligned text: it is drawn on a plane
     /// <see cref="OVERLAY_DISTANCE"/> world unit in front of the camera. It is alpha-blended and
     /// writes no depth, so geometry closer than that plane can still occlude it.
     /// </remarks>
     private void DrawStatusOverlay(Camera camera, EngineContext context) {
         // The returned transform's scale is world units per render pixel, so an em height of 18 local
         // units stays 18 render pixels in both projections. The built-in mono face keeps the changing
-        // counters from shifting the text around them.
+        // counters from shifting the text around them. The projection gets its own line so it stays
+        // visible when the statistics line runs past the right edge.
         Transform overlay = camera.ScreenToWorldTransform(
             new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
             OVERLAY_DISTANCE);
         string projectionName = _projection == CameraProjection.Perspective ? "perspective" : "ortho";
-        string statusText = $"{_overlay.Build(context)}   projection {projectionName}";
+        string statusText = $"{_overlay.Build(context)}\nprojection {projectionName}";
 
         camera.DrawText(
             context.Defaults.DefaultMonoFont,
