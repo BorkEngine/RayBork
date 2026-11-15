@@ -13,10 +13,9 @@ namespace RayBork.Tests;
 /// builds sealed <see cref="RenderFramePacket"/> values with the internal packet recording API, and
 /// submits them through <see cref="Vulkan12Backend"/>. Assertions use validation-layer cleanliness,
 /// render statistics, and single-pixel readback with explicit tolerances; there are no golden images
-/// and no sleeps. The tests join the serialized <c>SDL</c> collection because SDL and Vulkan
-/// initialization are process global.
+/// and no sleeps. GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the
+/// process-global SDL and Vulkan loader setup.
 /// </remarks>
-[Collection("SDL")]
 public sealed class VulkanDrawTests {
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private const float COLOR_TOLERANCE = 2e-3f;

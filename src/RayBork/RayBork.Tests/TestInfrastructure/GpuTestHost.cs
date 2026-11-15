@@ -11,8 +11,8 @@ namespace RayBork.Tests;
 /// <see cref="TryCreate"/> reports only environmental unavailability as a skip reason: SDL cannot
 /// initialize a Vulkan window, the Vulkan loader is missing, or the loader reports no physical
 /// device. A programming or capability failure throws so the test fails instead of disappearing.
-/// The host joins the serialized <c>SDL</c> collection because SDL's video driver hint and Vulkan
-/// initialization are process global.
+/// GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and
+/// Vulkan loader setup while each test owns its window, instance, and device.
 /// </remarks>
 internal sealed class GpuTestHost : IDisposable {
     private const string APPLICATION_NAME = "RayBork GPU Test";

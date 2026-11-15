@@ -7,7 +7,6 @@ namespace RayBork.Tests.Graphics.Assets;
 /// fault injection, which recreates the logical device deterministically, and the same worker instance
 /// the render loop would keep.
 /// </summary>
-[Collection("SDL")]
 public sealed class VulkanAssetRestoreTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]

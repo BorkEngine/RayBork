@@ -5,7 +5,6 @@ namespace RayBork.Tests.Assets.Gpu;
 /// <summary>
 /// GPU tests for the logical-device generation that gates GPU asset restoration.
 /// </summary>
-[Collection("SDL")]
 public sealed class DeviceGenerationTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]

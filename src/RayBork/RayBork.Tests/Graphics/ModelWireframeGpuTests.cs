@@ -24,11 +24,10 @@ namespace RayBork.Tests;
 /// need the feature.
 /// </para>
 /// <para>
-/// The tests join the serialized <c>SDL</c> collection because SDL and Vulkan initialization are process
-/// global.
+/// The tests run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan
+/// loader setup.
 /// </para>
 /// </remarks>
-[Collection("SDL")]
 public sealed class ModelWireframeGpuTests {
     private const float COLOR_TOLERANCE = 2e-3f;
     private const uint LINE_PIXEL_TOLERANCE = 2;

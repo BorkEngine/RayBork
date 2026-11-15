@@ -6,7 +6,6 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <summary>
 /// GPU tests for packed texture uploads through the GPU asset bridge and the Vulkan worker.
 /// </summary>
-[Collection("SDL")]
 public sealed class VulkanTextureUploadTests {
     [Theory]
     [InlineData(TextureFormat.Rgba8Unorm, Format.R8G8B8A8Unorm)]

@@ -249,7 +249,10 @@ internal static class CatalogTestData {
     }
 
     internal static PackBuilder CreateStandardBuilder(string displayPath = "catalog.pck") {
-        var builder = new PackBuilder(displayPath, PackCompressionPolicy.Release);
+        // Catalog behavior is independent of payload compression. The release policy pays a fixed
+        // max-quality Zstandard cost per payload, which dominated this suite; PackArchiveTests keeps
+        // the compressed-reader coverage.
+        var builder = new PackBuilder(displayPath, PackCompressionPolicy.Debug);
         builder.Add(MESH_PATH, AssetEntryType.Mesh, AssetSerialization.Serialize(CreateMeshDescriptor()), 1);
         builder.Add(MESH_PAYLOAD_PATH, AssetEntryType.Raw, CreateMeshPayload(), 16);
         builder.Add(TEXTURE_PATH, AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor()), 1);
@@ -264,7 +267,8 @@ internal static class CatalogTestData {
     internal static byte[] BuildStandardPack() => CreateStandardBuilder().Build();
 
     internal static byte[] BuildPack(params (string Path, AssetEntryType Type, byte[] Payload)[] entries) {
-        var builder = new PackBuilder("test.pck", PackCompressionPolicy.Release);
+        // See CreateStandardBuilder: these fixtures exercise catalog semantics, not compression.
+        var builder = new PackBuilder("test.pck", PackCompressionPolicy.Debug);
         foreach ((string path, AssetEntryType type, byte[] payload) in entries) {
             builder.Add(path, type, payload);
         }

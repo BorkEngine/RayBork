@@ -31,6 +31,8 @@ internal sealed class VulkanInstance : IDisposable {
     private const string DEBUG_UTILS_EXTENSION_NAME = "VK_EXT_debug_utils";
     private const string SWAPCHAIN_COLORSPACE_EXTENSION_NAME = "VK_EXT_swapchain_colorspace";
 
+    private static readonly Lock _processGate = new();
+
     private readonly ILogger _logger;
 
     private Vk? _vulkan;
@@ -109,6 +111,12 @@ internal sealed class VulkanInstance : IDisposable {
     /// failed, or validation reported an error. The diagnostic code is <c>RB3001</c>.
     /// </exception>
     internal static unsafe VulkanInstance Create(VulkanInstanceOptions options) {
+        lock (_processGate) {
+            return CreateCore(options);
+        }
+    }
+
+    private static unsafe VulkanInstance CreateCore(VulkanInstanceOptions options) {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(options.ApplicationName);
         ArgumentNullException.ThrowIfNull(options.ApplicationVersion);
@@ -259,6 +267,12 @@ internal sealed class VulkanInstance : IDisposable {
     /// render thread, keeps driver thread-local destructors valid until that thread has exited.
     /// </remarks>
     internal unsafe void DisposeFromMainThread() {
+        lock (_processGate) {
+            DisposeFromMainThreadCore();
+        }
+    }
+
+    private unsafe void DisposeFromMainThreadCore() {
         if (_tornDown) {
             return;
         }

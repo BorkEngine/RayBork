@@ -22,12 +22,11 @@ namespace RayBork.Tests;
 /// The draws are recorded into a detached <see cref="RenderFramePacket"/> because the public
 /// <see cref="Camera"/> does not expose the per-instance texture path yet; the record API is the same one
 /// the text draw path uses. A frame retains every texture it references in its retention set, exactly as
-/// a recorder must, and releases the set after the backend reaches frame idleness. The tests join the
-/// serialized <c>SDL</c> collection because SDL and Vulkan initialization are process global, and they
-/// report a skip with the reason when the host cannot open a GPU device.
+/// a recorder must, and releases the set after the backend reaches frame idleness. GPU test classes
+/// run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan loader
+/// setup, and the tests report a skip with the reason when the host cannot open a GPU device.
 /// </para>
 /// </remarks>
-[Collection("SDL")]
 public sealed class PerInstanceTextureGpuTests {
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private static readonly Color _instanceAColor = new(0.9f, 0.1f, 0.1f, 1f);

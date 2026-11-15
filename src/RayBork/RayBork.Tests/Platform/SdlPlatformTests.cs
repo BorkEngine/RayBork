@@ -415,6 +415,45 @@ public sealed class SdlPlatformTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TwoPlatformsShareTheProcessWideSdlLifetime() {
+        using SdlTestHost first = SdlTestHost.Create();
+        using SdlTestHost second = SdlTestHost.Create();
+
+        Assert.NotEqual(first.Window.WindowId, second.Window.WindowId);
+
+        first.Window.SetTitle("first");
+        second.Window.SetTitle("second");
+        first.Platform.Pump(TimeSpan.Zero);
+        second.Platform.Pump(TimeSpan.Zero);
+
+        Assert.Equal("first", first.Window.Title);
+        Assert.Equal("second", second.Window.Title);
+
+        first.Dispose();
+        Assert.False(second.Window.CloseRequested);
+
+        second.Window.SetSize(400, 300);
+        second.Platform.Pump(TimeSpan.Zero);
+        Assert.Equal(400, second.Window.Width);
+        Assert.Equal(300, second.Window.Height);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task PlatformsCanBeCreatedConcurrently() {
+        Task<SdlTestHost> firstTask = Task.Run(() => SdlTestHost.Create());
+        Task<SdlTestHost> secondTask = Task.Run(() => SdlTestHost.Create());
+
+        using SdlTestHost first = await firstTask;
+        using SdlTestHost second = await secondTask;
+
+        Assert.NotEqual(first.Window.WindowId, second.Window.WindowId);
+        first.Platform.Pump(TimeSpan.Zero);
+        second.Platform.Pump(TimeSpan.Zero);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void NonVulkanWindowCreationSucceedsAndTheWindowIsUsable() {
         using SdlTestHost host = SdlTestHost.Create();
         IWindow window = host.Platform.Window;

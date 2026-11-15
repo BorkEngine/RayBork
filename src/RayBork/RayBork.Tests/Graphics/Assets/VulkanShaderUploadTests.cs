@@ -5,7 +5,6 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <summary>
 /// GPU tests for shader uploads through the GPU asset bridge and the Vulkan worker.
 /// </summary>
-[Collection("SDL")]
 public sealed class VulkanShaderUploadTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]

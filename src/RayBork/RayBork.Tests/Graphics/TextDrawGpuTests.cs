@@ -19,11 +19,11 @@ namespace RayBork.Tests;
 /// occlusion and batching checks.
 /// </para>
 /// <para>
-/// The tests join the serialized <c>SDL</c> collection because SDL and Vulkan initialization are process
-/// global, and they use a single-sample target so a probe pixel is not resolved from multiple samples.
+/// The tests run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan
+/// loader setup. They use a single-sample target so a probe pixel is not resolved from multiple
+/// samples.
 /// </para>
 /// </remarks>
-[Collection("SDL")]
 public sealed class TextDrawGpuTests {
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private static readonly Color _textColor = new(0.9f, 0.35f, 0.1f, 1f);

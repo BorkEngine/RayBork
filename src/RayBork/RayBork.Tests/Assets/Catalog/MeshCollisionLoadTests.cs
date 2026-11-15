@@ -96,7 +96,7 @@ public sealed class MeshCollisionLoadTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task LegacyDescriptorWithoutTheCollisionMemberLoadsWithoutAcceleration() {
-        PackBuilder builder = new("mesh-collision.pck", PackCompressionPolicy.Release);
+        PackBuilder builder = new("mesh-collision.pck", PackCompressionPolicy.Debug);
         builder.Add(
             ACCELERATED_MESH_PATH,
             AssetEntryType.Mesh,
@@ -214,7 +214,9 @@ public sealed class MeshCollisionLoadTests {
         bool withCollisionPayload = true,
         bool referenceCollisionEntry = true,
         byte[]? collisionPayload = null) {
-        PackBuilder builder = new("mesh-collision.pck", PackCompressionPolicy.Release);
+        // Collision payload decoding is independent of compression; Debug avoids the fixed
+        // max-quality Zstandard cost. PackArchiveTests covers compressed payloads.
+        PackBuilder builder = new("mesh-collision.pck", PackCompressionPolicy.Debug);
         AddMeshDescriptor(
             builder,
             ACCELERATED_MESH_PATH,
