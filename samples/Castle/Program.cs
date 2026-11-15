@@ -31,6 +31,7 @@ internal static class Program {
           Left mouse drag   Orbit the camera.
           Mouse wheel       Zoom the camera.
           Mouse hover       Outline the castle and mark the surface point under the pointer.
+          O                 Toggle the camera between perspective and orthographic.
           Escape            Exit.
         """;
 

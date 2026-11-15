@@ -17,13 +17,16 @@ internal sealed class CastleGame : IGame {
     private const float ZOOM_PER_WHEEL_STEP = 1.15f;
     private const float MIN_DISTANCE = 5f;
     private const float MAX_DISTANCE = 500f;
+    // The orthographic far plane must stay beyond the maximum orbit distance plus the scene, so it
+    // scales with the zoom range instead of pinning a distance the controls could outgrow.
+    private const float ORTHO_FAR = MAX_DISTANCE * 2f;
     private const float MAX_PITCH_DEGREES = 89f;
     private const int GRID_SLICES = 20;
     private const float GRID_SPACING = 10f;
     private const float HIT_POINT_RADIUS = 0.2f;
 
-    // The status line is world-space text until M7 adds the screen-space HUD path. It sits on a
-    // camera-facing plane one world unit in front of the camera.
+    // The status line is same-pass, screen-aligned text drawn on a plane this far in front of the
+    // camera. The screen transform's scale makes the text size below render pixels in either mode.
     private const float OVERLAY_DISTANCE = 1f;
     private const float OVERLAY_PIXEL_HEIGHT = 18f;
     private const float OVERLAY_MARGIN_PIXELS = 8f;
@@ -42,6 +45,7 @@ internal sealed class CastleGame : IGame {
     private float _yawDegrees;
     private float _pitchDegrees;
     private float _distance;
+    private CameraProjection _projection = CameraProjection.Perspective;
     private int _frameCount;
 
     /// <summary>
@@ -85,6 +89,13 @@ internal sealed class CastleGame : IGame {
             context.RequestExit();
         }
 
+        // O swaps the projection before the camera is created; perspective remains the default.
+        if (context.Input.IsKeyPressed(Key.O)) {
+            _projection = _projection == CameraProjection.Perspective
+                ? CameraProjection.Orthographic
+                : CameraProjection.Perspective;
+        }
+
         UpdateOrbit(context.Input);
 
         // The orbit transform sits at the point we want to look at. Rotating it moves the camera
@@ -97,14 +108,23 @@ internal sealed class CastleGame : IGame {
             Vector3.One);
         Transform cameraTransform = new Transform(new Vector3(0f, 0f, _distance)).WithParent(orbit);
 
+        // The orthographic height reproduces the perspective framing at the current orbit distance,
+        // so the orbit, wheel zoom, and window resize behave the same in both modes. A finite far
+        // plane is enough: the orthographic pass only needs to cover the scene.
+        bool orthographic = _projection == CameraProjection.Orthographic;
+        float orthographicHeight = orthographic
+            ? 2f * _distance * MathF.Tan(FIELD_OF_VIEW_DEGREES * (MathF.PI / 180f) * 0.5f)
+            : 0f;
+
         using Camera camera = context.CreateCamera(
             cameraTransform,
-            projection: CameraProjection.Perspective,
-            fieldOfView: FIELD_OF_VIEW_DEGREES,
+            projection: _projection,
+            fieldOfView: orthographic ? 0f : FIELD_OF_VIEW_DEGREES,
+            orthographicHeight: orthographicHeight,
             clearMode: ClearMode.ColorAndDepth,
             clearColor: Color.WhiteSmoke,
             near: NEAR_PLANE,
-            far: float.PositiveInfinity);
+            far: orthographic ? ORTHO_FAR : float.PositiveInfinity);
 
         camera.DrawModel(_model!, Transform.Identity, Color.White);
 
@@ -115,8 +135,8 @@ internal sealed class CastleGame : IGame {
         DrawHoverOverlay(camera, context);
 
         // The DrawFPS-style overlay: presented FPS over a one-second window, the tick rate, the
-        // render CPU time, and the last completed frame's draw and instance counts. It is recorded
-        // last and is also world-space text.
+        // render CPU time, the last completed frame's draw and instance counts, and the current
+        // projection. It is recorded last in the same pass as the scene.
         DrawStatusOverlay(camera, context);
 
         _frameCount++;
@@ -163,36 +183,30 @@ internal sealed class CastleGame : IGame {
     }
 
     /// <summary>
-    /// Draws the presented-FPS, tick-rate, render-time, draw-call, and instance line at the top-left
-    /// of the view.
+    /// Draws the presented-FPS, tick-rate, render-time, draw-call, and instance statistics and the
+    /// current projection at the top-left of the view.
     /// </summary>
     /// <remarks>
-    /// Screen-space text arrives in M7. Until then the line is world-space text on a camera-facing
-    /// plane one unit in front of the camera, positioned and oriented with the camera's own axes.
+    /// The text is same-pass, screen-aligned text: it is drawn on a plane
+    /// <see cref="OVERLAY_DISTANCE"/> world unit in front of the camera. It is alpha-blended and
+    /// writes no depth, so geometry closer than that plane can still occlude it.
     /// </remarks>
     private void DrawStatusOverlay(Camera camera, EngineContext context) {
-        // One render pixel spans worldPerPixel world units at the overlay distance. The text size is
-        // an em height in world units, so an 18-pixel line uses 18 * worldPerPixel. The built-in mono
-        // face keeps the changing counters from shifting the text around them.
-        float halfHeight = OVERLAY_DISTANCE * MathF.Tan(camera.FieldOfView * (MathF.PI / 180f) * 0.5f);
-        float worldPerPixel = (2f * halfHeight) / camera.Viewport.Height;
-        float halfWidth = halfHeight * (camera.Viewport.Width / camera.Viewport.Height);
-        float margin = OVERLAY_MARGIN_PIXELS * worldPerPixel;
-
-        // The camera transform's axes are the screen axes: +X is right, +Y is up, and +Z points back
-        // toward the viewer. The text layout origin is the top-left of the first line, so placing it
-        // at the inset corner of the plane and reusing the camera rotation keeps the line upright,
-        // facing the camera, and where a HUD would sit.
-        Vector3 position = camera.Transform.Position
-            + (camera.Transform.Forward * OVERLAY_DISTANCE)
-            + (camera.Transform.Up * (halfHeight - margin))
-            - (camera.Transform.Right * (halfWidth - margin));
+        // The returned transform's scale is world units per render pixel, so an em height of 18 local
+        // units stays 18 render pixels in both projections. The built-in mono face keeps the changing
+        // counters from shifting the text around them. The projection gets its own line so it stays
+        // visible when the statistics line runs past the right edge.
+        Transform overlay = camera.ScreenToWorldTransform(
+            new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
+            OVERLAY_DISTANCE);
+        string projectionName = _projection == CameraProjection.Perspective ? "perspective" : "ortho";
+        string statusText = $"{_overlay.Build(context)}\nprojection {projectionName}";
 
         camera.DrawText(
             context.Defaults.DefaultMonoFont,
-            _overlay.Build(context),
-            new Transform(position, camera.Transform.Rotation, Vector3.One),
-            OVERLAY_PIXEL_HEIGHT * worldPerPixel,
+            statusText,
+            overlay,
+            OVERLAY_PIXEL_HEIGHT,
             Color.Black);
     }
 
