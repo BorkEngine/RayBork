@@ -411,8 +411,6 @@ automatic instancing, and per-instance textures/uniforms.
   load the adjacent pack with no `--assets` argument, draw the unlit castle model with the built-in
   mesh shader, and must exit `0` on the Windows hardware driver and on Linux with lavapipe. The
   sample is a plain user-facing example and contains no test-only draw assertion.
-  `samples/HelloInterop` used the same per-sample layout and build-time bake as the M1-M3
-  diagnostic host.
 - **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
   texture, an orbital camera, the reference XZ grid, and a mouse-hover outline. It deliberately
   leaves out features that need later milestones: model/texture drag-and-drop (post-1.0 platform

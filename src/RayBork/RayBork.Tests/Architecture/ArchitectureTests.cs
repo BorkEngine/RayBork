@@ -43,7 +43,7 @@ public sealed class ArchitectureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BakeReferencesEngineAndTestsAndSampleReferenceTheEngine() {
+    public void BakeReferencesEngineAndTestsReferenceBothAndSampleDoesNotReferenceBake() {
         XDocument bakeProject = DependencyInspector.Load(RepositoryLayout.PathOf(BAKE_PROJECT_PATH));
         XDocument testsProject = DependencyInspector.Load(RepositoryLayout.PathOf(TESTS_PROJECT_PATH));
         XDocument sampleProject = DependencyInspector.Load(RepositoryLayout.PathOf(SAMPLE_PROJECT_PATH));
