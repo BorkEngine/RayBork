@@ -8,7 +8,9 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerspectiveCameraExposesDocumentedDefaults() {
+    public void PerspectiveCameraTestHelperExposesItsDefaults() {
+        // CameraAppTests covers the public EngineContext defaults; this host helper keeps its own
+        // infinity far default for the tests that need an infinite perspective far plane.
         using CameraTestHost host = new();
         host.BeginFrame();
 
@@ -328,6 +330,19 @@ public sealed class CameraTests {
 
         Assert.Throws<ArgumentOutOfRangeException>(
             () => host.CreateOrthographicCamera(height: height, near: near, far: far));
+
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void InvalidOrthographicHeightReportsThePublicParameterName() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => host.CreateOrthographicCamera(height: 0f));
+        Assert.Equal("orthographicHeight", thrown.ParamName);
 
         host.EndFrame();
     }

@@ -187,8 +187,8 @@ public sealed class EngineContext {
     /// viewport is invalid or empty, or the clear color has a non-finite component.
     /// </exception>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// <paramref name="projection"/> is not defined, or a selected projection or clip-plane parameter is
-    /// outside its range.
+    /// <paramref name="projection"/> is not defined, <paramref name="clearMode"/> contains bits outside
+    /// <see cref="ClearMode.All"/>, or a selected projection or clip-plane parameter is outside its range.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera

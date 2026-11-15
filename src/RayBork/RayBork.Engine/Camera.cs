@@ -29,6 +29,10 @@ namespace RayBork;
 /// stays readable. All members are tick-thread only.
 /// </para>
 /// <para>
+/// The camera transform must have unit scale. A scaled camera transform is not a supported camera
+/// configuration, and <see cref="ScreenToWorldTransform"/> does not compensate for it.
+/// </para>
+/// <para>
 /// M4 does not ship a render target: the <c>Target</c> property and the <c>target</c> parameter arrive
 /// with <c>RenderTexture</c> in M8. A camera always records into the app's linear HDR scene target.
 /// </para>
@@ -3026,7 +3030,11 @@ public sealed class Camera : IDisposable {
     /// <summary>
     /// Converts a render-pixel coordinate with a top-left origin into a world-space ray.
     /// </summary>
-    /// <param name="screenPosition">The render-pixel position, in target space (not window space).</param>
+    /// <param name="screenPosition">
+    /// The render-pixel position in target space, not window space or viewport space. This differs from
+    /// <see cref="ScreenToWorldTransform"/>, whose input is relative to the camera viewport; add the
+    /// camera <see cref="Viewport"/> origin before passing a viewport-relative position here.
+    /// </param>
     /// <returns>
     /// A normalized world-space ray starting at the camera position for a perspective camera, or at the
     /// near-plane point for an orthographic camera.
@@ -3094,7 +3102,10 @@ public sealed class Camera : IDisposable {
     /// </summary>
     /// <param name="point">
     /// The render-pixel position relative to the camera viewport, with a top-left origin. It is not a
-    /// target-space position: <c>(0, 0)</c> is the viewport's top-left corner.
+    /// target-space position: <c>(0, 0)</c> is the viewport's top-left corner. This differs from
+    /// <see cref="ScreenToWorldRay"/>, whose input is in target space, and from <see cref="WorldToScreen"/>,
+    /// whose output is in target space; subtract the camera <see cref="Viewport"/> origin to convert a
+    /// target-space position, or add it to compare the plane position with <see cref="WorldToScreen"/>.
     /// </param>
     /// <param name="distance">
     /// The plane distance from the camera along its forward axis, in world units. It must be finite and
@@ -3118,6 +3129,11 @@ public sealed class Camera : IDisposable {
     /// perspective camera and <c>orthographicHeight / viewport.Height</c> for an orthographic camera. A
     /// quad of <c>width > 0</c> and <c>height > 0</c> authored in render pixels therefore maps to
     /// exactly the requested pixel extents at that plane.
+    /// </para>
+    /// <para>
+    /// The camera transform must have unit scale. A scaled camera transform is not supported by this
+    /// member: the view-to-world transform would scale the plane position, while
+    /// <paramref name="distance"/> and the returned units-per-pixel scale are unscaled.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="point"/> has a non-finite component.</exception>

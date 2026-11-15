@@ -157,15 +157,15 @@ internal static class CameraMath {
     /// <summary>
     /// Validates the orthographic camera parameters.
     /// </summary>
-    /// <param name="height">The visible world-space height.</param>
+    /// <param name="orthographicHeight">The visible world-space height.</param>
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The far clip distance.</param>
     /// <exception cref="ArgumentOutOfRangeException">A parameter is outside its documented range.</exception>
-    internal static void ValidateOrthographic(float height, float near, float far) {
-        if (!float.IsFinite(height) || height <= 0f) {
+    internal static void ValidateOrthographic(float orthographicHeight, float near, float far) {
+        if (!float.IsFinite(orthographicHeight) || orthographicHeight <= 0f) {
             throw new ArgumentOutOfRangeException(
-                nameof(height),
-                height,
+                nameof(orthographicHeight),
+                orthographicHeight,
                 "The orthographic height must be finite and greater than zero.");
         }
 

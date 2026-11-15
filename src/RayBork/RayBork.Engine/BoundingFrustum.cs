@@ -94,6 +94,11 @@ public readonly struct BoundingFrustum {
     /// <see langword="true"/> when the box is not fully outside any plane. The test is conservative:
     /// a box that only touches the boundary counts as intersecting.
     /// </returns>
+    /// <remarks>
+    /// A box whose positive corner is within a small tolerance behind a plane is still accepted, so
+    /// boundary-aligned geometry is not culled by floating-point drift in the extracted planes.
+    /// <see cref="Contains"/> keeps its exact non-negative test.
+    /// </remarks>
     public bool Intersects(BoundingBox bounds)
         => IntersectsPlane(Left, bounds)
             && IntersectsPlane(Right, bounds)
