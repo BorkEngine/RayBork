@@ -213,8 +213,8 @@ and `WithAssetType<T>`. M3 ships the loading, creation, and metadata surface of 
 and `Shader`: `Path`, `IsDisposed`, `Dispose`, the metadata getters in §7.3, §7.5, and §7.6, the
 procedural `MeshBuilder`/`TextureBuilder` API, and CPU mesh vertices/indices. It does not ship
 `Model`, `Font`, cameras, render textures, `Shader.SetUniform`, `ResetUniforms`, or any `Draw*`
-member; those arrive in M4, M6, and M8. The M3 sample loads a texture, a mesh part, a shader, and
-registered custom data, and reads back their metadata without drawing.
+member; those arrive in M4, M6, and M8. The M3 sample loaded a texture, a mesh part, a shader, and
+registered custom data, and read back their metadata without drawing.
 
 **M4 subset.** `EngineContext` additionally exposes `CreateCamera` and `CreateOrthographicCamera`,
 both legal only on the tick thread during `Tick`, and `Defaults`, which exposes the preloaded mesh
@@ -340,8 +340,7 @@ pass draws the castle, `DrawGrid(20, 10f, Color.Gray)`, and now a world-space pr
 render-statistics status line, and the sample ray-casts the pointer against the model bounds and mesh
 with `Collision.GetRayBox` and `Collision.GetRayMesh`, drawing `Camera.DrawBoundingBox` and a small hit
 sphere while hovered. The hosts exit `0`. It is not the AOT gate. The Windows hardware path and the
-conformant lavapipe Linux path pass; WSLg hardware Vulkan is not a target. `samples/HelloInterop`
-remains the M1-M3 diagnostic host; it is not the AOT gate.
+conformant lavapipe Linux path pass; WSLg hardware Vulkan is not a target.
 
 ## 2. Quick start
 

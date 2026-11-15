@@ -38,8 +38,9 @@ faces; the Lora face is sample-only and is recorded under `samples/Text/THIRD-PA
 here. The M5 `samples/PrimitiveGallery` gate remains a buildable and publishable sample that mounts
 the built-in pack and draws the primitive surface, and the M4 `samples/Castle` gate remains a
 buildable and publishable sample that mounts a baked pack and loads a multi-part `Model` with a KTX2
-texture and the built-in mesh shader. `samples/HelloInterop` remains the M1-M3 diagnostic host for
-the host, input, time, logging, renderer, and asset-loading surface. `Silk.NET.Vulkan`, `SDL3-CS`,
+texture and the built-in mesh shader. The M1-M3 diagnostic host was removed in M7; the remaining
+samples and the test suite exercise the host, input, time, logging, renderer, and asset-loading
+surface. `Silk.NET.Vulkan`, `SDL3-CS`,
 `PolyType`,
 `Nerdbank.MessagePack`, `System.IO.Hashing`, and
 the logging packages are exercised by the gates or their built-in pack and descriptor paths. The bake
@@ -54,9 +55,9 @@ These packages are referenced by `RayBork.Engine` or deployed with it.
 
 | Package | Version | License | Purpose | AOT status |
 | --- | --- | --- | --- | --- |
-| `SDL3-CS` | 3.4.20 | Zlib | Managed SDL3 bindings for windowing, input, events, the window HDR properties, and the Vulkan surface | Exercised end to end by the M1-M2 `samples/HelloInterop`, M4 `samples/Castle`, M5 `samples/PrimitiveGallery`, and M6 `samples/Text` AOT hosts on `win-x64` and `linux-x64`. |
+| `SDL3-CS` | 3.4.20 | Zlib | Managed SDL3 bindings for windowing, input, events, the window HDR properties, and the Vulkan surface | Exercised end to end by the M4 `samples/Castle`, M5 `samples/PrimitiveGallery`, and M6 `samples/Text` AOT hosts on `win-x64` and `linux-x64`, and by the engine and GPU test suites. |
 | `SDL3-CS.Native` | 3.4.2 | Zlib | Per-RID native SDL3 binaries deployed alongside the engine | Loaded and run by the same AOT hosts on both RIDs. |
-| SDL3 (native library) | bundled by `SDL3-CS.Native` 3.4.2 | Zlib | The native windowing, input, Vulkan surface, HDR property, and audio library itself | Proven by the M1-M6 AOT hosts; upgraded only with the `SDL3-CS.Native` pin. |
+| SDL3 (native library) | bundled by `SDL3-CS.Native` 3.4.2 | Zlib | The native windowing, input, Vulkan surface, HDR property, and audio library itself | Proven by the M1-M6 AOT gates; upgraded only with the `SDL3-CS.Native` pin. |
 | `Silk.NET.Vulkan` | 2.23.0 | MIT | Vulkan 1.2 bindings for the renderer backend; brings `Silk.NET.Core` 2.23.0 as a pinned transitive dependency | Exercised end to end by the M2, M4, M5, and M6 AOT gates: the published host creates the instance, device, swapchain, scene target, bindless descriptors, and draws the gate scene. |
 | `PolyType` | 1.4.1 | MIT | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by the M3-M6 AOT gates on both RIDs: pack and custom-data descriptors in M3, model/mesh/shader/texture descriptors in M4, the built-in texture and shader descriptors in M5, and the built-in and sample font descriptors in M6. |
 | `Nerdbank.MessagePack` | 1.4.104 | MIT | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the M3-M6 AOT gates on both RIDs (pack, model/mesh, built-in, and font descriptor decode). |

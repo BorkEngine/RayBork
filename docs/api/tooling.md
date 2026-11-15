@@ -53,7 +53,7 @@ the project root defaults to the working directory and the output root defaults 
 #### Build-time bake in a game or sample project
 
 A game or sample can run its assets executable as part of its own build instead of a manual step.
-`samples/Castle/Castle.csproj` and `samples/HelloInterop/HelloInterop.csproj` use the same
+`samples/Castle/Castle.csproj` and `samples/Text/Text.csproj` use the same
 out-of-process pattern as the engine's built-in pack: an `AfterTargets="Build"` target invokes the
 assets project with the `MSBuild` task (passing only `Configuration` and removing the sample's
 runtime/publish properties), runs the built assets executable as
@@ -67,7 +67,7 @@ Because the assets executable is only invoked out of process, the sample project
 `RayBork.Bake`, and the JIT tooling never enters the sample's Native AOT publish graph. The explicit
 `--project-root` and `--output-root` arguments keep the bake independent of the working directory.
 The samples are separate solutions (`samples/Castle/Castle.slnx`,
-`samples/HelloInterop/HelloInterop.slnx`) and are not part of `src/RayBork/RayBork.slnx`.
+`samples/Text/Text.slnx`) and are not part of `src/RayBork/RayBork.slnx`.
 
 M3's public bake surface is `BakeApplicationBuilder`, `BakeApplication`, `IAssetProcessor`,
 `AssetProcessor<TSidecar>`, `AssetProcessorContext`, `IAssetOutputSink`,
