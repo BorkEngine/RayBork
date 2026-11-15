@@ -10,11 +10,10 @@ namespace RayBork;
 /// <remarks>
 /// <para>
 /// A camera is not a GPU object and not a reusable scene camera. Create it with
-/// <see cref="EngineContext.CreateCamera"/> or <see cref="EngineContext.CreateOrthographicCamera"/>
-/// during <see cref="IGame.Tick"/>, record draws, and dispose it before the callback returns. Cameras
-/// are sequential: creating one while another is active throws <see cref="InvalidOperationException"/>,
-/// and a camera left undisposed when the tick ends is an <see cref="InvalidOperationException"/> that
-/// names it.
+/// <see cref="EngineContext.CreateCamera"/> during <see cref="IGame.Tick"/>, record draws, and dispose
+/// it before the callback returns. Cameras are sequential: creating one while another is active throws
+/// <see cref="InvalidOperationException"/>, and a camera left undisposed when the tick ends is an
+/// <see cref="InvalidOperationException"/> that names it.
 /// </para>
 /// <para>
 /// Each draw copies value snapshots of the mesh, material cursor state, tint, and transforms into the
@@ -28,6 +27,10 @@ namespace RayBork;
 /// top of the screen. <see cref="Dispose"/> seals the pass and is idempotent; after disposal every
 /// property and every draw throws <see cref="ObjectDisposedException"/>, while <see cref="IsDisposed"/>
 /// stays readable. All members are tick-thread only.
+/// </para>
+/// <para>
+/// The camera transform must have unit scale. A scaled camera transform is not a supported camera
+/// configuration, and <see cref="ScreenToWorldTransform"/> does not compensate for it.
 /// </para>
 /// <para>
 /// M4 does not ship a render target: the <c>Target</c> property and the <c>target</c> parameter arrive
@@ -3027,7 +3030,11 @@ public sealed class Camera : IDisposable {
     /// <summary>
     /// Converts a render-pixel coordinate with a top-left origin into a world-space ray.
     /// </summary>
-    /// <param name="screenPosition">The render-pixel position, in target space (not window space).</param>
+    /// <param name="screenPosition">
+    /// The render-pixel position in target space, not window space or viewport space. This differs from
+    /// <see cref="ScreenToWorldTransform"/>, whose input is relative to the camera viewport; add the
+    /// camera <see cref="Viewport"/> origin before passing a viewport-relative position here.
+    /// </param>
     /// <returns>
     /// A normalized world-space ray starting at the camera position for a perspective camera, or at the
     /// near-plane point for an orthographic camera.
@@ -3087,6 +3094,81 @@ public sealed class Camera : IDisposable {
         return new Vector2(
             _viewport.X + ((ndcX * 0.5f) + 0.5f) * _viewport.Width,
             _viewport.Y + ((ndcY * 0.5f) + 0.5f) * _viewport.Height);
+    }
+
+    /// <summary>
+    /// Converts a render-pixel coordinate relative to the camera viewport into a world transform on the
+    /// plane at <paramref name="distance"/> along the camera's forward axis.
+    /// </summary>
+    /// <param name="point">
+    /// The render-pixel position relative to the camera viewport, with a top-left origin. It is not a
+    /// target-space position: <c>(0, 0)</c> is the viewport's top-left corner. This differs from
+    /// <see cref="ScreenToWorldRay"/>, whose input is in target space, and from <see cref="WorldToScreen"/>,
+    /// whose output is in target space; subtract the camera <see cref="Viewport"/> origin to convert a
+    /// target-space position, or add it to compare the plane position with <see cref="WorldToScreen"/>.
+    /// </param>
+    /// <param name="distance">
+    /// The plane distance from the camera along its forward axis, in world units. It must be finite and
+    /// greater than zero.
+    /// </param>
+    /// <returns>
+    /// A transform whose position is the world point on that plane at <paramref name="point"/>, whose
+    /// rotation is the camera transform's rotation, and whose scale is uniform world units per render
+    /// pixel at that plane.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// The returned transform's local XY plane is screen-aligned and its local <c>+Z</c> faces the
+    /// camera, so a sprite or text quad authored in local XY reads upright at the screen point. This is
+    /// the anchored-plane counterpart of <see cref="ScreenToWorldRay"/>: the ray gives only a direction,
+    /// while this member also supplies the world position, the screen-aligned rotation, and the
+    /// world-units-per-pixel scale for that plane.
+    /// </para>
+    /// <para>
+    /// The uniform scale is <c>2 * distance * tan(fieldOfView / 2) / viewport.Height</c> for a
+    /// perspective camera and <c>orthographicHeight / viewport.Height</c> for an orthographic camera. A
+    /// quad of <c>width > 0</c> and <c>height > 0</c> authored in render pixels therefore maps to
+    /// exactly the requested pixel extents at that plane.
+    /// </para>
+    /// <para>
+    /// The camera transform must have unit scale. A scaled camera transform is not supported by this
+    /// member: the view-to-world transform would scale the plane position, while
+    /// <paramref name="distance"/> and the returned units-per-pixel scale are unscaled.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="point"/> has a non-finite component.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="distance"/> is not finite or is not greater than zero.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    public Transform ScreenToWorldTransform(Vector2 point, float distance) {
+        ThrowIfDisposed();
+        ValidateFinite(point, nameof(point));
+        if (!float.IsFinite(distance) || distance <= 0f) {
+            throw new ArgumentOutOfRangeException(
+                nameof(distance),
+                distance,
+                "The plane distance must be finite and greater than zero.");
+        }
+
+        float ndcX = (point.X / _viewport.Width * 2f) - 1f;
+        float ndcY = (point.Y / _viewport.Height * 2f) - 1f;
+        float aspectRatio = _viewport.Width / _viewport.Height;
+        float halfHeight;
+        float unitsPerPixel;
+        if (_projection == CameraProjection.Perspective) {
+            float tangent = MathF.Tan(_fieldOfView * DEGREES_TO_RADIANS * 0.5f);
+            halfHeight = distance * tangent;
+            unitsPerPixel = 2f * distance * tangent / _viewport.Height;
+        } else {
+            halfHeight = _orthographicHeight * 0.5f;
+            unitsPerPixel = _orthographicHeight / _viewport.Height;
+        }
+
+        float halfWidth = halfHeight * aspectRatio;
+        Vector3 viewPosition = new(ndcX * halfWidth, -ndcY * halfHeight, -distance);
+        Vector3 worldPosition = Vector3.Transform(viewPosition, _transform.ToMatrix());
+        return new Transform(worldPosition, _transform.Rotation, new Vector3(unitsPerPixel));
     }
 
     /// <summary>
