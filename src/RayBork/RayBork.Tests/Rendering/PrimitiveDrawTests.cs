@@ -1049,6 +1049,11 @@ public sealed class PrimitiveDrawTests {
             camera.DrawCircle(Transform.Identity, 0f, _color);
             camera.DrawCircle(Vector3.Zero, 0f, Vector3.UnitY, 0f, _color);
             camera.DrawRay(default, _color);
+            camera.DrawQuad(Transform.Identity, new Vector2(0f, 1f), _color);
+            camera.DrawQuad(Transform.Identity, new Vector2(1f, 0f), _color);
+            camera.DrawQuad(Transform.Identity, new Vector2(0f, 1f), texture);
+            camera.DrawQuad(Transform.Identity, new Vector2(1f, 0f), texture, Rect.FromSize(1f, 1f));
+            camera.DrawDisc(Transform.Identity, 0f, _color);
         }
 
         harness.Host.EndFrame();
@@ -1120,6 +1125,20 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawCircle(Vector3.Zero, -1f, Vector3.UnitY, 0f, _color));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => camera.DrawCircle(Transform.Identity, -1f, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawQuad(Transform.Identity, new Vector2(-1f, 1f), _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawQuad(Transform.Identity, new Vector2(1f, -1f), _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawQuad(Transform.Identity, new Vector2(-1f, 1f), texture));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawQuad(
+                Transform.Identity,
+                new Vector2(1f, -1f),
+                texture,
+                Rect.FromSize(1f, 1f)));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawDisc(Transform.Identity, -1f, _color));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -1144,6 +1163,14 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawGrid(slices: 1, spacing: 0f, _color));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => camera.DrawGrid(slices: 1, spacing: -1f, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawGrid(Transform.Identity, slices: 0, spacing: 1f, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawGrid(Transform.Identity, slices: -1, spacing: 1f, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawGrid(Transform.Identity, slices: 1, spacing: 0f, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawGrid(Transform.Identity, slices: 1, spacing: -1f, _color));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -1280,6 +1307,43 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawBoundingBox(
                 new BoundingBox(Vector3.Zero, new Vector3(float.NaN, 1f, 1f)),
                 _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(Transform.Identity, new Vector2(float.NaN, 1f), _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(new Transform(new Vector3(float.NaN, 0f, 0f)), Vector2.One, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(Transform.Identity, new Vector2(1f, float.PositiveInfinity), texture));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(
+                Transform.Identity,
+                Vector2.One,
+                texture,
+                Rect.FromSize(1f, 1f),
+                tint: new Color(float.NaN, 0f, 0f, 1f)));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(
+                Transform.Identity,
+                Vector2.One,
+                texture,
+                new Rect(0f, 0f, float.NaN, 1f)));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawDisc(Transform.Identity, float.NaN, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawDisc(Transform.Identity, float.PositiveInfinity, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawGrid(new Transform(new Vector3(0f, float.NaN, 0f)), 1, 1f, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawGrid(Transform.Identity, 1, float.NaN, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(
+                Transform.Identity,
+                Vector2.One,
+                new Color(float.NaN, 0f, 0f, 1f)));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawDisc(
+                Transform.Identity,
+                1f,
+                new Color(0f, 0f, float.PositiveInfinity, 1f)));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -1319,6 +1383,14 @@ public sealed class PrimitiveDrawTests {
         Assert.Throws<ObjectDisposedException>(() => camera.DrawLine(Vector3.Zero, Vector3.UnitX, _color));
         Assert.Throws<ObjectDisposedException>(
             () => camera.DrawGrid(slices: 1, spacing: 1f, _color));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, _color));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, RenderingTestAssets.CreateTexture()));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawDisc(Transform.Identity, 1f, _color));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawGrid(Transform.Identity, 1, 1f, _color));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -1406,6 +1478,16 @@ public sealed class PrimitiveDrawTests {
             () => camera.DrawRay(new Ray(Vector3.Zero, Vector3.UnitZ), _color));
         Assert.Throws<ObjectDisposedException>(
             () => camera.DrawBoundingBox(new BoundingBox(Vector3.Zero, Vector3.One), _color));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, _color));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, texture));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, texture, Rect.FromSize(1f, 1f)));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawDisc(Transform.Identity, 1f, _color));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawGrid(Transform.Identity, 1, 1f, _color));
 
         harness.Host.EndFrame();
     }
@@ -2458,6 +2540,24 @@ public sealed class PrimitiveDrawTests {
                 Vector2.One,
                 new Vector2(0.5f),
                 _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawQuad(negativeScale, Vector2.One, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawQuad(negativeScale, Vector2.One, texture));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawQuad(negativeScale, Vector2.One, texture, source));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawDisc(negativeScale, 1f, _color));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => camera.DrawGrid(negativeScale, 1, 1f, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(nanPosition, Vector2.One, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawQuad(nanScale, Vector2.One, texture));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawDisc(nanRotation, 1f, _color));
+        Assert.Throws<ArgumentException>(
+            () => camera.DrawGrid(nanScale, 1, 1f, _color));
 
         camera.Dispose();
         harness.Host.EndFrame();
@@ -2471,6 +2571,7 @@ public sealed class PrimitiveDrawTests {
     public async Task ZeroTransformScaleRecordsNothing() {
         using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
         RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
         Transform transform = new(Vector3.Zero, Quaternion.Identity, new Vector3(1f, 0f, 1f));
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
             camera.DrawCube(transform, Vector3.One, _color);
@@ -2485,6 +2586,10 @@ public sealed class PrimitiveDrawTests {
             camera.DrawCapsule(transform, 1f, 1f, rings: 2, slices: 4, _color);
             camera.DrawWireCapsule(transform, 1f, 1f, rings: 2, slices: 4, _color);
             camera.DrawCircle(transform, 1f, _color);
+            camera.DrawQuad(transform, Vector2.One, _color);
+            camera.DrawQuad(transform, Vector2.One, texture);
+            camera.DrawDisc(transform, 1f, _color);
+            camera.DrawGrid(transform, 1, 1f, _color);
         }
 
         harness.Host.EndFrame();
@@ -2551,6 +2656,415 @@ public sealed class PrimitiveDrawTests {
         harness.Host.EndFrame();
 
         Assert.Equal(0, packet.Passes[0].DrawCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawQuadRecordsTheUnitQuadScaledAndOrientedByTheTransform() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Transform transform = new(
+            new Vector3(1f, 2f, -5f),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f),
+            new Vector3(2f, 3f, 4f));
+        Vector2 size = new(2f, 4f);
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawQuad(transform, size, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        RenderDrawRecord record = packet.Passes[0].Draws[0];
+        Assert.Same(harness.Primitives.Quad.Lifetime, record.Mesh);
+        Assert.Same(harness.Primitives.PrimitiveMaterial.Program.Lifetime, record.Program);
+        Assert.Equal(PrimitiveTopology.TriangleList, record.Topology);
+        Assert.Equal(6, record.IndexCount);
+        Assert.Equal(RenderState.Opaque, record.RenderState);
+        Assert.Equal(_color, record.Tint);
+        Assert.Equal(1, record.InstanceCount);
+        Matrix4x4 matrix = record.GetWorldMatrices()[0];
+        AssertVector(transform.Position, MatrixPosition(matrix));
+        AssertVector(new Vector3(0f, 0f, -4f), Axis(matrix, 0));
+        AssertVector(new Vector3(0f, 12f, 0f), Axis(matrix, 1));
+        AssertVector(new Vector3(4f, 0f, 0f), Axis(matrix, 2));
+        AssertVector(
+            transform.Position + new Vector3(0f, -6f, 2f),
+            Vector3.Transform(new Vector3(-0.5f, -0.5f, 0f), matrix));
+        AssertWorldBounds(
+            record.MeshBounds,
+            matrix,
+            transform.Position - new Vector3(0f, 6f, 2f),
+            transform.Position + new Vector3(0f, 6f, 2f));
+
+        // One mesh and the internal primitive program.
+        Assert.Equal(2, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawQuadTexturedSamplesTheFullTextureAndRetainsIt() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Transform transform = new(new Vector3(1f, 2f, -5f));
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawQuad(transform, new Vector2(4f, 2f), texture, _color, RenderState.AlphaBlend);
+        }
+
+        harness.Host.EndFrame();
+
+        RenderDrawRecord record = packet.Passes[0].Draws[0];
+        Assert.Same(harness.Primitives.Quad.Lifetime, record.Mesh);
+        Assert.Same(harness.Primitives.MeshMaterial.Program.Lifetime, record.Program);
+        Assert.Equal(PrimitiveTopology.TriangleList, record.Topology);
+        Assert.Equal(RenderState.AlphaBlend, record.RenderState);
+        Assert.Equal(_color, record.Tint);
+        Assert.Equal(1, record.InstanceCount);
+        Assert.Same(texture, record.GetTextureBindings()[0]);
+        Assert.Equal(new Vector4(0f, 0f, 1f, 1f), record.UvRect);
+
+        Matrix4x4 matrix = record.GetWorldMatrices()[0];
+        AssertVector(transform.Position, MatrixPosition(matrix));
+        AssertVector(new Vector3(4f, 0f, 0f), Axis(matrix, 0));
+        AssertVector(new Vector3(0f, 2f, 0f), Axis(matrix, 1));
+        AssertVector(Vector3.UnitZ, Axis(matrix, 2));
+
+        // The shared engine material keeps no game texture after the call, and the frame holds the
+        // quad mesh, the mesh program, and the texture until the slot is released.
+        Assert.Null(harness.Primitives.MeshMaterial.TextureValues[0]);
+        Assert.Equal(3, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawQuadTexturedSourceRectRecordsTheNormalizedUvRectangle() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        Rect source = new(0.25f, 0.125f, 0.5f, 0.25f);
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawQuad(Transform.Identity, new Vector2(2f), texture, source);
+            camera.DrawQuad(Transform.Identity, new Vector2(2f), texture, source, Color.White, RenderState.AlphaBlend);
+        }
+
+        harness.Host.EndFrame();
+
+        CameraPass pass = packet.Passes[0];
+        Assert.Equal(2, pass.DrawCount);
+        RenderDrawRecord first = pass.Draws[0];
+        Assert.Same(harness.Primitives.MeshMaterial.Program.Lifetime, first.Program);
+        Assert.Equal(RenderState.Opaque, first.RenderState);
+        Assert.Equal(Color.White, first.Tint);
+        Assert.Same(texture, first.GetTextureBindings()[0]);
+
+        // The rectangle is the per-instance source sub-rectangle the built-in mesh shader reads as
+        // UvRect.xy + uv * UvRect.zw; (0, 0, 1, 1) would pass the authored quad UVs through unchanged.
+        Vector4 expectedRectangle = new(0.25f, 0.125f, 0.5f, 0.25f);
+        Assert.Equal(expectedRectangle, first.UvRect);
+        Assert.Same(texture, pass.Draws[1].GetTextureBindings()[0]);
+        Assert.Equal(expectedRectangle, pass.Draws[1].UvRect);
+        Assert.Equal(RenderState.AlphaBlend, pass.Draws[1].RenderState);
+        Assert.Null(harness.Primitives.MeshMaterial.TextureValues[0]);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawQuadRenderStateIsRecordedAndSplitsTheOpaqueBatch() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawQuad(new Transform(new Vector3(-1f, 0f, -5f)), Vector2.One, _color);
+            camera.DrawQuad(
+                new Transform(new Vector3(0f, 0f, -5f)),
+                Vector2.One,
+                _color,
+                RenderState.AlphaBlend);
+            camera.DrawQuad(new Transform(new Vector3(1f, 0f, -5f)), Vector2.One, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        CameraPass pass = packet.Passes[0];
+        Assert.Equal(3, pass.DrawCount);
+        Assert.Equal(RenderState.Opaque, pass.Draws[0].RenderState);
+        Assert.Equal(RenderState.AlphaBlend, pass.Draws[1].RenderState);
+        Assert.Equal(RenderState.Opaque, pass.Draws[2].RenderState);
+
+        // The effective state is part of the batch key, so the two opaque quads still merge around the
+        // alpha quad into one two-instance batch while the alpha quad forms its own batch.
+        FramePlan plan = new BatchPlanner().Plan(packet);
+        Assert.Equal(2, plan.DrawCalls);
+        Assert.Equal(3, plan.Instances);
+        Assert.Equal(6, plan.Triangles);
+        Assert.Equal(2, plan.Passes[0].Batches.Count);
+        PlannedBatch opaque = plan.Passes[0].Batches[0];
+        Assert.Equal(RenderState.Opaque, opaque.RenderState);
+        Assert.Equal(2, opaque.InstanceCount);
+        PlannedBatch transparent = plan.Passes[0].Batches[1];
+        Assert.Equal(RenderState.AlphaBlend, transparent.RenderState);
+        Assert.Equal(1, transparent.InstanceCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task SolidAndTexturedQuadsMergeByMeshProgramAndState() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture firstTexture = RenderingTestAssets.CreateTexture("textures/first");
+        Texture secondTexture = RenderingTestAssets.CreateTexture("textures/second");
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawQuad(new Transform(new Vector3(-1f, 0f, -5f)), Vector2.One, _color);
+            camera.DrawQuad(new Transform(new Vector3(0f, 0f, -5f)), Vector2.One, _color);
+            camera.DrawQuad(new Transform(new Vector3(1f, 0f, -5f)), Vector2.One, firstTexture);
+            camera.DrawQuad(new Transform(new Vector3(2f, 0f, -5f)), Vector2.One, secondTexture);
+        }
+
+        harness.Host.EndFrame();
+
+        // The two solid quads share the quad mesh, the primitive program, and the opaque state, so they
+        // merge into one batch; the two textured quads share the mesh program and merge even though
+        // their bound textures differ, because texture bindings are per-instance data.
+        FramePlan plan = new BatchPlanner().Plan(packet);
+        Assert.Equal(2, plan.DrawCalls);
+        Assert.Equal(4, plan.Instances);
+        Assert.Equal(8, plan.Triangles);
+        Assert.Equal(2, plan.Passes[0].Batches.Count);
+        PlannedBatch solidBatch = plan.Passes[0].Batches[0];
+        Assert.Same(harness.Primitives.Quad.Lifetime, solidBatch.Mesh);
+        Assert.Same(harness.Primitives.PrimitiveMaterial.Program.Lifetime, solidBatch.Program);
+        Assert.Equal(2, solidBatch.InstanceCount);
+        PlannedBatch texturedBatch = plan.Passes[0].Batches[1];
+        Assert.Same(harness.Primitives.Quad.Lifetime, texturedBatch.Mesh);
+        Assert.Same(harness.Primitives.MeshMaterial.Program.Lifetime, texturedBatch.Program);
+        Assert.Equal(2, texturedBatch.InstanceCount);
+        Assert.Same(firstTexture, texturedBatch.Instances[0].Record.GetTextureBindings()[0]);
+        Assert.Same(secondTexture, texturedBatch.Instances[1].Record.GetTextureBindings()[0]);
+
+        // The quad mesh, the two internal programs, and the two bound textures.
+        Assert.Equal(5, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawDiscRecordsTheUnitDiscScaledByTheRadiusAndTransform() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Transform transform = new(
+            new Vector3(1f, 2f, -5f),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f),
+            new Vector3(2f, 1f, 3f));
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawDisc(transform, 2f, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        RenderDrawRecord record = packet.Passes[0].Draws[0];
+        Assert.Same(harness.Primitives.Disc.Lifetime, record.Mesh);
+        Assert.Same(harness.Primitives.PrimitiveMaterial.Program.Lifetime, record.Program);
+        Assert.Equal(PrimitiveTopology.TriangleList, record.Topology);
+        Assert.Equal(108, record.IndexCount);
+        Assert.Equal(RenderState.Opaque, record.RenderState);
+        Assert.Equal(_color, record.Tint);
+        Assert.Equal(1, record.InstanceCount);
+        Matrix4x4 matrix = record.GetWorldMatrices()[0];
+        AssertVector(transform.Position, MatrixPosition(matrix));
+        AssertVector(new Vector3(0f, 0f, -4f), Axis(matrix, 0));
+        AssertVector(new Vector3(0f, 2f, 0f), Axis(matrix, 1));
+        AssertVector(new Vector3(6f, 0f, 0f), Axis(matrix, 2));
+        AssertWorldBounds(
+            record.MeshBounds,
+            matrix,
+            transform.Position - new Vector3(0f, 2f, 4f),
+            transform.Position + new Vector3(0f, 2f, 4f));
+
+        // One mesh and the internal primitive program.
+        Assert.Equal(2, packet.Retention.Count);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawGridTransformComposesTheLocalSpacingAndExtents() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Transform transform = new(
+            new Vector3(1f, 2f, -5f),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f),
+            new Vector3(2f, 1f, 3f));
+        using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
+            camera.DrawGrid(transform, slices: 2, spacing: 2f, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        RenderDrawRecord record = packet.Passes[0].Draws[0];
+        Assert.Same(harness.Primitives.Line.Lifetime, record.Mesh);
+        Assert.Same(harness.Primitives.PrimitiveMaterial.Program.Lifetime, record.Program);
+        Assert.Equal(PrimitiveTopology.LineList, record.Topology);
+        Assert.Equal(RenderState.Opaque, record.RenderState);
+        Assert.Equal(_color, record.Tint);
+        Assert.Equal(6, record.InstanceCount);
+
+        // The transform's 90 degree yaw and 2/1/3 scale: local X maps to world -Z * 2 and local Z maps
+        // to world +X * 3, so the local spacing and line extents both scale.
+        ReadOnlySpan<Matrix4x4> matrices = record.GetWorldMatrices();
+        for (int line = 0; line <= 2; line++) {
+            float offset = -2f + (line * 2f);
+            Matrix4x4 xLine = matrices[line];
+            AssertVector(
+                transform.Position + new Vector3(offset * 3f, 0f, 4f),
+                Vector3.Transform(Vector3.Zero, xLine));
+            AssertVector(
+                transform.Position + new Vector3(offset * 3f, 0f, -4f),
+                Vector3.Transform(Vector3.UnitX, xLine));
+        }
+
+        for (int line = 0; line <= 2; line++) {
+            float offset = -2f + (line * 2f);
+            Matrix4x4 zLine = matrices[3 + line];
+            AssertVector(
+                transform.Position + new Vector3(-6f, 0f, -offset * 2f),
+                Vector3.Transform(Vector3.Zero, zLine));
+            AssertVector(
+                transform.Position + new Vector3(6f, 0f, -offset * 2f),
+                Vector3.Transform(Vector3.UnitX, zLine));
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DrawGridWithoutTransformKeepsTheIdentityLayout() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        using (Camera camera = harness.Host.CreatePerspectiveCamera(
+            transform: new Transform(new Vector3(0f, 0f, 10f)))) {
+            camera.DrawGrid(2, 2f, _color);
+            camera.DrawGrid(Transform.Identity, 2, 2f, _color);
+        }
+
+        harness.Host.EndFrame();
+
+        CameraPass pass = packet.Passes[0];
+        Assert.Equal(2, pass.DrawCount);
+        RenderDrawRecord identityForm = pass.Draws[0];
+        RenderDrawRecord transformForm = pass.Draws[1];
+        Assert.Equal(6, identityForm.InstanceCount);
+        Assert.Equal(identityForm.InstanceCount, transformForm.InstanceCount);
+        ReadOnlySpan<Matrix4x4> identityMatrices = identityForm.GetWorldMatrices();
+        ReadOnlySpan<Matrix4x4> transformMatrices = transformForm.GetWorldMatrices();
+        for (int index = 0; index < identityMatrices.Length; index++) {
+            Assert.Equal(identityMatrices[index], transformMatrices[index]);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task InvalidTexturedQuadCallsRecordNothing() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        RenderFramePacket packet = harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        using Camera camera = harness.Host.CreatePerspectiveCamera();
+
+        Rect[] nonPositive = [
+            new(0f, 0f, 0f, 1f),
+            new(0f, 0f, 1f, 0f),
+            new(0f, 0f, -0.5f, 1f),
+            new(0f, 0f, 1f, -0.5f),
+        ];
+        foreach (Rect source in nonPositive) {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => camera.DrawQuad(Transform.Identity, Vector2.One, texture, source));
+        }
+
+        Rect[] outOfBounds = [
+            new(-0.1f, 0f, 0.5f, 1f),
+            new(0.6f, 0f, 0.5f, 1f),
+            new(0f, -0.1f, 1f, 0.5f),
+            new(0f, 0.6f, 1f, 0.5f),
+            new(0f, 0f, 1.2f, 1f),
+        ];
+        foreach (Rect source in outOfBounds) {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => camera.DrawQuad(Transform.Identity, Vector2.One, texture, source));
+        }
+
+        Rect[] nonFinite = [
+            new(float.NaN, 0f, 0.5f, 1f),
+            new(0f, float.PositiveInfinity, 0.5f, 1f),
+            new(0f, 0f, float.NaN, 1f),
+            new(0f, 0f, 0.5f, float.NegativeInfinity),
+        ];
+        foreach (Rect source in nonFinite) {
+            Assert.Throws<ArgumentException>(
+                () => camera.DrawQuad(Transform.Identity, Vector2.One, texture, source));
+        }
+
+        Assert.Throws<ArgumentNullException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, null!));
+        Assert.Throws<ArgumentNullException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, null!, Rect.FromSize(1f, 1f)));
+
+        Texture disposedTexture = RenderingTestAssets.CreateTexture("textures/disposed-quad");
+        disposedTexture.Dispose();
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, disposedTexture));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.DrawQuad(Transform.Identity, Vector2.One, disposedTexture, Rect.FromSize(1f, 1f)));
+
+        camera.Dispose();
+        harness.Host.EndFrame();
+
+        Assert.Equal(0, packet.Passes[0].DrawCount);
+        Assert.Equal(0, packet.Retention.Count);
+        Assert.Null(harness.Primitives.MeshMaterial.TextureValues[0]);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task QuadDiscAndTransformedGridRequireTheTickThread() {
+        using PrimitiveHarness harness = await PrimitiveHarness.CreateAsync();
+        harness.Host.BeginFrame();
+        Texture texture = RenderingTestAssets.CreateTexture();
+        using Camera camera = harness.Host.CreatePerspectiveCamera();
+        Exception? quad = null;
+        Exception? texturedQuad = null;
+        Exception? disc = null;
+        Exception? grid = null;
+
+        Thread thread = new(() => {
+            try {
+                camera.DrawQuad(Transform.Identity, Vector2.One, _color);
+            } catch (Exception exception) {
+                quad = exception;
+            }
+
+            try {
+                camera.DrawQuad(Transform.Identity, Vector2.One, texture, Rect.FromSize(1f, 1f));
+            } catch (Exception exception) {
+                texturedQuad = exception;
+            }
+
+            try {
+                camera.DrawDisc(Transform.Identity, 1f, _color);
+            } catch (Exception exception) {
+                disc = exception;
+            }
+
+            try {
+                camera.DrawGrid(Transform.Identity, 1, 1f, _color);
+            } catch (Exception exception) {
+                grid = exception;
+            }
+        });
+        thread.Start();
+        thread.Join();
+
+        Assert.IsType<InvalidOperationException>(quad);
+        Assert.IsType<InvalidOperationException>(texturedQuad);
+        Assert.IsType<InvalidOperationException>(disc);
+        Assert.IsType<InvalidOperationException>(grid);
+        camera.Dispose();
+        harness.Host.EndFrame();
     }
 
     private static Vector3 Axis(Matrix4x4 matrix, int index) => index switch {

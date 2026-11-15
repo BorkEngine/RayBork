@@ -31,6 +31,9 @@ internal static class PrimitiveMeshFactory {
     /// <summary>The number of great circles in the wire sphere.</summary>
     internal const int WIRE_SPHERE_CIRCLES = 3;
 
+    /// <summary>The number of radial segments in the unit disc.</summary>
+    internal const int DISC_SEGMENTS = 36;
+
     private const float HALF_EXTENT = 0.5f;
 
     private static readonly CubeFace[] _cubeFaces = [
@@ -215,6 +218,45 @@ internal static class PrimitiveMeshFactory {
         ];
         uint[] indices = [0u, 1u, 2u, 0u, 2u, 3u];
         return new PrimitiveMeshData(vertices, indices, PrimitiveTopology.TriangleList, ComputeBounds(vertices));
+    }
+
+    /// <summary>
+    /// Creates the unit disc: a filled unit-radius circle in the XY plane centered at the origin with
+    /// its front face toward +Z.
+    /// </summary>
+    /// <remarks>
+    /// The mesh has one center vertex plus one vertex per <see cref="DISC_SEGMENTS"/> rim segment, and
+    /// each segment is one triangle with the center as its first corner. Every triangle winds
+    /// counter-clockwise when viewed from +Z, and the vertices carry opaque white colors and +Z
+    /// normals.
+    /// </remarks>
+    /// <returns>The disc geometry and its bounds.</returns>
+    internal static PrimitiveMeshData CreateDisc() {
+        List<Vertex> vertices = new(DISC_SEGMENTS + 1);
+        List<uint> indices = new(DISC_SEGMENTS * 3);
+        vertices.Add(new Vertex(
+            Vector3.Zero,
+            Vector3.UnitZ,
+            uv: new Vector2(0.5f, 0.5f),
+            color: Color.White));
+        for (int segment = 0; segment < DISC_SEGMENTS; segment++) {
+            float angle = MathF.Tau * segment / DISC_SEGMENTS;
+            float cosine = MathF.Cos(angle);
+            float sine = MathF.Sin(angle);
+            vertices.Add(new Vertex(
+                new Vector3(cosine, sine, 0f),
+                Vector3.UnitZ,
+                uv: new Vector2(0.5f + (cosine * 0.5f), 0.5f - (sine * 0.5f)),
+                color: Color.White));
+        }
+
+        for (int segment = 0; segment < DISC_SEGMENTS; segment++) {
+            indices.Add(0u);
+            indices.Add((uint)(segment + 1));
+            indices.Add((uint)(((segment + 1) % DISC_SEGMENTS) + 1));
+        }
+
+        return CreateResult(vertices, indices, PrimitiveTopology.TriangleList);
     }
 
     /// <summary>

@@ -27,7 +27,7 @@ internal static class EnginePreloadCounts {
     internal const int ADDITIONAL_PRIMITIVE_PROGRAMS = 2;
 
     /// <summary>The procedural primitive meshes.</summary>
-    internal const int PRIMITIVE_MESHES = 8;
+    internal const int PRIMITIVE_MESHES = 9;
 
     /// <summary>The total GPU uploads the startup preload performs.</summary>
     internal const int TOTAL_UPLOADS = DEFAULTS + ADDITIONAL_PRIMITIVE_PROGRAMS + PRIMITIVE_MESHES;

@@ -60,7 +60,7 @@ public sealed class EngineDefaultsAppTests {
         Assert.True(tickMaterial!.IsDisposed);
 
         // The two materials were preloaded without a second program upload, and everything the engine
-        // owns (the defaults, the two additional primitive programs, and the eight meshes) is released
+        // owns (the defaults, the two additional primitive programs, and the nine meshes) is released
         // by shutdown.
         Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.UploadCallCount);
         Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, worker.DestroyCalls.Count);
@@ -166,11 +166,15 @@ public sealed class EngineDefaultsAppTests {
                 && !tickPrimitives.Sphere.IsDisposed
                 && !tickPrimitives.Plane.IsDisposed
                 && !tickPrimitives.Quad.IsDisposed
+                && !tickPrimitives.Disc.IsDisposed
                 && !tickPrimitives.Triangle.IsDisposed
                 && !tickPrimitives.Line.IsDisposed
                 && !tickPrimitives.WireCube.IsDisposed
                 && !tickPrimitives.WireSphere.IsDisposed
                 && tickPrimitives.Cube.IsProcedural
+                && tickPrimitives.Disc.IsProcedural
+                && tickPrimitives.Disc.Topology == PrimitiveTopology.TriangleList
+                && tickPrimitives.Disc.IndexCount == 108
                 && tickPrimitives.Cube.Topology == PrimitiveTopology.TriangleList;
             materialsUsableInTick = tickPrimitives is not null
                 && tickPrimitives.PrimitiveMaterial.Path == "/shaders/primitive"
@@ -195,7 +199,7 @@ public sealed class EngineDefaultsAppTests {
 
         Assert.NotNull(setupPrimitives);
         Assert.Same(setupPrimitives, tickPrimitives);
-        // The three defaults, the two additional primitive programs, and the eight primitive meshes
+        // The three defaults, the two additional primitive programs, and the nine primitive meshes
         // upload before Setup; nothing is destroyed until shutdown.
         Assert.Equal(EnginePreloadCounts.TOTAL_UPLOADS, uploadCountAtSetup);
         Assert.Equal(0, destroyCountAtSetup);
