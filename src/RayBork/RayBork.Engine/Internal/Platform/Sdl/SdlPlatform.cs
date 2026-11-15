@@ -122,6 +122,9 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         }
     }
 
+    /// <summary>
+    /// Gets the number of platforms that currently hold the SDL video subsystem. Diagnostic for tests.
+    /// </summary>
     internal static int SdlUserCountForTests => _sdlUsers;
 
     /// <summary>

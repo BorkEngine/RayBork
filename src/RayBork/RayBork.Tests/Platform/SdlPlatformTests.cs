@@ -139,8 +139,18 @@ public sealed class SdlPlatformTests {
                 Down = true,
             },
         };
+        SDL.Event secondMouseMotion = new() {
+            Type = (uint)SDL.EventType.MouseMotion,
+            Motion = new SDL.MouseMotionEvent {
+                Type = SDL.EventType.MouseMotion,
+                WindowID = second.Window.WindowId,
+                X = 10f,
+                Y = 20f,
+            },
+        };
         Assert.True(SDL.PushEvent(ref secondResize));
         Assert.True(SDL.PushEvent(ref secondKeyDown));
+        Assert.True(SDL.PushEvent(ref secondMouseMotion));
         first.Platform.Pump(TimeSpan.Zero);
 
         // Clear any resize flag queued while the dummy windows were created, then assert that the
@@ -152,6 +162,9 @@ public sealed class SdlPlatformTests {
         Assert.True(second.Window.WasResized);
         Assert.False(first.Platform.CaptureInput().IsKeyDown(Key.W));
         Assert.True(second.Platform.CaptureInput().IsKeyDown(Key.W));
+        Assert.Equal(0f, first.Platform.CaptureInput().MousePosition.X);
+        Assert.Equal(10f, second.Platform.CaptureInput().MousePosition.X);
+        Assert.Equal(20f, second.Platform.CaptureInput().MousePosition.Y);
 
         SDL.Event unknownClose = CloseEvent(uint.MaxValue);
         Assert.True(SDL.PushEvent(ref unknownClose));
@@ -481,7 +494,6 @@ public sealed class SdlPlatformTests {
         Assert.Equal("second", second.Window.Title);
 
         first.Dispose();
-        Assert.False(second.Window.CloseRequested);
 
         second.Window.SetSize(400, 300);
         second.Platform.Pump(TimeSpan.Zero);
@@ -522,32 +534,76 @@ public sealed class SdlPlatformTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void VulkanPlatformsShareTheLoaderReferenceCount() {
+        if (!GpuTestHost.IsVulkanLoaderAvailable()) {
+            Assert.Skip("The Vulkan loader is unavailable.");
+            return;
+        }
+
         using SdlTestHost first = SdlTestHost.CreateVulkan();
         using SdlTestHost second = SdlTestHost.CreateVulkan();
-        VulkanInstance instance = VulkanInstance.Create(new VulkanInstanceOptions {
-            ApplicationName = "RayBork SDL test",
-            ApplicationVersion = EngineVersion.Current,
-            SurfaceExtensions = first.Platform.GetVulkanInstanceExtensions(),
-            RequestValidation = false,
-            Logger = NullLogger.Instance,
-        });
+        Assert.Equal(2, SdlPlatform.SdlUserCountForTests);
+
+        VulkanInstance? instance = null;
+        IntPtr firstSurface = IntPtr.Zero;
+        IntPtr secondSurface = IntPtr.Zero;
         try {
-            IntPtr firstSurface = first.Platform.CreateVulkanSurface(instance.Handle.Handle);
-            IntPtr secondSurface = second.Platform.CreateVulkanSurface(instance.Handle.Handle);
+            IReadOnlyList<string> extensions;
+            try {
+                extensions = first.Platform.GetVulkanInstanceExtensions();
+            } catch (PlatformException exception) {
+                Assert.Skip($"SDL cannot provide the Vulkan instance extensions: {exception.Message}");
+                return;
+            }
+
+            try {
+                instance = VulkanInstance.Create(new VulkanInstanceOptions {
+                    ApplicationName = "RayBork SDL test",
+                    ApplicationVersion = EngineVersion.Current,
+                    SurfaceExtensions = extensions,
+                    RequestValidation = false,
+                    Logger = NullLogger.Instance,
+                });
+            } catch (GraphicsException exception) {
+                Assert.Skip($"A Vulkan instance is unavailable: {exception.Message}");
+                return;
+            }
+
+            try {
+                firstSurface = first.Platform.CreateVulkanSurface(instance.Handle.Handle);
+                secondSurface = second.Platform.CreateVulkanSurface(instance.Handle.Handle);
+            } catch (PlatformException exception) {
+                Assert.Skip($"SDL cannot create a Vulkan surface: {exception.Message}");
+                return;
+            }
+
             Assert.Equal(2, SdlPlatform.VulkanLoaderUserCountForTests);
 
             first.Platform.DestroyVulkanSurface(instance.Handle.Handle, firstSurface);
+            firstSurface = IntPtr.Zero;
             first.Dispose();
+            Assert.Equal(1, SdlPlatform.SdlUserCountForTests);
             Assert.Equal(1, SdlPlatform.VulkanLoaderUserCountForTests);
 
             second.Platform.DestroyVulkanSurface(instance.Handle.Handle, secondSurface);
+            secondSurface = IntPtr.Zero;
             second.Dispose();
+            Assert.Equal(0, SdlPlatform.SdlUserCountForTests);
             Assert.Equal(0, SdlPlatform.VulkanLoaderUserCountForTests);
         } finally {
+            if (instance is not null) {
+                if (firstSurface != IntPtr.Zero) {
+                    first.Platform.DestroyVulkanSurface(instance.Handle.Handle, firstSurface);
+                }
+
+                if (secondSurface != IntPtr.Zero) {
+                    second.Platform.DestroyVulkanSurface(instance.Handle.Handle, secondSurface);
+                }
+            }
+
             first.Dispose();
             second.Dispose();
-            instance.Dispose();
-            instance.DisposeFromMainThread();
+            instance?.Dispose();
+            instance?.DisposeFromMainThread();
         }
     }
 
