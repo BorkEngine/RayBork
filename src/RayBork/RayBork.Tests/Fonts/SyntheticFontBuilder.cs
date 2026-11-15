@@ -51,7 +51,7 @@ internal sealed class SyntheticFontBuilder {
     private int _unitsPerEm = 1000;
     private int _ascender = 800;
     private int _descender = -200;
-    private int _lineGap = 0;
+    private int _lineGap;
     private byte[]? _rawCmap;
     private byte[]? _rawKern;
     private byte[]? _rawGpos;

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Silk.NET.Vulkan;
 
@@ -406,6 +407,10 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The helper exists to destroy one table resource best-effort during teardown; the caller logs and moves on.")]
     private void DestroyBestEffort(string description, Action destroy) {
         try {
             destroy();

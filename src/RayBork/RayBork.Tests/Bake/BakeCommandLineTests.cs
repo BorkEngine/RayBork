@@ -33,7 +33,7 @@ public sealed class BakeCommandLineTests {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = workspace.Builder().Build();
 
-        BakeRunResult result = workspace.RunRaw(application, args);
+        BakeRunResult result = TempBakeWorkspace.RunRaw(application, args);
 
         Assert.Equal(2, result.ExitCode);
         Assert.NotEmpty(result.Error);

@@ -10,8 +10,13 @@
         <Deterministic>true</Deterministic>
         <EnableNETAnalyzers>true</EnableNETAnalyzers>
         <WarningLevel>9999</WarningLevel>
+        <!-- The engine is the only project held to the full analyzer set. Test, bake, tooling, and
+             sample projects override this to `latest-recommended` in their own project files: they
+             are not shipped API and the strict rules mostly flag test shapes and build-time tools.
+             `Features=strict` is Roslyn's unsupported extra-warning feature flag, not an analyzer
+             level; it was removed because this codebase produced no additional diagnostics when it
+             was set, and it can be re-added if those extra warnings are wanted. -->
         <AnalysisLevel>latest-all</AnalysisLevel>
-        <Features>strict</Features>
     </PropertyGroup>
 
 </Project>

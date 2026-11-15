@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.Extensions.Logging;
 using Silk.NET.Vulkan;
@@ -449,6 +450,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The Vulkan validation layer reported an error while recovering. The diagnostic code is
     /// <c>RB3001</c>.
     /// </exception>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Device recovery reports the failure through its return value and statistics instead of crashing the render thread.")]
     public bool Recover(RenderRecoveryReason reason) {
         EnsureInitialized();
         if (_consecutiveRecoveries >= MAX_CONSECUTIVE_RECOVERIES) {
@@ -1074,6 +1079,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// public asset stays valid. Render-thread only, with the device idle. Destruction is best effort:
     /// a failure is logged and the device teardown continues.
     /// </remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Asset GPU teardown runs during backend shutdown, when the worker or the device may already be gone.")]
     private void DestroyAssetGpuResources() {
         VulkanAssetWorker? worker = _assetGpuWorker;
         if (worker is null) {
@@ -1482,7 +1491,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         return draw.GetInstanceTextureBindings().Slice(instanceIndex * bindingCount, bindingCount);
     }
 
-    private uint ResolveTextureSlot(Texture? texture) {
+    private static uint ResolveTextureSlot(Texture? texture) {
         if (texture is null) {
             return VulkanBindlessTextureTable.WHITE_SLOT;
         }

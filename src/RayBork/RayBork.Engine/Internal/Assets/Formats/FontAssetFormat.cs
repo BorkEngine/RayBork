@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -33,6 +35,10 @@ internal sealed class FontAssetFormat : IEngineAssetFormat<Font> {
     public AssetEntryType EntryType => AssetEntryType.Font;
 
     /// <inheritdoc/>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "Pipeline ownership transfers to the returned DecodedAsset and its release callback, which dispose it exactly once.")]
     public DecodedAsset<Font> Decode(AssetFormatContext context) {
         ArgumentNullException.ThrowIfNull(context);
 

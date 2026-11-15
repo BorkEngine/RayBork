@@ -96,7 +96,8 @@ internal static class GltfModelReader {
         ModelRoot root,
         Action<string> warning) {
         var parts = new List<ModelPartSource>();
-        Scene? scene = root.DefaultScene ?? root.LogicalScenes.FirstOrDefault();
+        Scene? scene = root.DefaultScene
+            ?? (root.LogicalScenes.Count > 0 ? root.LogicalScenes[0] : null);
         if (scene is not null) {
             foreach (Node node in scene.VisualChildren) {
                 CollectNode(node, parts, warning);

@@ -4,6 +4,8 @@
         <!-- Shaderc returns raw pointers. The bake is build-time JIT tooling, so the unsafe surface
              never enters a runtime project or its AOT publish graph. -->
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <!-- Build-time tooling is not shipped API, so it is held to the recommended analyzer set. -->
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
     </PropertyGroup>
 
     <ItemGroup>

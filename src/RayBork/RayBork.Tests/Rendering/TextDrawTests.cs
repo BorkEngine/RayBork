@@ -68,7 +68,7 @@ public sealed class TextDrawTests {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
         Transform transform = new(new Vector3(0f, 0f, -5f));
-        await harness.SettleGlyphsAsync(font, "A");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "A");
         Assert.False(font.TryGetGlyph(new Rune('B'), out _));
 
         // "BA" with B pending: A is still placed after B's advance, so the pending glyph's advance is
@@ -96,7 +96,7 @@ public sealed class TextDrawTests {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
         Transform transform = new(new Vector3(0f, 0f, -5f));
-        await harness.SettleGlyphsAsync(font, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "AB");
         float advanceB = font.Measure("B", 1f).X;
 
         RenderFramePacket packet = harness.Host.BeginFrame();
@@ -126,7 +126,7 @@ public sealed class TextDrawTests {
     public async Task AZeroSizeSpaceRecordsNothingAndStillAdvancesThePen() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateSpaceFace());
-        await harness.SettleGlyphsAsync(font, "A");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "A");
 
         RenderFramePacket spacePacket = harness.Host.BeginFrame();
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
@@ -170,7 +170,7 @@ public sealed class TextDrawTests {
     public async Task AZeroTransformScaleComponentRecordsNothing() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
-        await harness.SettleGlyphsAsync(font, "A");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "A");
         RenderFramePacket packet = harness.Host.BeginFrame();
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
             Transform flattened = new(
@@ -192,7 +192,7 @@ public sealed class TextDrawTests {
     public async Task ThePerCallGlyphScratchDropsItsTextureReferences() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
-        await harness.SettleGlyphsAsync(font, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "AB");
         RenderFramePacket packet = harness.Host.BeginFrame();
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
             camera.DrawText(font, "AB", new Transform(new Vector3(0f, 0f, -5f)), 1f, _color);
@@ -211,7 +211,7 @@ public sealed class TextDrawTests {
     public async Task ReadyGlyphsRecordOneDrawWithPerInstanceTexturesTintAndMatrices() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
-        await harness.SettleGlyphsAsync(font, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "AB");
         Transform transform = new(
             new Vector3(1f, 2f, -5f),
             Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.5f),
@@ -545,7 +545,7 @@ public sealed class TextDrawTests {
     public async Task TwoDrawTextCallsOverOneFontProduceOneBatch() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
-        await harness.SettleGlyphsAsync(font, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "AB");
         RenderFramePacket packet = harness.Host.BeginFrame();
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
             camera.DrawText(font, "AB", new Transform(new Vector3(0f, 0f, -5f)), 1f, _color);
@@ -570,8 +570,8 @@ public sealed class TextDrawTests {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font firstFont = harness.CreateFont(CreateTwoGlyphFace());
         Font secondFont = harness.CreateFont(CreateAlternateFace());
-        await harness.SettleGlyphsAsync(firstFont, "AB");
-        await harness.SettleGlyphsAsync(secondFont, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(firstFont, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(secondFont, "AB");
         RenderFramePacket packet = harness.Host.BeginFrame();
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
             camera.DrawText(firstFont, "AB", new Transform(new Vector3(0f, 1.5f, -5f)), 1f, _color);
@@ -594,7 +594,7 @@ public sealed class TextDrawTests {
     public async Task TextAndBillboardDoNotMerge() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
-        await harness.SettleGlyphsAsync(font, "A");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "A");
         using Texture texture = RenderingTestAssets.CreateTexture();
         RenderFramePacket packet = harness.Host.BeginFrame();
         using (Camera camera = harness.Host.CreatePerspectiveCamera()) {
@@ -620,7 +620,7 @@ public sealed class TextDrawTests {
     public async Task DrawTextBillboardCentersTheBlockOnThePositionAndFacesTheCamera() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
-        await harness.SettleGlyphsAsync(font, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "AB");
         Glyph glyphA = GlyphOf(font, 'A');
         Glyph glyphB = GlyphOf(font, 'B');
         ExpectedLayout layout = ExpectLayout(font, [[glyphA, glyphB]], 0.5f, TextAlignment.Left);
@@ -667,7 +667,7 @@ public sealed class TextDrawTests {
     public async Task DrawTextBillboardAlignmentPositionsLinesInsideTheBlockWidth() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateTwoGlyphFace());
-        await harness.SettleGlyphsAsync(font, "AB");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "AB");
         Glyph glyphA = GlyphOf(font, 'A');
         Glyph glyphB = GlyphOf(font, 'B');
         ExpectedLayout leftLayout = ExpectLayout(font, [[glyphA], [glyphB]], 1f, TextAlignment.Left);
@@ -726,7 +726,7 @@ public sealed class TextDrawTests {
     public async Task DrawTextBillboardCentersTheGlyphOverhangOutsideTheLayoutBox() {
         using TextDrawTestHarness harness = await TextDrawTestHarness.CreateAsync();
         Font font = harness.CreateFont(CreateOverhangFace());
-        await harness.SettleGlyphsAsync(font, "AC");
+        await TextDrawTestHarness.SettleGlyphsAsync(font, "AC");
         Glyph glyphA = GlyphOf(font, 'A');
         Glyph glyphC = GlyphOf(font, 'C');
         ExpectedLayout layout = ExpectLayout(font, [[glyphA, glyphC]], 1f, TextAlignment.Left);

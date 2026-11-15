@@ -8,6 +8,8 @@
              RayBork.Bake and its packages enter this project's Native AOT publish graph. -->
         <TextAssetsProjectFile Condition="'$(TextAssetsProjectFile)' == ''">$(MSBuildProjectDirectory)\Text.Assets\Text.Assets.csproj</TextAssetsProjectFile>
         <TextPackFileName Condition="'$(TextPackFileName)' == ''">text.pck</TextPackFileName>
+        <!-- Samples are documentation, not shipped API, so they are held to the recommended set. -->
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
     </PropertyGroup>
 
     <!-- The assets project lives inside this sample directory (flat per-sample layout). Keep its

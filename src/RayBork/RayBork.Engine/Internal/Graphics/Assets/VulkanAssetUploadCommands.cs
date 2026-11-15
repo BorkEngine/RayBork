@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Silk.NET.Vulkan;
 
@@ -171,6 +172,10 @@ internal static unsafe class VulkanAssetUploadCommands {
         DestroyCommandPool(device.Vulkan, device.Device, submission.CommandPool, logger);
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Fence destruction runs on teardown paths where the device may already be lost; the failure is logged instead of thrown.")]
     private static void DestroyFence(Vk vulkan, Device device, Fence fence, ILogger logger) {
         if (fence.Handle == 0) {
             return;
@@ -185,6 +190,10 @@ internal static unsafe class VulkanAssetUploadCommands {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Command-pool destruction runs on teardown paths where the device may already be lost; the failure is logged instead of thrown.")]
     private static void DestroyCommandPool(Vk vulkan, Device device, CommandPool commandPool, ILogger logger) {
         if (commandPool.Handle == 0) {
             return;

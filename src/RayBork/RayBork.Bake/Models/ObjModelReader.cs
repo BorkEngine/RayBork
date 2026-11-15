@@ -97,7 +97,7 @@ internal static class ObjModelReader {
             }
         }
 
-        if (!filePart.Faces.Any() && parts.All(part => part.Faces.Count == 0)) {
+        if (filePart.Faces.Count == 0 && parts.All(part => part.Faces.Count == 0)) {
             throw new ModelReadException($"The OBJ source '{fileName}' contains no faces.");
         }
 
@@ -367,7 +367,7 @@ internal static class ObjModelReader {
     }
 
     private static string StripComment(string line) {
-        int comment = line.IndexOf('#');
+        int comment = line.IndexOf('#', StringComparison.Ordinal);
         return comment < 0 ? line : line[..comment];
     }
 

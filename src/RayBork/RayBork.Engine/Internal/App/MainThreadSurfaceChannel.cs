@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -72,6 +74,10 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
     /// <param name="platform">The initialized platform that owns the window.</param>
     /// <returns><see langword="true"/> when a request was serviced; otherwise <see langword="false"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="platform"/> is <c>null</c>.</exception>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The main thread services a surface request queued by the render thread; any failure is recorded on the request so the render thread observes it instead of the main thread dying.")]
     internal bool TryService(IEnginePlatform platform) {
         ArgumentNullException.ThrowIfNull(platform);
         if (!_requestQueued.WaitOne(0)) {

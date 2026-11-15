@@ -1,0 +1,5 @@
+# RayBork bake-project analyzer policy. The bake runs on the developer's machine over content
+# authored by someone else, so its string handling stays explicit.
+[*.cs]
+# Enable CA1307 for the bake: every culture-sensitive comparison must name StringComparison.
+dotnet_diagnostic.CA1307.severity = warning

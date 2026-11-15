@@ -97,7 +97,7 @@ public sealed class SfntFaceContainerTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void RejectsTruncatedOffsetTable() {
-        FontTestData.AssertFaceFailure(CreateDefaultFace()[..8], "12-byte sfnt offset table");
+        FontTestData.AssertFaceFailure(CreateDefaultFace().AsMemory(..8), "12-byte sfnt offset table");
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class SfntFaceContainerTests {
         int tableCount = BinaryPrimitives.ReadUInt16BigEndian(face.AsSpan(4));
 
         FontTestData.AssertFaceFailure(
-            face[..(12 + (16 * (tableCount - 1)) + 5)],
+            face.AsMemory(..(12 + (16 * (tableCount - 1)) + 5)),
             "table directory extends past");
     }
 

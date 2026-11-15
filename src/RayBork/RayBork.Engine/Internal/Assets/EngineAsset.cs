@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -107,9 +109,7 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
     /// <exception cref="ObjectDisposedException">The asset is already disposed.</exception>
     internal void AddOwnerReference() {
         lock (_gate) {
-            if (_disposed) {
-                throw new ObjectDisposedException(nameof(EngineAsset));
-            }
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             _ownerCount++;
         }
@@ -125,9 +125,7 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
         bool notifyOwnersReleased;
         bool destroy;
         lock (_gate) {
-            if (_disposed || _ownerCount <= 0) {
-                throw new ObjectDisposedException(nameof(EngineAsset));
-            }
+            ObjectDisposedException.ThrowIf(_disposed || _ownerCount <= 0, this);
 
             _ownerCount--;
             notifyOwnersReleased = _ownerCount == 0;
@@ -174,9 +172,7 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
     /// <exception cref="ObjectDisposedException">The asset is already disposed.</exception>
     public void AddFrameHold() {
         lock (_gate) {
-            if (_disposed) {
-                throw new ObjectDisposedException(nameof(EngineAsset));
-            }
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             _frameHoldCount++;
         }
@@ -220,6 +216,10 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The catalog cache-removal callback runs during teardown, when the entry may already be gone; it must not mask the GPU destruction that follows.")]
     private void NotifyOwnersReleased() {
         try {
             _onOwnersReleased();

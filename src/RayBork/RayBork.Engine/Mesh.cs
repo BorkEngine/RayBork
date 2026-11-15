@@ -214,9 +214,7 @@ public sealed class Mesh : IAsset {
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
     public void Dispose() {
-        if (_asset.IsDisposed) {
-            throw new ObjectDisposedException(nameof(Mesh));
-        }
+        ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
 
         _asset.ReleaseOwnerReference();
     }

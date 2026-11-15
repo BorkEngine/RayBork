@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -138,14 +140,21 @@ internal sealed class TickRunner {
     /// </summary>
     internal void Join() => _thread.Join();
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The tick thread records every failure in Failure and completes; an exception may never escape and kill the process.")]
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The synchronization context is disposed by the finally on every path; the analyzer cannot model the try/catch that records a dispose failure in Failure instead of letting it escape the tick thread.")]
     private void RunThread() {
         _threadId = Environment.CurrentManagedThreadId;
         SynchronizationContext? previousContext = SynchronizationContext.Current;
         TickSynchronizationContext synchronizationContext = new();
-        SynchronizationContext.SetSynchronizationContext(synchronizationContext);
-
         bool tickThreadAttached = false;
         try {
+            SynchronizationContext.SetSynchronizationContext(synchronizationContext);
             TickThread.Attach();
             tickThreadAttached = true;
             RunCallbacks(synchronizationContext);
@@ -176,6 +185,10 @@ internal sealed class TickRunner {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "IGame callbacks are user code; every exception is captured and reported as a game failure.")]
     private void RunCallbacks(TickSynchronizationContext synchronizationContext) {
         try {
             _context.SetInput(CaptureInput());
@@ -215,6 +228,10 @@ internal sealed class TickRunner {
         _failure = CombineFailures(tickFailure, shutdownFailure);
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "One failed frame step abandons the lease and reports the failure; no exception may escape the tick thread.")]
     private TickFailure? RunTickLoop() {
         CancellationToken stopToken = _stopSource.Token;
         while (true) {

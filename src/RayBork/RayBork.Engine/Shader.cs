@@ -430,9 +430,7 @@ public sealed class Shader : IDisposable {
 
         Texture?[] owned;
         lock (_cursorGate) {
-            if (_disposed) {
-                throw new ObjectDisposedException(nameof(Shader));
-            }
+            ObjectDisposedException.ThrowIf(_disposed, this);
 
             _disposed = true;
             owned = [.. _textureValues];
@@ -501,9 +499,7 @@ public sealed class Shader : IDisposable {
         => BinaryPrimitives.WriteSingleLittleEndian(destination.Slice(offset, sizeof(float)), value);
 
     private void ThrowIfCursorDisposedLocked() {
-        if (_disposed || _program.IsDisposed) {
-            throw new ObjectDisposedException(nameof(Shader));
-        }
+        ObjectDisposedException.ThrowIf(_disposed || _program.IsDisposed, this);
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(IsDisposed, this);

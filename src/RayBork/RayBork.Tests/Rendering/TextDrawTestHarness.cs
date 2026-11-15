@@ -101,7 +101,7 @@ internal sealed class TextDrawTestHarness : IDisposable {
     /// A glyph that is already cached needs no wait; an empty glyph settles without a texture. The probe
     /// acquisition releases its frame hold before the wait, simulating a frame that already completed.
     /// </remarks>
-    internal async Task SettleGlyphsAsync(Font font, string text, long frameIndex = 1) {
+    internal static async Task SettleGlyphsAsync(Font font, string text, long frameIndex = 1) {
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(text);
 

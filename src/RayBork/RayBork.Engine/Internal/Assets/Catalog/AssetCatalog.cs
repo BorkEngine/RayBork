@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace RayBork.Internal;
@@ -159,7 +160,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     /// upload complete asynchronously on the loader thread.
     /// </remarks>
     public Task<T> Load<T>(string path, CancellationToken cancellationToken = default)
-        => LoadCore<T>(path, cancellationToken, chain: null);
+        => LoadCore<T>(path, chain: null, cancellationToken);
 
     /// <summary>
     /// Normalizes the path, resolves the registered strategy for <typeparamref name="T"/>, and starts
@@ -167,12 +168,12 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     /// </summary>
     /// <typeparam name="T">The requested asset type.</typeparam>
     /// <param name="path">The caller-supplied path.</param>
-    /// <param name="cancellationToken">The caller cancellation token.</param>
     /// <param name="chain">
     /// The chain of loads that requested this load, or <see langword="null"/> for a top-level load.
     /// </param>
+    /// <param name="cancellationToken">The caller cancellation token.</param>
     /// <returns>The load task.</returns>
-    internal Task<T> LoadCore<T>(string path, CancellationToken cancellationToken, LoadChain? chain) {
+    internal Task<T> LoadCore<T>(string path, LoadChain? chain, CancellationToken cancellationToken) {
         string canonical = AssetPath.Normalize(path);
         if (ProceduralAssetIds.IsReserved(canonical)) {
             lock (_gate) {
@@ -199,7 +200,7 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                     + "asset type.");
         }
 
-        return LoadCustomAsync(canonical, loaderRegistration, cancellationToken, chain);
+        return LoadCustomAsync(canonical, loaderRegistration, chain, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -678,8 +679,8 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
     private Task<T> LoadCustomAsync<T>(
         string canonical,
         LoaderAssetTypeRegistration<T> registration,
-        CancellationToken cancellationToken,
-        LoadChain? chain) {
+        LoadChain? chain,
+        CancellationToken cancellationToken) {
         AssetLoaderWorkItem workItem;
         lock (_gate) {
             ThrowIfUnavailableLocked();
@@ -706,9 +707,9 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
                     visible,
                     registration.Loader,
                     registration.FailureDescription,
+                    chain,
                     stopToken,
-                    cancellationToken,
-                    chain),
+                    cancellationToken),
                 CompleteWorkItem,
                 mapCancellationToStopped: false);
             if (!TryEnqueueLocked(workItem)) {
@@ -732,9 +733,9 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         VisibleAsset descriptorEntry,
         IAssetLoader<T> loader,
         string failureDescription,
+        LoadChain? chain,
         CancellationToken stopToken,
-        CancellationToken cancellationToken,
-        LoadChain? chain) {
+        CancellationToken cancellationToken) {
         using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
             stopToken,
             cancellationToken);
@@ -743,9 +744,9 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
             AssetLoadContext context = new(
                 this,
                 descriptorEntry.Entry.Path,
-                linked.Token,
                 payload,
-                new LoadChain(typeof(T), descriptorEntry.Entry.Path, chain));
+                new LoadChain(typeof(T), descriptorEntry.Entry.Path, chain),
+                linked.Token);
             T value = await loader.LoadAsync(context).ConfigureAwait(false);
             if (value is null) {
                 throw AssetLoadErrors.CreateLoadFailure(
@@ -807,6 +808,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
         return true;
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Queuing GPU destruction happens while an asset is being released, so it must not throw out of the release path; the failure is logged.")]
     private void QueueDestruction(GpuAssetResource resource) {
         try {
             _bridge.Destroy(resource);
@@ -880,6 +885,10 @@ internal sealed class AssetCatalog : IAssetCatalog, IProceduralAssetProvider {
 
         internal Task<object> Completion => _completion.Task;
 
+        [SuppressMessage(
+            "Design",
+            "CA1031",
+            Justification = "A loader is user code; any failure completes the work item with that exception instead of killing the loader thread.")]
         internal void Execute(CancellationToken stopToken) {
             Task<object> work;
             try {

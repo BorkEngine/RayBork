@@ -320,13 +320,22 @@ internal sealed class HelloGame : IGame {
 
         bool focused = window.IsFocused;
         if (focused != _lastFocused) {
-            logger.LogInformation(focused ? "Window focus gained." : "Window focus lost.");
+            if (focused) {
+                logger.LogInformation("Window focus gained.");
+            } else {
+                logger.LogInformation("Window focus lost.");
+            }
+
             _lastFocused = focused;
         }
 
         bool minimized = window.IsMinimized;
         if (minimized != _lastMinimized) {
-            logger.LogInformation(minimized ? "Window minimized." : "Window restored from minimized state.");
+            if (minimized) {
+                logger.LogInformation("Window minimized.");
+            } else {
+                logger.LogInformation("Window restored from minimized state.");
+            }
         }
 
         WindowState state = window.State;

@@ -444,7 +444,7 @@ internal static class ShaderPrologueGenerator {
 
     private static bool TryReadQualifierInt(string qualifier, out int value) {
         value = 0;
-        int equals = qualifier.IndexOf('=');
+        int equals = qualifier.IndexOf('=', StringComparison.Ordinal);
         if (equals < 0) {
             return false;
         }
@@ -476,7 +476,7 @@ internal static class ShaderPrologueGenerator {
     private static int FindVersionDirectiveEnd(string stripped) {
         int lineStart = 0;
         while (lineStart < stripped.Length) {
-            int lineEnd = stripped.IndexOf('\n', lineStart);
+            int lineEnd = stripped.IndexOf('\n', lineStart, StringComparison.Ordinal);
             int nextLine = lineEnd < 0 ? stripped.Length : lineEnd + 1;
             int content = lineStart;
             while (content < nextLine && char.IsWhiteSpace(stripped[content])) {

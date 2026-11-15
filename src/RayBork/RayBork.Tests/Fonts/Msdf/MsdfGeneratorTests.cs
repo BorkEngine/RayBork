@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 using RayBork.Internal;
 
@@ -222,7 +223,10 @@ public sealed class MsdfGeneratorTests {
             () => MsdfGenerator.Generate(outline, layout));
 
         Assert.Contains("texels", exception.Reason, StringComparison.Ordinal);
-        Assert.Contains(MsdfGenerator.MAX_TEXELS.ToString(), exception.Reason, StringComparison.Ordinal);
+        Assert.Contains(
+            MsdfGenerator.MAX_TEXELS.ToString(CultureInfo.InvariantCulture),
+            exception.Reason,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -247,7 +251,7 @@ public sealed class MsdfGeneratorTests {
 
         Assert.Contains("edges", exception.Reason, StringComparison.Ordinal);
         Assert.Contains(
-            MsdfGenerator.MAX_FLATTENED_EDGES.ToString(),
+            MsdfGenerator.MAX_FLATTENED_EDGES.ToString(CultureInfo.InvariantCulture),
             exception.Reason,
             StringComparison.Ordinal);
     }
@@ -267,7 +271,7 @@ public sealed class MsdfGeneratorTests {
 
         Assert.Contains("edge-texel pairs", exception.Reason, StringComparison.Ordinal);
         Assert.Contains(
-            MsdfGenerator.MAX_EDGE_TEXEL_PAIRS.ToString(),
+            MsdfGenerator.MAX_EDGE_TEXEL_PAIRS.ToString(CultureInfo.InvariantCulture),
             exception.Reason,
             StringComparison.Ordinal);
     }
