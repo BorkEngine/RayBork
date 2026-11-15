@@ -247,6 +247,10 @@ public sealed class RayBorkApp : IDisposable {
     /// The factory that creates the app logger. The caller owns it when it is the default factory.
     /// </param>
     /// <returns>The failure that stopped the run, or <see langword="null"/> for a graceful exit.</returns>
+    /// <remarks>
+    /// An unexpected logger, cleanup, or final-log exception is not converted to a failure here; it
+    /// propagates to the caller, whose <c>finally</c> still disposes the default logger factory.
+    /// </remarks>
     [SuppressMessage(
         "Design",
         "CA1031",

@@ -90,6 +90,7 @@ public sealed class TonemappingSettingsTests {
     [InlineData(float.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ExposureSetterRejectsNonFiniteValuesWithThePropertyName(float exposure) {
+        Assert.False(TickThread.IsCurrent);
         TonemappingSettings settings = new(0f, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST);
 
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
@@ -108,6 +109,7 @@ public sealed class TonemappingSettingsTests {
     [InlineData(-4f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void AgxWhiteSetterRejectsValuesBelowTwoWithThePropertyName(float agxWhite) {
+        Assert.False(TickThread.IsCurrent);
         TonemappingSettings settings = new(0f, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST);
 
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
@@ -126,6 +128,7 @@ public sealed class TonemappingSettingsTests {
     [InlineData(-1f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void AgxContrastSetterRejectsValuesBelowOneWithThePropertyName(float agxContrast) {
+        Assert.False(TickThread.IsCurrent);
         TonemappingSettings settings = new(0f, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST);
 
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
