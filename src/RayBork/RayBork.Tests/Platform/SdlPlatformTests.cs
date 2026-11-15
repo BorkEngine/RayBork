@@ -460,6 +460,7 @@ public sealed class SdlPlatformTests {
         SdlTestHost? first = null;
         SdlTestHost? second = null;
         try {
+            await Task.WhenAll(firstTask, secondTask);
             first = await firstTask;
             second = await secondTask;
 
@@ -467,6 +468,14 @@ public sealed class SdlPlatformTests {
             first.Platform.Pump(TimeSpan.Zero);
             second.Platform.Pump(TimeSpan.Zero);
         } finally {
+            if (first is null && firstTask.Status == TaskStatus.RanToCompletion) {
+                first = await firstTask;
+            }
+
+            if (second is null && secondTask.Status == TaskStatus.RanToCompletion) {
+                second = await secondTask;
+            }
+
             first?.Dispose();
             second?.Dispose();
         }
