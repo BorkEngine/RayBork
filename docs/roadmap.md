@@ -535,7 +535,8 @@ color helpers, and the restored Bork2d/Unity color preset set:
   scales the `XZ` unit plane, whose front faces world `+Y`. `DrawCircle` is a closed 36-segment
   circle in the local `XZ` plane with local `+Y` normal. `DrawGrid` is one instanced line draw with
   `2 * (slices + 1)` instances spanning `slices * spacing` per axis. Every helper works in world
-  space; each mesh is a unit reference, and the instance transform carries the shape. The eight meshes
+  space; each mesh is a unit reference, and the instance transform carries the shape. The eight M5
+  meshes (M7 adds the unit disc as a ninth)
   are engine-owned, built once before `IGame.Setup` through the procedural GPU bridge from
   deterministic CPU geometry, and are not public assets. The tessellated sphere and wire sphere,
   cylinder and wire cylinder, capsule and wire capsule, and circle compose their geometry from the
@@ -1176,8 +1177,9 @@ details:
   rectangle, opaque and alpha quads (including the mesh-program textured alpha path), batching
   across textures and split only by render state, the disc interior, text and sprites in one frame,
   full-viewport frustum tolerance, and 3D orthographic cube rendering. `Rendering/PrimitiveDrawTests`
-  gains the `DrawQuad`, `DrawDisc`, `DrawGrid(Transform)`, and `ScreenToWorldTransform` record,
-  validation, zero-extent, disposed-asset, and batching coverage. The Windows hardware run is 2,695
+  gains the `DrawQuad`, `DrawDisc`, and `DrawGrid(Transform)` record, validation, zero-extent,
+  disposed-asset, and batching coverage; `Rendering/CameraTests` covers `ScreenToWorldTransform`.
+  The Windows hardware run is 2,695
   tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed,
   0 failed, and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes
   only SDR, and the GPU-filtered run is 107 passed with the same 7 skips. Every sample solution
@@ -1515,8 +1517,9 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   opaque and alpha quads (including the mesh-program textured alpha path), batching across textures
   and split only by render state, the disc interior, text and sprites in one frame, full-viewport
   frustum tolerance, and 3D orthographic cube rendering. `PrimitiveDrawTests` covers the
-  `DrawQuad`, `DrawDisc`, `DrawGrid(Transform)`, and `ScreenToWorldTransform` records, zero-extent
-  behavior, validation, disposed assets, retention, and batching. The suite is 2,695 tests, 114 of
+  `DrawQuad`, `DrawDisc`, and `DrawGrid(Transform)` records, zero-extent behavior, validation,
+  disposed assets, retention, and batching, and `CameraTests` covers `ScreenToWorldTransform`. The
+  suite is 2,695 tests, 114 of
   them GPU integration tests, and every sample solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

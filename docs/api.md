@@ -353,14 +353,17 @@ alpha quad. The effective state is written to the draw record and is part of the
 opaque and an alpha quad never merge. `DrawDisc` and `DrawGrid` are opaque. The text and billboard
 paths keep their own states: text is alpha/no-depth-write and the billboard is alpha-blended.
 
-The new primitives validate like the existing helpers: a non-finite size, radius, spacing, transform
-component, or color throws `ArgumentException`; a negative size, radius, spacing, or transform scale
-component throws `ArgumentOutOfRangeException`; an exactly zero size, radius, or transform scale
-component records nothing; a null texture is `ArgumentNullException` and a disposed texture, camera,
-or primitive asset is `ObjectDisposedException`; a source rectangle with a non-finite component is
-`ArgumentException`, and a non-positive width or height or a rectangle outside the normalized
-`[0, 1]` texture rectangle is `ArgumentOutOfRangeException`. Validation runs before any retention or
-record mutation.
+The new primitives validate before any retention or record mutation. For `DrawQuad` and `DrawDisc`,
+a non-finite size, radius, transform component, color, or source-rectangle component is
+`ArgumentException`; a negative size, radius, or transform scale component is
+`ArgumentOutOfRangeException`; an exactly zero size, radius, or transform scale component records
+nothing. `DrawGrid` validates a non-finite `spacing` or transform component as `ArgumentException`,
+`slices < 1` or `spacing <= 0` as `ArgumentOutOfRangeException`, records nothing for a zero transform
+scale component, and keeps the M5 grid's color behavior (it does not validate its color). A null
+texture is `ArgumentNullException` and a disposed texture, camera, or primitive asset is
+`ObjectDisposedException`; a source rectangle with a non-finite component is `ArgumentException`, and
+a non-positive width or height or a rectangle outside the normalized `[0, 1]` texture rectangle is
+`ArgumentOutOfRangeException`.
 
 `DrawTexture` is not shipped. A textured `DrawQuad` or `DrawBillboard(faceCamera: false)` covers a
 sprite, and `ScreenToWorldTransform` plus `DrawText` covers screen-space text with pixel-sized text;

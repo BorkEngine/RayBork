@@ -347,7 +347,7 @@ match: one orthographic camera whose visible height is the render height, so the
 Transform screen = camera.ScreenToWorldTransform(
     new Vector2(renderPixelX, renderPixelY),
     1f);
-camera.DrawQuad(screen, new Vector2(widthPixels, heightPixels), texture, RenderState.AlphaBlend);
+camera.DrawQuad(screen, new Vector2(widthPixels, heightPixels), texture, renderState: RenderState.AlphaBlend);
 camera.DrawText(font, "HUD", screen, 18f, Color.White);
 ```
 
@@ -379,12 +379,15 @@ matrix `CreateScale(size.X, size.Y, 1) * transform.ToMatrix()`:
 The effective render state is part of the batch key, so an alpha quad never merges with an opaque
 one. The shared mesh material's texture binding is set immediately before a textured quad is
 recorded and cleared immediately afterwards, and the frame retains the texture. A zero size, radius,
-or transform scale component records nothing. A non-finite size, radius, spacing, transform
-component, color, or source-rectangle component is `ArgumentException`; a negative size, radius,
-spacing, or transform scale component is `ArgumentOutOfRangeException`; a null texture is
-`ArgumentNullException`; a disposed camera, texture, or primitive asset is `ObjectDisposedException`;
-a source rectangle with a non-positive width or height, or one outside `[0, 1]`, is
-`ArgumentOutOfRangeException`. Validation runs before any retention or record mutation.
+or transform scale component records nothing. For `DrawQuad` and `DrawDisc`, a non-finite size,
+radius, transform component, color, or source-rectangle component is `ArgumentException`, and a
+negative size, radius, or transform scale component is `ArgumentOutOfRangeException`. `DrawGrid`
+validates its transform and a non-finite `spacing` as `ArgumentException`, `slices < 1` or
+`spacing <= 0` as `ArgumentOutOfRangeException`, and keeps the M5 grid's color behavior (it does not
+validate its color). A null texture is `ArgumentNullException`; a disposed camera, texture, or
+primitive asset is `ObjectDisposedException`; a source rectangle with a non-positive width or height,
+or one outside `[0, 1]`, is `ArgumentOutOfRangeException`. Validation runs before any retention or
+record mutation.
 
 `DrawModel(model, transform, tint)` uses each part's **material**. At the call it snapshots that
 material's current uniform cursor and texture bindings and uses the part's `ModelPart.RenderState`
@@ -422,9 +425,9 @@ has no CPU line-geometry fallback. Filled model draws never need the feature.
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
 The general draw API does not expose a UV rectangle override, so `DrawMesh`, `DrawInstanced`, and
-every primitive helper except the billboard source-rectangle overloads record `(0, 0, 1, 1)`.
-`DrawBillboard` with a `source` rectangle records that normalized rectangle as `rbInstance.UvRect`;
-see **Billboards** below.
+every primitive helper record `(0, 0, 1, 1)` except the billboard source-rectangle overloads and the
+textured `DrawQuad(..., Rect source, ...)` overload. Those source forms record their normalized
+rectangle as `rbInstance.UvRect`; the billboard form is described under **Billboards** below.
 
 For `DrawMesh` and `DrawInstanced`, `renderState` overrides the material's default render state for
 this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of the batching key.

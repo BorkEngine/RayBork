@@ -45,7 +45,9 @@ using (var screen = ctx.CreateCamera(
     CameraProjection.Orthographic,
     orthographicHeight: ctx.Window.RenderHeight,
     clearMode: ClearMode.ColorAndDepth)) {
-    Transform full = screen.ScreenToWorldTransform(Vector2.Zero, 1f);
+    Transform full = screen.ScreenToWorldTransform(
+        new Vector2(ctx.Window.RenderWidth * 0.5f, ctx.Window.RenderHeight * 0.5f),
+        1f);
     screen.DrawQuad(
         full,
         new Vector2(ctx.Window.RenderWidth, ctx.Window.RenderHeight),

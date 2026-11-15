@@ -214,6 +214,8 @@ plane can occlude it. A separate overlay pass and per-pass frame data are M8.
 
 - A non-finite numeric argument throws `ArgumentException`. A `Transform` overload requires finite
   position, rotation, and scale; a non-finite component is `ArgumentException`.
+- `DrawQuad` and `DrawDisc` validate their color; `DrawGrid` keeps the M5 grid behavior and does not
+  validate its color.
 - A negative extent, radius, height, width, or point size throws `ArgumentOutOfRangeException`. A
   negative transform scale component is also `ArgumentOutOfRangeException`.
 - An exactly zero extent, radius, height, start/end segment, or transform scale component records

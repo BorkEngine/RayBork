@@ -1444,8 +1444,9 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   scene-target probes for a pixel-aligned textured quad, a normalized source rectangle, an opaque and
   an alpha quad (including the mesh-program textured alpha path), a disc interior, text and sprites
   in one frame, a full-viewport quad that survives frustum culling, and 3D orthographic cube
-  geometry. `PrimitiveDrawTests` covers the new draw records, `ScreenToWorldTransform`, validation,
-  zero-extent behavior, disposed assets, retention, and batching. The Windows hardware run is 2,695
+  geometry. `PrimitiveDrawTests` covers the new draw records, validation, zero-extent behavior,
+  disposed assets, retention, and batching; `CameraTests` covers `ScreenToWorldTransform`. The
+  Windows hardware run is 2,695
   tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed
   and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes only SDR,
   and the GPU-filtered run is 107 passed with the same 7 skips.

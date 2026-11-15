@@ -112,7 +112,8 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 
 > **M5 subset.** M5 adds the primitive, billboard, and wireframe-model helpers and the collision
 > queries described in §7. The app preloads the built-in `/shaders/primitive` and `/shaders/mesh`
-> programs, their two engine materials, and the eight primitive meshes before `IGame.Setup`, so the
+> programs, their two engine materials, and the eight primitive meshes of M5 (M7 adds the unit disc
+> as the ninth) before `IGame.Setup`, so the
 > first tick can record a primitive draw. `DrawWireModel` records on the tick thread like
 > `DrawModel`; its polygon-mode-line pipeline needs the device's `fillModeNonSolid` feature, and a
 > device without it fails the frame with `GraphicsException` `RB3001` rather than falling back.

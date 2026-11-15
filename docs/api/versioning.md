@@ -136,7 +136,10 @@ The M7 camera and screen surface changes the 0.x preview in several ways.
 `CreateCamera` now takes `fieldOfView` and `orthographicHeight` as optional parameters and rejects
 the size argument that does not belong to the projection. The former perspective-only call
 `CreateCamera(transform, CameraProjection.Perspective, fieldOfView: fov, ...)` still compiles and
-keeps its behavior. The perspective `far` default changed from `float.PositiveInfinity` to `1000`, so
+keeps its behavior. Because `orthographicHeight` is inserted before `clearMode`, an old positional
+call that passed `clearMode`, `clearColor`, `near`, `far`, or `viewport` positionally no longer
+compiles; use named arguments for those parameters. The perspective `far` default changed from
+`float.PositiveInfinity` to `1000`, so
 a game that relied on the old implicit infinite far plane passes `float.PositiveInfinity` explicitly.
 `Camera.ScreenToWorldTransform` and the new `DrawQuad` (solid, full texture, and source rectangle),
 `DrawDisc`, and `DrawGrid(Transform, ...)` primitives are additive; `DrawGrid(int, float, Color)`

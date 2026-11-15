@@ -27,8 +27,9 @@
 The render thread never reads a live tick-thread object. `EngineContext.Tonemapping` is copied into a
 `TonemappingSnapshot` in the sealed frame packet; the present push constants and the scene frame
 block's exposure come from that snapshot, not from the app-lifetime settings object. A draw record
-likewise captures its per-instance UV rectangle: only the billboard source-rectangle overloads set a
-sub-rectangle, and every other draw records the full `(0, 0, 1, 1)` value. The render thread reads
+likewise captures its per-instance UV rectangle: only the billboard source-rectangle overloads and the
+textured `DrawQuad(..., Rect source, ...)` overload set a sub-rectangle, and every other draw records
+the full `(0, 0, 1, 1)` value. The render thread reads
 that value from the instance record; it never reads a live material cursor or camera.
 
 `DrawWireModel` is a tick-thread record call like `DrawModel`. The `fillModeNonSolid` support check
