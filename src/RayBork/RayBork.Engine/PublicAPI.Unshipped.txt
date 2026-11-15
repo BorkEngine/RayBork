@@ -1279,3 +1279,8 @@ RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, int 
 RayBork.Camera.DrawText(RayBork.Font! font, System.ReadOnlySpan<char> text, RayBork.Transform transform, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left, RayBork.TextWrapping wrapping = RayBork.TextWrapping.None, float maxWidth = 0) -> void
 RayBork.Camera.DrawTextBillboard(RayBork.Font! font, System.ReadOnlySpan<char> text, System.Numerics.Vector3 position, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left) -> void
 static RayBork.Collision.GetRayQuad(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, System.Numerics.Vector3 d) -> RayBork.RayCollision
+RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color, RayBork.RenderState? renderState = null) -> void
+RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Texture! texture, RayBork.Color? tint = null, RayBork.RenderState? renderState = null) -> void
+RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Texture! texture, RayBork.Rect source, RayBork.Color? tint = null, RayBork.RenderState? renderState = null) -> void
+RayBork.Camera.DrawDisc(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawGrid(RayBork.Transform transform, int slices, float spacing, RayBork.Color color) -> void

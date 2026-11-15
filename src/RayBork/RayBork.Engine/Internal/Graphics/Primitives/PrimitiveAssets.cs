@@ -16,7 +16,7 @@ namespace RayBork.Internal;
 /// A <see cref="PrimitiveAssets"/> owns one <see cref="Shader"/> material over the built-in
 /// <c>/shaders/primitive</c> program for vertex-color geometry, one over the built-in
 /// <c>/shaders/mesh</c> program for billboards and textured quads, and one over the built-in
-/// <c>/shaders/msdf</c> program for MSDF text. It also holds one owner reference for each of the eight
+/// <c>/shaders/msdf</c> program for MSDF text. It also holds one owner reference for each of the nine
 /// primitive meshes. Creation runs on the main thread before the tick thread starts, and the meshes and
 /// materials are read on the tick thread while the app records frames.
 /// <see cref="Dispose"/> runs on the main thread after the tick thread joined.
@@ -55,7 +55,7 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// <param name="primitiveMaterial">The material over <paramref name="primitiveProgram"/>.</param>
     /// <param name="meshMaterial">The material over <paramref name="meshProgram"/>.</param>
     /// <param name="msdfMaterial">The material over <paramref name="msdfProgram"/>.</param>
-    /// <param name="meshes">The eight primitive meshes, each with one owner reference.</param>
+    /// <param name="meshes">The nine primitive meshes, each with one owner reference.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     private PrimitiveAssets(
         ShaderProgram primitiveProgram,
@@ -136,6 +136,10 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
     internal Mesh Quad => GetMesh(_meshes.Quad);
 
+    /// <summary>Gets the unit XY disc mesh. The engine owns it; do not dispose it.</summary>
+    /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
+    internal Mesh Disc => GetMesh(_meshes.Disc);
+
     /// <summary>Gets the unit right-triangle mesh. The engine owns it; do not dispose it.</summary>
     /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
     internal Mesh Triangle => GetMesh(_meshes.Triangle);
@@ -154,7 +158,7 @@ internal sealed class PrimitiveAssets : IDisposable {
 
     /// <summary>
     /// Loads the three built-in shader programs, creates their engine-owned materials, and builds the
-    /// eight primitive meshes through the catalog's procedural asset service.
+    /// nine primitive meshes through the catalog's procedural asset service.
     /// </summary>
     /// <param name="assets">The started asset catalog.</param>
     /// <returns>The primitive assets, which own one reference per program, material, and mesh.</returns>
@@ -188,6 +192,7 @@ internal sealed class PrimitiveAssets : IDisposable {
         Mesh? sphere = null;
         Mesh? plane = null;
         Mesh? quad = null;
+        Mesh? disc = null;
         Mesh? triangle = null;
         Mesh? line = null;
         Mesh? wireCube = null;
@@ -203,6 +208,7 @@ internal sealed class PrimitiveAssets : IDisposable {
             sphere = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateSphere()).ConfigureAwait(false);
             plane = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreatePlane()).ConfigureAwait(false);
             quad = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateQuad()).ConfigureAwait(false);
+            disc = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateDisc()).ConfigureAwait(false);
             triangle = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateTriangle()).ConfigureAwait(false);
             line = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateLine()).ConfigureAwait(false);
             wireCube = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateWireCube()).ConfigureAwait(false);
@@ -214,7 +220,7 @@ internal sealed class PrimitiveAssets : IDisposable {
                 primitiveMaterial,
                 meshMaterial,
                 msdfMaterial,
-                new Meshes(cube, sphere, plane, quad, triangle, line, wireCube, wireSphere));
+                new Meshes(cube, sphere, plane, quad, disc, triangle, line, wireCube, wireSphere));
         } catch (Exception exception) when (exception is not OutOfMemoryException) {
             DisposeQuietly(primitiveMaterial);
             DisposeQuietly(meshMaterial);
@@ -223,6 +229,7 @@ internal sealed class PrimitiveAssets : IDisposable {
             ReleaseQuietly(sphere);
             ReleaseQuietly(plane);
             ReleaseQuietly(quad);
+            ReleaseQuietly(disc);
             ReleaseQuietly(triangle);
             ReleaseQuietly(line);
             ReleaseQuietly(wireCube);
@@ -257,6 +264,7 @@ internal sealed class PrimitiveAssets : IDisposable {
         ReleaseQuietly(_meshes.Sphere);
         ReleaseQuietly(_meshes.Plane);
         ReleaseQuietly(_meshes.Quad);
+        ReleaseQuietly(_meshes.Disc);
         ReleaseQuietly(_meshes.Triangle);
         ReleaseQuietly(_meshes.Line);
         ReleaseQuietly(_meshes.WireCube);
@@ -324,6 +332,7 @@ internal sealed class PrimitiveAssets : IDisposable {
         Mesh Sphere,
         Mesh Plane,
         Mesh Quad,
+        Mesh Disc,
         Mesh Triangle,
         Mesh Line,
         Mesh WireCube,

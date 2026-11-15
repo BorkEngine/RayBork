@@ -56,6 +56,16 @@ public sealed class PrimitiveMeshTests {
             IsCentered: true,
             IsClosed: false),
         new(
+            "disc",
+            PrimitiveMeshFactory.CreateDisc,
+            VertexCount: PrimitiveMeshFactory.DISC_SEGMENTS + 1,
+            IndexCount: PrimitiveMeshFactory.DISC_SEGMENTS * 3,
+            PrimitiveTopology.TriangleList,
+            new Vector3(2f, 2f, 0f),
+            new BoundingBox(new Vector3(-1f, -1f, 0f), new Vector3(1f, 1f, 0f)),
+            IsCentered: true,
+            IsClosed: false),
+        new(
             "triangle",
             PrimitiveMeshFactory.CreateTriangle,
             VertexCount: 3,
@@ -102,6 +112,7 @@ public sealed class PrimitiveMeshTests {
     [InlineData("sphere")]
     [InlineData("plane")]
     [InlineData("quad")]
+    [InlineData("disc")]
     [InlineData("triangle")]
     [InlineData("line")]
     [InlineData("wirecube")]
@@ -356,6 +367,34 @@ public sealed class PrimitiveMeshTests {
         Assert.Equal(new Vector2(0f, 1f), quad.Vertices[1].Uv);
         Assert.Equal(new Vector2(1f, 1f), quad.Vertices[2].Uv);
         Assert.Equal(new Vector2(1f, 0f), quad.Vertices[3].Uv);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DiscHasOneCenterVertexAndThirtySixCounterClockwiseSegments() {
+        PrimitiveMeshData disc = PrimitiveMeshFactory.CreateDisc();
+        int segments = PrimitiveMeshFactory.DISC_SEGMENTS;
+
+        Assert.Equal(36, segments);
+        Assert.Equal(segments + 1, disc.Vertices.Length);
+        Assert.Equal(segments * 3, disc.Indices.Length);
+        Assert.Equal(PrimitiveTopology.TriangleList, disc.Topology);
+        AssertVectorClose(Vector3.Zero, disc.Vertices[0].Position, "disc center");
+        Assert.Equal(new Vector2(0.5f, 0.5f), disc.Vertices[0].Uv);
+        AssertFaceNormals(disc, Vector3.UnitZ, "disc");
+
+        for (int segment = 0; segment < segments; segment++) {
+            Vertex rim = disc.Vertices[segment + 1];
+            Assert.Equal(1f, rim.Position.Length(), 5);
+            Assert.Equal(0f, rim.Position.Z);
+            Assert.Equal(Vector3.UnitZ, rim.Normal);
+            Assert.Equal(Color.White, rim.Color);
+            Assert.Equal(0u, disc.Indices[segment * 3]);
+            Assert.Equal((uint)(segment + 1), disc.Indices[(segment * 3) + 1]);
+            Assert.Equal(
+                (uint)(((segment + 1) % segments) + 1),
+                disc.Indices[(segment * 3) + 2]);
+        }
     }
 
     [Fact]
