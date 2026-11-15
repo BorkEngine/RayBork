@@ -340,8 +340,7 @@ pass draws the castle, `DrawGrid(20, 10f, Color.Gray)`, and now a world-space pr
 render-statistics status line, and the sample ray-casts the pointer against the model bounds and mesh
 with `Collision.GetRayBox` and `Collision.GetRayMesh`, drawing `Camera.DrawBoundingBox` and a small hit
 sphere while hovered. The hosts exit `0`. It is not the AOT gate. The Windows hardware path and the
-conformant lavapipe Linux path pass; WSLg hardware Vulkan is not a target. `samples/HelloInterop`
-remains the M1-M3 diagnostic host; it is not the AOT gate.
+conformant lavapipe Linux path pass; WSLg hardware Vulkan is not a target.
 
 ## 2. Quick start
 

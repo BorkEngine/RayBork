@@ -411,7 +411,7 @@ automatic instancing, and per-instance textures/uniforms.
   load the adjacent pack with no `--assets` argument, draw the unlit castle model with the built-in
   mesh shader, and must exit `0` on the Windows hardware driver and on Linux with lavapipe. The
   sample is a plain user-facing example and contains no test-only draw assertion.
-  `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
+  `samples/HelloInterop` used the same per-sample layout and build-time bake as the M1-M3
   diagnostic host.
 - **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
   texture, an orbital camera, the reference XZ grid, and a mouse-hover outline. It deliberately
@@ -1032,6 +1032,10 @@ blocking glyph generation.
 - Text renders correctly in the same frame as sprites.
 - The overlay pass does not disturb 3D depth.
 - Native AOT publish runs Pong on Windows and Linux.
+
+**Notes.** M7 removes the M1-M3 `samples/HelloInterop` diagnostic host. The Text, Castle, and
+PrimitiveGallery samples and the test suite cover the host, input, time, logging, renderer, and
+asset-loading surface it exercised.
 
 ### M8 — Render targets, multiple cameras, and readback
 

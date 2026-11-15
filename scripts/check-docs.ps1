@@ -15,7 +15,7 @@ Get-ChildItem -LiteralPath $repoRoot -Filter '*.md' -File | Sort-Object Name | F
 Get-ChildItem -LiteralPath (Join-Path $repoRoot 'docs') -Filter '*.md' -File -Recurse |
     Sort-Object FullName | ForEach-Object { $files.Add($_.FullName) }
 
-# Sample READMEs are included when the sample exists, starting with samples/HelloInterop in M0.
+# Sample READMEs are included when the sample exists.
 $samplesRoot = Join-Path $repoRoot 'samples'
 if (Test-Path -LiteralPath $samplesRoot) {
     Get-ChildItem -LiteralPath $samplesRoot -Filter 'README.md' -File -Recurse |

@@ -58,8 +58,6 @@ RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, St
                       BCnEncoder.Net, Silk.NET.Shaderc(+.Native), SharpGLTF.Core,
                       System.IO.Hashing (JIT)
 build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
-samples/HelloInterop -> RayBork.Engine (M1-M3 diagnostic host, Native AOT)
-samples/HelloInterop/HelloInterop.Assets -> RayBork.Bake (M3 assets executable, JIT)
 samples/Text -> RayBork.Engine (M6 sample and Native AOT gate)
 samples/Text/Text.Assets -> RayBork.Bake (M6 assets executable, JIT)
 samples/PrimitiveGallery -> RayBork.Engine (M5 sample, was the M5 Native AOT gate)
@@ -74,8 +72,6 @@ Samples (M7, M11) -> RayBork.Engine
 | `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, KTX2/BC encoding, GLSL compilation, pack writer, incremental manifest. Not referenced by a runtime project. |
 | `build/RayBork.BuiltInAssets` | JIT build-only generator: runs the ordinary bake over the checked-in built-in sources and emits a C# byte array compiled into `RayBork.Engine`. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/HelloInterop` | M1-M3 diagnostic host: opens an SDL3 Vulkan window, runs `Setup`/`Tick`/`Shutdown` on the tick thread, presents the cleared linear scene, auto-mounts the adjacent `hello.pck` when the sample build produced it (or a pack passed with `--assets`) and loads its custom data, logs window/DPI/monitor/input/gamepad/time activity, and exits on the close request, Escape, or `--frames`. It is not the AOT gate. |
-| `samples/HelloInterop/HelloInterop.Assets` | M3 assets executable: configures `BakeApplicationBuilder`, bakes `hello.pck` at sample build time, registers a custom type, and demonstrates a custom processor. JIT only. |
 | `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It now also draws a world-space presented-FPS/render-statistics status line in the built-in mono face. |
 | `samples/Text` | M6 sample and Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans and JetBrains Mono faces and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both proportional faces, a camera-facing billboard, a lazily generated Greek line, a mono status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
 | `samples/Text/Text.Assets` | M6 assets executable: bakes `text.pck` from the checked-in Lora face at sample build time. JIT only. |
@@ -114,7 +110,7 @@ policy.
 | `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same hosts on both RIDs. |
 | `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the backend | Exercised end to end by the M6 AOT gate: the published host creates the instance, device, swapchain, scene target, present pass, and the text draw path. |
 | `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by every AOT gate; the M6 gate decodes the built-in font, texture, and shader descriptors plus the sample's baked font descriptor through compiled shapes. |
-| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the gates that mount a user pack (M3 `samples/HelloInterop`, M4 `samples/Castle`, and M6 `samples/Text`, including the M6 font descriptor). |
+| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the gates that mount a user pack (M4 `samples/Castle` and M6 `samples/Text`, including the M6 font descriptor). |
 | `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the built-in pack read in every AOT gate, and by a sample-pack read in the gates that mount a user pack; no reflection or dynamic code. |
 | `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M6 AOT gate on both RIDs. |
 | `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M6 AOT gate on both RIDs. |
@@ -1303,12 +1299,12 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
   hardware driver and on the conformant lavapipe software driver. The suite is 2,625 tests, 106 of
   them GPU integration tests, and every sample solution builds. `samples/Castle` and
-  `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate, and
-  `samples/HelloInterop` remains the M1-M3 diagnostic host.
+  `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate. The
+  M1-M3 diagnostic host was removed in M7.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the
-  gates that mount a user pack (M3 `samples/HelloInterop`, M4 `samples/Castle`, and M6
-  `samples/Text`); the pack reader and descriptor decoding contain no reflection resolver. The M6
+  gates that mount a user pack (M4 `samples/Castle` and M6 `samples/Text`); the pack reader and
+  descriptor decoding contain no reflection resolver. The M6
   Text gate decodes the built-in font, texture, and shader descriptors and the sample's baked `Font`
   descriptor, so the font entry type is covered end to end; the M4 Castle gate covered the packed
   model, mesh, shader, and texture descriptors.
