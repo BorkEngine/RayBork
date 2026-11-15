@@ -220,7 +220,8 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateCameraDefaultsToAFinitePerspectiveFarPlane() {
+    public void CreateCameraUsesThePublicPerspectiveDefaults() {
+        float? near = null;
         float? far = null;
         ScriptedGame game = new() {
             TickHandler = context => {
@@ -228,6 +229,7 @@ public sealed class CameraAppTests {
                     Transform.Identity,
                     CameraProjection.Perspective,
                     60f);
+                near = camera.Near;
                 far = camera.Far;
                 context.RequestExit();
             },
@@ -236,6 +238,7 @@ public sealed class CameraAppTests {
 
         host.App.Run();
 
+        Assert.Equal(0.01f, near);
         Assert.Equal(1000f, far);
     }
 
