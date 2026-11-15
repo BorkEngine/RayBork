@@ -163,6 +163,10 @@ The implementation:
 - `SdlPlatform` initializes SDL with the video, events, and gamepad subsystems, creates the window,
   starts text input, refreshes monitors, applies the startup window state, and opens connected
   gamepads. It runs those operations on the process main thread.
+- The window is created with `SDL_WINDOW_HIGH_PIXEL_DENSITY`. The renderer sizes the swapchain from
+  `RenderWidth`/`RenderHeight`, so a high-density display renders at its physical pixel size.
+  `Width`/`Height` and mouse positions stay in window coordinates; camera and viewport APIs take
+  render pixels.
 - When `PlatformOptions.EnableVulkan` is set, the window is created with SDL's Vulkan flag.
   `GetVulkanInstanceExtensions` returns the de-duplicated, ordinal-sorted extension names SDL
   requires and fails with `PlatformException` `RB2003` when SDL reports none or omits
@@ -199,7 +203,8 @@ The implementation:
   and routes window-scoped events to the owning window. Each GPU test owns its window, instance,
   device, and backend.
 - SDL's `dummy` video driver cannot create a Vulkan window or surface. GPU tests and the sample
-  therefore use a real video driver; on WSL that means the WSLg display.
+  therefore use a real video driver; on WSL that means the WSLg display with the lavapipe ICD.
+  WSLg's hardware Vulkan path is not a target.
 - No SDL type or native handle appears in the public API.
 
 ## Renderer backend seam
@@ -1291,8 +1296,8 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   JetBrains Mono faces and the custom Lora face, generates glyph textures on demand, draws the text
   scene, and shuts down. The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
-  hardware driver and on WSLg's dzn hardware device. The suite is 2,625 tests, 106 of them GPU
-  integration tests, and every sample solution builds. `samples/Castle` and
+  hardware driver and on the conformant lavapipe software driver. The suite is 2,625 tests, 106 of
+  them GPU integration tests, and every sample solution builds. `samples/Castle` and
   `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate, and
   `samples/HelloInterop` remains the M1-M3 diagnostic host.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the

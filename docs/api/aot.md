@@ -54,9 +54,7 @@ dotnet build samples/Text/Text.slnx -c Release
 dotnet publish samples/Text/Text.csproj -c Release -r win-x64   -p:PublishAot=true
 dotnet publish samples/Text/Text.csproj -c Release -r linux-x64 -p:PublishAot=true
 samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30
-# WSL, from the repository root, on the WSLg display (dzn hardware):
-# DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30
-# WSL, optional conformant software run:
+# WSL, from the repository root, on the WSLg display with the conformant lavapipe ICD:
 # VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30
 ```
 
@@ -79,7 +77,7 @@ shaderc native libraries, or the glTF packages.
 Both M6 publishes must start, load the built-in fonts and the baked Lora face, generate glyphs on
 demand, draw the text scene, and shut down. Both finish with zero AOT/trim warnings, and both
 published hosts ran `--frames 30` to exit `0`: the Windows host on the hardware driver and the Linux
-host on WSLg's dzn hardware device.
+host on the conformant lavapipe software driver.
 
 `samples/Castle` remains a buildable and publishable sample, but it is not the M6 gate. Its build
 invokes the JIT assets executable out of process with the sample's configuration but without its
@@ -101,15 +99,12 @@ bindless glyph texture path. The sample is a plain user-facing example and conta
 draw assertion. The suite is 2,625 tests, 106 of them GPU integration tests, and every sample
 solution builds.
 
-On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver
-(`Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)`) and prints "dzn is not a conformant Vulkan
-implementation, testing use only". The gate runs on that hardware driver: the fixed 2048-element
-bindless texture array avoids dzn's runtime-descriptor-array DXIL lowering and fits its 2048-slot
-sampler heap, so the published host exits `0` on the hardware dzn device and needs no `DZN_DEBUG`
-workaround. Glyph textures are ordinary bindless procedural textures, so the text path uses that same
-fixed array. The conformant lavapipe ICD remains available for a software-only Linux run with
-`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. The Windows gate runs on the hardware
-driver.
+On WSL, run the Linux host with the conformant lavapipe ICD:
+`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. WSLg's hardware Vulkan path (Mesa dzn) is
+not a target and is not part of the gate. The fixed 2048-element bindless texture array is the
+engine's shader ABI and table capacity, not a driver-specific workaround. Glyph textures are ordinary
+bindless procedural textures, so the text path uses that same fixed array. The Windows gate runs on
+the hardware driver.
 
 Single-file publishing is supported when the native SDL3/Vulkan libraries are deployed alongside
 the executable or extracted by the host. A fully self-extracting single binary is not a v1 gate.

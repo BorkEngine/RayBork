@@ -199,7 +199,10 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         _sdlInitialized = true;
 
         _vulkanEnabled = options.EnableVulkan;
-        SDL.WindowFlags windowFlags = 0;
+        // Request the physical-pixel backbuffer. Windows window coordinates are already physical
+        // pixels; on platforms that separate logical points from pixels this is what makes
+        // RenderWidth/RenderHeight report the real drawable size.
+        SDL.WindowFlags windowFlags = SDL.WindowFlags.HighPixelDensity;
         if (options.Resizable) {
             windowFlags |= SDL.WindowFlags.Resizable;
         }

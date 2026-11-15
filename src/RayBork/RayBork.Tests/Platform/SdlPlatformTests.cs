@@ -32,6 +32,12 @@ public sealed class SdlPlatformTests {
         Assert.Contains(window.Monitors, monitor => monitor.Index == window.CurrentMonitor.Index);
         Assert.True(window.CurrentMonitor.RefreshRate >= 0);
 
+        IntPtr handle = SDL.GetWindowFromID(host.Window.WindowId);
+        Assert.NotEqual(IntPtr.Zero, handle);
+        Assert.True(
+            (SDL.GetWindowFlags(handle) & SDL.WindowFlags.HighPixelDensity) != 0,
+            "The SDL window must be created with SDL_WINDOW_HIGH_PIXEL_DENSITY.");
+
         IInput input = host.Platform.CaptureInput();
         // The host may have a physical gamepad connected, which is also what a real game sees. Assert
         // the snapshot is internally consistent instead of assuming no device is present.

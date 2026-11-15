@@ -169,13 +169,17 @@ git diff --check
   `src/RayBork/RayBork.slnx`. Build and format every sample solution. Each sample build bakes its
   pack beside the sample executable; do not require a manual bake or an `--assets` argument.
 - Publish the milestone's documented Native AOT gate for `win-x64` and `linux-x64` and run each
-  published host. The current gate sample and exact host commands are recorded in the README, the
-  sample README, and the PR; read them before running the gate.
+  published host. The Windows host runs on the hardware driver; the Linux host runs on the
+  conformant lavapipe software driver with `VK_ICD_FILENAMES` set to the lavapipe ICD. WSLg's
+  hardware Vulkan path (Mesa dzn) is not a target and is not a gate. The current gate sample and
+  exact host commands are recorded in the README, the sample README, and the PR; read them before
+  running the gate.
 - Both AOT publishes must finish with zero AOT/trim warnings and must not include bake tooling in
   the publish directory.
 - GPU tests open a hidden window through the real video driver. A GPU test that cannot run on the
   host is reported as a skip with the reason, never silently dropped. CI runs the GPU-filtered suite
-  under `xvfb-run` with the lavapipe ICD.
+  under `xvfb-run` with the lavapipe ICD; Linux GPU coverage is lavapipe only, not WSLg hardware
+  Vulkan.
 - Shader SPIR-V is regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; CI and
   normal builds consume the committed blobs and never need `glslc`.
 
@@ -202,7 +206,9 @@ Post-task verification runs independent build groups concurrently instead of one
   solution, `build/RayBork.BuiltInAssets/RayBork.BuiltInAssets.csproj`,
   `src/RayBork/RayBork.Engine/RayBork.Engine.csproj` for `linux-x64`, and every AOT sample solution
   for `linux-x64`. Then run the same Debug, Release, sample, `linux-x64` AOT, and host-run groups in
-  the clone. Build `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r linux-x64
+  the clone. Run every Linux host with `VK_ICD_FILENAMES` pointing at the lavapipe ICD
+  (`/usr/share/vulkan/icd.d/lvp_icd.json`) and do not use WSLg's dzn device; WSL hardware Vulkan is
+  not a target. Build `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r linux-x64
   --no-restore` after the Release solution build and before the `linux-x64` AOT publishes. The WSL
   group runs concurrently with the Windows group.
 - Never build the same project and configuration twice in one output tree. Sample builds require a
@@ -228,6 +234,8 @@ Post-task verification runs independent build groups concurrently instead of one
   shader-state snapshots, and render statistics.
 - No golden-image suite. Renderer tests use validation-layer cleanliness, draw/instance counts,
   readback values with explicit tolerances, and crash/leak checks.
+- Linux GPU and AOT host coverage uses the lavapipe ICD under a real display (WSLg or Xvfb). WSLg
+  hardware Vulkan (Mesa dzn) is not a test target; do not add a dzn or WSL hardware Vulkan gate.
 - Do not commit generated packs, images, publish output, or test artifacts.
 
 ## 6. Pull requests
@@ -252,7 +260,8 @@ one pull request from its milestone branch.
 - After the PR is created, clean up every local branch for the milestone, including the local
   milestone/PR branch, and switch back to `develop`. The remote branch stays with the PR.
 - After the user merges, delete the milestone branch remotely if it still exists.
-- AOT checks remain local; the `gpu` CI job runs the GPU tests. Report skipped gates with reasons.
+- AOT checks remain local; the `gpu` CI job runs the GPU tests on lavapipe. Report skipped gates with
+  reasons.
 
 ## 7. Git
 

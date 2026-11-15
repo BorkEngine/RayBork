@@ -69,8 +69,9 @@ Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics tex
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
 The suite is 2,625 tests, 106 of them GPU integration tests, and every sample builds. The Windows
-hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
-host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
+hardware path and the conformant lavapipe Linux path pass; WSLg's hardware Vulkan path (Mesa dzn) is
+not a target. The host, window, input, time, and logging surface shipped in M1; the renderer
+foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).
 
@@ -86,7 +87,10 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
 
 ## Targets
 
-- Windows x64 and Linux x64 (including WSL), Native AOT.
+- Windows x64 and Linux x64, Native AOT. WSL is a Linux build environment only; its hardware
+  Vulkan path is not a target.
+- High-density backbuffer (`SDL_WINDOW_HIGH_PIXEL_DENSITY`); `RenderWidth`/`RenderHeight` are
+  physical pixels and may exceed the logical window size.
 - Vulkan 1.2 with descriptor indexing and bindless textures; the renderer is replaceable behind an
   internal seam for future mobile/web backends.
 - Linear HDR rendering with Godot 4.7's HDR-aware AgX tone mapping, MSAA (4x default), and reverse-Z
@@ -212,8 +216,9 @@ The samples are outside `src/RayBork/RayBork.slnx`: each sample owns its own sol
 that needs assets owns an assets executable too. The engine solution builds only the engine, bake,
 and test projects.
 
-Run the samples from the repository root with a Vulkan 1.2 device and a real window system (on WSL,
-use the WSLg display). The Castle build bakes `castle.pck` beside the executable, and the sample loads
+Run the samples from the repository root with a Vulkan 1.2 device and a real window system. On WSL,
+use the WSLg display with the lavapipe ICD; WSLg's hardware Vulkan path is not a target. The Castle
+build bakes `castle.pck` beside the executable, and the sample loads
 it automatically; `--assets` is only an optional override. The Text build bakes `text.pck` with the
 custom Lora face beside the executable and loads it automatically; the built-in Fira Sans and
 JetBrains Mono faces come from the engine's built-in pack. The gallery has no assets executable and
@@ -246,10 +251,12 @@ dotnet publish samples/Text/Text.csproj -c Release -r win-x64 -p:PublishAot=true
 samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30
 ```
 
-In WSL, publish the Linux host from the repository root and run it on the WSLg display:
+In WSL, publish the Linux host from the repository root and run it on the WSLg display with the
+conformant lavapipe ICD:
 
 ```bash
 $HOME/.dotnet/dotnet publish samples/Text/Text.csproj -c Release -r linux-x64 -p:PublishAot=true
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
 DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30
 ```
@@ -257,8 +264,9 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
 Both publishes must finish with zero AOT/trim warnings. The publish directory must contain `text.pck`
 beside the host and must not contain `Text.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp,
 BCnEncoder, the shaderc native libraries, or the glTF packages. Both published hosts ran `--frames 30`
-to exit `0`: the Windows host on the hardware driver and the Linux host on WSLg's dzn hardware device.
-[samples/Text/README.md](samples/Text/README.md) also lists the optional lavapipe software run.
+to exit `0`: the Windows host on the hardware driver and the Linux host on the conformant lavapipe
+software driver. WSLg's hardware Vulkan path is not a target;
+[samples/Text/README.md](samples/Text/README.md) carries the same Linux command.
 
 ## Next step
 
