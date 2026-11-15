@@ -44,9 +44,9 @@ Transform screen = camera.ScreenToWorldTransform(pixel, 1f);
 The pass draws the playfield, the inset border, the dashed net, the two score panels, the two textured
 paddles, and the ball disc. It then draws the scores and the status line in the built-in mono face;
 when paused or finished it records an alpha-blended shade before that text and draws the pause/winner
-title and hint on top. The shade uses `RenderState.AlphaBlend`; every other draw uses the default
-opaque state. The paddles and the ball are `DrawQuad` and `DrawDisc` with the screen transform, and
-all text is `DrawText` with pixel sizes.
+title and hint on top. The shade uses `RenderState.AlphaBlend`; every other quad/disc draw uses the
+default opaque state, and `DrawText` records the engine's alpha text state. The paddles and the ball
+are `DrawQuad` and `DrawDisc` with the screen transform, and all text is `DrawText` with pixel sizes.
 
 The palette is authored with `Color.FromSrgbBytes`: a dark navy playfield, a warm border and net, a
 warm paddle texture, a pale gold ball, and a dimmed overlay.
@@ -107,9 +107,10 @@ host registers it with `WithAssetType<PongSettings>()`, and the assets executabl
 load is reflection-free and Native AOT compatible.
 
 `Setup` loads the settings from `/data/game`, validates that the texture path is non-empty and that
-the ball, paddle, and speed values are positive and finite, requires a positive `MaxScore`, then
-loads the paddle texture. Invalid values throw a clear `InvalidOperationException`; a missing or
-malformed settings entry fails the bake or the asset load.
+the ball, paddle, and speed values are positive and finite, bounds the paddle size and ball radius to
+the playfield, requires a positive `MaxScore`, then loads the paddle texture. Invalid values throw a
+clear `InvalidOperationException`; a missing or malformed settings entry fails the bake or the asset
+load.
 
 ## Assets
 

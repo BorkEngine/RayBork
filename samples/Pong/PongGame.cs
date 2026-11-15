@@ -167,6 +167,13 @@ internal sealed class PongGame : IGame {
         RequirePositive(settings.PaddleHeight, "PaddleHeight");
         RequirePositive(settings.PaddleSpeed, "PaddleSpeed");
         RequirePositive(settings.BallSpeed, "BallSpeed");
+
+        // The gameplay math needs the paddle height to leave a non-empty clamp range and the ball
+        // to fit between the top and bottom walls; reject impossible baked settings up front.
+        RequireAtMost(settings.PaddleWidth, DESIGN_WIDTH, "PaddleWidth");
+        RequireAtMost(settings.PaddleHeight, DESIGN_HEIGHT, "PaddleHeight");
+        RequireAtMost(settings.BallRadius, DESIGN_HEIGHT * 0.5f, "BallRadius");
+
         if (settings.MaxScore <= 0) {
             throw new InvalidOperationException(
                 $"Pong settings '{SETTINGS_PATH}' require a positive MaxScore; got "
@@ -178,6 +185,13 @@ internal sealed class PongGame : IGame {
         if (!float.IsFinite(value) || value <= 0f) {
             throw new InvalidOperationException(FormattableString.Invariant(
                 $"Pong settings '{SETTINGS_PATH}' require a positive finite {name}; got {value}."));
+        }
+    }
+
+    private static void RequireAtMost(float value, float maximum, string name) {
+        if (value > maximum) {
+            throw new InvalidOperationException(FormattableString.Invariant(
+                $"Pong settings '{SETTINGS_PATH}' require {name} at most {maximum}; got {value}."));
         }
     }
 
