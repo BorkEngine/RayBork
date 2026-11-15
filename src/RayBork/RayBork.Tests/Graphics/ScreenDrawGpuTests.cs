@@ -23,8 +23,9 @@ namespace RayBork.Tests;
 /// <see cref="PrimitiveDrawGpuHarness.Height"/> as the orthographic height makes the screen transform
 /// scale exactly one world unit per render pixel at 100% DPI: a destination rectangle in render pixels
 /// maps to the same rectangle on the target. All pixel probes read the interior of the requested
-/// rectangle (or a pixel center well inside a disc quad) with an explicit tolerance; tests that read a
-/// single pixel use a single-sample target so no resolved sample can land on an antialiased edge.
+/// rectangle, or a pixel inside a single disc fan triangle clear of its center vertex and radial
+/// edges, with an explicit tolerance; tests that read a single pixel use a single-sample target so no
+/// resolved sample can land on an antialiased edge.
 /// </para>
 /// <para>
 /// GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and
@@ -183,30 +184,46 @@ public sealed class ScreenDrawGpuTests {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
         Color blendedTint = new(0.9f, 0.2f, 0.1f, 0.5f);
         Color opaqueTint = new(0.1f, 0.8f, 0.3f, 1f);
+        Color textureColor = new(0.8f, 0.4f, 0.2f, 1f);
+        Color texturedTint = new(1f, 1f, 1f, 0.5f);
+        Texture texture = harness.CreateTexture(1, 1, textureColor);
 
         harness.SubmitOrthographic(
             camera => {
                 DrawSolidRect(camera, new Rect(40f, 40f, 80f, 60f), blendedTint, RenderState.AlphaBlend);
                 DrawSolidRect(camera, new Rect(200f, 40f, 80f, 60f), opaqueTint, RenderState.Opaque);
+                // The textured form multiplies the texture by the per-instance tint on the mesh
+                // program, so the same source-over result applies to the mesh-program fragment.
+                DrawTexturedRect(
+                    camera,
+                    texture,
+                    new Rect(120f, 120f, 80f, 60f),
+                    texturedTint,
+                    RenderState.AlphaBlend);
             },
             clearColor: _clearColor,
             height: harness.Height);
 
         // The alpha preset is source-over: src.rgb * src.a + dst.rgb * (1 - src.a).
-        Color expectedBlend = new(
-            (blendedTint.R * blendedTint.A) + (_clearColor.R * (1f - blendedTint.A)),
-            (blendedTint.G * blendedTint.A) + (_clearColor.G * (1f - blendedTint.A)),
-            (blendedTint.B * blendedTint.A) + (_clearColor.B * (1f - blendedTint.A)),
-            1f);
+        Color expectedBlend = SourceOver(blendedTint, _clearColor);
+        Color expectedTextureBlend = SourceOver(
+            new Color(
+                Unorm(textureColor).R,
+                Unorm(textureColor).G,
+                Unorm(textureColor).B,
+                texturedTint.A),
+            _clearColor);
         AssertColorNear(expectedBlend, harness.ReadColor(80, 70), BLEND_TOLERANCE);
         AssertColorNear(opaqueTint, harness.ReadColor(240, 70));
+        AssertColorNear(expectedTextureBlend, harness.ReadColor(160, 150), BLEND_TOLERANCE);
         AssertColorNear(_clearColor, harness.ReadColor(160, 70));
 
-        // Different effective render states split the draw call even over the same mesh and program.
+        // The two primitive draws split on the effective render state; the textured record uses the
+        // mesh program, so it forms a third draw call.
         RenderStats stats = harness.Host.Backend.Stats;
-        Assert.Equal(2, stats.DrawCalls);
-        Assert.Equal(2, stats.Instances);
-        Assert.Equal(4, stats.Triangles);
+        Assert.Equal(3, stats.DrawCalls);
+        Assert.Equal(3, stats.Instances);
+        Assert.Equal(6, stats.Triangles);
         Assert.Equal(0, stats.CulledInstances);
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
@@ -298,8 +315,10 @@ public sealed class ScreenDrawGpuTests {
         harness.SubmitOrthographic(
             camera => {
                 DrawSolidRect(camera, new Rect(40f, 40f, 64f, 40f), quadColor, RenderState.Opaque);
-                // The disc center sits on the center of pixel (240, 100), so the probe below reads the
-                // middle of the shape rather than a tessellation seam.
+                // The disc center is the center of pixel (240, 100); the probe below reads pixel
+                // (251, 111), about 15.6 pixels away on a 45 degree diagonal. The disc fan has ten
+                // degree radial edges, so that pixel sits between the edges at 40 and 50 degrees, is
+                // 8 pixels inside the rim, and is far from the shared fan vertex.
                 Transform discTransform = camera.ScreenToWorldTransform(new Vector2(240.5f, 100.5f), SCREEN_DISTANCE);
                 camera.DrawDisc(discTransform, 24f, discColor);
             },
@@ -307,7 +326,7 @@ public sealed class ScreenDrawGpuTests {
             height: harness.Height);
 
         AssertColorNear(quadColor, harness.ReadColor(72, 60));
-        AssertColorNear(discColor, harness.ReadColor(240, 100));
+        AssertColorNear(discColor, harness.ReadColor(251, 111));
 
         // The probes are one pixel outside the shapes: just left of the quad, and well clear of the disc
         // above and to its right.
@@ -547,6 +566,29 @@ public sealed class ScreenDrawGpuTests {
     }
 
     private static uint Pixel(float coordinate) => checked((uint)MathF.Floor(coordinate));
+
+    /// <summary>
+    /// Gets the source-over result of a straight-alpha source color over the destination color, the
+    /// result the <see cref="BlendMode.Alpha"/> preset produces.
+    /// </summary>
+    private static Color SourceOver(Color source, Color destination) => new(
+        (source.R * source.A) + (destination.R * (1f - source.A)),
+        (source.G * source.A) + (destination.G * (1f - source.A)),
+        (source.B * source.A) + (destination.B * (1f - source.A)),
+        1f);
+
+    /// <summary>
+    /// Converts a color to the value an RGBA8 texture upload stores, so a texture probe is compared
+    /// against the quantized sample rather than the authored color.
+    /// </summary>
+    private static Color Unorm(Color color) => new(
+        UnormChannel(color.R),
+        UnormChannel(color.G),
+        UnormChannel(color.B),
+        UnormChannel(color.A));
+
+    private static float UnormChannel(float value) =>
+        (byte)((int)((Math.Clamp(value, 0f, 1f) * 255f) + 0.5f)) / 255f;
 
     private static void AssertColorNear(Color expected, (float R, float G, float B) actual, float tolerance = COLOR_TOLERANCE) {
         Assert.True(
