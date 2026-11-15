@@ -122,6 +122,13 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         }
     }
 
+    internal static int SdlUserCountForTests => _sdlUsers;
+
+    /// <summary>
+    /// Gets the number of platforms that currently hold the SDL Vulkan loader. Diagnostic for tests.
+    /// </summary>
+    internal static int VulkanLoaderUserCountForTests => _vulkanUsers;
+
     /// <inheritdoc />
     public void Initialize(PlatformOptions options, Action onExitRequested)
         => Initialize(options, onExitRequested, videoDriverHint: null);
@@ -137,12 +144,13 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     internal void Initialize(PlatformOptions options, Action onExitRequested, string? videoDriverHint) {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(onExitRequested);
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_initialized) {
-            throw new InvalidOperationException("The platform has already been initialized.");
-        }
 
         lock (_videoGate) {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_initialized) {
+                throw new InvalidOperationException("The platform has already been initialized.");
+            }
+
             ApplyVideoDriverHint(videoDriverHint);
             try {
                 InitializeCore(options, onExitRequested);
@@ -155,8 +163,10 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
 
     private void ApplyVideoDriverHint(string? videoDriverHint) {
         if (videoDriverHint is null) {
-            SDL.ResetHint(SDL_VIDEO_DRIVER_HINT);
-            _videoDriverHintSet = false;
+            if (_videoDriverHintSet) {
+                SDL.ResetHint(SDL_VIDEO_DRIVER_HINT);
+                _videoDriverHintSet = false;
+            }
         } else {
             SDL.SetHint(SDL_VIDEO_DRIVER_HINT, videoDriverHint);
             _videoDriverHintSet = true;
@@ -166,10 +176,6 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     private void InitializeCore(PlatformOptions options, Action onExitRequested) {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(onExitRequested);
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_initialized) {
-            throw new InvalidOperationException("The platform has already been initialized.");
-        }
 
         SDL.InitFlags initFlags = SDL.InitFlags.Video | SDL.InitFlags.Events;
         if (_initializeGamepads) {
@@ -504,6 +510,8 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
             }
         }
 
+        // Display, quit, and gamepad events are process global and are handled by the pumping
+        // platform; only window-scoped events are routed to their owner.
         switch (type) {
             case SDL.EventType.WindowResized:
             case SDL.EventType.WindowPixelSizeChanged:

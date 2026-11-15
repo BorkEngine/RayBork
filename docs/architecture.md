@@ -1291,7 +1291,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   JetBrains Mono faces and the custom Lora face, generates glyph textures on demand, draws the text
   scene, and shuts down. The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
-  hardware driver and on WSLg's dzn hardware device. The suite is 2,624 tests, 106 of them GPU
+  hardware driver and on WSLg's dzn hardware device. The suite is 2,625 tests, 106 of them GPU
   integration tests, and every sample solution builds. `samples/Castle` and
   `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate, and
   `samples/HelloInterop` remains the M1-M3 diagnostic host.
@@ -1375,7 +1375,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   tests; the fuzz suites run fixed-seed hostile input with an allocation bound. Catalog fixtures
   mount uncompressed `PackCompressionPolicy.Debug` packs so max-quality Zstandard does not dominate
   the suite; the compressed reader is exercised by the archive, builder, fuzz, and one catalog test.
-  The suite is 2,624 tests, 106 of them GPU integration tests.
+  The suite is 2,625 tests, 106 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

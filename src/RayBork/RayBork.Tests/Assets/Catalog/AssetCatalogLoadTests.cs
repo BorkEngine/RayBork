@@ -399,12 +399,19 @@ public sealed class AssetCatalogLoadTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task BuiltInPackIsMountedBelowUserPacks() {
+        // A 4 KiB zero payload is guaranteed to shrink under Zstandard, so this smoke test proves
+        // that the catalog mounts and reads a compressed pack rather than a Debug fixture.
+        byte[] compressiblePayload = new byte[4096];
         byte[] builtIn = CatalogTestData.BuildPack(
             PackCompressionPolicy.Release,
             ("textures/shared", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(8))),
-            ("textures/shared-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()),
+            ("textures/shared-ktx2", AssetEntryType.Raw, compressiblePayload),
             ("textures/builtin-only", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(16))),
-            ("textures/builtin-only-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));
+            ("textures/builtin-only-ktx2", AssetEntryType.Raw, compressiblePayload));
+        using (PackArchive compressedArchive = PackArchive.Open(builtIn, "compressed-catalog.pck")) {
+            Assert.Contains(compressedArchive.Entries, static entry => entry.IsCompressed);
+        }
+
         byte[] user = CatalogTestData.BuildPack(
             ("textures/shared", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(4))),
             ("textures/shared-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));

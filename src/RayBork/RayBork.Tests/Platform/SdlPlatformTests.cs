@@ -115,11 +115,49 @@ public sealed class SdlPlatformTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WindowCloseEventIsRoutedToItsOwningWindow() {
+    public void WindowScopedEventsAreRoutedToTheirOwningWindow() {
         int firstExitRequests = 0;
         int secondExitRequests = 0;
         using SdlTestHost first = SdlTestHost.Create(() => firstExitRequests++);
         using SdlTestHost second = SdlTestHost.Create(() => secondExitRequests++);
+
+        SDL.Event secondResize = new() {
+            Type = (uint)SDL.EventType.WindowResized,
+            Window = new SDL.WindowEvent {
+                Type = SDL.EventType.WindowResized,
+                WindowID = second.Window.WindowId,
+                Data1 = 400,
+                Data2 = 300,
+            },
+        };
+        SDL.Event secondKeyDown = new() {
+            Type = (uint)SDL.EventType.KeyDown,
+            Key = new SDL.KeyboardEvent {
+                Type = SDL.EventType.KeyDown,
+                WindowID = second.Window.WindowId,
+                Scancode = SDL.Scancode.W,
+                Down = true,
+            },
+        };
+        Assert.True(SDL.PushEvent(ref secondResize));
+        Assert.True(SDL.PushEvent(ref secondKeyDown));
+        first.Platform.Pump(TimeSpan.Zero);
+
+        // Clear any resize flag queued while the dummy windows were created, then assert that the
+        // foreign resize event did not reach the first window.
+        first.Window.BeginTick();
+        first.Window.BeginTick();
+        second.Window.BeginTick();
+        Assert.False(first.Window.WasResized);
+        Assert.True(second.Window.WasResized);
+        Assert.False(first.Platform.CaptureInput().IsKeyDown(Key.W));
+        Assert.True(second.Platform.CaptureInput().IsKeyDown(Key.W));
+
+        SDL.Event unknownClose = CloseEvent(uint.MaxValue);
+        Assert.True(SDL.PushEvent(ref unknownClose));
+        first.Platform.Pump(TimeSpan.Zero);
+        Assert.False(first.Window.CloseRequested);
+        Assert.False(second.Window.CloseRequested);
 
         SDL.Event secondClose = CloseEvent(second.Window.WindowId);
         Assert.True(SDL.PushEvent(ref secondClose));
@@ -478,6 +516,38 @@ public sealed class SdlPlatformTests {
 
             first?.Dispose();
             second?.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void VulkanPlatformsShareTheLoaderReferenceCount() {
+        using SdlTestHost first = SdlTestHost.CreateVulkan();
+        using SdlTestHost second = SdlTestHost.CreateVulkan();
+        VulkanInstance instance = VulkanInstance.Create(new VulkanInstanceOptions {
+            ApplicationName = "RayBork SDL test",
+            ApplicationVersion = EngineVersion.Current,
+            SurfaceExtensions = first.Platform.GetVulkanInstanceExtensions(),
+            RequestValidation = false,
+            Logger = NullLogger.Instance,
+        });
+        try {
+            IntPtr firstSurface = first.Platform.CreateVulkanSurface(instance.Handle.Handle);
+            IntPtr secondSurface = second.Platform.CreateVulkanSurface(instance.Handle.Handle);
+            Assert.Equal(2, SdlPlatform.VulkanLoaderUserCountForTests);
+
+            first.Platform.DestroyVulkanSurface(instance.Handle.Handle, firstSurface);
+            first.Dispose();
+            Assert.Equal(1, SdlPlatform.VulkanLoaderUserCountForTests);
+
+            second.Platform.DestroyVulkanSurface(instance.Handle.Handle, secondSurface);
+            second.Dispose();
+            Assert.Equal(0, SdlPlatform.VulkanLoaderUserCountForTests);
+        } finally {
+            first.Dispose();
+            second.Dispose();
+            instance.Dispose();
+            instance.DisposeFromMainThread();
         }
     }
 

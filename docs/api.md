@@ -329,7 +329,7 @@ The samples set no tick target and request FIFO presentation, so the display ref
 thread; the engine default remains Mailbox for games that want the decoupled path. The published
 `win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
 Windows hardware driver and on WSLg's dzn hardware device. The M6
-suite is 2,624 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
+suite is 2,625 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
