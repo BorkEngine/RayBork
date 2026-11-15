@@ -74,7 +74,7 @@ internal sealed class PackTestPack {
 
     internal byte[] Bytes { get; }
 
-    internal int IndexOffset => PackFormat.PREFIX_LENGTH;
+    internal static int IndexOffset => PackFormat.PREFIX_LENGTH;
 
     internal int IndexLength => checked((int)BinaryPrimitives.ReadUInt32LittleEndian(
         Bytes.AsSpan(PackFormat.INDEX_LENGTH_OFFSET)));

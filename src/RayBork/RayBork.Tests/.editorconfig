@@ -1,0 +1,7 @@
+# RayBork test-project analyzer policy. The strict root policy applies to the engine; these two
+# rules flag intentional test shapes rather than defects.
+[*.cs]
+# Inline arrays are the readable form of a test case's data and are never on a hot path.
+dotnet_diagnostic.CA1861.severity = none
+# The one remaining test fake owns resources whose lifetime is the test run, not a caller's.
+dotnet_diagnostic.CA1001.severity = none

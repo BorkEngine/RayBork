@@ -30,20 +30,20 @@ public sealed class AssetLoadContext {
     /// </summary>
     /// <param name="catalog">The catalog that dispatched the load.</param>
     /// <param name="canonicalPath">The canonical path, without a leading slash.</param>
-    /// <param name="cancellationToken">
-    /// The token canceled when either the catalog stops or the caller cancels.
-    /// </param>
     /// <param name="payload">The complete payload bytes read from the pack entry.</param>
     /// <param name="chain">
     /// The chain of loads that requested this load, or <see langword="null"/> for a top-level load.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// The token canceled when either the catalog stops or the caller cancels.
     /// </param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal AssetLoadContext(
         AssetCatalog catalog,
         string canonicalPath,
-        CancellationToken cancellationToken,
         byte[] payload,
-        LoadChain? chain) {
+        LoadChain? chain,
+        CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(canonicalPath);
         ArgumentNullException.ThrowIfNull(payload);
@@ -89,7 +89,7 @@ public sealed class AssetLoadContext {
     /// <exception cref="OperationCanceledException">The context token is canceled.</exception>
     public Task<T> LoadAsync<T>(string path, CancellationToken cancellationToken = default) {
         CancellationToken token = cancellationToken.CanBeCanceled ? cancellationToken : CancellationToken;
-        return _catalog.LoadCore<T>(path, token, _chain);
+        return _catalog.LoadCore<T>(path, _chain, token);
     }
 
     /// <summary>

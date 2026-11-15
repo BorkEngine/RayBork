@@ -1,3 +1,4 @@
+using System.Globalization;
 using RayBork.Bake;
 using RayBork.Bake.Shaders;
 using RayBork.Internal;
@@ -439,7 +440,7 @@ public sealed class ShaderProcessorTests {
         toml.AppendLine("fragment = \"castle.frag\"");
         for (int binding = 0; binding < 17; binding++) {
             toml.AppendLine("[[shader.textures]]");
-            toml.AppendLine($"name = \"texture{binding}\"");
+            toml.AppendLine(CultureInfo.InvariantCulture, $"name = \"texture{binding}\"");
         }
 
         AssertFailure(workspace, toml.ToString(), "RB4008");
@@ -527,7 +528,7 @@ public sealed class ShaderProcessorTests {
         toml.AppendLine("fragment = \"castle.frag\"");
         for (int index = 0; index < count; index++) {
             toml.AppendLine("[[shader.uniforms]]");
-            toml.AppendLine($"name = \"uMatrix{index}\"");
+            toml.AppendLine(CultureInfo.InvariantCulture, $"name = \"uMatrix{index}\"");
             toml.AppendLine("type = \"mat4\"");
         }
 

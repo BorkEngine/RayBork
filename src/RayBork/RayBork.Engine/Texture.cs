@@ -146,9 +146,7 @@ public sealed class Texture : IAsset {
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
     public void Dispose() {
-        if (_asset.IsDisposed) {
-            throw new ObjectDisposedException(nameof(Texture));
-        }
+        ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
 
         _asset.ReleaseOwnerReference();
     }

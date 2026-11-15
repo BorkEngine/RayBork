@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace RayBork.Internal;
@@ -402,6 +403,10 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// is logged once (unless the metrics path already reported the same outline failure) and the
     /// pipeline never retries it.
     /// </summary>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "One glyph generation failure is recorded on its request; the service must keep serving the remaining glyphs.")]
     private void Execute(GlyphRequest request) {
         FontGlyphPipeline pipeline = request.Pipeline;
         int glyphId = request.GlyphId;

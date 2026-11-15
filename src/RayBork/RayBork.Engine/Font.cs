@@ -303,9 +303,7 @@ public sealed class Font : IAsset {
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">The font is already disposed.</exception>
     public void Dispose() {
-        if (_asset.IsDisposed) {
-            throw new ObjectDisposedException(nameof(Font));
-        }
+        ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
 
         _asset.ReleaseOwnerReference();
     }

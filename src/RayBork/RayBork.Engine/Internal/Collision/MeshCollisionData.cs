@@ -320,13 +320,13 @@ internal sealed class MeshCollisionData {
         if (!IsFinite(bounds.Min) || !IsFinite(bounds.Max)) {
             throw new ArgumentException(
                 $"Collision node {index} has a non-finite bound.",
-                "nodes");
+                nameof(bounds));
         }
 
         if (bounds.Min.X > bounds.Max.X || bounds.Min.Y > bounds.Max.Y || bounds.Min.Z > bounds.Max.Z) {
             throw new ArgumentException(
                 $"Collision node {index} has an inverted bound.",
-                "nodes");
+                nameof(bounds));
         }
     }
 

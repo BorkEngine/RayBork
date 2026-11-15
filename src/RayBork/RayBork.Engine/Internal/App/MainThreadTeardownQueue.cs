@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace RayBork.Internal;
@@ -44,6 +45,10 @@ internal sealed class MainThreadTeardownQueue {
     /// </remarks>
     /// <param name="logger">The logger that receives an action's failure.</param>
     /// <exception cref="ArgumentNullException"><paramref name="logger"/> is <see langword="null"/>.</exception>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Teardown steps are queued by the render thread at shutdown; a failing step is logged and the remaining steps still run.")]
     internal void RunPending(ILogger logger) {
         ArgumentNullException.ThrowIfNull(logger);
         while (true) {

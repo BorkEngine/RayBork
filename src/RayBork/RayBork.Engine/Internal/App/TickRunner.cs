@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -138,14 +140,17 @@ internal sealed class TickRunner {
     /// </summary>
     internal void Join() => _thread.Join();
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The tick thread records every failure in Failure and completes; an exception may never escape and kill the process.")]
     private void RunThread() {
         _threadId = Environment.CurrentManagedThreadId;
         SynchronizationContext? previousContext = SynchronizationContext.Current;
         TickSynchronizationContext synchronizationContext = new();
-        SynchronizationContext.SetSynchronizationContext(synchronizationContext);
-
         bool tickThreadAttached = false;
         try {
+            SynchronizationContext.SetSynchronizationContext(synchronizationContext);
             TickThread.Attach();
             tickThreadAttached = true;
             RunCallbacks(synchronizationContext);
@@ -166,16 +171,17 @@ internal sealed class TickRunner {
                 _failure ??= WrapUnexpectedFailure(exception);
             }
 
-            try {
-                synchronizationContext.Dispose();
-            } catch (Exception exception) {
-                _failure ??= WrapUnexpectedFailure(exception);
-            }
-
+            // TickSynchronizationContext.Dispose only disposes its own wait handle and is idempotent,
+            // so it cannot throw here and needs no failure capture.
+            synchronizationContext.Dispose();
             _completed = true;
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "IGame callbacks are user code; every exception is captured and reported as a game failure.")]
     private void RunCallbacks(TickSynchronizationContext synchronizationContext) {
         try {
             _context.SetInput(CaptureInput());
@@ -215,6 +221,10 @@ internal sealed class TickRunner {
         _failure = CombineFailures(tickFailure, shutdownFailure);
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "One failed frame step abandons the lease and reports the failure; no exception may escape the tick thread.")]
     private TickFailure? RunTickLoop() {
         CancellationToken stopToken = _stopSource.Token;
         while (true) {

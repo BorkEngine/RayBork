@@ -24,11 +24,11 @@ namespace RayBork.Internal;
 internal sealed unsafe class VulkanValidation : IDisposable {
     private const string VALIDATION_LAYER_NAME = "VK_LAYER_KHRONOS_validation";
 
-    private static readonly DebugUtilsMessageSeverityFlagsEXT _messageSeverity =
+    private const DebugUtilsMessageSeverityFlagsEXT MESSAGE_SEVERITY =
         DebugUtilsMessageSeverityFlagsEXT.WarningBitExt
         | DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt;
 
-    private static readonly DebugUtilsMessageTypeFlagsEXT _messageType =
+    private const DebugUtilsMessageTypeFlagsEXT MESSAGE_TYPE =
         DebugUtilsMessageTypeFlagsEXT.GeneralBitExt
         | DebugUtilsMessageTypeFlagsEXT.ValidationBitExt
         | DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt;
@@ -64,8 +64,8 @@ internal sealed unsafe class VulkanValidation : IDisposable {
     /// <returns>The messenger create info with the instance callback and user data set.</returns>
     internal DebugUtilsMessengerCreateInfoEXT CreateMessengerCreateInfo() => new() {
         SType = StructureType.DebugUtilsMessengerCreateInfoExt,
-        MessageSeverity = _messageSeverity,
-        MessageType = _messageType,
+        MessageSeverity = MESSAGE_SEVERITY,
+        MessageType = MESSAGE_TYPE,
         PfnUserCallback = _callback,
         PUserData = (void*)GCHandle.ToIntPtr(_selfHandle),
     };
@@ -134,7 +134,7 @@ internal sealed unsafe class VulkanValidation : IDisposable {
         DebugUtilsMessengerCallbackDataEXT* callbackData,
         void* userData) {
         if (userData is null
-            || (messageSeverity & _messageSeverity) == 0) {
+            || (messageSeverity & MESSAGE_SEVERITY) == 0) {
             return 0;
         }
 

@@ -34,7 +34,6 @@ internal sealed class CffDictReader {
     private const byte ONE_BYTE_INT_MAX = 246;
     private const byte TWO_BYTE_POSITIVE_MAX = 250;
     private const byte TWO_BYTE_NEGATIVE_MAX = 254;
-    private const int REAL_NIBBLE_END = 0x0F;
     private const int REAL_NIBBLE_RESERVED = 0x0D;
     private const int MAX_REAL_EXPONENT = 10000;
 

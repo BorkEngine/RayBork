@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -85,6 +87,10 @@ internal sealed class ProceduralAssetService {
     /// render thread may already be gone; the bridge destroy call is itself best effort.
     /// </summary>
     /// <param name="resource">The resource to destroy.</param>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Queuing destruction of a procedural resource must not throw out of the release path; the failure is logged and the resource stays queued.")]
     internal void QueueDestruction(GpuAssetResource resource) {
         try {
             _bridge.Destroy(resource);

@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -165,6 +167,10 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// mesh cannot be built. The message names the built-in assets; every asset created before the
     /// failure is released.
     /// </exception>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The eight meshes built here are stored in the returned PrimitiveAssets, which owns and disposes them; ownership transfers out of this method.")]
     internal static async Task<PrimitiveAssets> LoadAsync(IAssetCatalog assets) {
         ArgumentNullException.ThrowIfNull(assets);
         if (assets is not IProceduralAssetProvider provider) {

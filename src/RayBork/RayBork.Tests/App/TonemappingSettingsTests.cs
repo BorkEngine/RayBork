@@ -42,7 +42,7 @@ public sealed class TonemappingSettingsTests {
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
             () => new TonemappingSettings(exposure, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST));
 
-        Assert.Equal(nameof(TonemappingSettings.Exposure), thrown.ParamName);
+        Assert.Equal(nameof(exposure), thrown.ParamName);
     }
 
     [Theory]
@@ -57,7 +57,7 @@ public sealed class TonemappingSettingsTests {
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
             () => new TonemappingSettings(0f, agxWhite, AgxToneMap.DEFAULT_AGX_CONTRAST));
 
-        Assert.Equal(nameof(TonemappingSettings.AgxWhite), thrown.ParamName);
+        Assert.Equal(nameof(agxWhite), thrown.ParamName);
     }
 
     [Theory]
@@ -72,7 +72,7 @@ public sealed class TonemappingSettingsTests {
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
             () => new TonemappingSettings(0f, AgxToneMap.DEFAULT_AGX_WHITE, agxContrast));
 
-        Assert.Equal(nameof(TonemappingSettings.AgxContrast), thrown.ParamName);
+        Assert.Equal(nameof(agxContrast), thrown.ParamName);
     }
 
     [Fact]

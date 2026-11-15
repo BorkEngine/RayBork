@@ -67,6 +67,10 @@ internal sealed class PackArchive : IDisposable {
     /// <exception cref="AssetPackException">
     /// The file is missing, unreadable, truncated, or not a valid v1 pack.
     /// </exception>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The FileStream is owned by the returned PackArchive and disposed when the archive is disposed.")]
     internal static PackArchive Open(string path) {
         ArgumentNullException.ThrowIfNull(path);
         if (string.IsNullOrWhiteSpace(path)) {

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 using RayBork.Internal;
@@ -197,6 +198,14 @@ public sealed class RayBorkApp : IDisposable {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The app converts any main-loop or startup failure into the reported run failure instead of crashing the host.")]
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The default logger factory is disposed before RunCore returns on every path; the analyzer cannot follow the try/catch/finally and the early exits.")]
     private void RunCore() {
         Thread.CurrentThread.Name ??= MAIN_THREAD_NAME;
 
@@ -488,9 +497,17 @@ public sealed class RayBorkApp : IDisposable {
     /// loader and the render thread service the reads and uploads. A missing or corrupt built-in is
     /// reported as an <see cref="AssetLoadException"/> by <see cref="PrimitiveAssets.LoadAsync"/>.
     /// </remarks>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The returned PrimitiveAssets is stored by RunCore and disposed by the cleanup path that owns it.")]
     private static PrimitiveAssets LoadPrimitiveAssets(IAssetCatalog assets)
         => PrimitiveAssets.LoadAsync(assets).GetAwaiter().GetResult();
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Cleanup keeps going after a failed step: the failure is recorded and the remaining steps still run.")]
     private static Exception? Cleanup(
         ILogger logger,
         IEnginePlatform? platform,
@@ -607,6 +624,10 @@ public sealed class RayBorkApp : IDisposable {
         return failure;
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Waiting for the render thread must survive a failing platform pump and still join or time out.")]
     private static Exception? JoinRenderLoop(
         ILogger logger,
         IEnginePlatform? platform,
@@ -653,6 +674,10 @@ public sealed class RayBorkApp : IDisposable {
         return failure;
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A cleanup step failure is recorded and returned; cleanup must continue with the next step.")]
     private static Exception? RunCleanupStep(ILogger logger, string operation, Exception? failure, Action action) {
         try {
             action();

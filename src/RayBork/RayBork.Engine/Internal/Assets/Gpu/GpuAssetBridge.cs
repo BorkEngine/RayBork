@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -346,6 +348,10 @@ internal sealed class GpuAssetBridge {
     /// <exception cref="AssetLoadException">
     /// One or more resources could not be recreated. The diagnostic code is <c>RB1010</c>.
     /// </exception>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Device recovery replays queued uploads on the render thread; a failing replay completes its request with the error instead of aborting recovery.")]
     internal void Restore(IAssetGpuWorker worker) {
         ArgumentNullException.ThrowIfNull(worker);
 
@@ -458,6 +464,10 @@ internal sealed class GpuAssetBridge {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The render thread polls worker completions; a worker failure completes the request with the error and keeps the loop alive.")]
     private bool PollInFlight(IAssetGpuWorker worker) {
         bool progress = false;
         foreach (InFlightUpload upload in SnapshotInFlight()) {
@@ -504,6 +514,10 @@ internal sealed class GpuAssetBridge {
         return progress;
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A failing upload start is reported through its request, and the loop keeps servicing the remaining uploads.")]
     private bool StartQueuedUploads(IAssetGpuWorker worker) {
         bool started = false;
         while (true) {
@@ -591,7 +605,11 @@ internal sealed class GpuAssetBridge {
         }
     }
 
-    private void CancelOperation(IAssetGpuWorker worker, GpuAssetUploadOperation operation) {
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Cancellation runs during shutdown, when the device may already be gone; it must never stop the render loop.")]
+    private static void CancelOperation(IAssetGpuWorker worker, GpuAssetUploadOperation operation) {
         try {
             worker.Cancel(operation);
         } catch (Exception) {
@@ -636,6 +654,10 @@ internal sealed class GpuAssetBridge {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Destroying a GPU resource during shutdown or upload failure may itself throw; the destruction pass must keep going.")]
     private static void DestroyResourceNow(IAssetGpuWorker worker, GpuAssetResource resource) {
         if (!resource.TryMarkDestroyed()) {
             return;

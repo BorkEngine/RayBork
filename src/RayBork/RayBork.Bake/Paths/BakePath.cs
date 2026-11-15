@@ -160,8 +160,8 @@ internal static class BakePath {
     /// <param name="relativePath">The relative file path.</param>
     /// <returns>The lowercase extension, or an empty string.</returns>
     internal static string GetFinalExtension(string relativePath) {
-        int slash = relativePath.LastIndexOf('/');
-        int dot = relativePath.LastIndexOf('.');
+        int slash = relativePath.LastIndexOf('/', StringComparison.Ordinal);
+        int dot = relativePath.LastIndexOf('.', StringComparison.Ordinal);
         if (dot <= slash || dot == relativePath.Length - 1) {
             return string.Empty;
         }
@@ -173,8 +173,8 @@ internal static class BakePath {
     /// <param name="relativePath">The relative file path.</param>
     /// <returns>The path without its final extension.</returns>
     internal static string RemoveFinalExtension(string relativePath) {
-        int slash = relativePath.LastIndexOf('/');
-        int dot = relativePath.LastIndexOf('.');
+        int slash = relativePath.LastIndexOf('/', StringComparison.Ordinal);
+        int dot = relativePath.LastIndexOf('.', StringComparison.Ordinal);
         return dot <= slash ? relativePath : relativePath[..dot];
     }
 

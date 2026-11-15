@@ -112,7 +112,7 @@ public sealed class TonemappingSettings {
     private static void ValidateExposure(float exposure) {
         if (!float.IsFinite(exposure)) {
             throw new ArgumentOutOfRangeException(
-                nameof(Exposure),
+                nameof(exposure),
                 exposure,
                 "The exposure must be finite.");
         }
@@ -121,7 +121,7 @@ public sealed class TonemappingSettings {
     private static void ValidateAgxWhite(float agxWhite) {
         if (!float.IsFinite(agxWhite) || agxWhite < AgxCurveParameters.MIN_WHITE) {
             throw new ArgumentOutOfRangeException(
-                nameof(AgxWhite),
+                nameof(agxWhite),
                 agxWhite,
                 "The AgX white must be finite and at least 2.");
         }
@@ -130,7 +130,7 @@ public sealed class TonemappingSettings {
     private static void ValidateAgxContrast(float agxContrast) {
         if (!float.IsFinite(agxContrast) || agxContrast < 1f) {
             throw new ArgumentOutOfRangeException(
-                nameof(AgxContrast),
+                nameof(agxContrast),
                 agxContrast,
                 "The AgX contrast must be finite and at least 1.");
         }

@@ -77,7 +77,7 @@ internal sealed class VulkanInstance : IDisposable {
     /// <summary>
     /// Gets the packed Vulkan API version requested at creation, which is Vulkan 1.2.0.
     /// </summary>
-    internal uint ApiVersion => RequestedApiVersion;
+    internal static uint ApiVersion => RequestedApiVersion;
 
     /// <summary>
     /// Gets whether the <c>VK_LAYER_KHRONOS_validation</c> layer is active.
@@ -197,7 +197,7 @@ internal sealed class VulkanInstance : IDisposable {
             instance.ThrowIfValidationError("creating the Vulkan instance");
             options.Logger.LogInformation(
                 "Vulkan instance created: API {ApiVersion}; validation {Validation}; debug messenger {DebugMessenger}; swapchain color space {ColorSpace}.",
-                VulkanVersion.Format(instance.ApiVersion),
+                VulkanVersion.Format(VulkanInstance.ApiVersion),
                 instance.ValidationLayersEnabled ? "enabled" : "disabled",
                 instance.DebugMessengerEnabled ? "enabled" : "disabled",
                 instance.SwapchainColorSpaceExtensionEnabled ? "enabled" : "disabled");
