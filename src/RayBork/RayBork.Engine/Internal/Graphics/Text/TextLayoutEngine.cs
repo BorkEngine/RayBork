@@ -369,7 +369,7 @@ internal static class TextLayoutEngine {
             }
         }
 
-        private bool Finish(
+        private static bool Finish(
             out int lineStart,
             out int lineEnd,
             out float lineAdvance,

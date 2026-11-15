@@ -60,7 +60,7 @@ internal static class BakeConfigurationHash {
 
     private static string NormalizeExtension(string extension) {
         string normalized = extension.Trim().ToLowerInvariant();
-        return normalized.StartsWith('.') ? normalized[1..] : normalized;
+        return normalized.StartsWith('.', StringComparison.Ordinal) ? normalized[1..] : normalized;
     }
 
     private static string Format(int value) => value.ToString(CultureInfo.InvariantCulture);

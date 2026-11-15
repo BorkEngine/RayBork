@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 using RayBork.Internal;
@@ -197,6 +198,14 @@ public sealed class RayBorkApp : IDisposable {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A logger-factory dispose failure must be recorded as the run failure instead of replacing it.")]
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The default logger factory is disposed by the finally on every path, including a throw from CreateLogger or the run body; the analyzer cannot model the try/catch that keeps a dispose failure from replacing the recorded run failure.")]
     private void RunCore() {
         Thread.CurrentThread.Name ??= MAIN_THREAD_NAME;
 
@@ -210,6 +219,43 @@ public sealed class RayBorkApp : IDisposable {
             loggerFactory = defaultLoggerFactory;
         }
 
+        Exception? failure = null;
+        try {
+            failure = RunCoreBody(configuration, loggerFactory);
+        } finally {
+            if (defaultLoggerFactory is not null) {
+                try {
+                    defaultLoggerFactory.Dispose();
+                } catch (Exception exception) {
+                    // The default factory owns the only logger, so a dispose failure cannot be logged
+                    // through it. It becomes the reported failure only when the run itself succeeded.
+                    failure ??= exception;
+                }
+            }
+        }
+
+        if (failure is not null) {
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+    }
+
+    /// <summary>
+    /// Runs one app lifetime after the logger factory exists and returns the failure it ended with.
+    /// </summary>
+    /// <param name="configuration">The app configuration.</param>
+    /// <param name="loggerFactory">
+    /// The factory that creates the app logger. The caller owns it when it is the default factory.
+    /// </param>
+    /// <returns>The failure that stopped the run, or <see langword="null"/> for a graceful exit.</returns>
+    /// <remarks>
+    /// An unexpected logger, cleanup, or final-log exception is not converted to a failure here; it
+    /// propagates to the caller, whose <c>finally</c> still disposes the default logger factory.
+    /// </remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The app converts any main-loop or startup failure into the reported run failure instead of crashing the host.")]
+    private Exception? RunCoreBody(AppConfiguration configuration, ILoggerFactory loggerFactory) {
         ILogger logger = loggerFactory.CreateLogger(APP_LOGGER_CATEGORY);
         logger.LogInformation(
             "RayBork {EngineVersion} starting: title '{Title}', client size {Width}x{Height}.",
@@ -377,19 +423,7 @@ public sealed class RayBorkApp : IDisposable {
             logger.LogInformation("RayBork exiting: {ExitReason}.", exitReason ?? "requested");
         }
 
-        if (defaultLoggerFactory is not null) {
-            try {
-                defaultLoggerFactory.Dispose();
-            } catch (Exception exception) {
-                // The default factory owns the only logger, so a dispose failure cannot be logged
-                // through it; keep it as the failure instead.
-                failure ??= exception;
-            }
-        }
-
-        if (failure is not null) {
-            ExceptionDispatchInfo.Capture(failure).Throw();
-        }
+        return failure;
     }
 
     private IEnginePlatform CreatePlatform(ILoggerFactory loggerFactory) {
@@ -488,9 +522,17 @@ public sealed class RayBorkApp : IDisposable {
     /// loader and the render thread service the reads and uploads. A missing or corrupt built-in is
     /// reported as an <see cref="AssetLoadException"/> by <see cref="PrimitiveAssets.LoadAsync"/>.
     /// </remarks>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The returned PrimitiveAssets is stored by RunCore and disposed by the cleanup path that owns it.")]
     private static PrimitiveAssets LoadPrimitiveAssets(IAssetCatalog assets)
         => PrimitiveAssets.LoadAsync(assets).GetAwaiter().GetResult();
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Cleanup keeps going after a failed step: the failure is recorded and the remaining steps still run.")]
     private static Exception? Cleanup(
         ILogger logger,
         IEnginePlatform? platform,
@@ -607,6 +649,10 @@ public sealed class RayBorkApp : IDisposable {
         return failure;
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Waiting for the render thread must survive a failing platform pump and still join or time out.")]
     private static Exception? JoinRenderLoop(
         ILogger logger,
         IEnginePlatform? platform,
@@ -653,6 +699,10 @@ public sealed class RayBorkApp : IDisposable {
         return failure;
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A cleanup step failure is recorded and returned; cleanup must continue with the next step.")]
     private static Exception? RunCleanupStep(ILogger logger, string operation, Exception? failure, Action action) {
         try {
             action();

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Silk.NET.Vulkan;
 
@@ -103,6 +104,10 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable {
     /// sampler is either already destroyed or about to be recreated. The call is idempotent and safe
     /// when no device is available.
     /// </remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Shutdown destroys every cached sampler best-effort so one failure cannot leave the rest alive.")]
     internal void DestroyAll() {
         if (_samplers.Count == 0) {
             return;

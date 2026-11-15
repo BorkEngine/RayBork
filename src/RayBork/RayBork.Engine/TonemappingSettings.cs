@@ -33,9 +33,9 @@ public sealed class TonemappingSettings {
     /// <param name="agxContrast">The AgX curve contrast. It must be finite and at least <c>1</c>.</param>
     /// <exception cref="ArgumentOutOfRangeException">A value is outside its documented range.</exception>
     internal TonemappingSettings(float exposure, float agxWhite, float agxContrast) {
-        ValidateExposure(exposure);
-        ValidateAgxWhite(agxWhite);
-        ValidateAgxContrast(agxContrast);
+        ValidateExposure(exposure, nameof(Exposure));
+        ValidateAgxWhite(agxWhite, nameof(AgxWhite));
+        ValidateAgxContrast(agxContrast, nameof(AgxContrast));
 
         _exposure = exposure;
         _agxWhite = agxWhite;
@@ -55,7 +55,7 @@ public sealed class TonemappingSettings {
     public float Exposure {
         get => _exposure;
         set {
-            ValidateExposure(value);
+            ValidateExposure(value, nameof(Exposure));
             TickThread.RequireCurrent(nameof(Exposure));
             _exposure = value;
         }
@@ -77,7 +77,7 @@ public sealed class TonemappingSettings {
     public float AgxWhite {
         get => _agxWhite;
         set {
-            ValidateAgxWhite(value);
+            ValidateAgxWhite(value, nameof(AgxWhite));
             TickThread.RequireCurrent(nameof(AgxWhite));
             _agxWhite = value;
         }
@@ -97,7 +97,7 @@ public sealed class TonemappingSettings {
     public float AgxContrast {
         get => _agxContrast;
         set {
-            ValidateAgxContrast(value);
+            ValidateAgxContrast(value, nameof(AgxContrast));
             TickThread.RequireCurrent(nameof(AgxContrast));
             _agxContrast = value;
         }
@@ -109,28 +109,28 @@ public sealed class TonemappingSettings {
     /// <returns>The value snapshot the frame packet carries to the render thread.</returns>
     internal TonemappingSnapshot Snapshot() => new(_exposure, _agxWhite, _agxContrast);
 
-    private static void ValidateExposure(float exposure) {
+    private static void ValidateExposure(float exposure, string paramName) {
         if (!float.IsFinite(exposure)) {
             throw new ArgumentOutOfRangeException(
-                nameof(Exposure),
+                paramName,
                 exposure,
                 "The exposure must be finite.");
         }
     }
 
-    private static void ValidateAgxWhite(float agxWhite) {
+    private static void ValidateAgxWhite(float agxWhite, string paramName) {
         if (!float.IsFinite(agxWhite) || agxWhite < AgxCurveParameters.MIN_WHITE) {
             throw new ArgumentOutOfRangeException(
-                nameof(AgxWhite),
+                paramName,
                 agxWhite,
                 "The AgX white must be finite and at least 2.");
         }
     }
 
-    private static void ValidateAgxContrast(float agxContrast) {
+    private static void ValidateAgxContrast(float agxContrast, string paramName) {
         if (!float.IsFinite(agxContrast) || agxContrast < 1f) {
             throw new ArgumentOutOfRangeException(
-                nameof(AgxContrast),
+                paramName,
                 agxContrast,
                 "The AgX contrast must be finite and at least 1.");
         }

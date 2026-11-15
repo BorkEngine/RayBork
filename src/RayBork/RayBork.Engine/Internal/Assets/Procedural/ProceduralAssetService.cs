@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -81,16 +83,22 @@ internal sealed class ProceduralAssetService {
     }
 
     /// <summary>
-    /// Queues the destruction of a resource the service created. A failure is swallowed because the
-    /// render thread may already be gone; the bridge destroy call is itself best effort.
+    /// Queues the destruction of a resource the service created. A failure is swallowed: the only
+    /// throwing path is a full destroy queue while the render thread is not draining it, and the
+    /// resource is then put back in the live set for the bridge's Close to destroy.
     /// </summary>
     /// <param name="resource">The resource to destroy.</param>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A procedural resource release must not throw: the only throwing path is a full destroy queue while the render thread is not draining it, and Destroy re-adds the resource to the live set so Close still destroys it. No caller could handle the failure.")]
     internal void QueueDestruction(GpuAssetResource resource) {
         try {
             _bridge.Destroy(resource);
         } catch (Exception) {
-            // Destructions run on the render thread. A closed bridge already destroyed every live
-            // resource, and there is no caller that could handle a failure here.
+            // A full destroy queue with the render thread not draining it is the only throwing path;
+            // Destroy puts the resource back in the live set, so Close still destroys it, and there is
+            // no caller that could report the failure.
         }
     }
 

@@ -8,6 +8,8 @@
              RayBork.Bake and its packages enter this project's Native AOT publish graph. -->
         <CastleAssetsProjectFile Condition="'$(CastleAssetsProjectFile)' == ''">$(MSBuildProjectDirectory)\Castle.Assets\Castle.Assets.csproj</CastleAssetsProjectFile>
         <CastlePackFileName Condition="'$(CastlePackFileName)' == ''">castle.pck</CastlePackFileName>
+        <!-- Samples are documentation, not shipped API, so they are held to the recommended set. -->
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
     </PropertyGroup>
 
     <!-- The assets project lives inside this sample directory (flat per-sample layout). Keep its

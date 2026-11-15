@@ -10,6 +10,8 @@
         <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
         <!-- Build-time tooling: this executable is JIT and must never enter a runtime publish graph. -->
         <PublishAot>false</PublishAot>
+        <!-- Sample build tooling is not shipped API, so it is held to the recommended analyzer set. -->
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
     </PropertyGroup>
 
     <ItemGroup>

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Silk.NET.Vulkan;
@@ -143,6 +144,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     }
 
     /// <inheritdoc />
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A failing completion is returned to the bridge as a failed upload instead of escaping the render thread.")]
     public bool TryComplete(
         GpuAssetUploadOperation operation,
         out GpuAssetResource? resource,
@@ -172,6 +177,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     }
 
     /// <inheritdoc />
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Cancellation runs during shutdown after the device may already be gone; the failure is logged and the loop continues.")]
     public void Cancel(GpuAssetUploadOperation operation) {
         VulkanAssetUploadOperation upload = RequireUploadOperation(operation);
         if (!upload.TryMarkCanceled()) {
@@ -396,6 +405,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// Render-thread only, with the device idle. It never throws: a failed cancellation or destruction
     /// is logged and the remaining objects are still released, so device recreation can proceed.
     /// </remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Shutdown destroys every resource best-effort so one failure cannot leave the rest alive.")]
     internal void DestroyAllResources() {
         VulkanAssetUploadOperation[] pending = [.. _pending];
         foreach (VulkanAssetUploadOperation upload in pending) {
@@ -419,6 +432,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         _samplers.DestroyAll();
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Resource destruction is best-effort during upload failure and shutdown; each failure is logged.")]
     private void DestroyResource(VulkanAssetResource resource) {
         try {
             int currentGeneration = _deviceGenerationAccessor();
@@ -820,6 +837,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// Releases the submission, staging, and partial resource of an upload that failed while it was
     /// being started. A submitted copy is waited out before its staging buffer is freed.
     /// </summary>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Cleanup after a failed upload may itself fail; the original upload failure is what the caller needs.")]
     private void DestroyFailedUpload(
         VulkanDevice device,
         AssetGpuUpload upload,
@@ -844,7 +865,7 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
-    private void ValidateTextureSupport(
+    private static void ValidateTextureSupport(
         VulkanDevice device,
         AssetGpuUpload upload,
         TextureFormat textureFormat,
@@ -1211,6 +1232,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         DestroyMemory(vulkan, deviceHandle, staging.Memory);
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Best-effort teardown: the device may already be lost when the image view is destroyed.")]
     private void DestroyImageView(Vk vulkan, Device device, ImageView view) {
         if (view.Handle == 0) {
             return;
@@ -1223,6 +1248,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Best-effort teardown: the device may already be lost when the image is destroyed.")]
     private void DestroyImage(Vk vulkan, Device device, Image image) {
         if (image.Handle == 0) {
             return;
@@ -1235,6 +1264,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Best-effort teardown: the device may already be lost when the buffer is destroyed.")]
     private void DestroyBuffer(Vk vulkan, Device device, Buffer buffer) {
         if (buffer.Handle == 0) {
             return;
@@ -1247,6 +1280,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Best-effort teardown: the device may already be lost when the allocation is freed.")]
     private void DestroyMemory(Vk vulkan, Device device, DeviceMemory memory) {
         if (memory.Handle == 0) {
             return;
@@ -1259,6 +1296,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "Best-effort teardown: the device may already be lost when the shader module is destroyed.")]
     private void DestroyShaderModule(Vk vulkan, Device device, ShaderModule module) {
         if (module.Handle == 0) {
             return;

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace RayBork.Internal;
@@ -147,6 +148,10 @@ internal sealed class RenderLoop {
     /// </summary>
     internal void Join() => _thread.Join();
 
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The render thread records the failure and stops; an exception may not escape the thread and kill the process.")]
     private void RunThread() {
         IRendererBackend? backend = null;
         try {
@@ -251,6 +256,10 @@ internal sealed class RenderLoop {
     /// cannot signal its fences; the worker logs and returns instead of throwing, because shutdown
     /// must still release what it can.
     /// </remarks>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The drain runs during teardown, after the backend may already be gone; a failure must not prevent the loop from stopping.")]
     private void WaitForFrameResourcesIdle() {
         if (_assetGpuWorker is null) {
             return;

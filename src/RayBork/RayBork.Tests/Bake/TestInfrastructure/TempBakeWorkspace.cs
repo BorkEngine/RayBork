@@ -46,11 +46,11 @@ internal sealed class TempBakeWorkspace : IDisposable {
         => File.ReadAllText(
             Path.Combine(AssetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
 
-    internal string WriteFile(string fullPath, string content) => WriteFileBytes(
+    internal static string WriteFile(string fullPath, string content) => WriteFileBytes(
         fullPath,
         new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(content));
 
-    internal string WriteFileBytes(string fullPath, byte[] content) {
+    internal static string WriteFileBytes(string fullPath, byte[] content) {
         string? directory = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrEmpty(directory)) {
             Directory.CreateDirectory(directory);
@@ -71,7 +71,7 @@ internal sealed class TempBakeWorkspace : IDisposable {
         return RunRaw(application, effectiveArgs);
     }
 
-    internal BakeRunResult RunRaw(BakeApplication application, params string[] args) {
+    internal static BakeRunResult RunRaw(BakeApplication application, params string[] args) {
         var output = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
         var error = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
         int exitCode = application

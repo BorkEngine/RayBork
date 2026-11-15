@@ -198,7 +198,7 @@ public sealed class AppLifecycleTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void TickAndShutdownFailuresProduceAnAggregateInnerException() {
         InvalidOperationException tickException = new("tick failed");
-        ApplicationException shutdownException = new("shutdown failed");
+        InvalidOperationException shutdownException = new("shutdown failed");
         ScriptedGame game = new() {
             ShutdownHandler = () => Task.FromException(shutdownException),
         };
@@ -220,7 +220,7 @@ public sealed class AppLifecycleTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void ShutdownOnlyFailureBecomesGameException() {
-        ApplicationException shutdownException = new("shutdown failed");
+        InvalidOperationException shutdownException = new("shutdown failed");
         ScriptedGame game = new() {
             ShutdownHandler = () => Task.FromException(shutdownException),
             TickHandler = context => context.RequestExit(),

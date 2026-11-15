@@ -84,6 +84,60 @@ public sealed class TonemappingSettingsTests {
         Assert.Equal(1f, settings.AgxContrast);
     }
 
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ExposureSetterRejectsNonFiniteValuesWithThePropertyName(float exposure) {
+        Assert.False(TickThread.IsCurrent);
+        TonemappingSettings settings = new(0f, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST);
+
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => settings.Exposure = exposure);
+
+        Assert.Equal(nameof(TonemappingSettings.Exposure), thrown.ParamName);
+        Assert.Equal(0f, settings.Exposure);
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    [InlineData(1.99f)]
+    [InlineData(0f)]
+    [InlineData(-4f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AgxWhiteSetterRejectsValuesBelowTwoWithThePropertyName(float agxWhite) {
+        Assert.False(TickThread.IsCurrent);
+        TonemappingSettings settings = new(0f, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST);
+
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => settings.AgxWhite = agxWhite);
+
+        Assert.Equal(nameof(TonemappingSettings.AgxWhite), thrown.ParamName);
+        Assert.Equal(AgxToneMap.DEFAULT_AGX_WHITE, settings.AgxWhite);
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    [InlineData(float.NegativeInfinity)]
+    [InlineData(0.99f)]
+    [InlineData(0f)]
+    [InlineData(-1f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void AgxContrastSetterRejectsValuesBelowOneWithThePropertyName(float agxContrast) {
+        Assert.False(TickThread.IsCurrent);
+        TonemappingSettings settings = new(0f, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST);
+
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => settings.AgxContrast = agxContrast);
+
+        Assert.Equal(nameof(TonemappingSettings.AgxContrast), thrown.ParamName);
+        Assert.Equal(AgxToneMap.DEFAULT_AGX_CONTRAST, settings.AgxContrast);
+    }
+
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void SettersUpdateTheSnapshotOnTheTickThread() {
