@@ -1,0 +1,10 @@
+[raybork]
+type = "Pong.PongSettings"
+
+paddle_texture = "/textures/paddle"
+ball_radius = 12.0
+max_score = 11
+paddle_width = 18.0
+paddle_height = 110.0
+paddle_speed = 520.0
+ball_speed = 420.0
