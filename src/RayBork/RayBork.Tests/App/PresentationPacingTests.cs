@@ -225,9 +225,18 @@ public sealed class PresentationPacingTests {
         ScriptedGame game = new();
         using AppTestHost host = new(game, targetFps: 0);
         int presentCount = 0;
+        bool firstPresentationObservedBySecondTick = false;
         host.FakeRenderer.OnPresent = () => {
             int count = Interlocked.Increment(ref presentCount);
             if (count == 1) {
+                // The first frame was presented decoupled in MAILBOX. Switching to FIFO as that
+                // presentation completes, on the render thread, is the recovery/HDR-switch analogue.
+                // Both the fake backend and the live status change before the next tick reads them,
+                // and the render loop's post-present sync then reads FIFO instead of republishing the
+                // old MAILBOX.
+                EngineInfo fifo = host.FakeRenderer.Info with { PresentMode = PresentMode.Fifo };
+                host.FakeRenderer.Info = fifo;
+                host.App.RenderStatus.SetInfo(fifo);
                 firstPresented.Set();
             } else if (count == 2) {
                 secondPresentStarted.Set();
@@ -236,13 +245,11 @@ public sealed class PresentationPacingTests {
         };
         game.TickHandler = context => {
             if (game.TickCount == 2) {
-                // The first frame was presented decoupled in MAILBOX. Switching to FIFO here is the
-                // recovery/HDR-switch analogue and must pace the frame this tick publishes. The fake
-                // backend and the live status both change, as the render loop would publish a
-                // recovered Info; the tick reads the live status after it publishes.
-                EngineInfo fifo = host.FakeRenderer.Info with { PresentMode = PresentMode.Fifo };
-                host.FakeRenderer.Info = fifo;
-                host.App.RenderStatus.SetInfo(fifo);
+                // MAILBOX does not pace the tick, so this tick can outrun the first presentation and
+                // publish before the render loop consumed the first frame. Waiting here keeps the
+                // switch ahead of this tick's publication, so the second present paces this tick's
+                // frame instead of the third tick's frame.
+                firstPresentationObservedBySecondTick = firstPresented.Wait(AppTestHost.TIMEOUT);
             } else if (game.TickCount == 3) {
                 thirdTick.Set();
                 context.RequestExit();
@@ -263,6 +270,8 @@ public sealed class PresentationPacingTests {
             Assert.True(firstPresented.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
             Assert.True(secondPresentStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
 
+            // The second present is this tick's frame and is still blocked, so the third tick cannot
+            // start until FIFO pacing releases it.
             Assert.False(thirdTick.Wait(_absenceCheck, TestContext.Current.CancellationToken));
             Assert.Equal(2, game.TickCount);
 
@@ -272,6 +281,9 @@ public sealed class PresentationPacingTests {
             Assert.True(runThread.Join(AppTestHost.TIMEOUT));
             Assert.Null(runFailure);
             Assert.Equal(3, game.TickCount);
+            Assert.True(
+                firstPresentationObservedBySecondTick,
+                "The second tick must observe the first frame's presentation before it publishes.");
         } finally {
             secondPresentRelease.Set();
             runThread.Join(AppTestHost.TIMEOUT);
