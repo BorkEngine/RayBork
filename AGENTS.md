@@ -186,10 +186,11 @@ Post-task verification runs independent build groups concurrently instead of one
   `-p:BuildProjectReferences=false`; run the published hosts concurrently.
 - **WSL:** keep a persistent repository clone on the Linux filesystem at `$HOME/raybork` and sync the
   Windows checkout with
-  `rsync -a --delete --exclude bin/ --exclude obj/ <windows-checkout>/ "$HOME/raybork/"`. Use
-  `$HOME/.dotnet/dotnet`; the default `/usr/bin/dotnet` may be an older SDK. Run the same Debug,
-  Release, sample, `linux-x64` AOT, and host-run groups in the clone. The WSL group runs concurrently
-  with the Windows group.
+  `rsync -a --delete --include='/samples/*/*/Assets/***' --exclude='bin/' --exclude='obj/' <windows-checkout>/ "$HOME/raybork/"`.
+  The include keeps sample asset directories such as `samples/Castle/Castle.Assets/Assets/models/obj/`
+  (a source directory named `obj`) while the excludes skip build output. Use `$HOME/.dotnet/dotnet`;
+  the default `/usr/bin/dotnet` may be an older SDK. Run the same Debug, Release, sample, `linux-x64`
+  AOT, and host-run groups in the clone. The WSL group runs concurrently with the Windows group.
 - Never build the same project and configuration twice in one output tree. Sample builds require a
   current engine build first; AOT publishes require the engine `Release` build for that RID first.
   Pass `-p:BuildProjectReferences=false` only after that prerequisite build. Parallel sample or AOT
