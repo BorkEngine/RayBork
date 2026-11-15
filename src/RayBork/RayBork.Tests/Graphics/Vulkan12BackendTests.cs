@@ -4,7 +4,6 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
-[Collection("SDL")]
 public sealed class Vulkan12BackendTests {
     private static readonly Color _clearColor = new(0.25f, 0.5f, 0.75f, 1f);
 

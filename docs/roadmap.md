@@ -832,7 +832,7 @@ blocking glyph generation.
   run `--frames 30` to exit `0` (Windows hardware and WSLg dzn).
 - Fuzz tests cover malformed sfnt/cmap/glyf/CFF/kern/GPOS tables without crashes or unbounded
   allocation.
-- The suite is 2,622 tests, 106 of them GPU integration tests, and every sample solution builds.
+- The suite is 2,625 tests, 106 of them GPU integration tests, and every sample solution builds.
 
 **As-built notes.** M6 shipped the planned text surface with the following as-built shape:
 
@@ -970,7 +970,7 @@ blocking glyph generation.
   1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets. The
   per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
   milestone.
-- **Tests.** The suite is 2,622 tests, 106 of them GPU integration tests. M6 adds the font parser,
+- **Tests.** The suite is 2,625 tests, 106 of them GPU integration tests. M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
   colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
   the text layout, measurement, wrapping, buffer, and validation suites; the camera text draw
@@ -1324,7 +1324,7 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   `TextDrawTests` cover the CPU-only asset, `.notdef`, layout, and the camera draw records;
   `TextDrawGpuTests` submits the production text draws through the Vulkan backend and asserts
   validation-layer cleanliness, draw/instance/triangle statistics, and single-pixel linear
-  scene-target probes. The suite is 2,622 tests, 106 of them GPU integration tests, and every sample
+  scene-target probes. The suite is 2,625 tests, 106 of them GPU integration tests, and every sample
   solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and

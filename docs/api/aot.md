@@ -98,7 +98,7 @@ the built-in `/shaders/msdf` program, and exit `0`. The gate path exercises the 
 face payload decode, the managed sfnt parser, the MSDF generator, the glyph pipeline and cache, the
 layout engine, the `Camera.DrawText`/`Camera.DrawTextBillboard` draw records, and the per-instance
 bindless glyph texture path. The sample is a plain user-facing example and contains no test-only
-draw assertion. The suite is 2,622 tests, 106 of them GPU integration tests, and every sample
+draw assertion. The suite is 2,625 tests, 106 of them GPU integration tests, and every sample
 solution builds.
 
 On the WSL gate host, WSLg selects Mesa's dzn Vulkan driver

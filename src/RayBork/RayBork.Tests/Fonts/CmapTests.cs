@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Runtime.CompilerServices;
 using System.Text;
 using RayBork.Internal;
 
@@ -273,15 +274,29 @@ public sealed class CmapTests {
         }
 
         Assert.NotEqual(0, mapped);
+        // Compile the measured helper at tier 1 before taking the allocation baseline; otherwise
+        // tiered JIT bookkeeping on the test thread can be counted as lookup allocation.
+        _ = LookupAll(face);
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int iteration = 0; iteration < 10_000; iteration++) {
-            face.TryGetGlyphId(new Rune(0x41 + (iteration % 4)), out _);
-        }
+        int measured = LookupAll(face);
 
         // The threshold leaves room for runtime/JIT bookkeeping on the test thread while still
         // proving the per-codepoint path allocates nothing (well under a byte per lookup).
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+        Assert.True(measured > 0);
         Assert.True(allocated < 4096, $"10,000 cmap lookups allocated {allocated} bytes.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.NoInlining)]
+    private static int LookupAll(SfntFace face) {
+        int mapped = 0;
+        for (int iteration = 0; iteration < 10_000; iteration++) {
+            if (face.TryGetGlyphId(new Rune(0x41 + (iteration % 4)), out int glyph)) {
+                mapped += glyph;
+            }
+        }
+
+        return mapped;
     }
 
     [Fact]

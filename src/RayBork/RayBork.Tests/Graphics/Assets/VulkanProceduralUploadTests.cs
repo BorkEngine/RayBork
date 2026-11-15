@@ -9,7 +9,6 @@ namespace RayBork.Tests.Graphics.Assets;
 /// worker. The texture cases use the raw procedural level upload; the mesh cases use the fixed
 /// 88-byte layout builder data.
 /// </summary>
-[Collection("SDL")]
 public sealed class VulkanProceduralUploadTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]

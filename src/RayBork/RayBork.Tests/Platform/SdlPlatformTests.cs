@@ -15,7 +15,7 @@ public sealed class SdlPlatformTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void InitializeCreatesWindowMonitorsAndInput() {
-        using SdlTestHost host = SdlTestHost.Create();
+        using SdlTestHost host = SdlTestHost.Create(initializeGamepads: true);
         IWindow window = host.Platform.Window;
 
         Assert.Equal(320, window.Width);
@@ -115,25 +115,89 @@ public sealed class SdlPlatformTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WindowCloseEventInvokesTheExitCallback() {
-        int exitRequests = 0;
-        using SdlTestHost host = SdlTestHost.Create(() => exitRequests++);
-        SdlWindow window = host.Window;
+    public void WindowScopedEventsAreRoutedToTheirOwningWindow() {
+        int firstExitRequests = 0;
+        int secondExitRequests = 0;
+        using SdlTestHost first = SdlTestHost.Create(() => firstExitRequests++);
+        using SdlTestHost second = SdlTestHost.Create(() => secondExitRequests++);
 
-        SDL.Event closeEvent = new() {
-            Type = (uint)SDL.EventType.WindowCloseRequested,
+        SDL.Event secondResize = new() {
+            Type = (uint)SDL.EventType.WindowResized,
             Window = new SDL.WindowEvent {
-                Type = SDL.EventType.WindowCloseRequested,
-                WindowID = window.WindowId,
+                Type = SDL.EventType.WindowResized,
+                WindowID = second.Window.WindowId,
+                Data1 = 400,
+                Data2 = 300,
             },
         };
-        Assert.True(SDL.PushEvent(ref closeEvent));
+        SDL.Event secondKeyDown = new() {
+            Type = (uint)SDL.EventType.KeyDown,
+            Key = new SDL.KeyboardEvent {
+                Type = SDL.EventType.KeyDown,
+                WindowID = second.Window.WindowId,
+                Scancode = SDL.Scancode.W,
+                Down = true,
+            },
+        };
+        SDL.Event secondMouseMotion = new() {
+            Type = (uint)SDL.EventType.MouseMotion,
+            Motion = new SDL.MouseMotionEvent {
+                Type = SDL.EventType.MouseMotion,
+                WindowID = second.Window.WindowId,
+                X = 10f,
+                Y = 20f,
+            },
+        };
+        Assert.True(SDL.PushEvent(ref secondResize));
+        Assert.True(SDL.PushEvent(ref secondKeyDown));
+        Assert.True(SDL.PushEvent(ref secondMouseMotion));
+        first.Platform.Pump(TimeSpan.Zero);
 
-        host.Platform.Pump(TimeSpan.Zero);
+        // Clear any resize flag queued while the dummy windows were created, then assert that the
+        // foreign resize event did not reach the first window.
+        first.Window.BeginTick();
+        first.Window.BeginTick();
+        second.Window.BeginTick();
+        Assert.False(first.Window.WasResized);
+        Assert.True(second.Window.WasResized);
+        Assert.False(first.Platform.CaptureInput().IsKeyDown(Key.W));
+        Assert.True(second.Platform.CaptureInput().IsKeyDown(Key.W));
+        Assert.Equal(0f, first.Platform.CaptureInput().MousePosition.X);
+        Assert.Equal(10f, second.Platform.CaptureInput().MousePosition.X);
+        Assert.Equal(20f, second.Platform.CaptureInput().MousePosition.Y);
 
-        Assert.True(window.CloseRequested);
-        Assert.Equal(1, exitRequests);
+        SDL.Event unknownClose = CloseEvent(uint.MaxValue);
+        Assert.True(SDL.PushEvent(ref unknownClose));
+        first.Platform.Pump(TimeSpan.Zero);
+        Assert.False(first.Window.CloseRequested);
+        Assert.False(second.Window.CloseRequested);
+
+        SDL.Event secondClose = CloseEvent(second.Window.WindowId);
+        Assert.True(SDL.PushEvent(ref secondClose));
+        first.Platform.Pump(TimeSpan.Zero);
+
+        Assert.False(first.Window.CloseRequested);
+        Assert.Equal(0, firstExitRequests);
+        Assert.True(second.Window.CloseRequested);
+        Assert.Equal(1, secondExitRequests);
+
+        SDL.Event firstClose = CloseEvent(first.Window.WindowId);
+        Assert.True(SDL.PushEvent(ref firstClose));
+        first.Platform.Pump(TimeSpan.Zero);
+
+        Assert.True(first.Window.CloseRequested);
+        Assert.Equal(1, firstExitRequests);
     }
+
+    // This class is in the non-parallel SDL collection, so pushing directly into the process event
+    // queue cannot race a GPU test's pump.
+    private static SDL.Event CloseEvent(uint windowId) => new() {
+        Type = (uint)SDL.EventType.WindowCloseRequested,
+        Window = new SDL.WindowEvent {
+            Type = SDL.EventType.WindowCloseRequested,
+            WindowID = windowId,
+        },
+    };
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
@@ -411,6 +475,136 @@ public sealed class SdlPlatformTests {
         platform.Dispose();
         Assert.Equal(WindowHdrState.Sdr, platform.WindowHdrState);
         host.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TwoPlatformsShareTheProcessWideSdlLifetime() {
+        using SdlTestHost first = SdlTestHost.Create();
+        using SdlTestHost second = SdlTestHost.Create();
+
+        Assert.NotEqual(first.Window.WindowId, second.Window.WindowId);
+
+        first.Window.SetTitle("first");
+        second.Window.SetTitle("second");
+        first.Platform.Pump(TimeSpan.Zero);
+        second.Platform.Pump(TimeSpan.Zero);
+
+        Assert.Equal("first", first.Window.Title);
+        Assert.Equal("second", second.Window.Title);
+
+        first.Dispose();
+
+        second.Window.SetSize(400, 300);
+        second.Platform.Pump(TimeSpan.Zero);
+        Assert.Equal(400, second.Window.Width);
+        Assert.Equal(300, second.Window.Height);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task PlatformsCanBeCreatedConcurrently() {
+        Task<SdlTestHost> firstTask = Task.Run(() => SdlTestHost.Create());
+        Task<SdlTestHost> secondTask = Task.Run(() => SdlTestHost.Create());
+
+        SdlTestHost? first = null;
+        SdlTestHost? second = null;
+        try {
+            await Task.WhenAll(firstTask, secondTask);
+            first = await firstTask;
+            second = await secondTask;
+
+            Assert.NotEqual(first.Window.WindowId, second.Window.WindowId);
+            first.Platform.Pump(TimeSpan.Zero);
+            second.Platform.Pump(TimeSpan.Zero);
+        } finally {
+            if (first is null && firstTask.Status == TaskStatus.RanToCompletion) {
+                first = await firstTask;
+            }
+
+            if (second is null && secondTask.Status == TaskStatus.RanToCompletion) {
+                second = await secondTask;
+            }
+
+            first?.Dispose();
+            second?.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void VulkanPlatformsShareTheLoaderReferenceCount() {
+        if (!GpuTestHost.IsVulkanLoaderAvailable()) {
+            Assert.Skip("The Vulkan loader is unavailable.");
+            return;
+        }
+
+        using SdlTestHost first = SdlTestHost.CreateVulkan();
+        using SdlTestHost second = SdlTestHost.CreateVulkan();
+        Assert.Equal(2, SdlPlatform.SdlUserCountForTests);
+
+        VulkanInstance? instance = null;
+        IntPtr firstSurface = IntPtr.Zero;
+        IntPtr secondSurface = IntPtr.Zero;
+        try {
+            IReadOnlyList<string> extensions;
+            try {
+                extensions = first.Platform.GetVulkanInstanceExtensions();
+            } catch (PlatformException exception) {
+                Assert.Skip($"SDL cannot provide the Vulkan instance extensions: {exception.Message}");
+                return;
+            }
+
+            try {
+                instance = VulkanInstance.Create(new VulkanInstanceOptions {
+                    ApplicationName = "RayBork SDL test",
+                    ApplicationVersion = EngineVersion.Current,
+                    SurfaceExtensions = extensions,
+                    RequestValidation = false,
+                    Logger = NullLogger.Instance,
+                });
+            } catch (GraphicsException exception) {
+                Assert.Skip($"A Vulkan instance is unavailable: {exception.Message}");
+                return;
+            }
+
+            try {
+                firstSurface = first.Platform.CreateVulkanSurface(instance.Handle.Handle);
+                secondSurface = second.Platform.CreateVulkanSurface(instance.Handle.Handle);
+            } catch (PlatformException exception) {
+                Assert.Skip($"SDL cannot create a Vulkan surface: {exception.Message}");
+                return;
+            }
+
+            Assert.Equal(2, SdlPlatform.VulkanLoaderUserCountForTests);
+
+            first.Platform.DestroyVulkanSurface(instance.Handle.Handle, firstSurface);
+            firstSurface = IntPtr.Zero;
+            first.Dispose();
+            Assert.Equal(1, SdlPlatform.SdlUserCountForTests);
+            Assert.Equal(1, SdlPlatform.VulkanLoaderUserCountForTests);
+
+            second.Platform.DestroyVulkanSurface(instance.Handle.Handle, secondSurface);
+            secondSurface = IntPtr.Zero;
+            second.Dispose();
+            Assert.Equal(0, SdlPlatform.SdlUserCountForTests);
+            Assert.Equal(0, SdlPlatform.VulkanLoaderUserCountForTests);
+        } finally {
+            if (instance is not null) {
+                if (firstSurface != IntPtr.Zero) {
+                    first.Platform.DestroyVulkanSurface(instance.Handle.Handle, firstSurface);
+                }
+
+                if (secondSurface != IntPtr.Zero) {
+                    second.Platform.DestroyVulkanSurface(instance.Handle.Handle, secondSurface);
+                }
+            }
+
+            first.Dispose();
+            second.Dispose();
+            instance?.Dispose();
+            instance?.DisposeFromMainThread();
+        }
     }
 
     [Fact]

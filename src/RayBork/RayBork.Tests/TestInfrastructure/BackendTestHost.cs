@@ -17,9 +17,9 @@ namespace RayBork.Tests;
 /// </para>
 /// <para>
 /// The host exposes the backend's device, scene target, and instance for readback and validation
-/// probes. Those are diagnostics, not renderer seam members. Every GPU test that uses this host joins
-/// the serialized <c>SDL</c> collection because SDL's video driver hint and Vulkan initialization are
-/// process global.
+/// probes. Those are diagnostics, not renderer seam members. GPU test classes run in parallel;
+/// <see cref="SdlPlatform"/> serializes the process-global SDL and Vulkan loader setup while each
+/// test owns its window, device, and backend.
 /// </para>
 /// </remarks>
 internal sealed class BackendTestHost : IDisposable {
@@ -138,7 +138,7 @@ internal sealed class BackendTestHost : IDisposable {
         WindowHdrState? hdr = null) {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason)) {
+        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
             return false;
         }
 

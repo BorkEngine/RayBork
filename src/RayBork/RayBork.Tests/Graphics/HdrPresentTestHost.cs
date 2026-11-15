@@ -16,9 +16,9 @@ namespace RayBork.Tests;
 /// initialization, skip policy, and teardown order with a configurable tone-mapping mode.
 /// </para>
 /// <para>
-/// Every GPU test that uses this host joins the serialized <c>SDL</c> collection because SDL's video
-/// driver hint and Vulkan initialization are process global. The host exposes the backend, device,
-/// and instance as diagnostics, not renderer seam members.
+/// Every GPU test class runs in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL
+/// and Vulkan loader setup. The host exposes the backend, device, and instance as diagnostics, not
+/// renderer seam members.
 /// </para>
 /// </remarks>
 internal sealed class HdrPresentTestHost : IDisposable {
@@ -93,7 +93,7 @@ internal sealed class HdrPresentTestHost : IDisposable {
         int sampleCount = 4) {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason)) {
+        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
             return false;
         }
 

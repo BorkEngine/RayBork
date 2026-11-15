@@ -10,10 +10,9 @@ namespace RayBork.Tests;
 /// The tests exercise the production recovery path through <see cref="Vulkan12Backend.Recover"/> or
 /// through the test-only fault injection that routes the next frame call through the same code. They
 /// assert validation-layer cleanliness, statistics, and the surface-provider counters instead of
-/// pixels. Every test joins the serialized <c>SDL</c> collection because SDL's video driver and
-/// Vulkan initialization are process global.
+/// pixels. GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL
+/// and Vulkan loader setup.
 /// </remarks>
-[Collection("SDL")]
 public sealed class Vulkan12BackendRecoveryTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]

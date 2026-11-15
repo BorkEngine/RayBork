@@ -102,6 +102,9 @@ public sealed class Counter {
   meaningless tests, and returns findings to the lead. The lead sends the findings to the
   implementing worker for fixes and repeats until the review is clean. A review subagent is not a
   worker and does not own a task branch.
+- While a review subagent is running, no other agent may edit, branch, commit, build, test, format,
+  or otherwise touch the branch or workspace it is reviewing. Wait for the review to finish before
+  changing files or running builds, tests, or other verification in that tree.
 - The plan is the session task list. Do not create a planning, status, progress, report, or evidence
   document.
 - There is no time pressure. Split complex work into as many small, independently reviewable tasks
@@ -175,6 +178,44 @@ git diff --check
   under `xvfb-run` with the lavapipe ICD.
 - Shader SPIR-V is regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; CI and
   normal builds consume the committed blobs and never need `glslc`.
+
+### 4.1 Parallel build scheduling
+
+Post-task verification runs independent build groups concurrently instead of one command at a time:
+
+- **Windows:** restore once: the engine solution, every sample solution,
+  `build/RayBork.BuiltInAssets/RayBork.BuiltInAssets.csproj`,
+  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj` for `win-x64`, and every AOT sample solution
+  for `win-x64`. Then start the engine `Debug` and `Release` builds together with `--no-restore`.
+  After the Debug build, build every sample solution concurrently with `--no-restore`. After those
+  builds, run the Debug sample hosts concurrently. After the Release solution build (which builds
+  `RayBork.Bake` and the built-in-assets tool), build
+  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r win-x64 --no-restore`, then publish
+  every AOT sample concurrently with `-p:BuildProjectReferences=false --no-restore`; run the
+  published hosts concurrently.
+- **WSL:** keep a persistent repository clone on the Linux filesystem at `$HOME/raybork` and sync the
+  Windows checkout with
+  `rsync -a --delete --include='/samples/*/*/Assets/***' --exclude='bin/' --exclude='obj/' <windows-checkout>/ "$HOME/raybork/"`.
+  The include keeps sample asset directories such as `samples/Castle/Castle.Assets/Assets/models/obj/`
+  (a source directory named `obj`) while the excludes skip build output. Use `$HOME/.dotnet/dotnet`;
+  the default `/usr/bin/dotnet` may be an older SDK. Restore once: the engine solution, every sample
+  solution, `build/RayBork.BuiltInAssets/RayBork.BuiltInAssets.csproj`,
+  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj` for `linux-x64`, and every AOT sample solution
+  for `linux-x64`. Then run the same Debug, Release, sample, `linux-x64` AOT, and host-run groups in
+  the clone. Build `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r linux-x64
+  --no-restore` after the Release solution build and before the `linux-x64` AOT publishes. The WSL
+  group runs concurrently with the Windows group.
+- Never build the same project and configuration twice in one output tree. Sample builds require a
+  current engine build first; AOT publishes require the engine `Release` build for that RID first.
+  Pass `-p:BuildProjectReferences=false` only after that prerequisite build. Parallel sample or AOT
+  builds that rebuild a shared project reference fail with file locks (`CS2012`, SourceLink `.json`).
+- Never build the `/mnt/d` checkout from WSL, and never run Windows and WSL builds against the same
+  checkout. The WSL clone is the build tree; the Windows checkout is only the sync source.
+- Run tests, `dotnet format --verify-no-changes`, the docs check, and `git diff --check` after the
+  builds that produce their inputs. The four sample format checks are independent and run
+  concurrently. The engine format check runs after the engine build.
+- Start every independent group together (`Start-Job`/`Start-Process` on Windows, `&`/`wait` in WSL),
+  wait for all of them, and report any failed group before continuing.
 
 ## 5. Testing
 

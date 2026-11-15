@@ -18,7 +18,6 @@ namespace RayBork.Tests;
 /// the packet. The HDR cases need the scRGB half-float swapchain path; when the host surface cannot
 /// advertise it the test skips with the actual selected format.
 /// </remarks>
-[Collection("SDL")]
 public sealed class HdrPresentGpuTests {
     private const float PAPER_WHITE = 2f;
     private const float PEAK_HEADROOM = 6.25f;

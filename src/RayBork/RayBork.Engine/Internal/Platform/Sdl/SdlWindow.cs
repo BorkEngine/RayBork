@@ -343,6 +343,8 @@ internal sealed class SdlWindow : IPlatformWindow {
 
     /// <summary>
     /// Marks the window close requested and invokes the exit callback once. Runs on the main thread.
+    /// The callback runs while the platform video gate is held; it must not call a gated platform
+    /// method such as Initialize, Pump, or Dispose.
     /// </summary>
     internal void RequestClose() {
         bool shouldNotify;

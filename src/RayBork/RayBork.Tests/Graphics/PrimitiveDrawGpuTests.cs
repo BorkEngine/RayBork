@@ -14,10 +14,9 @@ namespace RayBork.Tests;
 /// bridge and worker (<see cref="PrimitiveDrawGpuHarness"/>), so the meshes, programs, render states,
 /// batching, pipeline cache, and readback path are the production ones. There are no golden images and
 /// no sleeps. Single-pixel assertions use a single-sample target; the validation and statistics case
-/// uses the default four-sample target. The tests join the serialized <c>SDL</c> collection because SDL
-/// and Vulkan initialization are process global.
+/// uses the default four-sample target. GPU test classes run in parallel; <see cref="SdlPlatform"/>
+/// serializes the process-global SDL and Vulkan loader setup.
 /// </remarks>
-[Collection("SDL")]
 public sealed class PrimitiveDrawGpuTests {
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private const float COLOR_TOLERANCE = 2e-3f;

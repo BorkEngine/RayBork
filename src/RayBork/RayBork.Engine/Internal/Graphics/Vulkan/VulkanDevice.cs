@@ -37,6 +37,8 @@ internal sealed class VulkanDevice : IDisposable {
     private const string SWAPCHAIN_EXTENSION_NAME = "VK_KHR_swapchain";
     private const float QUEUE_PRIORITY = 1.0f;
 
+    private static readonly Lock _processGate = new();
+
     private readonly VulkanInstance _instance;
     private readonly ILogger _logger;
 
@@ -111,6 +113,12 @@ internal sealed class VulkanDevice : IDisposable {
     /// support a swapchain, or logical-device creation failed. The diagnostic code is <c>RB3001</c>.
     /// </exception>
     internal static unsafe VulkanDevice Create(VulkanInstance instance, IntPtr surface, ILogger logger) {
+        lock (_processGate) {
+            return CreateCore(instance, surface, logger);
+        }
+    }
+
+    private static unsafe VulkanDevice CreateCore(VulkanInstance instance, IntPtr surface, ILogger logger) {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(logger);
         ObjectDisposedException.ThrowIf(instance.Handle.Handle == 0, instance);
@@ -273,6 +281,12 @@ internal sealed class VulkanDevice : IDisposable {
     /// Waits for the device to become idle and destroys it. The call is idempotent.
     /// </summary>
     public unsafe void Dispose() {
+        lock (_processGate) {
+            DisposeCore();
+        }
+    }
+
+    private unsafe void DisposeCore() {
         if (_disposed) {
             return;
         }

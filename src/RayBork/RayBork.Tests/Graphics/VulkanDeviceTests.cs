@@ -4,7 +4,6 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
-[Collection("SDL")]
 public sealed class VulkanDeviceTests {
     private const uint MINIMUM_VULKAN_API_VERSION = (1u << 22) | (2u << 12);
 

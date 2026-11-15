@@ -193,7 +193,11 @@ The implementation:
   queued to the main thread, so the tick thread never calls SDL directly.
 - The test project substitutes `FakeEnginePlatform`, `FakePlatformWindow`, and `FakeInput` (see
   `src/RayBork/RayBork.Tests/TestInfrastructure`) to run lifecycle, timer, and logging tests without
-  a display or a wall-clock wait.
+  a display or a wall-clock wait. GPU test classes are separate xUnit collections and run in
+  parallel; tests inside a class run sequentially. SDL and Vulkan initialization are process global,
+  so `SdlPlatform` reference-counts their lifetimes, serializes the calls that touch process state,
+  and routes window-scoped events to the owning window. Each GPU test owns its window, instance,
+  device, and backend.
 - SDL's `dummy` video driver cannot create a Vulkan window or surface. GPU tests and the sample
   therefore use a real video driver; on WSL that means the WSLg display.
 - No SDL type or native handle appears in the public API.
@@ -1287,7 +1291,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   JetBrains Mono faces and the custom Lora face, generates glyph textures on demand, draws the text
   scene, and shuts down. The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
-  hardware driver and on WSLg's dzn hardware device. The suite is 2,622 tests, 106 of them GPU
+  hardware driver and on WSLg's dzn hardware device. The suite is 2,625 tests, 106 of them GPU
   integration tests, and every sample solution builds. `samples/Castle` and
   `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate, and
   `samples/HelloInterop` remains the M1-M3 diagnostic host.
@@ -1320,6 +1324,13 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   window, a Vulkan instance with validation requested, a device, and a `Vulkan12Backend`, and
   exposes the backend's instance, device, and scene target for diagnostics. `GpuTestHost` creates
   the same window, instance, surface, and device for the device-level tests without a backend.
+- GPU test classes run in parallel. `SdlPlatform` reference-counts `SDL_Init`/`SDL_Quit` and the SDL
+  Vulkan loader, applies the driver hint and initializes under one gate, and serializes
+  initialization, disposal, event pumping, and Vulkan surface calls; window-scoped events are routed
+  to the owning window. `VulkanInstance` and `VulkanDevice` serialize instance and device creation
+  and teardown. The GPU test hosts use hidden Vulkan windows, disable gamepad initialization, and
+  skip monitor, text-input, and window-HDR refresh. Unit Vulkan tests keep the full window services,
+  and one unit test enables gamepads. None of these test controls is used by the production path.
 - The tests assert numeric readback values with explicit tolerances: the configured linear clear
   color, depth cleared to `0.0`, the MSAA resolve producing the clear color at 1, 4, and 8
   samples, resize recreation, minimized idle, SDR-to-HDR presentation recreation, stats fields, and
@@ -1361,8 +1372,10 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `Camera.DrawTextBillboard` is covered by the unit suite `Tests/Rendering/TextDrawTests.cs` for its
   centering, bounds union, and alignment. The glyph texture path is also covered by the per-instance
   texture record and GPU suites. The font, layout, MSDF, and parser suites are deterministic CPU
-  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. The suite is 2,622
-  tests, 106 of them GPU integration tests.
+  tests; the fuzz suites run fixed-seed hostile input with an allocation bound. Catalog fixtures
+  mount uncompressed `PackCompressionPolicy.Debug` packs so max-quality Zstandard does not dominate
+  the suite; the compressed reader is exercised by the archive, builder, fuzz, and one catalog test.
+  The suite is 2,625 tests, 106 of them GPU integration tests.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

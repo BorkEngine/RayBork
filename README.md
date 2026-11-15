@@ -68,7 +68,7 @@ changing counters keep their positions. `samples/Text` is the M6 sample and AOT 
 Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics text overlays at 18 px.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
-The suite is 2,622 tests, 106 of them GPU integration tests, and every sample builds. The Windows
+The suite is 2,625 tests, 106 of them GPU integration tests, and every sample builds. The Windows
 hardware path, the conformant lavapipe Linux path, and the WSLg Mesa dzn hardware path all pass. The
 host, window, input, time, and logging surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
