@@ -137,7 +137,7 @@ while on a scaled display its pointer would otherwise be scaled twice. `MouseWhe
 buttons, `Window.Width`/`Height`, `Window.SetSize`, and `Window.Bounds` keep their existing values and
 units. A game that kept other state in window coordinates converts a mouse position back with
 `position * (Window.Width / (float)Window.RenderWidth)` (equivalently
-`position / (RenderWidth / Width)`, and the same for Y) before comparing it with window sizes or
+`position / (RenderWidth / (float)Width)`, and the same for Y) before comparing it with window sizes or
 coordinates; that conversion is only for window-space comparisons. Drag and look sensitivity
 expressed per render pixel, such as an `ORBIT_DEGREES_PER_PIXEL` constant, now scales with the pixel
 ratio too: re-check it and divide the rotation by the ratio where scale-independent sensitivity is
