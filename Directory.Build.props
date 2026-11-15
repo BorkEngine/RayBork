@@ -9,6 +9,9 @@
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
         <Deterministic>true</Deterministic>
         <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <WarningLevel>9999</WarningLevel>
+        <AnalysisLevel>latest-all</AnalysisLevel>
+        <Features>strict</Features>
     </PropertyGroup>
 
 </Project>
