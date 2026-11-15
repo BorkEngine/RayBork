@@ -102,6 +102,9 @@ public sealed class Counter {
   meaningless tests, and returns findings to the lead. The lead sends the findings to the
   implementing worker for fixes and repeats until the review is clean. A review subagent is not a
   worker and does not own a task branch.
+- While a review subagent is running, no other agent may edit, branch, commit, build, test, format,
+  or otherwise touch the branch or workspace it is reviewing. Wait for the review to finish before
+  changing files or running builds, tests, or other verification in that tree.
 - The plan is the session task list. Do not create a planning, status, progress, report, or evidence
   document.
 - There is no time pressure. Split complex work into as many small, independently reviewable tasks
@@ -180,22 +183,25 @@ git diff --check
 
 Post-task verification runs independent build groups concurrently instead of one command at a time:
 
-- **Windows:** restore once, then start the engine `Debug` and `Release` builds together with
-  `--no-restore`. After the Debug build, build every sample solution concurrently. After those
-  builds, run the Debug sample hosts concurrently. After the Release solution build (which builds
-  `RayBork.Bake` and the built-in-assets tool), build
-  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r win-x64`, then publish every AOT
-  sample concurrently with `-p:BuildProjectReferences=false`; run the published hosts concurrently.
+- **Windows:** restore once: the engine solution, every sample solution, and
+  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj` for `win-x64`. Then start the engine `Debug` and
+  `Release` builds together with `--no-restore`. After the Debug build, build every sample solution
+  concurrently with `--no-restore`. After those builds, run the Debug sample hosts concurrently.
+  After the Release solution build (which builds `RayBork.Bake` and the built-in-assets tool), build
+  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r win-x64 --no-restore`, then publish
+  every AOT sample concurrently with `-p:BuildProjectReferences=false`; run the published hosts
+  concurrently.
 - **WSL:** keep a persistent repository clone on the Linux filesystem at `$HOME/raybork` and sync the
   Windows checkout with
   `rsync -a --delete --include='/samples/*/*/Assets/***' --exclude='bin/' --exclude='obj/' <windows-checkout>/ "$HOME/raybork/"`.
   The include keeps sample asset directories such as `samples/Castle/Castle.Assets/Assets/models/obj/`
   (a source directory named `obj`) while the excludes skip build output. Use `$HOME/.dotnet/dotnet`;
-  the default `/usr/bin/dotnet` may be an older SDK. Restore once, then run the same Debug, Release,
-  sample, `linux-x64` AOT, and host-run groups in the clone. Build
-  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r linux-x64` after the Release
-  solution build and before the `linux-x64` AOT publishes. The WSL group runs concurrently with the
-  Windows group.
+  the default `/usr/bin/dotnet` may be an older SDK. Restore once: the engine solution, every sample
+  solution, and `src/RayBork/RayBork.Engine/RayBork.Engine.csproj` for `linux-x64`. Then run the same
+  Debug, Release, sample, `linux-x64` AOT, and host-run groups in the clone. Build
+  `src/RayBork/RayBork.Engine/RayBork.Engine.csproj -c Release -r linux-x64 --no-restore` after the
+  Release solution build and before the `linux-x64` AOT publishes. The WSL group runs concurrently
+  with the Windows group.
 - Never build the same project and configuration twice in one output tree. Sample builds require a
   current engine build first; AOT publishes require the engine `Release` build for that RID first.
   Pass `-p:BuildProjectReferences=false` only after that prerequisite build. Parallel sample or AOT
