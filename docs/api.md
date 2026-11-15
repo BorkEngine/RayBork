@@ -71,7 +71,7 @@ below. Section numbers are stable, so a `§7.3` reference names the same section
 | --- | --- |
 | Runtime | .NET 11 (`net11.0`), Native AOT for games |
 | GPU API | Vulkan 1.2 backend; the renderer is replaceable behind an internal seam for future mobile/web backends |
-| Platform | Windows x64, Linux x64 (including WSL) in v1; mobile and web are future targets |
+| Platform | Windows x64 and Linux x64 in v1; WSL is a Linux build environment only and its hardware Vulkan path is not a target. Mobile and web are future targets. |
 | Windowing / input | SDL3 |
 | Sound | SDL3, deferred to a post-1.0 milestone |
 | Logging | `Microsoft.Extensions.Logging` with ZLogger; `EngineContext` exposes `ILoggerFactory` |
@@ -110,7 +110,7 @@ and `finally` stay on the closing-brace line.
 | Time | `double` seconds; monotonic `Stopwatch` |
 | Angle | User-facing RayBork APIs use **degrees**; raw `System.Numerics` rotation methods use radians |
 | Color | Linear float RGBA, HDR values allowed; AgX maps to the output |
-| Screen space | Top-left origin, pixels; `Window.Width/Height` are window coordinates, `RenderWidth/RenderHeight` are physical pixels |
+| Screen space | Top-left origin, pixels; `Input.MousePosition`/`Input.MouseDelta`, cameras, and viewports use physical render pixels; `Window.Width/Height` and `SetSize` are window coordinates |
 | Depth | Reverse-Z, `[0,1]`, clear `0.0`, default compare `GreaterOrEqual` |
 
 The engine flips Vulkan's Y-down NDC internally. World space stays Y-up. Public `gl_Position`
@@ -328,7 +328,7 @@ orbit/zoom controls and the `--frames` and `--help` options.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; the engine default remains Mailbox for games that want the decoupled path. The published
 `win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
-Windows hardware driver and on WSLg's dzn hardware device. The M6
+Windows hardware driver and on the conformant lavapipe software driver. The M6
 suite is 2,625 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
 
@@ -339,8 +339,8 @@ without a manual bake or an `--assets` argument. The model parts use the built-i
 pass draws the castle, `DrawGrid(20, 10f, Color.Gray)`, and now a world-space presented-FPS and
 render-statistics status line, and the sample ray-casts the pointer against the model bounds and mesh
 with `Collision.GetRayBox` and `Collision.GetRayMesh`, drawing `Camera.DrawBoundingBox` and a small hit
-sphere while hovered. The hosts exit `0`. It is not the AOT gate. The Windows hardware path, the
-conformant lavapipe Linux path, and the WSLg dzn hardware path all pass. `samples/HelloInterop`
+sphere while hovered. The hosts exit `0`. It is not the AOT gate. The Windows hardware path and the
+conformant lavapipe Linux path pass; WSLg hardware Vulkan is not a target. `samples/HelloInterop`
 remains the M1-M3 diagnostic host; it is not the AOT gate.
 
 ## 2. Quick start

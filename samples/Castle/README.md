@@ -92,9 +92,9 @@ part's local transform. The castle is drawn at `Transform.Identity`, so those mo
 the world-space bounds. They span approximately `(-24.0, 0.0, -16.3)` to `(18.2, 30.9, 16.3)`, about
 `42.2` by `30.9` by `32.7` world units.
 
-Every tick, `DrawHoverOverlay` converts `Input.MousePosition` from logical window units to render
-pixels with `Window.RenderWidth / Window.Width` and calls `Camera.ScreenToWorldRay`, which applies the
-camera viewport. `Collision.GetRayBox` then tests the ray against `_worldBounds`; when it misses, the
+Every tick, `DrawHoverOverlay` passes `Input.MousePosition` directly to `Camera.ScreenToWorldRay`,
+because both use render pixels with a top-left origin; the camera applies its own viewport.
+`Collision.GetRayBox` then tests the ray against `_worldBounds`; when it misses, the
 overlay draws nothing. When it hits, the sample draws the box in `Color.Cyan` with
 `Camera.DrawBoundingBox` and casts the same ray against the model:
 
@@ -160,24 +160,20 @@ dotnet publish samples/Castle/Castle.csproj -c Release -r win-x64 -p:PublishAot=
 samples/Castle/bin/Release/net11.0/win-x64/publish/Castle.exe --frames 30
 ```
 
-Publish the Linux host from the repository root inside WSL and run it on the WSLg display:
+Publish the Linux host from the repository root inside WSL and run it on the WSLg display with the
+conformant lavapipe ICD:
 
 ```bash
 $HOME/.dotnet/dotnet publish samples/Castle/Castle.csproj -c Release -r linux-x64 -p:PublishAot=true
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
 DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
 ```
 
 Both publishes must finish with zero AOT/trim warnings. The publish directory must contain
 `castle.pck` beside the host and must not contain `Castle.Assets.dll`, `RayBork.Bake.dll`, Tomlyn,
-StbImageSharp, BCnEncoder, the shaderc native libraries, or the glTF packages. The WSLg Mesa dzn
-hardware device is supported; the conformant lavapipe ICD remains available for a software-only run:
-
-```bash
-VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
-DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
-  samples/Castle/bin/Release/net11.0/linux-x64/publish/Castle --frames 30
-```
+StbImageSharp, BCnEncoder, the shaderc native libraries, or the glTF packages. The Linux host runs on
+the conformant lavapipe software driver; WSLg's hardware Vulkan path (Mesa dzn) is not a target.
 
 ## What the sample omits
 
@@ -191,7 +187,7 @@ The sample does not implement these features yet:
   and MSDF arrived in M6, which is what makes the current overlay possible.
 
 The sample cannot run with SDL's dummy video driver because the Vulkan backend needs a real window
-surface; run it on a desktop session or under WSLg.
+surface; run it on a desktop session or under WSLg with the lavapipe ICD.
 
 ## Notices and license
 

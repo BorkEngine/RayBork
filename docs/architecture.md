@@ -163,6 +163,10 @@ The implementation:
 - `SdlPlatform` initializes SDL with the video, events, and gamepad subsystems, creates the window,
   starts text input, refreshes monitors, applies the startup window state, and opens connected
   gamepads. It runs those operations on the process main thread.
+- The window is created with `SDL_WINDOW_HIGH_PIXEL_DENSITY`. The renderer sizes the swapchain from
+  `RenderWidth`/`RenderHeight`, so a high-density display renders at its physical pixel size.
+  `Width`/`Height` stay in window coordinates; `Input.MousePosition`/`Input.MouseDelta` and camera
+  and viewport APIs use render pixels.
 - When `PlatformOptions.EnableVulkan` is set, the window is created with SDL's Vulkan flag.
   `GetVulkanInstanceExtensions` returns the de-duplicated, ordinal-sorted extension names SDL
   requires and fails with `PlatformException` `RB2003` when SDL reports none or omits
@@ -185,9 +189,14 @@ The implementation:
   resize to `WasResized` for exactly one tick. Clipboard reads return the cached value and queue a
   main-thread refresh.
 - `SdlInput` writes keyboard, mouse, text, and gamepad events into `InputState` under a `Lock`.
-  `CaptureInput` runs on the tick thread, clones the level and edge arrays, and clears the per-tick
-  text, mouse delta, wheel, and edge sets in the same critical section. A gamepad handle is stable
-  per SDL instance id; `Input.Gamepads` contains the pads connected for the current tick.
+  SDL reports mouse position and relative motion in window coordinates, so `SdlInput` scales both
+  axes by the window snapshot's `RenderWidth / Width` and `RenderHeight / Height` ratios at
+  ingestion; a non-positive window or render extent, or a non-finite/non-positive ratio, falls back
+  to `1`. The public `Input.MousePosition` and `Input.MouseDelta` are therefore render pixels, the
+  units `Camera.ScreenToWorldRay` and `Camera.WorldToScreen` use. `CaptureInput` runs on the tick
+  thread, clones the level and edge arrays, and clears the per-tick text, mouse delta, wheel, and edge
+  sets in the same critical section. A gamepad handle is stable per SDL instance id; `Input.Gamepads`
+  contains the pads connected for the current tick.
 - Gamepad hotplug is reconciled on SDL gamepad-added/removed events and polled every 0.25 seconds.
   Buttons, sticks, and triggers are seeded from the initial device poll; vibration requests are
   queued to the main thread, so the tick thread never calls SDL directly.
@@ -199,7 +208,8 @@ The implementation:
   and routes window-scoped events to the owning window. Each GPU test owns its window, instance,
   device, and backend.
 - SDL's `dummy` video driver cannot create a Vulkan window or surface. GPU tests and the sample
-  therefore use a real video driver; on WSL that means the WSLg display.
+  therefore use a real video driver; on WSL that means the WSLg display with the lavapipe ICD.
+  WSLg's hardware Vulkan path is not a target.
 - No SDL type or native handle appears in the public API.
 
 ## Renderer backend seam
@@ -1291,8 +1301,8 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   JetBrains Mono faces and the custom Lora face, generates glyph textures on demand, draws the text
   scene, and shuts down. The published `win-x64` and `linux-x64` hosts finished with zero AOT/trim
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
-  hardware driver and on WSLg's dzn hardware device. The suite is 2,625 tests, 106 of them GPU
-  integration tests, and every sample solution builds. `samples/Castle` and
+  hardware driver and on the conformant lavapipe software driver. The suite is 2,625 tests, 106 of
+  them GPU integration tests, and every sample solution builds. `samples/Castle` and
   `samples/PrimitiveGallery` remain buildable and publishable samples but are not the M6 gate, and
   `samples/HelloInterop` remains the M1-M3 diagnostic host.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the

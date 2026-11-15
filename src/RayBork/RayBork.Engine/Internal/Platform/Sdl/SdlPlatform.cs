@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Numerics;
 using Microsoft.Extensions.Logging;
 using SDL3;
 
@@ -105,7 +106,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         ArgumentNullException.ThrowIfNull(loggerFactory);
         _windowLogger = loggerFactory.CreateLogger(WINDOW_LOGGER_CATEGORY);
         _inputLogger = loggerFactory.CreateLogger(INPUT_LOGGER_CATEGORY);
-        _input = new SdlInput(this);
+        _input = new SdlInput(this, GetMousePixelScale);
         _initializeGamepads = initializeGamepads;
         _minimalTestMode = minimalTestMode;
     }
@@ -199,7 +200,10 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
         _sdlInitialized = true;
 
         _vulkanEnabled = options.EnableVulkan;
-        SDL.WindowFlags windowFlags = 0;
+        // Request the physical-pixel backbuffer. Windows window coordinates are already physical
+        // pixels; on platforms that separate logical points from pixels this is what makes
+        // RenderWidth/RenderHeight report the real drawable size.
+        SDL.WindowFlags windowFlags = SDL.WindowFlags.HighPixelDensity;
         if (options.Resizable) {
             windowFlags |= SDL.WindowFlags.Resizable;
         }
@@ -411,6 +415,24 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink {
     public IInput CaptureInput() {
         EnsureInitialized();
         return _input.Capture();
+    }
+
+    /// <summary>
+    /// Gets the render-to-window pixel ratio from the current window snapshot. SDL reports mouse
+    /// motion in window coordinates, so <see cref="SdlInput"/> scales it by this ratio to expose
+    /// render pixels.
+    /// </summary>
+    private Vector2 GetMousePixelScale() {
+        SdlWindow? window = _window;
+        if (window is null) {
+            return Vector2.One;
+        }
+
+        return SdlInput.ComputePixelScale(
+            window.RenderWidth,
+            window.RenderHeight,
+            window.Width,
+            window.Height);
     }
 
     /// <inheritdoc />

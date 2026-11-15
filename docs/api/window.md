@@ -76,9 +76,13 @@ Semantics:
 
 - `Width`/`Height` are **window coordinates**. On Windows they equal render pixels; on platforms
   that distinguish logical points they may differ from the physical framebuffer.
-  `RenderWidth`/`RenderHeight` are **physical pixels**. `DpiScale` is the OS display/content scale,
-  for example `1.5` at 150%, **not** the pixel ratio; the pixel ratio is `RenderWidth / Width`.
-  Mouse positions are window coordinates; cameras and viewports are render pixels.
+  `RenderWidth`/`RenderHeight` are **physical pixels**. The window is created with
+  `SDL_WINDOW_HIGH_PIXEL_DENSITY`, so a high-density display gets the full physical backbuffer.
+  `DpiScale` is the OS display/content scale, for example `1.5` at 150%, **not** the pixel ratio;
+  the pixel ratio is `RenderWidth / Width`. Mouse positions and deltas are render pixels, the same
+  units as cameras and viewports, so `Input.MousePosition` goes directly to
+  `Camera.ScreenToWorldRay`; `Width`, `Height`, and `SetSize` stay window coordinates, and `Bounds`
+  stays in desktop coordinates.
 - `Bounds` is in desktop coordinates. It is a snapshot, not a live handle.
 - `WasResized` is true for exactly the first tick after a resize; it is reset by the engine.
 - `CloseRequested` is true after the window close request. The engine treats it as a graceful exit

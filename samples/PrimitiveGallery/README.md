@@ -162,18 +162,23 @@ dotnet publish samples/PrimitiveGallery/PrimitiveGallery.csproj -c Release -r wi
 samples/PrimitiveGallery/bin/Release/net11.0/win-x64/publish/PrimitiveGallery.exe --frames 30
 ```
 
-Publish the Linux host on a Linux machine (or from WSL) and run it on a desktop session or WSLg
-display:
+Publish the Linux host on a Linux machine (or from WSL) and run it on a desktop session or, on WSL,
+the WSLg display with the conformant lavapipe ICD:
 
 ```bash
 dotnet publish samples/PrimitiveGallery/PrimitiveGallery.csproj -c Release -r linux-x64 -p:PublishAot=true
 samples/PrimitiveGallery/bin/Release/net11.0/linux-x64/publish/PrimitiveGallery --frames 30
 ```
 
+On WSL, prefix the run command with
+`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`.
+WSLg's hardware Vulkan path is not a target.
+
 Both publishes must finish with zero AOT/trim warnings. The publish directory must not contain
 `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native libraries, or the glTF
 packages: the sample has no bake tooling and no external pack, and the generated meshes upload at
-`Setup`. The published host opens a real window, so run it on a desktop session or under WSLg.
+`Setup`. The published host opens a real window, so run it on a desktop session or under WSLg with the
+lavapipe ICD.
 
 ## What the sample omits
 

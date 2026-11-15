@@ -207,24 +207,27 @@ publish; the per-milestone AOT gate is `samples/Text`.
 
 ## WSL Linux Native AOT
 
-Publish the Linux x64 host from the repository root inside WSL, then run it on the WSLg display:
+Publish the Linux x64 host from the repository root inside WSL, then run it on the WSLg display with
+the conformant lavapipe ICD:
 
 ```bash
 $HOME/.dotnet/dotnet publish samples/HelloInterop/HelloInterop.csproj -c Release -r linux-x64 -p:PublishAot=true
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
 DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/HelloInterop/bin/Release/net11.0/linux-x64/publish/HelloInterop --frames 30
 ```
 
 WSLg provides the X display and the Wayland socket that SDL3 needs. Without a display the renderer
-cannot create its Vulkan surface and the host exits `1`. This diagnostic publish is reported as
-unavailable when the host has no WSL or no Vulkan 1.2 device; it is never faked.
+cannot create its Vulkan surface and the host exits `1`. WSLg's hardware Vulkan path is not a
+target; the Linux run uses lavapipe. This diagnostic publish is reported as unavailable when the
+host has no WSL or no Vulkan 1.2 device; it is never faked.
 
 ## No dummy video driver
 
 The Vulkan backend creates its presentation surface from a real SDL3 window, so unlike the M1 host
 this sample cannot run with SDL's dummy video driver. `SDL_VIDEODRIVER=dummy` fails during renderer
 initialization because the dummy driver has no window system for a Vulkan surface; run the sample on
-a desktop session or under WSLg instead.
+a desktop session or under WSLg with the lavapipe ICD instead.
 
 Publish output is generated under `samples/HelloInterop/bin/` and is gitignored. Both publishes must
 finish with zero AOT/trim warnings. This host remains the M1-M3 diagnostic host; the per-milestone

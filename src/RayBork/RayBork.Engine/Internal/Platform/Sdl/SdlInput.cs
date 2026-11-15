@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using SDL3;
 
@@ -8,9 +9,20 @@ namespace RayBork.Internal;
 /// tick thread captures the state through <see cref="Capture"/>.
 /// </summary>
 internal sealed class SdlInput {
+    private readonly Func<Vector2> _pixelScaleProvider;
     private readonly InputState _state;
 
-    internal SdlInput(IGamepadVibrationSink vibrationSink) {
+    /// <summary>
+    /// Creates the input translator.
+    /// </summary>
+    /// <param name="vibrationSink">The sink for gamepad vibration requests.</param>
+    /// <param name="pixelScaleProvider">
+    /// Returns the render-to-window pixel ratio used for mouse position and delta. The platform
+    /// supplies the live window ratio; tests pass a fixed ratio.
+    /// </param>
+    internal SdlInput(IGamepadVibrationSink vibrationSink, Func<Vector2> pixelScaleProvider) {
+        ArgumentNullException.ThrowIfNull(pixelScaleProvider);
+        _pixelScaleProvider = pixelScaleProvider;
         _state = new InputState(vibrationSink);
     }
 
@@ -45,11 +57,7 @@ internal sealed class SdlInput {
                 AppendTextInput(sdlEvent.Text.Text);
                 break;
             case SDL.EventType.MouseMotion:
-                _state.HandleMouseMotion(
-                    sdlEvent.Motion.X,
-                    sdlEvent.Motion.Y,
-                    sdlEvent.Motion.XRel,
-                    sdlEvent.Motion.YRel);
+                ApplyMouseMotion(sdlEvent.Motion);
                 break;
             case SDL.EventType.MouseButtonDown:
                 ApplyMouseButton(sdlEvent.Button.Button, down: true);
@@ -70,6 +78,41 @@ internal sealed class SdlInput {
                 ApplyGamepadAxis(sdlEvent.GAxis.Which, sdlEvent.GAxis.Axis, sdlEvent.GAxis.Value);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Computes the per-axis render-to-window pixel ratio. The result is linear and unrounded so
+    /// fractional render pixels survive.
+    /// </summary>
+    /// <param name="renderWidth">The physical framebuffer width.</param>
+    /// <param name="renderHeight">The physical framebuffer height.</param>
+    /// <param name="windowWidth">The window width.</param>
+    /// <param name="windowHeight">The window height.</param>
+    /// <returns>The x and y pixel ratios, each 1 when its ratio is unusable.</returns>
+    internal static Vector2 ComputePixelScale(float renderWidth, float renderHeight, float windowWidth, float windowHeight)
+        => new(ComputeAxisScale(renderWidth, windowWidth), ComputeAxisScale(renderHeight, windowHeight));
+
+    private static float ComputeAxisScale(float renderExtent, float windowExtent) {
+        // A hidden, minimized, or zero-sized window can report no extent. Keeping the ratio at 1
+        // leaves mouse motion well defined instead of collapsing it to zero or NaN.
+        if (!(windowExtent > 0f)) {
+            return 1f;
+        }
+
+        float scale = renderExtent / windowExtent;
+        return float.IsFinite(scale) && scale > 0f ? scale : 1f;
+    }
+
+    private void ApplyMouseMotion(in SDL.MouseMotionEvent motion) {
+        // SDL reports mouse position and relative motion in window coordinates. The public input
+        // contract uses render pixels so a game can pass MousePosition straight to
+        // Camera.ScreenToWorldRay; scale once here rather than in every game.
+        Vector2 scale = _pixelScaleProvider();
+        _state.HandleMouseMotion(
+            motion.X * scale.X,
+            motion.Y * scale.Y,
+            motion.XRel * scale.X,
+            motion.YRel * scale.Y);
     }
 
     private void AppendTextInput(IntPtr textPointer) {

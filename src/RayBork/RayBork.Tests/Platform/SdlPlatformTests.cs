@@ -32,6 +32,12 @@ public sealed class SdlPlatformTests {
         Assert.Contains(window.Monitors, monitor => monitor.Index == window.CurrentMonitor.Index);
         Assert.True(window.CurrentMonitor.RefreshRate >= 0);
 
+        IntPtr handle = SDL.GetWindowFromID(host.Window.WindowId);
+        Assert.NotEqual(IntPtr.Zero, handle);
+        Assert.True(
+            (SDL.GetWindowFlags(handle) & SDL.WindowFlags.HighPixelDensity) != 0,
+            "The SDL window must be created with SDL_WINDOW_HIGH_PIXEL_DENSITY.");
+
         IInput input = host.Platform.CaptureInput();
         // The host may have a physical gamepad connected, which is also what a real game sees. Assert
         // the snapshot is internally consistent instead of assuming no device is present.
@@ -163,8 +169,12 @@ public sealed class SdlPlatformTests {
         Assert.False(first.Platform.CaptureInput().IsKeyDown(Key.W));
         Assert.True(second.Platform.CaptureInput().IsKeyDown(Key.W));
         Assert.Equal(0f, first.Platform.CaptureInput().MousePosition.X);
-        Assert.Equal(10f, second.Platform.CaptureInput().MousePosition.X);
-        Assert.Equal(20f, second.Platform.CaptureInput().MousePosition.Y);
+        // The routed position is scaled to render pixels, so derive the expected value from the
+        // window instead of hard-coding it; a high-density test display would use a different ratio.
+        float pixelScaleX = second.Window.RenderWidth / (float)second.Window.Width;
+        float pixelScaleY = second.Window.RenderHeight / (float)second.Window.Height;
+        Assert.Equal(10f * pixelScaleX, second.Platform.CaptureInput().MousePosition.X);
+        Assert.Equal(20f * pixelScaleY, second.Platform.CaptureInput().MousePosition.Y);
 
         SDL.Event unknownClose = CloseEvent(uint.MaxValue);
         Assert.True(SDL.PushEvent(ref unknownClose));

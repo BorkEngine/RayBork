@@ -18,7 +18,8 @@ RayBork 1.0 is done when all of the following are true:
 2. The public API in [api.md](api.md) is implemented, documented, and covered by XML docs and
    public-API analyzer entries.
 3. The Castle, Pong, Text, Instancing, and RenderTarget samples run on Windows x64 and Linux x64
-   (WSL) from a Native AOT publish.
+   from a Native AOT publish. WSL is a Linux build environment only; WSLg hardware Vulkan is not a
+   target.
 4. The renderer is Vulkan 1.2, reverse-Z, linear HDR, AgX tone-mapped, MSAA, bindless, and
    instanced by default. A frame with the same mesh, shader, and render state is one draw call
    regardless of textures or uniform values.
@@ -181,7 +182,10 @@ tick thread, log through `ILoggerFactory`, and exit cleanly.
 - No Vulkan code is required yet; the window may show the platform's default background.
 
 **Notes.** M1 deliberately ships without drawing. That keeps the first milestone small and makes
-the threading/lifecycle contract testable before the GPU enters the picture.
+the threading/lifecycle contract testable before the GPU enters the picture. The window requests
+`SDL_WINDOW_HIGH_PIXEL_DENSITY`; `RenderWidth`/`RenderHeight` report the physical drawable size, and
+the M2 renderer sizes the swapchain from those values so high-density displays render at native
+pixel density.
 
 ### M2 — Renderer foundation, HDR, and recovery
 
@@ -229,9 +233,8 @@ AgX presentation, MSAA, reverse-Z depth, and recovery from recoverable failures.
 - A forced swapchain/device loss recovers at least once and increments `RecoveryCount`; a simulated
   unrecoverable failure produces `GraphicsDeviceLostException` and a clean shutdown.
 - Validation is clean for the clear/resize/present/recover cycle.
-- Native AOT publish runs the M2 sample on Windows and WSL with hardware Vulkan.
-- A software-Vulkan (lavapipe) CI job runs the same clear test under Xvfb, if the CI host has no
-  GPU.
+- Native AOT publish runs the M2 sample on Windows and Linux; Linux uses lavapipe.
+- A software-Vulkan (lavapipe) CI job runs the same clear test under Xvfb; it is the Linux GPU path.
 
 **Notes.** The M2 AgX curve was normalized to display white and did not use the reported HDR
 headroom, so HDR highlights stopped at paper white. `TonemappingMode.None` could write above
@@ -239,9 +242,8 @@ paper white for direct authoring. M5 reworked the tone mapper so the curve's out
 reported headroom on the scRGB path; see the M5 as-built and
 [Rendering: Camera](api/rendering/camera.md#72-projection-clear-hdr-and-tone-mapping).
 
-**Risks.** WSL's Vulkan 1.2 implementation may expose a different feature set than native Windows.
-HDR swapchain support is highly driver-dependent; the SDR fallback is the guaranteed path. The
-device policy is tested on both before M4 relies on bindless.
+**Risks.** HDR swapchain support is highly driver-dependent; the SDR fallback is the guaranteed
+path. The device policy is tested on Windows and lavapipe before M4 relies on bindless.
 
 ### M3 — Asset pipeline and custom data
 
@@ -349,7 +351,7 @@ automatic instancing, and per-instance textures/uniforms.
 **Exit criteria.**
 
 - The Castle sample renders a textured model with correct depth and AgX output at 800x450 on Windows
-  hardware, native Linux, and WSLg dzn hardware.
+  hardware and on Linux with lavapipe.
 - Two materials over the same internal program with different textures produce **one** draw call
   and two instances, as reported by `RenderStats.DrawCalls`.
 - One thousand cubes with the same mesh/program/state produce one instanced draw (or a documented
@@ -373,8 +375,8 @@ automatic instancing, and per-instance textures/uniforms.
   table of exactly 2048 slots, matching the shader ABI's fixed `RayBorkTextures[2048]` array; slot 0
   is reserved for the built-in 1x1 white texture. A device whose update-after-bind sampled-image
   limits are below 2048 is rejected during device selection, and the capacity is never reduced.
-  The array is fixed-size rather than a runtime array: dzn's DXIL lowering needs a declared resource
-  range, and dzn's sampler heap is limited to 2048 descriptors. Samplers are cached per device and
+  The array is fixed-size rather than a runtime array: it is the shader ABI's declared resource
+  range. Samplers are cached per device and
   keyed by `(filter, wrap, anisotropy)`. Geometry pipelines are cached by the shader-state snapshot
   `(vertex module, fragment module, effective render state, topology)`; the present pipeline and the
   scene target are owned separately by the backend. A texture allocates its slot when its GPU upload
@@ -407,8 +409,8 @@ automatic instancing, and per-instance textures/uniforms.
   its diffuse texture, and the model sidecar, and copies the pack beside the sample executable; the
   publish also copies it into the publish directory. The published `win-x64` and `linux-x64` hosts
   load the adjacent pack with no `--assets` argument, draw the unlit castle model with the built-in
-  mesh shader, and must exit `0` on the Windows hardware driver, native Linux, and the WSLg dzn
-  hardware path. The sample is a plain user-facing example and contains no test-only draw assertion.
+  mesh shader, and must exit `0` on the Windows hardware driver and on Linux with lavapipe. The
+  sample is a plain user-facing example and contains no test-only draw assertion.
   `samples/HelloInterop` has the same per-sample layout and build-time bake and remains the M1-M3
   diagnostic host.
 - **Castle sample scope.** The sample is an orbitable castle scene with a model, its diffuse
@@ -428,18 +430,10 @@ automatic instancing, and per-instance textures/uniforms.
   world-space text and geometry closer than one unit to the camera can occlude it. The castle model
   and texture are sample-only assets with their own notice under `samples/Castle/`; that notice is
   deliberately not duplicated in the repository-root notices.
-- **WSLg dzn compatibility.** On the WSL gate host WSLg selects
-  `Microsoft Direct3D12 (AMD Radeon(TM) 8060S Graphics)` through Mesa's dzn driver and prints
-  "dzn is not a conformant Vulkan implementation, testing use only". The original runtime
-  `RayBorkTextures[]` declaration crashed dzn's DXIL lowering on the first geometry pipeline
-  (`nir_to_dxil.c: emit_createhandle_call_dynamic` asserted "Resource access for undeclared range");
-  a 4096-slot combined-sampler layout also exceeds dzn's 2048-descriptor sampler heap. The shipped
-  fixed `RayBorkTextures[2048]` array gives dzn a declared resource range and exactly fills one
-  sampler heap, so the published host now completes the 30-frame hardware gate on dzn with 2 draw
-  calls, 2 instances, and 7168 triangles, with no `DZN_DEBUG` workaround. The validation layer's
-  expected `WARNING-Shader-OutputNotConsumed` performance warnings for unused fixed vertex-layout
-  attributes still appear; they are not errors. The Windows hardware gate passes on the same GPU,
-  and the conformant lavapipe ICD remains available for a software-only Linux run.
+- **WSL host policy.** WSL is a Linux build environment only. WSLg's hardware Vulkan path (Mesa
+  dzn) is not a target and is not part of the gate; the Linux gate uses the conformant lavapipe ICD.
+  The fixed `RayBorkTextures[2048]` array is the shader ABI and table capacity, not a
+  driver-specific workaround.
 - **M4 limitation: one frame block per frame slot.** The renderer writes one 256-byte `rbFrame`
   block per frame slot. A frame that records more than one camera pass overwrites that block for
   each pass, so every pass in that frame sees the last recorded pass' view-projection, view,
@@ -449,9 +443,9 @@ automatic instancing, and per-instance textures/uniforms.
 
 **Risks.** This is the largest milestone. The shader ABI and per-instance layout can force changes
 in the bake, the renderer, and the sample at the same time. Prototype the ABI on two shaders before
-building the full batching path. The as-built WSLg dzn issue was fixed by the fixed-size texture
-array; the remaining device constraint is the 2048-slot sampler heap, which the engine enforces at
-device selection instead of clamping silently.
+building the full batching path. The fixed-size texture array and the 2048-slot table are the
+shader ABI; a device below the required bindless limits is rejected during device selection instead
+of clamping silently.
 
 ### M5 — Primitives, lines, billboards, and collision
 
@@ -829,7 +823,7 @@ blocking glyph generation.
   an invalid face is `RB1011`; a pre-M6 pack still loads, while an old TOML `ranges` key is
   `RB4002`.
 - Both AOT publishes (`win-x64` and `linux-x64`) finish with zero warnings and both published hosts
-  run `--frames 30` to exit `0` (Windows hardware and WSLg dzn).
+  run `--frames 30` to exit `0` (Windows hardware and Linux lavapipe).
 - Fuzz tests cover malformed sfnt/cmap/glyf/CFF/kern/GPOS tables without crashes or unbounded
   allocation.
 - The suite is 2,625 tests, 106 of them GPU integration tests, and every sample solution builds.
@@ -950,7 +944,7 @@ blocking glyph generation.
   the presented FPS, the tick rate, the render CPU time, and draw calls and instances from
   `RenderStats`. The published `win-x64` and
   `linux-x64` hosts finish with zero AOT/trim warnings, contain `text.pck` but no bake tooling, and
-  both run `--frames 30` to exit `0`; the Linux run used WSLg's dzn hardware device.
+  both run `--frames 30` to exit `0`; the Linux run used the conformant lavapipe software driver.
 - **Presentation pacing and truthful diagnostics.** The samples set no tick target and request FIFO.
   In FIFO mode the tick thread waits until the render loop finishes with the frame it published
   (normally its presentation), so one tick maps to one presented image and the tick rate follows the
@@ -1031,7 +1025,8 @@ blocking glyph generation.
 
 **Exit criteria.**
 
-- Pong runs at 1280x720 on Windows and WSL, resizes correctly, and keeps a stable aspect.
+- Pong runs at 1280x720 on Windows and on WSL with lavapipe, resizes correctly, and keeps a stable
+  aspect.
 - A texture drawn at integer pixel coordinates is pixel-aligned at 100% DPI.
 - A sprite sheet or multiple textures batch into one draw when mesh/shader/state match.
 - Text renders correctly in the same frame as sprites.
@@ -1085,7 +1080,7 @@ blocking glyph generation.
 
 **Exit criteria.**
 
-- A text field sample accepts typed text and committed IME text on Windows and WSL.
+- A text field sample accepts typed text and committed IME text on Windows and on WSL with lavapipe.
 - Alt+Enter toggles fullscreen; borderless mode works on both platforms.
 - A gamepad can be connected/disconnected while running and the game sees the change at the next
   tick with stable instance IDs.
@@ -1166,7 +1161,8 @@ with Native AOT without reading the engine source.
 
 **Exit criteria.**
 
-- All five samples run on Windows and WSL from a clean checkout and from the packaged NuGet.
+- All five samples run on Windows and on WSL with lavapipe from a clean checkout and from the
+  packaged NuGet.
 - The template creates, builds, bakes, runs, and AOT-publishes without manual edits.
 - A new user can follow the getting-started guide in under an hour without asking for help.
 - The API reference matches the public API analyzer output.
@@ -1181,8 +1177,8 @@ with Native AOT without reading the engine source.
 
 - API freeze review: naming, nullable annotations, thread contracts, exceptions, diagnostics.
 - Final AOT publishes for `win-x64` and `linux-x64`, Debug and Release.
-- CI matrix: Windows hardware Vulkan, WSL hardware Vulkan, lavapipe software Vulkan, AOT smoke,
-  added to GitHub Actions after the first sample.
+- CI matrix: Windows hardware Vulkan, lavapipe software Vulkan, AOT smoke, added to GitHub Actions
+  after the first sample.
 - Full test run: unit, GPU integration, AOT, stress, fuzz, benchmarks. No golden-image suite.
 - Release notes: features, known limitations, migration notes, hardware baseline, HDR/AgX/MSAA
   behavior, performance numbers.
@@ -1334,8 +1330,8 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   selected format.
 - The architecture tests enforce the dependency rules, the no-native/backend-types-in-public-API
   rule, and the absence of a public `Material`.
-- CI runs on Windows and WSL/Linux. The WSL job uses the hardware Vulkan path when available and
-  lavapipe otherwise.
+- CI runs on Windows and Ubuntu. Linux GPU tests use lavapipe under Xvfb; WSLg hardware Vulkan is
+  not a target.
 - HDR/SDR fallback, MSAA sample counts, and device-loss recovery each have an explicit test path;
   a host that cannot exercise them reports a skip with a reason.
 
@@ -1383,7 +1379,6 @@ removed from the release notes rather than weakened silently.
 
 | Risk | Impact | Mitigation | Milestone |
 | --- | --- | --- | --- |
-| WSL Vulkan 1.2 feature gaps | Bindless/instancing unavailable on a target platform | Feature-probe early in M2; document required device features; test both native and WSL | M2 |
 | HDR swapchain variability | HDR path unavailable or inconsistent | Prefer HDR, fall back to sRGB; report `EngineInfo.HdrOutput`; test both | M2/M10 |
 | HDR tone mapping is display-dependent | HDR highlights are capped at the reported display headroom; HDR10/PQ output is deferred | The AgX curve's output maximum is the reported headroom on scRGB, so the curve itself reaches the display peak; HDR10/PQ remains deferred and is never selected; probe paper white and peak on an HDR display | M2/M4/M5 |
 | Wireframe needs `fillModeNonSolid` | `DrawWireModel` unavailable on a device without the feature | Feature-probe at device creation; `RB3001` names the device and feature; no silent fallback; GPU tests cover the pipeline split | M5 |
