@@ -851,7 +851,7 @@ combined-image-sampler array in binding 1, and a per-instance storage buffer in 
 the transform, the tint, the normalized UV rectangle `UvRect`, one bindless index per texture binding,
 and the reflected user uniforms. `UvRect` is `(x, y, width, height)` in normalized texture space; the
 built-in `/shaders/mesh` vertex stage computes `vUv = UvRect.xy + uv * UvRect.zw`, so `(0, 0, 1, 1)`
-passes the authored mesh UVs through unchanged. The billboard source-rectangle overloads set a
+passes the authored mesh UVs through unchanged. The billboard and textured-quad source forms set a
 sub-rectangle; every other draw, including the line, point, triangle, and wireframe-model records,
 keeps `(0, 0, 1, 1)`. The rectangle is per-instance data and never joins or splits a batch. The array
 binding is `RayBorkTextures[2048]` in the shader and 2048 descriptors in the

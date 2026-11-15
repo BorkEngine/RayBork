@@ -41,8 +41,9 @@ are written per instance. Consequently:
 
 **Per-instance data.** Each instance carries the world transform, the tint, a UV rectangle for
 sprite/text-style shaders, and the reflected uniform/texture data. The rectangle is
-`(u0, v0, du, dv)` in normalized texture coordinates: `DrawBillboard`'s source form writes it and
-every other draw writes `(0, 0, 1, 1)`, so a shader that does not opt into a sub-rectangle samples
+`(u0, v0, du, dv)` in normalized texture coordinates: `DrawBillboard`'s source form and the textured
+`DrawQuad` source form write it; every other draw writes `(0, 0, 1, 1)`, so a shader that does not
+opt into a sub-rectangle samples
 the authored mesh UVs unchanged. Uniform values and texture bindings never split a batch, and the UV
 rectangle is per-instance data too.
 

@@ -536,9 +536,9 @@ color helpers, and the restored Bork2d/Unity color preset set:
   circle in the local `XZ` plane with local `+Y` normal. `DrawGrid` is one instanced line draw with
   `2 * (slices + 1)` instances spanning `slices * spacing` per axis. Every helper works in world
   space; each mesh is a unit reference, and the instance transform carries the shape. The eight M5
-  meshes (M7 adds the unit disc as a ninth)
-  are engine-owned, built once before `IGame.Setup` through the procedural GPU bridge from
-  deterministic CPU geometry, and are not public assets. The tessellated sphere and wire sphere,
+  meshes are engine-owned, built once before `IGame.Setup` through the procedural GPU bridge from
+  deterministic CPU geometry, and are not public assets. M7 adds the unit disc as a ninth mesh. The
+  tessellated sphere and wire sphere,
   cylinder and wire cylinder, capsule and wire capsule, and circle compose their geometry from the
   unit quad, triangle, and line meshes.
 - **Overloads and Transform composition.** The primitive families use ordinary C# overloads; the
