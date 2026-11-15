@@ -93,6 +93,13 @@ public enum TextureFormat {
   The renderer decodes sRGB texture samples to linear before shading.
 - `Sampler` is per texture. Loaded textures use the baked sampler; procedural textures use the
   sampler passed to `CreateTextureBuilder`, defaulting to `Linear` + `Repeat` with anisotropy `1`.
+- A texture is sampled through the material binding of the draw that uses it. The textured
+  `DrawQuad` overloads and `DrawBillboard` set the shared built-in `/shaders/mesh` material's
+  `mainTexture` immediately before the recorded call and clear it immediately afterwards, and the
+  frame retains the texture until the renderer releases the slot. The texture's own `Sampler`
+  selects nearest, linear, or anisotropic filtering and the wrap mode; sampling is the same whether
+  the quad is world-space or authored on a `ScreenToWorldTransform` plane. There is no
+  `DrawTexture`; a sprite is a textured `DrawQuad` or `DrawBillboard(faceCamera: false)`.
 - `Rgba16Float` is the default HDR render-target format. Ordinary packed color textures are usually
   `Bc7Srgb`; linear data textures use `Bc7Unorm`, `Bc5Unorm`, or `R8Unorm`.
 - Bindless slots are allocated when a texture's GPU upload completes, not lazily at the first draw.

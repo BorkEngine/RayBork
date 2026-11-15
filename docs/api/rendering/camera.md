@@ -150,6 +150,22 @@ public sealed class Camera : IDisposable {
     public void DrawCircle(Vector3 center, float radius, Vector3 rotationAxis, float rotationAngle, Color color);
     public void DrawCircle(Transform transform, float radius, Color color);
     public void DrawGrid(int slices, float spacing, Color color);
+    public void DrawGrid(Transform transform, int slices, float spacing, Color color);
+    public void DrawQuad(Transform transform, Vector2 size, Color color, RenderState? renderState = null);
+    public void DrawQuad(
+        Transform transform,
+        Vector2 size,
+        Texture texture,
+        Color? tint = null,
+        RenderState? renderState = null);
+    public void DrawQuad(
+        Transform transform,
+        Vector2 size,
+        Texture texture,
+        Rect source,
+        Color? tint = null,
+        RenderState? renderState = null);
+    public void DrawDisc(Transform transform, float radius, Color color);
     public void DrawBillboard(Texture texture, Vector3 position, Vector2 size, Color color);
     public void DrawBillboard(Texture texture, Vector3 position, Vector2 size, Color color, bool faceCamera);
     public void DrawBillboard(Texture texture, Transform transform, Vector2 size, Color color);
@@ -171,7 +187,6 @@ public sealed class Camera : IDisposable {
         Vector2 origin,
         Color color,
         bool faceCamera);
-    public void DrawTexture(Texture texture, Rect destination, Color? tint = null);
     public void DrawText(
         Font font,
         ReadOnlySpan<char> text,
@@ -191,6 +206,7 @@ public sealed class Camera : IDisposable {
 
     public Ray ScreenToWorldRay(Vector2 screenPosition);
     public Vector2 WorldToScreen(Vector3 worldPosition);
+    public Transform ScreenToWorldTransform(Vector2 point, float distance);
 
     public void Dispose();
 }
@@ -203,9 +219,11 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - After `Dispose`, any draw or property access throws `ObjectDisposedException`.
 - Creating a camera while another camera is active throws `InvalidOperationException`; cameras are
   sequential, not nested. Multiple cameras in one tick are created and disposed one after another.
-- `CreateCamera` and `CreateOrthographicCamera` require a frame that is being recorded, so they are
-  legal only on the tick thread during `Tick`. Setup, Shutdown, any other thread, and a second active
-  camera are `InvalidOperationException`.
+- `EngineContext.CreateCamera` requires a frame that is being recorded, so it is legal only on the
+  tick thread during `Tick`. Setup, Shutdown, any other thread, and a second active
+  camera are `InvalidOperationException`. `CreateCamera` is the one camera entry point: pass
+  `CameraProjection.Perspective` with `fieldOfView` or `CameraProjection.Orthographic` with
+  `orthographicHeight`. `CreateOrthographicCamera` is removed.
 - If a camera is not disposed when `Tick` returns, the engine throws `InvalidOperationException`
   naming the leaked camera and the frame is **not** published. The tick loop stops with that
   exception; `Shutdown` still runs.
@@ -218,7 +236,7 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
   is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
-> **M5 and M6 surface.** `Camera` ships the raylib-style helper surface: the line, point, and triangle
+> **M5, M6, and M7 surface.** `Camera` ships the raylib-style helper surface: the line, point, and triangle
 > helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
 > `DrawSphere`, `DrawPlane`, `DrawCylinder`/`DrawWireCylinder`, `DrawCapsule`/`DrawWireCapsule`,
 > `DrawCircle`, `DrawTriangleStrip`, `DrawRay`, `DrawBoundingBox`, `DrawWireCube`, `DrawWireSphere`,
@@ -227,10 +245,12 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > validation, and batching are specified in §7.9. The model helpers are `DrawModel`,
 > `DrawModelInstanced`, and `DrawWireModel`; the wireframe helper is specified below. M6 adds the
 > world-space text draws: `DrawText` and `DrawTextBillboard` are specified under **Text** below and in
-> §7.10. The `Target` property and the `target` parameter arrive with `RenderTexture` in M8.
-> `DrawTexture` is not part of M6: it moves to M7 with the orthographic/sprite contract, where the
-> destination rectangle is in render pixels and the texture is sampled with its own point/linear
-> filter. The camera always records into the app's linear HDR scene target, and the present pass
+> §7.10. M7 adds the screen transform and the world-space 2D primitives:
+> `ScreenToWorldTransform`, the three `DrawQuad` overloads, `DrawDisc`, and
+> `DrawGrid(Transform, ...)`; they are specified under **Screen transform and 2D primitives** below.
+> There is no `DrawTexture`, no 2D destination-rectangle draw, and no `DrawText(Vector2)` overload.
+> The `Target` property and the `target` parameter arrive with `RenderTexture` in M8.
+> The camera always records into the app's linear HDR scene target, and the present pass
 > applies AgX after all cameras finish.
 
 Properties:
@@ -249,18 +269,35 @@ Properties:
 | `ViewProjectionMatrix` | `ViewMatrix * ProjectionMatrix` under the row-vector convention. |
 | `Frustum` | World-space `BoundingFrustum` derived from the view-projection matrix; useful for custom culling. |
 
-`CreateCamera` sets the aspect ratio from the clamped viewport. The projection is built with
+`EngineContext.CreateCamera` is the one camera entry point:
+
+```csharp
+public Camera CreateCamera(
+    Transform transform,
+    CameraProjection projection,
+    float fieldOfView = 0f,
+    float orthographicHeight = 0f,
+    ClearMode clearMode = ClearMode.ColorAndDepth,
+    Color? clearColor = null,
+    float near = 0.01f,
+    float far = 1000f,
+    Rect? viewport = null);
+```
+
+It sets the aspect ratio from the clamped viewport. A perspective camera uses `fieldOfView` and
+rejects a nonzero `orthographicHeight`; an orthographic camera uses `orthographicHeight` and rejects
+a nonzero `fieldOfView`. The projection is built with
 reverse-Z; the `ProjectionMatrix` already contains Vulkan's Y-flip. Custom code that builds its own
 projection must preserve both conventions if it wants to match the engine's depth and screen-space
 helpers.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`
-must be greater than `near`, and a perspective `far` may be `float.PositiveInfinity`. `fieldOfView`
-must be finite and inside `(0, 180)` degrees. An orthographic camera requires a finite `far`.
-`CreateOrthographicCamera` takes the visible `height`; `CreateCamera` is the perspective entry point
-and rejects `CameraProjection.Orthographic` with `ArgumentException` because it has no height
-parameter.
+must be greater than `near`, and a perspective `far` may be `float.PositiveInfinity`. The perspective
+default `far` is `1000`; pass `float.PositiveInfinity` explicitly for an infinite far plane.
+`fieldOfView` must be finite and inside `(0, 180)` degrees, and `orthographicHeight` must be finite
+and greater than zero. An orthographic camera requires a finite `far`. `CreateOrthographicCamera` is
+removed; its visible `height` is the unified `orthographicHeight`.
 
 `DrawRay` records a ray as one long world-space line segment. The ray itself is infinite; the draw
 uses the documented approximation from `ray.Origin` to `ray.Origin + ray.Direction * 1,000,000`
@@ -278,6 +315,79 @@ unit direction is stored by the `Ray` constructor. A non-finite input is `Argume
 as `Input.MousePosition`. A point behind the camera (`w <= 0`) has no finite screen position, so it
 returns `(float.NaN, float.NaN)`. A non-finite input is `ArgumentException`. A point outside the
 viewport still projects to a finite value; the caller decides whether to clip it.
+
+**Screen transform and 2D primitives.** `ScreenToWorldTransform(Vector2 point, float distance)`
+converts a **viewport-relative** render-pixel point with a top-left origin into a `Transform` on the
+view-depth plane at `distance` world units:
+
+- `point` is relative to the camera viewport: `(0, 0)` is the viewport's top-left corner, not the
+  target's. `ScreenToWorldRay` and `WorldToScreen` use target space; subtract the camera `Viewport`
+  origin to convert a target-space point, or add it to compare with `WorldToScreen`. A non-finite
+  point is `ArgumentException`.
+- `distance` is the plane distance from the camera along its forward axis. It must be finite and
+  greater than zero; otherwise `ArgumentOutOfRangeException`.
+- The returned position is the world point at that screen pixel on that plane. The rotation is the
+  camera transform's rotation, so local `XY` is screen-aligned and local `+Z` faces the camera. The
+  scale is uniform: `2 * distance * tan(fieldOfView / 2) / viewport.Height` for a perspective camera
+  and `orthographicHeight / viewport.Height` for an orthographic camera. A quad authored in render
+  pixels (`width > 0`, `height > 0`) therefore maps to exactly those pixel extents at that plane.
+- The camera transform must have unit scale. A scaled camera transform would scale the plane position
+  while `distance` and the returned units-per-pixel scale stay unscaled, so it is not supported.
+- It works for both projections and has no `ScreenToWorldPoint` counterpart.
+
+This is the screen-space authoring pattern: there is no `DrawTexture` and no 2D draw overload. A
+game fits its design space into render pixels, calls `ScreenToWorldTransform` for each position, and
+draws the world-space `DrawQuad` (solid, full texture, or source rectangle), `DrawDisc`, or
+`DrawText` with a pixel-sized `size` on the returned transform. A textured `DrawQuad` or
+`DrawBillboard(faceCamera: false)` covers a sprite. `samples/Pong` uses this pattern for its whole
+match: one orthographic camera whose visible height is the render height, so the plane at distance
+`1` has a scale of exactly one, and every draw is anchored with `ScreenToWorldTransform`.
+
+```csharp
+Transform screen = camera.ScreenToWorldTransform(
+    new Vector2(renderPixelX, renderPixelY),
+    1f);
+camera.DrawQuad(screen, new Vector2(widthPixels, heightPixels), texture, renderState: RenderState.AlphaBlend);
+camera.DrawText(font, "HUD", screen, 18f, Color.White);
+```
+
+The HUD text is same-pass, screen-aligned text: it is alpha-blended with no depth write, so geometry
+closer than the overlay plane can still occlude it. The separate multi-camera overlay pass and
+per-pass frame data are deferred to M8; the M4 one-frame-block limitation is unchanged.
+
+**2D quad, disc, and grid primitives.** The `DrawQuad` overloads draw one instance of the engine
+quad in the transform's local `XY` plane, centered, with local `+Z` as the front and the instance
+matrix `CreateScale(size.X, size.Y, 1) * transform.ToMatrix()`:
+
+- `DrawQuad(Transform, Vector2 size, Color color, RenderState? renderState = null)` draws a solid
+  quad through the built-in `/shaders/primitive` material. `renderState` null is
+  `RenderState.Opaque`; `RenderState.AlphaBlend` is the alpha/sprite case.
+- `DrawQuad(Transform, Vector2 size, Texture texture, Color? tint = null, RenderState? renderState =
+  null)` draws a textured quad through the built-in `/shaders/mesh` material and samples the full
+  texture, recording `(0, 0, 1, 1)` as its UV rectangle.
+- `DrawQuad(Transform, Vector2 size, Texture texture, Rect source, Color? tint = null, RenderState?
+  renderState = null)` samples a normalized `[0, 1]` source rectangle (`X`/`Y` top-left,
+  positive `Width`/`Height`) recorded as `rbInstance.UvRect`; the mesh shader computes
+  `UvRect.xy + uv * UvRect.zw`.
+- `DrawDisc(Transform, float radius, Color color)` instances the unit disc mesh (36 segments) in the
+  same local `XY` plane, centered, local `+Z` front, and always uses the opaque state.
+- `DrawGrid(Transform, int slices, float spacing, Color color)` draws a uniform grid in the
+  transform's local `XZ` plane with local `+Y` as its normal; the transform position is the grid
+  center, and the scale multiplies both `spacing` and the line extents. `DrawGrid(int, float, Color)`
+  is exactly `DrawGrid(Transform.Identity, ...)` and keeps its behavior.
+
+The effective render state is part of the batch key, so an alpha quad never merges with an opaque
+one. The shared mesh material's texture binding is set immediately before a textured quad is
+recorded and cleared immediately afterwards, and the frame retains the texture. A zero size, radius,
+or transform scale component records nothing. For `DrawQuad` and `DrawDisc`, a non-finite size,
+radius, transform component, color, or source-rectangle component is `ArgumentException`, and a
+negative size, radius, or transform scale component is `ArgumentOutOfRangeException`. `DrawGrid`
+validates its transform and a non-finite `spacing` as `ArgumentException`, `slices < 1` or
+`spacing <= 0` as `ArgumentOutOfRangeException`, and keeps the M5 grid's color behavior (it does not
+validate its color). A null texture is `ArgumentNullException`; a disposed camera, texture, or
+primitive asset is `ObjectDisposedException`; a source rectangle with a non-positive width or height,
+or one outside `[0, 1]`, is `ArgumentOutOfRangeException`. Validation runs before any retention or
+record mutation.
 
 `DrawModel(model, transform, tint)` uses each part's **material**. At the call it snapshots that
 material's current uniform cursor and texture bindings and uses the part's `ModelPart.RenderState`
@@ -315,9 +425,9 @@ has no CPU line-geometry fallback. Filled model draws never need the feature.
 `tint` writes the per-instance linear color field. Built-in shaders multiply it into the output. A
 custom shader sees it as `rbInstance.Color` and must use it explicitly. `null` means opaque white.
 The general draw API does not expose a UV rectangle override, so `DrawMesh`, `DrawInstanced`, and
-every primitive helper except the billboard source-rectangle overloads record `(0, 0, 1, 1)`.
-`DrawBillboard` with a `source` rectangle records that normalized rectangle as `rbInstance.UvRect`;
-see **Billboards** below.
+every primitive helper record `(0, 0, 1, 1)` except the billboard source-rectangle overloads and the
+textured `DrawQuad(..., Rect source, ...)` overload. Those source forms record their normalized
+rectangle as `rbInstance.UvRect`; the billboard form is described under **Billboards** below.
 
 For `DrawMesh` and `DrawInstanced`, `renderState` overrides the material's default render state for
 this draw only. `null` uses `Shader.DefaultRenderState`. The override is part of the batching key.
@@ -343,9 +453,10 @@ uses the default 16 sides; the five-argument form takes `sides` explicitly.
 **Primitive overloads and Transform composition.** The primitive families use ordinary C# overloads;
 the engine has no `Ex`, `Rec`, `Pro`, or `V` suffixes. Every transformable solid or wire shape (cube,
 sphere, plane, cylinder, capsule, circle, wire cube, and wire sphere) has a raylib-compatible
-shape/position overload and a `Transform` overload in addition to its simple overload. The line,
-point, triangle, strip, ray, bounding box, and grid helpers are world-space draws without a `Transform`
-form. The transform supplies the world position, rotation, and scale; the shape dimensions stay
+shape/position overload and a `Transform` overload in addition to its simple overload. At M5 the line,
+point, triangle, strip, ray, bounding box, and grid helpers were world-space draws without a
+`Transform` form; M7 adds `DrawGrid(Transform, ...)`, and `DrawGrid(int, float, Color)` is its
+identity form. The transform supplies the world position, rotation, and scale; the shape dimensions stay
 explicit arguments. The instance matrix is `local * transform.ToMatrix()` under the row-vector
 convention, where `local` builds the shape dimensions in local space. The transform scale therefore
 multiplies the shape dimensions, and an identity rotation with unit scale reproduces the matching
@@ -435,8 +546,11 @@ line inside the block width. The plane's `+X` and `+Y` axes are the camera's rig
 quad's `+Z` faces the camera. There is no roll or orientation parameter: a billboard block always faces
 the camera.
 
-Text is world-space geometry. Screen-space text, like the rest of the orthographic sprite surface,
-arrives with M7.
+Text is world-space geometry. M7 adds the screen-space pattern through `ScreenToWorldTransform`
+(above) and this `Transform` overload: pass the returned transform and a pixel-sized `size`, and the
+block stays screen-aligned at that pixel. There is no `DrawText(Vector2)` screen overload and no
+screen-space text draw API, and the HUD is same-pass text that geometry closer than its plane can
+occlude.
 
 Batching and statistics: every text draw records the same quad, MSDF program, and render state, so all
 text batches together regardless of the font, size, or string; uniform values and per-instance textures
@@ -455,12 +569,6 @@ defined values, and `maxWidth` must be finite and non-negative (positive for `Te
 `TextWrapping.Character`); the layout engine rejects each as `ArgumentOutOfRangeException`. A zero
 transform scale component records nothing, and empty text records nothing. A camera draw off the tick
 thread is `InvalidOperationException`.
-
-**DrawTexture (M7).** The screen-space texture helper is not part of M6. It returns in M7 as the
-sprite helper for an orthographic camera: `destination` is a render-pixel rectangle relative to the
-camera viewport (top-left origin, Y downward), `tint` is linear, and the texture's own sampler
-selects point or linear filtering. It draws an alpha-blended textured quad on the normal draw path;
-the earlier unprojected-overlay preview is not part of the shipped surface.
 
 **Ray/quad collision.** `Collision.GetRayQuad(ray, a, b, c, d)` splits the quad into the triangles
 `(a, b, c)` and `(a, c, d)`, reuses the double-sided triangle test, and returns the nearest
@@ -526,8 +634,11 @@ public sealed class TonemappingSettings {
   and later cameras see the previous pass' pixels.
 - The depth test defaults to `GreaterOrEqual`; depth writes are on for opaque draws.
 - Perspective supports an infinite far plane. The projection maps the near plane to `1.0` and
-  infinity to `0.0`.
-- Orthographic supports reverse-Z too, but requires a finite far plane.
+  infinity to `0.0`. The perspective `far` defaults to `1000`; pass `float.PositiveInfinity`
+  explicitly for an infinite plane.
+- Orthographic supports reverse-Z too, but requires a finite far plane. The same camera renders 3D
+  models and primitives with an orthographic projection; it is not a separate 2D renderer.
+  `samples/Castle` toggles its one camera between the two projections with `O`.
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
 - Multiple cameras can clear different passes sequentially in one tick. The first camera usually

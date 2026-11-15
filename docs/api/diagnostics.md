@@ -45,7 +45,7 @@ public static class EngineVersion {
 | `Current` | **Any** | The version of the loaded `RayBork.Engine` assembly. Immutable for the app lifetime. Safe to read from any thread. Throws no `RayBorkException`. |
 
 `Current` is the loaded `RayBork.Engine` assembly's `Version`; it reports `0.1.0.0` in the 0.1
-release, including M1 through M6. The build and package version is `0.1.0`. It describes the engine
+release, including M1 through M7. The build and package version is `0.1.0`. It describes the engine
 assembly that is actually loaded, not the game assembly, the pack format, or the shader ABI. The
 value cannot change while the process runs, and no RayBork API mutates it. `EngineVersion` is the
 only public type added in M0. M1 adds the host, window, input, time, and logging surface listed in
@@ -53,7 +53,9 @@ only public type added in M0. M1 adds the host, window, input, time, and logging
 `TonemappingMode`, `GraphicsException`, and `GraphicsDeviceLostException`); M3 adds the asset
 exceptions; M4 adds the camera/draw path and the draw-arm `RenderStats` semantics in §10.6; M5 adds
 the primitive and collision surface and the runtime tone-mapping settings without a new diagnostic
-type; M6 adds the font asset and text draws without a new diagnostic type. Every other type in this
+type; M6 adds the font asset and text draws without a new diagnostic type; M7 adds the unified
+camera, screen transform, quad/disc/grid primitives, and the Pong sample without a new diagnostic
+type. Every other type in this
 reference remains a contract for later milestones.
 
 The getter has no dependency on a pack, window, GPU, renderer, or logger. It does not block, does not
@@ -131,6 +133,10 @@ asset and its load failures: `Load<Font>` reports a missing or wrong-length face
 sfnt face, an unsupported outline source (CFF2) or parser feature, and invalid MSDF settings as
 `AssetLoadException` `RB1011` with a message naming the cause. A text draw's validation failures use
 the standard exceptions described in [Rendering: text](rendering/text.md#710-fonts-and-text).
+M7's unified `CreateCamera`, `ScreenToWorldTransform`, and quad/disc/grid helpers use the standard
+exceptions too: a mismatched projection size is `ArgumentException`, an invalid screen-transform
+distance is `ArgumentOutOfRangeException`, and a null or disposed texture is
+`ArgumentNullException`/`ObjectDisposedException`; there is no new diagnostic type.
 `ShaderException` remains a contract for a later milestone.
 
 Game and platform diagnostic codes (M1, M2):

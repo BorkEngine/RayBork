@@ -1,6 +1,6 @@
 # Text
 
-`Text` is the M6 sample and Native AOT gate: a world-space text scene drawn in one perspective pass
+`Text` was the M6 sample and Native AOT gate: a world-space text scene drawn in one perspective pass
 with the built-in Fira Sans and JetBrains Mono faces and a custom baked Lora face. It shows the same
 paragraph at three sizes, three alignments, both wrapping modes, and two rotations; Latin and Cyrillic
 paragraphs in both proportional faces; a camera-facing billboard; a line that appends one new Greek
@@ -133,7 +133,7 @@ automatically. The JIT bake tool and its packages never enter the sample's AOT p
 
 ## Native AOT
 
-`Text` is the M6 Native AOT gate. Publish and run the Windows host from the repository root:
+`Text` was the M6 Native AOT gate. Publish and run the Windows host from the repository root:
 
 ```powershell
 dotnet publish samples/Text/Text.csproj -c Release -r win-x64 -p:PublishAot=true
@@ -157,10 +157,11 @@ conformant lavapipe software driver; WSLg's hardware Vulkan path (Mesa dzn) is n
 
 ## M6 limitations
 
-- **Text is world space.** `DrawText` and `DrawTextBillboard` place geometry in the scene; screen-space
-  HUD text, sprites, and `DrawTexture` with pixel rectangles arrive in M7. The sample's status line is
-  drawn on the wall for that reason, and a game that needs a HUD today follows the same world-space
-  pattern the other samples use.
+- **Text is world space.** `DrawText` and `DrawTextBillboard` place geometry in the scene. M7 adds
+  the screen-space authoring pattern through `Camera.ScreenToWorldTransform` and the same `Transform`
+  overload; there is no `DrawText(Vector2)` screen overload and no `DrawTexture`. This sample's
+  status line stays on the wall because the scene is a text-layout demonstration; Castle,
+  PrimitiveGallery, and Pong anchor their HUDs with the screen transform.
 - **Tick recording cost.** The scene records 1,196 glyph instances in one draw call, but the
   per-glyph tick work (layout, metrics lookup, cache acquire, and frame retention) measures about
   10-13 ms per tick in Debug (~80 ticks/s) and 2.7-3 ms per tick in Release (~300 ticks/s) on the

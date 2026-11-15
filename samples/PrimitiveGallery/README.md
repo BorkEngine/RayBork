@@ -106,20 +106,22 @@ disposed in `Shutdown`, together with the generated meshes and the mesh material
 
 ## Status overlay
 
-`DrawStatusOverlay` records one more world-space draw: an `18`-pixel line in the built-in JetBrains
+`DrawStatusOverlay` records one more same-pass draw: an `18`-pixel line in the built-in JetBrains
 Mono font showing presented frames per second, the tick rate, the render CPU time, draw calls, and
 instances. The monospaced face keeps the changing counters from shifting the text around them.
 The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
 presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`. The render time is
 `ctx.Stats.CpuFrameMilliseconds`, which measures only the render thread's planning, recording, and
-submission and excludes the fence, acquire, and present waits. Screen-space text arrives in M7, so
-the line is text on a camera-facing plane one unit in front of the camera rather than an
-orthographic HUD. At that distance, `worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so
-the text's em size is `18 * worldPerPixel`. The camera's right and up axes place the layout origin at
-the top-left corner, inset by an 8-pixel margin, and the transform reuses the camera rotation: the
-line stays upright, faces the camera, and remains fixed to the view as the camera orbits or the
-window resizes. The line is `Color.White` against the `Color.Gray3` background, and because it is
-depth-tested world-space text, geometry closer than one unit to the camera can still occlude it.
+submission and excludes the fence, acquire, and present waits.
+
+The line is anchored with `Camera.ScreenToWorldTransform(new Vector2(8f, 8f), 1f)`. The returned
+transform's scale is world units per render pixel, so an em height of `18` local units is `18` render
+pixels. The transform places the layout origin at the top-left corner, inset by an 8-pixel margin,
+and its rotation keeps the block screen-aligned, so the line stays upright and fixed to the view as
+the camera orbits or the window resizes. It
+is `Color.White` against the `Color.Gray3` background. Because this is same-pass,
+alpha-blended text with no depth write, geometry closer than the overlay plane can still occlude it;
+a separate overlay pass and per-pass frame data are deferred to M8.
 
 ## Options
 
@@ -183,8 +185,9 @@ lavapipe ICD.
 ## What the sample omits
 
 - **Per-helper text labels.** The gallery's only text is the status overlay, so the table above
-  documents which helper is which instead of drawing a label on every shape. Screen-space HUD text
-  arrives in M7.
+  documents which helper is which instead of drawing a label on every shape. The status line is
+  anchored with `ScreenToWorldTransform`; per-helper labels are simply more text draws and are not
+  part of this sample.
 - **Thick lines and point sprites.** M5 draws one-pixel lines and camera-facing point quads.
 - **Overload completeness.** The gallery shows one representative call per helper family instead of
   every overload. The start/end `DrawCylinder` form, the other `Transform` overloads, the non-facing

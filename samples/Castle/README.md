@@ -1,13 +1,14 @@
 # Castle
 
 `Castle` is a small RayBork sample: an orbitable castle scene with a model, a diffuse texture, an
-orbital perspective camera, and the reference XZ grid. It loads the model and texture, binds the
+orbital camera that toggles between perspective and orthographic, and the reference XZ grid. It
+loads the model and texture, binds the
 texture on the model's materials, draws the castle solid and the grid every tick, outlines the castle
 with a surface hit point when the pointer is over it, and draws a small presented-FPS and
 render-statistics line at the top-left of the view. The source is kept small and commented so the
 scene can be read and adapted as a starting point.
 
-`samples/Text` is the M6 Native AOT gate. This sample remains a buildable and publishable
+`samples/Pong` is the M7 Native AOT gate. This sample remains a buildable and publishable
 example, and it contains no test-only logic: it opens the window, draws the scene, and exits cleanly.
 Build and run it from the repository root:
 
@@ -49,6 +50,7 @@ prints an error and exits `1`.
 | --- | --- |
 | Left mouse drag | Orbit the camera around the castle. Pitch is clamped to ±89 degrees. |
 | Mouse wheel | Zoom the orbit distance, clamped to 5–500. |
+| `O` | Toggle the camera between perspective and orthographic. |
 | Mouse hover | Outline the castle's world bounds and mark the nearest surface point. |
 | Escape | Request exit. |
 
@@ -57,15 +59,18 @@ Hovering the castle draws its world-space bounding box in `Color.Cyan` and a `0.
 box but misses every triangle draws the box alone.
 
 The camera starts at `(50, 50, 50)`, looks at `(0, 12, 0)`, and uses a 45 degree vertical field of
-view with a `0.01` near plane and an infinite far plane. The background is the `Color.WhiteSmoke`
+view with a `0.01` near plane and an infinite far plane. `O` switches the one camera to an
+orthographic projection: its visible height is `2 * orbitDistance * tan(45 degrees / 2)`, so the
+framing matches the perspective view at the current orbit distance, and its finite far plane is
+`MAX_DISTANCE * 2`. The background is the `Color.WhiteSmoke`
 preset: the Bork2d/Unity sRGB `#F5F5F5`, stored linear as `0.913099` per channel. The grid uses
 `Color.Gray`, the sRGB display mid-gray stored linear as `0.214041`.
 
 ## Scene
 
-Each tick records one perspective pass: the castle model with its built-in mesh material, the
-reference grid under it, the hover overlays when the pointer is over the castle, then the status
-overlay:
+Each tick records one camera pass, perspective by default or orthographic after `O`: the castle model
+with its built-in mesh material, the reference grid under it, the hover overlays when the pointer is
+over the castle, then the status overlay:
 
 ```csharp
 camera.DrawModel(_model!, Transform.Identity, Color.White);
@@ -119,23 +124,27 @@ model, so geometry in front of them occludes them.
 
 ### Status overlay
 
-`DrawStatusOverlay` records one more world-space draw: an `18`-pixel line in the built-in JetBrains
-Mono font showing presented frames per second, the tick rate, the render CPU time, draw calls, and
-instances. The monospaced face keeps the changing counters from shifting the text around them.
+`DrawStatusOverlay` records one more same-pass draw: an `18`-pixel line in the built-in JetBrains
+Mono font showing presented frames per second, the tick rate, the render CPU time, draw calls and
+instances, and the current projection. The monospaced face keeps the changing counters from shifting
+the text around them.
 The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
 presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`, because it is not the
 presented rate. The render time is `ctx.Stats.CpuFrameMilliseconds`, which measures only the render
 thread's planning, recording, and submission and excludes the fence, acquire, and present waits.
-Screen-space text arrives in M7, so the line is text on a camera-facing plane one unit in front of
-the camera rather than an orthographic HUD. At that distance,
-`worldPerPixel = 2 * distance * tan(fov / 2) / renderHeight`, so the text's em size is
-`18 * worldPerPixel`. The camera's right and up axes place the layout origin at the top-left corner,
-inset by an 8-pixel margin, and the transform reuses the camera rotation: the line stays upright,
-faces the camera, and remains fixed to the view as the camera orbits or the window resizes.
 
-This is the `DrawFPS`-style overlay the sample deferred since M4, when runtime text did not exist. The
-line is `Color.Black` against the `Color.WhiteSmoke` background. It is still depth-tested world-space
-text, so geometry closer than one unit to the camera can occlude it.
+The line is anchored with `Camera.ScreenToWorldTransform(new Vector2(8f, 8f), 1f)`. The returned
+transform's scale is world units per render pixel, so an em height of `18` local units stays `18`
+render pixels in both projections. The transform places the layout origin at the top-left corner,
+inset by an 8-pixel margin, and its rotation keeps the block screen-aligned, so the line
+stays upright and fixed to the view as the camera orbits, toggles projection, or the window resizes.
+The projection is its own line so it stays visible when the statistics line runs past the right
+edge.
+
+This is the `DrawFPS`-style overlay the sample deferred since M4, when runtime text did not exist.
+The line is `Color.Black` against the `Color.WhiteSmoke` background. It is still same-pass,
+alpha-blended text with no depth write, so geometry closer than one unit to the camera can occlude
+it; a separate overlay pass and per-pass frame data are deferred to M8.
 
 The sample's hover math does not allocate: the bounds are computed once, the box and mesh queries are
 allocation-free static math, and the part loop is indexed so the `IReadOnlyList<ModelPart>` enumerator
@@ -182,9 +191,9 @@ The sample does not implement these features yet:
 - **Drag-and-drop of a new model or texture.** Window file-drop events are post-1.0.
 - **Click selection.** Hover reports the nearest surface point, but a click has no action and the
   sample keeps no selection state.
-- **Screen-space HUD text.** The status overlay is world-space text pinned one unit in front of the
-  camera. M7 adds the orthographic screen-space path and the real `DrawFPS`-style HUD; runtime text
-  and MSDF arrived in M6, which is what makes the current overlay possible.
+- **A separate overlay pass.** The status HUD is same-pass, screen-aligned text anchored with
+  `ScreenToWorldTransform`, so geometry closer than the overlay plane can still occlude it. A
+  dedicated overlay pass with per-pass frame data is M8.
 
 The sample cannot run with SDL's dummy video driver because the Vulkan backend needs a real window
 surface; run it on a desktop session or under WSLg with the lavapipe ICD.

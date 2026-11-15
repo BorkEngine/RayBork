@@ -7,7 +7,7 @@ It aims for the ergonomics of raylib with a modern bindless, instanced renderer:
 frame-scoped draw API, assets from a baked pack, text, and enough 3D/2D primitives to ship a small
 game without adopting a scene graph or an ECS.
 
-**Status: M6 shipped.** The engine opens an SDL3 window, runs
+**Status: M7 shipped.** The engine opens an SDL3 window, runs
 `Setup`/`Tick`/`Shutdown` on a dedicated tick thread, and presents through a Vulkan 1.2 backend: a
 linear HDR scene target, Godot 4.7's HDR-aware AgX tone mapping, scRGB HDR output when the window
 reports HDR, MSAA with color resolve, reverse-Z depth, bounded recovery, and a Native AOT gate. M3
@@ -39,8 +39,7 @@ scales by paper white, so the curve itself reaches the reported peak. M5 additio
 tone mapping through `ctx.Tonemapping` (`Exposure`, `AgxWhite`, `AgxContrast`, snapshotted into the
 sealed frame) and the `Color.FromSrgb`/`Color.FromSrgbBytes`/`Color.ToSrgb` helpers. M5 restores the
 full 158-color Bork2d/Unity preset set converted from sRGB to linear, and the samples use those named
-presets instead of hand-written color constants. The screen-space `DrawTexture` helper is not part
-of M5; it moves to M7 with the orthographic sprite contract.
+presets instead of hand-written color constants.
 M6 adds world-space text with no pre-baked atlas. A managed sfnt parser handles TTF/OTF faces: cmap
 formats 0/4/6/12, TrueType `glyf` simple and composite outlines, CFF 1.0 Type 2 charstrings
 (including CID FDArray/FDSelect and `seac`), `head`/`maxp`/`hhea`/`hmtx` metrics, `kern` format 0
@@ -64,14 +63,45 @@ Sans Regular face (OFL 1.1, Latin/Cyrillic/Greek) is at `/fonts/fira-sans` in th
 is exposed as `EngineDefaults.DefaultFont`; the built-in JetBrains Mono variable face (default
 instance Regular, OFL 1.1, Latin/Cyrillic/Greek) at `/fonts/jetbrains-mono` is exposed as
 `EngineDefaults.DefaultMonoFont`, and the samples draw their status/statistics readouts with it so
-changing counters keep their positions. `samples/Text` is the M6 sample and AOT gate, and the
-Castle and PrimitiveGallery samples now draw presented-FPS/render-statistics text overlays at 18 px.
+changing counters keep their positions. `samples/Text` was the M6 sample and AOT gate;
+`samples/Pong` is the M7 sample and AOT gate. The Castle and PrimitiveGallery samples draw
+presented-FPS/render-statistics text overlays at 18 px and anchor them with
+`ScreenToWorldTransform`.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; `RenderStats.PresentedFrames` is the cumulative presented count behind the overlay.
-The suite is 2,625 tests, 106 of them GPU integration tests, and every sample builds. The Windows
-hardware path and the conformant lavapipe Linux path pass; WSLg's hardware Vulkan path (Mesa dzn) is
-not a target. The host, window, input, time, and logging surface shipped in M1; the renderer
-foundation shipped in M2.
+M7 adds the orthographic and screen-space surface. `EngineContext.CreateCamera` is the unified camera
+entry point: it takes a `CameraProjection` plus `fieldOfView` for perspective or
+`orthographicHeight` for orthographic, rejects the size argument that does not belong to the
+projection, allows an infinite perspective `far`, and requires a finite orthographic `far`; the
+perspective default `far` is `1000` and callers that need infinity pass it explicitly.
+`CreateOrthographicCamera` is gone, and the rest of the camera contract is unchanged.
+`Camera.ScreenToWorldTransform(point, distance)` converts viewport-relative render pixels with a
+top-left origin into a `Transform` on the view-depth plane at `distance`: the position is the world
+point at that screen pixel, the rotation is the camera rotation so local `XY` is screen-aligned and
+local `+Z` faces the camera, and the uniform scale is world units per render pixel at that plane
+(perspective `2 * distance * tan(fov / 2) / viewportHeight`, orthographic
+`orthographicHeight / viewportHeight`). The camera transform must have unit scale. The world-space
+primitive surface gains `DrawQuad` (solid color, full texture, and normalized source rectangle),
+`DrawDisc` (unit disc mesh, 36 segments), and `DrawGrid(Transform, ...)` for a transformable `XZ`
+grid; `DrawGrid(int, float, Color)` keeps its exact identity behavior. Every `DrawQuad` overload
+takes an optional `renderState` (`null` is `RenderState.Opaque`; use `RenderState.AlphaBlend` for a
+sprite), the effective state is part of the batch key, and `DrawDisc`/`DrawGrid` are opaque.
+There is no `DrawTexture` and no 2D or screen-space draw overload: a textured `DrawQuad` or
+`DrawBillboard(faceCamera: false)` covers sprites, and `ScreenToWorldTransform` plus `DrawText`
+covers screen-space text. The engine now builds nine primitive meshes: cube, sphere, plane, quad,
+disc, triangle, line, wire cube, and wire sphere. `BoundingFrustum.Intersects` accepts a small plane
+tolerance (`1e-4`) so full-screen and boundary quads are not culled, while `Contains` stays exact.
+Castle gains an `O` toggle between perspective and orthographic and uses `ScreenToWorldTransform`
+for its status line; PrimitiveGallery uses the same screen transform for its HUD. `samples/Pong` is
+the M7 sample and Native AOT gate: a two-project solution with a build-time bake into `pong.pck`, one
+orthographic camera per tick, a `1280x720` 16:9 design space fitted into the render pixels,
+`ScreenToWorldTransform` for every draw, and `DrawQuad`/`DrawDisc`/`DrawText` for the whole match.
+The suite is 2,695 tests, 114 of them GPU integration tests, and every sample builds. The Windows
+hardware path runs all 2,695 with no skips (114 GPU); the conformant lavapipe Linux path reports
+2,688 passed, 0 failed, and 7 skipped, because lavapipe exposes only SDR and the seven existing
+HDR/scRGB-present tests report the skip; its GPU-filtered run is 107 passed with the same 7 skips.
+WSLg's hardware Vulkan path (Mesa dzn) is not a target. The host, window, input, time, and logging
+surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).
 
@@ -126,9 +156,9 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   billboards use `/shaders/mesh` with an alpha render-state override. `DrawWireModel` draws model
   parts through a polygon-mode-line variant of the geometry pipeline; it needs the device's
   `fillModeNonSolid` feature and reports `GraphicsException` `RB3001` instead of drawing a fallback
-  when the feature is missing. The eight primitive meshes (cube, sphere, plane, quad, triangle, line,
-  wire cube, wire sphere) are built once before `IGame.Setup` through the procedural GPU bridge, are
-  internal, and are not exposed as public assets; the tessellated sphere, cylinder, capsule, and
+  when the feature is missing. The nine primitive meshes (cube, sphere, plane, quad, disc, triangle,
+  line, wire cube, wire sphere) are built once before `IGame.Setup` through the procedural GPU bridge,
+  are internal, and are not exposed as public assets; the tessellated sphere, cylinder, capsule, and
   circle helpers compose their geometry from those unit meshes. `EngineDefaults` exposes
   `CreateMeshShader`, `White`, `Error`, `DefaultFont`, and `DefaultMonoFont`; a game can load a
   material over `/shaders/primitive` for its own vertex-color meshes.
@@ -154,8 +184,11 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   and bounds, and `BuildAsync` returns an immutable asset only after the GPU upload finishes.
   `MeshBuilder` also ships nine `Generate*` factories (poly, plane, cube, sphere, hemisphere,
   cylinder, cone, torus, and knot); heightmap and cubicmap generation wait for a CPU image type.
-- `DrawTexture` is not part of M6. It arrives in M7 with the orthographic sprite path; `DrawText`
-  ships in M6, and `RenderTexture` in M8.
+- There is no 2D or screen-space draw API. The camera records world-space draws only:
+  `DrawQuad`, `DrawDisc`, `DrawGrid(Transform, ...)`, `DrawText`, and
+  `DrawBillboard(faceCamera: false)` draw in the plane that `ScreenToWorldTransform` returns, which
+  carries the camera rotation and a world-units-per-render-pixel scale. `DrawTexture` is not shipped;
+  `RenderTexture` arrives in M8.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, the
@@ -191,16 +224,21 @@ src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
-samples/Text/                 M6 sample and Native AOT gate (world-space text with two proportional
-                              faces and a mono status line)
+samples/Pong/                 M7 sample and Native AOT gate (orthographic screen-space match with a
+                              baked paddle texture, settings data, and a mono HUD)
+  Pong.slnx                   sample-owned solution (sample + assets executable)
+  Pong.Assets/                JIT assets executable (bakes pong.pck at sample build time)
+samples/Text/                 M6 sample (was the M6 Native AOT gate; world-space text with two
+                              proportional faces and a mono status line)
   Text.slnx                   sample-owned solution (sample + assets executable)
   Text.Assets/                JIT assets executable (bakes text.pck from the Lora face)
 samples/PrimitiveGallery/     M5 primitive sample (was the M5 AOT gate; no pack)
   PrimitiveGallery.slnx       sample-owned solution (single project)
-samples/Castle/               castle scene sample (orbitable model, texture, grid, and hover outline)
+samples/Castle/               castle scene sample (orbitable model, texture, grid, hover outline,
+                              and perspective/orthographic toggle)
   Castle.slnx                 sample-owned solution (sample + assets executable)
   Castle.Assets/              JIT assets executable (bakes castle.pck at sample build time)
-samples/                      Pong, Instancing, RenderTarget (M11)
+samples/                      Instancing and RenderTarget (M11)
 docs/                         API reference (overview + section pages), roadmap, architecture
 .github/                      GitHub Actions CI and PR template
 scripts/                      docs checks and shader compilation
@@ -214,7 +252,9 @@ that needs assets owns an assets executable too. The engine solution builds only
 and test projects.
 
 Run the samples from the repository root with a Vulkan 1.2 device and a real window system. On WSL,
-use the WSLg display with the lavapipe ICD; WSLg's hardware Vulkan path is not a target. The Castle
+use the WSLg display with the lavapipe ICD; WSLg's hardware Vulkan path is not a target. The Pong
+build bakes `pong.pck` with the paddle texture and the `Pong.PongSettings` data beside the executable
+and loads it automatically; the sample has no `--assets` argument. The Castle
 build bakes `castle.pck` beside the executable, and the sample loads
 it automatically; `--assets` is only an optional override. The Text build bakes `text.pck` with the
 custom Lora face beside the executable and loads it automatically; the built-in Fira Sans and
@@ -222,6 +262,8 @@ JetBrains Mono faces come from the engine's built-in pack. The gallery has no as
 no pack: it builds its only texture at runtime.
 
 ```powershell
+dotnet build samples/Pong/Pong.slnx -c Debug
+dotnet run --project samples/Pong/Pong.csproj -c Debug -- --frames 30
 dotnet build samples/Text/Text.slnx -c Debug
 dotnet run --project samples/Text/Text.csproj -c Debug -- --frames 30
 dotnet build samples/Castle/Castle.slnx -c Debug
@@ -230,42 +272,49 @@ dotnet build samples/PrimitiveGallery/PrimitiveGallery.slnx -c Debug
 dotnet run --project samples/PrimitiveGallery/PrimitiveGallery.csproj -c Debug -- --frames 30
 ```
 
-Use `--help` for the available options. [samples/Text/README.md](samples/Text/README.md) covers the
+Use `--help` for the available options. [samples/Pong/README.md](samples/Pong/README.md) covers the
+match, its settings asset, its original paddle art, and its controls;
+[samples/Text/README.md](samples/Text/README.md) covers the
 text scene, its layout demonstration, its Native AOT publish and run commands, and its controls;
 [samples/PrimitiveGallery/README.md](samples/PrimitiveGallery/README.md) covers the gallery scene, its
 publish commands, and its controls, and [samples/Castle/README.md](samples/Castle/README.md) covers
-the castle scene's publish commands, controls, and omitted features. Built-in shader SPIR-V is
+the castle scene's publish commands, controls, orthographic toggle, and omitted features. Built-in
+shader SPIR-V is
 regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; a normal build and CI use the
 committed blobs. The bake, the built-in pack generator, and the sample builds compile their GLSL with
 the pinned native shaderc package; they do not need the Vulkan SDK.
 
-`samples/Text` is the M6 Native AOT gate. Publish and run it from the repository root:
+`samples/Pong` is the M7 Native AOT gate. Publish and run it from the repository root:
 
 ```powershell
-dotnet publish samples/Text/Text.csproj -c Release -r win-x64 -p:PublishAot=true
-samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30
+dotnet publish samples/Pong/Pong.csproj -c Release -r win-x64 -p:PublishAot=true
+samples/Pong/bin/Release/net11.0/win-x64/publish/Pong.exe --frames 30
 ```
 
 In WSL, publish the Linux host from the repository root and run it on the WSLg display with the
 conformant lavapipe ICD:
 
 ```bash
-$HOME/.dotnet/dotnet publish samples/Text/Text.csproj -c Release -r linux-x64 -p:PublishAot=true
+$HOME/.dotnet/dotnet publish samples/Pong/Pong.csproj -c Release -r linux-x64 -p:PublishAot=true
 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
 DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
-  samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30
+  samples/Pong/bin/Release/net11.0/linux-x64/publish/Pong --frames 30
 ```
 
-Both publishes must finish with zero AOT/trim warnings. The publish directory must contain `text.pck`
-beside the host and must not contain `Text.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp,
-BCnEncoder, the shaderc native libraries, or the glTF packages. Both published hosts ran `--frames 30`
-to exit `0`: the Windows host on the hardware driver and the Linux host on the conformant lavapipe
-software driver. WSLg's hardware Vulkan path is not a target;
-[samples/Text/README.md](samples/Text/README.md) carries the same Linux command.
+Both publishes must finish with zero AOT/trim warnings. The Windows `win-x64` publish finished with
+zero warnings: its publish directory contains `pong.pck` (22,648 bytes) beside `Pong.exe`
+(11,271,680 bytes) and no `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder,
+shaderc native libraries, or glTF packages, and the published host ran `--frames 30` to exit `0` on
+the hardware driver. The Linux `linux-x64` publish also finished with zero warnings, contains
+`pong.pck` beside `Pong` and no bake tooling, and the published host ran `--frames 30` to exit `0`
+on the conformant lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO
+presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware Vulkan path is not a target.
+[samples/Pong/README.md](samples/Pong/README.md) carries the same Linux command.
 
 ## Next step
 
-M7 adds the orthographic and sprite path: screen-space/HUD text and the re-homed `DrawTexture` helper
-with destination rectangles, 2D primitives, sprite batching, and the Pong sample. It builds on the
-M6 font path and the M4 camera; the shipped surface is listed in
-[API reference §1.6](docs/api.md#16-milestone-availability).
+M8 adds render targets, multiple cameras, and readback: `RenderTexture` with color/depth attachments,
+MSAA resolve, resize, and sampling; camera target routing and per-pass frame data; image barriers
+between passes; a separate multi-camera overlay pass; `ReadPixelsAsync`; and the RenderTarget and
+split-screen samples. It builds on the M7 screen-space surface and the M4 camera; the shipped surface
+is listed in [API reference §1.6](docs/api.md#16-milestone-availability).

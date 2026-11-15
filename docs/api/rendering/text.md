@@ -122,7 +122,10 @@ Limitations:
 - CFF2 outlines are rejected: only TrueType `glyf` and CFF 1.0 outlines are supported.
 - There is no preload and no synchronous glyph generation. The first draw of a glyph may skip it for
   that call while the `RayBork.Font` thread generates its texture.
-- Text is world-space geometry. Screen-space/HUD text and the orthographic sprite path arrive in M7.
+- Text is world-space geometry. Screen-space text uses `Camera.ScreenToWorldTransform` and the
+  `Transform` `DrawText` overload with a pixel-sized `size`; there is no `DrawText(Vector2)` overload
+  and no 2D text draw. The HUD is same-pass, screen-aligned, alpha/no-depth-write text, so geometry
+  closer than the overlay plane can occlude it, and a separate overlay pass is M8.
 - One texture per glyph means a font's glyph cache consumes bindless slots: 512 cached per font, and
   the fixed bindless texture table is table-wide 2048 slots.
 - MSDF sharp corners are not extended, so a small artifact can appear at very large sizes.
@@ -150,3 +153,19 @@ public void DrawTextBillboard(
     Color color,
     TextAlignment alignment = TextAlignment.Left);
 ```
+
+**Screen-space text.** There is no `DrawText(Vector2)` screen overload; the `Transform` overload is
+world-space, and a HUD passes the transform from `Camera.ScreenToWorldTransform`. The screen
+transform's rotation keeps the block screen-aligned, and its uniform scale is world units per render
+pixel, so a pixel-sized `size` (for example `18f`) is 18 render pixels at the chosen plane:
+
+```csharp
+Transform hud = camera.ScreenToWorldTransform(new Vector2(margin, margin), 1f);
+camera.DrawText(font, "HUD", hud, 18f, Color.White);
+```
+
+This is same-pass geometry, not a separate overlay pass. The text render state is alpha blending,
+no culling, `greater_equal`, and no depth write, so the glyphs do not disturb 3D depth, but geometry
+closer than the overlay plane can still occlude them. Castle and PrimitiveGallery use this pattern
+for their status lines, and Pong uses it for its scores, status, and overlays. A dedicated
+multi-camera overlay pass with per-pass frame data is M8.
