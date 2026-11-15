@@ -90,7 +90,7 @@ internal sealed class ProceduralAssetService {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Queuing destruction of a procedural resource must not throw out of the release path; the failure is logged and the resource stays queued.")]
+        Justification = "A procedural resource release must not throw: the only expected failure is an already-closed bridge that has destroyed every live resource, so the catch swallows it and there is no caller to report it to.")]
     internal void QueueDestruction(GpuAssetResource resource) {
         try {
             _bridge.Destroy(resource);

@@ -170,7 +170,7 @@ internal sealed class PrimitiveAssets : IDisposable {
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The eight meshes built here are stored in the returned PrimitiveAssets, which owns and disposes them; ownership transfers out of this method.")]
+        Justification = "The built-in programs, materials, and meshes created here transfer to the returned PrimitiveAssets, which disposes them; the failure path releases whatever was created before it threw.")]
     internal static async Task<PrimitiveAssets> LoadAsync(IAssetCatalog assets) {
         ArgumentNullException.ThrowIfNull(assets);
         if (assets is not IProceduralAssetProvider provider) {

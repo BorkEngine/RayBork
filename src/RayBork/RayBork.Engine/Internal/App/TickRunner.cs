@@ -144,6 +144,10 @@ internal sealed class TickRunner {
         "Design",
         "CA1031",
         Justification = "The tick thread records every failure in Failure and completes; an exception may never escape and kill the process.")]
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The synchronization context is disposed by the finally on every path; the analyzer cannot model the try/catch that records a dispose failure in Failure instead of letting it escape the tick thread.")]
     private void RunThread() {
         _threadId = Environment.CurrentManagedThreadId;
         SynchronizationContext? previousContext = SynchronizationContext.Current;
@@ -171,9 +175,12 @@ internal sealed class TickRunner {
                 _failure ??= WrapUnexpectedFailure(exception);
             }
 
-            // TickSynchronizationContext.Dispose only disposes its own wait handle and is idempotent,
-            // so it cannot throw here and needs no failure capture.
-            synchronizationContext.Dispose();
+            try {
+                synchronizationContext.Dispose();
+            } catch (Exception exception) {
+                _failure ??= WrapUnexpectedFailure(exception);
+            }
+
             _completed = true;
         }
     }

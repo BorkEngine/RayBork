@@ -13,8 +13,9 @@
         <!-- The engine is the only project held to the full analyzer set. Test, bake, tooling, and
              sample projects override this to `latest-recommended` in their own project files: they
              are not shipped API and the strict rules mostly flag test shapes and build-time tools.
-             `Features=strict` is a legacy Roslyn compiler flag that is superseded by AnalysisLevel
-             and produced no diagnostics at all, so it is not set. -->
+             `Features=strict` is an independent legacy compiler feature flag (ECMA-strict compiler
+             warnings); it was removed because this codebase produced no additional diagnostics when
+             it was set, and it can be re-added if those warnings are wanted. -->
         <AnalysisLevel>latest-all</AnalysisLevel>
     </PropertyGroup>
 

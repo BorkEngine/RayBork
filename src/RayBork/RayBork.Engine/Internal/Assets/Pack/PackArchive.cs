@@ -70,7 +70,7 @@ internal sealed class PackArchive : IDisposable {
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The FileStream is owned by the returned PackArchive and disposed when the archive is disposed.")]
+        Justification = "The FileStream is handed to MemoryMappedFile.CreateFromFile with leaveOpen: false, so the mapped file owns it and disposes it with the archive.")]
     internal static PackArchive Open(string path) {
         ArgumentNullException.ThrowIfNull(path);
         if (string.IsNullOrWhiteSpace(path)) {

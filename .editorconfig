@@ -184,6 +184,10 @@ dotnet_diagnostic.IDE0161.severity = error
 dotnet_diagnostic.IDE1006.severity = error
 
 # --- Analyzer policy -----------------------------------------------------------
+# Demotions apply repo-wide: the engine is the only project at latest-all today, and samples (plus
+# any future tooling) inherit these severities; the test and bake projects stay at
+# latest-recommended and inherit this policy too.
+#
 # CA1848 and CA1873: engine logging is confined to startup and failure paths and every call site
 # uses a constant structured template, so the allocation argument does not apply. Adopting
 # source-generated LoggerMessage would rewrite the logging surface and belongs to its own

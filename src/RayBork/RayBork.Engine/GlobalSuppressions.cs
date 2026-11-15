@@ -10,13 +10,13 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage(
     "Design",
     "CA1001:Types that own disposable fields should be disposable",
-    Justification = "The channel owns one wait handle that is closed with Close() and is released when the app tears down the surface; an IDisposable here would duplicate Close.",
+    Justification = "The channel owns one wait handle that Close() does not dispose; it lives for one app run and is reclaimed when the app is collected. A post-join disposal lifecycle is a deliberate follow-up, not part of this task.",
     Scope = "type",
     Target = "~T:RayBork.Internal.MainThreadSurfaceChannel")]
 [assembly: SuppressMessage(
     "Design",
     "CA1001:Types that own disposable fields should be disposable",
-    Justification = "The tick thread is stopped with Stop() and joined with Join(); its stop source and stop signal live exactly one app run and are not disposable while the thread may still observe them.",
+    Justification = "The tick thread is stopped with Stop() and joined with Join(); its stop source and stop signal live for one app run and are reclaimed when the app is collected. Disposal would need a post-join lifecycle that this task deliberately defers.",
     Scope = "type",
     Target = "~T:RayBork.Internal.TickRunner")]
 [assembly: SuppressMessage(
@@ -28,13 +28,13 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage(
     "Design",
     "CA1001:Types that own disposable fields should be disposable",
-    Justification = "The bridge is closed with Close() on the render thread after the frame ring drains; the worker signal it owns is part of that render-thread teardown, not of a caller-facing lifetime.",
+    Justification = "GpuAssetBridge.Close() fails pending uploads and destroys the live and queued resources, but it does not dispose the worker signal. The signal lives for one app run and is reclaimed when the app is collected; disposal would need a post-join lifecycle that this task deliberately defers.",
     Scope = "type",
     Target = "~T:RayBork.Internal.GpuAssetBridge")]
 [assembly: SuppressMessage(
     "Design",
     "CA1001:Types that own disposable fields should be disposable",
-    Justification = "The ring's wait handles live for the whole app run and are released with the process; the tick and render threads observe the ring until they exit, so there is no safe point to dispose them.",
+    Justification = "The ring's wait handles live for one app run and are reclaimed when the app is collected. The tick and render threads observe the ring until they exit, so disposal would need a post-join lifecycle that this task deliberately defers.",
     Scope = "type",
     Target = "~T:RayBork.Internal.FrameRing")]
 [assembly: SuppressMessage(

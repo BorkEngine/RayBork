@@ -351,7 +351,7 @@ internal sealed class GpuAssetBridge {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Device recovery replays queued uploads on the render thread; a failing replay completes its request with the error instead of aborting recovery.")]
+        Justification = "Device recovery replays every live resource on the render thread; a failing replay is recorded so the remaining resources are still restored, and the failures are reported as one AssetLoadException afterwards.")]
     internal void Restore(IAssetGpuWorker worker) {
         ArgumentNullException.ThrowIfNull(worker);
 

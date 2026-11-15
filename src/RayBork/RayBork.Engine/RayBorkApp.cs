@@ -201,11 +201,11 @@ public sealed class RayBorkApp : IDisposable {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The app converts any main-loop or startup failure into the reported run failure instead of crashing the host.")]
+        Justification = "A logger-factory dispose failure must be recorded as the run failure instead of replacing it.")]
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The default logger factory is disposed before RunCore returns on every path; the analyzer cannot follow the try/catch/finally and the early exits.")]
+        Justification = "The default logger factory is disposed by the finally on every path, including a throw from CreateLogger or the run body; the analyzer cannot model the try/catch that keeps a dispose failure from replacing the recorded run failure.")]
     private void RunCore() {
         Thread.CurrentThread.Name ??= MAIN_THREAD_NAME;
 
@@ -219,6 +219,39 @@ public sealed class RayBorkApp : IDisposable {
             loggerFactory = defaultLoggerFactory;
         }
 
+        Exception? failure = null;
+        try {
+            failure = RunCoreBody(configuration, loggerFactory);
+        } finally {
+            if (defaultLoggerFactory is not null) {
+                try {
+                    defaultLoggerFactory.Dispose();
+                } catch (Exception exception) {
+                    // The default factory owns the only logger, so a dispose failure cannot be logged
+                    // through it. It becomes the reported failure only when the run itself succeeded.
+                    failure ??= exception;
+                }
+            }
+        }
+
+        if (failure is not null) {
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+    }
+
+    /// <summary>
+    /// Runs one app lifetime after the logger factory exists and returns the failure it ended with.
+    /// </summary>
+    /// <param name="configuration">The app configuration.</param>
+    /// <param name="loggerFactory">
+    /// The factory that creates the app logger. The caller owns it when it is the default factory.
+    /// </param>
+    /// <returns>The failure that stopped the run, or <see langword="null"/> for a graceful exit.</returns>
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The app converts any main-loop or startup failure into the reported run failure instead of crashing the host.")]
+    private Exception? RunCoreBody(AppConfiguration configuration, ILoggerFactory loggerFactory) {
         ILogger logger = loggerFactory.CreateLogger(APP_LOGGER_CATEGORY);
         logger.LogInformation(
             "RayBork {EngineVersion} starting: title '{Title}', client size {Width}x{Height}.",
@@ -386,19 +419,7 @@ public sealed class RayBorkApp : IDisposable {
             logger.LogInformation("RayBork exiting: {ExitReason}.", exitReason ?? "requested");
         }
 
-        if (defaultLoggerFactory is not null) {
-            try {
-                defaultLoggerFactory.Dispose();
-            } catch (Exception exception) {
-                // The default factory owns the only logger, so a dispose failure cannot be logged
-                // through it; keep it as the failure instead.
-                failure ??= exception;
-            }
-        }
-
-        if (failure is not null) {
-            ExceptionDispatchInfo.Capture(failure).Throw();
-        }
+        return failure;
     }
 
     private IEnginePlatform CreatePlatform(ILoggerFactory loggerFactory) {

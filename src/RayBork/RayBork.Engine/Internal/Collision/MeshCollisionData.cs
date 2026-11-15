@@ -75,7 +75,7 @@ internal sealed class MeshCollisionData {
         long leafTriangleCount = 0L;
         for (int index = 0; index < nodes.Length; index++) {
             MeshCollisionNode node = nodes[index];
-            ValidateBounds(node.Bounds, index);
+            ValidateBounds(node.Bounds, index, nameof(nodes));
             if (node.Count < 0) {
                 throw new ArgumentException(
                     $"Collision node {index} has a negative count {node.Count}.",
@@ -316,17 +316,17 @@ internal sealed class MeshCollisionData {
         return bestTriangle != int.MaxValue;
     }
 
-    private static void ValidateBounds(BoundingBox bounds, int index) {
+    private static void ValidateBounds(BoundingBox bounds, int index, string paramName) {
         if (!IsFinite(bounds.Min) || !IsFinite(bounds.Max)) {
             throw new ArgumentException(
                 $"Collision node {index} has a non-finite bound.",
-                nameof(bounds));
+                paramName);
         }
 
         if (bounds.Min.X > bounds.Max.X || bounds.Min.Y > bounds.Max.Y || bounds.Min.Z > bounds.Max.Z) {
             throw new ArgumentException(
                 $"Collision node {index} has an inverted bound.",
-                nameof(bounds));
+                paramName);
         }
     }
 

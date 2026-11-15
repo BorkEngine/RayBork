@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using RayBork.Internal;
 
 namespace RayBork.Tests.Assets.Gpu;
@@ -15,6 +16,10 @@ namespace RayBork.Tests.Assets.Gpu;
 /// whenever an upload starts or a deferred operation finishes, so a test harness that stands in for
 /// the render loop wakes without polling.
 /// </remarks>
+[SuppressMessage(
+    "Design",
+    "CA1001",
+    Justification = "The fake's wait handles live for the test run and are deliberately never disposed: the worker is a test double whose lifetime is the test, not a caller's.")]
 internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     private readonly Lock _gate = new();
     private readonly List<AssetGpuUpload> _uploadCalls = [];
