@@ -103,7 +103,8 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > **M4 subset.** M4 removes `WithClearColor`; clear control belongs to each camera pass. The
 > renderer builder keeps only the presentation options (`WithPresentMode`, `WithMSAA`,
 > `WithTonemapping`, `WithExposure`, `WithValidation`). `EngineContext` additionally exposes
-> `CreateCamera`, `CreateOrthographicCamera`, and `Defaults`; the `target` parameter and
+> `CreateCamera` and `Defaults`; M4's camera entry point was perspective-only, and M7 unifies the
+> orthographic projection into it. The `target` parameter and
 > `RenderTexture` targets arrive with M8, so every M4 camera records into the app's linear HDR scene
 > target. Camera creation, draw recording, and camera disposal are legal only on the tick thread
 > during `Tick`. A camera left undisposed when `Tick` returns is an `InvalidOperationException`
@@ -117,7 +118,8 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > device without it fails the frame with `GraphicsException` `RB3001` rather than falling back.
 > `Collision` and `RayCollision` are pure CPU queries, and `MeshBuilder.GenerateCollisions()` plus
 > the nine `Generate*` factories are ordinary builder steps available in `Setup` and `Tick`.
-> `DrawTexture` is not part of M5; it moves to M7 with the orthographic sprite path. M5 also adds
+> The preview screen-space texture helper is not part of M5 and did not return in M7; M7 ships no
+> `DrawTexture`. M5 also adds
 > the runtime tone-mapping surface: `WithAgxWhite` and `WithAgxContrast` set the startup AgX
 > defaults, and `EngineContext.Tonemapping` exposes the app-lifetime settings that a game changes
 > during `Setup`, `Tick`, or `Shutdown`. The values are frame-global and are snapshotted into the
@@ -138,6 +140,27 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > that call while its advance stays. There is no font preload range: the bake packs the whole face and
 > any cmap-mapped glyph can be generated later. The `Glyph` value, `TryGetGlyph`, and `Measure` are part
 > of [Rendering: text](rendering/text.md#710-fonts-and-text).
+
+> **M7 subset.** `CreateCamera` is the one camera entry point and takes a `CameraProjection` plus
+> either `fieldOfView` (perspective) or `orthographicHeight` (orthographic); the size argument that
+> does not belong to the projection is `ArgumentException`, a perspective `far` may be
+> `float.PositiveInfinity`, an orthographic `far` must be finite, and the perspective default `far`
+> is `1000`. `CreateOrthographicCamera` is removed; its `height` is the unified
+> `orthographicHeight`. `Camera.ScreenToWorldTransform(point, distance)` returns the screen-aligned
+> world transform for a viewport-relative render-pixel point on a view-depth plane, with the camera
+> rotation and a uniform world-units-per-render-pixel scale; the camera transform must have unit
+> scale, `distance` must be finite and positive, and there is no `ScreenToWorldPoint`.
+> `Camera` adds `DrawQuad` (solid color, full texture, and normalized source rectangle),
+> `DrawDisc`, and `DrawGrid(Transform, ...)`. A null `renderState` is `RenderState.Opaque`, and
+> `RenderState.AlphaBlend` is the sprite/alpha case; the effective state is part of the batch key.
+> `DrawDisc` and `DrawGrid` are opaque. The engine builds a ninth primitive mesh, the unit disc.
+> There is no `DrawTexture`, no 2D draw overload, and no `DrawText(Vector2)` overload: a sprite is a
+> textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and screen-space text uses
+> `ScreenToWorldTransform` with the world-space `DrawText` overload. The screen-space HUD is
+> same-pass text and can be occluded by geometry closer than its plane; a separate overlay pass and
+> per-pass frame data are deferred to M8. `BoundingFrustum.Intersects` accepts a `1e-4` plane
+> tolerance so full-viewport quads are not culled. `samples/Pong` is the M7 sample and Native AOT
+> gate, and the current suite is 2,695 tests, 114 of them GPU integration tests.
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -206,17 +229,8 @@ public sealed class EngineContext {
     public Camera CreateCamera(
         Transform transform,
         CameraProjection projection,
-        float fieldOfView,
-        ClearMode clearMode = ClearMode.ColorAndDepth,
-        Color? clearColor = null,
-        float near = 0.01f,
-        float far = float.PositiveInfinity,
-        RenderTexture? target = null,
-        Rect? viewport = null);
-
-    public Camera CreateOrthographicCamera(
-        Transform transform,
-        float height,
+        float fieldOfView = 0f,
+        float orthographicHeight = 0f,
         ClearMode clearMode = ClearMode.ColorAndDepth,
         Color? clearColor = null,
         float near = 0.01f,
@@ -265,8 +279,7 @@ public sealed class EngineContext {
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
 | `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. `PresentedFrames` is cumulative and monotonic; `CpuFrameMilliseconds` excludes the fence, acquire, and present waits. |
 | `Tonemapping` | Tick | App-lifetime runtime tone-mapping settings, initialized from the builder defaults. Read or write them on the tick thread. A write during `Tick` applies to the frame that tick records. |
-| `CreateCamera` | Tick | Perspective camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
-| `CreateOrthographicCamera` | Tick | Orthographic camera. `height` is the visible world-space height. |
+| `CreateCamera` | Tick | The one camera entry point. Pass `CameraProjection.Perspective` with `fieldOfView` or `CameraProjection.Orthographic` with `orthographicHeight`; the size argument that does not belong to the projection is `ArgumentException`. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateRenderTextureAsync` | Tick | Creates an offscreen target and completes when the render thread has allocated it. Legal in `Setup` and `Tick`. |
 | `CreateMeshBuilder` | Any | Creates a procedural mesh builder. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |
 | `CreateTextureBuilder` | Any | Creates a procedural texture builder for an uncompressed format. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |
@@ -289,15 +302,17 @@ already published keeps the snapshot it was sealed with.
 `clearColor` is `null` by default, which means linear opaque black (`Color.Black`); HDR components
 above `1` are allowed and a non-finite component is `ArgumentException`. `near` must be positive and
 finite. `far` must be greater than `near`; `float.PositiveInfinity` is valid only for perspective
-cameras. For an orthographic camera, `height` is the visible vertical extent; `far` must be finite.
-`CreateCamera` is the perspective entry point and rejects `CameraProjection.Orthographic` because it
-has no height parameter; use `CreateOrthographicCamera` for an orthographic camera.
+cameras, and the perspective default is `1000`. For an orthographic camera,
+`orthographicHeight` is the visible vertical extent and `far` must be finite. A perspective camera
+requires a finite `fieldOfView` inside `(0, 180)` degrees and a nonzero `orthographicHeight` is
+`ArgumentException`; an orthographic camera requires a finite positive `orthographicHeight` and a
+nonzero `fieldOfView` is `ArgumentException`. `CreateOrthographicCamera` is removed.
 
 A `viewport` of `null` means the full window render size. A non-null viewport is clamped to the
 target; an invalid, non-finite, or empty result is `ArgumentException`. The camera's `Viewport`
 reports the clamped rectangle and the projection aspect uses it.
 
-`CreateCamera` and `CreateOrthographicCamera` have no `target` parameter and record into the app's
+`CreateCamera` has no `target` parameter in M7 and records into the app's
 HDR scene target. The present pass applies the frame's exposure and AgX settings and writes to the
 swapchain after the cameras finish; `ctx.Tonemapping` is frame-global, not per camera. The
 `RenderTexture` target parameter arrives in M8; a camera with a `RenderTexture` target writes to
@@ -317,7 +332,7 @@ that target and can be sampled by a later camera.
       preloads `EngineContext.Defaults` (the `/shaders/mesh` program, the white/error textures, and the
       built-in `/fonts/fira-sans` and `/fonts/jetbrains-mono` fonts; each font load is CPU-only and
       uploads nothing) and then the engine's primitive assets (the `/shaders/primitive`,
-      `/shaders/msdf`, and `/shaders/mesh` programs, one engine material over each, and the eight
+      `/shaders/msdf`, and `/shaders/mesh` programs, one engine material over each, and the nine
       primitive meshes; the mesh program itself is already cached by the defaults, but its material is
       created here).
    e. Tick thread starts with a SynchronizationContext. Setup therefore sees Info, Defaults, and a

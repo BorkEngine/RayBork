@@ -127,7 +127,12 @@ the draw; §7.10 specifies the font, layout, and glyph contract.
 | `DrawWireCapsule` | Engine line mesh | One body edge per slice, one equator ring per end, and per hemispherical cap `slices` meridians of `rings` segments plus `rings - 1` interior latitude rings, for `slices * (4 * rings + 1)` line instances. The start/end and `Transform` anchors match `DrawCapsule`. Zero radius, zero height, or a zero-length start/end segment records nothing. |
 | `DrawPlane` | Engine plane | `XZ` plane centered at `center`, front face toward world `+Y`, `size` is width along `X` and depth along `Z`; the `Transform` form centers it at the transform origin and local `+Y` is its normal. |
 | `DrawCircle` | Engine line mesh | A closed 36-segment circle. The axis-angle form starts from the local `XZ` plane with local `+Y` as its normal, rotates it by `rotationAngle` degrees around `rotationAxis`, and translates it to `center`. The `Transform` form uses the local `XZ` plane and the transform rotation and scale. A zero rotation axis is `ArgumentException`; zero radius records nothing. |
-| `DrawGrid` | Engine line mesh | `XZ` grid centered at the world origin with `slices` cells per axis, one uniform color, and `spacing` world units between lines. It has `slices + 1` lines per axis, so it is one instanced draw with `2 * (slices + 1)` instances spanning `slices * spacing` per axis. |
+| `DrawGrid` | Engine line mesh | `XZ` grid centered at the world origin with `slices` cells per axis, one uniform color, and `spacing` world units between lines. It has `slices + 1` lines per axis, so it is one instanced draw with `2 * (slices + 1)` instances spanning `slices * spacing` per axis. This overload keeps the identity transform behavior. |
+| `DrawGrid(Transform, ...)` | Engine line mesh | The same grid in the transform's local `XZ` plane, with the transform position as the grid center and local `+Y` as the normal; the transform rotation orients the plane, and its scale multiplies both `spacing` and the line extents. A zero transform scale component records nothing. |
+| `DrawQuad` (solid) | Engine quad | One solid instance in the transform's local `XY` plane, centered, local `+Z` front, over `/shaders/primitive`, with `size` as the local width and height. `renderState` selects the effective state (`null` is opaque; `AlphaBlend` for a sprite). |
+| `DrawQuad` (textured) | Engine quad | The full texture through `/shaders/mesh`, tinted by `tint` (null is white). `renderState` selects the effective state. The shared material's texture binding is set only around the recorded call. |
+| `DrawQuad` (source rectangle) | Engine quad | The same textured quad with a normalized `[0, 1]` `source` rectangle recorded as the per-instance UV rectangle; the full-texture form records `(0, 0, 1, 1)`. |
+| `DrawDisc` | Engine disc | One solid disc of `radius` in the transform's local `XY` plane, centered, local `+Z` front, over `/shaders/primitive` with the opaque state. A non-uniform transform scale produces an ellipse. |
 | `DrawBillboard` | Engine quad | One textured, alpha-blended quad. The four-argument form is camera-facing, centered, and samples the full texture. A `source` rectangle samples a normalized sub-rectangle, `origin` pins a normalized pivot to the transform position, and a `Transform` supplies position/rotation/scale. |
 | `DrawText` | Engine quad | One instance per ready glyph of the engine text layout, through the built-in `/shaders/msdf` program. The block lies in the transform's local XY plane with the origin at the first line's ascent-box top-left; each glyph quad is the layout `Position`/`Size` composed as `glyphQuad * transform.ToMatrix()`. A glyph whose texture is not ready is skipped while its advance stays. |
 | `DrawTextBillboard` | Engine quad | The same layout (`wrapping: None`, no width limit) through the same program, centered on a world position in a camera-facing plane: the block `BoundsMin`/`BoundsMax` union is centered, the plane uses the camera's right/up axes, and `alignment` positions the lines inside the block width. |
@@ -136,13 +141,17 @@ the draw; §7.10 specifies the font, layout, and glyph contract.
 program: vertex position at location 0, linear vertex color at location 6, no uniforms and no
 textures, opaque blending, back-face culling, `greater_equal` depth test, depth write. Its vertex
 stage multiplies the vertex color by the per-instance tint and its fragment stage writes that color.
-The billboard uses the built-in `/shaders/mesh` program with the `RenderState.AlphaBlend` state
+The solid `DrawQuad` and `DrawDisc` use the same program and state; `DrawDisc` is always opaque. The
+textured `DrawQuad` overloads use the built-in `/shaders/mesh` program and take the call's effective
+`renderState`: `null` is `RenderState.Opaque`, and `RenderState.AlphaBlend` is the alpha/sprite case.
+The billboard uses the same `/shaders/mesh` program with the `RenderState.AlphaBlend` state
 override. Text records against the built-in `/shaders/msdf` program: one `mainTexture` binding
 resolved per instance, vertex position at location 0, vertex UV at location 2, and the per-instance
 linear color. Its render state is `{ Blend = Alpha, Cull = None, DepthTest = GreaterOrEqual, DepthWrite
 = false }`, which is the program's declared state. The batch key includes the effective render state,
-so a billboard record never merges with a shape draw, and a text record never merges with a billboard
-or a shape draw even though all three instance the engine quad.
+so a billboard record never merges with a shape draw, a text record never merges with a billboard
+or a shape draw even though all three instance the engine quad, and an opaque and an alpha `DrawQuad`
+never merge.
 
 **Colors and tint.** `color` is a linear `Color`; no conversion is applied at draw time. A
 display-encoded authoring color converts once with `Color.FromSrgb` or `Color.FromSrgbBytes`. The
@@ -157,7 +166,10 @@ or wire segment; a camera-facing basis for `DrawPoint` and the facing `DrawBillb
 affine reference-triangle map for `DrawTriangle`, `DrawTriangleStrip`, the tessellated sphere, and the
 cylinder and capsule caps; a side-quad basis for equal-radius cylinder sides and capsule sides; two
 reference-triangle maps per tapered cylinder side segment; and one line matrix per grid, wire, ray,
-or bounding-box segment. A transformed overload applies the same `local * transform.ToMatrix()`
+or bounding-box segment. `DrawQuad` scales the unit quad by `size` and composes
+`CreateScale(size.X, size.Y, 1) * transform.ToMatrix()`; `DrawDisc` composes
+`CreateScale(radius) * transform.ToMatrix()`; and `DrawGrid(Transform, ...)` composes every line
+matrix with the grid transform. A transformed overload applies the same `local * transform.ToMatrix()`
 composition to every one of those matrices. The mesh bounds are transformed by the same matrix for
 frustum culling. For `DrawBillboard`, `local` is the unit quad translated so the normalized `origin`
 pivot sits at the local origin and scaled by `size`; the facing form then applies the transform's
@@ -171,8 +183,9 @@ each cover their scalar, tessellation, start/end, and `Transform` forms by overl
 
 **Transform composition.** Every transformable solid or wire shape (cube, sphere, plane, cylinder,
 capsule, circle, wire cube, and wire sphere) has a `Transform` overload in addition to the simple and
-shape/position forms. The line, point, triangle, strip, ray, bounding box, and grid helpers are
-world-space draws without a `Transform` form. The transform supplies the world position, rotation,
+shape/position forms. At M5 the line, point, triangle, strip, ray, bounding box, and grid helpers were
+world-space draws without a `Transform` form; M7 adds `DrawGrid(Transform, ...)` and the
+`DrawQuad`/`DrawDisc` transform forms. The transform supplies the world position, rotation,
 and scale, and the shape dimensions stay explicit. The instance matrix is
 `local * transform.ToMatrix()` under the row-vector convention, where `local` builds the shape
 dimensions in local space:
@@ -182,7 +195,19 @@ multiplies the shape dimensions, and an identity rotation with unit scale reprod
 simple overload at `Transform.Position`. A transformed cube, wire cube, sphere, wire sphere, plane,
 or circle is centered at the transform origin; a transformed cylinder or wire cylinder puts its
 bottom cap/ring at the transform origin along local `+Y`; a transformed capsule or wire capsule is
-centered at the transform origin along local `+Y` with its cap centers at `±height/2`.
+centered at the transform origin along local `+Y` with its cap centers at `±height/2`. A quad and a
+disc are centered at the transform origin in the local `XY` plane; the grid is centered at the
+transform origin in the local `XZ` plane.
+
+**Screen transform and no 2D overloads.** `Camera.ScreenToWorldTransform(point, distance)` returns
+the world `Transform` for a viewport-relative render-pixel point on a view-depth plane; pass it to
+`DrawQuad`, `DrawDisc`, `DrawGrid(Transform, ...)`, or `DrawText` with pixel-sized text to author a
+2D or HUD layout. The point, distance, rotation, and world-units-per-pixel rules are in §7.1. There
+is no `DrawTexture`, no destination-rectangle screen draw, and no 2D overload family: a sprite is a
+textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and it uses the normal batch key, culling,
+sorting, and statistics. Because a screen-space draw is ordinary world-space geometry on the
+returned plane, it participates in depth testing; HUD text is same-pass and geometry closer than the
+plane can occlude it. A separate overlay pass and per-pass frame data are M8.
 
 **Validation.** All helpers are tick-thread only, and a disposed camera or primitive asset is
 `ObjectDisposedException`.
@@ -197,11 +222,13 @@ centered at the transform origin along local `+Y` with its cap centers at `±hei
   `ArgumentOutOfRangeException`; no helper substitutes a default tessellation.
 - A zero `rotationAxis` on `DrawCircle` throws `ArgumentException`; the axis-angle form has no plane
   without it.
-- A billboard source rectangle with a non-finite component throws `ArgumentException`; a non-positive
-  width or height, or a rectangle outside the normalized `[0, 1]` texture rectangle, throws
-  `ArgumentOutOfRangeException`. A non-finite billboard origin throws `ArgumentException`; the origin
-  is not clamped.
+- A billboard or textured-quad source rectangle with a non-finite component throws
+  `ArgumentException`; a non-positive width or height, or a rectangle outside the normalized `[0, 1]`
+  texture rectangle, throws `ArgumentOutOfRangeException`. A non-finite billboard origin throws
+  `ArgumentException`; the origin is not clamped.
 - A `null` texture throws `ArgumentNullException`; a disposed texture is `ObjectDisposedException`.
+- `ScreenToWorldTransform` throws `ArgumentException` for a non-finite `point` and
+  `ArgumentOutOfRangeException` for a `distance` that is not finite and greater than zero.
 - A camera whose app has no primitive assets attached throws `InvalidOperationException`. Game code
   does not hit this case: the app attaches the primitive assets before `IGame.Setup`.
 
@@ -212,12 +239,19 @@ and its retention set untouched.
 the engine mesh, internal program, and effective render state, so it batches by
 `(mesh, program, effective render state)` and follows the normal culling, sorting, splitting, and
 statistics rules. Line-topology draws contribute zero triangles; `DrawPoint` draws the quad and
-contributes two. `DrawLines`, `DrawGrid`, `DrawCircle`, `DrawRay`, `DrawBoundingBox`, and the wire
+contributes two; `DrawQuad` contributes two, and `DrawDisc` contributes its 36 triangles.
+`DrawLines`, `DrawGrid`, `DrawCircle`,
+`DrawRay`, `DrawBoundingBox`, and the wire
 helpers are one instanced line draw each. `DrawCylinder` is two instanced draws for equal positive
 radii because its sides and caps use different meshes; a tapered cylinder is one triangle draw.
 `DrawCapsule` is two instanced draws: side quads and cap triangles. Equal records merge: two
-`DrawCube` calls are one instanced draw with two instances, and every triangle- or line-based helper
-merges into the shared engine mesh batch for its program and render state. Text follows the same rule
+`DrawCube` calls are one instanced draw with two instances, two solid `DrawQuad` calls are one
+instanced draw, and every triangle- or line-based helper
+merges into the shared engine mesh batch for its program and render state. A textured `DrawQuad`
+carries its texture as the material binding; two textured quads with different textures still merge
+when the mesh, program, and effective state match, because the texture is per-instance data. An
+opaque and an alpha quad split into separate batches because the effective state is part of the key.
+Text follows the same rule
 with one addition: a text record carries one per-instance glyph texture per instance, so glyphs with
 different textures still form one instanced batch. All text over the quad, MSDF program, and text
 render state merges across calls, fonts, sizes, and strings. `Instances` counts the submitted glyph
@@ -230,17 +264,20 @@ width argument. The primitive helpers' wire shapes are line geometry, not polygo
 `DrawWireModel` is the one draw that requests the polygon-mode-line state, and it does so through its
 own cached pipeline rather than changing a filled pipeline.
 
-**Textured quads.** `DrawBillboard` samples the texture through the engine material's `mainTexture`
-binding. That material is shared by every billboard, so the binding is set immediately before the
+**Textured quads.** `DrawBillboard` and the textured `DrawQuad` overloads sample the texture through
+the engine material's `mainTexture` binding. That material is shared by every billboard and textured
+quad, so the binding is set immediately before the
 draw is recorded and cleared immediately afterwards. The recorded frame retains the texture until
 the render thread releases the slot, so the shared material never keeps a game texture and a
-texture disposed after the call stays alive for the recorded frame. To shade a quad with a custom
-material, draw a quad mesh instead.
+texture disposed after the call stays alive for the recorded frame. For a custom material or
+lighting, draw a quad mesh with `DrawMesh`.
 
 The `source` overloads record a normalized `Rect` as the per-instance UV rectangle:
 `rbInstance.UvRect = (source.X, source.Y, source.Width, source.Height)`. The built-in mesh shader
 computes `vUv = UvRect.xy + uv * UvRect.zw`, so the default `(0, 0, 1, 1)` passes the quad's
-authored UVs through unchanged. `origin` is the normalized pivot in the billboard's local quad:
+authored UVs through unchanged. `DrawQuad`'s full-texture form records `(0, 0, 1, 1)`; its
+source-rectangle form records the rectangle as per-instance data, so quads with different source
+rectangles still share one batch. `origin` is the normalized pivot in the billboard's local quad:
 `(0, 0)` is the bottom-left corner, `(1, 1)` is the top-right corner, and `(0.5, 0.5)` is the
 centered default. It moves the pivot to the transform position and is not clamped. The transform
 scale multiplies `size` on the local X and Y axes; a zero size component or a zero transform scale

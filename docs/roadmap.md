@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M6 as-built**, 2026-11-14. M0-M6 are shipped. Milestones are ordered by
+Status: **v0.1 M7 as-built**, 2026-11-16. M0-M7 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -73,7 +73,7 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M4 | Core 3D renderer | Models, shaders, bindless textures, instancing, camera draws | M2, M3 |
 | M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, wireframe models, mesh generators, collision queries, HDR AgX rework, restored linearized Bork2d color presets | M4 |
 | M6 | Text and MSDF | Managed TTF/OTF parsing, deterministic on-demand MSDF, layout, built-in font, world-space text | M4 |
-| M7 | 2D and orthographic rendering | Sprites, 2D shapes, pixel mapping, Pong | M4 |
+| M7 | 2D and orthographic rendering | Orthographic cameras, screen transform, quad/disc/grid primitives, Pong | M4 |
 | M8 | Render targets and multiple cameras | HDR/MSAA targets, readback, split-screen | M4 |
 | M9 | Input and window polish | IME, clipboard, fullscreen, gamepad hotplug/rumble | M1 |
 | M10 | Performance and hardening | Pacing, caches, stress, validation CI, recovery hardening | M4-M8 |
@@ -472,7 +472,8 @@ mesh generation, and the collision queries a small game expects.
 - Runtime tone mapping, the Godot 4.7 HDR-aware AgX, the sRGB color helpers, and the linearized
   Bork2d/Unity preset set.
 - Tests for each shape's bounds, winding, draw counts, and collision result.
-- `DrawTexture` moves to M7; the M5 surface does not include the screen-space texture helper.
+- The preview screen-space texture helper is not part of M5; the shipped M7 surface uses world-space
+  `DrawQuad`/`DrawBillboard` with `ScreenToWorldTransform` instead of a screen-space texture draw.
 
 **Exit criteria.**
 
@@ -542,8 +543,9 @@ color helpers, and the restored Bork2d/Unity color preset set:
 - **Overloads and Transform composition.** The primitive families use ordinary C# overloads; the
   engine has no `Ex`, `Rec`, `Pro`, or `V` suffix names. Every transformable solid or wire shape
   (cube, sphere, plane, cylinder, capsule, circle, wire cube, and wire sphere) has a shape/position
-  overload and a `Transform` overload; the line, point, triangle, strip, ray, bounding box, and grid
-  helpers are world-space draws without a `Transform` form. The transform supplies position,
+  overload and a `Transform` overload; at M5 the line, point, triangle, strip, ray, bounding box, and
+  grid helpers were world-space draws without a `Transform` form (M7 adds `DrawGrid(Transform, ...)`).
+  The transform supplies position,
   rotation, and scale while the shape dimensions stay explicit. The instance matrix is
   `local * transform.ToMatrix()` under the row-vector convention, so the transform scale multiplies
   the dimensions and an identity rotation with unit scale reproduces the simple overload at
@@ -595,8 +597,9 @@ color helpers, and the restored Bork2d/Unity color preset set:
   only `CreateMeshShader`, `White`, and `Error`; M6 adds `DefaultFont` and `DefaultMonoFont`.
   `/shaders/primitive` is an ordinary
   built-in shader entry, so a game can load a material over it by path for its own vertex-color
-  meshes; the primitive meshes have no public accessor. `DrawTexture` is not built or shipped in M5;
-  the screen-space overlay path is re-homed to M7.
+  meshes; the primitive meshes have no public accessor. The preview screen-space texture helper is
+  not built or shipped in M5; M7 ships no `DrawTexture`, and the screen-space pattern is
+  `ScreenToWorldTransform` plus world-space primitives.
 - **Validation.** A non-finite numeric argument throws `ArgumentException`; a negative extent,
   radius, height, width, point size, or transform scale component throws
   `ArgumentOutOfRangeException`; an exactly zero extent, radius, height, start/end segment, or
@@ -722,10 +725,10 @@ color helpers, and the restored Bork2d/Unity color preset set:
   no bake tooling. The sample is a plain user-facing example and contains no test-only draw
   assertion. The M5 suite is 1,899 tests, 93 of them GPU integration tests, and every sample solution
   builds.
-- **DrawTexture boundary.** `DrawTexture` is not part of M5. The preview screen-space overlay helper
-  is removed and re-homed to M7, where it returns with the orthographic/sprite contract and
-  destination rectangles; the M5 surface has no screen-space texture draw. The migration note is in
-  [Versioning](api/versioning.md#14-versioning-and-compatibility).
+- **Preview screen-space helper.** The preview `DrawTexture` overlay helper was removed in M5 and
+  did not return in M7. M7 ships no `DrawTexture` and no screen-space draw overload; a sprite is a
+  textured `DrawQuad` or `DrawBillboard(faceCamera: false)` on a `ScreenToWorldTransform` plane. The
+  migration note is in [Versioning](api/versioning.md#14-versioning-and-compatibility).
 - **Expected validation warnings.** The validation layer reports two performance warnings on the
   gate path; neither is an error and neither fails the gate. The fixed vertex layout declares
   attributes a shader does not consume, and the primitive program's vertex stage writes the engine
@@ -737,9 +740,11 @@ color helpers, and the restored Bork2d/Unity color preset set:
   M5, and `DrawBoundingBox` now ships as a public M5 helper. The Castle sample uses the helper for its
   hover overlay: it tests the pointer ray against the model bounds with `Collision.GetRayBox`, draws
   the bounds on a hit, and marks the nearest `Collision.GetRayMesh` hit. It still does not implement
-  click selection. M6 adds the world-space presented-FPS/render-statistics status overlay the sample
-  deferred in M4. Castle remains a buildable and publishable sample; the M6 AOT gate is `samples/Text`. The M4
-  limitation of one `rbFrame` block per frame slot is unchanged by M5/M6.
+  click selection. M6 adds the presented-FPS/render-statistics status overlay the sample deferred in
+  M4, and M7 draws it through `ScreenToWorldTransform` so it stays screen-aligned. Castle remains a
+  buildable and publishable sample; the M6 AOT gate was `samples/Text` and the M7 gate is
+  `samples/Pong`. The M4
+  limitation of one `rbFrame` block per frame slot is unchanged by M5-M7.
 
 **Risks.**
 
@@ -824,7 +829,7 @@ blocking glyph generation.
   run `--frames 30` to exit `0` (Windows hardware and Linux lavapipe).
 - Fuzz tests cover malformed sfnt/cmap/glyf/CFF/kern/GPOS tables without crashes or unbounded
   allocation.
-- The suite is 2,625 tests, 106 of them GPU integration tests, and every sample solution builds.
+- The M6 suite was 2,625 tests, 106 of them GPU integration tests, and every sample solution built.
 
 **As-built notes.** M6 shipped the planned text surface with the following as-built shape:
 
@@ -928,7 +933,7 @@ blocking glyph generation.
   camera or font is `ObjectDisposedException`, non-finite or out-of-range layout arguments are
   `ArgumentException`/`ArgumentOutOfRangeException`, and a zero transform scale or empty text records
   nothing.
-- **Text sample and AOT gate.** `samples/Text` is the M6 sample and Native AOT gate. Its solution
+- **Text sample and AOT gate.** `samples/Text` was the M6 sample and Native AOT gate. Its solution
   `samples/Text/Text.slnx` contains the sample and the JIT `Text.Assets` executable, which bakes
   `text.pck` from the checked-in Lora Regular 3.008 face and copies it beside the sample
   executable; the sample has no `--assets` argument. It draws text in the built-in Fira Sans and
@@ -938,9 +943,9 @@ blocking glyph generation.
   generated glyph every 30 ticks. A fixed right-aligned status block in the built-in mono face shows
   presented FPS, the tick rate, the render CPU time, and draw calls and instances from `RenderStats`;
   the sample has orbit/zoom controls and the `--frames`/`--help` options. `samples/Castle` and
-  `samples/PrimitiveGallery` gained the `DrawText` status overlays they had deferred, so they now draw
+  `samples/PrimitiveGallery` gained the `DrawText` status overlays they had deferred, so they draw
   the presented FPS, the tick rate, the render CPU time, and draw calls and instances from
-  `RenderStats`. The published `win-x64` and
+  `RenderStats`; M7 anchors those lines with `ScreenToWorldTransform`. The published `win-x64` and
   `linux-x64` hosts finish with zero AOT/trim warnings, contain `text.pck` but no bake tooling, and
   both run `--frames 30` to exit `0`; the Linux run used the conformant lavapipe software driver.
 - **Presentation pacing and truthful diagnostics.** The samples set no tick target and request FIFO.
@@ -962,7 +967,9 @@ blocking glyph generation.
   1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets. The
   per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
   milestone.
-- **Tests.** The suite is 2,625 tests, 106 of them GPU integration tests. M6 adds the font parser,
+- **Tests.** At the M6 milestone the suite was 2,625 tests, 106 of them GPU integration tests; the
+  current suite, including the M7 screen-space suites, is 2,695 tests, 114 GPU integration tests.
+  M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
   colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
   the text layout, measurement, wrapping, buffer, and validation suites; the camera text draw
@@ -975,9 +982,12 @@ blocking glyph generation.
   Cyrillic, and Greek.
   Variable fonts load their default instance. CFF2 is rejected. One texture per glyph consumes
   bindless slots: 512 cached per font, within the fixed 2048-slot table. There is no preload and no
-  synchronous glyph generation. Text is world-space only; screen-space/HUD text is M7. MSDF sharp
-  corners are not extended, so a small artifact can appear at very large sizes. A world-space
-  status overlay can be occluded by geometry closer than the overlay distance. M6 ships text as
+  synchronous glyph generation. Text is world-space geometry; M7 adds the screen-space pattern
+  through `ScreenToWorldTransform` and the world-space `DrawText` overload, not a screen-space draw
+  API. MSDF sharp
+  corners are not extended, so a small artifact can appear at very large sizes. A status overlay on
+  a screen-aligned plane can still be occluded by geometry closer than that plane, and the separate
+  overlay pass is M8. M6 ships text as
   alpha-blended (derivative antialiasing, transparent batch, no depth writes); M10 makes the
   alpha-to-coverage cutout the default so text needs no sorting and resolves overlapping glyphs by
   depth, keeping the alpha path for translucent text.
@@ -999,27 +1009,45 @@ blocking glyph generation.
 - **Coverage and feature gaps.** There is no fallback, shaping, bidi, color font, emoji, or variable
   axis support, and coverage is per face. A game that needs those features must pre-process its text
   or wait for post-1.0 work; the samples state the per-face boundary honestly.
-- **World-space text only.** Screen-space HUD text arrives with the orthographic path in M7. The
-  sample overlays are world-space text one unit in front of the camera and can be occluded by closer
-  geometry; that is the documented M6 behavior, not an M7 feature already shipped.
+- **World-space text.** M7 adds `ScreenToWorldTransform` so a text block can be anchored to a screen
+  pixel on a camera-facing plane, but the draw is still world-space geometry. The sample overlays
+  are alpha text on that plane, so geometry closer than it can occlude them; a separate overlay pass
+  is M8 work, not an M7 feature already shipped.
 
-### M7 — 2D, orthographic rendering, and sprites
+### M7 — Orthographic rendering and the screen-space surface
 
 **Goal.** Raylib-style 2D games are practical without a separate 2D renderer.
 
 **Scope.**
 
-- Orthographic camera whose visible height maps world units to pixels; pixel-perfect mapping for
-  the default window size and DPI.
-- `DrawTexture` with destination rectangles, linear tint, and point/linear sampling, re-homed from
-  M5 with the orthographic/sprite contract.
-- 2D primitives: lines, rectangles, circles, triangles, and grids, built on the same draw path.
-- 2D text through the M6 font path.
-- Sprite batching with bindless textures and per-instance UV/color.
-- Screen-space overlay pass (an orthographic camera with no depth write).
-- HDR scene target and AgX present apply to 2D as well; LDR sprites are still authored linearly.
-- DPI and resize behavior; letterboxing is a game choice, not an engine mode.
-- Pong sample: two paddles, ball, score text, keyboard/gamepad input, pause, restart.
+- Unified camera creation: `EngineContext.CreateCamera` takes a `CameraProjection` and either a
+  `fieldOfView` (perspective) or an `orthographicHeight` (orthographic); `CreateOrthographicCamera`
+  is removed. The perspective default `far` becomes `1000`, and a caller that needs an infinite far
+  plane passes `float.PositiveInfinity` explicitly; an orthographic `far` stays finite.
+- `Camera.ScreenToWorldTransform(Vector2 point, float distance)`: viewport-relative render pixels
+  with a top-left origin, a finite positive view-depth `distance`, and a returned `Transform` whose
+  position is the world point on that plane, whose rotation is the camera rotation, and whose
+  uniform scale is world units per render pixel. It works for perspective and orthographic cameras,
+  and the camera transform must have unit scale.
+- 2D primitives as world-space draws: a solid quad, a full-texture quad, and a normalized
+  source-rectangle quad; a disc; and a transformable grid. The effective render state is part of the
+  batch key, and `RenderState.AlphaBlend` is the sprite/alpha case.
+- Screen-space text through `ScreenToWorldTransform` and the world-space `DrawText` `Transform`
+  overload. There is no `DrawText(Vector2)` overload and no separate screen-space draw API.
+- Sprite batching with bindless textures and per-instance UV/color through the existing batch path;
+  no new renderer path.
+- A ninth internal primitive mesh, the unit disc.
+- A small plane tolerance in `BoundingFrustum.Intersects` so a full-viewport or boundary-aligned
+  quad is not culled by plane-extraction drift.
+- HDR scene target and AgX present apply to the screen-space pass as well; LDR sprites are still
+  authored linearly.
+- DPI and resize behavior; letterboxing is a game choice through the camera's clear color and a
+  design-space fit, not an engine mode.
+- Pong sample: two paddles, ball, score text, keyboard/gamepad input, pause, restart; a two-project
+  solution with a build-time bake, and the M7 Native AOT gate.
+- Remove the M1-M3 `samples/HelloInterop` diagnostic host.
+- **Deferred to M8, not shipped in M7:** a separate multi-camera overlay pass and per-pass frame
+  data. The M7 HUD is same-pass text on a screen-aligned plane.
 
 **Exit criteria.**
 
@@ -1028,12 +1056,162 @@ blocking glyph generation.
 - A texture drawn at integer pixel coordinates is pixel-aligned at 100% DPI.
 - A sprite sheet or multiple textures batch into one draw when mesh/shader/state match.
 - Text renders correctly in the same frame as sprites.
-- The overlay pass does not disturb 3D depth.
+- `ScreenToWorldTransform` places a pixel-authored quad at the requested render pixels, and its
+  world position agrees with `WorldToScreen` on the same plane.
+- A full-viewport quad survives frustum culling.
+- The screen-space pass does not disturb 3D depth: it is one same-pass text/quad draw with the
+  normal render state.
 - Native AOT publish runs Pong on Windows and Linux.
 
-**Notes.** M7 removes the M1-M3 `samples/HelloInterop` diagnostic host. The Text, Castle, and
-PrimitiveGallery samples and the test suite cover the host, input, time, logging, renderer, and
-asset-loading surface it exercised.
+**As-built notes.** M7 shipped the planned orthographic and screen-space scope with these as-built
+details:
+
+- **Unified camera creation.** `EngineContext.CreateCamera(Transform, CameraProjection, float
+  fieldOfView = 0f, float orthographicHeight = 0f, ClearMode clearMode = ClearMode.ColorAndDepth,
+  Color? clearColor = null, float near = 0.01f, float far = 1000f, Rect? viewport = null)` is the
+  only camera entry point. A perspective camera uses `fieldOfView` and rejects a nonzero
+  `orthographicHeight`; an orthographic camera uses `orthographicHeight` and rejects a nonzero
+  `fieldOfView`; both reject an undefined projection and an out-of-range selected parameter. A
+  perspective `far` may be `float.PositiveInfinity`; an orthographic `far` must be finite. The
+  perspective default changed from infinity to `1000`, so callers that relied on the old implicit
+  infinity pass it explicitly. `CreateOrthographicCamera` is removed; `orthographicHeight` is its
+  replacement. The camera properties, clamping, clearing, frame scoping, and disposal contract are
+  unchanged. The unified signature has no `target` parameter; `RenderTexture` targets arrive in M8.
+- **Screen transform.** `Camera.ScreenToWorldTransform(Vector2 point, float distance)` takes a
+  viewport-relative render-pixel point with a top-left origin (`(0, 0)` is the viewport's top-left
+  corner, not target space) and a view-depth plane distance that must be finite and greater than
+  zero. It builds the view-space point from the normalized device position and the plane half-extents,
+  transforms it to world space by the camera transform, and returns
+  `new Transform(worldPosition, cameraRotation, new Vector3(unitsPerPixel))`. The scale is
+  `2 * distance * tan(fieldOfView / 2) / viewport.Height` for perspective and
+  `orthographicHeight / viewport.Height` for orthographic, so a quad authored in render pixels maps
+  to those exact pixel extents at that plane. The returned transform's local `XY` is screen-aligned
+  and local `+Z` faces the camera. The camera transform must have unit scale: a scaled camera
+  transform would scale the world position while `distance` and the pixel scale stay unscaled, so
+  the member documents that requirement instead of guessing. There is no `ScreenToWorldPoint`.
+- **New world-space primitives.** `Camera.DrawQuad(Transform, Vector2, Color, RenderState?)` draws
+  one instance of the engine quad in the transform's local `XY` plane, centered, local `+Z` front,
+  with the instance matrix `CreateScale(size.X, size.Y, 1) * transform.ToMatrix()`, over the built-in
+  `/shaders/primitive` material. `Camera.DrawQuad(Transform, Vector2, Texture, Color?, RenderState?)`
+  samples the full texture through the built-in `/shaders/mesh` material and records `(0, 0, 1, 1)`
+  as the per-instance UV rectangle.
+  `Camera.DrawQuad(Transform, Vector2, Texture, Rect source, Color?, RenderState?)` takes a
+  normalized `[0, 1]` source rectangle (top-left corner plus positive extents) and records it as
+  `rbInstance.UvRect`. `Camera.DrawDisc(Transform, float radius, Color)` instances the unit disc
+  mesh (36 segments) in the same local `XY` plane and is opaque.
+  `Camera.DrawGrid(Transform, int slices, float spacing, Color)` composes every line as
+  `CreateLineMatrix(localStart, localEnd) * transform.ToMatrix()`; the base grid is the local `XZ`
+  plane with local `+Y` as the normal, the transform position is the grid center, and the scale
+  multiplies both `spacing` and the line extents. `DrawGrid(int, float, Color)` is exactly the
+  `Transform.Identity` form, so its behavior is unchanged. A zero transform scale component records
+  nothing. `DrawDisc` and `DrawGrid` use the opaque state; `DrawQuad` with a null `renderState` is
+  opaque, and `RenderState.AlphaBlend` is the alpha/sprite case. The effective state is written to
+  the draw record and is part of the batch key, so opaque and alpha quads never merge. The text and
+  billboard paths keep their alpha/no-depth-write states.
+- **Validation.** The new helpers validate before any retention or record mutation. A non-finite
+  size, radius, spacing, transform component, color, or source rectangle component is
+  `ArgumentException`; a negative size, radius, spacing, or transform scale component is
+  `ArgumentOutOfRangeException`; an exactly zero size, radius, or transform scale component records
+  nothing; a null texture is `ArgumentNullException`; a disposed texture, camera, or primitive asset
+  is `ObjectDisposedException`. A source rectangle with a non-positive width or height, or one
+  outside the normalized `[0, 1]` texture rectangle, is `ArgumentOutOfRangeException`. A camera draw
+  off the tick thread is `InvalidOperationException`.
+- **No `DrawTexture`, no 2D overloads.** The M5 preview screen-space texture helper did not return:
+  M7 ships no `DrawTexture`, no destination-rectangle screen-space draw, and no 2D overload family.
+  A textured `DrawQuad` or `DrawBillboard(faceCamera: false)` covers a sprite, and
+  `ScreenToWorldTransform` plus the world-space `DrawText` `Transform` overload covers screen-space
+  text with pixel-sized text. There is no `DrawText(Vector2)` overload; the screen pattern passes
+  the transform from `ScreenToWorldTransform`. Sprite batching uses the existing bindless +
+  per-instance UV/color path, not a second renderer.
+- **Orthographic 3D.** The same orthographic camera renders 3D models and primitives with an
+  orthographic projection; it is not a separate 2D renderer. `samples/Castle` has an `O` toggle
+  between perspective and orthographic, records one camera per tick, and derives the orthographic
+  height from the orbit distance (`2 * orbitDistance * tan(fieldOfView / 2)`) so the framing matches
+  the perspective view at that distance. Its orthographic far plane is derived from
+  `MAX_DISTANCE * 2`, and the status line shows the current projection. The same `Camera` batching,
+  depth test, culling, and statistics apply to both projections.
+- **HUD text.** Castle and PrimitiveGallery draw their HUD with
+  `ScreenToWorldTransform(new Vector2(margin, margin), 1f)` and
+  `DrawText(..., 18f, ...)`. The returned scale keeps 18 local units at 18 render pixels in either
+  projection. This is same-pass, screen-aligned text: it is alpha-blended with no depth write, so
+  geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass,
+  and per-pass frame data is still absent, so the M4 one-frame-block limitation is unchanged. A
+  dedicated multi-camera overlay pass and per-pass frame data are deferred to M8.
+- **Nine primitive meshes.** The engine builds one more internal primitive mesh, the unit disc,
+  alongside cube, sphere, plane, quad, triangle, line, wire cube, and wire sphere. The disc is one
+  center vertex plus 36 rim vertices and 36 triangles, built once before `IGame.Setup` through the
+  procedural GPU bridge. It has no public accessor; the primitive meshes and the three engine
+  materials remain internal.
+- **Frustum tolerance.** `BoundingFrustum.Intersects` accepts a positive corner within `1e-4` of a
+  plane so a full-viewport quad or boundary-aligned geometry is not culled by floating-point drift
+  in the extracted planes. `Contains` keeps its exact non-negative test, and the tolerance applies
+  only to the `Intersects` positive-vertex test.
+- **Pong sample and AOT gate.** `samples/Pong` is the M7 sample and Native AOT gate. It is a
+  two-project solution, `samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, containing the
+  sample and the JIT `Pong.Assets` executable. The sample build invokes the assets executable out of
+  process, bakes `pong.pck`, and copies it beside the sample executable; the publish target copies
+  the same pack beside the published host, so neither needs a manual bake or an `--assets` argument.
+  The pack contains `/data/game`, a `Pong.PongSettings` TOML data asset (paddle texture path, ball
+  radius, max score, paddle width/height/speed, and ball speed), and `/textures/paddle`, a 32x128
+  original opaque paddle PNG with its KTX2 raw payload. Every tick records one orthographic camera
+  at `(0, 0, 1)` looking down `-Z` with `orthographicHeight = Window.RenderHeight`, so the plane at
+  distance `1` has a world-units-per-pixel scale of exactly one. The `1280x720` 16:9 design
+  playfield is fitted into the current render pixels, letterboxed with the camera clear color, and
+  every draw uses `ScreenToWorldTransform`. `DrawQuad` draws the playfield, border, net, score
+  panels, shaded overlay, and textured paddles; `DrawDisc` draws the ball; `DrawText` draws the
+  scores, status line, and pause/winner overlay. The simulation uses a fixed opening serve, fixed
+  `1/120` second substeps capped at a `0.25` second tick delta, top and bottom bounces,
+  `Collision.CheckBoxSphere` paddle collisions, scoring with the serve going to the loser, a
+  max-score win, and pause/restart. The controls are keyboard plus gamepad 0, and the sample accepts
+  `--frames` and `--help`. The Windows `win-x64` publish finished with zero AOT/trim warnings: its
+  publish directory contains `pong.pck` (22,648 bytes) beside `Pong.exe` (11,271,680 bytes) with no
+  bake tooling, and the published host ran `--frames 30` to exit `0` on the hardware driver. The
+  `linux-x64` publish also finished with zero warnings, contains `pong.pck` beside `Pong` and no
+  bake tooling, and the published host ran `--frames 30` to exit `0` on the conformant
+  lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x
+  MSAA, and a 1280x720 window.
+- **Tests.** M7 adds `Graphics/ScreenDrawGpuTests`, which submits the production screen-space draws
+  through the Vulkan backend and asserts validation-layer cleanliness, statistics, and single-pixel
+  linear scene-target probes. It covers pixel-aligned textured quads, the normalized source
+  rectangle, opaque and alpha quads (including the mesh-program textured alpha path), batching
+  across textures and split only by render state, the disc interior, text and sprites in one frame,
+  full-viewport frustum tolerance, and 3D orthographic cube rendering. `Rendering/PrimitiveDrawTests`
+  gains the `DrawQuad`, `DrawDisc`, `DrawGrid(Transform)`, and `ScreenToWorldTransform` record,
+  validation, zero-extent, disposed-asset, and batching coverage. The Windows hardware run is 2,695
+  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed,
+  0 failed, and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes
+  only SDR, and the GPU-filtered run is 107 passed with the same 7 skips. Every sample solution
+  builds. There is no golden-image suite.
+- **HelloInterop removed.** The M1-M3 `samples/HelloInterop` diagnostic host is gone; the Pong,
+  Text, Castle, and PrimitiveGallery samples and the test suite cover the host, input, time,
+  logging, renderer, and asset-loading surface it exercised.
+- **Overlay pass deferred.** The M7 scope listed a screen-space overlay pass; the shipped HUD is
+  same-pass text, and the separate multi-camera overlay pass with per-pass frame data is M8 work.
+  M7 does not claim it as shipped.
+
+**Risks.**
+
+- **Screen transform and camera scale.** `ScreenToWorldTransform` requires a unit-scale camera
+  transform. A scaled camera would produce a plane position scaled by the transform while the
+  pixel scale stays unscaled, so the member documents the requirement and does not support a scaled
+  camera; the samples keep the camera transform at unit scale.
+- **Same-pass HUD occlusion.** The M7 HUD is depth-tested alpha text on a screen-aligned plane, so
+  geometry closer than the overlay plane can occlude it, and the one-frame-block limitation still
+  prevents different per-pass views in one frame. A dedicated overlay pass with per-pass frame data
+  is M8; the current behavior is documented rather than hidden.
+- **No 2D draw API.** Games porting a raylib-style 2D renderer must draw through
+  `ScreenToWorldTransform` and the world-space primitives instead of screen-coordinate overloads.
+  This is a deliberate design choice: one draw path, one batch key, and no duplicate 2D renderer.
+  The Pong sample is the reference pattern.
+- **Frustum tolerance.** `Intersects` keeps boundary geometry that is up to `1e-4` behind a plane.
+  The slack is small and applies only to the conservative overlap test; `Contains` stays exact, and
+  the renderer still rejects geometry fully outside a plane.
+- **Pixel mapping and DPI.** Pixel alignment depends on the render-pixel viewport and the DPI
+  scaling of the window; the screen transform is exact for the clamped viewport, while a game that
+  wants a fixed design space must fit it itself, as Pong does.
+- **AOT gate moved to Pong.** `samples/Text`, `samples/Castle`, and `samples/PrimitiveGallery` remain
+  buildable and publishable but are no longer the gate. The M7 gate is Pong on both RIDs, and a
+  failure there is a milestone failure.
 
 ### M8 — Render targets, multiple cameras, and readback
 
@@ -1046,6 +1224,10 @@ asset-loading surface it exercised.
 - Camera target routing and viewport rectangles.
 - Image and resolve barriers between passes; write-after-read validation.
 - Multiple cameras to the HDR scene target and to offscreen targets.
+- Per-pass frame data: one frame uniform block per camera pass, so multiple cameras with different
+  views are correct instead of sharing the last pass' values.
+- A separate multi-camera overlay pass for HUD text and sprites that must not be occluded by scene
+  depth; the M7 HUD is same-pass and is the deferred input to this work.
 - `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots; raw HDR readback is post-1.0.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
   simple post-process shader, and present.
@@ -1147,8 +1329,10 @@ with Native AOT without reading the engine source.
 
 **Scope.**
 
-- Samples: Castle (3D textured/custom shader/HDR; the sample and its assets executable ship in M4,
-  and M11 polishes them), Pong (2D/input/text), Text (MSDF/layout; the sample and its AOT gate ship in
+- Samples: Castle (3D textured/custom shader/HDR plus the perspective/orthographic toggle; the
+  sample and its assets executable ship in M4, and M11 polishes them), Pong
+  (orthographic/screen-space match, input, and text; the sample and its AOT gate ship in M7, and M11
+  polishes them), Text (MSDF/layout; the sample and its AOT gate ship in
   M6, and M11 polishes them), Instancing (batching/stats), RenderTarget
   (offscreen/MSAA/post-process).
 - `dotnet new raybork` template with a game project, assets executable, and AOT publish profile.
@@ -1229,9 +1413,9 @@ The matrix is the scope contract.
 | --- | --- | --- | --- |
 | Window | Covered | M1, M9 | One window; fullscreen/borderless/DPI in M9; 30 FPS cap when minimized/unfocused. |
 | Cursor | Covered | M9 | Normal/hidden/disabled; cursor-on-screen. |
-| Drawing (2D/3D begin/end) | Covered | M4, M7 | Cameras are the begin/end scope; no global draw state. |
+| Drawing (2D/3D begin/end) | Covered | M4, M7 | Cameras are the begin/end scope; no global draw state. 2D is drawn as world-space quads, discs, and text on a `ScreenToWorldTransform` plane, not through a second 2D path. |
 | Shader load/uniforms | Covered | M4 | SPIR-V at bake; `SetUniform` snapshot; entry points `main_vertex`/`main_fragment`. |
-| Screen-space helpers | Covered | M4, M7 | `ScreenToWorldRay`, `WorldToScreen`, orthographic cameras. |
+| Screen-space helpers | Covered | M4, M7 | `ScreenToWorldRay`, `WorldToScreen`, `ScreenToWorldTransform`, orthographic cameras, and screen-aligned HUD text; no 2D draw overloads. |
 | Timing | Covered | M1 | `Stopwatch`; double seconds; no fixed step in v1. |
 | Random | Not engine | — | Use `System.Random`; no global RNG. |
 | Misc (screenshot, OpenURL) | Partial | M8/M9 | Display-referred readback screenshot; `OpenURL` out. |
@@ -1244,15 +1428,15 @@ The matrix is the scope contract.
 | Mouse | Covered | M1 | Buttons, position, delta, wheel. |
 | Gamepad | Covered | M1, M9 | Basic in M1; hotplug/rumble in M9. |
 | Touch | Post | — | Post-1.0. |
-| Text/fonts | Covered | M6 | Managed TTF/OTF parsing (cmap 0/4/6/12, TrueType `glyf`, CFF Type 2, `kern`/GPOS pair kerning), deterministic on-demand MSDF, layout/alignment/wrapping, and world-space text; no complex shaping, ligatures, bidi, fallback, color fonts, emoji, variable axes, or CFF2. |
-| Textures | Covered | M3, M5, M7, M8 | Loaded textures, billboard texture sampling, screen-space sprites, and HDR/MSAA render targets. |
+| Text/fonts | Covered | M6, M7 | Managed TTF/OTF parsing (cmap 0/4/6/12, TrueType `glyf`, CFF Type 2, `kern`/GPOS pair kerning), deterministic on-demand MSDF, layout/alignment/wrapping, and world-space text; M7 anchors a block to a screen pixel with `ScreenToWorldTransform`. No complex shaping, ligatures, bidi, fallback, color fonts, emoji, variable axes, or CFF2. |
+| Textures | Covered | M3, M5, M7, M8 | Loaded textures, billboard texture sampling, textured quads and screen-space sprites through `DrawQuad`/`DrawBillboard`, and HDR/MSAA render targets. |
 | Images | Partial | M3 | Bake decodes; no runtime image manipulation API. |
 | Models | Covered | M4, M5 | glTF 2.0/OBJ are source formats; packs contain the engine format; static meshes; wireframe model drawing. |
 | Custom data | Covered | M3 | TOML data with `[GenerateShape]`; `WithAssetType<T>` then `Load<T>`. |
 | Meshes | Covered | M3, M4, M5 | Loaded meshes, procedural `MeshBuilder` creation including the nine `Generate*` factories, and primitive meshes; fixed vertex layout. |
 | Materials | Rethought | M4 | No `Material`; shader state + per-instance uniforms. |
 | Model animations | Post | — | Skeletal/morph post-1.0. |
-| 3D shapes | Covered | M5 | Lines, points, triangles, strips, rays, bounding boxes, cube, sphere, plane, cylinder/wire cylinder, capsule/wire capsule, circle, grid, and wire shapes, with shape/position and `Transform` forms. |
+| 3D shapes | Covered | M5, M7 | Lines, points, triangles, strips, rays, bounding boxes, cube, sphere, plane, cylinder/wire cylinder, capsule/wire capsule, circle, grid, and wire shapes, with shape/position and `Transform` forms; M7 adds the quad, disc, and transformable grid. |
 | Collision | Covered | M5 | Sphere/box checks and ray/sphere/box/triangle/quad/plane/mesh queries. |
 | HDR / AgX / MSAA | Covered | M2, M4, M5 | Linear scene target, Godot 4.7's HDR-aware AgX present, 4x default MSAA. |
 | Renderer backend | Covered | M2 | Vulkan 1.2 first; internal seam for future mobile/web backends. |
@@ -1322,8 +1506,18 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   `TextDrawTests` cover the CPU-only asset, `.notdef`, layout, and the camera draw records;
   `TextDrawGpuTests` submits the production text draws through the Vulkan backend and asserts
   validation-layer cleanliness, draw/instance/triangle statistics, and single-pixel linear
-  scene-target probes. The suite is 2,625 tests, 106 of them GPU integration tests, and every sample
-  solution builds.
+  scene-target probes. At the M6 milestone the suite was 2,625 tests, 106 of them GPU integration
+  tests.
+- M7 adds the screen-space GPU suite (`ScreenDrawGpuTests`) and extends the primitive draw unit
+  suite (`PrimitiveDrawTests`). `ScreenDrawGpuTests` submits the production screen-space draws
+  through the Vulkan backend and asserts validation-layer cleanliness, statistics, and single-pixel
+  linear scene-target probes for pixel-aligned textured quads, the normalized source rectangle,
+  opaque and alpha quads (including the mesh-program textured alpha path), batching across textures
+  and split only by render state, the disc interior, text and sprites in one frame, full-viewport
+  frustum tolerance, and 3D orthographic cube rendering. `PrimitiveDrawTests` covers the
+  `DrawQuad`, `DrawDisc`, `DrawGrid(Transform)`, and `ScreenToWorldTransform` records, zero-extent
+  behavior, validation, disposed assets, retention, and batching. The suite is 2,695 tests, 114 of
+  them GPU integration tests, and every sample solution builds.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
   the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,

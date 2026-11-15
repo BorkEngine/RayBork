@@ -168,10 +168,14 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/Pong/bin/Release/net11.0/linux-x64/publish/Pong --frames 30
 ```
 
-Both publishes must finish with zero AOT/trim warnings. The publish directory must contain `pong.pck`
-beside the host and must not contain `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp,
-BCnEncoder, the shaderc native libraries, or the glTF packages. The Linux host runs on the conformant
-lavapipe software driver; WSLg's hardware Vulkan path (Mesa dzn) is not a target.
+Both publishes finished with zero AOT/trim warnings. The Windows `win-x64` publish directory contains
+`pong.pck` (22,648 bytes) beside `Pong.exe` (11,271,680 bytes) and no `Pong.Assets.dll`,
+`RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc native libraries, or glTF packages;
+the published Windows host ran `--frames 30` to exit `0` on the hardware driver. The Linux
+`linux-x64` publish directory contains `pong.pck` beside `Pong` and no bake tooling; the published
+Linux host ran `--frames 30` to exit `0` on llvmpipe (lavapipe) with an SDR `B8G8R8A8_SRGB`
+swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware Vulkan path (Mesa
+dzn) is not a target.
 
 ## Limitations
 

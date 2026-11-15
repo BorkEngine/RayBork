@@ -53,7 +53,8 @@ the project root defaults to the working directory and the output root defaults 
 #### Build-time bake in a game or sample project
 
 A game or sample can run its assets executable as part of its own build instead of a manual step.
-`samples/Castle/Castle.csproj` and `samples/Text/Text.csproj` use the same
+`samples/Castle/Castle.csproj`, `samples/Text/Text.csproj`, and `samples/Pong/Pong.csproj` use the
+same
 out-of-process pattern as the engine's built-in pack: an `AfterTargets="Build"` target invokes the
 assets project with the `MSBuild` task (passing only `Configuration` and removing the sample's
 runtime/publish properties), runs the built assets executable as
@@ -67,7 +68,16 @@ Because the assets executable is only invoked out of process, the sample project
 `RayBork.Bake`, and the JIT tooling never enters the sample's Native AOT publish graph. The explicit
 `--project-root` and `--output-root` arguments keep the bake independent of the working directory.
 The samples are separate solutions (`samples/Castle/Castle.slnx`,
-`samples/Text/Text.slnx`) and are not part of `src/RayBork/RayBork.slnx`.
+`samples/Text/Text.slnx`, and `samples/Pong/Pong.slnx`) and are not part of
+`src/RayBork/RayBork.slnx`.
+
+`samples/Pong` is the smallest worked example of a baked custom-data asset. Its
+`Pong.Assets/Assets` holds `textures/paddle.png` (an ordinary texture source, baked to
+`/textures/paddle` with its KTX2 payload) and `data/game.toml` (a registered `Pong.PongSettings`
+data source, baked to `/data/game`). The sample registers the type with `WithAssetType<PongSettings>()`
+at runtime and the assets executable registers it with `RegisterAsset<PongSettings>()`, so the same
+`[GenerateShape]` type is baked and loaded without reflection. The sample needs no `--assets`
+argument at run time.
 
 M3's public bake surface is `BakeApplicationBuilder`, `BakeApplication`, `IAssetProcessor`,
 `AssetProcessor<TSidecar>`, `AssetProcessorContext`, `IAssetOutputSink`,
@@ -315,7 +325,7 @@ The built-in processors use `RB4007`-`RB4010`; the shared TOML and discovery fai
 
 ### 13.4 Pack v1 (as built)
 
-M5 and M6 do not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
+M5, M6, and M7 do not change the pack format: pack v1 is unchanged since M3. The pack is little-endian and
 starts with a fixed 40-byte header:
 
 | Field | Size | Notes |
@@ -453,9 +463,10 @@ is set.
 
 The engine's primitive meshes are procedural assets built at engine startup, not pack entries, so
 the pack carries no primitive geometry. Each font's glyph id zero (`.notdef`) is the
-missing-glyph fallback; there is no separate error-glyph entry. Pack v1 is unchanged by the M5 and
-M6 additions: the primitive and MSDF programs are ordinary shader entries at reserved built-in paths,
-each font is an ordinary `Font` descriptor plus a raw face payload, and none of them is a format
+missing-glyph fallback; there is no separate error-glyph entry. Pack v1 is unchanged by the M5, M6,
+and M7 additions: the primitive and MSDF programs are ordinary shader entries at reserved built-in
+paths, each font is an ordinary `Font` descriptor plus a raw face payload, and the Pong settings and
+texture are ordinary `Data` and `Texture` entries. None of them is a format
 change. The app preloads the mesh program, the white and error textures, and the built-in default and
 monospaced fonts into `EngineContext.Defaults` before `IGame.Setup` and keeps the primitive, MSDF, and
 mesh programs, with one engine material over each, for the engine's primitive assets; the mesh program

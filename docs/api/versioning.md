@@ -67,11 +67,12 @@ camera-facing convenience overload plus a five-argument overload with an explici
 call that passed `sides` or `faceCamera` still compiles and keeps its behavior; only reflection or
 binary consumers of the optional parameter defaults observe the change.
 
-`DrawTexture` is removed from the M5 surface. The preview screen-space overlay helper is re-homed to
-M7, where it arrives with the orthographic/sprite contract and destination rectangles instead of the
-M5 unprojected-overlay path. A game written against an M5 preview that called
-`camera.DrawTexture(texture, destination, tint)` should draw a textured quad with `DrawMesh` or wait
-for the M7 helper. These M5 surface changes are 0.x preview changes; each paragraph here is its
+`DrawTexture` is removed from the shipped surface. The preview screen-space overlay helper was
+removed in M5 and did not return in M7: M7 ships no `DrawTexture` and no 2D destination-rectangle or
+screen-space draw overload. A game written against an M5 preview that called
+`camera.DrawTexture(texture, destination, tint)` should map the destination through
+`Camera.ScreenToWorldTransform` and draw a textured `DrawQuad` (or a `DrawBillboard` with
+`faceCamera: false`). These M5 surface changes are 0.x preview changes; each paragraph here is its
 migration note, and after 1.0 the same changes would need the obsolete/migration cycle above.
 
 The runtime tone-mapping surface is additive too: `TonemappingSettings` and
@@ -121,12 +122,32 @@ preview additions and this paragraph is their migration note; after 1.0 a breaki
 surface would need the obsolete/migration cycle above.
 
 The M6 text surface is world-space only. `Camera.DrawText` lays a block out in a transform's local
-XY plane and `Camera.DrawTextBillboard` centers a camera-facing block; the screen-space orthographic
-path, including HUD text and `DrawTexture`, arrives in M7. Complex shaping, ligatures, bidi ordering,
-font fallback, color fonts, emoji, and variable font axes are out of scope for v1, and CFF2 is
-rejected. Coverage is per face: the built-in Fira Sans Regular and JetBrains Mono (default instance
-Regular) faces cover
+XY plane and `Camera.DrawTextBillboard` centers a camera-facing block. M7 adds the screen-space
+authoring pattern through `Camera.ScreenToWorldTransform` and the same `Transform` overload; there is
+no `DrawText(Vector2)` overload and no screen-space text draw API. Complex shaping, ligatures, bidi
+ordering, font fallback, color fonts, emoji, and variable font axes are out of scope for v1, and CFF2
+is rejected. Coverage is per face: the built-in Fira Sans Regular and JetBrains Mono (default
+instance Regular) faces cover
 Latin, Cyrillic, and Greek. A variable font that a game packs loads and renders its default instance.
+
+The M7 camera and screen surface changes the 0.x preview in several ways.
+`EngineContext.CreateOrthographicCamera` is removed; replace each call with
+`CreateCamera(transform, CameraProjection.Orthographic, orthographicHeight: height, ...)`.
+`CreateCamera` now takes `fieldOfView` and `orthographicHeight` as optional parameters and rejects
+the size argument that does not belong to the projection. The former perspective-only call
+`CreateCamera(transform, CameraProjection.Perspective, fieldOfView: fov, ...)` still compiles and
+keeps its behavior. The perspective `far` default changed from `float.PositiveInfinity` to `1000`, so
+a game that relied on the old implicit infinite far plane passes `float.PositiveInfinity` explicitly.
+`Camera.ScreenToWorldTransform` and the new `DrawQuad` (solid, full texture, and source rectangle),
+`DrawDisc`, and `DrawGrid(Transform, ...)` primitives are additive; `DrawGrid(int, float, Color)`
+keeps its exact identity behavior. There is no `DrawTexture` and no 2D or screen-space draw overload
+family: a sprite is a textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and HUD text uses
+`ScreenToWorldTransform` with the world-space `DrawText` overload and a pixel-sized `size`. The
+screen transform requires a unit-scale camera transform; a scaled camera transform is invalid for
+it, and there is no `ScreenToWorldPoint`. The M7 HUD is same-pass text, so geometry closer than the
+overlay plane can occlude it; a separate multi-camera overlay pass with per-pass frame data is
+deferred to M8. These are 0.x preview changes and this paragraph is their migration note; after 1.0
+a breaking change to this surface would need the obsolete/migration cycle above.
 
 Mouse input now uses render pixels instead of logical window coordinates. `Input.MousePosition` and
 `Input.MouseDelta` are physical framebuffer pixels with a top-left origin and fractional values, so a

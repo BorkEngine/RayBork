@@ -208,8 +208,11 @@ public readonly record struct Rect(float X, float Y, float Width, float Height) 
 }
 ```
 
-`Rect` is used for viewports, destination rectangles, monitor bounds, and scissor-like regions.
-Screen rectangles use a top-left origin.
+`Rect` is used for viewports, normalized texture source rectangles, monitor bounds, and scissor-like
+regions. Screen and viewport rectangles use a top-left origin; a texture source rectangle is
+normalized to `[0, 1]` and uses a top-left origin too. `Camera.ScreenToWorldTransform` converts a
+viewport-relative render-pixel point into a world transform, so a render-pixel rectangle is authored
+as a quad size and position rather than through a destination-rectangle draw call.
 
 ### 5.5 Rays, bounds, and collision
 
@@ -249,7 +252,9 @@ public readonly struct BoundingFrustum {
 - `BoundingFrustum` extracts six inward-facing, normalized planes from a view-projection matrix in
   the engine's row-vector convention. `Contains` requires every signed plane distance to be
   non-negative. `Intersects` uses the positive-vertex test and is conservative: a box that only
-  touches a plane counts as intersecting.
+  touches a plane counts as intersecting, and a positive corner within a `1e-4` tolerance behind a
+  plane is still accepted so boundary-aligned geometry and full-viewport quads are not culled by
+  plane-extraction drift. `Contains` keeps the exact test.
 - The plane names follow the engine's Y-flipped NDC and reverse-Z `[0, 1]` depth range: `Near` is the
   `z >= 0` plane, `Far` is the `z <= w` plane, and `Top`/`Bottom` are inverted relative to a
   non-flipped clip space. See [Rendering: Camera](rendering/camera.md#72-projection-clear-hdr-and-tone-mapping).
