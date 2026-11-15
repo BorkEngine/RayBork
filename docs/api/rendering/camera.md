@@ -268,17 +268,16 @@ world units, and the view and depth clipping make it read as infinite while ever
 stays finite. `Ray` stores a unit direction, so the segment follows the ray exactly. A
 `default(Ray)` has a zero direction and records nothing.
 
-`ScreenToWorldRay` takes **render pixels** with a top-left origin. `Input.MousePosition` is in
-window coordinates, so convert it with `ctx.Window.RenderWidth / (float)ctx.Window.Width` when
-`Width` is nonzero. `DpiScale` is the OS display scale, not the pixel ratio, and is not the
-conversion factor for this call. The ray starts at the camera position for a perspective camera and
-at the near-plane point for an orthographic camera, and its unit direction is stored by the `Ray`
-constructor. A non-finite input is `ArgumentException`.
+`ScreenToWorldRay` takes **render pixels** with a top-left origin. `Input.MousePosition` is already in
+render pixels, so pass it directly; `WorldToScreen` output is in the same units, so a game can compare
+it with `Input.MousePosition` without a window-to-render conversion. The ray starts at the camera
+position for a perspective camera and at the near-plane point for an orthographic camera, and its
+unit direction is stored by the `Ray` constructor. A non-finite input is `ArgumentException`.
 
-`WorldToScreen` returns render pixels in the camera viewport with a top-left origin. A point behind
-the camera (`w <= 0`) has no finite screen position, so it returns `(float.NaN, float.NaN)`. A
-non-finite input is `ArgumentException`. A point outside the viewport still projects to a finite
-value; the caller decides whether to clip it.
+`WorldToScreen` returns render pixels in the camera viewport with a top-left origin, the same units
+as `Input.MousePosition`. A point behind the camera (`w <= 0`) has no finite screen position, so it
+returns `(float.NaN, float.NaN)`. A non-finite input is `ArgumentException`. A point outside the
+viewport still projects to a finite value; the caller decides whether to clip it.
 
 `DrawModel(model, transform, tint)` uses each part's **material**. At the call it snapshots that
 material's current uniform cursor and texture bindings and uses the part's `ModelPart.RenderState`

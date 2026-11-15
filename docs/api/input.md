@@ -71,12 +71,16 @@ public enum Key {
 
 ### 9.2 Mouse
 
-- `MousePosition` is in window coordinates, top-left origin.
-- `MouseDelta` is the movement since the previous tick. It is especially useful with
-  `CursorMode.Disabled`.
+- `MousePosition` is in **render pixels** (physical framebuffer pixels) with a top-left origin, and
+  keeps fractional values. Pass it directly to `Camera.ScreenToWorldRay`, and compare
+  `Camera.WorldToScreen` output directly; no `RenderWidth / Width` conversion is needed.
+- `MouseDelta` is the movement in **render pixels** since the previous tick, including while the
+  cursor mode is `CursorMode.Disabled`. It is especially useful for look controls.
 - `MouseWheel` is the vertical wheel delta for the tick. Horizontal wheel and high-resolution
   scroll are post-1.0.
 - Mouse buttons use the five-button `MouseButton` enum.
+- The mouse position and delta are the only mouse values in render pixels. `MouseWheel`, the
+  mouse buttons, and the window sizes and bounds keep their existing values and units.
 
 ### 9.3 Gamepads
 

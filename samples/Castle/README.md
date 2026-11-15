@@ -92,9 +92,9 @@ part's local transform. The castle is drawn at `Transform.Identity`, so those mo
 the world-space bounds. They span approximately `(-24.0, 0.0, -16.3)` to `(18.2, 30.9, 16.3)`, about
 `42.2` by `30.9` by `32.7` world units.
 
-Every tick, `DrawHoverOverlay` converts `Input.MousePosition` from logical window units to render
-pixels with `Window.RenderWidth / Window.Width` and calls `Camera.ScreenToWorldRay`, which applies the
-camera viewport. `Collision.GetRayBox` then tests the ray against `_worldBounds`; when it misses, the
+Every tick, `DrawHoverOverlay` passes `Input.MousePosition` directly to `Camera.ScreenToWorldRay`,
+because both use render pixels with a top-left origin; the camera applies its own viewport.
+`Collision.GetRayBox` then tests the ray against `_worldBounds`; when it misses, the
 overlay draws nothing. When it hits, the sample draws the box in `Color.Cyan` with
 `Camera.DrawBoundingBox` and casts the same ray against the model:
 

@@ -128,6 +128,18 @@ rejected. Coverage is per face: the built-in Fira Sans Regular and JetBrains Mon
 Regular) faces cover
 Latin, Cyrillic, and Greek. A variable font that a game packs loads and renders its default instance.
 
+Mouse input now uses render pixels instead of logical window coordinates. `Input.MousePosition` and
+`Input.MouseDelta` are physical framebuffer pixels with a top-left origin and fractional values, so a
+game passes `MousePosition` directly to `Camera.ScreenToWorldRay` and compares `WorldToScreen` output
+directly. Remove any `RenderWidth / Width` conversion and any other window-to-render scaling from
+mouse code; on a 1x display `Width` and `RenderWidth` are equal, so such a game sees no change there,
+while on a scaled display its pointer would otherwise be scaled twice. `MouseWheel`, the mouse
+buttons, `Window.Width`/`Height`, `Window.SetSize`, and `Window.Bounds` keep their existing values and
+units. A game that kept mouse positions in window coordinates must convert them
+with `RenderWidth / Width` (or `RenderHeight / Height`) before comparing them with window sizes. This
+is a 0.x preview change and this paragraph is its migration note; after 1.0 the same change would
+need the obsolete/migration cycle above.
+
 The pack format and the runtime are versioned independently. A 1.x runtime reads a 1.x pack. A
 future pack v2 requires a runtime that advertises support; v1 rejects it rather than attempting a
 best-effort read.

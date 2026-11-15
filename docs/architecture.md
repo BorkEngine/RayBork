@@ -189,9 +189,14 @@ The implementation:
   resize to `WasResized` for exactly one tick. Clipboard reads return the cached value and queue a
   main-thread refresh.
 - `SdlInput` writes keyboard, mouse, text, and gamepad events into `InputState` under a `Lock`.
-  `CaptureInput` runs on the tick thread, clones the level and edge arrays, and clears the per-tick
-  text, mouse delta, wheel, and edge sets in the same critical section. A gamepad handle is stable
-  per SDL instance id; `Input.Gamepads` contains the pads connected for the current tick.
+  SDL reports mouse position and relative motion in window coordinates, so `SdlInput` scales both
+  axes by the window snapshot's `RenderWidth / Width` and `RenderHeight / Height` ratios at
+  ingestion; a non-positive window extent or a non-finite ratio falls back to `1`. The public
+  `Input.MousePosition` and `Input.MouseDelta` are therefore render pixels, the units
+  `Camera.ScreenToWorldRay` and `Camera.WorldToScreen` use. `CaptureInput` runs on the tick thread,
+  clones the level and edge arrays, and clears the per-tick text, mouse delta, wheel, and edge sets in
+  the same critical section. A gamepad handle is stable per SDL instance id; `Input.Gamepads` contains
+  the pads connected for the current tick.
 - Gamepad hotplug is reconciled on SDL gamepad-added/removed events and polled every 0.25 seconds.
   Buttons, sticks, and triggers are seeded from the initial device poll; vibration requests are
   queued to the main thread, so the tick thread never calls SDL directly.

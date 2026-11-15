@@ -85,6 +85,53 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MouseMotionScalesPositionAndDeltaToRenderPixels() {
+        SdlInput input = new(new TestGamepadVibrationSink(), () => new Vector2(1.5f, 2f));
+
+        input.HandleEvent(MouseMotionEvent(10f, 20f, 1.5f, -2.5f));
+
+        IInput snapshot = input.Capture();
+        Assert.Equal(new Vector2(15f, 40f), snapshot.MousePosition);
+        Assert.Equal(new Vector2(2.25f, -5f), snapshot.MouseDelta);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MouseMotionWithIdentityPixelScaleKeepsWindowValues() {
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
+
+        input.HandleEvent(MouseMotionEvent(10f, 20f, 1.5f, -2.5f));
+
+        IInput snapshot = input.Capture();
+        Assert.Equal(new Vector2(10f, 20f), snapshot.MousePosition);
+        Assert.Equal(new Vector2(1.5f, -2.5f), snapshot.MouseDelta);
+    }
+
+    [Theory]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    [InlineData(0f, 0f)]
+    [InlineData(0f, 100f)]
+    [InlineData(100f, 0f)]
+    [InlineData(-100f, 100f)]
+    [InlineData(100f, -100f)]
+    [InlineData(float.NaN, 100f)]
+    [InlineData(float.PositiveInfinity, 100f)]
+    [InlineData(100f, float.NaN)]
+    public void PixelScaleFallsBackToOneForInvalidRatios(float renderExtent, float windowExtent) {
+        Assert.Equal(Vector2.One, SdlInput.ComputePixelScale(renderExtent, renderExtent, windowExtent, windowExtent));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void PixelScaleUsesEachAxisRatioWithoutRounding() {
+        Vector2 scale = SdlInput.ComputePixelScale(renderWidth: 1200f, renderHeight: 800f, width: 800f, height: 600f);
+
+        Assert.Equal(1.5f, scale.X);
+        Assert.Equal(4f / 3f, scale.Y);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void UnsupportedMouseButtonsAreIgnored() {
         SdlInput input = new(new TestGamepadVibrationSink());
 
@@ -174,6 +221,19 @@ public sealed class SdlInputTests {
             Text = new SDL.TextInputEvent {
                 Type = SDL.EventType.TextInput,
                 Text = text,
+            },
+        };
+    }
+
+    private static SDL.Event MouseMotionEvent(float x, float y, float xRelative, float yRelative) {
+        return new SDL.Event {
+            Type = (uint)SDL.EventType.MouseMotion,
+            Motion = new SDL.MouseMotionEvent {
+                Type = SDL.EventType.MouseMotion,
+                X = x,
+                Y = y,
+                XRel = xRelative,
+                YRel = yRelative,
             },
         };
     }
