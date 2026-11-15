@@ -110,7 +110,7 @@ and `finally` stay on the closing-brace line.
 | Time | `double` seconds; monotonic `Stopwatch` |
 | Angle | User-facing RayBork APIs use **degrees**; raw `System.Numerics` rotation methods use radians |
 | Color | Linear float RGBA, HDR values allowed; AgX maps to the output |
-| Screen space | Top-left origin, pixels; `Window.Width/Height` are window coordinates, `RenderWidth/RenderHeight` are physical pixels |
+| Screen space | Top-left origin, pixels; `Input.MousePosition`/`Input.MouseDelta`, cameras, and viewports use physical render pixels; `Window.Width/Height` and `SetSize` are window coordinates |
 | Depth | Reverse-Z, `[0,1]`, clear `0.0`, default compare `GreaterOrEqual` |
 
 The engine flips Vulkan's Y-down NDC internally. World space stays Y-up. Public `gl_Position`

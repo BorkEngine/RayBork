@@ -55,13 +55,19 @@ public interface IInput {
     string TextInput { get; }
 
     /// <summary>
-    /// Gets the mouse position in logical window coordinates with a top-left origin.
+    /// Gets the mouse position in render pixels with a top-left origin.
     /// </summary>
+    /// <remarks>
+    /// Render pixels are physical framebuffer pixels, so the value is passed directly to
+    /// <see cref="Camera.ScreenToWorldRay"/> and compared directly with
+    /// <see cref="Camera.WorldToScreen"/> output. It is fractional and is not in
+    /// <see cref="IWindow.Width"/> window coordinates.
+    /// </remarks>
     Vector2 MousePosition { get; }
 
     /// <summary>
-    /// Gets the mouse movement in logical units since the previous tick. This is the preferred value
-    /// for look controls while the cursor mode is <see cref="CursorMode.Disabled"/>.
+    /// Gets the mouse movement in render pixels since the previous tick, including while the cursor
+    /// mode is <see cref="CursorMode.Disabled"/>.
     /// </summary>
     Vector2 MouseDelta { get; }
 

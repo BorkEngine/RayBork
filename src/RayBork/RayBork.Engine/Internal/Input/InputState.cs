@@ -84,8 +84,9 @@ internal sealed class InputState {
     }
 
     /// <summary>
-    /// Applies an SDL3 mouse-motion event. The position is the reported window position and the delta
-    /// sums the relative motion for the tick.
+    /// Applies an SDL3 mouse-motion event whose values are already scaled to render pixels. The
+    /// position replaces the absolute mouse position and the delta accumulates relative motion for the
+    /// tick.
     /// </summary>
     internal void HandleMouseMotion(float x, float y, float deltaX, float deltaY) {
         lock (_gate) {

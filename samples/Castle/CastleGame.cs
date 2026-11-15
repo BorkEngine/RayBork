@@ -129,12 +129,9 @@ internal sealed class CastleGame : IGame {
     /// Outlines the castle when the pointer ray hits its world bounds and marks the nearest mesh hit.
     /// </summary>
     private void DrawHoverOverlay(Camera camera, EngineContext context) {
-        // Input.MousePosition is in logical window units; ScreenToWorldRay takes render pixels in the
-        // target. RenderWidth / Width is the pixel ratio; DpiScale is the OS display scale and is not
-        // the conversion factor. ScreenToWorldRay applies the camera viewport itself.
-        Vector2 renderMouse = context.Input.MousePosition
-            * (context.Window.RenderWidth / (float)context.Window.Width);
-        Ray pointerRay = camera.ScreenToWorldRay(renderMouse);
+        // MousePosition and ScreenToWorldRay both use render pixels, so the pointer needs no unit
+        // conversion; ScreenToWorldRay applies the camera viewport itself.
+        Ray pointerRay = camera.ScreenToWorldRay(context.Input.MousePosition);
 
         if (!Collision.GetRayBox(pointerRay, _worldBounds).Hit) {
             return;
