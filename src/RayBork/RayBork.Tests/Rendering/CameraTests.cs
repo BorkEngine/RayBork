@@ -50,6 +50,176 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void UnifiedCreateCameraCreatesBothProjections() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+
+        using (Camera perspective = host.Service.CreateCamera(
+            Transform.Identity,
+            CameraProjection.Perspective,
+            fieldOfView: 75f,
+            orthographicHeight: 0f,
+            ClearMode.ColorAndDepth,
+            clearColor: null,
+            near: 0.1f,
+            far: 100f,
+            viewport: null)) {
+            Assert.Equal(CameraProjection.Perspective, perspective.Projection);
+            Assert.Equal(75f, perspective.FieldOfView);
+            Assert.Equal(0f, perspective.OrthographicHeight);
+        }
+
+        using (Camera orthographic = host.Service.CreateCamera(
+            Transform.Identity,
+            CameraProjection.Orthographic,
+            fieldOfView: 0f,
+            orthographicHeight: 4.5f,
+            ClearMode.ColorAndDepth,
+            clearColor: null,
+            near: 0.1f,
+            far: 100f,
+            viewport: null)) {
+            Assert.Equal(CameraProjection.Orthographic, orthographic.Projection);
+            Assert.Equal(0f, orthographic.FieldOfView);
+            Assert.Equal(4.5f, orthographic.OrthographicHeight);
+        }
+
+        host.EndFrame();
+    }
+
+    [Theory]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    [InlineData(CameraProjection.Perspective, 60f, 4f, "orthographicHeight")]
+    [InlineData(CameraProjection.Orthographic, 60f, 4f, "fieldOfView")]
+    [InlineData(CameraProjection.Perspective, 60f, 0.5f, "orthographicHeight")]
+    [InlineData(CameraProjection.Orthographic, 0.5f, 4f, "fieldOfView")]
+    public void UnifiedCreateCameraRejectsTheSizeArgumentOfTheOtherProjection(
+        CameraProjection projection,
+        float fieldOfView,
+        float orthographicHeight,
+        string expectedParameter) {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+
+        ArgumentException thrown = Assert.Throws<ArgumentException>(
+            () => host.Service.CreateCamera(
+                Transform.Identity,
+                projection,
+                fieldOfView,
+                orthographicHeight,
+                ClearMode.ColorAndDepth,
+                clearColor: null,
+                near: 0.1f,
+                far: 100f,
+                viewport: null));
+        Assert.Equal(expectedParameter, thrown.ParamName);
+
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void UnifiedCreateCameraRejectsAnUndefinedProjection() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => host.Service.CreateCamera(
+                Transform.Identity,
+                (CameraProjection)42,
+                fieldOfView: 60f,
+                orthographicHeight: 0f,
+                ClearMode.ColorAndDepth,
+                clearColor: null,
+                near: 0.1f,
+                far: 100f,
+                viewport: null));
+        Assert.Equal("projection", thrown.ParamName);
+
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void UnifiedCreateCameraAcceptsAnInfinitePerspectiveFarPlane() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+
+        Camera camera = host.Service.CreateCamera(
+            Transform.Identity,
+            CameraProjection.Perspective,
+            fieldOfView: 60f,
+            orthographicHeight: 0f,
+            ClearMode.ColorAndDepth,
+            clearColor: null,
+            near: 0.1f,
+            far: float.PositiveInfinity,
+            viewport: null);
+
+        Assert.Equal(float.PositiveInfinity, camera.Far);
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Theory]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    [InlineData(CameraProjection.Perspective, 0.1f, 0.1f)]
+    [InlineData(CameraProjection.Perspective, 0.1f, 0.05f)]
+    [InlineData(CameraProjection.Perspective, 0.1f, float.NaN)]
+    [InlineData(CameraProjection.Orthographic, 0.1f, float.PositiveInfinity)]
+    [InlineData(CameraProjection.Orthographic, 0.1f, 0.1f)]
+    [InlineData(CameraProjection.Orthographic, 0.1f, 0.05f)]
+    public void UnifiedCreateCameraEnforcesTheFarPlaneRules(
+        CameraProjection projection,
+        float near,
+        float far) {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+            () => host.Service.CreateCamera(
+                Transform.Identity,
+                projection,
+                projection == CameraProjection.Perspective ? 60f : 0f,
+                projection == CameraProjection.Perspective ? 0f : 4f,
+                ClearMode.ColorAndDepth,
+                clearColor: null,
+                near,
+                far,
+                viewport: null));
+        Assert.Equal("far", thrown.ParamName);
+
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void UnifiedCreateCameraAppliesClearModeColorAndViewport() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Color clearColor = new(0.25f, 0.5f, 2f, 1f);
+
+        Camera camera = host.Service.CreateCamera(
+            Transform.Identity,
+            CameraProjection.Orthographic,
+            fieldOfView: 0f,
+            orthographicHeight: 4f,
+            clearMode: ClearMode.Color,
+            clearColor,
+            near: 0.5f,
+            far: 50f,
+            viewport: new Rect(100f, 50f, 640f, 360f));
+
+        Assert.Equal(ClearMode.Color, camera.ClearMode);
+        Assert.Equal(clearColor, camera.ClearColor);
+        Assert.Equal(new Rect(100f, 50f, 640f, 360f), camera.Viewport);
+        Assert.Equal(2f / (4f * (640f / 360f)), camera.ProjectionMatrix.M11, TOLERANCE);
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void NullClearColorIsOpaqueBlackAndHdrValuesAreAccepted() {
         using CameraTestHost host = new();
         host.BeginFrame();
@@ -203,7 +373,9 @@ public sealed class CameraTests {
             Assert.Throws<InvalidOperationException>(
                 () => service.CreateCamera(
                     Transform.Identity,
+                    CameraProjection.Perspective,
                     60f,
+                    0f,
                     ClearMode.ColorAndDepth,
                     null,
                     0.1f,
@@ -223,7 +395,9 @@ public sealed class CameraTests {
         Assert.Throws<InvalidOperationException>(
             () => service.CreateCamera(
                 Transform.Identity,
+                CameraProjection.Perspective,
                 60f,
+                0f,
                 ClearMode.ColorAndDepth,
                 null,
                 0.1f,
@@ -285,6 +459,8 @@ public sealed class CameraTests {
             () => camera.DrawModelInstanced(model, [Transform.Identity]));
         Assert.Throws<ObjectDisposedException>(
             () => camera.ScreenToWorldRay(new Vector2(0f, 0f)));
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.ScreenToWorldTransform(new Vector2(0f, 0f), 1f));
         Assert.Throws<ObjectDisposedException>(
             () => camera.WorldToScreen(Vector3.Zero));
         Assert.True(camera.IsDisposed);
@@ -1076,6 +1252,159 @@ public sealed class CameraTests {
         Assert.Throws<ArgumentNullException>(() => camera.DrawInstanced(mesh, null!, [Transform.Identity]));
 
         camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScreenToWorldTransformRoundTripsForAPerspectiveCamera() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera(
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            fieldOfView: 60f);
+        const float distance = 7.5f;
+        float expectedScale = 2f * distance * MathF.Tan(60f * MathF.PI / 180f * 0.5f) / 720f;
+
+        Vector2[] points = [new(0f, 0f), new(640f, 360f), new(1279f, 719f)];
+        foreach (Vector2 point in points) {
+            Transform anchored = camera.ScreenToWorldTransform(point, distance);
+            Vector2 screen = camera.WorldToScreen(anchored.Position);
+
+            Assert.Equal(point.X, screen.X, 1e-3f);
+            Assert.Equal(point.Y, screen.Y, 1e-3f);
+            Assert.Equal(camera.Transform.Rotation, anchored.Rotation);
+            Assert.Equal(expectedScale, anchored.Scale.X, TOLERANCE);
+            Assert.Equal(expectedScale, anchored.Scale.Y, TOLERANCE);
+            Assert.Equal(expectedScale, anchored.Scale.Z, TOLERANCE);
+        }
+
+        // The viewport center lands on the camera's forward axis at the requested plane distance.
+        Vector3 center = camera.ScreenToWorldTransform(new Vector2(640f, 360f), distance).Position;
+        Assert.Equal(0f, center.X, 1e-4f);
+        Assert.Equal(0f, center.Y, 1e-4f);
+        Assert.Equal(-2.5f, center.Z, 1e-4f);
+
+        // The top-left pixel is left of and above the camera axis; the bottom-right pixel is the mirror.
+        Vector3 topLeft = camera.ScreenToWorldTransform(new Vector2(0f, 0f), distance).Position;
+        Vector3 bottomRight = camera.ScreenToWorldTransform(new Vector2(1280f, 720f), distance).Position;
+        Assert.True(topLeft.X < 0f);
+        Assert.True(topLeft.Y > 0f);
+        Assert.True(bottomRight.X > 0f);
+        Assert.True(bottomRight.Y < 0f);
+
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScreenToWorldTransformRoundTripsForAnOrthographicCamera() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Camera camera = host.CreateOrthographicCamera(
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            height: 4f);
+
+        Transform centered = camera.ScreenToWorldTransform(new Vector2(640f, 360f), 2f);
+        Assert.Equal(0f, centered.Position.X, 1e-4f);
+        Assert.Equal(0f, centered.Position.Y, 1e-4f);
+        Assert.Equal(3f, centered.Position.Z, 1e-4f);
+        Assert.Equal(camera.Transform.Rotation, centered.Rotation);
+        Assert.Equal(4f / 720f, centered.Scale.X, TOLERANCE);
+        Assert.Equal(4f / 720f, centered.Scale.Y, TOLERANCE);
+        Assert.Equal(4f / 720f, centered.Scale.Z, TOLERANCE);
+
+        // Height 4 gives a half-height of 2 and a half-width of 2 * 16/9 at the default viewport.
+        Transform topLeft = camera.ScreenToWorldTransform(new Vector2(0f, 0f), 2f);
+        Assert.Equal(-2f * (1280f / 720f), topLeft.Position.X, 1e-4f);
+        Assert.Equal(2f, topLeft.Position.Y, 1e-4f);
+        Assert.Equal(3f, topLeft.Position.Z, 1e-4f);
+        Vector2 screen = camera.WorldToScreen(topLeft.Position);
+        Assert.Equal(0f, screen.X, 1e-3f);
+        Assert.Equal(0f, screen.Y, 1e-3f);
+
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScreenToWorldTransformUsesTheCameraRotation() {
+        Quaternion rotation = Quaternion.Normalize(Quaternion.CreateFromYawPitchRoll(0.7f, -0.35f, 0.2f));
+        Transform cameraTransform = new(new Vector3(2f, -1f, 6f), rotation, Vector3.One);
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera(transform: cameraTransform, fieldOfView: 55f);
+        Vector2 point = new(900f, 200f);
+        const float distance = 12f;
+
+        Transform anchored = camera.ScreenToWorldTransform(point, distance);
+        Vector2 screen = camera.WorldToScreen(anchored.Position);
+
+        Assert.Equal(point.X, screen.X, 5e-3f);
+        Assert.Equal(point.Y, screen.Y, 5e-3f);
+        Assert.Equal(camera.Transform.Rotation, anchored.Rotation);
+        float expectedScale = 2f * distance * MathF.Tan(55f * MathF.PI / 180f * 0.5f) / 720f;
+        Assert.Equal(expectedScale, anchored.Scale.X, TOLERANCE);
+        // Local +Z is the screen-facing plane normal, opposite the camera's forward axis.
+        Vector3 facing = Vector3.Transform(Vector3.UnitZ, anchored.Rotation);
+        Assert.Equal(1f, Vector3.Dot(facing, -camera.Transform.Forward), 1e-4f);
+
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScreenToWorldTransformUsesViewportRelativePixels() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera(
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            fieldOfView: 60f,
+            viewport: new Rect(100f, 50f, 640f, 360f));
+        Vector2 relative = new(20f, 30f);
+        const float distance = 10f;
+
+        Transform anchored = camera.ScreenToWorldTransform(relative, distance);
+        Vector2 screen = camera.WorldToScreen(anchored.Position);
+
+        // WorldToScreen reports target pixels, so the viewport origin is added back for comparison.
+        Assert.Equal(relative.X + 100f, screen.X, 1e-3f);
+        Assert.Equal(relative.Y + 50f, screen.Y, 1e-3f);
+        float expectedScale = 2f * distance * MathF.Tan(60f * MathF.PI / 180f * 0.5f) / 360f;
+        Assert.Equal(expectedScale, anchored.Scale.X, TOLERANCE);
+
+        camera.Dispose();
+        host.EndFrame();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScreenToWorldTransformValidatesItsArgumentsAndDisposal() {
+        using CameraTestHost host = new();
+        host.BeginFrame();
+        Camera camera = host.CreatePerspectiveCamera();
+
+        foreach (float distance in new[] { 0f, -1f, float.NaN, float.PositiveInfinity }) {
+            ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
+                () => camera.ScreenToWorldTransform(Vector2.Zero, distance));
+            Assert.Equal("distance", thrown.ParamName);
+        }
+
+        Assert.Equal(
+            "point",
+            Assert.Throws<ArgumentException>(
+                () => camera.ScreenToWorldTransform(new Vector2(float.NaN, 0f), 1f)).ParamName);
+        Assert.Equal(
+            "point",
+            Assert.Throws<ArgumentException>(
+                () => camera.ScreenToWorldTransform(new Vector2(0f, float.PositiveInfinity), 1f)).ParamName);
+
+        camera.Dispose();
+        Assert.Throws<ObjectDisposedException>(
+            () => camera.ScreenToWorldTransform(Vector2.Zero, 1f));
         host.EndFrame();
     }
 

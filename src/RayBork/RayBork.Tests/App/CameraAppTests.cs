@@ -220,19 +220,54 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateCameraRejectsTheOrthographicProjection() {
-        Exception? failure = null;
+    public void CreateCameraDefaultsToAFinitePerspectiveFarPlane() {
+        float? far = null;
+        ScriptedGame game = new() {
+            TickHandler = context => {
+                using Camera camera = context.CreateCamera(
+                    Transform.Identity,
+                    CameraProjection.Perspective,
+                    60f);
+                far = camera.Far;
+                context.RequestExit();
+            },
+        };
+        using AppTestHost host = new(game);
+
+        host.App.Run();
+
+        Assert.Equal(1000f, far);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CreateCameraRejectsTheSizeArgumentOfTheOtherProjection() {
+        Exception? orthographicFailure = null;
+        Exception? perspectiveFailure = null;
         ScriptedGame game = new() {
             TickHandler = context => {
                 try {
                     context.CreateCamera(
                         Transform.Identity,
                         CameraProjection.Orthographic,
-                        60f,
+                        fieldOfView: 60f,
+                        orthographicHeight: 4f,
                         near: 0.1f,
                         far: 100f);
                 } catch (Exception exception) {
-                    failure = exception;
+                    orthographicFailure = exception;
+                }
+
+                try {
+                    context.CreateCamera(
+                        Transform.Identity,
+                        CameraProjection.Perspective,
+                        fieldOfView: 60f,
+                        orthographicHeight: 4f,
+                        near: 0.1f,
+                        far: 100f);
+                } catch (Exception exception) {
+                    perspectiveFailure = exception;
                 }
 
                 context.RequestExit();
@@ -242,8 +277,10 @@ public sealed class CameraAppTests {
 
         host.App.Run();
 
-        ArgumentException thrown = Assert.IsType<ArgumentException>(failure);
-        Assert.Equal("projection", thrown.ParamName);
+        ArgumentException orthographic = Assert.IsType<ArgumentException>(orthographicFailure);
+        Assert.Equal("fieldOfView", orthographic.ParamName);
+        ArgumentException perspective = Assert.IsType<ArgumentException>(perspectiveFailure);
+        Assert.Equal("orthographicHeight", perspective.ParamName);
     }
 
     private readonly record struct SubmittedFrame(

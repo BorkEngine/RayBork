@@ -151,15 +151,20 @@ public sealed class EngineContext {
         => _proceduralAssets.CreateTextureBuilder(width, height, format, generateMips, sampler);
 
     /// <summary>
-    /// Creates a perspective camera that records one pass into the current frame.
+    /// Creates a camera for the requested projection that records one pass into the current frame.
+    /// Exactly the size argument selected by <paramref name="projection"/> is used.
     /// </summary>
     /// <param name="transform">The world-space camera transform. The camera looks down local <c>-Z</c>.</param>
-    /// <param name="projection">
-    /// The projection kind. M4 accepts <see cref="CameraProjection.Perspective"/> here; use
-    /// <see cref="CreateOrthographicCamera"/> when an orthographic height is needed.
-    /// </param>
+    /// <param name="projection">The projection kind.</param>
     /// <param name="fieldOfView">
-    /// The vertical field of view in degrees. It must be finite and inside <c>(0, 180)</c>.
+    /// The perspective vertical field of view in degrees. It must be finite and inside <c>(0, 180)</c>
+    /// for a perspective camera and must be <c>0</c> for an orthographic camera, which uses
+    /// <paramref name="orthographicHeight"/> instead.
+    /// </param>
+    /// <param name="orthographicHeight">
+    /// The visible world-space height. It must be finite and greater than zero for an orthographic
+    /// camera and must be <c>0</c> for a perspective camera, which uses
+    /// <paramref name="fieldOfView"/> instead.
     /// </param>
     /// <param name="clearMode">The buffers the pass clears. The default is color and depth.</param>
     /// <param name="clearColor">
@@ -169,7 +174,8 @@ public sealed class EngineContext {
     /// <param name="near">The near clip distance. It must be finite and greater than zero.</param>
     /// <param name="far">
     /// The far clip distance. It must be greater than <paramref name="near"/>; positive infinity is
-    /// allowed for a perspective camera.
+    /// allowed for a perspective camera and rejected for an orthographic camera. The default is
+    /// <c>1000</c>; pass <see cref="float.PositiveInfinity"/> for an infinite perspective far plane.
     /// </param>
     /// <param name="viewport">
     /// The pixel viewport, or <see langword="null"/> for the full window render size. The rectangle is
@@ -177,10 +183,13 @@ public sealed class EngineContext {
     /// </param>
     /// <returns>The camera. Dispose it before <see cref="IGame.Tick"/> returns.</returns>
     /// <exception cref="ArgumentException">
-    /// <paramref name="projection"/> is <see cref="CameraProjection.Orthographic"/>, the resolved
+    /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
     /// viewport is invalid or empty, or the clear color has a non-finite component.
     /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A projection or clip-plane parameter is outside its range.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="projection"/> is not defined, or a selected projection or clip-plane parameter is
+    /// outside its range.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
     /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
     /// transform is singular.
@@ -193,65 +202,23 @@ public sealed class EngineContext {
     public Camera CreateCamera(
         Transform transform,
         CameraProjection projection,
-        float fieldOfView,
-        ClearMode clearMode = ClearMode.ColorAndDepth,
-        Color? clearColor = null,
-        float near = 0.01f,
-        float far = float.PositiveInfinity,
-        Rect? viewport = null) {
-        if (!Enum.IsDefined(projection)) {
-            throw new ArgumentOutOfRangeException(nameof(projection), projection, "The projection is not a defined value.");
-        }
-
-        if (projection != CameraProjection.Perspective) {
-            throw new ArgumentException(
-                "CreateCamera records a perspective camera. Use CreateOrthographicCamera for an "
-                    + "orthographic camera, which requires a visible height.",
-                nameof(projection));
-        }
-
-        return _cameras.CreateCamera(transform, fieldOfView, clearMode, clearColor, near, far, viewport);
-    }
-
-    /// <summary>
-    /// Creates an orthographic camera that records one pass into the current frame.
-    /// </summary>
-    /// <param name="transform">The world-space camera transform. The camera looks down local <c>-Z</c>.</param>
-    /// <param name="height">The visible world-space height. It must be finite and greater than zero.</param>
-    /// <param name="clearMode">The buffers the pass clears. The default is color and depth.</param>
-    /// <param name="clearColor">
-    /// The linear clear color. <see langword="null"/> means opaque black; HDR components above <c>1</c>
-    /// are allowed.
-    /// </param>
-    /// <param name="near">The near clip distance. It must be finite and greater than zero.</param>
-    /// <param name="far">The finite far clip distance. It must be greater than <paramref name="near"/>.</param>
-    /// <param name="viewport">
-    /// The pixel viewport, or <see langword="null"/> for the full window render size. The rectangle is
-    /// clamped to the target and must not clamp to an empty region.
-    /// </param>
-    /// <returns>The camera. Dispose it before <see cref="IGame.Tick"/> returns.</returns>
-    /// <exception cref="ArgumentException">
-    /// The resolved viewport is invalid or empty, or the clear color has a non-finite component.
-    /// </exception>
-    /// <exception cref="ArgumentOutOfRangeException">A projection or clip-plane parameter is outside its range.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
-    /// transform is singular.
-    /// </exception>
-    /// <remarks>
-    /// Legal only during <see cref="IGame.Tick"/>. Cameras are sequential: dispose one before creating
-    /// the next. A camera left undisposed when the tick returns stops the app with
-    /// <see cref="InvalidOperationException"/> naming it; the frame is not published.
-    /// </remarks>
-    public Camera CreateOrthographicCamera(
-        Transform transform,
-        float height,
+        float fieldOfView = 0f,
+        float orthographicHeight = 0f,
         ClearMode clearMode = ClearMode.ColorAndDepth,
         Color? clearColor = null,
         float near = 0.01f,
         float far = 1000f,
         Rect? viewport = null)
-        => _cameras.CreateOrthographicCamera(transform, height, clearMode, clearColor, near, far, viewport);
+        => _cameras.CreateCamera(
+            transform,
+            projection,
+            fieldOfView,
+            orthographicHeight,
+            clearMode,
+            clearColor,
+            near,
+            far,
+            viewport);
 
     /// <summary>
     /// Gets the input snapshot for the current tick. Read it on the tick thread.

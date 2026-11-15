@@ -51,7 +51,9 @@ internal sealed class CameraTestHost : IDisposable {
         Rect? viewport = null)
         => Service.CreateCamera(
             transform ?? Transform.Identity,
+            CameraProjection.Perspective,
             fieldOfView,
+            orthographicHeight: 0f,
             clearMode,
             clearColor,
             near,
@@ -66,8 +68,10 @@ internal sealed class CameraTestHost : IDisposable {
         float near = 0.1f,
         float far = 100f,
         Rect? viewport = null)
-        => Service.CreateOrthographicCamera(
+        => Service.CreateCamera(
             transform ?? Transform.Identity,
+            CameraProjection.Orthographic,
+            fieldOfView: 0f,
             height,
             clearMode,
             clearColor,

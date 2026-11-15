@@ -88,6 +88,55 @@ internal static class CameraMath {
     }
 
     /// <summary>
+    /// Validates the parameters of a camera projection: exactly the size argument selected by the
+    /// projection is used, and the other size argument must be left at zero.
+    /// </summary>
+    /// <param name="projection">The projection kind.</param>
+    /// <param name="fieldOfView">The perspective vertical field of view in degrees.</param>
+    /// <param name="orthographicHeight">The orthographic visible world-space height.</param>
+    /// <param name="near">The near clip distance.</param>
+    /// <param name="far">The far clip distance.</param>
+    /// <exception cref="ArgumentException">
+    /// The size argument that does not belong to <paramref name="projection"/> is nonzero.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="projection"/> is not a defined value, or a selected parameter is outside its
+    /// documented range.
+    /// </exception>
+    internal static void ValidateProjection(
+        CameraProjection projection,
+        float fieldOfView,
+        float orthographicHeight,
+        float near,
+        float far) {
+        switch (projection) {
+            case CameraProjection.Perspective:
+                if (orthographicHeight != 0f) {
+                    throw new ArgumentException(
+                        "A perspective camera uses fieldOfView and requires orthographicHeight to be 0.",
+                        nameof(orthographicHeight));
+                }
+
+                ValidatePerspective(fieldOfView, near, far);
+                break;
+            case CameraProjection.Orthographic:
+                if (fieldOfView != 0f) {
+                    throw new ArgumentException(
+                        "An orthographic camera uses orthographicHeight and requires fieldOfView to be 0.",
+                        nameof(fieldOfView));
+                }
+
+                ValidateOrthographic(orthographicHeight, near, far);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(projection),
+                    projection,
+                    "The projection is not a defined value.");
+        }
+    }
+
+    /// <summary>
     /// Validates the perspective camera parameters.
     /// </summary>
     /// <param name="fieldOfView">The vertical field of view in degrees.</param>

@@ -27,6 +27,14 @@ namespace RayBork;
 /// </remarks>
 public readonly struct BoundingFrustum {
     /// <summary>
+    /// The signed-distance slack <see cref="Intersects"/> allows for the positive box corner. Without
+    /// it, a box exactly on a frustum plane, or a full-screen quad recorded at the view boundary, can
+    /// be culled by floating-point drift in the extracted plane. <see cref="Contains"/> keeps its exact
+    /// non-negative test.
+    /// </summary>
+    private const float PLANE_TOLERANCE = 1e-4f;
+
+    /// <summary>
     /// Extracts the six normalized planes from a view-projection matrix.
     /// </summary>
     /// <param name="viewProjection">
@@ -99,7 +107,9 @@ public readonly struct BoundingFrustum {
             plane.Normal.X >= 0f ? bounds.Max.X : bounds.Min.X,
             plane.Normal.Y >= 0f ? bounds.Max.Y : bounds.Min.Y,
             plane.Normal.Z >= 0f ? bounds.Max.Z : bounds.Min.Z);
-        return Plane.DotCoordinate(plane, positiveVertex) >= 0f;
+        // Accept a positive corner that is only within tolerance behind the plane: boundary-aligned
+        // geometry must not flicker out of the frame because of plane-extraction rounding.
+        return Plane.DotCoordinate(plane, positiveVertex) >= -PLANE_TOLERANCE;
     }
 
     private static Plane CreatePlane(Vector4 coefficients) {
