@@ -28,12 +28,12 @@ Every tick records up to four camera passes in creation order:
    barrier for the later pass.
 3. A later orthographic HUD camera loads the scene color, clears depth, and draws the status panel.
 
-The offscreen scene has a central rotating cube, a ring of four colored cubes, a sphere, and a grid;
-its camera orbits the other way. The main scene has a rotating ring of six cubes, a stand, and the
-monitor that shows the offscreen color. The monitor sways around the vertical axis but never turns its
-back to the camera, so the offscreen content stays readable. The monitor is a textured `DrawQuad`; it
-uses the same world-space 2D primitive path as every other quad in the samples, and the target's
-`ColorTexture` is the texture.
+The offscreen scene has a central cube, a ring of four colored cubes that turns the opposite way while
+the offscreen camera orbits, a sphere, and a grid. The main scene has a rotating ring of six cubes, a
+stand, and the monitor that shows the offscreen color. The monitor sways around the vertical axis but
+never turns its back to the camera, so the offscreen content stays readable. The monitor is a textured
+`DrawQuad`; it uses the same world-space 2D primitive path as every other quad in the samples, and the
+target's `ColorTexture` is the texture.
 
 ## Split-screen
 
@@ -144,8 +144,9 @@ needs no image codec or extra package.
 | `Escape` | Request exit. |
 
 The HUD shows the current split and effect state, the target description, and the last readback
-status. The main camera, both split cameras, and the HUD camera all use the window render size; the
-HUD is an ordinary later camera and has no post-process stack.
+status. The main camera, both split cameras, and the HUD camera all target the window render size; the
+split cameras use left and right half-width viewports of it. The HUD is an ordinary later camera and
+has no post-process stack.
 
 ## Options
 

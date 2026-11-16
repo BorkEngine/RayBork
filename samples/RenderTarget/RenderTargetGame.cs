@@ -42,6 +42,9 @@ internal sealed class RenderTargetGame : IGame {
     private const float HUD_PADDING_PIXELS = 8f;
     private const float HUD_PANEL_HEIGHT = 92f;
 
+    // A split view needs two non-empty viewports; a 1-pixel-wide window cannot hold them.
+    private const int MIN_SPLIT_RENDER_WIDTH = 2;
+
     private static readonly Color _background = Color.FromSrgbBytes(14, 18, 28);
     private static readonly Color _offscreenBackground = Color.FromSrgbBytes(10, 14, 24);
     private static readonly Color _splitLeftBackground = Color.FromSrgbBytes(54, 28, 20);
@@ -184,7 +187,7 @@ internal sealed class RenderTargetGame : IGame {
             DrawOffscreenScene(offscreen);
         }
 
-        if (_splitScreen) {
+        if (_splitScreen && context.Window.RenderWidth >= MIN_SPLIT_RENDER_WIDTH) {
             DrawSplitScreen(context);
         } else {
             // The main scene samples the offscreen target on the monitor and applies the custom
@@ -322,17 +325,18 @@ internal sealed class RenderTargetGame : IGame {
             HUD_PLANE_DISTANCE);
         camera.DrawText(
             context.Defaults.DefaultMonoFont,
-            BuildStatusText(),
+            BuildStatusText(context),
             text,
             HUD_TEXT_PIXEL_HEIGHT,
             _hudText);
     }
 
-    private string BuildStatusText() {
+    private string BuildStatusText(EngineContext context) {
+        bool splitScreen = _splitScreen && context.Window.RenderWidth >= MIN_SPLIT_RENDER_WIDTH;
         string effect = _postEffects.Enabled ? "on" : "off";
         string controls = FormattableString.Invariant(
-            $"S split-screen ({(_splitScreen ? "on" : "off")})   E vignette ({effect})   F2 readback   R reset   Esc exit");
-        string scene = _splitScreen
+            $"S split-screen ({(splitScreen ? "on" : "off")})   E vignette ({effect}, single view)   F2 readback   R reset   Esc exit");
+        string scene = splitScreen
             ? FormattableString.Invariant(
                 $"scene split view, left/right cameras (no post effect)   target {_target!.Width}x{_target.Height} rgba16-float {_target.SampleCount}x")
             : FormattableString.Invariant(
