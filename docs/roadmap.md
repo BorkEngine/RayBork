@@ -436,8 +436,10 @@ automatic instancing, and per-instance textures/uniforms.
   block per frame slot, so a frame that recorded more than one camera pass gave every pass the last
   recorded pass' view-projection, view, projection, camera position, and viewport. The M8 shader ABI
   v2 writes one frame block per camera pass into a storage-buffer array and selects it with a
-  push-constant pass index, so multiple cameras with different views are correct. Split-screen layout
-  and the separate multi-camera overlay pass remain the M8 render-pass work.
+  push-constant pass index, so multiple cameras with different views are correct. The M8 camera-pass
+  work records one render pass per camera pass on the HDR scene target, with the clamped viewport as
+  the render area, so split-screen views and viewport-scoped clears are correct. There is no separate
+  multi-camera overlay pass: a HUD is an ordinary later camera.
 
 **Risks.** This is the largest milestone. The shader ABI and per-instance layout can force changes
 in the bake, the renderer, and the sample at the same time. Prototype the ABI on two shaders before
@@ -987,8 +989,9 @@ blocking glyph generation.
   through `ScreenToWorldTransform` and the world-space `DrawText` overload, not a screen-space draw
   API. MSDF sharp
   corners are not extended, so a small artifact can appear at very large sizes. A status overlay on
-  a screen-aligned plane can still be occluded by geometry closer than that plane, and the separate
-  overlay pass is M8. M6 ships text as
+  a screen-aligned plane can still be occluded by geometry closer than that plane; a HUD that must
+  not be occluded is an ordinary later camera that loads the scene color and clears depth. M6 ships
+  text as
   alpha-blended (derivative antialiasing, transparent batch, no depth writes); M10 makes the
   alpha-to-coverage cutout the default so text needs no sorting and resolves overlapping glyphs by
   depth, keeping the alpha path for translucent text.
@@ -1012,8 +1015,8 @@ blocking glyph generation.
   or wait for post-1.0 work; the samples state the per-face boundary honestly.
 - **World-space text.** M7 adds `ScreenToWorldTransform` so a text block can be anchored to a screen
   pixel on a camera-facing plane, but the draw is still world-space geometry. The sample overlays
-  are alpha text on that plane, so geometry closer than it can occlude them; a separate overlay pass
-  is M8 work, not an M7 feature already shipped.
+  are alpha text on that plane, so geometry closer than it can occlude them. M8 does not add a
+  separate overlay pass either: a HUD that must not be occluded is an ordinary later camera.
 
 ### M7 — Orthographic rendering and the screen-space surface
 
@@ -1048,8 +1051,10 @@ blocking glyph generation.
   keyboard/gamepad input, pause, restart; a two-project solution with a build-time bake, and the M7
   Native AOT gate.
 - Remove the M1-M3 `samples/HelloInterop` diagnostic host.
-- **Deferred to M8, not shipped in M7:** a separate multi-camera overlay pass and per-pass frame
-  data. The M7 HUD is same-pass text on a screen-aligned plane.
+- **Deferred to M8, not shipped in M7:** per-pass frame data and multiple cameras to the scene
+  target. M8 ships one frame block per camera pass and one render pass per camera; the M7 HUD stays
+  same-pass text on a screen-aligned plane, and a HUD that must not be occluded becomes an ordinary
+  later camera rather than a separate overlay pass.
 
 **Exit criteria.**
 
@@ -1137,8 +1142,9 @@ details:
   `DrawText(..., 18f, ...)`. The returned scale keeps 18 local units at 18 render pixels in either
   projection. This is same-pass, screen-aligned text: it is alpha-blended with no depth write, so
   geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass.
-  Shader ABI v2 provides per-pass frame data, so the M4 one-frame-block limitation no longer applies;
-  only a dedicated multi-camera overlay pass remains pending in the M8 render-pass work.
+  Shader ABI v2 provides per-pass frame data, so the M4 one-frame-block limitation no longer applies,
+  and M8 records one render pass per camera pass, so a HUD that must not be occluded is an ordinary
+  later camera that loads the scene color and clears depth.
 - **Nine primitive meshes.** The engine builds one more internal primitive mesh, the unit disc,
   alongside cube, sphere, plane, quad, triangle, line, wire cube, and wire sphere. The disc is one
   center vertex plus 36 rim vertices and 36 triangles, built once before `IGame.Setup` through the
@@ -1199,9 +1205,10 @@ details:
 - **HelloInterop removed.** The M1-M3 `samples/HelloInterop` diagnostic host is gone; the Pong,
   Text, Castle, and PrimitiveGallery samples and the test suite cover the host, input, time,
   logging, renderer, and asset-loading surface it exercised.
-- **Overlay pass deferred.** The M7 scope listed a screen-space overlay pass; the shipped HUD is
-  same-pass text, and the separate multi-camera overlay pass is M8 render-pass work.
-  M7 does not claim it as shipped.
+- **No separate overlay pass.** The M7 scope listed a screen-space overlay pass; the shipped HUD is
+  same-pass text. M8 does not add a separate overlay or layer pass either: a HUD that must not be
+  occluded is an ordinary later camera that loads the scene color and clears depth. M7 does not claim
+  an overlay pass as shipped, and M8 does not reintroduce one.
 
 **Risks.**
 
@@ -1211,9 +1218,9 @@ details:
   camera; the samples keep the camera transform at unit scale.
 - **Same-pass HUD occlusion.** The M7 HUD is depth-tested alpha text on a screen-aligned plane, so
   geometry closer than the overlay plane can occlude it. Shader ABI v2 provides per-pass frame data,
-  so the one-frame-block limitation no longer prevents different per-pass views in one frame; only a
-  dedicated multi-camera overlay pass remains pending in the M8 render-pass work. The current
-  occlusion behavior is documented rather than hidden.
+  and M8 records one render pass per camera pass, so a HUD that must not be occluded is an ordinary
+  later camera that loads the scene color and clears depth. The same-pass occlusion behavior stays
+  documented rather than hidden.
 - **No 2D draw API.** Games porting a raylib-style 2D renderer must draw through
   `ScreenToWorldTransform` and the world-space primitives instead of screen-coordinate overloads.
   This is a deliberate design choice: one draw path, one batch key, and no duplicate 2D renderer.
@@ -1239,10 +1246,12 @@ details:
 - Camera target routing and viewport rectangles.
 - Image and resolve barriers between passes; write-after-read validation.
 - Multiple cameras to the HDR scene target and to offscreen targets.
+- One render pass per camera pass on the HDR scene target, with the clamped viewport as the render
+  area, viewport-scoped clears, and load/store between passes. Each pass carries its own frame block,
+  so split-screen views and layered HUD cameras are correct. A HUD is an ordinary later camera, not a
+  separate overlay or layer pass.
 - Per-pass frame data: one frame block per camera pass, so multiple cameras with different
   views are correct instead of sharing the last pass' values.
-- A separate multi-camera overlay pass for HUD text and sprites that must not be occluded by scene
-  depth; the M7 HUD is same-pass and is the deferred input to this work.
 - `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots; raw HDR readback is post-1.0.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
   simple post-process shader, and present.
@@ -1253,7 +1262,13 @@ details:
 
 - Render-to-texture produces the same visible image as the direct path (within tolerance).
 - A post-process shader samples the color target without validation errors.
-- Split-screen renders two independent views in one frame.
+- Split-screen renders two independent camera views into the HDR scene target in one frame, and each
+  camera's clear stays inside its clamped viewport.
+- A later camera with `ClearMode.None` keeps the earlier pass' color and depth; `ClearMode.Depth`
+  clears depth only, and the frame passes validation with both the multisampled and single-sample
+  scene targets.
+- A HUD that must not be occluded renders as an ordinary later camera; there is no separate overlay
+  or layer pass.
 - `ReadPixelsAsync` returns the expected top-left display-referred RGBA8 image and completes
   without stalling the next tick indefinitely.
 - Resizing a target while it is not in use works; resizing while in use fails with a clear error.

@@ -322,7 +322,9 @@ presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware Vulkan path is not
 ## Next step
 
 M8 adds render targets, multiple cameras, and readback: `RenderTexture` with color/depth attachments,
-MSAA resolve, resize, and sampling; camera target routing and per-pass frame data; image barriers
-between passes; a separate multi-camera overlay pass; `ReadPixelsAsync`; and the RenderTarget and
-split-screen samples. It builds on the M7 screen-space surface and the M4 camera; the shipped surface
-is listed in [API reference §1.6](docs/api.md#16-milestone-availability).
+MSAA resolve, resize, and sampling; camera target routing, per-camera render passes with
+viewport-scoped clears, and per-pass frame data; image barriers between passes; `ReadPixelsAsync`; and
+the RenderTarget and split-screen samples. Multiple cameras and split-screen viewports render to the
+HDR scene target, and a HUD is an ordinary later camera rather than a separate overlay pass. It builds
+on the M7 screen-space surface and the M4 camera; the shipped surface is listed in
+[API reference §1.6](docs/api.md#16-milestone-availability).

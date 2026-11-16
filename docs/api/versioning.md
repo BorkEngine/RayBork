@@ -147,9 +147,12 @@ keeps its exact identity behavior. There is no `DrawTexture` and no 2D or screen
 family: a sprite is a textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and HUD text uses
 `ScreenToWorldTransform` with the world-space `DrawText` overload and a pixel-sized `size`. The
 screen transform requires a unit-scale camera transform; a scaled camera transform is invalid for
-it, and there is no `ScreenToWorldPoint`. The M7 HUD is same-pass text, so geometry closer than the
-overlay plane can occlude it; shader ABI v2 already provides per-pass frame data, and only a separate
-multi-camera overlay pass remains deferred to the M8 render-pass work. These are 0.x preview changes
+it, and there is no `ScreenToWorldPoint`. A HUD drawn in a scene camera is same-pass text, so
+geometry closer than the overlay plane can occlude it; a HUD that must not be occluded is an ordinary
+later camera that loads the scene color and clears depth, not a separate overlay pass. Shader ABI v2
+provides one frame block per camera pass, and the renderer records one render pass per camera pass
+with the clamped viewport as the render area, so multiple cameras and split-screen viewports are
+correct. These are 0.x preview changes
 and this paragraph is their migration note; after 1.0
 a breaking change to this surface would need the obsolete/migration cycle above.
 

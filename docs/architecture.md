@@ -241,7 +241,7 @@ The backend owns:
 | --- | --- | --- |
 | `Initialize` | Render | Creates the instance, requests the native surface through `RendererBackendOptions.SurfaceProvider`, then creates the device, queues, swapchain, scene target, present pipeline, and frame resources. Failure is fatal (`RB3001`; a platform surface failure surfaces as `RB2003` on the main thread and is wrapped as `RB3001` on the render thread). |
 | `Resize` | Render | Recreates the swapchain, scene target, present pipeline framebuffers, and per-image semaphores when the selected extent changes. A zero width or height marks the surface as having no drawable extent and keeps the presentation path. It is idempotent for an unchanged extent. |
-| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, clears the multisampled scene target per camera pass, resolves color, records the present pass, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
+| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area, loads/stores the scene attachments between passes, resolves each pass' render area, transitions the resolved color for the present pass, records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
 | `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
@@ -317,8 +317,8 @@ is presented, and disposal remains safe after a failed recovery.
 The backend also exposes internal GPU-test accessors (`Instance`, `Device`, `SceneTarget`), fault
 injection for the recovery tests, and the `VulkanReadback` single-pixel probes. These are
 diagnostics, not seam members: a readback creates its own command pool, staging buffer, and fence
-and stalls the GPU, so it is never used by the frame path. The scene color is resolved to a
-single-sample image the present pass samples; multisampled depth is not resolved.
+and stalls the GPU, so it is never used by the frame path. Each camera pass resolves its own render
+area to the single-sample image the present pass samples; multisampled depth is not resolved.
 
 M3 adds the `GpuAssetBridge` as an internal companion to the backend, not a new seam operation. The
 render loop drains upload and destroy requests before frame waits and recreates live asset resources
@@ -511,8 +511,10 @@ wait for the render loop to finish with it   wait for newest ready
 - Frames carry the camera passes and the recorded draw records: mesh, internal shader program,
   effective render state, instance matrices, per-instance uniform bytes, and bindless texture
   references. Primitive helpers record the same kind of draw record with an engine mesh. A tick with
-  no camera pass still clears the linear HDR target; the present pass always
-  draws one fullscreen triangle, which is not counted in `RenderStats.DrawCalls`.
+  no camera pass records no camera render pass: the target content is undefined for that frame, the
+  present pass still draws one fullscreen triangle, and the frame reports zero scene draw statistics.
+  A game that needs a defined blank frame records a clearing camera. The present triangle is not
+  counted in `RenderStats.DrawCalls`.
 - A frame also carries the tone-mapping snapshot: exposure in stops, AgX white, and AgX contrast,
   copied from `EngineContext.Tonemapping` when the tick seals the frame. The present push constants
   and the scene shader's frame block read the snapshot, so the render thread never reads the live
@@ -574,7 +576,9 @@ wait for the render loop to finish with it   wait for newest ready
 - The scene target uses `R16G16B16A16_SFLOAT` color and `D32_SFLOAT` depth. The present pass
   samples the resolved color and applies exposure, `TonemappingMode`, and the output encoding.
 - MSAA defaults to 4x; scene color is resolved to a single-sample image before presentation, and
-  the swapchain images are single-sample. The HDR and SDR paths share the resolve.
+  the swapchain images are single-sample. The HDR and SDR paths share the resolve. Each camera pass
+  resolves its own render area, and the multisampled color and depth attachments are stored between
+  camera passes so a later camera can load them.
 - Projection is built for Vulkan's `[0,1]` depth range and reverse-Z:
   - near plane maps to depth `1.0`;
   - infinity maps to `0.0`;
@@ -607,9 +611,14 @@ wants a pixel-authored 2D layout maps its design space to render pixels, calls
 orthographic camera per tick, a `1280x720` design playfield fitted into the render pixels, and every
 draw anchored with the screen transform. Castle uses the same screen transform for its status line
 and toggles its one camera between perspective and orthographic. The HUD is same-pass, screen-aligned
-alpha text; it is not a separate overlay pass, and geometry closer than its plane can occlude it. A
-multi-camera overlay pass is pending M8 render-pass work; shader ABI v2 already provides per-pass
-frame data.
+alpha text; it is not a separate overlay pass, and geometry closer than its plane can occlude it.
+Multiple cameras and viewport rectangles are supported: each camera pass is its own render pass with
+the clamped viewport as the render area, so a game can render split-screen views and layered HUD
+passes into the HDR scene target in one tick. A HUD that must not be occluded is an ordinary later
+camera that loads the scene color and clears depth (`ClearMode.Depth`), or keeps both
+(`ClearMode.None`) when the HUD should remain depth-tested; there is no separate overlay or layer
+pass. Shader ABI v2 gives every camera pass
+its own frame data.
 
 **HDR selection.** The cached `WindowHdrState` drives the swapchain choice. When the window has HDR
 enabled, the renderer selects `R16G16B16A16_SFLOAT` with
@@ -651,17 +660,21 @@ offsets 28, 32, and 36 (`tonemapping`, `encoding`, `reserved`). `exposureMultipl
 for linear clamp, `1` for manual sRGB encode, and `2` for scRGB HDR (scaled by the SDR white level,
 not clamped). The `awp*` fields are the CPU-derived allenwp curve parameters; the shader has no
 separate HDR highlight stage, no AgX white-point constant, and no log-range clamp. Scene clear
-control belongs to the camera pass: each camera clears its clamped viewport with its own `ClearMode`
-and `ClearColor`, and there is no builder-level clear color. The present triangle is not a scene draw
-and is not counted in `RenderStats.DrawCalls`.
+control belongs to the camera pass: each camera pass is its own render pass with the clamped viewport
+as the render area, clears that rectangle with its own `ClearMode` and `ClearColor`, and there is no
+builder-level clear color. The color and depth attachments load the previous camera pass' stored
+content and store their own, so `ClearMode.None` keeps the earlier color and depth, `ClearMode.Color`
+keeps depth, and `ClearMode.Depth` keeps color. The present triangle is not a scene draw and is not
+counted in `RenderStats.DrawCalls`.
 
 **MSAA and depth.** The requested sample count comes from `WithMSAA` (default 4); the effective
 count is the highest device-supported count that does not exceed the request, or `1` when none is
 supported, and a mismatch logs a warning. The scene target color and depth attachments use the
-effective count; the color attachment is resolved to a single-sample sampled image. Depth is
-cleared to `0.0` per camera pass and the reverse-Z comparison state is defined, but multisampled
-depth is not resolved because nothing samples depth until M8. The present triangle is not
-depth-tested; the geometry pipelines consume the reverse-Z state.
+effective count; the color attachment is resolved to a single-sample sampled image once per camera
+render area. Depth is cleared to `0.0` per camera pass and the reverse-Z comparison state is defined;
+the multisampled color and depth attachments are stored between camera passes so a later pass can
+load them, but multisampled depth is not resolved because nothing samples depth. The present triangle
+is not depth-tested; the geometry pipelines consume the reverse-Z state.
 
 The reverse-Z perspective projection used by the engine is, for row vectors:
 
@@ -898,8 +911,11 @@ buffer and pushes that pass's index before its draws. A frame with more than one
 therefore submits each pass's own view-projection, view, projection, camera position, and viewport,
 so multiple cameras with different views are correct instead of sharing the last pass's values. The
 descriptor set stays bound once per frame; the frame buffer grows when a frame records more passes
-and the slot fence has already signaled. The separate multi-camera overlay pass for HUD text and
-sprites is a different M8 task and is not part of the frame-data change.
+and the slot fence has already signaled. Each camera pass is its own render pass with the clamped
+viewport as the render area, so a later camera loads the earlier pass' stored color and depth. A HUD
+that must not be occluded is an ordinary later camera that loads the scene color and clears depth
+(`ClearMode.Depth`), or keeps both (`ClearMode.None`) when it should remain depth-tested; there is no
+separate overlay or layer pass.
 
 Vulkan instancing consumes one vertex/index buffer, so different meshes with the same shader are
 still separate draws in v1. Multi-draw indirect is post-1.0.
@@ -1183,8 +1199,10 @@ out-of-range layout arguments are `ArgumentException`/`ArgumentOutOfRangeExcepti
 transform scale or empty text records nothing. Text is world-space geometry. M7 adds the
 screen-space pattern: `ScreenToWorldTransform(point, distance)` returns a camera-rotation transform
 with a world-units-per-render-pixel scale, and passing it to `DrawText` anchors a pixel-sized block
-to a screen pixel. There is still no screen-space draw API, no `DrawText(Vector2)` overload, and no
-separate overlay pass; a multi-camera overlay pass is pending M8 render-pass work.
+to a screen pixel. There is still no screen-space draw API and no `DrawText(Vector2)` overload.
+Text drawn in a scene camera is alpha-blended and can be occluded by closer geometry; a HUD that
+must not be occluded is an ordinary later camera that loads the scene color and clears depth, not a
+separate overlay or layer pass.
 
 
 ### GPU upload bridge and frame retention
@@ -1461,6 +1479,18 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed
   and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes only SDR,
   and the GPU-filtered run is 107 passed with the same 7 skips.
+- M8 adds the per-camera render-pass suite (`CameraRenderPassGpuTests`): two camera passes in one
+  frame render split-screen views with two viewport rectangles and different projections, a later
+  camera with `ClearMode.None` loads the earlier pass' color, a later camera with `ClearMode.Depth`
+  replaces the earlier depth while `ClearMode.None` keeps it (on both the single-sample and
+  multisampled targets), two cameras that clear their own viewports keep their own color, a first
+  camera with `ClearMode.None` records validation-clean undefined content, a negative and oversized
+  viewport clamps to the target, and a frame with no camera pass presents with zero scene
+  statistics. The suite asserts draw/instance/triangle statistics, single-pixel resolved-color
+  probes, and single-sample depth probes with explicit tolerances, and every test requires a
+  validation-clean submission. The host validates core Vulkan usage, not synchronization, so the
+  suite does not prove the access masks against the validation layer's synchronization model.
+  `PerPassFrameGpuTests` keeps covering the shader ABI v2 per-pass frame block.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
