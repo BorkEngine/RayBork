@@ -17,25 +17,32 @@ namespace RayBork.Internal;
 /// record time, so any texture the material had bound to those names is ignored. Every other uniform
 /// and texture binding comes from the snapshot.
 /// </para>
+/// <para>
+/// A snapshot is pooled by its effect and reused for a later camera: the uniform buffer, texture array,
+/// and instance layout are kept and refilled instead of reallocated. The custom effect records exactly
+/// one entry in <see cref="InstanceLayout"/>.
+/// </para>
 /// </remarks>
 internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapshot {
     private EngineAsset? _program;
     private byte[] _instanceData = [];
+    private int _instanceDataLength;
     private Texture?[] _textures = [];
     private int _textureCount;
+    private readonly PostProcessInstanceRecord[] _instanceLayout = [default];
     private int _sourceColorBinding;
     private int _sourceDepthBinding;
 
     private ShaderPostProcessEffectSnapshot() {
     }
 
-    /// <summary>Gets the internal shader program asset the effect runs, or <c>null</c> after a reset.</summary>
-    internal EngineAsset? ProgramAsset => _program;
-
     /// <summary>
     /// Gets the captured per-instance uniform bytes, without the 96-byte instance header.
     /// </summary>
-    internal ReadOnlySpan<byte> InstanceData => _instanceData.AsSpan(0, _instanceData.Length);
+    internal ReadOnlySpan<byte> InstanceData => _instanceData.AsSpan(0, _instanceDataLength);
+
+    /// <summary>Gets the frozen instance-record stride of the effect's one fullscreen pass.</summary>
+    internal int InstanceStride => _instanceLayout[0].Stride;
 
     /// <summary>Gets the texture binding index that receives the source color.</summary>
     internal int SourceColorBinding => _sourceColorBinding;
@@ -50,14 +57,17 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     internal override ReadOnlySpan<Texture?> TextureValues => _textures.AsSpan(0, _textureCount);
 
     /// <inheritdoc/>
-    internal override int InstanceStride => ShaderAbiLayout.INSTANCE_HEADER_SIZE + _instanceData.Length;
+    internal override ReadOnlySpan<PostProcessInstanceRecord> InstanceLayout => _instanceLayout;
 
     /// <inheritdoc/>
-    internal override int InstanceRecordCount => 1;
+    internal override bool IsReservedTextureBinding(int index) =>
+        index == _sourceColorBinding || index == _sourceDepthBinding;
 
     /// <summary>
-    /// Creates a snapshot from a shader program and one material cursor state.
+    /// Rents a snapshot from the effect's pool, or creates one, and fills it from a shader program and
+    /// one material cursor state.
     /// </summary>
+    /// <param name="owner">The effect that will pool the snapshot after its camera pass is recycled.</param>
     /// <param name="program">The shader program the material uses.</param>
     /// <param name="instanceData">The material's captured uniform data without the instance header.</param>
     /// <param name="textures">The material's captured texture bindings in declaration order.</param>
@@ -70,7 +80,9 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     /// </param>
     /// <param name="targetDescription">The target name used in the depthless-target error.</param>
     /// <returns>The captured snapshot.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="program"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="owner"/> or <paramref name="program"/> is <c>null</c>.
+    /// </exception>
     /// <exception cref="ArgumentException">
     /// The texture array does not hold one binding per program texture, or a reserved slot is outside
     /// the declared bindings.
@@ -78,7 +90,8 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     /// <exception cref="InvalidOperationException">
     /// The shader declares <c>sourceDepth</c> but the target has no depth attachment.
     /// </exception>
-    internal static ShaderPostProcessEffectSnapshot Create(
+    internal static ShaderPostProcessEffectSnapshot Rent(
+        PostProcessEffect owner,
         ShaderProgram program,
         ReadOnlySpan<byte> instanceData,
         ReadOnlySpan<Texture?> textures,
@@ -86,6 +99,7 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
         int sourceDepthBinding,
         bool targetHasDepth,
         string targetDescription) {
+        ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(program);
         int textureCount = program.Abi.Textures.Count;
         if (textures.Length != textureCount) {
@@ -113,15 +127,14 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
             }
         }
 
-        ShaderPostProcessEffectSnapshot snapshot = new() {
-            _program = program.Lifetime,
-            _instanceData = instanceData.ToArray(),
-            _textures = new Texture?[textureCount],
-            _textureCount = textureCount,
-            _sourceColorBinding = sourceColorBinding,
-            _sourceDepthBinding = sourceDepthBinding,
-        };
-        textures.CopyTo(snapshot._textures);
+        ShaderPostProcessEffectSnapshot snapshot =
+            owner.TakeSnapshot<ShaderPostProcessEffectSnapshot>() ?? new ShaderPostProcessEffectSnapshot();
+        snapshot.Fill(
+            program,
+            instanceData,
+            textures,
+            sourceColorBinding,
+            sourceDepthBinding);
         return snapshot;
     }
 
@@ -134,6 +147,11 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
 
         retention.Add(_program);
         for (int index = 0; index < _textureCount; index++) {
+            if (IsReservedTextureBinding(index)) {
+                // The engine overrides the reserved binding, so its material value is never sampled.
+                continue;
+            }
+
             Texture? texture = _textures[index];
             if (texture is not null) {
                 retention.Add(texture.RetentionTarget);
@@ -142,23 +160,50 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     }
 
     /// <inheritdoc/>
-    internal override void Reset() {
+    protected override void ReleaseState() {
         _program = null;
         Array.Clear(_textures, 0, _textureCount);
         _textureCount = 0;
-        _instanceData = [];
+        _instanceDataLength = 0;
         _sourceColorBinding = 0;
         _sourceDepthBinding = -1;
+        _instanceLayout[0] = default;
     }
 
     /// <inheritdoc/>
     internal override void Run(PostProcessContext context) {
         ArgumentNullException.ThrowIfNull(context);
         EngineAsset program = _program ?? throw new InvalidOperationException(
-            "The post-process effect snapshot was reset before the frame rendered it.");
+            "The post-process effect snapshot ran after it was reset.");
         VulkanPostTarget destination = context.RentColorTarget();
         context.RecordCustomShaderPass(destination, this, program);
         context.CompleteColorTarget(destination);
+    }
+
+    private void Fill(
+        ShaderProgram program,
+        ReadOnlySpan<byte> instanceData,
+        ReadOnlySpan<Texture?> textures,
+        int sourceColorBinding,
+        int sourceDepthBinding) {
+        _program = program.Lifetime;
+        if (_instanceData.Length < instanceData.Length) {
+            _instanceData = new byte[instanceData.Length];
+        }
+
+        instanceData.CopyTo(_instanceData);
+        _instanceDataLength = instanceData.Length;
+        if (_textures.Length < textures.Length) {
+            _textures = new Texture?[textures.Length];
+        }
+
+        textures.CopyTo(_textures);
+        _textureCount = textures.Length;
+        _sourceColorBinding = sourceColorBinding;
+        _sourceDepthBinding = sourceDepthBinding;
+        _instanceLayout[0] = new PostProcessInstanceRecord(
+            ShaderAbiLayout.INSTANCE_HEADER_SIZE + instanceData.Length,
+            1);
     }
 
     private static void ValidateReservedBinding(ShaderProgram program, int binding, string parameterName) {

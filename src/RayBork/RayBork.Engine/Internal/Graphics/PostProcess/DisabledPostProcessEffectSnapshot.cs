@@ -15,6 +15,9 @@ internal sealed class DisabledPostProcessEffectSnapshot : PostProcessEffectSnaps
     }
 
     /// <inheritdoc/>
+    internal override bool IsShared => true;
+
+    /// <inheritdoc/>
     internal override bool Enabled => false;
 
     /// <inheritdoc/>

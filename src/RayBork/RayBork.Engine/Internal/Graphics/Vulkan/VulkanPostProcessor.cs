@@ -25,16 +25,18 @@ namespace RayBork.Internal;
 /// pass still references. <see cref="BeginFrame"/> keeps the extents the previous frame on that slot used
 /// and destroys the rest after the slot's fence signaled, so a resize or a changed target set recycles
 /// its images one frame later and the steady state allocates nothing. A device recovery disposes and
-/// recreates the whole processor. Each post target allocates one bindless slot so a custom effect can
-/// sample it through the shader ABI's reserved source bindings, and one descriptor set for the
-/// store-back pass' own sampler layout. Render-thread only; the normal path allocates nothing after
-/// warm-up.
+/// recreates the whole processor. Each post target allocates one bindless slot so an effect can sample
+/// it through the shader ABI, and one descriptor set for the store-back pass' own sampler layout.
+/// Render-thread only; the normal path allocates nothing after warm-up.
 /// </para>
 /// <para>
 /// The SSAO and bloom effects hook in through <see cref="PostProcessEffectSnapshot"/> and
-/// <see cref="PostProcessContext"/>: a built-in effect rents additional target-sized color targets, records
-/// its own pipeline passes against them, and completes the final target; this processor then runs the
-/// same store-back. No built-in effect exists in this task.
+/// <see cref="PostProcessContext"/>. A built-in rents a target-sized or smaller color target from the
+/// same pool, creates a fullscreen pipeline against the post render pass, writes one instance record per
+/// pass, and records the pass with the engine quad and frame descriptor set. It completes its final
+/// target-sized result with <see cref="PostProcessContext.CompleteColorTarget"/>, or releases an
+/// intermediate target with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>; this processor then
+/// runs the same store-back. No built-in effect exists in this task.
 /// </para>
 /// </remarks>
 internal sealed unsafe class VulkanPostProcessor : IDisposable {
@@ -66,7 +68,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     private VulkanPostStoreBackPipeline? _storeBack;
     private VulkanFullscreenQuad? _quad;
     private PostProcessContext? _context;
-    private PostTargetPair? _activePair;
+    private PostTargetSlot? _activeSlot;
     private bool _disposed;
 
     private VulkanPostProcessor(
@@ -166,7 +168,6 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     /// <param name="targetColorSlot">The target's resolved color bindless slot.</param>
     /// <param name="targetDepthSlot">The target's resolved depth bindless slot, or <c>0</c>.</param>
     /// <param name="renderArea">The camera viewport rectangle the store-back writes.</param>
-    /// <param name="viewport">The camera viewport for the store-back pass.</param>
     /// <param name="instanceByteOffset">
     /// The next unused instance-buffer byte offset; advanced past the recorded effect instances.
     /// </param>
@@ -185,7 +186,6 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         uint targetColorSlot,
         uint targetDepthSlot,
         Rect2D renderArea,
-        Viewport viewport,
         ref ulong instanceByteOffset) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(frame);
@@ -196,13 +196,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         }
 
         PostTargetSlot slot = _slots[frameSlot];
-        if (!slot.TryGet(target.Extent, frame.FrameIndex, out PostTargetPair? pair)) {
-            pair = CreatePair(target.Extent);
-            slot.Add(target.Extent, pair, frame.FrameIndex);
-            TargetRecreationCount++;
-        }
-
-        _activePair = pair;
+        _activeSlot = slot;
         try {
             PostProcessContext context = _context!;
             context.Reset(
@@ -215,7 +209,6 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
                 target,
                 target.Extent,
                 renderArea,
-                viewport,
                 targetColorSlot,
                 targetDepthSlot,
                 instanceByteOffset);
@@ -233,7 +226,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
 
             instanceByteOffset = context.InstanceByteOffset;
         } finally {
-            _activePair = null;
+            _activeSlot = null;
         }
     }
 
@@ -253,44 +246,237 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         }
     }
 
+    /// <summary>Gets the Vulkan device that owns the post render pass, pipelines, and targets.</summary>
+    internal VulkanDevice Device => _device;
+
     /// <summary>
-    /// Rents a target-sized post target for the next pass and transitions it for writing. The two-target
-    /// ping-pong alternates so the current source is never overwritten.
+    /// Gets the color-only single-sample render pass every post target is built against. A built-in
+    /// effect creates its pipelines against this pass.
+    /// </summary>
+    internal RenderPass PostRenderPass => _postRenderPass;
+
+    /// <summary>
+    /// Gets the engine pipeline layout a fullscreen post pipeline must use so it can read the frame
+    /// block and instance records and receive the pass-index push constant.
+    /// </summary>
+    internal PipelineLayout PipelineLayout => _geometryPipelineLayout;
+
+    /// <summary>
+    /// Gets the forced render state a post-process pipeline uses: opaque, no culling, no depth test or
+    /// write, because the post render pass has no depth attachment.
+    /// </summary>
+    internal static RenderState FullscreenRenderState => _forcedRenderState;
+
+    /// <summary>
+    /// Gets the frame descriptor set that binds the frame block and instance-record storage buffer.
+    /// </summary>
+    /// <param name="frameSlot">The frame ring slot being recorded.</param>
+    /// <returns>The descriptor set to bind at set 0.</returns>
+    internal DescriptorSet GetFrameDescriptorSet(int frameSlot) =>
+        _frameResources.GetDescriptorSet(frameSlot);
+
+    /// <summary>
+    /// Gets a writable range of the frame slot's instance-record storage.
+    /// </summary>
+    /// <param name="frameSlot">The frame ring slot being recorded.</param>
+    /// <param name="byteOffset">The record's byte offset.</param>
+    /// <param name="stride">The record's size in bytes.</param>
+    /// <returns>The writable record span.</returns>
+    internal Span<byte> GetInstanceRecordSpan(int frameSlot, ulong byteOffset, int stride) =>
+        _frameResources.GetInstanceSpan(frameSlot, byteOffset, (ulong)stride);
+
+    /// <summary>
+    /// Gets or creates a fullscreen pipeline for a baked shader against the post render pass, using the
+    /// engine pipeline layout and the requested render state.
+    /// </summary>
+    /// <param name="program">The internal shader program asset.</param>
+    /// <param name="renderState">The render state to bake into the pipeline.</param>
+    /// <returns>The cached pipeline.</returns>
+    internal Pipeline GetOrCreateFullscreenPipeline(EngineAsset program, RenderState renderState) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(program);
+        VulkanShaderAssetResource shader = Vulkan12Backend.RequireShaderResource(program);
+        return _postPipelines!.GetOrCreate(shader, renderState, RayBork.PrimitiveTopology.TriangleList);
+    }
+
+    /// <summary>
+    /// Rents a target-sized post target for the next pass and transitions it for writing.
     /// </summary>
     /// <param name="context">The current camera pass context.</param>
     /// <returns>The target to write.</returns>
+    internal VulkanPostTarget RentColorTarget(PostProcessContext context) => RentColorTarget(context, context.Extent);
+
+    /// <summary>
+    /// Rents a post target of any extent from the per-extent pool and transitions it for writing.
+    /// </summary>
+    /// <remarks>
+    /// The rent alternates within the extent's two-target pair, so consecutive passes never overwrite the
+    /// previous pass' image. A built-in effect uses this for an intermediate pass at a different
+    /// resolution, such as a bloom downsample, and releases it with
+    /// <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>.
+    /// </remarks>
+    /// <param name="context">The current camera pass context.</param>
+    /// <param name="extent">The positive target extent.</param>
+    /// <returns>The target to write.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="extent"/> has a zero dimension.</exception>
     /// <exception cref="InvalidOperationException">
     /// No post chain is active; only an effect's <c>Run</c> may rent a target.
     /// </exception>
-    internal VulkanPostTarget RentColorTarget(PostProcessContext context) {
+    internal VulkanPostTarget RentColorTarget(PostProcessContext context, Extent2D extent) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(context);
-        PostTargetPair pair = _activePair ?? throw new InvalidOperationException(
-            "A post-process target can be rented only while the renderer runs a camera pass' effect chain.");
-        VulkanPostTarget target;
-        if (context.CurrentColorTarget is null) {
-            target = pair.First;
-        } else if (ReferenceEquals(context.CurrentColorTarget, pair.First)) {
-            target = pair.Second;
-        } else {
-            target = pair.First;
+        if (extent.Width == 0 || extent.Height == 0) {
+            throw new ArgumentOutOfRangeException(nameof(extent), extent, "The post target extent must be positive.");
         }
 
+        PostTargetSlot slot = _activeSlot ?? throw new InvalidOperationException(
+            "A post-process target can be rented only while the renderer runs a camera pass' effect chain.");
+        PostTargetPair pair = GetTargetPair(slot, extent, context.Frame.FrameIndex);
+        VulkanPostTarget target = pair.Rent();
         target.TransitionToColorAttachment(context.Vulkan, context.CommandBuffer);
         return target;
     }
 
     /// <summary>
-    /// Transitions a rendered post target to a shader read and makes it the chain source.
+    /// Transitions a rendered post target to a shader read and makes it the chain source. The target
+    /// must be camera-target-sized, because the store-back maps the camera viewport through it.
     /// </summary>
     /// <param name="context">The current camera pass context.</param>
     /// <param name="target">The target the effect rendered into.</param>
+    /// <exception cref="InvalidOperationException">
+    /// The target is not the camera target's size; complete an intermediate-sized result with
+    /// <see cref="PostProcessContext.CompleteAuxiliaryTarget"/> instead.
+    /// </exception>
     internal void CompleteColorTarget(PostProcessContext context, VulkanPostTarget target) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(target);
+        if (target.Extent.Width != context.Extent.Width || target.Extent.Height != context.Extent.Height) {
+            throw new InvalidOperationException(
+                $"The post-process chain completed a {target.Extent.Width}x{target.Extent.Height} target, "
+                    + $"but the camera target is {context.Extent.Width}x{context.Extent.Height}. A chain's "
+                    + "final target must be camera-target-sized; complete an intermediate result with "
+                    + "CompleteAuxiliaryTarget and upscale it into a target-sized target.");
+        }
+
         target.TransitionToShaderRead(context.Vulkan, context.CommandBuffer);
         context.SetCurrentColorTarget(target);
+    }
+
+    /// <summary>
+    /// Transitions an auxiliary post target to a shader read without making it the chain source, so a
+    /// built-in effect can sample it in a later pass.
+    /// </summary>
+    /// <param name="context">The current camera pass context.</param>
+    /// <param name="target">The auxiliary target the effect rendered into.</param>
+    internal void CompleteAuxiliaryTarget(PostProcessContext context, VulkanPostTarget target) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(target);
+        target.TransitionToShaderRead(context.Vulkan, context.CommandBuffer);
+    }
+
+    /// <summary>
+    /// Records one fullscreen pass from a post target into another with a pipeline created against the
+    /// post render pass, the engine fullscreen quad, and the frame descriptor set.
+    /// </summary>
+    /// <remarks>
+    /// The caller reserves and writes the pass' instance record first with
+    /// <see cref="PostProcessContext.ReserveInstanceRecord"/> and
+    /// <see cref="PostProcessContext.GetInstanceRecordSpan"/>, and writes every texture index slot
+    /// itself. A custom shader effect and a built-in multi-pass effect both use this recorder.
+    /// </remarks>
+    /// <param name="context">The current camera pass context.</param>
+    /// <param name="destination">The rented target to write.</param>
+    /// <param name="pipeline">The fullscreen pipeline to draw with.</param>
+    /// <param name="instanceByteOffset">The reserved record's stride-aligned byte offset.</param>
+    /// <param name="stride">The record's size in bytes.</param>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="pipeline"/> is the default handle or <paramref name="instanceByteOffset"/> is not
+    /// stride-aligned.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stride"/> is not positive.</exception>
+    /// <exception cref="InvalidOperationException">No post chain is active.</exception>
+    internal void RecordFullscreenPass(
+        PostProcessContext context,
+        VulkanPostTarget destination,
+        Pipeline pipeline,
+        ulong instanceByteOffset,
+        int stride) {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(destination);
+        if (pipeline.Handle == 0) {
+            throw new ArgumentException("The fullscreen pass pipeline must not be the default handle.", nameof(pipeline));
+        }
+
+        if (stride <= 0) {
+            throw new ArgumentOutOfRangeException(nameof(stride), stride, "The instance record stride must be positive.");
+        }
+
+        if (instanceByteOffset % (ulong)stride != 0) {
+            throw new ArgumentException(
+                $"The instance byte offset {instanceByteOffset} is not aligned to the {stride}-byte record stride.",
+                nameof(instanceByteOffset));
+        }
+
+        if (_activeSlot is null) {
+            throw new InvalidOperationException(
+                "A fullscreen post-process pass can be recorded only while the renderer runs a camera pass' "
+                    + "effect chain.");
+        }
+
+        Vk vulkan = context.Vulkan;
+        CommandBuffer commandBuffer = context.CommandBuffer;
+        Extent2D extent = destination.Extent;
+        Rect2D renderArea = new() {
+            Offset = new Offset2D { X = 0, Y = 0 },
+            Extent = extent,
+        };
+        Viewport viewport = new() {
+            X = 0f,
+            Y = 0f,
+            Width = extent.Width,
+            Height = extent.Height,
+            MinDepth = VulkanDepthState.MIN_DEPTH,
+            MaxDepth = VulkanDepthState.MAX_DEPTH,
+        };
+        RenderPassBeginInfo beginInfo = new() {
+            SType = StructureType.RenderPassBeginInfo,
+            RenderPass = _postRenderPass,
+            Framebuffer = destination.Framebuffer,
+            RenderArea = renderArea,
+            ClearValueCount = 0,
+            PClearValues = null,
+        };
+        DescriptorSet descriptorSet = _frameResources.GetDescriptorSet(context.FrameSlot);
+        uint firstInstance = checked((uint)(instanceByteOffset / (ulong)stride));
+        vulkan.CmdBeginRenderPass(commandBuffer, &beginInfo, SubpassContents.Inline);
+        vulkan.CmdSetViewport(commandBuffer, 0, 1, &viewport);
+        vulkan.CmdSetScissor(commandBuffer, 0, 1, &renderArea);
+        vulkan.CmdBindDescriptorSets(
+            commandBuffer,
+            PipelineBindPoint.Graphics,
+            _geometryPipelineLayout,
+            0,
+            1,
+            &descriptorSet,
+            0,
+            null);
+        vulkan.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, pipeline);
+        Buffer vertexBuffer = _quad!.VertexBuffer;
+        ulong vertexOffset = 0;
+        vulkan.CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
+        vulkan.CmdBindIndexBuffer(commandBuffer, _quad.IndexBuffer, 0, IndexType.Uint32);
+        PushPassIndex(vulkan, commandBuffer, context.PassIndex);
+        vulkan.CmdDrawIndexed(
+            commandBuffer,
+            VulkanFullscreenQuad.IndexCount,
+            1,
+            0,
+            0,
+            firstInstance);
+        vulkan.CmdEndRenderPass(commandBuffer);
     }
 
     /// <summary>
@@ -316,18 +502,10 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(program);
 
-        VulkanShaderAssetResource shader = Vulkan12Backend.RequireShaderResource(program);
-        Pipeline pipeline = _postPipelines!.GetOrCreate(
-            shader,
-            _forcedRenderState,
-            RayBork.PrimitiveTopology.TriangleList);
-
+        Pipeline pipeline = GetOrCreateFullscreenPipeline(program, _forcedRenderState);
         int stride = snapshot.InstanceStride;
-        ulong byteOffset = VulkanInstanceRecordWriter.AlignUp(context.InstanceByteOffset, (ulong)stride);
-        Span<byte> record = _frameResources.GetInstanceSpan(
-            context.FrameSlot,
-            byteOffset,
-            (ulong)stride);
+        ulong byteOffset = context.ReserveInstanceRecord(stride);
+        Span<byte> record = context.GetInstanceRecordSpan(byteOffset, stride);
         VulkanInstanceRecordWriter.WriteMatrix(record, ShaderAbiLayout.TRANSFORM_OFFSET, Matrix4x4.Identity);
         VulkanInstanceRecordWriter.WriteVector4(record, ShaderAbiLayout.COLOR_OFFSET, Vector4.One);
         VulkanInstanceRecordWriter.WriteVector4(
@@ -361,59 +539,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
                 slot);
         }
 
-        uint firstInstance = checked((uint)(byteOffset / (ulong)stride));
-        context.InstanceByteOffset = byteOffset + (ulong)stride;
-
-        Vk vulkan = context.Vulkan;
-        CommandBuffer commandBuffer = context.CommandBuffer;
-        Extent2D extent = context.Extent;
-        Rect2D renderArea = new() {
-            Offset = new Offset2D { X = 0, Y = 0 },
-            Extent = extent,
-        };
-        Viewport viewport = new() {
-            X = 0f,
-            Y = 0f,
-            Width = extent.Width,
-            Height = extent.Height,
-            MinDepth = VulkanDepthState.MIN_DEPTH,
-            MaxDepth = VulkanDepthState.MAX_DEPTH,
-        };
-        RenderPassBeginInfo beginInfo = new() {
-            SType = StructureType.RenderPassBeginInfo,
-            RenderPass = _postRenderPass,
-            Framebuffer = destination.Framebuffer,
-            RenderArea = renderArea,
-            ClearValueCount = 0,
-            PClearValues = null,
-        };
-        DescriptorSet descriptorSet = _frameResources.GetDescriptorSet(context.FrameSlot);
-        vulkan.CmdBeginRenderPass(commandBuffer, &beginInfo, SubpassContents.Inline);
-        vulkan.CmdSetViewport(commandBuffer, 0, 1, &viewport);
-        vulkan.CmdSetScissor(commandBuffer, 0, 1, &renderArea);
-        vulkan.CmdBindDescriptorSets(
-            commandBuffer,
-            PipelineBindPoint.Graphics,
-            _geometryPipelineLayout,
-            0,
-            1,
-            &descriptorSet,
-            0,
-            null);
-        vulkan.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, pipeline);
-        Buffer vertexBuffer = _quad!.VertexBuffer;
-        ulong vertexOffset = 0;
-        vulkan.CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
-        vulkan.CmdBindIndexBuffer(commandBuffer, _quad.IndexBuffer, 0, IndexType.Uint32);
-        PushPassIndex(vulkan, commandBuffer, context.PassIndex);
-        vulkan.CmdDrawIndexed(
-            commandBuffer,
-            VulkanFullscreenQuad.IndexCount,
-            1,
-            0,
-            0,
-            firstInstance);
-        vulkan.CmdEndRenderPass(commandBuffer);
+        RecordFullscreenPass(context, destination, pipeline, byteOffset, stride);
     }
 
     /// <summary>
@@ -491,7 +617,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         }
 
         _context = null;
-        _activePair = null;
+        _activeSlot = null;
     }
 
     private void CreateResources() {
@@ -583,6 +709,25 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         }
     }
 
+    /// <summary>
+    /// Gets or creates the post-target pair for one extent in a frame slot and marks it used by this
+    /// frame.
+    /// </summary>
+    /// <param name="slot">The frame slot's pool.</param>
+    /// <param name="extent">The positive target extent.</param>
+    /// <param name="frameIndex">The recording frame's index.</param>
+    /// <returns>The pair to ping-pong through.</returns>
+    private PostTargetPair GetTargetPair(PostTargetSlot slot, Extent2D extent, long frameIndex) {
+        if (slot.TryGet(extent, frameIndex, out PostTargetPair? pair)) {
+            return pair;
+        }
+
+        pair = CreatePair(extent);
+        slot.Add(extent, pair, frameIndex);
+        TargetRecreationCount++;
+        return pair;
+    }
+
     private TargetStoreBack GetStoreBack(VulkanRenderTarget target) {
         if (_storeBacks.TryGetValue(target, out TargetStoreBack cached)) {
             return cached;
@@ -642,14 +787,27 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     private readonly record struct TargetStoreBack(RenderPass RenderPass, Framebuffer Framebuffer);
 
     /// <summary>
-    /// One target-sized pair of post targets the chain ping-pongs through.
+    /// One post-target pair the renderer ping-pongs through for one extent. The pair owns its two
+    /// target-sized images; <see cref="Rent"/> alternates between them so consecutive passes never
+    /// overwrite the previous pass' image.
     /// </summary>
     private sealed class PostTargetPair(VulkanPostTarget first, VulkanPostTarget second) {
+        private VulkanPostTarget? _lastRented;
+
         internal VulkanPostTarget First { get; } = first;
 
         internal VulkanPostTarget Second { get; } = second;
 
+        /// <summary>Gets the next target to write: the one not written by the previous pass.</summary>
+        /// <returns>The alternating target.</returns>
+        internal VulkanPostTarget Rent() {
+            VulkanPostTarget target = ReferenceEquals(_lastRented, First) ? Second : First;
+            _lastRented = target;
+            return target;
+        }
+
         internal void DisposeTargets() {
+            _lastRented = null;
             First.Dispose();
             Second.Dispose();
         }

@@ -15,11 +15,13 @@ namespace RayBork;
 /// <para>
 /// <see cref="Enabled"/> is read and written on the tick thread. A camera snapshots the stack, the
 /// effects, and each effect's <see cref="Enabled"/> value when it is created, so a change made after
-/// that affects only later cameras. An effect and its stack own no engine object and do not dispose the
-/// effect's shader.
+/// that affects only later cameras. The snapshot is pooled by this effect and reused after the frame
+/// that held it is released, so adding an effect to a stack does not allocate a new snapshot for every
+/// camera. An effect and its stack own no engine object and do not dispose the effect's shader.
 /// </para>
 /// </remarks>
 public abstract class PostProcessEffect {
+    private readonly List<PostProcessEffectSnapshot> _snapshotPool = [];
     private bool _enabled = true;
 
     private protected PostProcessEffect() {
@@ -53,4 +55,32 @@ public abstract class PostProcessEffect {
     /// source the shader declares.
     /// </exception>
     internal abstract PostProcessEffectSnapshot Capture(PostProcessCaptureContext context);
+
+    /// <summary>
+    /// Takes a pooled snapshot of <typeparamref name="T"/> from this effect, or returns
+    /// <see langword="null"/> when none is free. Called on the tick thread by a capture that reuses its
+    /// snapshot object, uniform buffer, and texture array across cameras.
+    /// </summary>
+    /// <typeparam name="T">The concrete snapshot type the effect owns.</typeparam>
+    /// <returns>A free snapshot to fill, or <see langword="null"/>.</returns>
+    internal T? TakeSnapshot<T>() where T : PostProcessEffectSnapshot {
+        for (int index = _snapshotPool.Count - 1; index >= 0; index--) {
+            if (_snapshotPool[index] is T snapshot) {
+                _snapshotPool.RemoveAt(index);
+                return snapshot;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns a reset snapshot to this effect's pool. Called on the tick thread when the camera pass
+    /// that held it is recycled.
+    /// </summary>
+    /// <param name="snapshot">The snapshot to pool.</param>
+    internal void ReturnSnapshot(PostProcessEffectSnapshot snapshot) {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        _snapshotPool.Add(snapshot);
+    }
 }

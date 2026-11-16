@@ -13,11 +13,23 @@ namespace RayBork.Internal;
 /// normal path allocates nothing. An effect reads <see cref="SourceColorSlot"/> and
 /// <see cref="SourceDepthSlot"/> only until it calls <see cref="CompleteColorTarget"/>; that call makes
 /// its output the source for the next effect. Custom effects use
-/// <see cref="RecordCustomShaderPass"/>. A built-in multi-pass effect (SSAO, bloom) is the
-/// documented extension point: it subclasses <see cref="PostProcessEffectSnapshot"/>, rents one or more
-/// target-sized color targets with <see cref="RentColorTarget"/>, records its own pipeline passes
-/// between them, and completes its final target with <see cref="CompleteColorTarget"/>. The backend then
-/// runs <see cref="RecordStoreBack"/> once for the chain.
+/// <see cref="RecordCustomShaderPass"/>. A built-in multi-pass effect (SSAO, bloom) is the documented
+/// extension point: it subclasses <see cref="PostProcessEffectSnapshot"/>, rents a target-sized color
+/// target with <see cref="RentColorTarget()"/> and smaller intermediates with
+/// <see cref="RentColorTarget(Extent2D)"/>, creates a fullscreen pipeline with
+/// <see cref="GetOrCreateFullscreenPipeline"/>, writes one instance record per pass with
+/// <see cref="ReserveInstanceRecord"/> and <see cref="GetInstanceRecordSpan"/>, records the pass with
+/// <see cref="RecordFullscreenPass"/>, and releases intermediates with
+/// <see cref="CompleteAuxiliaryTarget"/>. Its final camera-target-sized target is completed with
+/// <see cref="CompleteColorTarget"/>, after which the backend runs <see cref="RecordStoreBack"/> once for
+/// the chain. A built-in adds its own shaders and effect type; it does not need to change the public
+/// stack, the camera snapshot path, or the processor.
+/// </para>
+/// <para>
+/// The per-extent pool holds two targets per extent, so a built-in can have two intermediate targets of
+/// one size before it completes or reuses one; a different size gets its own pair. A target rented at a
+/// different extent must be completed with <see cref="CompleteAuxiliaryTarget"/>; a chain's final target
+/// must be the camera target's size.
 /// </para>
 /// <para>
 /// Render-thread only. The context is valid for exactly one camera pass and is reset before the next.
@@ -34,6 +46,24 @@ internal sealed class PostProcessContext {
 
     /// <summary>Gets the Vulkan functions of the recording device.</summary>
     internal Vk Vulkan { get; private set; } = null!;
+
+    /// <summary>Gets the logical device that owns the post render pass, pipelines, and targets.</summary>
+    internal VulkanDevice Device => _processor.Device;
+
+    /// <summary>
+    /// Gets the color-only single-sample render pass every post target is built against. A built-in
+    /// effect creates its pipelines against this pass.
+    /// </summary>
+    internal RenderPass PostRenderPass => _processor.PostRenderPass;
+
+    /// <summary>
+    /// Gets the engine pipeline layout a fullscreen post pipeline must use so it can read the frame
+    /// block and instance records and receive the pass-index push constant.
+    /// </summary>
+    internal PipelineLayout PipelineLayout => _processor.PipelineLayout;
+
+    /// <summary>Gets the forced render state a post-process pipeline uses.</summary>
+    internal static RenderState FullscreenRenderState => VulkanPostProcessor.FullscreenRenderState;
 
     /// <summary>Gets the command buffer the frame records into.</summary>
     internal CommandBuffer CommandBuffer { get; private set; }
@@ -53,14 +83,11 @@ internal sealed class PostProcessContext {
     /// <summary>Gets the camera's render target.</summary>
     internal VulkanRenderTarget Target { get; private set; } = null!;
 
-    /// <summary>Gets the target extent in pixels; the chain is always target-sized.</summary>
+    /// <summary>Gets the target extent in pixels; the chain's final target is always this size.</summary>
     internal Extent2D Extent { get; private set; }
 
     /// <summary>Gets the camera's clamped viewport rectangle. The store-back writes only this area.</summary>
     internal Rect2D RenderArea { get; private set; }
-
-    /// <summary>Gets the camera's clamped viewport, for the store-back pass.</summary>
-    internal Viewport Viewport { get; private set; }
 
     /// <summary>
     /// Gets the bindless slot of the camera target's resolved color image, which is the chain source
@@ -75,9 +102,12 @@ internal sealed class PostProcessContext {
     internal uint TargetDepthSlot { get; private set; }
 
     /// <summary>
-    /// Gets or sets the next unused byte offset in the frame slot's instance storage buffer.
+    /// Gets the next unused byte offset in the frame slot's instance storage buffer.
     /// </summary>
-    internal ulong InstanceByteOffset { get; set; }
+    internal ulong InstanceByteOffset { get; private set; }
+
+    /// <summary>Gets the frame descriptor set that binds the frame block and instance storage buffer.</summary>
+    internal DescriptorSet FrameDescriptorSet => _processor.GetFrameDescriptorSet(FrameSlot);
 
     /// <summary>
     /// Gets the current chain source color slot: the last completed effect's target, or the camera
@@ -95,6 +125,38 @@ internal sealed class PostProcessContext {
     internal VulkanPostTarget? CurrentColorTarget => _currentColorTarget;
 
     /// <summary>
+    /// Gets or creates a fullscreen pipeline for a baked shader against the post render pass.
+    /// </summary>
+    /// <param name="program">The internal shader program asset.</param>
+    /// <param name="renderState">The render state to bake into the pipeline.</param>
+    /// <returns>The cached pipeline.</returns>
+    internal Pipeline GetOrCreateFullscreenPipeline(EngineAsset program, RenderState renderState) =>
+        _processor.GetOrCreateFullscreenPipeline(program, renderState);
+
+    /// <summary>
+    /// Reserves one stride-aligned instance record in the frame slot's instance buffer and advances the
+    /// chain's next offset past it.
+    /// </summary>
+    /// <param name="stride">The record's size in bytes, including the fixed instance header.</param>
+    /// <returns>The record's byte offset, aligned to <paramref name="stride"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stride"/> is not positive.</exception>
+    internal ulong ReserveInstanceRecord(int stride) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(stride);
+        ulong byteOffset = VulkanInstanceRecordWriter.AlignUp(InstanceByteOffset, (ulong)stride);
+        InstanceByteOffset = byteOffset + (ulong)stride;
+        return byteOffset;
+    }
+
+    /// <summary>
+    /// Gets a writable span of one reserved instance record.
+    /// </summary>
+    /// <param name="byteOffset">The offset <see cref="ReserveInstanceRecord"/> returned.</param>
+    /// <param name="stride">The record's size in bytes.</param>
+    /// <returns>The writable record span.</returns>
+    internal Span<byte> GetInstanceRecordSpan(ulong byteOffset, int stride) =>
+        _processor.GetInstanceRecordSpan(FrameSlot, byteOffset, stride);
+
+    /// <summary>
     /// Resets the context for one camera pass. Called by the renderer before the pass' first effect.
     /// </summary>
     /// <param name="vulkan">The Vulkan functions.</param>
@@ -106,7 +168,6 @@ internal sealed class PostProcessContext {
     /// <param name="target">The camera's render target.</param>
     /// <param name="extent">The target extent.</param>
     /// <param name="renderArea">The camera viewport rectangle the store-back writes.</param>
-    /// <param name="viewport">The camera viewport for the store-back pass.</param>
     /// <param name="targetColorSlot">The resolved color slot of the camera target.</param>
     /// <param name="targetDepthSlot">The resolved depth slot, or <c>0</c>.</param>
     /// <param name="instanceByteOffset">The next unused instance-buffer byte offset.</param>
@@ -120,7 +181,6 @@ internal sealed class PostProcessContext {
         VulkanRenderTarget target,
         Extent2D extent,
         Rect2D renderArea,
-        Viewport viewport,
         uint targetColorSlot,
         uint targetDepthSlot,
         ulong instanceByteOffset) {
@@ -133,23 +193,52 @@ internal sealed class PostProcessContext {
         Target = target;
         Extent = extent;
         RenderArea = renderArea;
-        Viewport = viewport;
         TargetColorSlot = targetColorSlot;
         TargetDepthSlot = targetDepthSlot;
         InstanceByteOffset = instanceByteOffset;
         _currentColorTarget = null;
     }
 
-    /// <summary>Rents a target-sized color target for the next pass and transitions it for writing.</summary>
-    /// <returns>The target to render into.</returns>
+    /// <summary>Rents a camera-target-sized color target for the next pass and transitions it for writing.</summary>
+    /// <returns>The target to write.</returns>
     internal VulkanPostTarget RentColorTarget() => _processor.RentColorTarget(this);
 
     /// <summary>
-    /// Transitions a rendered target to a shader read and makes it the chain source for the next
-    /// effect or the store-back.
+    /// Rents a color target of any extent for an intermediate pass and transitions it for writing.
+    /// </summary>
+    /// <param name="extent">The positive target extent.</param>
+    /// <returns>The target to write.</returns>
+    internal VulkanPostTarget RentColorTarget(Extent2D extent) => _processor.RentColorTarget(this, extent);
+
+    /// <summary>
+    /// Transitions a rendered camera-target-sized target to a shader read and makes it the chain source
+    /// for the next effect or the store-back.
     /// </summary>
     /// <param name="target">The target the effect rendered into.</param>
     internal void CompleteColorTarget(VulkanPostTarget target) => _processor.CompleteColorTarget(this, target);
+
+    /// <summary>
+    /// Transitions an auxiliary target to a shader read without making it the chain source, so a later
+    /// pass can sample it.
+    /// </summary>
+    /// <param name="target">The auxiliary target the effect rendered into.</param>
+    internal void CompleteAuxiliaryTarget(VulkanPostTarget target) =>
+        _processor.CompleteAuxiliaryTarget(this, target);
+
+    /// <summary>
+    /// Records one fullscreen pass into a rented target with a pipeline created against the post render
+    /// pass. The caller uses <see cref="ReserveInstanceRecord"/> and <see cref="GetInstanceRecordSpan"/>
+    /// first and writes every texture index slot itself.
+    /// </summary>
+    /// <param name="destination">The rented target to write.</param>
+    /// <param name="pipeline">The fullscreen pipeline to draw with.</param>
+    /// <param name="instanceByteOffset">The reserved record's stride-aligned byte offset.</param>
+    /// <param name="stride">The record's size in bytes.</param>
+    internal void RecordFullscreenPass(
+        VulkanPostTarget destination,
+        Pipeline pipeline,
+        ulong instanceByteOffset,
+        int stride) => _processor.RecordFullscreenPass(this, destination, pipeline, instanceByteOffset, stride);
 
     /// <summary>
     /// Records one fullscreen custom-effect pass from the current source into

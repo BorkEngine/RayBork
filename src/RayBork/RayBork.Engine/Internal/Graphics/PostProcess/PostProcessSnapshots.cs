@@ -30,6 +30,8 @@ internal static class PostProcessSnapshots {
             return DisabledPostProcessEffectSnapshot.Instance;
         }
 
-        return effect.Capture(new PostProcessCaptureContext(targetHasDepth, targetDescription));
+        PostProcessEffectSnapshot snapshot = effect.Capture(new PostProcessCaptureContext(targetHasDepth, targetDescription));
+        snapshot.Attach(effect);
+        return snapshot;
     }
 }

@@ -88,13 +88,19 @@ public sealed class ShaderPostProcessEffect : PostProcessEffect {
 
         ReadOnlySpan<Texture?> textures = shader.TextureValues;
         for (int index = 0; index < textures.Length; index++) {
+            if (index == sourceColor.Slot || index == sourceDepthBinding) {
+                // The engine overrides the reserved bindings, so a material value there is ignored.
+                continue;
+            }
+
             Texture? texture = textures[index];
             if (texture is not null) {
                 ObjectDisposedException.ThrowIf(texture.IsDisposed, texture);
             }
         }
 
-        return ShaderPostProcessEffectSnapshot.Create(
+        return ShaderPostProcessEffectSnapshot.Rent(
+            this,
             program,
             shader.InstanceData,
             textures,

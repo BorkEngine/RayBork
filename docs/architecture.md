@@ -647,8 +647,12 @@ A camera's `PostProcessStack` is tick-thread state, so the camera service snapsh
 custom effect's internal shader program, captured uniform bytes, texture bindings, and reserved
 `sourceColor`/`sourceDepth` binding indices. The capture runs before the pass is appended, so a
 rejected effect leaves the frame packet unchanged, and the frame's retention set acquires the
-program's and every bound texture's frame hold at the same time. The `CameraPass` resets its effect
-array with the draw records, so a pooled slot never keeps an old effect alive.
+program's and every bound texture's frame hold at the same time. The reserved binding values are never
+validated, retained, or registered as sampled targets because the engine overrides them at record time.
+The `CameraPass` resets its effect array with the draw records, so a pooled slot never keeps an old
+effect alive. Snapshots are pooled per effect: the pass reset releases a snapshot's program and texture
+references and returns it to its effect, so a later camera reuses the snapshot object, uniform buffer,
+and texture array instead of allocating them again.
 
 The render thread runs a pass' effects after its camera render pass ended and its resolved color and
 depth images were transitioned to a shader read, and before the next camera pass or the present pass.
@@ -660,15 +664,16 @@ The chain is target-sized whichever target the camera writes:
   releases their samplers and slots during teardown. A runtime render target already exposes those
   images through its public `ColorTexture`/`DepthTexture` view slots.
 - The post processor owns two target-sized single-sample `Rgba16Float` color targets per frame ring
-  slot and per target extent. Each has a color-only render pass framebuffer, a bindless slot for a
-  custom effect to sample it through the shader ABI, and a dedicated descriptor set for the engine
-  store-back pass' own single-sampler layout. A frame can chain effects on the scene target and on
-  render targets of different sizes, so the extents are pooled instead of one pair per slot: when a
-  frame starts, after its slot's fence signaled, the processor keeps the extents the previous frame on
-  that slot used and destroys the rest. A target resize therefore reallocates that target's post
-  targets, an unchanged extent reuses them with no per-frame allocation, and a device recovery destroys
-  the whole pool with the processor. The scene-target source slots are reallocated with every scene
-  target (window resize, HDR change, surface or device recovery) without leaking a slot.
+  slot and per target extent. Each has a color-only render pass framebuffer, a bindless slot for an
+  effect to sample it through the shader ABI, and a dedicated descriptor set for the engine store-back
+  pass' own single-sampler layout. A frame can chain effects on the scene target and on render targets
+  of different sizes, so the extents are pooled instead of one pair per slot: when a frame starts,
+  after its slot's fence signaled, the processor keeps the extents the previous frame on that slot used
+  and destroys the rest. A target resize therefore reallocates that target's post targets, an unchanged
+  extent reuses them with no per-frame allocation, and a device recovery destroys the whole pool with
+  the processor. The same per-extent pool serves a built-in effect's intermediate targets, so a bloom
+  downsample can rent a half- or quarter-sized pair; the pair alternates its two targets, so one extent
+  supports two live images before an effect completes or reuses one.
 - A custom effect records one fullscreen pass: the geometry pipeline layout, the shared frame
   descriptor set and instance buffer, the backend-owned fullscreen quad, and a post pipeline cached
   against the post render pass with a forced opaque/no-cull/no-depth state. The instance record's
@@ -694,21 +699,31 @@ barrier that orders the MSAA color attachment's camera-pass write before the sto
 store-back's resolve writes the single-sample color image at the color-attachment stage, so the
 following transition back to a shader read uses `ColorAttachmentOutput`/`ColorAttachmentWrite`.
 Depth resolves keep the T3b color-attachment stage and access rules, and the depth images are never
-transitioned by the store-back. Every later camera pass that writes the target uses the general
-resolved-attachment transition, which handles a resolved color that a post chain left in a shader
-read, and the frame-start and between-pass scene-target transitions are unchanged otherwise. A pass
-with no stack keeps the same behavior, so the chain adds no render graph and no pass dependency
-analysis.
+transitioned by the store-back. Every camera pass that targets a runtime render texture transitions
+its resolved images back to a shader read for a later camera or a readback. A scene-target pass makes
+those transitions only when it runs a post chain; a scene pass with no stack is immediately followed by
+either another scene pass that transitions the attachments for its own write or the frame-final scene
+transition that serves the present pass and the diagnostic depth probe, so split-screen frames without
+effects do not pay two extra layout transitions per pass. A later camera pass that writes the target
+uses the general resolved-attachment transition, which handles a resolved color that a post chain left
+in a shader read. A pass with no stack keeps the same behavior, so the chain adds no render graph and
+no pass dependency analysis.
 
-The core is extensible rather than custom-shader-specific. The SSAO and bloom effects add an internal
-`PostProcessEffectSnapshot` subclass whose `Run` uses the per-pass `PostProcessContext`: it rents
-target-sized color targets from the same pool, reads the chain source color/depth slots, records its
-own pipeline passes into them, and completes its final target, after which the backend runs the same
-store-back. The context carries the target extent, the camera pass and frame, the frame slot, the
-pool, the fullscreen-pass recording helpers, and the store-back hook; the snapshot reports the stride
-and number of shader-ABI instance records its run appends, so the frame's instance storage buffer is
-sized for the built-in passes. A built-in effect therefore does not change the public stack or the
-camera snapshot path. There is no built-in effect in this task.
+The core is extensible rather than custom-shader-specific, but a built-in effect is engine code, not a
+new public effect type. The SSAO and bloom effects add an internal `PostProcessEffectSnapshot` subclass
+whose `Run` uses the per-pass `PostProcessContext`. The context gives a built-in the Vulkan device, the
+color-only post render pass, the engine pipeline layout and forced post render state, the shared frame
+descriptor set, and the engine fullscreen quad. It also provides `RentColorTarget()` for a
+camera-target-sized target and `RentColorTarget(Extent2D)` for an intermediate from the per-extent
+pool; `GetOrCreateFullscreenPipeline` against the post render pass; `ReserveInstanceRecord` and
+`GetInstanceRecordSpan` for one shader-ABI instance record per pass; `RecordFullscreenPass` for a pass
+that binds the frame set, the engine quad, and the custom pipeline; and `CompleteAuxiliaryTarget` or
+`CompleteColorTarget` to release an intermediate or make a camera-target-sized result the chain source.
+The snapshot reports its ordered instance-record layout (per-pass stride and count), so the frame's
+instance storage buffer is sized for every built-in pass, including passes with different shaders and
+uniform sizes. A built-in still supplies its own shaders, effect type, and pass scheduling; it does not
+change the public stack, the camera snapshot path, the store-back, or the processor. There is no
+built-in effect in this task.
 
 ## Time
 
@@ -908,9 +923,10 @@ src/RayBork/RayBork.Engine/Shaders/PostStore.frag.spv    committed SPIR-V build 
 - The fragment stage samples the final single-sample `Rgba16Float` post target through one combined
   image sampler and a 16-byte fragment push constant: the normalized post-target origin in `x`/`y` and
   size in `z`/`w` that the camera viewport covers, so a viewport store-back samples the matching
-  target region. The render pass owns the target color format, so a `Rgba8Unorm` or `Rgba8Srgb` target
-  converts in the fixed-function write path. There is no tone mapping or gamma in this stage; the
-  chain is scene-linear HDR and the present pass applies display conversion later.
+  target region. The render pass owns the target color format: an `Rgba8Unorm` target stores the same
+  linear values, and an `Rgba8Srgb` target applies the fixed-function sRGB encode in the write path
+  (the readback decodes it again). There is no tone mapping in this stage; the chain is scene-linear
+  HDR and the present pass applies display conversion later.
 - `RayBork.Engine.csproj` embeds the `.spv` files under the same logical resource pattern as the
   present pair. `ShaderAssets` loads them once, and the backend's post-process store-back pipeline
   caches render passes and pipelines per target color format and sample count. The runtime never
@@ -1803,10 +1819,12 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
     views, bindless slots, or lifetime. The pre-existing scene-target cross-frame overwrite hazard is
     unchanged.
 16. A camera post-process stack is snapshotted on the tick thread and never read live by the render
-    thread; a recorded frame holds the effect's shader program and textures until it completes. The
-    target-sized chain writes only through its own `Rgba16Float` post targets and the camera-viewport
-    store-back, leaves the target's depth unchanged, and returns the resolved color to a shader read
-    with the target's written flag and tone snapshot updated.
+    thread; a recorded frame holds the effect's shader program and textures until it completes. A
+    snapshot is pooled per effect and reused only after the recorded frame releases the pass that held
+    it, and the reserved `sourceColor`/`sourceDepth` material values are never validated, retained, or
+    sampled. The target-sized chain writes only through its own `Rgba16Float` post targets and the
+    camera-viewport store-back, leaves the target's depth unchanged, and returns the resolved color to a
+    shader read with the target's written flag and tone snapshot updated.
 
 Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3; 2-4, 7, and 10 are exercised end to end by
 the camera and draw path, and 7 and 10 by the M7 `samples/Pong` AOT gate; 13 is enforced by the

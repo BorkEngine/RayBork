@@ -1,5 +1,7 @@
 using System.Numerics;
 using RayBork.Internal;
+using RayBork.Tests.Rendering;
+using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
@@ -89,6 +91,30 @@ public sealed class PostProcessGpuTests {
 
         void main_fragment() {
             oColor = texture(sourceColor, vUv) * texture(uTintTexture, vUv);
+        }
+        """;
+
+    private const string BUILT_IN_SCALE_FRAGMENT_SOURCE = """
+        #version 450
+
+        layout(location = 0) in vec2 vUv;
+
+        layout(location = 0) out vec4 oColor;
+
+        void main_fragment() {
+            oColor = vec4(texture(sourceColor, vUv).rgb * uScale, 1.0);
+        }
+        """;
+
+    private const string BUILT_IN_COMPOSITE_FRAGMENT_SOURCE = """
+        #version 450
+
+        layout(location = 0) in vec2 vUv;
+
+        layout(location = 0) out vec4 oColor;
+
+        void main_fragment() {
+            oColor = texture(uSource, vUv) + uBias;
         }
         """;
 
@@ -874,7 +900,7 @@ public sealed class PostProcessGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void AnEffectsOnADepthBearingRenderTargetSamplesThatTargetsDepth() {
+    public void AnEffectOnADepthBearingRenderTargetSamplesThatTargetsDepth() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(16, 16));
@@ -963,6 +989,200 @@ public sealed class PostProcessGpuTests {
         Assert.Equal(6, host.Backend.PostTargetRecreationCountForTests);
         AssertColorNear(Invert(targetClear), harness.ReadRenderTargetColor(target, 8, 8), HDR_TOLERANCE);
         AssertColorNear(Invert(sceneClear), harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ABuiltInMultiPassEffectRentsIntermediatesAndRecordsPerPassLayouts() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using Shader scale = harness.CreateShader(
+            "shaders/post-builtin-scale",
+            FULLSCREEN_VERTEX_SOURCE,
+            BUILT_IN_SCALE_FRAGMENT_SOURCE,
+            [
+                new ShaderUniformAsset {
+                    Name = "uScale",
+                    Type = ShaderUniformType.Float,
+                    Default = [0.5f],
+                },
+            ],
+            ["sourceColor"]);
+        using Shader composite = harness.CreateShader(
+            "shaders/post-builtin-composite",
+            FULLSCREEN_VERTEX_SOURCE,
+            BUILT_IN_COMPOSITE_FRAGMENT_SOURCE,
+            [
+                new ShaderUniformAsset {
+                    Name = "uBias",
+                    Type = ShaderUniformType.Vector4,
+                    Default = [0.1f, 0f, 0f, 0f],
+                },
+                new ShaderUniformAsset {
+                    Name = "uReserved",
+                    Type = ShaderUniformType.Vector4,
+                    Default = [0f, 0f, 0f, 0f],
+                },
+            ],
+            ["uSource"]);
+        scale.SetUniform("uScale", 0.5f);
+        composite.SetUniform("uBias", new Vector4(0.1f, 0f, 0f, 0f));
+        var builtIn = new TestBuiltInEffect(scale, composite);
+        Color clear = new(0.2f, 0.4f, 0.6f, 1f);
+        Color expected = new((clear.R * 0.5f) + 0.1f, clear.G * 0.5f, clear.B * 0.5f, 1f);
+        (int width, int height) = SceneSize(host);
+        VulkanDrawTestHarness.PassSpec pass = new(
+            CreateOrthoView(0, 0, width, height, 2f),
+            0,
+            0,
+            width,
+            height,
+            ClearMode.ColorAndDepth,
+            clear,
+            [],
+            PostProcessEffects: [builtIn]);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, pass));
+
+        // The two passes use different shaders and uniform sizes, so their instance strides differ; the
+        // recorder must reserve and write both without the frame's instance simulation under-sizing the
+        // buffer. The first pass writes a half-extent auxiliary target, the second composites it.
+        Assert.True(builtIn.FirstStride != builtIn.SecondStride);
+        (int x, int y) = SceneCenter(host);
+        AssertColorNear(expected, harness.ReadColor((uint)x, (uint)y), HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void AnEffectOnAnSrgbRenderTargetWritesTheEncodedResult() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(
+            8,
+            8,
+            ColorFormat: TextureFormat.Rgba8Srgb,
+            Depth: true,
+            SampleCount: 4));
+        using Shader invert = CreateEffectShader(harness, "shaders/post-srgb-invert", INVERT_FRAGMENT_SOURCE);
+        Color clear = new(0.25f, 0.5f, 0.75f, 1f);
+        Color expected = new(0.75f, 0.5f, 0.25f, 1f);
+        VulkanDrawTestHarness.PassSpec pass = new(
+            CreateOrthoView(0, 0, target.Width, target.Height, 2f),
+            0,
+            0,
+            target.Width,
+            target.Height,
+            ClearMode.ColorAndDepth,
+            clear,
+            [],
+            target.TargetId,
+            [Capture(invert)]);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, pass));
+
+        // The store-back writes linear color into an sRGB attachment; the fixed-function encode stores it
+        // and the readback decodes it back to the linear value the sampling shader would see.
+        AssertColorNear(expected, harness.ReadRenderTargetColor(target, 4, 4), 0.01f);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void AnEffectOnANeverWrittenTargetMarksItColorWritten() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(8, 8));
+        using Shader sample = CreateEffectShader(harness, "shaders/post-unwritten-sample", SAMPLE_FRAGMENT_SOURCE);
+        VulkanDrawTestHarness.PassSpec pass = new(
+            CreateOrthoView(0, 0, target.Width, target.Height, 2f),
+            0,
+            0,
+            target.Width,
+            target.Height,
+            ClearMode.None,
+            Color.Black,
+            [],
+            target.TargetId,
+            [Capture(sample)]);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, pass));
+
+        // The source color was never written, but the store-back still wrote the target for the camera
+        // viewport, so the target must report color content instead of the unwritten default.
+        Assert.True(host.Backend.HasRenderTargetColorContentForTests(target.TargetId));
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ACameraCapturedChainRendersThroughTheRealCameraService() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        (int width, int height) = SceneSize(host);
+        using CameraTestHost cameraHost = new(width, height);
+        using Shader invert = CreateEffectShader(harness, "shaders/post-camera-invert", INVERT_FRAGMENT_SOURCE);
+        PostProcessStack stack = new();
+        stack.Add(new ShaderPostProcessEffect(invert));
+        Color clear = new(0.25f, 0.5f, 0.75f, 1f);
+        Color expected = new(0.75f, 0.5f, 0.25f, 1f);
+
+        cameraHost.BeginFrame();
+        using (Camera camera = cameraHost.CreatePerspectiveCamera(clearColor: clear, postProcess: stack)) {
+            Assert.True(cameraHost.Packet.Passes[0].HasEnabledPostProcessEffects);
+        }
+
+        cameraHost.EndFrame();
+        host.Backend.Submit(cameraHost.Packet);
+        host.Backend.Present();
+
+        // The whole tick path runs: the camera service snapshots the caller's stack, the packet carries
+        // the frozen effect, and the renderer records the chain from that snapshot.
+        (int x, int y) = SceneCenter(host);
+        AssertColorNear(expected, harness.ReadColor((uint)x, (uint)y), HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizingTheSceneTargetKeepsAChainWorking() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using Shader invert = CreateEffectShader(harness, "shaders/post-resize-scene-invert", INVERT_FRAGMENT_SOURCE);
+        Color clear = new(0.25f, 0.5f, 0.75f, 1f);
+        Color expected = new(0.75f, 0.5f, 0.25f, 1f);
+
+        VulkanDrawTestHarness.PassSpec FullFrame() {
+            (int width, int height) = SceneSize(host);
+            return new VulkanDrawTestHarness.PassSpec(
+                CreateOrthoView(0, 0, width, height, 2f),
+                0,
+                0,
+                width,
+                height,
+                ClearMode.ColorAndDepth,
+                clear,
+                [],
+                PostProcessEffects: [Capture(invert)]);
+        }
+
+        harness.Submit(harness.CreateFrameWithPasses(1, FullFrame()));
+        AssertColorNear(expected, harness.ReadColor(8, 8), HDR_TOLERANCE);
+        int beforeResize = host.Backend.PostTargetRecreationCountForTests;
+
+        if (!TryResizeWindow(host, 320, 240)) {
+            Assert.Skip("The host did not apply the SDL window resize synchronously.");
+        }
+
+        host.SyncWithWindow();
+        host.Backend.Resize(320, 240);
+        harness.Submit(harness.CreateFrameWithPasses(2, FullFrame()));
+
+        Assert.Equal(320u, host.SceneTarget.Extent.Width);
+        Assert.Equal(240u, host.SceneTarget.Extent.Height);
+        Assert.True(host.Backend.PostTargetRecreationCountForTests > beforeResize);
+        AssertColorNear(expected, harness.ReadColor(8, 8), HDR_TOLERANCE);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -1083,6 +1303,114 @@ public sealed class PostProcessGpuTests {
             $"The {channel} byte at ({x}, {y}) is {actual}, expected {expected} within 1.");
     }
 
+    private static bool TryResizeWindow(BackendTestHost host, int width, int height) {
+        host.Platform.Window.SetSize(width, height);
+        for (int attempt = 0; attempt < 200; attempt++) {
+            host.Platform.Pump(TimeSpan.Zero);
+            if (host.Platform.Window.RenderWidth == width && host.Platform.Window.RenderHeight == height) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static byte Quantize(float channel) =>
         (byte)Math.Clamp((int)MathF.Round(channel * 255f, MidpointRounding.AwayFromZero), 0, 255);
+
+    /// <summary>
+    /// A test-only built-in multi-pass effect: a half-extent scale pass into an auxiliary target, then a
+    /// full-extent composite pass from it into the chain target, with one instance record per pass.
+    /// </summary>
+    /// <remarks>
+    /// The two passes use different shaders and uniform sizes, so their strides differ. The effect
+    /// reports its ordered record layout, which is what the frame's instance-byte simulation walks.
+    /// </remarks>
+    private sealed class TestBuiltInEffect : PostProcessEffectSnapshot {
+        private readonly Shader _scale;
+        private readonly Shader _composite;
+        private readonly byte[] _scaleInstance;
+        private readonly byte[] _compositeInstance;
+        private readonly PostProcessInstanceRecord[] _layout;
+
+        internal TestBuiltInEffect(Shader scale, Shader composite) {
+            _scale = scale;
+            _composite = composite;
+            _scaleInstance = scale.InstanceData.ToArray();
+            _compositeInstance = composite.InstanceData.ToArray();
+            _layout = [
+                new PostProcessInstanceRecord(
+                    ShaderAbiLayout.INSTANCE_HEADER_SIZE + _scaleInstance.Length,
+                    1),
+                new PostProcessInstanceRecord(
+                    ShaderAbiLayout.INSTANCE_HEADER_SIZE + _compositeInstance.Length,
+                    1),
+            ];
+        }
+
+        internal int FirstStride => _layout[0].Stride;
+
+        internal int SecondStride => _layout[1].Stride;
+
+        internal override ReadOnlySpan<PostProcessInstanceRecord> InstanceLayout => _layout;
+
+        internal override void Retain(FrameAssetRetention retention) {
+            ArgumentNullException.ThrowIfNull(retention);
+            retention.Add(_scale.Program.Lifetime);
+            retention.Add(_composite.Program.Lifetime);
+        }
+
+        internal override void Run(PostProcessContext context) {
+            ArgumentNullException.ThrowIfNull(context);
+            Extent2D auxiliaryExtent = new() {
+                Width = (uint)Math.Max(2, context.Extent.Width / 2),
+                Height = (uint)Math.Max(2, context.Extent.Height / 2),
+            };
+
+            VulkanPostTarget auxiliary = context.RentColorTarget(auxiliaryExtent);
+            Pipeline scalePipeline = context.GetOrCreateFullscreenPipeline(
+                _scale.Program.Lifetime,
+                PostProcessContext.FullscreenRenderState);
+            ulong scaleOffset = context.ReserveInstanceRecord(_layout[0].Stride);
+            WriteRecord(context, _scale, _scaleInstance, scaleOffset, _layout[0].Stride, context.SourceColorSlot);
+            context.RecordFullscreenPass(auxiliary, scalePipeline, scaleOffset, _layout[0].Stride);
+            context.CompleteAuxiliaryTarget(auxiliary);
+
+            VulkanPostTarget destination = context.RentColorTarget();
+            Pipeline compositePipeline = context.GetOrCreateFullscreenPipeline(
+                _composite.Program.Lifetime,
+                PostProcessContext.FullscreenRenderState);
+            ulong compositeOffset = context.ReserveInstanceRecord(_layout[1].Stride);
+            WriteRecord(
+                context,
+                _composite,
+                _compositeInstance,
+                compositeOffset,
+                _layout[1].Stride,
+                auxiliary.BindlessSlot);
+            context.RecordFullscreenPass(destination, compositePipeline, compositeOffset, _layout[1].Stride);
+            context.CompleteColorTarget(destination);
+        }
+
+        private static void WriteRecord(
+            PostProcessContext context,
+            Shader shader,
+            ReadOnlySpan<byte> instanceData,
+            ulong byteOffset,
+            int stride,
+            uint sourceTextureSlot) {
+            Span<byte> record = context.GetInstanceRecordSpan(byteOffset, stride);
+            VulkanInstanceRecordWriter.WriteMatrix(record, ShaderAbiLayout.TRANSFORM_OFFSET, Matrix4x4.Identity);
+            VulkanInstanceRecordWriter.WriteVector4(record, ShaderAbiLayout.COLOR_OFFSET, Vector4.One);
+            VulkanInstanceRecordWriter.WriteVector4(
+                record,
+                ShaderAbiLayout.UV_RECT_OFFSET,
+                new Vector4(0f, 0f, 1f, 1f));
+            instanceData.CopyTo(record[ShaderAbiLayout.INSTANCE_HEADER_SIZE..]);
+            VulkanInstanceRecordWriter.WriteUInt32(
+                record,
+                shader.Abi.Textures[0].IndexOffset,
+                sourceTextureSlot);
+        }
+    }
 }

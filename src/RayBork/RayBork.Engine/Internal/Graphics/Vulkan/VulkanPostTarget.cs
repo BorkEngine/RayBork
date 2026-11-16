@@ -53,8 +53,11 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
     /// <summary>Gets the descriptor set the engine store-back pass binds when this target is final.</summary>
     internal DescriptorSet StoreBackSet => _storeBackSet;
 
+    /// <summary>Gets the target extent in pixels.</summary>
+    internal Extent2D Extent { get; private set; }
+
     /// <summary>Gets the tracked image layout.</summary>
-    internal ImageLayout Layout { get; private set; } = ImageLayout.Undefined;
+    private ImageLayout Layout { get; set; } = ImageLayout.Undefined;
 
     /// <summary>
     /// Creates the image, memory, view, framebuffer, bindless slot, and store-back descriptor set for
@@ -187,6 +190,7 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         Extent2D extent,
         RenderPass postRenderPass,
         VulkanPostStoreBackPipeline storeBack) {
+        Extent = extent;
         ImageCreateInfo imageInfo = new() {
             SType = StructureType.ImageCreateInfo,
             ImageType = ImageType.Type2D,

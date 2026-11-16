@@ -264,12 +264,12 @@ custom post effect that declares `sourceDepth`. That cost is a known property of
 hidden regression; a built-in effect can decide whether a pass needs the resolve.
 
 **Remaining M8 work.** The extensible camera post-process core and the custom-shader effect ship:
-the stack API, the target-sized chain and viewport store-back, the reserved `sourceColor`/`sourceDepth`
+the stack API, the target-sized chain, viewport store-back, the reserved `sourceColor`/`sourceDepth`
 contract, and the scene-target and render-target source slots. Built-in SSAO and bloom effects and the
 RenderTarget and split-screen samples remain later M8 tasks. This section covers the color path, the
 depth view, resize, and color readback: creation, camera routing, MSAA color and depth resolve,
-same-tick sampling of both views, resize, lifetime, raw linear color readback, and display-referred
-pixel readback.
+same-tick sampling of both views, resize, lifetime, raw linear color readback, display-referred pixel
+readback, and camera post-processing.
 
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or
@@ -314,7 +314,7 @@ public readonly record struct RenderStats(
 | `Triangles` | Submitted triangle count after instancing: `indexCount / 3` per triangle-list instance, `indexCount - 2` per triangle-strip instance, and `0` for line and point topologies. |
 | `CulledInstances` | Instances rejected by frustum culling in this frame. |
 | `PipelineCount` | Distinct scene (geometry) pipelines used by the frame. The present pipeline is not counted. |
-| `TextureCount` | Bindless texture slots live after the frame, including the reserved white slot and the scene target's two internal resolved color and depth source slots. A texture allocates its slot when its GPU upload completes and releases it only when its GPU resource is destroyed. |
+| `TextureCount` | Bindless texture slots live after the frame, including the reserved white slot, the scene target's two internal resolved color and depth source slots, and the live post-process targets (two per target extent per frame ring slot while the extent is in use). A texture allocates its slot when its GPU upload completes and releases it only when its GPU resource is destroyed. |
 | `SampleCount` | Effective MSAA sample count for the frame. |
 | `HdrOutput` | Whether the frame presented through the scRGB HDR path. |
 | `CpuFrameMilliseconds` | Render-thread CPU time for planning, recording, and submitting the frame. The measurement starts after the frame fence wait and the swapchain acquire, so it excludes both blocking waits and presentation. |

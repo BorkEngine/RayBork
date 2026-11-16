@@ -83,7 +83,9 @@ custom effect's shader cursor (uniforms) and texture bindings are frozen for tha
 effect, or material changes apply to later cameras only; an already recorded frame keeps what it
 captured. A disabled stack captures no effects, and a disabled effect captures a skipped entry, so it
 does not shift the captured order. Disposing the effect's shader after the camera was created does not
-corrupt the recorded frame.
+corrupt the recorded frame. Snapshots are pooled per effect and reused after the recorded frame is
+released, so steady-state camera creation does not allocate a new snapshot, uniform buffer, or texture
+array.
 
 **Custom shader contract.** A `ShaderPostProcessEffect` takes an ordinary baked engine shader with
 both the vertex and fragment stages. It is drawn once as a fullscreen pass through the engine's
@@ -95,14 +97,17 @@ fullscreen quad:
   the camera target's resolved single-sample reverse-Z depth image. A target created with
   `RenderTextureDescription.Depth` `false` has no depth, so a shader that declares `sourceDepth` is
   rejected when the camera is created.
-- The engine always overrides both reserved names. A texture the material cursor holds for
-  `sourceColor` or `sourceDepth` is ignored, not sampled; every other uniform and texture binding comes
-  from the shader material and is frozen at camera creation.
+- The engine always overrides both reserved names. A value the material cursor holds for `sourceColor`
+  or `sourceDepth` is ignored: it is never sampled, validated, retained for the frame, or prepared as a
+  sampled render target. Every other uniform and texture binding comes from the shader material and is
+  frozen at camera creation.
 - The shader's baked default render state is ignored. The post pass forces opaque blending, no culling,
   and no depth test or depth write, because it covers the whole target and has no depth attachment.
 - The fragment output is scene-linear HDR color with alpha. The engine applies no exposure, AgX, gamma,
   or sRGB encoding to the chain; the present pass owns display conversion. Values above `1` survive
-  intermediate passes because the post targets are `Rgba16Float`.
+  intermediate passes because the post targets are `Rgba16Float`. A render target whose color format is
+  `Rgba8Srgb` still applies the fixed-function sRGB encode when the store-back writes its attachment,
+  exactly like any other write to that target; an `Rgba8Unorm` target stores the linear values.
 
 The engine fullscreen quad has positions in `[-0.5, 0.5]` in local XY and UVs in `[0, 1]` with
 `(0, 0)` at the image top-left. The vertex stage must map it with:
@@ -153,9 +158,9 @@ name = "sourceColor"
 **Errors.** A camera whose enabled custom effect does not declare `sourceColor`, whose shader is
 missing the vertex or fragment stage, or whose shader declares `sourceDepth` for a depth-less target
 throws `InvalidOperationException` from `CreateCamera` before the pass is recorded; the message names
-the shader and the missing requirement. A disposed shader or a disposed texture binding is
-`ObjectDisposedException`. `EngineContext.CreateCamera` throws the same way for the camera's own
-arguments.
+the shader and the missing requirement. A disposed shader or a disposed texture bound to a non-reserved
+binding is `ObjectDisposedException`; a stale value on a reserved binding is ignored.
+`EngineContext.CreateCamera` throws the same way for the camera's own arguments.
 
 **Execution and content.** Effects run after the camera's geometry pass and its color/depth resolve,
 and before the next camera pass or the present pass. A camera with `ClearMode.None` sees the earlier
@@ -198,11 +203,25 @@ geometry depth.
 
 **Ownership and retention.** A stack, an effect, and a `ShaderPostProcessEffect` own no engine asset.
 They never dispose the shader. The recorded frame retains the effect's internal shader program and every
-texture the material had bound, exactly like a draw record, so disposing the material or a texture after
-camera creation leaves the recorded frame valid until the frame completes.
+non-reserved texture the material had bound, exactly like a draw record, so disposing the material or a
+texture after camera creation leaves the recorded frame valid until the frame completes.
 
-**Built-in effects.** SSAO and bloom are later M8 tasks. They use the same stack, snapshot,
-and store-back core: an internal effect runner rents target-sized post targets from the pool, records
-its own pipeline passes into them, and completes the final target, after which the engine runs the same
-store-back. This core is generic in the number and order of effects; it does not special-case a custom
-shader effect beyond the one fullscreen pass it records.
+**Built-in effects.** SSAO and bloom are later M8 tasks. A built-in is engine code, not a new public
+effect type: it subclasses the internal effect snapshot and uses the internal per-pass context. The
+shipped core gives it everything a multi-pass effect needs without touching the public stack, the
+camera snapshot path, or the store-back:
+
+- `RentColorTarget()` for a camera-target-sized target and `RentColorTarget(Extent2D)` for an
+  intermediate from the same per-extent pool (two targets per extent, alternating);
+- the Vulkan device, the color-only post render pass, the engine pipeline layout, the forced post render
+  state, the shared frame descriptor set, the engine fullscreen quad, and
+  `GetOrCreateFullscreenPipeline` for a built-in shader;
+- `ReserveInstanceRecord`/`GetInstanceRecordSpan` for one shader-ABI instance record per pass and
+  `RecordFullscreenPass` to draw it into a target;
+- `CompleteAuxiliaryTarget` to release an intermediate and `CompleteColorTarget` to make a
+  camera-target-sized result the chain source, after which the engine runs the same store-back.
+
+The effect snapshot reports its ordered instance-record layout (per-pass stride and count), so a
+built-in can append passes with different shaders and uniform sizes and the frame's instance buffer is
+sized for all of them. A built-in supplies its own shaders, effect type, and pass scheduling; there is
+no built-in effect in this task.

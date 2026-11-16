@@ -237,8 +237,9 @@ public sealed class EngineContext {
         Color? clearColor = null,
         float near = 0.01f,
         float far = 1000f,
+        Rect? viewport = null,
         RenderTexture? target = null,
-        Rect? viewport = null);
+        PostProcessStack? postProcess = null);
 
     public Task<RenderTexture> CreateRenderTextureAsync(RenderTextureDescription description);
 
@@ -281,7 +282,7 @@ public sealed class EngineContext {
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
 | `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. `PresentedFrames` is cumulative and monotonic; `CpuFrameMilliseconds` excludes the fence, acquire, and present waits. |
 | `Tonemapping` | Tick | App-lifetime runtime tone-mapping settings, initialized from the builder defaults. Read or write them on the tick thread. A write during `Tick` applies to the frame that tick records. |
-| `CreateCamera` | Tick | The one camera entry point. Pass `CameraProjection.Perspective` with `fieldOfView` or `CameraProjection.Orthographic` with `orthographicHeight`; the size argument that does not belong to the projection is `ArgumentException`. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
+| `CreateCamera` | Tick | The one camera entry point. Pass `CameraProjection.Perspective` with `fieldOfView` or `CameraProjection.Orthographic` with `orthographicHeight`; the size argument that does not belong to the projection is `ArgumentException`. `target` routes the pass into a render texture and `postProcess` snapshots a post-process stack for the camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateRenderTextureAsync` | Tick | Creates an offscreen target and completes when the render thread has allocated it. Legal in `Setup` and `Tick`. |
 | `CreateMeshBuilder` | Any | Creates a procedural mesh builder. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |
 | `CreateTextureBuilder` | Any | Creates a procedural texture builder for an uncompressed format. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |

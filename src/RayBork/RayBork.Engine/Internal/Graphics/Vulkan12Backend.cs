@@ -1293,6 +1293,17 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     internal int ReadbackCopyCountForTests { get; private set; }
 
     /// <summary>
+    /// Computes one frame's required instance-record bytes, for unit tests. Test-only; it is not part of
+    /// the renderer seam.
+    /// </summary>
+    /// <param name="frame">The sealed frame to simulate.</param>
+    /// <returns>The instance-record bytes the frame needs, including per-record alignment.</returns>
+    internal static ulong ComputeInstanceBytesForTests(RenderFramePacket frame) {
+        ArgumentNullException.ThrowIfNull(frame);
+        return ComputeInstanceBytes(new BatchPlanner().Plan(frame));
+    }
+
+    /// <summary>
     /// Gets the number of times the post-processor created a target-sized post-target pair for a frame
     /// slot, for GPU tests. Test-only; it is not part of the renderer seam. A target extent change or a
     /// device recovery increments it when the next effect frame runs.
@@ -2343,8 +2354,16 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             // A later camera, the present pass, or a post effect samples the resolved images, so they
-            // leave an attachment layout before the chain runs or the next pass begins.
-            target.TransitionResolvedToShaderRead(vulkan, commandBuffer);
+            // leave an attachment layout before the chain runs or the next pass begins. A scene pass
+            // with no stack needs no readable intermediate state: the next scene pass transitions the
+            // attachments for its own write, and the frame-final transition covers the present pass and
+            // the diagnostic depth probe.
+            if (targetId != 0) {
+                target.TransitionResolvedToShaderRead(vulkan, commandBuffer);
+            } else if (pass.HasEnabledPostProcessEffects) {
+                sceneTarget.TransitionResolvedToShaderRead(vulkan, commandBuffer);
+            }
+
             if (pass.HasEnabledPostProcessEffects) {
                 uint sourceColorSlot = targetId == 0
                     ? _sceneSourceColorSlot
@@ -2363,7 +2382,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     sourceColorSlot,
                     sourceDepthSlot,
                     scissor,
-                    viewport,
                     ref instanceByteOffset);
                 if (targetEntry is not null) {
                     // The store-back wrote the target's color for the camera viewport, so a readback
@@ -2405,9 +2423,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             // A post-process effect can sample render target views through its own material bindings,
-            // so those targets must be readable before the chain runs too.
+            // so those targets must be readable before the chain runs too. The reserved source bindings
+            // are overridden by the engine and are never sampled, so they are skipped.
             foreach (PostProcessEffectSnapshot effect in pass.PostProcessEffects) {
-                AddSampledRenderTargets(effect.TextureValues);
+                AddSampledPostProcessTextures(effect);
             }
         }
 
@@ -2418,6 +2437,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         foreach (RenderTargetEntry entry in _frameSampledRenderTargets) {
             PrepareRenderTargetUse(entry, frameSlot);
             entry.Target.PrepareSampled(vulkan, commandBuffer);
+        }
+    }
+
+    private void AddSampledPostProcessTextures(PostProcessEffectSnapshot effect) {
+        ReadOnlySpan<Texture?> textures = effect.TextureValues;
+        for (int index = 0; index < textures.Length; index++) {
+            if (effect.IsReservedTextureBinding(index)) {
+                continue;
+            }
+
+            Texture? texture = textures[index];
+            if (texture is not null && texture.IsRenderTargetView) {
+                _frameSampledRenderTargets.Add(RequireRenderTarget(texture.RenderTargetId));
+            }
         }
     }
 
@@ -2667,7 +2700,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
 
         throw new GraphicsException(
-            $"The shader '{shader.Path}' is not a Vulkan GPU shader and cannot create a geometry pipeline.",
+            $"The shader '{shader.Path}' is not a Vulkan GPU shader and cannot be used to create a pipeline.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
             null);
     }
@@ -2690,7 +2723,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <remarks>
     /// The post-process effect records follow each camera pass' scene batches, so the simulation must
     /// include them: a later scene batch aligns after the effect records and can need more bytes than a
-    /// scene-only sum. A built-in multi-pass effect reports the number of records its run appends.
+    /// scene-only sum. An effect reports its ordered record layout, so a built-in multi-pass effect whose
+    /// passes use different shaders and uniform sizes reserves each pass' stride in turn.
     /// </remarks>
     private static ulong ComputeInstanceBytes(FramePlan plan) {
         ulong bytes = 0;
@@ -2705,14 +2739,18 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
             ReadOnlySpan<PostProcessEffectSnapshot> effects = pass.Pass.PostProcessEffects;
             foreach (PostProcessEffectSnapshot effect in effects) {
-                int stride = effect.InstanceStride;
-                int recordCount = effect.Enabled ? effect.InstanceRecordCount : 0;
-                if (recordCount == 0 || stride == 0) {
+                if (!effect.Enabled) {
                     continue;
                 }
 
-                bytes = VulkanInstanceRecordWriter.AlignUp(bytes, (ulong)stride);
-                bytes += (ulong)(stride * recordCount);
+                foreach (PostProcessInstanceRecord record in effect.InstanceLayout) {
+                    if (record.Count <= 0 || record.Stride <= 0) {
+                        continue;
+                    }
+
+                    bytes = VulkanInstanceRecordWriter.AlignUp(bytes, (ulong)record.Stride);
+                    bytes += (ulong)(record.Stride * record.Count);
+                }
             }
         }
 
@@ -2732,9 +2770,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     private static void WriteVector4(Span<byte> destination, int offset, Vector4 value)
         => VulkanInstanceRecordWriter.WriteVector4(destination, offset, value);
-
-    private static void WriteSingle(Span<byte> destination, int offset, float value)
-        => VulkanInstanceRecordWriter.WriteSingle(destination, offset, value);
 
     private static void WriteUInt32(Span<byte> destination, int offset, uint value)
         => VulkanInstanceRecordWriter.WriteUInt32(destination, offset, value);

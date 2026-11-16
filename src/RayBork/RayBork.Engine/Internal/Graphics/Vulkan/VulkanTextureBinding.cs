@@ -28,7 +28,7 @@ internal static class VulkanTextureBinding {
         ITextureBindingResource? binding = texture.BindingResource;
         if (binding is null) {
             throw new GraphicsException(
-                $"{Describe(texture)} is not a Vulkan GPU texture and cannot be bound in a draw.",
+                $"{Describe(texture)} is not a Vulkan GPU texture and cannot be sampled by a shader.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
                 null);
         }
@@ -36,7 +36,7 @@ internal static class VulkanTextureBinding {
         if (binding.BindlessSlot == 0) {
             throw new GraphicsException(
                 $"{Describe(texture)} has no bindless slot. The texture must finish its GPU upload "
-                    + "before a draw can reference it.",
+                    + "before a draw or post-process pass can reference it.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
                 null);
         }
