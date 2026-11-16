@@ -261,7 +261,11 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > `ColorTexture`, and a later camera can sample its resolved `DepthTexture` for depth-driven effects.
 > A camera-written target can also be read back with `RenderTexture.ReadColorsAsync` (raw scene-linear
 > `[y, x]` colors) or `RenderTexture.ReadPixelsAsync` (display-referred RGBA8 for a screenshot); the
-> readback is a `RenderTexture` member, not a camera member, and never reads depth.
+> readback is a `RenderTexture` member, not a camera member, and never reads depth. M8 also adds the
+> `postProcess` parameter and the `PostProcessStack`/`PostProcessEffect`/`ShaderPostProcessEffect`
+> surface: a camera's stack runs after its geometry pass and before the next camera or the present
+> pass, on the scene target or a render texture target, and its post-processed output is what a later
+> sample and both readback methods observe. Built-in SSAO and bloom effects remain later M8 tasks.
 
 Properties:
 
@@ -293,7 +297,8 @@ public Camera CreateCamera(
     float near = 0.01f,
     float far = 1000f,
     Rect? viewport = null,
-    RenderTexture? target = null);
+    RenderTexture? target = null,
+    PostProcessStack? postProcess = null);
 ```
 
 It sets the aspect ratio from the clamped viewport. A perspective camera uses `fieldOfView` and
@@ -304,7 +309,24 @@ projection must preserve both conventions if it wants to match the engine's dept
 helpers. `target` selects the pass' render target: `null` is the app's linear HDR scene target, and a
 `RenderTexture` routes the pass into that target. The viewport defaults to the full target and is
 clamped to the target size, and the aspect ratio uses the clamped viewport. A disposed target is
-`ObjectDisposedException`. A later camera in the same tick can sample the target's `ColorTexture` or
+`ObjectDisposedException`.
+
+`postProcess` selects an app-lifetime, caller-owned `PostProcessStack` for this camera. The stack is
+snapshotted at creation: the effect order, each effect's `Enabled` value, and each custom effect's
+shader cursor and texture bindings are frozen, so later changes affect later cameras only. The chain
+runs after this camera's geometry and resolve pass and before the next camera or the present pass, on
+the app scene target or on a `RenderTexture` target. A camera with a color clear processes the new
+content; a camera with `ClearMode.None` processes the earlier target content plus its own draws. The
+chain is target-sized and stores its result back only for the camera viewport, so pixels outside the
+viewport are untouched; because the source is the full target, a viewport camera's effect can sample
+content outside its viewport (documented M8 cross-viewport behavior). A disabled stack or effect is
+skipped. A custom effect must be a `ShaderPostProcessEffect` over a baked shader whose
+sidecar declares the reserved `sourceColor` binding; `sourceDepth` is optional and is rejected on a
+depth-less target. A missing `sourceColor`, a shader without both stages, or `sourceDepth` on a
+depth-less target is `InvalidOperationException` from `CreateCamera`; a disposed effect shader or bound
+texture is `ObjectDisposedException`. See [Post-processing](post-processing.md).
+
+A later camera in the same tick can sample the target's `ColorTexture` or
 `DepthTexture`; sampling either view in the camera pass that writes the target is rejected with
 `InvalidOperationException` from the draw call. A target declared `Depth: false` has no depth attachment:
 depth-tested and depth-writing draws are not rejected, but their depth test and write are no-ops for
@@ -842,7 +864,7 @@ before the present pass, and each camera pass resolves only its own render area.
 color and depth attachments are stored between camera passes so a later camera can load them. Depth is
 cleared to `0.0` and the reverse-Z state is defined. Scene depth is also resolved into a single-sample
 internal depth image with the Vulkan 1.2 depth/stencil resolve path; it is the input a later internal
-consumer such as T5 SSAO samples, and there is no public scene-target depth view. A `RenderTexture`
+consumer such as the SSAO effect samples, and there is no public scene-target depth view. A `RenderTexture`
 uses its own `SampleCount` and its own render pass, resolved single-sample color and depth images, and
 geometry pipeline cache; the app scene target is unaffected. The public `DepthTexture` is the resolved
 multisampled depth image, or the depth attachment itself for a single-sample target.

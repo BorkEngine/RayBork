@@ -32,7 +32,8 @@ namespace RayBork;
 /// count, and the two view objects are unchanged, while <see cref="Width"/>, <see cref="Height"/>, and
 /// the views' dimensions report the new size. The target's contents are undefined after a resize.
 /// <see cref="ReadColorsAsync"/> and <see cref="ReadPixelsAsync"/> read the target's resolved color
-/// image, not its depth image; post-processing is a later M8 task.
+/// image, not its depth image. A camera with a post-process stack writes its post-processed output into
+/// that image, so both readback methods observe it.
 /// </para>
 /// </remarks>
 public sealed class RenderTexture : IDisposable {

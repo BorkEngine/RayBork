@@ -1247,9 +1247,14 @@ scene target, and the color, depth, resize, and readback paths of public render 
 resolve, Vulkan 1.2 depth/stencil resolve, the sampled `ColorTexture` and `DepthTexture` views,
 same-tick sampling, multiple targets in one frame, target lifetime, in-place target recreation at a new
 size, and top-left color readback (raw scene-linear HDR colors and display-referred RGBA8). `Depth:
-false` targets have no depth view. The scene target's resolved depth image is internal for a later SSAO
-pass. Post-processing/effects and the RenderTarget and split-screen samples remain later M8 tasks; M8
-is not complete.
+false` targets have no depth view. The scene target's resolved depth image is internal for the SSAO
+effect. The extensible camera post-process core ships: `PostProcessStack`, `PostProcessEffect`,
+`ShaderPostProcessEffect`, the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float`
+chains over the engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader
+contract, and camera-viewport store-back on the scene target and on render targets, with the
+post-processed output included in a later target sample and both readback methods. Built-in SSAO and
+bloom effects and the RenderTarget and split-screen samples remain later M8 tasks; M8 is not
+complete.
 
 **Scope.**
 
@@ -1269,19 +1274,29 @@ is not complete.
 - `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots, and `ReadColorsAsync` raw
   scene-linear HDR colors for tests and tooling. Both are top-left, wait for the target's last-use
   fence, and leave the target state unchanged. Shipped.
+- Camera post-process core: an app-lifetime, caller-owned effect stack snapshotted at camera
+  creation, a custom-shader effect over the engine fullscreen quad with the reserved
+  `sourceColor`/`sourceDepth` bindings, a target-sized single-sample `Rgba16Float` ping-pong chain, and
+  a camera-viewport store-back into the target's MSAA or single-sample color image. The chain runs
+  after the camera's geometry and resolve pass, works on the scene target and on `RenderTexture`
+  targets, includes the post-processed output in readback, and leaves depth unchanged. Shipped.
+- Built-in SSAO and bloom effects on the same core. Later M8 tasks.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
   simple post-process shader, and present. Later M8 task.
 - Split-screen sample pass: two cameras, two viewports. Later M8 task.
 - Target format/sRGB rules; depth texture sampling. The three color formats, the sRGB sampling decode,
   and the resolved `DepthTexture` over a Vulkan 1.2 depth resolve ship. The scene target's resolved
-  depth image is internal for T5 SSAO; post-processing remains a later task.
+  depth image is an internal post-process source; the built-in depth consumers are later tasks.
 
 **Exit criteria.**
 
 - Render-to-texture produces the same visible image as the direct path (within tolerance). Met for
   the shipped color path and the sampled depth path by the GPU tests.
-- A post-process shader samples the color target without validation errors. Met for a normal sampled
-  color target; the post-process sample is later.
+- A post-process shader samples the color target without validation errors, and a camera's effect
+  chain writes the post-processed result back into the target and into both readback paths. Met by the
+  post-process unit and GPU tests for the scene target and render target, including effect order,
+  user uniforms, the source depth binding, viewport store-back, disabled semantics, retained
+  materials, target resize, and device recovery; the standalone RenderTarget sample is later.
 - Split-screen renders two independent camera views into the HDR scene target in one frame, and each
   camera's clear stays inside its clamped viewport. Met.
 - A later camera with `ClearMode.None` keeps the earlier pass' color and depth; `ClearMode.Depth`
@@ -1667,7 +1682,7 @@ Audio defines `ctx.Audio`, `AudioClip`, `AudioSource`, `AudioListener`, and the 
 ### Other post-1.0 work
 
 - Skeletal and morph animation; animation asset pipeline; model animation playback.
-- Built-in forward lighting, PBR, shadow maps, skybox, fog, and a post-processing stack.
+- Built-in forward lighting, PBR, shadow maps, skybox, fog, and built-in post-processing effects.
 - Rigid-body physics and a collision world; v1 only has queries.
 - UI toolkit (retained or immediate mode) built on orthographic cameras and text.
 - Custom vertex/instance layouts; compute shaders; GPU-driven culling.

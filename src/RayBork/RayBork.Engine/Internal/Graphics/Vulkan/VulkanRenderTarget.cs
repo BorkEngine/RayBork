@@ -50,6 +50,7 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
     private RenderPass _renderPass;
     private Framebuffer _framebuffer;
     private Image _multisampledColorImage;
+    private ImageView _multisampledColorView;
     private Image _multisampledDepthImage;
     private Image _resolvedColorImage;
     private Image _resolvedDepthImage;
@@ -104,6 +105,12 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
 
     /// <summary>Gets the single-sample color image view a shader samples.</summary>
     internal ImageView ResolvedColorView => _resolvedColorView;
+
+    /// <summary>
+    /// Gets the color image view a store-back render pass attaches: the multisampled color attachment
+    /// for a multisampled target, or the single-sample resolved color image for a single-sample target.
+    /// </summary>
+    internal ImageView ColorAttachmentView => IsMultisampled ? _multisampledColorView : _resolvedColorView;
 
     /// <summary>
     /// Gets the single-sample depth image a shader samples. It is the depth attachment itself for a
@@ -194,6 +201,7 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
 
         _imageResources.Clear();
         _multisampledColorImage = default;
+        _multisampledColorView = default;
         _multisampledDepthImage = default;
         _resolvedColorImage = default;
         _resolvedDepthImage = default;
@@ -400,6 +408,84 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
     }
 
     /// <summary>
+    /// Prepares the target's color images for a post-process store-back render pass.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A store-back pass renders only color: a multisampled target attaches its multisampled color
+    /// attachment and resolves into the single-sample resolved color image; a single-sample target
+    /// attaches the resolved color image directly. The resolved color image is transitioned from its
+    /// current read layout to <c>ColorAttachmentOptimal</c> and a same-layout barrier orders the
+    /// multisampled attachment's previous camera-pass write before the pass load.
+    /// </para>
+    /// <para>
+    /// The depth images are untouched: the store-back writes the camera viewport's color only, and the
+    /// target's depth content stays exactly as the camera pass left it.
+    /// </para>
+    /// </remarks>
+    /// <param name="vulkan">The Vulkan functions.</param>
+    /// <param name="commandBuffer">The command buffer recording the frame.</param>
+    internal void PrepareStoreBack(Vk vulkan, CommandBuffer commandBuffer) {
+        bool multisampled = IsMultisampled;
+        Span<ImageMemoryBarrier> barriers = stackalloc ImageMemoryBarrier[multisampled ? 2 : 1];
+        int count = 0;
+        if (multisampled) {
+            barriers[count++] = CreateImageBarrier(
+                _multisampledColorImage,
+                ImageAspectFlags.ColorBit,
+                ImageLayout.ColorAttachmentOptimal,
+                ImageLayout.ColorAttachmentOptimal,
+                AccessFlags.ColorAttachmentWriteBit,
+                COLOR_ATTACHMENT_ACCESS);
+        }
+
+        // The fragment shaders of the post chain read the resolved color as their source, and the
+        // camera pass resolved it, so the source scope covers the shader reads and the attachment write.
+        barriers[count++] = CreateImageBarrier(
+            _resolvedColorImage,
+            ImageAspectFlags.ColorBit,
+            _resolvedColorLayout,
+            ImageLayout.ColorAttachmentOptimal,
+            ColorSourceAccess(_resolvedColorLayout) | AccessFlags.ColorAttachmentWriteBit,
+            AccessFlags.ColorAttachmentWriteBit);
+        RecordImageBarriers(
+            vulkan,
+            commandBuffer,
+            ColorSourceStage(_resolvedColorLayout) | PipelineStageFlags.ColorAttachmentOutputBit,
+            PipelineStageFlags.ColorAttachmentOutputBit,
+            barriers[..count]);
+        _resolvedColorLayout = ImageLayout.ColorAttachmentOptimal;
+    }
+
+    /// <summary>
+    /// Returns the target's resolved color image to <c>ShaderReadOnlyOptimal</c> after a store-back
+    /// pass, so a later camera, the present pass, or a readback observes the post-processed content.
+    /// </summary>
+    /// <param name="vulkan">The Vulkan functions.</param>
+    /// <param name="commandBuffer">The command buffer recording the frame.</param>
+    internal void CompleteStoreBack(Vk vulkan, CommandBuffer commandBuffer) {
+        if (_resolvedColorLayout == ImageLayout.ShaderReadOnlyOptimal) {
+            return;
+        }
+
+        Span<ImageMemoryBarrier> barriers = stackalloc ImageMemoryBarrier[1];
+        barriers[0] = CreateImageBarrier(
+            _resolvedColorImage,
+            ImageAspectFlags.ColorBit,
+            _resolvedColorLayout,
+            ImageLayout.ShaderReadOnlyOptimal,
+            AccessFlags.ColorAttachmentWriteBit,
+            AccessFlags.ShaderReadBit);
+        RecordImageBarriers(
+            vulkan,
+            commandBuffer,
+            PipelineStageFlags.ColorAttachmentOutputBit,
+            PipelineStageFlags.FragmentShaderBit,
+            barriers);
+        _resolvedColorLayout = ImageLayout.ShaderReadOnlyOptimal;
+    }
+
+    /// <summary>
     /// Prepares the resolved color and depth images for a sampling pass: transitions them to
     /// <c>ShaderReadOnlyOptimal</c>, or synchronizes the previous frame's writes with the read when they
     /// are already in that layout.
@@ -466,66 +552,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
         }
 
         RecordImageBarriers(vulkan, commandBuffer, sourceStage, PipelineStageFlags.FragmentShaderBit, barriers[..count]);
-    }
-
-    /// <summary>
-    /// Synchronizes the previous camera pass' attachment writes with the next pass' loads and resolves
-    /// for two consecutive writing passes of the app scene target.
-    /// </summary>
-    /// <param name="vulkan">The Vulkan functions.</param>
-    /// <param name="commandBuffer">The command buffer recording the frame.</param>
-    internal void SynchronizeBetweenPasses(Vk vulkan, CommandBuffer commandBuffer) {
-        bool multisampled = IsMultisampled;
-        int capacity = (multisampled ? 2 : 1) + (_hasDepth ? (multisampled ? 2 : 1) : 0);
-        Span<ImageMemoryBarrier> barriers = stackalloc ImageMemoryBarrier[capacity];
-        int count = 0;
-        if (multisampled) {
-            barriers[count++] = CreateImageBarrier(
-                _multisampledColorImage,
-                ImageAspectFlags.ColorBit,
-                ImageLayout.ColorAttachmentOptimal,
-                ImageLayout.ColorAttachmentOptimal,
-                AccessFlags.ColorAttachmentWriteBit,
-                COLOR_ATTACHMENT_ACCESS);
-        }
-
-        // The next pass loads the previous pass' color and depth and resolves into the resolved images,
-        // so its destination scope includes the attachment reads and writes.
-        barriers[count++] = CreateImageBarrier(
-            _resolvedColorImage,
-            ImageAspectFlags.ColorBit,
-            ImageLayout.ColorAttachmentOptimal,
-            ImageLayout.ColorAttachmentOptimal,
-            AccessFlags.ColorAttachmentWriteBit,
-            COLOR_ATTACHMENT_ACCESS);
-        if (_hasDepth) {
-            if (multisampled) {
-                barriers[count++] = CreateImageBarrier(
-                    _multisampledDepthImage,
-                    ImageAspectFlags.DepthBit,
-                    ImageLayout.DepthStencilAttachmentOptimal,
-                    ImageLayout.DepthStencilAttachmentOptimal,
-                    AccessFlags.DepthStencilAttachmentWriteBit,
-                    DEPTH_ATTACHMENT_ACCESS);
-            }
-
-            barriers[count++] = CreateImageBarrier(
-                _resolvedDepthImage,
-                ImageAspectFlags.DepthBit,
-                ImageLayout.DepthStencilAttachmentOptimal,
-                ImageLayout.DepthStencilAttachmentOptimal,
-                ResolvedDepthSourceAccess(ImageLayout.DepthStencilAttachmentOptimal),
-                ResolvedDepthWriteAccess());
-        }
-
-        RecordImageBarriers(
-            vulkan,
-            commandBuffer,
-            PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.LateFragmentTestsBit,
-            PipelineStageFlags.ColorAttachmentOutputBit
-                | PipelineStageFlags.EarlyFragmentTestsBit
-                | PipelineStageFlags.LateFragmentTestsBit,
-            barriers[..count]);
     }
 
     private static AccessFlags ColorSourceAccess(ImageLayout layout) => layout switch {
@@ -630,6 +656,7 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
                 : [resolvedColor.View]);
         _framebuffer = CreateFramebuffer(attachments);
         _multisampledColorImage = multisampled ? multisampledColor!.Value.Image : default;
+        _multisampledColorView = multisampled ? multisampledColor!.Value.View : default;
         _multisampledDepthImage = multisampled && _hasDepth ? multisampledDepth.Image : default;
         _resolvedColorImage = resolvedColor.Image;
         _resolvedDepthImage = _hasDepth ? resolvedDepth.Image : default;

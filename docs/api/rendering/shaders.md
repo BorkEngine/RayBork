@@ -484,3 +484,37 @@ that uses an unsupported type fails the bake with a diagnostic pointing at the s
 
 A shader that fails prologue validation, compilation, entry-point renaming, or SPIR-V validation is a
 bake error, not a runtime error.
+
+**Custom post-process shaders**
+
+A `ShaderPostProcessEffect` is an ordinary baked shader with both stages, drawn once as a fullscreen
+pass. Its sidecar must declare the reserved texture binding `sourceColor`, which the engine binds to
+the camera target's current resolved color (or the previous effect's output in a chain). It may
+declare the optional `sourceDepth`, which the engine binds to the target's resolved reverse-Z depth; a
+depth-less `RenderTexture` target rejects that binding when the camera is created. The engine always
+overrides both reserved names; a material value the cursor holds for them is ignored. Every other
+uniform and texture comes from the shader material and is snapshotted at camera creation.
+
+The vertex stage maps the engine fullscreen quad, whose positions are `[-0.5, 0.5]` and whose UVs are
+`[0, 1]` with `(0, 0)` at the image top-left:
+
+```glsl
+#version 450
+
+layout(location = 0) in vec3 aPosition;
+layout(location = 2) in vec2 aUv;
+
+layout(location = 0) out vec2 vUv;
+
+void main_vertex() {
+    vUv = aUv;
+    gl_Position = vec4(aPosition.xy * 2.0, 0.0, 1.0);
+}
+```
+
+The fragment stage writes scene-linear HDR color. The engine does not apply exposure, AgX, or gamma to
+the chain; the present pass owns display conversion, and intermediate post targets are `Rgba16Float`
+so values above `1` survive. The shader's baked default render state is ignored: the post pass forces
+opaque blending, no culling, and no depth test or depth write. Chaining effects in a stack gives
+multi-pass processing. SSAO and bloom are later M8 tasks built on the same core; see
+[Post-processing](post-processing.md).

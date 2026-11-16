@@ -43,8 +43,10 @@ pass, framebuffer, bindless views, and pipeline cache in place while keeping the
 `RenderTexture.ReadColorsAsync` copies the resolved color image into a top-left staging buffer and
 decodes raw scene-linear HDR colors; `RenderTexture.ReadPixelsAsync` applies the frame's tone snapshot
 and the SDR AgX/sRGB CPU reference to produce display-referred RGBA8. Both wait for the target's
-last-use fence and restore its resolved layout. Post-processing and the render-target sample are later
-M8 tasks.
+last-use fence and restore its resolved layout. Camera post-process stacks build on those resolved
+images: a target-sized `Rgba16Float` chain with a camera-viewport store-back, on the scene target and
+on a `RenderTexture` target (see [Post-process execution](#post-process-execution)). The render-target
+sample remains a later M8 task.
 
 ## Goals
 
@@ -254,7 +256,7 @@ The backend owns:
 | `Initialize` | Render | Creates the instance, requests the native surface through `RendererBackendOptions.SurfaceProvider`, then creates the device, queues, swapchain, scene target, present pipeline, and frame resources. Failure is fatal (`RB3001`; a platform surface failure surfaces as `RB2003` on the main thread and is wrapped as `RB3001` on the render thread). |
 | `Resize` | Render | Recreates the swapchain, scene target, present pipeline framebuffers, and per-image semaphores when the selected extent changes. A zero width or height marks the surface as having no drawable extent and keeps the presentation path. It is idempotent for an unchanged extent. |
 | `ProcessRenderTextureRequests` | Render | Drains the render texture request queue before the frame wait: it creates a target's color and depth images, resolved images, samplers, bindless color and depth views, and public `RenderTexture` for a queued creation, recreates those resources at a new size for a queued resize after the target is idle, copies a target's resolved color image for a queued readback after the target's last-use fence and completes it with raw linear colors or display-referred pixels, and destroys a released target's GPU objects and bindless slots after the frame that last used it completed. A creation, resize, or readback failure completes its request with the failure and never stops the loop. A device recovery recreates the images, samplers, slots, and the bindless view resources behind the unchanged public views from the retained description. |
-| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area and the camera's target as the framebuffer, loads/stores the scene attachments between passes, resolves each pass' render area for color and depth, transitions the resolved color and depth images for the present pass and for a later camera's sample, records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
+| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area and the camera's target as the framebuffer, loads/stores the scene attachments between passes, resolves each pass' render area for color and depth, runs a camera pass' post-process chain and stores it back, transitions the resolved color and depth images for the present pass and for a later camera's sample, records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
 | `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, every live render target and its pipeline cache, the scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
@@ -616,10 +618,11 @@ wait for the render loop to finish with it   wait for newest ready
   requires `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, so the sampled depth value is the stored reverse-Z value
   rather than a min/max resolve. The resolved depth image carries a sampled view for the public
   `DepthTexture` (runtime targets) or stays internal (the app scene target); the scene target's resolved
-  depth is the input an internal later consumer such as T5 SSAO samples. `VulkanReadback.ReadSceneDepthPixel`
+  depth is the input an internal later consumer such as the SSAO effect samples. `VulkanReadback.ReadSceneDepthPixel`
   reads that resolved image for both single-sample and multisampled scene targets. The scene target
-  resolves depth on every camera pass even though the only reader before T5 is the diagnostic probe; that
-  is a known bandwidth cost recorded for T5 rather than a hidden regression.
+  resolves depth on every camera pass even though the only reader before the SSAO effect is the
+  diagnostic probe; that is a known bandwidth cost recorded for the post-process core rather than a
+  hidden regression.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
   starts in `Setup` completes without waiting for the first tick and does not stall frame
@@ -636,6 +639,91 @@ wait for the render loop to finish with it   wait for newest ready
 - When the window is minimized or unfocused, the tick loop continues at a **30 FPS cap**. The M2
   renderer skips image acquisition and presentation while the surface has no extent and keeps the
   last presentation path for the restore.
+
+## Post-process execution
+
+A camera's `PostProcessStack` is tick-thread state, so the camera service snapshots it into the
+`CameraPass` when the camera is created: the stack entry order, each entry's `Enabled` value, and a
+custom effect's internal shader program, captured uniform bytes, texture bindings, and reserved
+`sourceColor`/`sourceDepth` binding indices. The capture runs before the pass is appended, so a
+rejected effect leaves the frame packet unchanged, and the frame's retention set acquires the
+program's and every bound texture's frame hold at the same time. The reserved binding values are never
+validated, retained, or registered as sampled targets because the engine overrides them at record time.
+The `CameraPass` resets its effect array with the draw records, so a pooled slot never keeps an old
+effect alive. Snapshots are pooled per effect: the pass reset releases a snapshot's program and texture
+references and returns it to its effect, so a later camera reuses the snapshot object, uniform buffer,
+and texture array instead of allocating them again.
+
+The render thread runs a pass' effects after its camera render pass ended and its resolved color and
+depth images were transitioned to a shader read, and before the next camera pass or the present pass.
+The chain is target-sized whichever target the camera writes:
+
+- The app scene target owns two internal bindless slots for its resolved color and depth views. The
+  backend allocates them with the scene target after the bindless table exists, recreates them with
+  every presentation-path recreation (window resize, HDR change, surface or device recovery), and
+  releases their samplers and slots during teardown. A runtime render target already exposes those
+  images through its public `ColorTexture`/`DepthTexture` view slots.
+- The post processor owns two target-sized single-sample `Rgba16Float` color targets per frame ring
+  slot and per target extent. Each has a color-only render pass framebuffer, a bindless slot for an
+  effect to sample it through the shader ABI, and a dedicated descriptor set for the engine store-back
+  pass' own single-sampler layout. A frame can chain effects on the scene target and on render targets
+  of different sizes, so the extents are pooled instead of one pair per slot: when a frame starts,
+  after its slot's fence signaled, the processor keeps the extents the previous frame on that slot used
+  and destroys the rest. A target resize therefore reallocates that target's post targets, an unchanged
+  extent reuses them with no per-frame allocation, and a device recovery destroys the whole pool with
+  the processor. The same per-extent pool serves a built-in effect's intermediate targets, so a bloom
+  downsample can rent a half- or quarter-sized pair; the pair alternates its two targets, so one extent
+  supports two live images before an effect completes or reuses one.
+- A custom effect records one fullscreen pass: the geometry pipeline layout, the shared frame
+  descriptor set and instance buffer, the backend-owned fullscreen quad, and a post pipeline cached
+  against the post render pass with a forced opaque/no-cull/no-depth state. The instance record's
+  `sourceColor` and `sourceDepth` texture index slots are overridden with the current chain source and
+  the target's depth slot; every other texture index comes from the captured material bindings. Two
+  effects ping-pong between the two targets, so the chain is genuinely multi-pass.
+- The engine store-back pass samples the final post target through the built-in `PostStore` shader
+  pair (embedded SPIR-V, compiled by `scripts/compile-shaders.ps1`) into a color-only render pass on
+  the camera target with the camera viewport as the render area: the MSAA color attachment plus the
+  resolved color image, or the single-sample resolved color image. The fragment shader receives the
+  normalized sub-rectangle of the target-sized post image that the viewport covers, so a viewport
+  store-back samples the matching target pixels. The target's depth images are not part of this pass
+  and keep their content.
+- After the store-back the target's resolved color returns to `ShaderReadOnlyOptimal` for the next
+  camera, the present pass, or a readback, and the backend marks the runtime target as color-written
+  with the frame's tone snapshot. The app scene target's depth stays resolved and readable for a later
+  SSAO-style consumer.
+
+The barriers follow the target path's rules. Before the store-back the resolved color image moves from
+its shader-read layout to `ColorAttachmentOptimal` with a source scope that covers the post effect's
+fragment reads and the camera pass' resolve write; a multisampled target also gets a same-layout
+barrier that orders the MSAA color attachment's camera-pass write before the store-back load. The
+store-back's resolve writes the single-sample color image at the color-attachment stage, so the
+following transition back to a shader read uses `ColorAttachmentOutput`/`ColorAttachmentWrite`.
+Depth resolves keep the T3b color-attachment stage and access rules, and the depth images are never
+transitioned by the store-back. Every camera pass that targets a runtime render texture transitions
+its resolved images back to a shader read for a later camera or a readback. A scene-target pass makes
+those transitions only when it runs a post chain; a scene pass with no stack is immediately followed by
+either another scene pass that transitions the attachments for its own write or the frame-final scene
+transition that serves the present pass and the diagnostic depth probe, so split-screen frames without
+effects do not pay two extra layout transitions per pass. A later camera pass that writes the target
+uses the general resolved-attachment transition, which handles a resolved color that a post chain left
+in a shader read. A pass with no stack keeps the same behavior, so the chain adds no render graph and
+no pass dependency analysis.
+
+The core is extensible rather than custom-shader-specific, but a built-in effect is engine code, not a
+new public effect type. The SSAO and bloom effects add an internal `PostProcessEffectSnapshot` subclass
+whose `Run` uses the per-pass `PostProcessContext`. The context gives a built-in the Vulkan device, the
+color-only post render pass, the engine pipeline layout and forced post render state, the shared frame
+descriptor set, and the engine fullscreen quad. It also provides `RentColorTarget()` for a
+camera-target-sized target and `RentColorTarget(Extent2D)` for an intermediate from the per-extent
+pool; `GetOrCreateFullscreenPipeline` against the post render pass; `ReserveInstanceRecord` and
+`GetInstanceRecordSpan` for one shader-ABI instance record per pass; `RecordFullscreenPass` for a pass
+that binds the frame set, the engine quad, and the custom pipeline; and `CompleteAuxiliaryTarget` or
+`CompleteColorTarget` to release an intermediate or make a camera-target-sized result the chain source.
+The snapshot reports its ordered instance-record layout (per-pass stride and count), so the frame's
+instance storage buffer is sized for every built-in pass, including passes with different shaders and
+uniform sizes. A built-in still supplies its own shaders, effect type, and pass scheduling; it does not
+change the public stack, the camera snapshot path, the store-back, or the processor. There is no
+built-in effect in this task.
 
 ## Time
 
@@ -674,7 +762,7 @@ wait for the render loop to finish with it   wait for newest ready
   resolves its own render area, and the multisampled color and depth attachments are stored between
   camera passes so a later camera can load them. Scene depth is also resolved into a single-sample
   internal depth image with Vulkan 1.2 depth/stencil resolve; it is the input a later internal consumer
-  such as T5 SSAO samples, and there is no public scene-target depth view. A runtime depth-bearing
+  such as the SSAO effect samples, and there is no public scene-target depth view. A runtime depth-bearing
   target resolves its depth attachment into the image behind `RenderTexture.DepthTexture`.
 - A render target's color and depth views are separate bindless textures over separate single-sample
   images. The render-target entry owns one `RenderTextureViewLifetime`, `RenderTextureViewResource`,
@@ -776,7 +864,7 @@ render area. Depth is cleared to `0.0` per camera pass and the reverse-Z compari
 the multisampled color and depth attachments are stored between camera passes so a later pass can
 load them. The depth attachment is also resolved into a single-sample image per camera render area
 with Vulkan 1.2 depth/stencil resolve; the scene target's resolved depth stays internal for a later
-internal consumer such as T5 SSAO, while a runtime target exposes its resolved depth as
+internal consumer such as the SSAO effect, while a runtime target exposes its resolved depth as
 `RenderTexture.DepthTexture`. The present triangle is not depth-tested; the geometry pipelines consume
 the reverse-Z state.
 
@@ -820,6 +908,29 @@ src/RayBork/RayBork.Engine/Shaders/Present.frag.spv    committed SPIR-V build in
 - The fragment shader owns the encoding branch and the AgX transform. The numeric `encoding`
   values are the shader ABI: changing one requires recompiling the committed blob in the same
   change.
+
+The post-process store-back pass is the engine's second built-in fullscreen shader pair:
+
+```text
+src/RayBork/RayBork.Engine/Shaders/PostStore.vert.glsl   committed source
+src/RayBork/RayBork.Engine/Shaders/PostStore.vert.spv    committed SPIR-V build input
+src/RayBork/RayBork.Engine/Shaders/PostStore.frag.glsl   committed source
+src/RayBork/RayBork.Engine/Shaders/PostStore.frag.spv    committed SPIR-V build input
+```
+
+- The vertex stage generates the same fullscreen triangle as the present pass from
+  `gl_VertexIndex`, so the store-back needs no vertex or index buffer.
+- The fragment stage samples the final single-sample `Rgba16Float` post target through one combined
+  image sampler and a 16-byte fragment push constant: the normalized post-target origin in `x`/`y` and
+  size in `z`/`w` that the camera viewport covers, so a viewport store-back samples the matching
+  target region. The render pass owns the target color format: an `Rgba8Unorm` target stores the same
+  linear values, and an `Rgba8Srgb` target applies the fixed-function sRGB encode in the write path
+  (the readback decodes it again). There is no tone mapping in this stage; the chain is scene-linear
+  HDR and the present pass applies display conversion later.
+- `RayBork.Engine.csproj` embeds the `.spv` files under the same logical resource pattern as the
+  present pair. `ShaderAssets` loads them once, and the backend's post-process store-back pipeline
+  caches render passes and pipelines per target color format and sample count. The runtime never
+  compiles shaders and never invokes `glslc`.
 
 The AgX curve has two implementations that must stay in step: the GLSL in `Present.frag.glsl`, and
 the CPU reference `AgxToneMap` with `AgxCurveParameters`. The renderer never calls the CPU reference
@@ -1707,9 +1818,17 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
     the resolved color image after that wait and restores its layout without changing the target's
     views, bindless slots, or lifetime. The pre-existing scene-target cross-frame overwrite hazard is
     unchanged.
+16. A camera post-process stack is snapshotted on the tick thread and never read live by the render
+    thread; a recorded frame holds the effect's shader program and textures until it completes. A
+    snapshot is pooled per effect and reused only after the recorded frame releases the pass that held
+    it, and the reserved `sourceColor`/`sourceDepth` material values are never validated, retained, or
+    sampled. The target-sized chain writes only through its own `Rgba16Float` post targets and the
+    camera-viewport store-back, leaves the target's depth unchanged, and returns the resolved color to a
+    shader read with the target's written flag and tone snapshot updated.
 
 Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3; 2-4, 7, and 10 are exercised end to end by
 the camera and draw path, and 7 and 10 by the M7 `samples/Pong` AOT gate; 13 is enforced by the
 collision unit tests and the loader tests for the baked payload; 14 is enforced by the glyph
-pipeline, font asset, and text draw tests; 15 is enforced by the render texture unit and GPU tests.
+pipeline, font asset, and text draw tests; 15 is enforced by the render texture unit and GPU tests;
+16 is enforced by the post-process unit and GPU tests and the validation layer.
 M3 enforced the asset and frame-retention parts of 3, 7, and 10 before the draw recorder existed.

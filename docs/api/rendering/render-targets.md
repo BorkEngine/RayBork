@@ -186,12 +186,27 @@ change; a later frame samples or writes the target exactly as before.
   transition entirely and returns the default. A post-processed later write to the target is read back
   like any other content.
 
-**Camera target and viewport.** `EngineContext.CreateCamera` takes `target:` as its last parameter.
-A camera targeting a `RenderTexture` records its pass into that target instead of the app's linear HDR
-scene target; `Camera.Target` returns the target object. The target's viewport defaults to the full
-target and clamps to the target size, not the window, and the projection aspect ratio uses the clamped
-viewport. `ScreenToWorldRay`, `WorldToScreen`, and `ScreenToWorldTransform` keep their documented
-camera-viewport behavior. A camera targeting a disposed target throws `ObjectDisposedException`.
+**Camera target and viewport.** `EngineContext.CreateCamera` takes `target:` and `postProcess:` after
+the viewport. A camera targeting a `RenderTexture` records its pass into that target instead of the
+app's linear HDR scene target; `Camera.Target` returns the target object. The target's viewport
+defaults to the full target and clamps to the target size, not the window, and the projection aspect
+ratio uses the clamped viewport. `ScreenToWorldRay`, `WorldToScreen`, and `ScreenToWorldTransform` keep
+their documented camera-viewport behavior. A camera targeting a disposed target throws
+`ObjectDisposedException`.
+
+**Post-process effects on a target.** A camera's `postProcess` stack runs after the camera's geometry
+and resolve pass and before the next camera or the present pass. The chain is target-sized: it samples
+the target's resolved color and depth, ping-pongs one fullscreen pass per enabled custom effect through
+two target-sized single-sample `Rgba16Float` post targets, and stores the final result back into the
+target's color attachment for the camera viewport only. A multisampled target is written through its
+MSAA color attachment and resolved into the single-sample color image; a single-sample target is
+written directly. Pixels outside the camera viewport are untouched, and the target's depth is
+unchanged. After the store-back the resolved color is `ShaderReadOnlyOptimal` again, with the written
+flag and tone snapshot updated, so a later camera's `ColorTexture` sample and both
+`ReadColorsAsync`/`ReadPixelsAsync` calls include the post-processed output. A viewport camera is
+supported; because the source is the full target, its effect can sample content outside its viewport
+(cross-viewport source behavior and edge bleed are documented M8 behavior, with per-viewport copies a
+follow-up). See [Post-processing](post-processing.md).
 
 **Same-tick sampling and barriers.** Passes run in camera creation order. A later camera in the same
 tick can sample `ColorTexture` or `DepthTexture` with `Shader.SetUniform`, `DrawQuad`, or `DrawMesh`: the
@@ -240,17 +255,21 @@ recovery the same public `Texture` object remains valid; only its GPU image and 
 replaced. `DepthTexture` is `null` for a `Depth: false` target.
 
 The app scene target also owns a resolved depth image, but it is internal: there is no public scene-target
-depth view. It is the input a later internal consumer such as T5 SSAO samples. The scene target discards
+depth view. It is the input an internal consumer such as the SSAO effect samples. The scene target discards
 its attachments, including the resolved depth image, at the start of every frame, and
 `VulkanReadback.ReadSceneDepthPixel` reads the resolved depth image for both single-sample and
-multisampled scene targets. Resolving scene depth costs bandwidth on every camera pass; T5 SSAO is the
-consumer, and until it lands the only reader is the diagnostic probe. That cost is a known property of
-the depth path, not a hidden regression; T5 can decide whether a pass needs the resolve.
+multisampled scene targets. Resolving scene depth costs bandwidth on every camera pass; the SSAO
+effect is the internal consumer, and until it lands the only reader is the diagnostic probe and a
+custom post effect that declares `sourceDepth`. That cost is a known property of the depth path, not a
+hidden regression; a built-in effect can decide whether a pass needs the resolve.
 
-**Remaining M8 work.** Post-processing/effects (T5) and the RenderTarget and split-screen samples
-remain later M8 tasks. This section covers the color path, the depth view, resize, and color readback:
-creation, camera routing, MSAA color and depth resolve, same-tick sampling of both views, resize,
-lifetime, raw linear color readback, and display-referred pixel readback.
+**Remaining M8 work.** The extensible camera post-process core and the custom-shader effect ship:
+the stack API, the target-sized chain, viewport store-back, the reserved `sourceColor`/`sourceDepth`
+contract, and the scene-target and render-target source slots. Built-in SSAO and bloom effects and the
+RenderTarget and split-screen samples remain later M8 tasks. This section covers the color path, the
+depth view, resize, and color readback: creation, camera routing, MSAA color and depth resolve,
+same-tick sampling of both views, resize, lifetime, raw linear color readback, display-referred pixel
+readback, and camera post-processing.
 
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or
@@ -295,7 +314,7 @@ public readonly record struct RenderStats(
 | `Triangles` | Submitted triangle count after instancing: `indexCount / 3` per triangle-list instance, `indexCount - 2` per triangle-strip instance, and `0` for line and point topologies. |
 | `CulledInstances` | Instances rejected by frustum culling in this frame. |
 | `PipelineCount` | Distinct scene (geometry) pipelines used by the frame. The present pipeline is not counted. |
-| `TextureCount` | Bindless texture slots live after the frame, including the reserved white slot at slot 0. A texture allocates its slot when its GPU upload completes and releases it only when its GPU resource is destroyed. |
+| `TextureCount` | Bindless texture slots live after the frame, including the reserved white slot, the scene target's two internal resolved color and depth source slots, and the live post-process targets (two per target extent per frame ring slot while the extent is in use). A texture allocates its slot when its GPU upload completes and releases it only when its GPU resource is destroyed. |
 | `SampleCount` | Effective MSAA sample count for the frame. |
 | `HdrOutput` | Whether the frame presented through the scRGB HDR path. |
 | `CpuFrameMilliseconds` | Render-thread CPU time for planning, recording, and submitting the frame. The measurement starts after the frame fence wait and the swapchain acquire, so it excludes both blocking waits and presentation. |

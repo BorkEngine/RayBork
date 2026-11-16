@@ -21,7 +21,9 @@ namespace RayBork.Internal;
 /// </remarks>
 internal sealed class CameraPass {
     private RenderDrawRecord[] _draws = new RenderDrawRecord[4];
+    private PostProcessEffectSnapshot[] _postProcessEffects = new PostProcessEffectSnapshot[2];
     private int _drawCount;
+    private int _postProcessEffectCount;
     private bool _sealed;
 
     /// <summary>Gets the zero-based creation order of the pass inside its frame.</summary>
@@ -67,6 +69,30 @@ internal sealed class CameraPass {
 
     /// <summary>Gets the number of draw records recorded into the pass.</summary>
     internal int DrawCount => _drawCount;
+
+    /// <summary>
+    /// Gets the post-process effect snapshots in stack order, including entries that were disabled when
+    /// the camera was created.
+    /// </summary>
+    internal ReadOnlySpan<PostProcessEffectSnapshot> PostProcessEffects =>
+        _postProcessEffects.AsSpan(0, _postProcessEffectCount);
+
+    /// <summary>Gets the number of captured post-process entries, enabled or disabled.</summary>
+    internal int PostProcessEffectCount => _postProcessEffectCount;
+
+    /// <summary>Gets whether the pass has at least one enabled post-process effect.</summary>
+    internal bool HasEnabledPostProcessEffects {
+        get {
+            ReadOnlySpan<PostProcessEffectSnapshot> effects = PostProcessEffects;
+            for (int index = 0; index < effects.Length; index++) {
+                if (effects[index].Enabled) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
 
     /// <summary>Gets whether the pass rejects new draws.</summary>
     internal bool IsSealed => _sealed;
@@ -124,6 +150,26 @@ internal sealed class CameraPass {
     }
 
     /// <summary>
+    /// Appends one post-process effect snapshot in run order.
+    /// </summary>
+    /// <param name="effect">The snapshot captured for this camera.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">The pass is sealed.</exception>
+    internal void AddPostProcessEffect(PostProcessEffectSnapshot effect) {
+        ArgumentNullException.ThrowIfNull(effect);
+        if (_sealed) {
+            throw new InvalidOperationException(
+                "The camera pass is already sealed; a post-process effect cannot be recorded into a sealed pass.");
+        }
+
+        if (_postProcessEffectCount == _postProcessEffects.Length) {
+            Array.Resize(ref _postProcessEffects, checked(_postProcessEffects.Length * 2));
+        }
+
+        _postProcessEffects[_postProcessEffectCount++] = effect;
+    }
+
+    /// <summary>
     /// Stops recording. Idempotent.
     /// </summary>
     internal void Seal() => _sealed = true;
@@ -134,7 +180,13 @@ internal sealed class CameraPass {
     /// </summary>
     internal void Reset() {
         Array.Clear(_draws, 0, _drawCount);
+        for (int index = 0; index < _postProcessEffectCount; index++) {
+            _postProcessEffects[index].Reset();
+        }
+
+        Array.Clear(_postProcessEffects, 0, _postProcessEffectCount);
         _drawCount = 0;
+        _postProcessEffectCount = 0;
         _sealed = false;
         Index = 0;
         View = default;

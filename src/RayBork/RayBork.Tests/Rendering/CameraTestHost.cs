@@ -13,6 +13,7 @@ namespace RayBork.Tests.Rendering;
 /// </remarks>
 internal sealed class CameraTestHost : IDisposable {
     private bool _attached;
+    private bool _ownsAttachment;
 
     internal CameraTestHost(int renderWidth = 1280, int renderHeight = 720) {
         Window = new FakePlatformWindow(static () => { }) {
@@ -32,7 +33,13 @@ internal sealed class CameraTestHost : IDisposable {
 
     internal RenderFramePacket BeginFrame(long frameIndex = 1, double time = 1.0, double deltaTime = 1.0 / 60.0) {
         if (!_attached) {
-            TickThread.Attach();
+            // Another test helper on this thread (for example the GPU draw harness) may already own the
+            // tick-thread attachment; only detach in Dispose when this host attached.
+            _ownsAttachment = !TickThread.IsCurrent;
+            if (_ownsAttachment) {
+                TickThread.Attach();
+            }
+
             _attached = true;
         }
 
@@ -48,7 +55,9 @@ internal sealed class CameraTestHost : IDisposable {
         Color? clearColor = null,
         float near = 0.1f,
         float far = float.PositiveInfinity,
-        Rect? viewport = null)
+        Rect? viewport = null,
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null)
         => Service.CreateCamera(
             transform ?? Transform.Identity,
             CameraProjection.Perspective,
@@ -58,7 +67,9 @@ internal sealed class CameraTestHost : IDisposable {
             clearColor,
             near,
             far,
-            viewport);
+            viewport,
+            target,
+            postProcess);
 
     internal Camera CreateOrthographicCamera(
         Transform? transform = null,
@@ -67,7 +78,9 @@ internal sealed class CameraTestHost : IDisposable {
         Color? clearColor = null,
         float near = 0.1f,
         float far = 100f,
-        Rect? viewport = null)
+        Rect? viewport = null,
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null)
         => Service.CreateCamera(
             transform ?? Transform.Identity,
             CameraProjection.Orthographic,
@@ -77,7 +90,9 @@ internal sealed class CameraTestHost : IDisposable {
             clearColor,
             near,
             far,
-            viewport);
+            viewport,
+            target,
+            postProcess);
 
     internal void EndFrame() => Service.EndFrame();
 
@@ -90,7 +105,10 @@ internal sealed class CameraTestHost : IDisposable {
             Service.AbandonFrame();
         } finally {
             _attached = false;
-            TickThread.Detach();
+            if (_ownsAttachment) {
+                _ownsAttachment = false;
+                TickThread.Detach();
+            }
         }
     }
 }

@@ -327,9 +327,13 @@ M8's goal is render targets, multiple cameras, and readback. The per-pass frame 
 per camera pass, and the color, depth, resize, and readback paths of `RenderTexture` ship: creation,
 `Camera.Target` routing, MSAA color and depth resolve, the sampled `ColorTexture` and `DepthTexture`
 views, target lifetime, `Resize`, and top-left color readback through `ReadColorsAsync` (raw
-scene-linear HDR colors) and `ReadPixelsAsync` (display-referred RGBA8 for screenshots).
-Post-processing/effects and the RenderTarget and split-screen samples remain as later M8 tasks.
-Multiple cameras and split-screen viewports render to the HDR scene target, and a HUD is an ordinary
-later camera rather than a separate overlay pass. It builds on the M7 screen-space surface and the M4
-camera; the shipped surface is listed in
+scene-linear HDR colors) and `ReadPixelsAsync` (display-referred RGBA8 for screenshots). The extensible
+camera post-process core ships too: `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`,
+the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float` chains over the engine
+fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader contract, and camera-viewport
+store-back on the scene target and render targets, with the post-processed output included in a later
+sample and both readback methods. Built-in SSAO and bloom effects and the RenderTarget and split-screen
+samples remain as later M8 tasks. Multiple cameras and split-screen viewports render to the HDR scene
+target, and a HUD is an ordinary later camera rather than a separate overlay pass. It builds on the M7
+screen-space surface and the M4 camera; the shipped surface is listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).

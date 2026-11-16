@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
@@ -72,6 +71,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private VulkanFrameResources? _frameResources;
     private VulkanBindlessTextureTable? _bindlessTextures;
     private VulkanGeometryPipelineCache? _geometryPipelines;
+    private VulkanPostProcessor? _postProcessor;
     private IntPtr _surfaceHandle;
     private SurfaceKHR _surface;
     private VulkanSwapchain? _swapchain;
@@ -99,6 +99,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     private int _recoveryCount;
     private int _consecutiveRecoveries;
     private int _deviceGeneration;
+    private uint _sceneSourceColorSlot;
+    private uint _sceneSourceDepthSlot;
+    private Sampler _sceneSourceColorSampler;
+    private Sampler _sceneSourceDepthSampler;
+    private int _sceneSourceSlotAllocationCount;
     private RenderRecoveryReason? _simulatedFailure;
     private bool _unrecoverableFailureForTests;
     private bool _initialized;
@@ -571,6 +576,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         lifetime.SetLastUseFrameSlot(-1);
 
         previousPipelines?.Dispose();
+        _postProcessor?.DestroyStoreBack(previousTarget);
         previousTarget.Dispose();
         request.Completion.TrySetResult();
     }
@@ -889,6 +895,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             entry.Lifetime.MarkDestroyed();
         }
 
+        _postProcessor?.DestroyStoreBack(entry.Target);
         entry.Target.Dispose();
     }
 
@@ -1023,6 +1030,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         ulong instanceBytes = ComputeInstanceBytes(plan);
         _frameResources!.EnsureFrameCapacity((int)frameSlot, plan.Passes.Count, frame.FrameIndex);
         _frameResources!.EnsureSlot((int)frameSlot, instanceBytes, frame.FrameIndex);
+        // The slot's fence signaled, so the processor can release the post-target extents this slot's
+        // previous frame did not use before the new frame records into it.
+        _postProcessor!.BeginFrame((int)frameSlot, frame.FrameIndex);
 
         CommandBuffer commandBuffer = _commandBuffers[frameSlot];
         ThrowIfFailed(vulkan.ResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer");
@@ -1283,6 +1293,31 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     internal int ReadbackCopyCountForTests { get; private set; }
 
     /// <summary>
+    /// Computes one frame's required instance-record bytes, for unit tests. Test-only; it is not part of
+    /// the renderer seam.
+    /// </summary>
+    /// <param name="frame">The sealed frame to simulate.</param>
+    /// <returns>The instance-record bytes the frame needs, including per-record alignment.</returns>
+    internal static ulong ComputeInstanceBytesForTests(RenderFramePacket frame) {
+        ArgumentNullException.ThrowIfNull(frame);
+        return ComputeInstanceBytes(new BatchPlanner().Plan(frame));
+    }
+
+    /// <summary>
+    /// Gets the number of times the post-processor created a target-sized post-target pair for a frame
+    /// slot, for GPU tests. Test-only; it is not part of the renderer seam. A target extent change or a
+    /// device recovery increments it when the next effect frame runs.
+    /// </summary>
+    internal int PostTargetRecreationCountForTests => _postProcessor?.TargetRecreationCount ?? 0;
+
+    /// <summary>
+    /// Gets the number of times the scene target's internal bindless source slots were allocated, for GPU
+    /// tests. Test-only; it is not part of the renderer seam. The initial scene target allocates once and
+    /// every presentation-path recreation allocates again.
+    /// </summary>
+    internal int SceneTargetSourceSlotAllocationCountForTests => _sceneSourceSlotAllocationCount;
+
+    /// <summary>
     /// Gets whether no submitted frame can still reference a GPU asset resource.
     /// </summary>
     /// <remarks>
@@ -1388,9 +1423,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         DeviceWaitIdle();
         DropPendingPresent();
         DestroyGeometryPipelines();
+        VulkanPostProcessor? postProcessor = _postProcessor;
+        _postProcessor = null;
+        postProcessor?.Dispose();
         DestroyRenderTargets();
         _presentPipeline?.Dispose();
         _presentPipeline = null;
+        ReleaseSceneTargetSourceSlots();
         _sceneTarget?.Dispose();
         _sceneTarget = null;
         _frameResources?.Dispose();
@@ -1526,6 +1565,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _bindlessTextures = new VulkanBindlessTextureTable(capabilities.BindlessTextureCapacity, _options!.Logger);
         _bindlessTextures.Initialize(device, _descriptorState, _frameResources);
         CreateGeometryPipelines();
+        CreatePostProcessor();
+        CreateSceneTargetSourceSlots();
         _options.Logger.LogInformation(
             "Bindless texture table: {Capacity} slot(s) (device limits: per-stage update-after-bind sampled images {StageLimit}, per-set {SetLimit}, per-stage samplers {SamplerLimit}); instance storage-buffer bound {InstanceBound} byte(s).",
             capabilities.BindlessTextureCapacity,
@@ -1561,6 +1602,120 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         pipelines?.Dispose();
     }
 
+    /// <summary>
+    /// Creates the camera post-process executor for the current device, bindless table, frame
+    /// resources, and geometry pipeline layout.
+    /// </summary>
+    /// <remarks>
+    /// Render-thread only, after <see cref="CreateGeometryResources"/> created the bindless table and
+    /// frame resources. The processor owns the target-sized post targets, the custom-effect pipeline
+    /// cache, the store-back pipelines, and the backend-owned fullscreen quad.
+    /// </remarks>
+    private void CreatePostProcessor() {
+        _postProcessor = VulkanPostProcessor.Create(
+            _device!,
+            _bindlessTextures!,
+            _frameResources!,
+            _descriptorState!.PipelineLayout,
+            _deviceGeneration);
+    }
+
+    /// <summary>
+    /// Allocates the scene target's internal bindless source slots for the resolved color and depth
+    /// images and writes their descriptors.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The scene target has no public color or depth view, so the post-process chain needs internal
+    /// slots to sample its resolved images. The color slot uses a linear clamp sampler and the depth
+    /// slot a nearest clamp sampler, matching a runtime target's public views. The slots are released
+    /// when the scene target is recreated and reallocated for its new views.
+    /// </para>
+    /// <para>
+    /// Render-thread only, with the bindless table initialized and the scene target live. A failure
+    /// releases the partial slots and samplers before it rethrows.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="GraphicsException">
+    /// The bindless table is full. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    private void CreateSceneTargetSourceSlots() {
+        ReleaseSceneTargetSourceSlots();
+        VulkanRenderTarget sceneTarget = _sceneTarget!;
+        VulkanBindlessTextureTable bindless = _bindlessTextures!;
+        VulkanDevice device = _device!;
+        Sampler colorSampler = default;
+        Sampler depthSampler = default;
+        uint colorSlot = 0;
+        uint depthSlot = 0;
+        try {
+            colorSampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
+            if (!bindless.TryAllocate(out colorSlot)) {
+                throw new GraphicsException(
+                    $"The bindless texture table is full ({bindless.Capacity} slots, including the "
+                        + "reserved white slot), so the scene target's resolved color view has no slot.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null);
+            }
+
+            bindless.WriteTexture(colorSlot, sceneTarget.ResolvedColorView, colorSampler);
+            depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
+            if (!bindless.TryAllocate(out depthSlot)) {
+                throw new GraphicsException(
+                    $"The bindless texture table is full ({bindless.Capacity} slots, including the "
+                        + "reserved white slot), so the scene target's resolved depth view has no slot.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null);
+            }
+
+            bindless.WriteTexture(depthSlot, sceneTarget.ResolvedDepthView, depthSampler);
+            _sceneSourceColorSampler = colorSampler;
+            _sceneSourceDepthSampler = depthSampler;
+            _sceneSourceColorSlot = colorSlot;
+            _sceneSourceDepthSlot = depthSlot;
+            _sceneSourceSlotAllocationCount++;
+        } catch {
+            if (colorSlot != 0) {
+                bindless.Release(colorSlot);
+            }
+
+            if (depthSlot != 0) {
+                bindless.Release(depthSlot);
+            }
+
+            DestroyRenderTargetSampler(device, colorSampler);
+            DestroyRenderTargetSampler(device, depthSampler);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Releases the scene target's internal bindless source slots and destroys their samplers. Safe when
+    /// they were never allocated. Render-thread only; the caller has made the device idle or is in
+    /// teardown.
+    /// </summary>
+    private void ReleaseSceneTargetSourceSlots() {
+        if (_bindlessTextures is not null) {
+            if (_sceneSourceColorSlot != 0) {
+                _bindlessTextures.Release(_sceneSourceColorSlot);
+            }
+
+            if (_sceneSourceDepthSlot != 0) {
+                _bindlessTextures.Release(_sceneSourceDepthSlot);
+            }
+        }
+
+        if (_device is not null) {
+            DestroyRenderTargetSampler(_device, _sceneSourceColorSampler);
+            DestroyRenderTargetSampler(_device, _sceneSourceDepthSampler);
+        }
+
+        _sceneSourceColorSlot = 0;
+        _sceneSourceDepthSlot = 0;
+        _sceneSourceColorSampler = default;
+        _sceneSourceDepthSampler = default;
+    }
+
     private void RecreatePresentation(WindowSurfaceState state, LogLevel logLevel, string reason) {
         VulkanDevice device = _device!;
         RendererBackendOptions options = _options!;
@@ -1589,8 +1744,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         VulkanRenderTarget? sceneTarget = _sceneTarget;
         _sceneTarget = null;
+        if (sceneTarget is not null) {
+            _postProcessor?.DestroyStoreBack(sceneTarget);
+        }
+
+        ReleaseSceneTargetSourceSlots();
         sceneTarget?.Dispose();
         _sceneTarget = VulkanRenderTarget.Create(device, extent, _sampleCount, Format.R16G16B16A16Sfloat, depth: true);
+        CreateSceneTargetSourceSlots();
         CreateGeometryPipelines();
         VulkanPresentPipeline? presentPipeline = _presentPipeline;
         if (presentPipeline is null || formatChanged) {
@@ -1676,6 +1837,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         _surface = new SurfaceKHR { Handle = unchecked((ulong)_surfaceHandle.ToInt64()) };
         CreatePresentationPath(state);
+        // The device and bindless table survive a surface loss, but the scene target was recreated, so
+        // its internal post-process source slots must point at the new resolved views.
+        CreateSceneTargetSourceSlots();
         CreateGeometryPipelines();
         return true;
     }
@@ -1695,6 +1859,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         DeviceWaitIdle();
         DropPendingPresent();
         DestroyGeometryPipelines();
+        VulkanPostProcessor? postProcessor = _postProcessor;
+        _postProcessor = null;
+        postProcessor?.Dispose();
         DestroyRenderTargetGpuResources();
         DestroyPresentationResources();
         DestroyFrameResources();
@@ -1839,6 +2006,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         presentPipeline?.Dispose();
         VulkanRenderTarget? sceneTarget = _sceneTarget;
         _sceneTarget = null;
+        if (sceneTarget is not null) {
+            _postProcessor?.DestroyStoreBack(sceneTarget);
+        }
+
+        ReleaseSceneTargetSourceSlots();
         sceneTarget?.Dispose();
         VulkanSwapchain? swapchain = _swapchain;
         _swapchain = null;
@@ -2045,19 +2217,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <remarks>
     /// <para>
     /// Render-thread only. The frame slot's fence has already signaled, so the slot's buffers and
-    /// descriptor set can be updated. The frame descriptor set is bound once for the whole frame.
-    /// Every camera pass begins its own render pass instance with its clamped viewport as the render
-    /// area, writes its own 256-byte block into the slot's frame storage buffer, and pushes its index,
-    /// so each pass's draws read their own <c>rbFrame</c> values and only that pass' render area is
-    /// resolved.
+    /// descriptor set can be updated. Every camera pass begins its own render pass instance with its
+    /// clamped viewport as the render area, re-binds the shared frame descriptor set (a post-process
+    /// store-back binds its own set and pipeline layout), writes its own 256-byte block into the slot's
+    /// frame storage buffer, and pushes its index, so each pass's draws read their own <c>rbFrame</c>
+    /// values and only that pass' render area is resolved.
     /// </para>
     /// <para>
     /// The app scene target discards its content before the first pass and its resolved color and depth
-    /// are transitioned to <c>ShaderReadOnlyOptimal</c> for the present pass and a later internal
-    /// consumer after the last one. A runtime render target keeps its content: the frame waits for the
-    /// last frame that used each target, the writing pass transitions the target's color and depth
-    /// images to their attachment layouts, and the resolved images transition back to a shader read
-    /// after the pass so a later camera can sample them.
+    /// are transitioned to <c>ShaderReadOnlyOptimal</c> after every pass so a later camera, a post effect,
+    /// the present pass, or a readback observes the stored content. A runtime render target keeps its
+    /// content: the frame waits for the last frame that used each target, the writing pass transitions the
+    /// target's color and depth images to their attachment layouts, and the resolved images transition
+    /// back to a shader read after the pass. A pass with an enabled post-process stack runs the target-sized
+    /// chain after its resolve and stores the result back into the camera viewport.
     /// </para>
     /// </remarks>
     private void RecordScenePass(
@@ -2071,15 +2244,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         sceneTarget.DiscardContentAndTransitionToAttachments(vulkan, commandBuffer);
         PrepareFrameRenderTargets(vulkan, commandBuffer, frame, frameSlot);
         DescriptorSet descriptorSet = _frameResources!.GetDescriptorSet(frameSlot);
-        vulkan.CmdBindDescriptorSets(
-            commandBuffer,
-            PipelineBindPoint.Graphics,
-            _descriptorState!.PipelineLayout,
-            VulkanDescriptorState.GEOMETRY_SET,
-            1,
-            &descriptorSet,
-            0,
-            null);
 
         ulong instanceByteOffset = 0;
         bool renderedScenePass = false;
@@ -2096,8 +2260,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             if (targetEntry is not null) {
                 // Only a pass that can write color marks the target as content-bearing and records its
                 // tone snapshot. ClearMode.None/Depth with no surviving draw batches leaves the color
-                // untouched, so a later readback must keep the earlier content and tone. A later T5
-                // post-effect store-back that writes color must set the same flag and snapshot.
+                // untouched, so a later readback must keep the earlier content and tone. A post-effect
+                // store-back also writes color and sets the same flag and snapshot below.
                 bool writesColor = (pass.ClearMode & ClearMode.Color) != 0 || passPlan.Batches.Count > 0;
                 if (writesColor) {
                     targetEntry.HasResolvedColorContent = true;
@@ -2105,12 +2269,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 }
             }
 
-            if (targetId == 0) {
-                if (renderedScenePass) {
-                    sceneTarget.SynchronizeBetweenPasses(vulkan, commandBuffer);
-                }
-            } else {
+            // The first scene pass already transitioned the attachments from Undefined. Every later
+            // scene pass may follow a post-process store-back that left the resolved color in a shader
+            // read, so the general attachment transition handles both cases.
+            if (targetId != 0) {
                 target.TransitionForWrite(vulkan, commandBuffer);
+            } else if (renderedScenePass) {
+                sceneTarget.TransitionForWrite(vulkan, commandBuffer);
             }
 
             RenderPassBeginInfo beginInfo = new() {
@@ -2124,6 +2289,17 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             vulkan.CmdBeginRenderPass(commandBuffer, &beginInfo, SubpassContents.Inline);
             vulkan.CmdSetViewport(commandBuffer, 0, 1, &viewport);
             vulkan.CmdSetScissor(commandBuffer, 0, 1, &scissor);
+            // The post-process store-back binds its own descriptor set and pipeline layout, so every
+            // pass re-binds the shared geometry set instead of relying on the previous pass' binding.
+            vulkan.CmdBindDescriptorSets(
+                commandBuffer,
+                PipelineBindPoint.Graphics,
+                _descriptorState!.PipelineLayout,
+                VulkanDescriptorState.GEOMETRY_SET,
+                1,
+                &descriptorSet,
+                0,
+                null);
             if ((pass.ClearMode & ClearMode.Color) != 0) {
                 ClearColorAttachment(vulkan, commandBuffer, pass.ClearColor, scissor);
             }
@@ -2152,7 +2328,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
                     RenderDrawRecord first = batch.Instances[0].Record;
                     int stride = ShaderAbiLayout.INSTANCE_HEADER_SIZE + first.InstanceTemplate.Length;
-                    instanceByteOffset = AlignUp(instanceByteOffset, (ulong)stride);
+                    instanceByteOffset = VulkanInstanceRecordWriter.AlignUp(instanceByteOffset, (ulong)stride);
                     uint firstInstance = checked((uint)(instanceByteOffset / (ulong)stride));
                     WriteInstanceRecords(frameSlot, instanceByteOffset, stride, batch);
                     instanceByteOffset += (ulong)(stride * batch.InstanceCount);
@@ -2175,8 +2351,44 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             vulkan.CmdEndRenderPass(commandBuffer);
             if (targetId == 0) {
                 renderedScenePass = true;
-            } else {
+            }
+
+            // A later camera, the present pass, or a post effect samples the resolved images, so they
+            // leave an attachment layout before the chain runs or the next pass begins. A scene pass
+            // with no stack needs no readable intermediate state: the next scene pass transitions the
+            // attachments for its own write, and the frame-final transition covers the present pass and
+            // the diagnostic depth probe.
+            if (targetId != 0) {
                 target.TransitionResolvedToShaderRead(vulkan, commandBuffer);
+            } else if (pass.HasEnabledPostProcessEffects) {
+                sceneTarget.TransitionResolvedToShaderRead(vulkan, commandBuffer);
+            }
+
+            if (pass.HasEnabledPostProcessEffects) {
+                uint sourceColorSlot = targetId == 0
+                    ? _sceneSourceColorSlot
+                    : targetEntry!.ViewResource.BindlessSlot;
+                uint sourceDepthSlot = targetId == 0
+                    ? _sceneSourceDepthSlot
+                    : targetEntry!.DepthViewResource?.BindlessSlot ?? 0;
+                _postProcessor!.Process(
+                    vulkan,
+                    commandBuffer,
+                    frame,
+                    pass,
+                    passIndex,
+                    frameSlot,
+                    target,
+                    sourceColorSlot,
+                    sourceDepthSlot,
+                    scissor,
+                    ref instanceByteOffset);
+                if (targetEntry is not null) {
+                    // The store-back wrote the target's color for the camera viewport, so a readback
+                    // must return the post-processed content and its frame's tone snapshot.
+                    targetEntry.HasResolvedColorContent = true;
+                    targetEntry.Tone = frame.Tonemapping;
+                }
             }
         }
 
@@ -2209,6 +2421,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 AddSampledRenderTargets(draw.GetTextureBindings());
                 AddSampledRenderTargets(draw.GetInstanceTextureBindings());
             }
+
+            // A post-process effect can sample render target views through its own material bindings,
+            // so those targets must be readable before the chain runs too. The reserved source bindings
+            // are overridden by the engine and are never sampled, so they are skipped.
+            foreach (PostProcessEffectSnapshot effect in pass.PostProcessEffects) {
+                AddSampledPostProcessTextures(effect);
+            }
         }
 
         foreach (RenderTargetEntry entry in _frameRenderTargets) {
@@ -2218,6 +2437,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         foreach (RenderTargetEntry entry in _frameSampledRenderTargets) {
             PrepareRenderTargetUse(entry, frameSlot);
             entry.Target.PrepareSampled(vulkan, commandBuffer);
+        }
+    }
+
+    private void AddSampledPostProcessTextures(PostProcessEffectSnapshot effect) {
+        ReadOnlySpan<Texture?> textures = effect.TextureValues;
+        for (int index = 0; index < textures.Length; index++) {
+            if (effect.IsReservedTextureBinding(index)) {
+                continue;
+            }
+
+            Texture? texture = textures[index];
+            if (texture is not null && texture.IsRenderTargetView) {
+                _frameSampledRenderTargets.Add(RequireRenderTarget(texture.RenderTargetId));
+            }
         }
     }
 
@@ -2451,40 +2684,23 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// exactly like a packed or procedural texture; the frame's retention set already kept its target
     /// alive.
     /// </summary>
-    private static uint ResolveTextureSlot(Texture? texture) {
-        if (texture is null) {
-            return VulkanBindlessTextureTable.WHITE_SLOT;
-        }
+    private static uint ResolveTextureSlot(Texture? texture) => VulkanTextureBinding.ResolveSlot(texture);
 
-        ITextureBindingResource? binding = texture.BindingResource;
-        if (binding is null) {
-            throw new GraphicsException(
-                $"{DescribeTexture(texture)} is not a Vulkan GPU texture and cannot be bound in a draw.",
-                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
-        }
-
-        if (binding.BindlessSlot == 0) {
-            throw new GraphicsException(
-                $"{DescribeTexture(texture)} has no bindless slot. The texture must finish its GPU "
-                    + "upload before a draw can reference it.",
-                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
-        }
-
-        return binding.BindlessSlot;
-    }
-
-    private static string DescribeTexture(Texture texture) =>
-        texture.Path.Length == 0 ? "The render target texture view" : $"The texture '{texture.Path}'";
-
-    private static VulkanShaderAssetResource RequireShaderResource(EngineAsset shader) {
+    /// <summary>
+    /// Requires a live Vulkan shader GPU resource behind one engine shader program asset.
+    /// </summary>
+    /// <param name="shader">The internal shader program asset.</param>
+    /// <returns>The Vulkan shader resource.</returns>
+    /// <exception cref="GraphicsException">
+    /// The asset is not a Vulkan GPU shader. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    internal static VulkanShaderAssetResource RequireShaderResource(EngineAsset shader) {
         if (shader.Resource is VulkanShaderAssetResource resource) {
             return resource;
         }
 
         throw new GraphicsException(
-            $"The shader '{shader.Path}' is not a Vulkan GPU shader and cannot create a geometry pipeline.",
+            $"The shader '{shader.Path}' is not a Vulkan GPU shader and cannot be used to create a pipeline.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
             null);
     }
@@ -2501,24 +2717,45 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Computes the instance-record bytes a frame needs, including per-batch stride alignment.
+    /// Computes the instance-record bytes a frame needs, including per-batch and per-effect stride
+    /// alignment in recording order.
     /// </summary>
+    /// <remarks>
+    /// The post-process effect records follow each camera pass' scene batches, so the simulation must
+    /// include them: a later scene batch aligns after the effect records and can need more bytes than a
+    /// scene-only sum. An effect reports its ordered record layout, so a built-in multi-pass effect whose
+    /// passes use different shaders and uniform sizes reserves each pass' stride in turn.
+    /// </remarks>
     private static ulong ComputeInstanceBytes(FramePlan plan) {
         ulong bytes = 0;
-        foreach (PassPlan pass in plan.Passes) {
+        for (int passIndex = 0; passIndex < plan.Passes.Count; passIndex++) {
+            PassPlan pass = plan.Passes[passIndex];
             foreach (PlannedBatch batch in pass.Batches) {
                 RenderDrawRecord first = batch.Instances[0].Record;
                 int stride = ShaderAbiLayout.INSTANCE_HEADER_SIZE + first.InstanceTemplate.Length;
-                bytes = AlignUp(bytes, (ulong)stride);
+                bytes = VulkanInstanceRecordWriter.AlignUp(bytes, (ulong)stride);
                 bytes += (ulong)(stride * batch.InstanceCount);
+            }
+
+            ReadOnlySpan<PostProcessEffectSnapshot> effects = pass.Pass.PostProcessEffects;
+            foreach (PostProcessEffectSnapshot effect in effects) {
+                if (!effect.Enabled) {
+                    continue;
+                }
+
+                foreach (PostProcessInstanceRecord record in effect.InstanceLayout) {
+                    if (record.Count <= 0 || record.Stride <= 0) {
+                        continue;
+                    }
+
+                    bytes = VulkanInstanceRecordWriter.AlignUp(bytes, (ulong)record.Stride);
+                    bytes += (ulong)(record.Stride * record.Count);
+                }
             }
         }
 
         return bytes;
     }
-
-    private static ulong AlignUp(ulong value, ulong alignment)
-        => checked(((value + alignment - 1) / alignment) * alignment);
 
     /// <summary>
     /// Writes one System.Numerics matrix in its storage order.
@@ -2528,39 +2765,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// as column-major, so it sees the transpose of what this method writes, which is the engine's
     /// row-vector matrix expressed in the shader's column-vector convention.
     /// </remarks>
-    private static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value) {
-        Span<byte> target = destination[offset..];
-        WriteSingle(target, 0, value.M11);
-        WriteSingle(target, 4, value.M12);
-        WriteSingle(target, 8, value.M13);
-        WriteSingle(target, 12, value.M14);
-        WriteSingle(target, 16, value.M21);
-        WriteSingle(target, 20, value.M22);
-        WriteSingle(target, 24, value.M23);
-        WriteSingle(target, 28, value.M24);
-        WriteSingle(target, 32, value.M31);
-        WriteSingle(target, 36, value.M32);
-        WriteSingle(target, 40, value.M33);
-        WriteSingle(target, 44, value.M34);
-        WriteSingle(target, 48, value.M41);
-        WriteSingle(target, 52, value.M42);
-        WriteSingle(target, 56, value.M43);
-        WriteSingle(target, 60, value.M44);
-    }
+    private static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value)
+        => VulkanInstanceRecordWriter.WriteMatrix(destination, offset, value);
 
-    private static void WriteVector4(Span<byte> destination, int offset, Vector4 value) {
-        Span<byte> target = destination[offset..];
-        WriteSingle(target, 0, value.X);
-        WriteSingle(target, 4, value.Y);
-        WriteSingle(target, 8, value.Z);
-        WriteSingle(target, 12, value.W);
-    }
-
-    private static void WriteSingle(Span<byte> destination, int offset, float value)
-        => BinaryPrimitives.WriteSingleLittleEndian(destination[offset..], value);
+    private static void WriteVector4(Span<byte> destination, int offset, Vector4 value)
+        => VulkanInstanceRecordWriter.WriteVector4(destination, offset, value);
 
     private static void WriteUInt32(Span<byte> destination, int offset, uint value)
-        => BinaryPrimitives.WriteUInt32LittleEndian(destination[offset..], value);
+        => VulkanInstanceRecordWriter.WriteUInt32(destination, offset, value);
 
     /// <summary>
     /// Gets whether a presentation result means the image reached the presentation engine. A
