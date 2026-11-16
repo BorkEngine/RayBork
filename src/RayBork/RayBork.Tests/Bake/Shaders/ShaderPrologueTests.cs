@@ -57,6 +57,7 @@ public sealed class ShaderPrologueTests {
         Assert.True(archive.TryGetEntry("shaders/abi", out PackEntry? entry));
         ShaderAssetDescriptor descriptor = AssetSerialization.Deserialize<ShaderAssetDescriptor>(
             archive.ReadPayload(entry));
+        Assert.Equal(ShaderAbiNames.ABI_VERSION, descriptor.AbiVersion);
         Assert.Equal("main_vertex", descriptor.VertexEntry);
         Assert.Equal("main_fragment", descriptor.FragmentEntry);
         Assert.Equal(["mainTexture"], descriptor.Textures);
@@ -110,13 +111,18 @@ public sealed class ShaderPrologueTests {
         Assert.True(wrapper < macro, "The entry-point macro must follow the wrapper.");
         Assert.True(macro < user, "The entry-point macro must precede the user function.");
 
-        Assert.Contains("layout(set = 0, binding = 0, std140) uniform RayBorkFrameBlock", wrapped);
+        Assert.Contains("layout(std430, set = 0, binding = 0) readonly buffer RayBorkFrameBuffer", wrapped);
+        Assert.Contains("RayBorkFrame frames[];", wrapped);
+        Assert.Contains("} rbFrameBlock;", wrapped);
+        Assert.Contains("layout(push_constant) uniform RayBorkPushConstants", wrapped);
+        Assert.Contains("uint passIndex;", wrapped);
+        Assert.Contains("} rbPushConstants;", wrapped);
         Assert.Contains("layout(set = 0, binding = 1) uniform sampler2D RayBorkTextures[2048];", wrapped);
         Assert.DoesNotContain("RayBorkTextures[]", wrapped);
         Assert.Contains("layout(set = 0, binding = 2, std430) readonly buffer RayBorkInstanceBuffer", wrapped);
         Assert.Contains("layout(location = 15) flat out uint rbInstanceIndexOut;", wrapped);
         Assert.Contains("rbInstanceIndexOut = uint(gl_InstanceIndex);", wrapped);
-        Assert.Contains("#define rbFrame rbFrameBlock.frame", wrapped);
+        Assert.Contains("#define rbFrame rbFrameBlock.frames[rbPushConstants.passIndex]", wrapped);
         Assert.Contains("#define rbInstance RayBorkInstances.instances[rbInstanceIndexOut]", wrapped);
         Assert.Contains(
             "#define mainTexture RayBorkTextures[nonuniformEXT(rbInstance.mainTextureIndex)]",
@@ -147,6 +153,8 @@ public sealed class ShaderPrologueTests {
             message);
 
         Assert.Contains("layout(location = 15) flat in uint rbInstanceIndex;", wrapped);
+        Assert.Contains("layout(push_constant) uniform RayBorkPushConstants", wrapped);
+        Assert.Contains("#define rbFrame rbFrameBlock.frames[rbPushConstants.passIndex]", wrapped);
         Assert.Contains("#define rbInstance RayBorkInstances.instances[rbInstanceIndex]", wrapped);
         Assert.Contains("#define main_fragment rbUserFragmentMain", wrapped);
         Assert.DoesNotContain("gl_InstanceIndex", wrapped);
@@ -195,7 +203,11 @@ public sealed class ShaderPrologueTests {
     [Theory]
     [InlineData("main", "void main() { gl_Position = vec4(0.0); }")]
     [InlineData("RayBorkFrame", "struct RayBorkFrame { vec4 value; };")]
-    [InlineData("RayBorkFrameBlock", "struct RayBorkFrameBlock { vec4 value; };")]
+    [InlineData("RayBorkFrameBuffer", "struct RayBorkFrameBuffer { vec4 value; };")]
+    [InlineData("rbFrameBlock", "vec4 rbFrameBlock;")]
+    [InlineData("RayBorkPushConstants", "struct RayBorkPushConstants { vec4 value; };")]
+    [InlineData("rbPushConstants", "vec4 rbPushConstants;")]
+    [InlineData("passIndex", "uint passIndex;")]
     [InlineData("RayBorkTextures", "vec4 RayBorkTextures;")]
     [InlineData("RayBorkInstance", "struct RayBorkInstance { vec4 value; };")]
     [InlineData("RayBorkInstanceBuffer", "struct RayBorkInstanceBuffer { vec4 value; };")]

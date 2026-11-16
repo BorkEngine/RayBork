@@ -155,6 +155,7 @@ public sealed class BuiltInPackTests {
         using PackArchive archive = OpenBuiltInPack();
         ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, PRESENT_PATH);
 
+        Assert.Equal(ShaderAbiNames.ABI_VERSION, descriptor.AbiVersion);
         Assert.Equal(PRESENT_VERTEX_PAYLOAD_PATH, descriptor.VertexPayload);
         Assert.Equal(PRESENT_FRAGMENT_PAYLOAD_PATH, descriptor.FragmentPayload);
         Assert.Equal("main", descriptor.VertexEntry);
@@ -174,6 +175,7 @@ public sealed class BuiltInPackTests {
         using PackArchive archive = OpenBuiltInPack();
         ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, MESH_SHADER_PATH);
 
+        Assert.Equal(ShaderAbiNames.ABI_VERSION, descriptor.AbiVersion);
         Assert.Equal(MESH_VERTEX_PAYLOAD_PATH, descriptor.VertexPayload);
         Assert.Equal(MESH_FRAGMENT_PAYLOAD_PATH, descriptor.FragmentPayload);
         Assert.Equal("main_vertex", descriptor.VertexEntry);

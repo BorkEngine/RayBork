@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace RayBork.Internal;
 
 /// <summary>
@@ -6,8 +8,8 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// The format is stateless, so one shared instance serves every program load on the loader thread. The
-/// runtime never parses GLSL or SPIR-V; it only checks that each module is a non-empty, 4-byte aligned
-/// blob.
+/// runtime never parses GLSL or SPIR-V; it only checks the descriptor's shader ABI version and that
+/// each module is a non-empty, 4-byte aligned blob.
 /// </remarks>
 internal sealed class ShaderProgramAssetFormat : IEngineAssetFormat<ShaderProgram> {
     /// <summary>
@@ -27,6 +29,7 @@ internal sealed class ShaderProgramAssetFormat : IEngineAssetFormat<ShaderProgra
 
         ShaderAssetDescriptor descriptor = AssetSerialization.Deserialize<ShaderAssetDescriptor>(
             context.DescriptorPayload);
+        ValidateAbiVersion(descriptor, context.CanonicalPath);
         byte[] vertexPayload = context.ReadRawPayload(
             descriptor.VertexPayload,
             "vertex SPIR-V");
@@ -38,6 +41,18 @@ internal sealed class ShaderProgramAssetFormat : IEngineAssetFormat<ShaderProgra
         return new DecodedAsset<ShaderProgram>(
             new ShaderGpuUpload(context.CanonicalPath, descriptor, vertexPayload, fragmentPayload),
             lifetime => new ShaderProgram(lifetime, captured));
+    }
+
+    private static void ValidateAbiVersion(ShaderAssetDescriptor descriptor, string canonical) {
+        if (descriptor.AbiVersion == ShaderAbiNames.ABI_VERSION) {
+            return;
+        }
+
+        throw AssetLoadErrors.CreateLoadFailure(
+            canonical,
+            $"the shader was baked for shader ABI version {descriptor.AbiVersion.ToString(CultureInfo.InvariantCulture)} "
+                + $"but this runtime requires version {ShaderAbiNames.ABI_VERSION.ToString(CultureInfo.InvariantCulture)}; "
+                + "rebake the pack with the current bake tool");
     }
 
     private static void ValidateShader(

@@ -432,12 +432,12 @@ automatic instancing, and per-instance textures/uniforms.
   dzn) is not a target and is not part of the gate; the Linux gate uses the conformant lavapipe ICD.
   The fixed `RayBorkTextures[2048]` array is the shader ABI and table capacity, not a
   driver-specific workaround.
-- **M4 limitation: one frame block per frame slot.** The renderer writes one 256-byte `rbFrame`
-  block per frame slot. A frame that records more than one camera pass overwrites that block for
-  each pass, so every pass in that frame sees the last recorded pass' view-projection, view,
-  projection, camera position, and viewport. Single-camera frames are correct; split-screen
-  cameras and multiple cameras with different views need per-pass frame data, which lands with the
-  M8 multiple-camera work. This is the honest M4 limitation, not an M8 feature already shipped.
+- **M4 frame-block limitation, resolved by the M8 shader ABI v2.** M4 wrote one 256-byte `rbFrame`
+  block per frame slot, so a frame that recorded more than one camera pass gave every pass the last
+  recorded pass' view-projection, view, projection, camera position, and viewport. The M8 shader ABI
+  v2 writes one frame block per camera pass into a storage-buffer array and selects it with a
+  push-constant pass index, so multiple cameras with different views are correct. Split-screen layout
+  and the separate multi-camera overlay pass remain the M8 render-pass work.
 
 **Risks.** This is the largest milestone. The shader ABI and per-instance layout can force changes
 in the bake, the renderer, and the sample at the same time. Prototype the ABI on two shaders before
@@ -1136,9 +1136,9 @@ details:
   `ScreenToWorldTransform(new Vector2(margin, margin), 1f)` and
   `DrawText(..., 18f, ...)`. The returned scale keeps 18 local units at 18 render pixels in either
   projection. This is same-pass, screen-aligned text: it is alpha-blended with no depth write, so
-  geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass,
-  and per-pass frame data is still absent, so the M4 one-frame-block limitation is unchanged. A
-  dedicated multi-camera overlay pass and per-pass frame data are deferred to M8.
+  geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass.
+  Shader ABI v2 provides per-pass frame data, so the M4 one-frame-block limitation no longer applies;
+  only a dedicated multi-camera overlay pass remains pending in the M8 render-pass work.
 - **Nine primitive meshes.** The engine builds one more internal primitive mesh, the unit disc,
   alongside cube, sphere, plane, quad, triangle, line, wire cube, and wire sphere. The disc is one
   center vertex plus 36 rim vertices and 36 triangles, built once before `IGame.Setup` through the
@@ -1200,7 +1200,7 @@ details:
   Text, Castle, and PrimitiveGallery samples and the test suite cover the host, input, time,
   logging, renderer, and asset-loading surface it exercised.
 - **Overlay pass deferred.** The M7 scope listed a screen-space overlay pass; the shipped HUD is
-  same-pass text, and the separate multi-camera overlay pass with per-pass frame data is M8 work.
+  same-pass text, and the separate multi-camera overlay pass is M8 render-pass work.
   M7 does not claim it as shipped.
 
 **Risks.**
@@ -1210,9 +1210,10 @@ details:
   pixel scale stays unscaled, so the member documents the requirement and does not support a scaled
   camera; the samples keep the camera transform at unit scale.
 - **Same-pass HUD occlusion.** The M7 HUD is depth-tested alpha text on a screen-aligned plane, so
-  geometry closer than the overlay plane can occlude it, and the one-frame-block limitation still
-  prevents different per-pass views in one frame. A dedicated overlay pass with per-pass frame data
-  is M8; the current behavior is documented rather than hidden.
+  geometry closer than the overlay plane can occlude it. Shader ABI v2 provides per-pass frame data,
+  so the one-frame-block limitation no longer prevents different per-pass views in one frame; only a
+  dedicated multi-camera overlay pass remains pending in the M8 render-pass work. The current
+  occlusion behavior is documented rather than hidden.
 - **No 2D draw API.** Games porting a raylib-style 2D renderer must draw through
   `ScreenToWorldTransform` and the world-space primitives instead of screen-coordinate overloads.
   This is a deliberate design choice: one draw path, one batch key, and no duplicate 2D renderer.
@@ -1238,7 +1239,7 @@ details:
 - Camera target routing and viewport rectangles.
 - Image and resolve barriers between passes; write-after-read validation.
 - Multiple cameras to the HDR scene target and to offscreen targets.
-- Per-pass frame data: one frame uniform block per camera pass, so multiple cameras with different
+- Per-pass frame data: one frame block per camera pass, so multiple cameras with different
   views are correct instead of sharing the last pass' values.
 - A separate multi-camera overlay pass for HUD text and sprites that must not be occluded by scene
   depth; the M7 HUD is same-pass and is the deferred input to this work.

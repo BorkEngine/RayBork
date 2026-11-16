@@ -197,6 +197,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
             SpirvExecutionModel.Fragment,
             path + ".frag");
         ShaderAssetDescriptor descriptor = new() {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
             VertexEntry = ShaderAbiNames.VERTEX_ENTRY_POINT,
@@ -291,21 +292,54 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         CameraView camera,
         params DrawSpec[] draws) {
         AssertNotDisposed();
+        return CreateFrameWithPasses(
+            frameIndex,
+            new PassSpec(
+                camera,
+                0,
+                0,
+                camera.Width,
+                camera.Height,
+                ClearMode.ColorAndDepth,
+                clearColor,
+                draws));
+    }
+
+    /// <summary>
+    /// Builds one sealed frame from explicit camera passes, each with its own viewport, clear state,
+    /// and draw records.
+    /// </summary>
+    /// <param name="frameIndex">The frame index.</param>
+    /// <param name="passes">The camera passes in recording order.</param>
+    /// <returns>The sealed packet.</returns>
+    internal RenderFramePacket CreateFrameWithPasses(long frameIndex, params PassSpec[] passes) {
+        AssertNotDisposed();
+        ArgumentNullException.ThrowIfNull(passes);
         RenderFramePacket packet = new(frameIndex);
         packet.BeginRecording(0.0, 0.0);
-        CameraPass pass = packet.BeginPass();
-        pass.Begin(
-            index: 0,
-            camera.View,
-            camera.Projection,
-            camera.ViewProjection,
-            camera.Position,
-            viewportX: 0,
-            viewportY: 0,
-            viewportWidth: camera.Width,
-            viewportHeight: camera.Height,
-            ClearMode.ColorAndDepth,
-            clearColor);
+        for (int index = 0; index < passes.Length; index++) {
+            PassSpec spec = passes[index];
+            CameraPass pass = packet.BeginPass();
+            pass.Begin(
+                index,
+                spec.Camera.View,
+                spec.Camera.Projection,
+                spec.Camera.ViewProjection,
+                spec.Camera.Position,
+                spec.ViewportX,
+                spec.ViewportY,
+                spec.ViewportWidth,
+                spec.ViewportHeight,
+                spec.ClearMode,
+                spec.ClearColor);
+            AddDraws(packet, pass, spec.Draws);
+        }
+
+        packet.Seal();
+        return packet;
+    }
+
+    private static void AddDraws(RenderFramePacket packet, CameraPass pass, DrawSpec[] draws) {
         foreach (DrawSpec draw in draws) {
             RenderDrawRecord record = packet.RentDrawRecord();
             record.Begin(
@@ -323,9 +357,6 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
             draw.WorldMatrices.AsSpan().CopyTo(worlds);
             pass.Add(record);
         }
-
-        packet.Seal();
-        return packet;
     }
 
     /// <summary>
@@ -542,6 +573,27 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         Vector3 Position,
         int Width,
         int Height);
+
+    /// <summary>
+    /// One camera pass for <see cref="CreateFrameWithPasses"/>.
+    /// </summary>
+    /// <param name="Camera">The camera value snapshot.</param>
+    /// <param name="ViewportX">The viewport left edge in target pixels.</param>
+    /// <param name="ViewportY">The viewport top edge in target pixels.</param>
+    /// <param name="ViewportWidth">The viewport width in target pixels.</param>
+    /// <param name="ViewportHeight">The viewport height in target pixels.</param>
+    /// <param name="ClearMode">The buffers the pass clears before it draws.</param>
+    /// <param name="ClearColor">The linear color written when color is cleared.</param>
+    /// <param name="Draws">The draw records in recording order.</param>
+    internal sealed record PassSpec(
+        CameraView Camera,
+        int ViewportX,
+        int ViewportY,
+        int ViewportWidth,
+        int ViewportHeight,
+        ClearMode ClearMode,
+        Color ClearColor,
+        DrawSpec[] Draws);
 
     /// <summary>
     /// One draw record for <see cref="CreateFrame"/>.

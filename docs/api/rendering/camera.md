@@ -352,8 +352,9 @@ camera.DrawText(font, "HUD", screen, 18f, Color.White);
 ```
 
 The HUD text is same-pass, screen-aligned text: it is alpha-blended with no depth write, so geometry
-closer than the overlay plane can still occlude it. The separate multi-camera overlay pass and
-per-pass frame data are deferred to M8; the M4 one-frame-block limitation is unchanged.
+closer than the overlay plane can still occlude it. Shader ABI v2 already gives every camera pass its
+own 256-byte frame block, so passes with different views read their own frame data; only the separate
+multi-camera overlay pass remains pending in the M8 render-pass work.
 
 **2D quad, disc, and grid primitives.** The `DrawQuad` overloads draw one instance of the engine
 quad in the transform's local `XY` plane, centered, with local `+Z` as the front and the instance
@@ -642,10 +643,11 @@ public sealed class TonemappingSettings {
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
 - Multiple cameras can clear different passes sequentially in one tick. The first camera usually
-  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. The engine shares
-  one frame uniform block per frame slot across every camera pass: a frame with more than one camera
-  pass submits the same `rbFrame` values (the last recorded pass') to every pass. Split-screen
-  cameras in one frame are therefore a known limitation rather than a supported layout.
+  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. The shader ABI v2
+  gives every camera pass its own 256-byte frame block, selected by a push-constant pass index, so a
+  frame with several camera passes submits each pass' own matrices, camera position, and viewport to
+  its draws. The M8 render-pass work that owns dedicated split-screen and overlay passes is tracked
+  separately.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
   target inside the same pass that writes it is invalid and is reported as a validation error. This

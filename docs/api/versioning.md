@@ -148,8 +148,9 @@ family: a sprite is a textured `DrawQuad` or `DrawBillboard(faceCamera: false)`,
 `ScreenToWorldTransform` with the world-space `DrawText` overload and a pixel-sized `size`. The
 screen transform requires a unit-scale camera transform; a scaled camera transform is invalid for
 it, and there is no `ScreenToWorldPoint`. The M7 HUD is same-pass text, so geometry closer than the
-overlay plane can occlude it; a separate multi-camera overlay pass with per-pass frame data is
-deferred to M8. These are 0.x preview changes and this paragraph is their migration note; after 1.0
+overlay plane can occlude it; shader ABI v2 already provides per-pass frame data, and only a separate
+multi-camera overlay pass remains deferred to the M8 render-pass work. These are 0.x preview changes
+and this paragraph is their migration note; after 1.0
 a breaking change to this surface would need the obsolete/migration cycle above.
 
 Mouse input now uses render pixels instead of logical window coordinates. `Input.MousePosition` and

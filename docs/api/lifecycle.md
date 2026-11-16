@@ -157,8 +157,9 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > There is no `DrawTexture`, no 2D draw overload, and no `DrawText(Vector2)` overload: a sprite is a
 > textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and screen-space text uses
 > `ScreenToWorldTransform` with the world-space `DrawText` overload. The screen-space HUD is
-> same-pass text and can be occluded by geometry closer than its plane; a separate overlay pass and
-> per-pass frame data are deferred to M8. `BoundingFrustum.Intersects` accepts a `1e-4` plane
+> same-pass text and can be occluded by geometry closer than its plane; shader ABI v2 already gives
+> every camera pass its own frame block, and only a separate multi-camera overlay pass is deferred
+> to the M8 render-pass work. `BoundingFrustum.Intersects` accepts a `1e-4` plane
 > tolerance so full-viewport quads are not culled. `samples/Pong` is the M7 sample and Native AOT
 > gate, and the current suite is 2,695 tests, 114 of them GPU integration tests.
 

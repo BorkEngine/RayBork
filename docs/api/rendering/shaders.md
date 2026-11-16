@@ -192,15 +192,17 @@ screen-space derivative, so the program needs no range, pixel-size, or per-font 
 ### 7.4 Shader ABI
 
 The bake generates a prologue for every shader so user GLSL does not declare the engine plumbing.
-The exact generated identifiers are part of the v1 compatibility contract and are stabilized before
-1.0. The frame block offsets are shared with the renderer's frame writer and the instance offsets
-with the draw recorder, so the tables below are normative.
+The exact generated identifiers are part of the shader ABI contract (version 2) and are stabilized
+before 1.0. The frame block offsets are shared with the renderer's frame writer and the instance
+offsets with the draw recorder, so the tables below are normative. A camera pass selects its
+256-byte frame block with a push-constant index, so several passes in one frame can carry different
+camera data.
 
 **Descriptor set 0**
 
 | Binding | Type | Contents |
 | --- | --- | --- |
-| 0 | uniform buffer, std140, 256 bytes | `RayBorkFrame`: view-projection, view, projection, camera position, viewport, time/delta/frame, screen size/exposure |
+| 0 | storage buffer, std430 | `RayBorkFrame frames[]`: one 256-byte frame block per camera pass, selected by the `passIndex` push constant |
 | 1 | bindless combined image samplers | `RayBorkTextures[2048]`, a fixed-size array of 2048 slots |
 | 2 | storage buffer, std430 | `RayBorkInstances[]`, one record per instance, plus reflected user uniforms |
 
@@ -215,8 +217,15 @@ features: `descriptorBindingPartiallyBound`, `descriptorBindingSampledImageUpdat
 selection with a diagnostic naming the missing feature or limit. The capacity is never reduced and
 the layout is never created with a count different from the shader array.
 
-The frame block is declared as `layout(set = 0, binding = 0, std140) uniform RayBorkFrameBlock
-{ RayBorkFrame frame; } rbFrameBlock;` and `rbFrame` expands to `rbFrameBlock.frame`.
+The frame block array is declared as `layout(std430, set = 0, binding = 0) readonly buffer
+RayBorkFrameBuffer { RayBorkFrame frames[]; } rbFrameBlock;`. A 4-byte push-constant block is
+visible to the vertex and fragment stages: `layout(push_constant) uniform RayBorkPushConstants { uint
+passIndex; } rbPushConstants;`. The generated accessor `rbFrame` expands to
+`rbFrameBlock.frames[rbPushConstants.passIndex]`, so user GLSL keeps reading `rbFrame` unchanged. The
+renderer writes one 256-byte block per camera pass and pushes that pass's index before its draws.
+
+One `RayBorkFrame` element is a 256-byte record; every member is a `mat4` or `vec4`, so the std430
+offsets equal the std140 ones and the element stride is 256 bytes.
 
 | Offset | Member | Contents |
 | --- | --- | --- |
@@ -230,6 +239,27 @@ The frame block is declared as `layout(set = 0, binding = 0, std140) uniform Ray
 
 `CameraPosition`, `Time`, `Viewport`, and `ScreenSize` are written by the engine frame path. They are
 not shader uniforms and cannot be changed with `SetUniform`.
+
+**Geometry pass push constants**
+
+The geometry pipeline layout declares one push-constant range visible to the vertex and fragment
+stages:
+
+| Offset | Type | Member | Contents |
+| --- | --- | --- | --- |
+| 0 | `uint` | `passIndex` | Index of the camera pass's `RayBorkFrame` element in the binding 0 storage buffer |
+
+The range is exactly 4 bytes. The renderer pushes the current pass index after it writes that pass's
+frame block and before the pass's first draw. The descriptor set stays bound once for the whole
+frame; the push constant is command-buffer state, so every pass sets it again.
+
+**Shader ABI version and rebaking**
+
+The bake writes the shader ABI version into every shader descriptor (`AbiVersion = 2`). The runtime
+accepts only version 2: any other value, including a missing version (`0`) or a newer version, fails
+with `AssetLoadException` (`RB1008`) that names the shader path and instructs the user to rebake the
+pack with the current bake tool. Rebuild the app's asset pack after updating the engine; there is no
+runtime prologue compatibility path.
 
 **Present pass push constants**
 
@@ -303,9 +333,9 @@ no outputs are emitted.
 The prologue is inserted immediately after the first `#version` directive line. A source without a
 `#version` directive gets `#version 450` prepended, followed by the prologue. The `#version` line
 stays first. The prologue starts with `#extension GL_EXT_nonuniform_qualifier : require`, then the
-frame struct and block, the fixed 2048-element bindless texture array when the shader has at least
-one texture, the instance struct and storage buffer, the stage-specific instance varying, and the
-macros below.
+frame struct, the frame storage buffer, and the push-constant block, the fixed 2048-element bindless
+texture array when the shader has at least one texture, the instance struct and storage buffer, the
+stage-specific instance varying, and the macros below.
 
 The bake compiles the generated wrapper function named `main` with shaderc, then renames the compiled
 `OpEntryPoint` to `main_vertex` or `main_fragment` and validates the module. The runtime never parses
@@ -352,9 +382,11 @@ and color, and the engine records only the transform, the tint, and the UV recta
 vertex stage multiplies the vertex color by `rbInstance.Color` and its fragment stage writes that
 color. `EngineDefaults` does not expose it; the engine loads it as an ordinary built-in shader entry.
 
-The prologue defines the frame block and a stage-specific `rbInstance` expression:
+The prologue defines the frame block, the `rbFrame` accessor, and the stage-specific `rbInstance`
+accessor:
 
-- `rbFrame` expands to `rbFrameBlock.frame`.
+- `rbFrame` expands to `rbFrameBlock.frames[rbPushConstants.passIndex]`; `passIndex` is the push
+  constant that selects the current camera pass's 256-byte block.
 - In the vertex stage, `rbInstance` expands to
   `RayBorkInstances.instances[rbInstanceIndexOut]`, where the wrapper assigns
   `rbInstanceIndexOut = uint(gl_InstanceIndex)`.
@@ -371,9 +403,10 @@ The prologue defines the frame block and a stage-specific `rbInstance` expressio
 
 **Reserved identifiers and validation**
 
-The user GLSL must not declare `main`, `RayBorkFrame`, `RayBorkFrameBlock`, `rbFrameBlock`,
-`RayBorkTextures`, `RayBorkInstance`, `RayBorkInstanceBuffer`, `RayBorkInstances`, `rbFrame`,
-`rbInstance`, `rbInstanceIndex`, `rbInstanceIndexOut`, `rbUserVertexMain`, or `rbUserFragmentMain`.
+The user GLSL must not declare `main`, `RayBorkFrame`, `RayBorkFrameBuffer`, `rbFrameBlock`,
+`RayBorkPushConstants`, `rbPushConstants`, `passIndex`, `RayBorkTextures`, `RayBorkInstance`,
+`RayBorkInstanceBuffer`, `RayBorkInstances`, `rbFrame`, `rbInstance`, `rbInstanceIndex`,
+`rbInstanceIndexOut`, `rbUserVertexMain`, or `rbUserFragmentMain`.
 It must not declare any uniform or texture name that the sidecar reflects, and it must not declare a
 `layout(set = ...)` binding or a `layout(location = 15)` output/input. `main_vertex` and
 `main_fragment` are the user functions and are not reserved. The bake scans the comment-stripped

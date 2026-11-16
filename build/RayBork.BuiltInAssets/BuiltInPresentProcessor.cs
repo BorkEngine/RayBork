@@ -125,6 +125,7 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
         string vertexPayload = context.BaseAssetPath + VERTEX_PAYLOAD_SUFFIX;
         string fragmentPayload = context.BaseAssetPath + FRAGMENT_PAYLOAD_SUFFIX;
         var descriptor = new ShaderAssetDescriptor {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = vertexPayload,
             FragmentPayload = fragmentPayload,
             VertexEntry = ENTRY_POINT,

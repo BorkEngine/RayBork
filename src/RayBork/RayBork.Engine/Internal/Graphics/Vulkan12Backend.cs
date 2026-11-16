@@ -20,7 +20,9 @@ namespace RayBork.Internal;
 /// packet's batches, acquires a swapchain image, records one scene render pass for every camera pass,
 /// records the present pass, and submits without waiting for the frame fence. The geometry pass binds
 /// one shared descriptor set per slot, clears each camera viewport with <c>vkCmdClearAttachments</c>,
-/// and draws instanced scene batches whose per-instance records live in a host-visible storage buffer.
+/// writes each pass's frame block into a host-visible frame storage buffer with a pass-index push
+/// constant, and draws instanced scene batches whose per-instance records live in a second
+/// host-visible storage buffer.
 /// Recoverable presentation, surface, and device failures are handled inside the backend;
 /// <see cref="Recover"/> idles the device, drops the affected frame, recreates the affected resources,
 /// and resumes. A bounded recovery loop or a failed recovery throws
@@ -328,6 +330,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         long startTimestamp = Stopwatch.GetTimestamp();
         FramePlan plan = new BatchPlanner().Plan(frame);
         ulong instanceBytes = ComputeInstanceBytes(plan);
+        _frameResources!.EnsureFrameCapacity((int)frameSlot, plan.Passes.Count, frame.FrameIndex);
         _frameResources!.EnsureSlot((int)frameSlot, instanceBytes, frame.FrameIndex);
 
         CommandBuffer commandBuffer = _commandBuffers[frameSlot];
@@ -1216,14 +1219,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Records the scene render pass for every camera pass: viewport-scoped clears, the frame uniform
-    /// block write, and the instanced geometry draws.
+    /// Records the scene render pass for every camera pass: viewport-scoped clears, the per-pass frame
+    /// block write, the pass-index push constant, and the instanced geometry draws.
     /// </summary>
     /// <remarks>
     /// Render-thread only. The frame slot's fence has already signaled, so the slot's buffers and
     /// descriptor set can be updated. The render pass and the frame descriptor set are bound once for
-    /// the whole frame; the frame uniform block holds the most recently written camera pass because
-    /// the update-after-bind texture array forbids a dynamic uniform buffer in the same set.
+    /// the whole frame. Every camera pass writes its own 256-byte block into the slot's frame storage
+    /// buffer and pushes its index, so each pass's draws read their own <c>rbFrame</c> values.
     /// </remarks>
     private void RecordScenePass(
         Vk vulkan,
@@ -1278,7 +1281,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
             // ClearMode.Stencil has no attachment in M4; the flag is a documented no-op.
 
-            WriteFrameBlock(frameSlot, pass, frame, viewport);
+            WriteFrameBlock(frameSlot, passIndex, pass, frame, viewport);
+            PushPassIndex(vulkan, commandBuffer, passIndex);
             if (passPlan.Batches.Count == 0) {
                 continue;
             }
@@ -1316,6 +1320,25 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
 
         vulkan.CmdEndRenderPass(commandBuffer);
+    }
+
+    /// <summary>
+    /// Records the 4-byte push constant that selects one camera pass's frame block.
+    /// </summary>
+    /// <remarks>
+    /// The push constant is command-buffer state, so it must be set after the previous pass's draws
+    /// and before the next pass's first draw. The descriptor set stays bound across passes because the
+    /// frame storage buffer holds every pass's block.
+    /// </remarks>
+    private void PushPassIndex(Vk vulkan, CommandBuffer commandBuffer, int passIndex) {
+        uint index = checked((uint)passIndex);
+        vulkan.CmdPushConstants(
+            commandBuffer,
+            _descriptorState!.PipelineLayout,
+            VulkanDescriptorState.PUSH_CONSTANT_STAGES,
+            VulkanDescriptorState.PASS_INDEX_PUSH_CONSTANT_OFFSET,
+            VulkanDescriptorState.PASS_INDEX_PUSH_CONSTANT_SIZE,
+            &index);
     }
 
     private static bool TryResolveViewport(
@@ -1388,7 +1411,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Writes the 256-byte frame uniform block for one camera pass.
+    /// Writes one camera pass's 256-byte frame block at its pass index.
     /// </summary>
     /// <remarks>
     /// The engine stores matrices in System.Numerics' row-vector convention, while GLSL reads the
@@ -1399,10 +1422,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </remarks>
     private void WriteFrameBlock(
         int frameSlot,
+        int passIndex,
         CameraPass pass,
         RenderFramePacket frame,
         Viewport viewport) {
-        Span<byte> block = _frameResources!.GetFrameBlockSpan(frameSlot);
+        Span<byte> block = _frameResources!.GetFrameBlockSpan(frameSlot, passIndex);
         WriteMatrix(block, ShaderAbiFrame.VIEW_PROJECTION_OFFSET, pass.ViewProjection);
         // The shader multiplies a column vector by the column-major matrix it reads; raw row-major
         // System.Numerics words are the transpose of that, which is the engine's row-vector transform.
