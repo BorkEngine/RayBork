@@ -81,10 +81,15 @@ screen-space content on the app's scene target instead.
   the texture; the renderer inserts the image and resolve barriers. Sampling a target inside the
   pass that writes it is invalid.
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
-  and clear only the first; later cameras use `ClearMode.None` or `ClearMode.Depth` as appropriate.
-  Each camera pass reads its own frame block from shader ABI v2, so passes with different views are
-  correct. The separate multi-camera overlay pass arrives with this work in M8; M7's HUD is same-pass
-  text on a screen-aligned plane.
+  and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or
+  `ClearMode.Depth` as appropriate. Each camera pass is its own render pass with the clamped viewport
+  as the render area, so a clear only touches that viewport and the pass resolves only its own
+  rectangle. Each camera pass reads its own frame block from shader ABI v2, so passes with different
+  views are correct. A HUD is an ordinary later camera: `ClearMode.Depth` loads the scene color and
+  clears depth when the HUD must not be occluded, and `ClearMode.None` keeps both. There is no
+  separate overlay or layer pass. The render-target surface described in this section is a later M8
+  task; split-screen to the HDR scene target uses per-camera render passes and needs no render
+  target.
 - There is no render graph and no automatic pass dependency analysis in v1. Creation order is the
   pass order. Cycles and write-after-read hazards are validation errors.
 

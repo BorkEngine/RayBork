@@ -207,9 +207,11 @@ the world `Transform` for a viewport-relative render-pixel point on a view-depth
 is no `DrawTexture`, no destination-rectangle screen draw, and no 2D overload family: a sprite is a
 textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and it uses the normal batch key, culling,
 sorting, and statistics. Because a screen-space draw is ordinary world-space geometry on the
-returned plane, it participates in depth testing; HUD text is same-pass and geometry closer than the
-plane can occlude it. Shader ABI v2 provides per-pass frame data; only a separate multi-camera
-overlay pass is pending M8 render-pass work.
+returned plane, it participates in depth testing; HUD text drawn in a scene camera is same-pass and
+geometry closer than the plane can occlude it. A HUD that must not be occluded is an ordinary later
+camera that loads the scene color and clears depth; there is no separate overlay or layer pass. Each
+camera pass has its own frame block, and every camera pass records its own render pass with the
+clamped viewport as the render area, so split-screen viewports and later-camera clears are correct.
 
 **Validation.** All helpers are tick-thread only, and a disposed camera or primitive asset is
 `ObjectDisposedException`.

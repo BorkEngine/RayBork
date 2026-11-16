@@ -233,6 +233,10 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
   view-projection matrices, and the camera position. Every recorded frame retains the mesh, internal
   shader program, and bound textures it recorded until the render thread releases the frame slot; a
   model or material object is not an engine asset and adds no hold.
+- Each camera pass is its own render pass. The renderer uses the clamped viewport as the render area,
+  loads the previous pass' stored color and depth, clears that rectangle when the camera asks, and
+  resolves the color for that rectangle only. Several cameras in one tick therefore render
+  split-screen views and layered HUD passes into the same scene target correctly.
 - MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
   is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
 
@@ -352,9 +356,13 @@ camera.DrawText(font, "HUD", screen, 18f, Color.White);
 ```
 
 The HUD text is same-pass, screen-aligned text: it is alpha-blended with no depth write, so geometry
-closer than the overlay plane can still occlude it. Shader ABI v2 already gives every camera pass its
-own 256-byte frame block, so passes with different views read their own frame data; only the separate
-multi-camera overlay pass remains pending in the M8 render-pass work.
+closer than the overlay plane can still occlude it. To place a HUD over the scene without depth
+occlusion, record an ordinary later camera after the scene cameras with `ClearMode.Depth`: it loads
+the scene color and clears depth, so the HUD is not occluded by scene depth. `ClearMode.None` loads
+both the scene color and depth when the HUD should still be depth-tested. There is no separate overlay
+or layer pass; a HUD is an ordinary later camera and behaves like every other camera pass. Shader ABI
+v2 gives every camera pass its own 256-byte frame block, so passes with different views read their own
+frame data.
 
 **2D quad, disc, and grid primitives.** The `DrawQuad` overloads draw one instance of the engine
 quad in the transform's local `XY` plane, centered, with local `+Z` as the front and the instance
@@ -623,16 +631,23 @@ public sealed class TonemappingSettings {
 }
 ```
 
-- Default camera clear is `ClearMode.ColorAndDepth`. A 3D frame that uses only `ClearMode.Color`
-  will reuse the previous frame's depth buffer and must be treated as an overlay pass.
+- Default camera clear is `ClearMode.ColorAndDepth`.
 - Clears are scoped to the camera viewport, not the whole target. The renderer clears the clamped
   viewport rectangle with the camera's clear state; a pass with a smaller viewport leaves the pixels
   outside it untouched.
 - Depth clears to `0.0`. Color clears to `ClearColor`. `ClearMode.Stencil` is a no-op because the
   scene target has no stencil attachment; the flag is accepted and does not fail.
-- The scene target's render pass starts with undefined color and depth content. A first camera that
-  wants defined content must clear; a first camera with `ClearMode.None` leaves undefined content,
-  and later cameras see the previous pass' pixels.
+- The scene target starts every frame with undefined color and depth content: the renderer discards
+  the previous frame's contents before the first camera pass. A first camera that wants defined
+  content must clear; a first camera with `ClearMode.None` leaves undefined content.
+- Later cameras load the previous camera pass' stored content for their own viewport. `ClearMode.None`
+  keeps the earlier color and depth, `ClearMode.Color` clears color and keeps depth, and
+  `ClearMode.Depth` clears depth and keeps color. The load is part of the camera's own render pass, so
+  a camera that draws over only part of the target keeps the earlier pixels everywhere else.
+- Multiple cameras render to the scene target in one frame: each pass is its own render pass with the
+  clamped viewport as the render area, and each pass resolves its own render area. That makes
+  split-screen to the scene target correct, including passes with different views, projections, and
+  clear modes. There is no separate multi-camera overlay or layer pass.
 - The depth test defaults to `GreaterOrEqual`; depth writes are on for opaque draws.
 - Perspective supports an infinite far plane. The projection maps the near plane to `1.0` and
   infinity to `0.0`. The perspective `far` defaults to `1000`; pass `float.PositiveInfinity`
@@ -642,20 +657,20 @@ public sealed class TonemappingSettings {
   `samples/Castle` toggles its one camera between the two projections with `O`.
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
-- Multiple cameras can clear different passes sequentially in one tick. The first camera usually
-  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. The shader ABI v2
-  gives every camera pass its own 256-byte frame block, selected by a push-constant pass index, so a
-  frame with several camera passes submits each pass' own matrices, camera position, and viewport to
-  its draws. The M8 render-pass work that owns dedicated split-screen and overlay passes is tracked
-  separately.
+- Multiple cameras can render sequentially in one tick. The first camera usually clears; later
+  cameras choose `ClearMode.None`, `ClearMode.Color`, or `ClearMode.Depth` for overlays. A HUD is an
+  ordinary later camera: `ClearMode.Depth` loads the scene color and clears depth when the HUD must
+  not be occluded, and `ClearMode.None` keeps both. The shader ABI v2 gives every camera pass its own
+  256-byte frame block, selected by a push-constant pass index, so a frame with several camera passes
+  submits each pass' own matrices, camera position, and viewport to its draws.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
-  target inside the same pass that writes it is invalid and is reported as a validation error. This
-  applies from M8; the current renderer has no render target.
+  target inside the same pass that writes it is invalid and is reported as a validation error. The
+  render-target surface is a later M8 task; the current renderer has no render target.
 
 There is no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
-the scene clear control for its pass. A camera that does not clear color leaves the previous pass'
-color in place, which is the documented overlay behavior.
+the scene clear control for its pass. A camera that does not clear color leaves the earlier pass'
+color in place for its viewport, which is how a later HUD or overlay camera keeps the scene visible.
 
 **Projection math.** The engine is right-handed and Y-up and the camera looks down local `-Z`.
 `ViewMatrix` is the inverse of `Transform.ToMatrix()`. `ProjectionMatrix` uses Vulkan's `[0, 1]`
@@ -792,9 +807,10 @@ public void Tick(EngineContext ctx) {
 highest device-supported count that does not exceed the request, or `1` when none is supported, and
 a fallback logs a warning. The scene target color and depth attachments use the effective count;
 the swapchain images are single-sample. Scene color is resolved into a single-sample sampled image
-before the present pass. Depth is cleared to `0.0` and the reverse-Z state is defined; multisampled
-depth is not resolved because nothing samples depth until M8. A `RenderTexture` uses its
-own `SampleCount` (M8).
+before the present pass, and each camera pass resolves only its own render area. The multisampled
+color and depth attachments are stored between camera passes so a later camera can load them. Depth is
+cleared to `0.0` and the reverse-Z state is defined; multisampled depth is not resolved because
+nothing samples depth. A `RenderTexture` uses its own `SampleCount` (a later M8 task).
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
 not advertise it; a requested `Fifo` falls back to `Mailbox` when FIFO is unavailable. `Immediate` is

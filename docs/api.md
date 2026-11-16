@@ -374,15 +374,18 @@ primitive meshes or their materials. `BoundingFrustum.Intersects` accepts a smal
 (`1e-4`) so a full-viewport or boundary-aligned quad is not culled by plane-extraction drift;
 `Contains` keeps its exact non-negative test.
 
-The screen-space HUD is same-pass text, not a separate overlay pass: `ScreenToWorldTransform(point,
-1f)` plus `DrawText(..., 18f, ...)` draws screen-aligned text that is alpha-blended with no depth
-write, so geometry closer than the overlay plane can still occlude it. The shader ABI v2 provides
-per-pass frame data: every camera pass in a frame writes its own 256-byte frame block and a
-push-constant pass index selects it, so multiple cameras with different views read their own
-matrices, camera position, and viewport. A separate multi-camera overlay pass for HUD text and
-sprites that must not be occluded by scene depth is deferred to the remaining M8 render-pass work.
-`samples/Pong` is the M7 sample and Native AOT gate, and `samples/Castle` and
-`samples/PrimitiveGallery` draw their status lines through the same screen transform.
+The screen-space HUD is same-pass text: `ScreenToWorldTransform(point, 1f)` plus
+`DrawText(..., 18f, ...)` draws screen-aligned text that is alpha-blended with no depth write, so
+geometry closer than the overlay plane can still occlude it. A HUD that must not be occluded is an
+ordinary later camera that loads the scene color and clears depth (`ClearMode.Depth`), or keeps both
+buffers (`ClearMode.None`); there is no separate overlay or layer pass. Multiple cameras and viewport
+rectangles are supported: each camera pass is its own render pass with the clamped viewport as the
+render area, so split-screen views, viewport-scoped clears, and layered HUD cameras are correct in
+one frame. The shader ABI v2 provides per-pass frame data: every camera pass in a frame writes its own
+256-byte frame block and a push-constant pass index selects it, so multiple cameras with different
+views read their own matrices, camera position, and viewport. `samples/Pong` is the M7 sample and
+Native AOT gate, and `samples/Castle` and `samples/PrimitiveGallery` draw their status lines through
+the same screen transform.
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and

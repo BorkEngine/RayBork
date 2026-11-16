@@ -17,12 +17,12 @@ namespace RayBork.Internal;
 /// <remarks>
 /// <para>
 /// The render thread owns every member. <see cref="Submit"/> waits for a frame slot, plans the
-/// packet's batches, acquires a swapchain image, records one scene render pass for every camera pass,
-/// records the present pass, and submits without waiting for the frame fence. The geometry pass binds
-/// one shared descriptor set per slot, clears each camera viewport with <c>vkCmdClearAttachments</c>,
-/// writes each pass's frame block into a host-visible frame storage buffer with a pass-index push
-/// constant, and draws instanced scene batches whose per-instance records live in a second
-/// host-visible storage buffer.
+/// packet's batches, acquires a swapchain image, records one render pass per camera pass, records the
+/// present pass, and submits without waiting for the frame fence. Each camera render pass uses its
+/// clamped viewport as the render area, binds one shared descriptor set per slot, clears that viewport
+/// with <c>vkCmdClearAttachments</c> when the camera asks, writes that pass's frame block into a
+/// host-visible frame storage buffer with a pass-index push constant, and draws instanced scene
+/// batches whose per-instance records live in a second host-visible storage buffer.
 /// Recoverable presentation, surface, and device failures are handled inside the backend;
 /// <see cref="Recover"/> idles the device, drops the affected frame, recreates the affected resources,
 /// and resumes. A bounded recovery loop or a failed recovery throws
@@ -1219,14 +1219,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Records the scene render pass for every camera pass: viewport-scoped clears, the per-pass frame
-    /// block write, the pass-index push constant, and the instanced geometry draws.
+    /// Records one render pass per camera pass: the frame-start transition, viewport-scoped clears, the
+    /// per-pass frame block write, the pass-index push constant, the instanced geometry draws, the
+    /// barriers between consecutive render passes, and the final transition for the present pass.
     /// </summary>
     /// <remarks>
     /// Render-thread only. The frame slot's fence has already signaled, so the slot's buffers and
-    /// descriptor set can be updated. The render pass and the frame descriptor set are bound once for
-    /// the whole frame. Every camera pass writes its own 256-byte block into the slot's frame storage
-    /// buffer and pushes its index, so each pass's draws read their own <c>rbFrame</c> values.
+    /// descriptor set can be updated. The frame descriptor set is bound once for the whole frame.
+    /// Every camera pass begins its own render pass instance with its clamped viewport as the render
+    /// area, writes its own 256-byte block into the slot's frame storage buffer, and pushes its index,
+    /// so each pass's draws read their own <c>rbFrame</c> values and only that pass' render area is
+    /// resolved. The scene images are transitioned to undefined content before the first pass,
+    /// synchronized between render passes, and the resolved color is transitioned to
+    /// <c>ShaderReadOnlyOptimal</c> for the present pass after the last one.
     /// </remarks>
     private void RecordScenePass(
         Vk vulkan,
@@ -1237,19 +1242,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Extent2D extent,
         HashSet<ulong> pipelines) {
         VulkanSceneTarget target = _sceneTarget!;
-        Rect2D renderArea = new() {
-            Offset = new Offset2D { X = 0, Y = 0 },
-            Extent = extent,
-        };
-        RenderPassBeginInfo beginInfo = new() {
-            SType = StructureType.RenderPassBeginInfo,
-            RenderPass = target.RenderPass,
-            Framebuffer = target.Framebuffer,
-            RenderArea = renderArea,
-            ClearValueCount = 0,
-            PClearValues = null,
-        };
-        vulkan.CmdBeginRenderPass(commandBuffer, &beginInfo, SubpassContents.Inline);
+        TransitionSceneTargetToAttachments(vulkan, commandBuffer, target);
         DescriptorSet descriptorSet = _frameResources!.GetDescriptorSet(frameSlot);
         vulkan.CmdBindDescriptorSets(
             commandBuffer,
@@ -1262,6 +1255,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             null);
 
         ulong instanceByteOffset = 0;
+        bool renderedPass = false;
         for (int passIndex = 0; passIndex < plan.Passes.Count; passIndex++) {
             PassPlan passPlan = plan.Passes[passIndex];
             CameraPass pass = passPlan.Pass;
@@ -1269,6 +1263,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 continue;
             }
 
+            if (renderedPass) {
+                SynchronizeSceneRenderPasses(vulkan, commandBuffer, target);
+            }
+
+            RenderPassBeginInfo beginInfo = new() {
+                SType = StructureType.RenderPassBeginInfo,
+                RenderPass = target.RenderPass,
+                Framebuffer = target.Framebuffer,
+                RenderArea = scissor,
+                ClearValueCount = 0,
+                PClearValues = null,
+            };
+            vulkan.CmdBeginRenderPass(commandBuffer, &beginInfo, SubpassContents.Inline);
             vulkan.CmdSetViewport(commandBuffer, 0, 1, &viewport);
             vulkan.CmdSetScissor(commandBuffer, 0, 1, &scissor);
             if ((pass.ClearMode & ClearMode.Color) != 0) {
@@ -1279,47 +1286,208 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 ClearDepthAttachment(vulkan, commandBuffer, scissor);
             }
 
-            // ClearMode.Stencil has no attachment in M4; the flag is a documented no-op.
+            // ClearMode.Stencil has no attachment in M8; the flag is a documented no-op.
 
             WriteFrameBlock(frameSlot, passIndex, pass, frame, viewport);
             PushPassIndex(vulkan, commandBuffer, passIndex);
-            if (passPlan.Batches.Count == 0) {
-                continue;
+            if (passPlan.Batches.Count > 0) {
+                foreach (PlannedBatch batch in passPlan.Batches) {
+                    VulkanShaderAssetResource shader = RequireShaderResource(batch.Program);
+                    VulkanMeshAssetResource mesh = RequireMeshResource(batch.Mesh);
+                    Pipeline pipeline = _geometryPipelines!.GetOrCreate(
+                        shader,
+                        batch.RenderState,
+                        batch.Topology,
+                        batch.Wireframe);
+                    pipelines.Add(pipeline.Handle);
+
+                    RenderDrawRecord first = batch.Instances[0].Record;
+                    int stride = ShaderAbiLayout.INSTANCE_HEADER_SIZE + first.InstanceTemplate.Length;
+                    instanceByteOffset = AlignUp(instanceByteOffset, (ulong)stride);
+                    uint firstInstance = checked((uint)(instanceByteOffset / (ulong)stride));
+                    WriteInstanceRecords(frameSlot, instanceByteOffset, stride, batch);
+                    instanceByteOffset += (ulong)(stride * batch.InstanceCount);
+
+                    vulkan.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, pipeline);
+                    Buffer vertexBuffer = mesh.VertexBuffer;
+                    ulong vertexOffset = 0;
+                    vulkan.CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
+                    vulkan.CmdBindIndexBuffer(commandBuffer, mesh.IndexBuffer, 0, IndexType.Uint32);
+                    vulkan.CmdDrawIndexed(
+                        commandBuffer,
+                        checked((uint)first.IndexCount),
+                        checked((uint)batch.InstanceCount),
+                        0,
+                        0,
+                        firstInstance);
+                }
             }
 
-            foreach (PlannedBatch batch in passPlan.Batches) {
-                VulkanShaderAssetResource shader = RequireShaderResource(batch.Program);
-                VulkanMeshAssetResource mesh = RequireMeshResource(batch.Mesh);
-                Pipeline pipeline = _geometryPipelines!.GetOrCreate(
-                    shader,
-                    batch.RenderState,
-                    batch.Topology,
-                    batch.Wireframe);
-                pipelines.Add(pipeline.Handle);
-
-                RenderDrawRecord first = batch.Instances[0].Record;
-                int stride = ShaderAbiLayout.INSTANCE_HEADER_SIZE + first.InstanceTemplate.Length;
-                instanceByteOffset = AlignUp(instanceByteOffset, (ulong)stride);
-                uint firstInstance = checked((uint)(instanceByteOffset / (ulong)stride));
-                WriteInstanceRecords(frameSlot, instanceByteOffset, stride, batch);
-                instanceByteOffset += (ulong)(stride * batch.InstanceCount);
-
-                vulkan.CmdBindPipeline(commandBuffer, PipelineBindPoint.Graphics, pipeline);
-                Buffer vertexBuffer = mesh.VertexBuffer;
-                ulong vertexOffset = 0;
-                vulkan.CmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBuffer, &vertexOffset);
-                vulkan.CmdBindIndexBuffer(commandBuffer, mesh.IndexBuffer, 0, IndexType.Uint32);
-                vulkan.CmdDrawIndexed(
-                    commandBuffer,
-                    checked((uint)first.IndexCount),
-                    checked((uint)batch.InstanceCount),
-                    0,
-                    0,
-                    firstInstance);
-            }
+            vulkan.CmdEndRenderPass(commandBuffer);
+            renderedPass = true;
         }
 
-        vulkan.CmdEndRenderPass(commandBuffer);
+        TransitionResolvedColorForPresent(vulkan, commandBuffer, target);
+    }
+
+    /// <summary>
+    /// Transitions the scene color, resolve, and depth images from <c>Undefined</c> to their attachment
+    /// layouts, discarding the previous frame's contents.
+    /// </summary>
+    private static void TransitionSceneTargetToAttachments(
+        Vk vulkan,
+        CommandBuffer commandBuffer,
+        VulkanSceneTarget target) {
+        bool multisampled = target.SampleCount > 1;
+        Span<ImageMemoryBarrier> barriers = stackalloc ImageMemoryBarrier[multisampled ? 3 : 2];
+        int count = 0;
+        if (multisampled) {
+            barriers[count++] = CreateSceneImageBarrier(
+                target.MultisampledColorImage,
+                ImageAspectFlags.ColorBit,
+                ImageLayout.Undefined,
+                ImageLayout.ColorAttachmentOptimal,
+                AccessFlags.None,
+                AccessFlags.ColorAttachmentWriteBit);
+        }
+
+        barriers[count++] = CreateSceneImageBarrier(
+            target.ResolvedColorImage,
+            ImageAspectFlags.ColorBit,
+            ImageLayout.Undefined,
+            ImageLayout.ColorAttachmentOptimal,
+            AccessFlags.None,
+            AccessFlags.ColorAttachmentWriteBit);
+        barriers[count++] = CreateSceneImageBarrier(
+            target.DepthImage,
+            ImageAspectFlags.DepthBit,
+            ImageLayout.Undefined,
+            ImageLayout.DepthStencilAttachmentOptimal,
+            AccessFlags.None,
+            AccessFlags.DepthStencilAttachmentWriteBit);
+        RecordSceneImageBarriers(
+            vulkan,
+            commandBuffer,
+            PipelineStageFlags.TopOfPipeBit,
+            PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
+            barriers[..count]);
+    }
+
+    /// <summary>
+    /// Synchronizes the previous camera render pass' attachment writes with the next pass' loads and
+    /// resolve.
+    /// </summary>
+    /// <remarks>
+    /// Separate render pass instances do not synchronize their attachment stores with a later
+    /// instance's loads, so every consecutive pair needs an image barrier with unchanged layouts: the
+    /// next pass loads the previous pass' multisampled color and depth and resolves over its own
+    /// render area.
+    /// </remarks>
+    private static void SynchronizeSceneRenderPasses(
+        Vk vulkan,
+        CommandBuffer commandBuffer,
+        VulkanSceneTarget target) {
+        bool multisampled = target.SampleCount > 1;
+        Span<ImageMemoryBarrier> barriers = stackalloc ImageMemoryBarrier[multisampled ? 3 : 2];
+        int count = 0;
+        if (multisampled) {
+            barriers[count++] = CreateSceneImageBarrier(
+                target.MultisampledColorImage,
+                ImageAspectFlags.ColorBit,
+                ImageLayout.ColorAttachmentOptimal,
+                ImageLayout.ColorAttachmentOptimal,
+                AccessFlags.ColorAttachmentWriteBit,
+                AccessFlags.ColorAttachmentWriteBit);
+        }
+
+        barriers[count++] = CreateSceneImageBarrier(
+            target.ResolvedColorImage,
+            ImageAspectFlags.ColorBit,
+            ImageLayout.ColorAttachmentOptimal,
+            ImageLayout.ColorAttachmentOptimal,
+            AccessFlags.ColorAttachmentWriteBit,
+            AccessFlags.ColorAttachmentWriteBit);
+        barriers[count++] = CreateSceneImageBarrier(
+            target.DepthImage,
+            ImageAspectFlags.DepthBit,
+            ImageLayout.DepthStencilAttachmentOptimal,
+            ImageLayout.DepthStencilAttachmentOptimal,
+            AccessFlags.DepthStencilAttachmentWriteBit,
+            AccessFlags.DepthStencilAttachmentWriteBit);
+        RecordSceneImageBarriers(
+            vulkan,
+            commandBuffer,
+            PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.LateFragmentTestsBit,
+            PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
+            barriers[..count]);
+    }
+
+    /// <summary>
+    /// Transitions the resolved scene color to <c>ShaderReadOnlyOptimal</c> for the present pass.
+    /// </summary>
+    private static void TransitionResolvedColorForPresent(
+        Vk vulkan,
+        CommandBuffer commandBuffer,
+        VulkanSceneTarget target) {
+        Span<ImageMemoryBarrier> barriers = stackalloc ImageMemoryBarrier[1];
+        barriers[0] = CreateSceneImageBarrier(
+            target.ResolvedColorImage,
+            ImageAspectFlags.ColorBit,
+            ImageLayout.ColorAttachmentOptimal,
+            ImageLayout.ShaderReadOnlyOptimal,
+            AccessFlags.ColorAttachmentWriteBit,
+            AccessFlags.ShaderReadBit);
+        RecordSceneImageBarriers(
+            vulkan,
+            commandBuffer,
+            PipelineStageFlags.ColorAttachmentOutputBit,
+            PipelineStageFlags.FragmentShaderBit,
+            barriers);
+    }
+
+    private static ImageMemoryBarrier CreateSceneImageBarrier(
+        Image image,
+        ImageAspectFlags aspect,
+        ImageLayout oldLayout,
+        ImageLayout newLayout,
+        AccessFlags sourceAccess,
+        AccessFlags destinationAccess) => new() {
+            SType = StructureType.ImageMemoryBarrier,
+            SrcAccessMask = sourceAccess,
+            DstAccessMask = destinationAccess,
+            OldLayout = oldLayout,
+            NewLayout = newLayout,
+            SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
+            Image = image,
+            SubresourceRange = new ImageSubresourceRange {
+                AspectMask = aspect,
+                BaseMipLevel = 0,
+                LevelCount = 1,
+                BaseArrayLayer = 0,
+                LayerCount = 1,
+            },
+        };
+
+    private static void RecordSceneImageBarriers(
+        Vk vulkan,
+        CommandBuffer commandBuffer,
+        PipelineStageFlags sourceStage,
+        PipelineStageFlags destinationStage,
+        ReadOnlySpan<ImageMemoryBarrier> barriers) {
+        fixed (ImageMemoryBarrier* pointer = barriers) {
+            vulkan.CmdPipelineBarrier(
+                commandBuffer,
+                sourceStage,
+                destinationStage,
+                0,
+                0,
+                null,
+                0,
+                null,
+                checked((uint)barriers.Length),
+                pointer);
+        }
     }
 
     /// <summary>

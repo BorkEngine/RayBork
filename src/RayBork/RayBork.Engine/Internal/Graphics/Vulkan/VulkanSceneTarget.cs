@@ -4,17 +4,21 @@ namespace RayBork.Internal;
 
 /// <summary>
 /// The linear HDR scene target: the multisampled color and depth images, the resolved color image the
-/// present pass samples, and the render pass and framebuffer the geometry pass renders into.
+/// present pass samples, and the render pass and framebuffer every camera pass renders into.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The color images use <c>R16G16B16A16_SFLOAT</c> and the depth image uses <c>D32_SFLOAT</c>. The
-/// render pass loads both attachments with <c>DontCare</c>: the render area starts undefined and the
-/// geometry pass clears the camera viewport with <c>vkCmdClearAttachments</c> when the camera asks for
-/// a clear. A first camera with <see cref="ClearMode.None"/> therefore leaves undefined content, which
-/// is the documented overlay behavior. The single-sample resolved color image is readable and
-/// copyable so a GPU test can probe it; the single-sample depth image is also a transfer source.
-/// Multisampled depth is not resolved in M4 because nothing samples depth before M8.
+/// The color images use <c>R16G16B16A16_SFLOAT</c> and the depth image uses <c>D32_SFLOAT</c>. Every
+/// camera pass is its own render pass instance with a viewport-sized render area. The color and depth
+/// attachments load the previous pass' stored content and store their own, so a later camera with
+/// <see cref="ClearMode.None"/> sees the earlier pass' pixels and depth, and a camera that clears only
+/// touches its clamped viewport with <c>vkCmdClearAttachments</c>. The backend transitions the
+/// attachments to undefined content at the start of the frame, so a first camera that does not clear
+/// sees undefined content. The resolved color attachment is a resolve target with a
+/// <c>DontCare</c> load and a <c>Store</c> store, so each pass resolves only its render area. The
+/// single-sample resolved color image is readable and copyable so a GPU test can probe it; the
+/// single-sample depth image is also a transfer source. Multisampled depth is not resolved in M8
+/// because nothing samples depth.
 /// </para>
 /// <para>
 /// Every member is render-thread only. The caller recreates the target after a device wait-idle and
@@ -32,6 +36,7 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
 
     private RenderPass _renderPass;
     private Framebuffer _framebuffer;
+    private Image _multisampledColorImage;
     private Image _resolvedColorImage;
     private Image _depthImage;
     private ImageView _resolvedColorView;
@@ -58,8 +63,9 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
     internal int SampleCount => _sampleCount;
 
     /// <summary>
-    /// Gets the render pass the geometry pass renders into. The pass loads the color and depth
-    /// attachments with <c>DontCare</c>; the geometry pass clears the camera viewport itself.
+    /// Gets the render pass every camera pass records into. Each pass begins its own instance with a
+    /// viewport-sized render area; the color and depth attachments load the previous pass' stored
+    /// content and store their own.
     /// </summary>
     internal RenderPass RenderPass => _renderPass;
 
@@ -67,6 +73,16 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
     /// Gets the framebuffer that binds the target attachments for the render pass.
     /// </summary>
     internal Framebuffer Framebuffer => _framebuffer;
+
+    /// <summary>
+    /// Gets the multisampled color image, or the default handle when the target is single-sample.
+    /// </summary>
+    /// <remarks>
+    /// The backend transitions this image to <c>ColorAttachmentOptimal</c> at the start of a frame and
+    /// synchronizes it between camera render passes. A single-sample target renders and resolves into
+    /// <see cref="ResolvedColorImage"/> instead.
+    /// </remarks>
+    internal Image MultisampledColorImage => _multisampledColorImage;
 
     /// <summary>
     /// Gets the single-sample color image the present pass samples.
@@ -164,6 +180,7 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
         }
 
         _imageResources.Clear();
+        _multisampledColorImage = default;
         _resolvedColorImage = default;
         _depthImage = default;
         _resolvedColorView = default;
@@ -204,6 +221,7 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
             ? [multisampledColor!.Value.View, resolvedColor.View, depth.View]
             : [resolvedColor.View, depth.View];
         _framebuffer = CreateFramebuffer(attachments);
+        _multisampledColorImage = multisampled ? multisampledColor!.Value.Image : default;
         _resolvedColorImage = resolvedColor.Image;
         _resolvedColorView = resolvedColor.View;
         _depthImage = depth.Image;
@@ -310,32 +328,32 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
             attachments[0] = CreateAttachmentDescription(
                 Format.R16G16B16A16Sfloat,
                 samples,
-                AttachmentLoadOp.DontCare,
-                AttachmentStoreOp.DontCare,
+                AttachmentLoadOp.Load,
+                AttachmentStoreOp.Store,
                 ImageLayout.ColorAttachmentOptimal);
             attachments[1] = CreateAttachmentDescription(
                 Format.R16G16B16A16Sfloat,
                 SampleCountFlags.Count1Bit,
                 AttachmentLoadOp.DontCare,
                 AttachmentStoreOp.Store,
-                ImageLayout.ShaderReadOnlyOptimal);
+                ImageLayout.ColorAttachmentOptimal);
             attachments[2] = CreateAttachmentDescription(
                 Format.D32Sfloat,
                 samples,
-                AttachmentLoadOp.DontCare,
-                AttachmentStoreOp.DontCare,
+                AttachmentLoadOp.Load,
+                AttachmentStoreOp.Store,
                 ImageLayout.DepthStencilAttachmentOptimal);
         } else {
             attachments[0] = CreateAttachmentDescription(
                 Format.R16G16B16A16Sfloat,
                 SampleCountFlags.Count1Bit,
-                AttachmentLoadOp.DontCare,
+                AttachmentLoadOp.Load,
                 AttachmentStoreOp.Store,
-                ImageLayout.ShaderReadOnlyOptimal);
+                ImageLayout.ColorAttachmentOptimal);
             attachments[1] = CreateAttachmentDescription(
                 Format.D32Sfloat,
                 SampleCountFlags.Count1Bit,
-                AttachmentLoadOp.DontCare,
+                AttachmentLoadOp.Load,
                 AttachmentStoreOp.Store,
                 ImageLayout.DepthStencilAttachmentOptimal);
         }
@@ -353,36 +371,30 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
             PResolveAttachments = multisampled ? &resolveReference : null,
             PDepthStencilAttachment = &depthReference,
         };
-        SubpassDependency[] dependencies = [
-            new() {
-                SrcSubpass = SUBPASS_EXTERNAL,
-                DstSubpass = 0,
-                SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.LateFragmentTestsBit,
-                DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
-                SrcAccessMask = 0,
-                DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit,
-                DependencyFlags = 0,
-            },
-            new() {
-                SrcSubpass = 0,
-                DstSubpass = SUBPASS_EXTERNAL,
-                SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit,
-                SrcAccessMask = AccessFlags.ColorAttachmentWriteBit,
-                DstStageMask = PipelineStageFlags.FragmentShaderBit,
-                DstAccessMask = AccessFlags.ShaderReadBit,
-                DependencyFlags = 0,
-            },
-        ];
-        fixed (AttachmentDescription* attachmentsPointer = attachments)
-        fixed (SubpassDependency* dependenciesPointer = dependencies) {
+
+        // The backend transitions the attachments to their attachment layouts before the first pass
+        // and records explicit barriers between passes, so the render pass needs only the external
+        // dependency that orders each load after the preceding scene work. There is no final
+        // dependency: the backend transitions the resolved color to ShaderReadOnlyOptimal after the
+        // last pass instead.
+        SubpassDependency dependency = new() {
+            SrcSubpass = SUBPASS_EXTERNAL,
+            DstSubpass = 0,
+            SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.LateFragmentTestsBit,
+            DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
+            SrcAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit,
+            DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit,
+            DependencyFlags = 0,
+        };
+        fixed (AttachmentDescription* attachmentsPointer = attachments) {
             RenderPassCreateInfo createInfo = new() {
                 SType = StructureType.RenderPassCreateInfo,
                 AttachmentCount = (uint)attachments.Length,
                 PAttachments = attachmentsPointer,
                 SubpassCount = 1,
                 PSubpasses = &subpass,
-                DependencyCount = (uint)dependencies.Length,
-                PDependencies = dependenciesPointer,
+                DependencyCount = 1,
+                PDependencies = &dependency,
             };
             Result result = _vulkan.CreateRenderPass(_device, &createInfo, null, out RenderPass renderPass);
             ThrowIfFailed(result, "vkCreateRenderPass");
@@ -412,15 +424,18 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
         SampleCountFlags samples,
         AttachmentLoadOp loadOp,
         AttachmentStoreOp storeOp,
-        ImageLayout finalLayout) => new() {
+        ImageLayout layout) => new() {
             Format = format,
             Samples = samples,
             LoadOp = loadOp,
             StoreOp = storeOp,
             StencilLoadOp = AttachmentLoadOp.DontCare,
             StencilStoreOp = AttachmentStoreOp.DontCare,
-            InitialLayout = ImageLayout.Undefined,
-            FinalLayout = finalLayout,
+            // The backend keeps each attachment in its attachment layout for the whole frame, so the
+            // render pass never transitions it and loadOp always sees the previous pass' stored
+            // content (or undefined content after the frame-start transition).
+            InitialLayout = layout,
+            FinalLayout = layout,
         };
 
     private static uint FindMemoryType(
