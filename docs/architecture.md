@@ -567,13 +567,14 @@ wait for the render loop to finish with it   wait for newest ready
   with `InvalidOperationException` before it queues; the renderer re-checks the frame hold and then waits
   for the last-use fence, so it never waits on a hold the blocked tick thread would have to release and
   never replaces images an in-flight frame reads. It creates a new `VulkanRenderTarget` (color, optional
-  depth, resolved images, render pass, framebuffer) and new samplers, reuses the target's bindless slots
-  and rewrites their descriptors to the new views, updates both `RenderTextureViewLifetime` resources
-  behind the unchanged public `Texture` objects, updates the lifetime description, and then disposes the
-  old pipeline cache (which references the old render pass) and the old target. A failure before the
-  swap leaves the old target live and releases the partial new resources. The views' `Width`/`Height`
-  are updated in place on the tick thread after the request completes, and a later device recovery
-  recreates the resized target from the updated description.
+  depth, resolved images, render pass, framebuffer), keeps the target's samplers, reuses its bindless
+  slots and rewrites their descriptors to the new views, updates both `RenderTextureViewLifetime`
+  resources behind the unchanged public `Texture` objects, updates their dimensions together with the
+  lifetime description on the render thread before it completes the request, and then disposes the old
+  pipeline cache (which references the old render pass) and the old target. A failure before the swap
+  leaves the old target live and releases the partial new resources. The view lifetime owns the current
+  view dimensions, so `Texture.Width`/`Height` and `RenderTexture.Width`/`Height` become authoritative at
+  the same point, and a later device recovery recreates the resized target from the updated description.
 - A multisampled depth-bearing target resolves its depth attachment through Vulkan 1.2
   `VkSubpassDescriptionDepthStencilResolve` in a `vkCreateRenderPass2` render pass. Device selection
   requires `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, so the sampled depth value is the stored reverse-Z value
@@ -1574,19 +1575,24 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   two depth targets in one frame, `ClearMode.None`/`ClearMode.Depth` loads and clears, and assert the
   depth view's format, nearest clamp sampler, empty path, and ownership. M8 also covers resize: an idle
   64x64 target resized to 96x48 recreates the target, render pass, framebuffer, and views while the two
-  `Texture` objects keep their identity and report the new dimensions; the resized target renders and
-  samples color and depth; an unchanged size recreates nothing; resize while a camera targets the target
-  or a sealed frame holds it throws `InvalidOperationException` without corrupting the frame, and works
-  after the frame completes; depthless, `Rgba16Float`/`Rgba8Unorm`/`Rgba8Srgb`, and 1x/2x/4x targets
-  keep their format, depth, and sample count; and a device recovery recreates the resized target from the
-  updated description. `RenderTextureDescriptionTests` and `RenderTextureServiceTests` cover validation,
-  the sample-count fallback, depth-view nullability and ownership, cancellation, the shutdown failure,
-  the target lifetime, the resize request handoff and completion, the render-thread hold re-check, the
-  idempotent same-size no-op, the invalid and disposed resize failures, and the queued create/resize/
-  destroy round without a GPU; `RenderTextureAppTests` covers creation in `Setup` and `Tick`, a blocking
-  resize with in-place view dimensions, the in-use rejection, and the post-shutdown
-  `ObjectDisposedException`. `VulkanDepthStencilResolveTests` covers the required sample-zero selection,
-  the rejection of min/max-only modes, and the missing-mode diagnostic without a GPU.
+  `Texture` objects keep their identity and their bindless slots and report the new dimensions; the
+  resized target renders and samples color and depth; an unchanged size recreates nothing; resize while a
+  camera targets the target or a sealed frame holds it throws `InvalidOperationException` without
+  corrupting the frame, and works after the frame completes and the last-use fence is waited on; a resize
+  succeeds while every spare bindless slot is allocated; the render-thread re-check rejects a resize whose
+  frame hold appeared after queueing and leaves the target usable; a resize after a device recovery
+  recreates the recovered target; the device-limit rejection is exercised through a test-only limit
+  override and keeps the old target; depthless, `Rgba16Float`/`Rgba8Unorm`/`Rgba8Srgb`, and 1x/2x/4x
+  targets keep their format, depth, and sample count; and a device recovery recreates the resized target
+  from the updated description. `RenderTextureDescriptionTests` and `RenderTextureServiceTests` cover
+  validation, the sample-count fallback, depth-view nullability and ownership, cancellation, the shutdown
+  failure, the target lifetime, the resize request handoff and completion, the render-thread hold
+  re-check, the idempotent same-size no-op, the invalid and disposed resize failures, the public resize
+  after `Stop`, and the queued create/resize/destroy round without a GPU; `RenderTextureAppTests` covers
+  creation in `Setup` and `Tick`, a blocking resize with in-place view dimensions, the in-use rejection,
+  and the post-shutdown stopped-service `ObjectDisposedException`. `VulkanDepthStencilResolveTests`
+  covers the required sample-zero selection, the rejection of min/max-only modes, and the missing-mode
+  diagnostic without a GPU.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

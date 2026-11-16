@@ -295,7 +295,7 @@ internal sealed class RenderTextureService : IDisposable {
     }
 
     /// <summary>
-    /// Stops the service: rejects later requests and fails every queued creation request with
+    /// Stops the service: rejects later requests and fails every queued creation or resize request with
     /// <see cref="ObjectDisposedException"/>. Idempotent.
     /// </summary>
     internal void Stop() {

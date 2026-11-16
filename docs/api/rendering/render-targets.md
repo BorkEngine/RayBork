@@ -105,28 +105,32 @@ depth attachment, resolved images, render pass, framebuffer, per-target geometry
 bindless color and depth views at the new size. It is tick-thread only, like `CreateRenderTextureAsync`,
 and blocks until the render thread finished the recreation; the render thread services the request
 independently of the tick thread, so the call never deadlocks with a frame. It keeps the target id, the
-color format, the `Depth` flag, the effective `SampleCount`, and both `Texture` view objects. `Width`,
-`Height`, `ColorTexture.Width`/`Height`, and `DepthTexture.Width`/`Height` report the new size after the
-call; the view's format, sampler, empty `Path`, and owner do not change, and directly disposing a view
-still throws. The target's contents are undefined after a resize.
+color format, the `Depth` flag, the effective `SampleCount`, the samplers, and both `Texture` view
+objects. `Width`, `Height`, `ColorTexture.Width`/`Height`, and `DepthTexture.Width`/`Height` report the
+new size after the call; the view's format, sampler, empty `Path`, and owner do not change, and directly
+disposing a view still throws. The target's contents are undefined after a resize.
 
-- An unchanged size is a no-op: it recreates nothing and does not throw, even while a frame holds the
-  target.
+- An unchanged size is a no-op for a live target with a running renderer: it recreates nothing and,
+  even while a frame holds the target, does not throw. A disposed target or a stopped renderer still
+  reports `ObjectDisposedException`.
 - A dimension that is not positive or exceeds `16384` throws `ArgumentOutOfRangeException` before the
   request is queued. The render thread re-checks the new size against the current device's maximum 2D
   image dimension and fails the call with `ArgumentOutOfRangeException` when it is too large; the target
-  keeps its previous images.
+  keeps its previous images. The device limit can be below the public `16384` cap on conformant hardware,
+  and a recreation can select a smaller limit.
 - `InvalidOperationException` means the target is in use: a camera targets it, a draw samples one of its
   views, or a recorded or in-flight frame still references it. The early check runs on the tick thread
   and the render thread re-checks before it recreates anything, so a resize never silently blocks on a
   current-frame hold and never replaces images an in-flight frame reads. Resize after the frame that
   used the target completed; a frame that was released but is still executing on the GPU is waited for.
 - `ObjectDisposedException` means the target was disposed, or the app's render texture service stopped
-  during shutdown. A resize failure (invalid size, device limit, or a failed image/sampler creation)
-  finishes the call with the exception and leaves the previous target usable.
-- The target keeps its bindless slots; the renderer rewrites their descriptors to the recreated views
-  before any later frame can sample them, so a resize neither exhausts the bindless table nor leaves a
-  stale view or slot. A later device recovery recreates the target from the updated description, so the
+  during shutdown. A resize failure (invalid size, device limit, or a failed image creation) finishes
+  the call with the exception and leaves the previous target usable.
+- The target keeps its samplers and bindless slots; the renderer rewrites their descriptors to the
+  recreated views before any later frame can sample them, so a resize neither exhausts the bindless table
+  nor leaves a stale view or slot. The render thread updates the target description and both view
+  dimensions together before it completes the request, so a tick thread that observes the completed call
+  sees one size. A later device recovery recreates the target from the updated description, so the
   resized dimensions survive.
 
 **Camera target and viewport.** `EngineContext.CreateCamera` takes `target:` as its last parameter.

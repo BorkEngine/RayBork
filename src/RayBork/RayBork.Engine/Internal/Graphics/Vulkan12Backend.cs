@@ -272,7 +272,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         foreach (RenderTextureService.ResizeRequest request in service.DrainResizes()) {
             try {
-                ResizeRenderTextureTarget(request);
+                ResizeRenderTextureTarget(request, request.Width, request.Height);
             } catch (Exception exception) {
                 request.Completion.TrySetException(exception);
             }
@@ -311,14 +311,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
 
         VulkanDevice device = _device!;
-        PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice);
-        if (description.Width > properties.Limits.MaxImageDimension2D
-            || description.Height > properties.Limits.MaxImageDimension2D) {
+        uint maxDimension = GetMaxImageDimension2D(device);
+        if (description.Width > maxDimension || description.Height > maxDimension) {
             throw new ArgumentOutOfRangeException(
                 nameof(description),
                 description,
                 $"The {description.Width}x{description.Height} render texture exceeds the device's "
-                    + $"maximum 2D image dimension {properties.Limits.MaxImageDimension2D}.");
+                    + $"maximum 2D image dimension {maxDimension}.");
         }
 
         int sampleCount = RenderTextureValidation.SelectSampleCount(
@@ -357,7 +356,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             RenderTextureViewResource viewResource = new(target.ResolvedColorView, sampler) {
                 BindlessSlot = slot,
             };
-            RenderTextureViewLifetime viewLifetime = new(lifetime, viewResource);
+            RenderTextureViewLifetime viewLifetime = new(
+                lifetime,
+                viewResource,
+                description.Width,
+                description.Height);
             RenderTextureViewResource? depthViewResource = null;
             RenderTextureViewLifetime? depthViewLifetime = null;
             Texture? depthTexture = null;
@@ -365,7 +368,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 depthViewResource = new RenderTextureViewResource(target.ResolvedDepthView, depthSampler) {
                     BindlessSlot = depthSlot,
                 };
-                depthViewLifetime = new RenderTextureViewLifetime(lifetime, depthViewResource);
+                depthViewLifetime = new RenderTextureViewLifetime(
+                    lifetime,
+                    depthViewResource,
+                    description.Width,
+                    description.Height);
                 TextureAssetDescriptor depthDescriptor = new() {
                     Payload = string.Empty,
                     Width = checked((uint)description.Width),
@@ -424,7 +431,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     /// <summary>
     /// Recreates one live render target's images, render pass, framebuffer, bindless views, and pipeline
-    /// cache at the request's size, then updates the target's retained description and public dimensions.
+    /// cache at the request's size, then updates the target description and both view dimensions.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -436,14 +443,18 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// released can still be in flight on the GPU; the new images are not referenced by it.
     /// </para>
     /// <para>
-    /// The new target is fully created, and its samplers exist, before any live entry is changed; a
-    /// failure before that point leaves the old target usable and releases the partial new resources. The
-    /// target keeps its bindless slots and the descriptors are rewritten to the new views, so a resize
-    /// cannot exhaust the bindless table and never leaves a stale slot. The old pipeline cache is
-    /// destroyed before the old render pass, and the old target after the new resources are live.
+    /// The target keeps its samplers, color format, depth attachment, effective sample count, and bindless
+    /// slots. The new images are fully created before any live entry is changed, so a failure before that
+    /// point leaves the old target usable. The descriptors are rewritten to the new views and the view
+    /// dimensions update with the target description before the request completes, so a later frame
+    /// samples the recreated views and a tick thread that observes completion sees one size. The old
+    /// pipeline cache is destroyed before the old render pass, and the old target after the new resources
+    /// are live.
     /// </para>
     /// </remarks>
     /// <param name="request">The queued resize request.</param>
+    /// <param name="width">The requested width in pixels, matching the public parameter name.</param>
+    /// <param name="height">The requested height in pixels, matching the public parameter name.</param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The new size exceeds the current device's maximum 2D image dimension.
     /// </exception>
@@ -452,7 +463,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </exception>
     /// <exception cref="ObjectDisposedException">The render texture was disposed before the request ran.</exception>
     /// <exception cref="GraphicsException">The renderer could not recreate the target's GPU objects.</exception>
-    private void ResizeRenderTextureTarget(RenderTextureService.ResizeRequest request) {
+    private void ResizeRenderTextureTarget(RenderTextureService.ResizeRequest request, int width, int height) {
         RenderTextureTargetLifetime lifetime = request.Lifetime;
         if (lifetime.IsDisposed) {
             throw new ObjectDisposedException(
@@ -475,73 +486,67 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         // The public Resize no-ops an unchanged size before it queues; keep the render thread idempotent
         // in case a second request reaches it for the same size.
         RenderTextureDescription description = lifetime.Description;
-        if (description.Width == request.Width && description.Height == request.Height) {
+        if (description.Width == width && description.Height == height) {
             request.Completion.TrySetResult();
             return;
         }
 
         VulkanDevice device = _device!;
-        PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice);
-        uint maxDimension = properties.Limits.MaxImageDimension2D;
-        if (request.Width > maxDimension || request.Height > maxDimension) {
+        uint maxDimension = GetMaxImageDimension2D(device);
+        if (width > maxDimension) {
             throw new ArgumentOutOfRangeException(
-                nameof(request),
+                nameof(width),
+                width,
                 $"{nameof(RenderTexture.Resize)} cannot resize render target {request.TargetId} to "
-                    + $"{request.Width}x{request.Height}: it exceeds the device's maximum 2D image dimension "
-                    + $"{maxDimension}. The target keeps its {description.Width}x{description.Height} images.");
+                    + $"{width}x{height}: it exceeds the device's maximum 2D image dimension {maxDimension}. "
+                    + $"The target keeps its {description.Width}x{description.Height} images.");
+        }
+
+        if (height > maxDimension) {
+            throw new ArgumentOutOfRangeException(
+                nameof(height),
+                height,
+                $"{nameof(RenderTexture.Resize)} cannot resize render target {request.TargetId} to "
+                    + $"{width}x{height}: it exceeds the device's maximum 2D image dimension {maxDimension}. "
+                    + $"The target keeps its {description.Width}x{description.Height} images.");
         }
 
         WaitForRenderTargetIdle(lifetime);
 
         VulkanRenderTarget target = VulkanRenderTarget.Create(
             device,
-            new Extent2D { Width = checked((uint)request.Width), Height = checked((uint)request.Height) },
+            new Extent2D { Width = checked((uint)width), Height = checked((uint)height) },
             entry.SampleCount,
             ToVulkanColorFormat(description.ColorFormat),
             description.Depth);
-        Sampler sampler = default;
-        Sampler depthSampler = default;
-        try {
-            sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
-            if (target.HasDepth) {
-                depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
-            }
-        } catch {
-            DestroyRenderTargetSampler(device, sampler);
-            DestroyRenderTargetSampler(device, depthSampler);
-            target.Dispose();
-            throw;
-        }
 
-        // Every resource the new target needs is live, so the swap below only assigns fields and
-        // rewrites descriptors; it cannot fail and leave the entry pointing at a half-created target.
+        // The new target has every image, view, render pass, and framebuffer it needs. The swap below
+        // writes two bindless descriptors and assigns fields; the descriptor writes are the only calls
+        // that can throw, and they throw only while the bindless table is not initialized. The backend
+        // services requests only between Initialize and Dispose, and the table is initialized for the
+        // current device, so these writes cannot throw in the supported state. A future failure point
+        // here would have to roll the entry back before it disposes the new target.
         VulkanRenderTarget previousTarget = entry.Target;
-        Sampler previousSampler = entry.Sampler;
-        Sampler previousDepthSampler = entry.DepthSampler;
         VulkanGeometryPipelineCache? previousPipelines = entry.Pipelines;
         entry.Target = target;
-        entry.Sampler = sampler;
         entry.ViewResource.View = target.ResolvedColorView;
-        entry.ViewResource.Sampler = sampler;
         entry.ViewLifetime.SetBindingResource(entry.ViewResource);
-        _bindlessTextures!.WriteTexture(entry.ViewResource.BindlessSlot, target.ResolvedColorView, sampler);
+        _bindlessTextures!.WriteTexture(entry.ViewResource.BindlessSlot, target.ResolvedColorView, entry.Sampler);
         if (target.HasDepth && entry.DepthViewResource is not null) {
-            entry.DepthSampler = depthSampler;
             entry.DepthViewResource.View = target.ResolvedDepthView;
-            entry.DepthViewResource.Sampler = depthSampler;
             entry.DepthViewLifetime!.SetBindingResource(entry.DepthViewResource);
-            _bindlessTextures.WriteTexture(entry.DepthViewResource.BindlessSlot, target.ResolvedDepthView, depthSampler);
+            _bindlessTextures.WriteTexture(entry.DepthViewResource.BindlessSlot, target.ResolvedDepthView, entry.DepthSampler);
         }
 
         entry.Pipelines = null;
-        lifetime.UpdateDescription(description with { Width = request.Width, Height = request.Height });
+        entry.ViewLifetime.SetDimensions(width, height);
+        entry.DepthViewLifetime?.SetDimensions(width, height);
+        lifetime.UpdateDescription(description with { Width = width, Height = height });
         // The new images were never used by a frame; the previous images' last-use fence was waited on.
         lifetime.SetLastUseFrameSlot(-1);
 
         previousPipelines?.Dispose();
         previousTarget.Dispose();
-        DestroyRenderTargetSampler(device, previousSampler);
-        DestroyRenderTargetSampler(device, previousDepthSampler);
         request.Completion.TrySetResult();
     }
 
@@ -689,6 +694,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
+    /// Gets the current device's maximum 2D image dimension, or the test-only override when one is set.
+    /// </summary>
+    /// <param name="device">The current logical device.</param>
+    /// <returns>The maximum accepted render target width or height.</returns>
+    private uint GetMaxImageDimension2D(VulkanDevice device) {
+        if (MaxImageDimension2DOverrideForTests is { } maxDimension) {
+            return maxDimension;
+        }
+
+        return device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice).Limits.MaxImageDimension2D;
+    }
+
+    /// <summary>
     /// Gets whether the frame slot that last used the target signaled its fence, so a destroy or resize
     /// can safely release or replace the target images. Render-thread only.
     /// </summary>
@@ -730,6 +748,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         ThrowIfFailed(
             _device.Vulkan.WaitForFences(_device.Device, 1, &fence, true, WAIT_TIMEOUT),
             "vkWaitForFences");
+        RenderTargetFenceWaitCountForTests++;
     }
 
     private void DestroyRenderTarget(RenderTargetEntry entry, bool retireView) {
@@ -1127,6 +1146,23 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// that <see cref="RenderStats.CpuFrameMilliseconds"/> excludes the wait.
     /// </summary>
     internal Action? BeforeAcquireForTests { get; set; }
+
+    /// <summary>
+    /// Gets or sets a test-only override for the device's maximum 2D image dimension. The default
+    /// <see langword="null"/> uses the real device limit.
+    /// </summary>
+    /// <remarks>
+    /// A render target size above the real limit is unreachable on a device whose limit is at least the
+    /// public <c>16384</c> cap, so a GPU test lowers the limit to exercise the device-limit rejection
+    /// without creating an oversized image.
+    /// </remarks>
+    internal uint? MaxImageDimension2DOverrideForTests { get; set; }
+
+    /// <summary>
+    /// Gets the number of render-target last-use fence waits, for GPU tests. Test-only; it is not part of
+    /// the renderer seam.
+    /// </summary>
+    internal int RenderTargetFenceWaitCountForTests { get; private set; }
 
     /// <summary>
     /// Gets whether no submitted frame can still reference a GPU asset resource.
@@ -1608,13 +1644,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
             VulkanDevice device = _device!;
             RenderTextureDescription description = entry.Lifetime.Description;
-            PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice);
-            if (description.Width > properties.Limits.MaxImageDimension2D
-                || description.Height > properties.Limits.MaxImageDimension2D) {
+            uint maxDimension = GetMaxImageDimension2D(device);
+            if (description.Width > maxDimension || description.Height > maxDimension) {
                 throw new GraphicsException(
                     $"Render target {entry.Id} cannot be recreated on the new device: its "
                         + $"{description.Width}x{description.Height} extent exceeds the device's maximum 2D "
-                        + $"image dimension {properties.Limits.MaxImageDimension2D}. Dispose and recreate the "
+                        + $"image dimension {maxDimension}. Dispose and recreate the "
                         + "render texture with a supported size.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
                     null);

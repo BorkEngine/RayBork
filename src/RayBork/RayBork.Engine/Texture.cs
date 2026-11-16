@@ -25,14 +25,14 @@ namespace RayBork;
 /// </remarks>
 public sealed class Texture : IAsset {
     private readonly ITextureOwner _owner;
+    private readonly int _width;
+    private readonly int _height;
     private readonly int _mipLevels;
     private readonly TextureFormat _format;
     private readonly bool _isSrgb;
     private readonly SamplerState _sampler;
     private readonly bool _isProcedural;
     private readonly bool _isRenderTargetView;
-    private int _width;
-    private int _height;
 
     /// <summary>
     /// Initializes a texture from its uploaded lifetime state and descriptor.
@@ -95,7 +95,7 @@ public sealed class Texture : IAsset {
     public int Width {
         get {
             ThrowIfDisposed();
-            return Volatile.Read(ref _width);
+            return _owner is RenderTextureViewLifetime view ? view.Width : _width;
         }
     }
 
@@ -107,7 +107,7 @@ public sealed class Texture : IAsset {
     public int Height {
         get {
             ThrowIfDisposed();
-            return Volatile.Read(ref _height);
+            return _owner is RenderTextureViewLifetime view ? view.Height : _height;
         }
     }
 
@@ -189,28 +189,6 @@ public sealed class Texture : IAsset {
     /// Gets the render target id when this texture is a render target view, or <c>0</c> otherwise.
     /// </summary>
     internal long RenderTargetId => _owner is RenderTextureViewLifetime view ? view.TargetId : 0;
-
-    /// <summary>
-    /// Updates a render target view's reported dimensions after the owning <see cref="RenderTexture"/>
-    /// recreated its GPU image at a new size. The view keeps its identity, sampler, format, and owner;
-    /// only <see cref="Width"/> and <see cref="Height"/> change.
-    /// </summary>
-    /// <param name="width">The new target width in pixels.</param>
-    /// <param name="height">The new target height in pixels.</param>
-    /// <exception cref="InvalidOperationException">The texture is not a render target view.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
-    internal void UpdateRenderTargetViewDimensions(int width, int height) {
-        if (!_isRenderTargetView) {
-            throw new InvalidOperationException(
-                "Only a render target color or depth view can change its dimensions after creation; "
-                    + "an asset texture is immutable.");
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        Volatile.Write(ref _width, width);
-        Volatile.Write(ref _height, height);
-    }
 
     /// <summary>
     /// Retires the view and releases the owner reference the render texture held on it when the

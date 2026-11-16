@@ -201,8 +201,30 @@ public sealed class RenderTextureServiceTests {
         await request;
         Assert.Equal(96, target.Width);
         Assert.Equal(48, target.Height);
+        Assert.Equal(96, target.ColorTexture.Width);
+        Assert.Equal(48, target.ColorTexture.Height);
+        Assert.Equal(96, target.DepthTexture!.Width);
+        Assert.Equal(48, target.DepthTexture!.Height);
         Assert.False(service.HasPendingWork);
         Assert.Equal(1, host.LiveRenderTextureCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task PublicResizeAfterStopReportsObjectDisposedWithoutTouchingTheTarget() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        service.Stop();
+
+        Assert.False(target.IsDisposed);
+        Assert.Throws<ObjectDisposedException>(() => target.Resize(96, 48));
+        Assert.Equal(64, target.Width);
+        Assert.Equal(64, target.Height);
+        Assert.Equal(64, target.ColorTexture.Width);
+        Assert.False(service.HasPendingWork);
     }
 
     [Fact]

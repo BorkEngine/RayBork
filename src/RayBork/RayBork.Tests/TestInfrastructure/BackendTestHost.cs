@@ -108,7 +108,7 @@ internal sealed class BackendTestHost : IDisposable {
     /// <param name="target">The render texture to resize.</param>
     /// <param name="width">The new width in pixels.</param>
     /// <param name="height">The new height in pixels.</param>
-    /// <exception cref="TimeoutException">The resize request was not queued or did not return.</exception>
+    /// <exception cref="TimeoutException">The resize neither queued nor completed in time.</exception>
     internal void ResizeRenderTexture(RenderTexture target, int width, int height) {
         ArgumentNullException.ThrowIfNull(target);
 
@@ -119,24 +119,38 @@ internal sealed class BackendTestHost : IDisposable {
         }
 
         Exception? failure = null;
+        using ManualResetEventSlim completed = new(false);
         Thread tick = new(() => {
             try {
                 target.Resize(width, height);
             } catch (Exception exception) {
                 failure = exception;
+            } finally {
+                try {
+                    completed.Set();
+                } catch (ObjectDisposedException) {
+                    // A timeout on this thread disposes the event while a blocked resize is still unwinding.
+                }
             }
         }) {
             IsBackground = true,
             Name = "RayBork.Test.RenderTextureResize",
         };
         tick.Start();
-        if (!RenderTextures.Signal.WaitOne(SERVICE_TIMEOUT_MILLISECONDS)) {
+
+        int signaled = WaitHandle.WaitAny(
+            [RenderTextures.Signal, completed.WaitHandle],
+            SERVICE_TIMEOUT_MILLISECONDS);
+        if (signaled == WaitHandle.WaitTimeout) {
             throw new TimeoutException(
-                $"Render texture {target.TargetId} did not queue a resize request within "
+                $"The resize of render texture {target.TargetId} neither queued nor completed within "
                     + $"{SERVICE_TIMEOUT_MILLISECONDS} ms.");
         }
 
-        ProcessRenderTextures();
+        if (signaled == 0) {
+            ProcessRenderTextures();
+        }
+
         if (!tick.Join(SERVICE_TIMEOUT_MILLISECONDS)) {
             throw new TimeoutException(
                 $"The blocking resize of render texture {target.TargetId} did not return within "

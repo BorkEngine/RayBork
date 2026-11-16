@@ -110,7 +110,9 @@ public sealed class RenderTextureAppTests {
         host.App.Run();
 
         Assert.NotNull(target);
-        // The app's render texture service stopped at shutdown, so a later resize reports the app state.
+        // The target itself is still alive; the app's render texture service stopped at shutdown, so the
+        // stopped-service path reports ObjectDisposedException.
+        Assert.False(target.IsDisposed);
         Assert.Throws<ObjectDisposedException>(() => target.Resize(64, 32));
         target.Dispose();
     }

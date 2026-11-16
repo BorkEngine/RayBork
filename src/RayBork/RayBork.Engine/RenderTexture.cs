@@ -180,7 +180,10 @@ public sealed class RenderTexture : IDisposable {
     /// Call it from the tick thread, like <see cref="EngineContext.CreateRenderTextureAsync"/>. The call
     /// blocks until the render thread recreated the target; the render thread services the request
     /// independently of the tick thread, so a call from <see cref="IGame.Tick"/> stalls only that tick.
-    /// A resize to the current size is a no-op: it recreates nothing and does not throw.
+    /// A resize to the current size recreates nothing and, for a live target with a running renderer,
+    /// does not throw. The render thread updates the target description and both views' dimensions
+    /// together before it completes the request, so the public dimensions and
+    /// <see cref="Texture.Width"/>/<see cref="Texture.Height"/> never report a split size.
     /// </para>
     /// <para>
     /// The device-limit check runs on the render thread against the current device's maximum 2D image
@@ -191,8 +194,6 @@ public sealed class RenderTexture : IDisposable {
     public void Resize(int width, int height) {
         ThrowIfDisposed();
         _service.ResizeAsync(_lifetime, width, height).GetAwaiter().GetResult();
-        ColorTexture.UpdateRenderTargetViewDimensions(width, height);
-        DepthTexture?.UpdateRenderTargetViewDimensions(width, height);
     }
 
     /// <summary>

@@ -19,7 +19,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
     private readonly Lock _gate = new();
     private readonly List<long> _submitFrames = [];
-    private readonly Dictionary<long, RenderTextureTargetLifetime> _renderTargets = [];
+    private readonly Dictionary<long, FakeRenderTarget> _renderTargets = [];
 
     private RendererBackendOptions? _options;
     private IntPtr _surfaceHandle;
@@ -346,7 +346,11 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             RenderTextureViewResource viewResource = new(default, default) {
                 BindlessSlot = 1,
             };
-            RenderTextureViewLifetime viewLifetime = new(lifetime, viewResource);
+            RenderTextureViewLifetime viewLifetime = new(
+                lifetime,
+                viewResource,
+                description.Width,
+                description.Height);
             TextureAssetDescriptor descriptor = new() {
                 Payload = string.Empty,
                 Width = checked((uint)description.Width),
@@ -360,11 +364,16 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             };
             Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
             Texture? depthTexture = null;
+            RenderTextureViewLifetime? depthLifetime = null;
             if (description.Depth) {
                 RenderTextureViewResource depthResource = new(default, default) {
                     BindlessSlot = 2,
                 };
-                RenderTextureViewLifetime depthLifetime = new(lifetime, depthResource);
+                depthLifetime = new RenderTextureViewLifetime(
+                    lifetime,
+                    depthResource,
+                    description.Width,
+                    description.Height);
                 TextureAssetDescriptor depthDescriptor = new() {
                     Payload = string.Empty,
                     Width = checked((uint)description.Width),
@@ -381,7 +390,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
             RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture, service);
             lock (_gate) {
-                _renderTargets[targetId] = lifetime;
+                _renderTargets[targetId] = new FakeRenderTarget(lifetime, viewLifetime, depthLifetime);
             }
 
             request.DisposeRegistration();
@@ -393,30 +402,35 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
 
         foreach (RenderTextureService.ResizeRequest request in service.DrainResizes()) {
-            if (request.Lifetime.IsDisposed) {
+            FakeRenderTarget? target;
+            lock (_gate) {
+                _renderTargets.TryGetValue(request.TargetId, out target);
+            }
+
+            if (target is null) {
+                request.Completion.TrySetException(new InvalidOperationException(
+                    $"The fake render target {request.TargetId} is no longer alive."));
+                continue;
+            }
+
+            if (target.Lifetime.IsDisposed) {
                 request.Completion.TrySetException(new ObjectDisposedException(nameof(RenderTexture)));
                 continue;
             }
 
-            lock (_gate) {
-                if (!_renderTargets.ContainsKey(request.TargetId)) {
-                    request.Completion.TrySetException(new InvalidOperationException(
-                        $"The fake render target {request.TargetId} is no longer alive."));
-                    continue;
-                }
-            }
-
-            if (request.Lifetime.IsInUse) {
+            if (target.Lifetime.IsInUse) {
                 request.Completion.TrySetException(new InvalidOperationException(
                     $"The fake render target {request.TargetId} is in use by a recorded or in-flight frame."));
                 continue;
             }
 
-            RenderTextureDescription description = request.Lifetime.Description;
-            request.Lifetime.UpdateDescription(description with {
+            RenderTextureDescription description = target.Lifetime.Description;
+            target.Lifetime.UpdateDescription(description with {
                 Width = request.Width,
                 Height = request.Height,
             });
+            target.ColorView.SetDimensions(request.Width, request.Height);
+            target.DepthView?.SetDimensions(request.Width, request.Height);
             request.Completion.TrySetResult();
         }
 
@@ -471,4 +485,15 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             _lastWindowState = state;
         }
     }
+
+    /// <summary>
+    /// One fake render target: the lifetime and the view lifetimes whose dimensions follow a resize.
+    /// </summary>
+    /// <param name="Lifetime">The target lifetime.</param>
+    /// <param name="ColorView">The color view lifetime.</param>
+    /// <param name="DepthView">The depth view lifetime, or <see langword="null"/> for a depthless target.</param>
+    private sealed record FakeRenderTarget(
+        RenderTextureTargetLifetime Lifetime,
+        RenderTextureViewLifetime ColorView,
+        RenderTextureViewLifetime? DepthView);
 }
