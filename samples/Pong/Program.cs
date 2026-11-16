@@ -14,10 +14,12 @@ internal static class Program {
     private const string USAGE_TEXT = """
         Pong - a player-vs-AI match on an orthographic screen plane
 
-        A 1280x720 playfield is letterboxed into the window and drawn in one orthographic pass with
-        screen-space quads, discs, and text. The paddle texture and the design values are baked into
-        pong.pck; the human moves the left paddle against a deterministic AI right paddle, every
-        paddle hit speeds the ball up to a cap, and the first player to MaxScore wins.
+        A 1280x720 playfield is letterboxed into the window and drawn with screen-space quads, discs,
+        and text. A scene pass draws the playfield, border, net, paddles, and ball; a later HUD pass
+        with ClearMode.Depth draws the scores, status line, and pause/winner overlay. The paddle
+        texture and the design values are baked into pong.pck; the human moves the left paddle
+        against a deterministic AI right paddle, every paddle hit speeds the ball up to a cap, and
+        the first player to MaxScore wins.
 
         Usage:
           Pong [options]

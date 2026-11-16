@@ -5,21 +5,23 @@ using RayBork;
 namespace Pong;
 
 /// <summary>
-/// A player-vs-AI Pong match drawn as one screen-space orthographic pass.
+/// A player-vs-AI Pong match drawn with a scene camera and a later HUD camera in screen space.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The left paddle is the human and the right paddle is the deterministic AI. The gameplay runs on a
 /// 1280x720 design playfield with its origin at the top-left and <c>+Y</c> pointing down. Each tick
-/// fits that 16:9 playfield into the current render pixels, keeps the remainder as the camera's clear
-/// color, and maps design pixels to render pixels when it draws. Sizes passed to the draw helpers are
-/// therefore always render pixels.
+/// fits that 16:9 playfield into the current render pixels, keeps the remainder as the scene camera's
+/// clear color, and maps design pixels to render pixels when it draws. Sizes passed to the draw
+/// helpers are therefore always render pixels.
 /// </para>
 /// <para>
 /// Every draw anchors a camera-facing plane with
-/// <see cref="Camera.ScreenToWorldTransform(Vector2, float)"/>. The camera is orthographic with a
+/// <see cref="Camera.ScreenToWorldTransform(Vector2, float)"/>. Both cameras are orthographic with a
 /// visible height equal to the render height, so the plane's world-units-per-pixel scale is exactly
-/// one and the design layout needs no manual projection math.
+/// one and the design layout needs no manual projection math. The scene camera draws the playfield,
+/// the paddles, and the ball; the later HUD camera draws the scores, status line, and pause/winner
+/// overlay with <see cref="ClearMode.Depth"/>, so scene depth cannot occlude the HUD.
 /// </para>
 /// </remarks>
 internal sealed class PongGame : IGame {
@@ -134,17 +136,34 @@ internal sealed class PongGame : IGame {
             AdvanceSimulation((float)context.DeltaTime, leftAxis);
         }
 
-        // One orthographic pass per tick. Its visible height is the render height, so the screen
-        // plane at distance one has a scale of exactly one render pixel per plane unit.
-        using Camera camera = context.CreateCamera(
-            new Transform(new Vector3(0f, 0f, SCREEN_PLANE_DISTANCE)),
+        // The two passes share the camera transform. Its visible height is the render height, so the
+        // screen plane at distance one has a scale of exactly one render pixel per plane unit.
+        Transform cameraTransform = new(new Vector3(0f, 0f, SCREEN_PLANE_DISTANCE));
+
+        // The scene pass clears color and depth.
+        using (Camera scene = context.CreateCamera(
+            cameraTransform,
             projection: CameraProjection.Orthographic,
             orthographicHeight: context.Window.RenderHeight,
             clearMode: ClearMode.ColorAndDepth,
             clearColor: _letterboxColor,
             near: CAMERA_NEAR,
+            far: CAMERA_FAR)) {
+            DrawScene(scene);
+        }
+
+        // The HUD is an ordinary later camera. ClearMode.Depth loads the scene color and clears depth,
+        // so the scores, status line, and pause/winner overlay read over the scene without accepting
+        // its depth. The projection and viewport match the scene camera, so every screen position is
+        // unchanged. There is no overlay pass or post-process stack.
+        using Camera hud = context.CreateCamera(
+            cameraTransform,
+            projection: CameraProjection.Orthographic,
+            orthographicHeight: context.Window.RenderHeight,
+            clearMode: ClearMode.Depth,
+            near: CAMERA_NEAR,
             far: CAMERA_FAR);
-        Draw(camera);
+        DrawHud(hud);
 
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
@@ -417,16 +436,9 @@ internal sealed class PongGame : IGame {
         Serve(towardRight: leftScored);
     }
 
-    private void Draw(Camera camera) {
+    private void DrawScene(Camera camera) {
         Layout layout = new(camera.Viewport.Width, camera.Viewport.Height);
-        Font font = _monoFont!;
         PongSettings settings = _settings!;
-        Vector2 leftScoreCenter = new(
-            _playfieldCenter.X - SCORE_BOX_GAP,
-            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f));
-        Vector2 rightScoreCenter = new(
-            _playfieldCenter.X + SCORE_BOX_GAP,
-            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f));
 
         DrawDesignQuad(
             camera,
@@ -436,8 +448,6 @@ internal sealed class PongGame : IGame {
             _playfieldColor);
         DrawBorder(camera, layout);
         DrawNet(camera, layout);
-        DrawScoreBox(camera, layout, leftScoreCenter);
-        DrawScoreBox(camera, layout, rightScoreCenter);
 
         DrawPaddle(camera, layout, settings, _paddleTexture!, _leftPaddle);
         DrawPaddle(camera, layout, settings, _paddleTexture!, _rightPaddle);
@@ -445,9 +455,24 @@ internal sealed class PongGame : IGame {
             ScreenTransform(camera, layout.ToPixel(_ballPosition)),
             settings.BallRadius * layout.Scale,
             _ballColor);
+    }
+
+    private void DrawHud(Camera camera) {
+        Layout layout = new(camera.Viewport.Width, camera.Viewport.Height);
+        Font font = _monoFont!;
+        Vector2 leftScoreCenter = new(
+            _playfieldCenter.X - SCORE_BOX_GAP,
+            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f));
+        Vector2 rightScoreCenter = new(
+            _playfieldCenter.X + SCORE_BOX_GAP,
+            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f));
+
+        DrawScoreBox(camera, layout, leftScoreCenter);
+        DrawScoreBox(camera, layout, rightScoreCenter);
 
         // The shade is a transparent draw, and the planner submits transparent batches in
         // first-record order at equal depth. Record it before the text so every label stays on top.
+        // The HUD camera loaded the scene color, so the shade dims the scene rather than the clear.
         bool showOverlay = _paused || _winner != 0;
         if (showOverlay) {
             DrawOverlayShade(camera, layout);

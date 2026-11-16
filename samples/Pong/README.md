@@ -1,12 +1,13 @@
 # Pong
 
-`Pong` is the M7 sample and Native AOT gate: a player-vs-AI match drawn as one screen-space
-orthographic pass. A 1280x720 design playfield is letterboxed into the current render pixels, and the
-background, border, net, score panels, textured paddles, ball, scores, status line, and pause/winner
-overlay are all recorded with `Camera.DrawQuad`, `Camera.DrawDisc`, and `Camera.DrawText` through
-`Camera.ScreenToWorldTransform`. The left paddle is the human; the right paddle is a deterministic AI
-opponent. The paddle texture and the design values come from the sample's own baked `pong.pck`, so the
-sample also exercises the texture and TOML data asset paths end to end.
+`Pong` is the M7 sample and Native AOT gate: a player-vs-AI match drawn with two ordinary screen-space
+orthographic cameras. A 1280x720 design playfield is letterboxed into the current render pixels; a
+scene camera draws the background, border, net, textured paddles, and ball, and a later HUD camera
+draws the score panels, scores, status line, and pause/winner overlay with `Camera.DrawQuad`,
+`Camera.DrawDisc`, and `Camera.DrawText` through `Camera.ScreenToWorldTransform`. The left paddle is
+the human; the right paddle is a deterministic AI opponent. The paddle texture and the design values
+come from the sample's own baked `pong.pck`, so the sample also exercises the texture and TOML data
+asset paths end to end.
 
 The sample contains no test-only logic: it opens a window, plays the match, and exits cleanly. Build
 and run it from the repository root:
@@ -18,36 +19,61 @@ dotnet run --project samples/Pong/Pong.csproj -c Debug -- --frames 30
 
 ## Scene
 
-Every tick records exactly one camera pass with an orthographic camera at `(0, 0, 1)` looking down
-`-Z`. The camera's visible height is `Window.RenderHeight`, so the screen plane at distance `1` has a
-world-units-per-pixel scale of exactly one:
+Every tick records two sequential camera passes, both with an orthographic camera at `(0, 0, 1)`
+looking down `-Z`. The camera's visible height is `Window.RenderHeight`, so the screen plane at
+distance `1` has a world-units-per-pixel scale of exactly one:
 
 ```csharp
-using Camera camera = context.CreateCamera(
-    new Transform(new Vector3(0f, 0f, 1f)),
+Transform cameraTransform = new(new Vector3(0f, 0f, SCREEN_PLANE_DISTANCE));
+```
+
+The scene camera clears color and depth with `ClearMode.ColorAndDepth` and the letterbox color. After
+it is disposed, the HUD camera uses `ClearMode.Depth` to load the scene color and clear depth:
+
+```csharp
+using (Camera scene = context.CreateCamera(
+    cameraTransform,
     projection: CameraProjection.Orthographic,
     orthographicHeight: context.Window.RenderHeight,
     clearMode: ClearMode.ColorAndDepth,
-    clearColor: letterboxColor,
-    near: 0.01f,
-    far: 100f);
+    clearColor: _letterboxColor,
+    near: CAMERA_NEAR,
+    far: CAMERA_FAR)) {
+    DrawScene(scene);
+}
+
+using Camera hud = context.CreateCamera(
+    cameraTransform,
+    projection: CameraProjection.Orthographic,
+    orthographicHeight: context.Window.RenderHeight,
+    clearMode: ClearMode.Depth,
+    near: CAMERA_NEAR,
+    far: CAMERA_FAR);
+DrawHud(hud);
 ```
 
 The 16:9 design playfield is fitted into the current render pixels and centered; the remainder is the
-camera's clear color, which reads as the letterbox bars. `scale = playfieldWidth / 1280` maps design
-pixels to render pixels, and every size passed to a draw is already in render pixels:
+scene camera's clear color, which reads as the letterbox bars. `scale = playfieldWidth / 1280` maps
+design pixels to render pixels, and every size passed to a draw is already in render pixels:
 
 ```csharp
 Vector2 pixel = new(playfieldLeft + (design.X * scale), playfieldTop + (design.Y * scale));
 Transform screen = camera.ScreenToWorldTransform(pixel, 1f);
 ```
 
-The pass draws the playfield, the inset border, the dashed net, the two score panels, the two textured
-paddles, and the ball disc. It then draws the scores and the status line in the built-in mono face;
-when paused or finished it records an alpha-blended shade before that text and draws the pause/winner
-title and hint on top. The shade uses `RenderState.AlphaBlend`; every other quad/disc draw uses the
-default opaque state, and `DrawText` records the engine's alpha text state. The paddles and the ball
-are `DrawQuad` and `DrawDisc` with the screen transform, and all text is `DrawText` with pixel sizes.
+Cameras are sequential: the scene pass is disposed before the HUD camera is created. Both cameras use
+the same projection, full viewport, and screen-plane distance, so the returned transform is identical
+in both passes and every HUD position is unchanged. `ClearMode.Depth` loads the scene color and clears
+depth, so HUD text is not occluded by scene depth; there is no separate overlay pass, and the HUD
+camera has no post-process stack.
+
+The scene pass draws the playfield, the inset border, the dashed net, the two textured paddles, and
+the ball disc. The HUD pass draws the two score panels, the scores, and the status line in the
+built-in mono face; when paused or finished it records an alpha-blended shade before that text and
+draws the pause/winner title and hint on top. The shade uses `RenderState.AlphaBlend`; every other
+quad/disc draw uses the default opaque state, and `DrawText` records the engine's alpha text state.
+The paddles and the ball are `DrawQuad` and `DrawDisc` with the screen transform, and all text is
+`DrawText` with pixel sizes.
 
 The palette is authored with `Color.FromSrgbBytes`: a dark navy playfield, a warm border and net, a
 warm paddle texture, a pale gold ball, and a dimmed overlay.
