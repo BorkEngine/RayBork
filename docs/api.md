@@ -170,9 +170,9 @@ unified camera entry point, `Camera.ScreenToWorldTransform`, the world-space qua
 transformable-grid primitives, the ninth primitive mesh, and the Pong sample. M8 ships shader ABI v2
 (one frame block per camera pass), one render pass per camera pass on the scene target, and the color
 and depth paths of public render textures: `RenderTexture` creation, `Camera.Target` routing, MSAA color
-and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, same-tick sampling, and lifetime.
-The scene target's resolved depth image is internal. `Resize`, readback, post-processing, and the
-render-target sample remain later M8 tasks. The remaining
+and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, same-tick sampling, lifetime, and
+`RenderTexture.Resize`. The scene target's resolved depth image is internal. Readback, post-processing,
+and the render-target sample remain later M8 tasks. The remaining
 rows name the milestone that owns the deferred surface; the full code blocks in the section pages stay
 the 1.0 contract.
 
@@ -202,7 +202,7 @@ the 1.0 contract.
 | Unified `EngineContext.CreateCamera(Transform, CameraProjection, fieldOfView, orthographicHeight, ...)` with `CameraProjection.Perspective`/`CameraProjection.Orthographic` | M7 |
 | `Camera.ScreenToWorldTransform(Vector2, float)` | M7 |
 | `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
-| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color and depth paths; resize, readback, and post-processing are later M8 tasks) | M8 |
+| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color, depth, and resize paths; readback and post-processing are later M8 tasks) | M8 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
 current asset surface after M4; see §6.

@@ -17,7 +17,9 @@ namespace RayBork.Internal;
 /// renderer waits for that slot's fence before it reuses the target in a later frame, so a render target
 /// is never overwritten or sampled while the previous frame that used it is still in flight. The owner
 /// and frame-hold counts are thread-safe; the last-use slot is render-thread state guarded by the same
-/// lock for the reads the renderer makes outside it.
+/// lock for the reads the renderer makes outside it. A resize updates the retained description and is
+/// legal only while the target is not in use, so the description a device recovery recreates from is
+/// the one the public dimensions report.
 /// </para>
 /// </remarks>
 internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
@@ -26,6 +28,7 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     private int _frameHoldCount;
     private int _lastUseFrameSlot = -1;
     private int _sampleCount;
+    private RenderTextureDescription _description;
     private bool _disposed;
     private bool _destroyQueued;
 
@@ -53,7 +56,7 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleCount);
 
         TargetId = targetId;
-        Description = description;
+        _description = description;
         _sampleCount = sampleCount;
         _queueDestruction = queueDestruction;
     }
@@ -61,8 +64,42 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// <summary>Gets the unique render-thread target id. It is never reused.</summary>
     internal long TargetId { get; }
 
-    /// <summary>Gets the description the target was created from.</summary>
-    internal RenderTextureDescription Description { get; }
+    /// <summary>
+    /// Gets the current description of the target. A successful resize updates its width and height;
+    /// the color format, depth flag, and requested sample count stay fixed for the target's lifetime.
+    /// </summary>
+    internal RenderTextureDescription Description {
+        get {
+            lock (_gate) {
+                return _description;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets whether a recorded or in-flight frame still holds the target. A camera that targets the
+    /// target and a draw that samples one of its views both add a frame hold, and the hold is released
+    /// only after the render thread released the frame slot. Render-thread and tick-thread state
+    /// guarded by the lifetime's lock.
+    /// </summary>
+    internal bool IsInUse {
+        get {
+            lock (_gate) {
+                return _frameHoldCount > 0;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Replaces the description after the renderer recreated the target's images at a new size. The
+    /// color format, depth flag, and requested sample count must not change. Render-thread only.
+    /// </summary>
+    /// <param name="description">The description with the new width and height.</param>
+    internal void UpdateDescription(RenderTextureDescription description) {
+        lock (_gate) {
+            _description = description;
+        }
+    }
 
     /// <summary>
     /// Gets the effective MSAA sample count of the current target images. A device recovery can select

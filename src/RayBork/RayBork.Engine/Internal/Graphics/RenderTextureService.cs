@@ -1,8 +1,8 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The thread-safe handoff between the tick thread and the render thread for render texture creation and
-/// destruction.
+/// The thread-safe handoff between the tick thread and the render thread for render texture creation,
+/// resize, and destruction.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -12,6 +12,14 @@ namespace RayBork.Internal;
 /// continuation through the engine synchronization context; the render thread still services the request,
 /// so the tick thread never deadlocks. Cancellation before completion completes the task as canceled and
 /// a target created for a canceled request is destroyed instead of leaking.
+/// </para>
+/// <para>
+/// <see cref="ResizeAsync"/> queues one target resize and returns a task that completes after the render
+/// thread recreated the images, render pass, framebuffer, bindless views, and pipeline cache, or faults
+/// with the render-thread failure. <see cref="RenderTexture.Resize"/> blocks on that task, so the tick
+/// thread never observes a half-resized target. A resize is rejected with
+/// <see cref="InvalidOperationException"/> while a recorded or in-flight frame holds the target; the
+/// render thread re-checks the hold and the last-use fence before it recreates anything.
 /// </para>
 /// <para>
 /// The service owns no GPU object. It hands target lifetimes to the renderer and receives the target's
@@ -26,6 +34,7 @@ internal sealed class RenderTextureService : IDisposable {
 
     private readonly Lock _gate = new();
     private readonly Queue<CreateRequest> _creates = new();
+    private readonly Queue<ResizeRequest> _resizes = new();
     private readonly Queue<RenderTextureTargetLifetime> _destroys = new();
     private readonly AutoResetEvent _workAvailable = new(false);
     private long _nextTargetId;
@@ -35,7 +44,7 @@ internal sealed class RenderTextureService : IDisposable {
 
     /// <summary>
     /// Gets the wait handle the render loop waits on with the frame-ring and GPU asset signals. It is
-    /// signaled while a creation or destruction request is queued.
+    /// signaled while a creation, resize, or destruction request is queued.
     /// </summary>
     internal WaitHandle Signal => _workAvailable;
 
@@ -51,13 +60,13 @@ internal sealed class RenderTextureService : IDisposable {
     }
 
     /// <summary>
-    /// Gets whether a creation or destruction request is queued. The render loop uses it to keep
+    /// Gets whether a creation, resize, or destruction request is queued. The render loop uses it to keep
     /// polling the render thread while no frame is published.
     /// </summary>
     internal bool HasPendingWork {
         get {
             lock (_gate) {
-                return _creates.Count > 0 || _destroys.Count > 0;
+                return _creates.Count > 0 || _resizes.Count > 0 || _destroys.Count > 0;
             }
         }
     }
@@ -106,6 +115,73 @@ internal sealed class RenderTextureService : IDisposable {
 
         if (cancellationToken.CanBeCanceled) {
             request.RegisterCancellation();
+        }
+
+        _workAvailable.Set();
+        return request.Completion.Task;
+    }
+
+    /// <summary>
+    /// Queues one render texture resize request and returns its completion. The render thread recreates
+    /// the target's images, render pass, framebuffer, bindless views, and pipeline cache before it
+    /// completes the request.
+    /// </summary>
+    /// <param name="lifetime">The target lifetime to resize.</param>
+    /// <param name="width">The new width in pixels.</param>
+    /// <param name="height">The new height in pixels.</param>
+    /// <returns>
+    /// A task that completes after the render thread recreated the target, or faults with the
+    /// render-thread failure.
+    /// </returns>
+    /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A dimension is not positive, exceeds <c>16384</c>, or exceeds the current device's maximum 2D
+    /// image dimension on the render thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The target lifetime is disposed, or the service already stopped.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A recorded or in-flight frame holds the target. The request is not queued.
+    /// </exception>
+    internal Task ResizeAsync(RenderTextureTargetLifetime lifetime, int width, int height) {
+        ArgumentNullException.ThrowIfNull(lifetime);
+
+        // A stopped service answers with ObjectDisposedException before any argument or target state
+        // check, so a call after shutdown reports the documented state instead of a validation error.
+        lock (_gate) {
+            if (_stopped || _closed) {
+                return Task.FromException(CreateStoppedException());
+            }
+        }
+
+        if (lifetime.IsDisposed) {
+            throw new ObjectDisposedException(
+                nameof(RenderTexture),
+                "The render texture is disposed; it cannot be resized.");
+        }
+
+        RenderTextureValidation.ValidateDimensions(width, height);
+        RenderTextureDescription description = lifetime.Description;
+        if (description.Width == width && description.Height == height) {
+            // An unchanged size is a no-op, even while a frame holds the target: nothing is recreated.
+            return Task.CompletedTask;
+        }
+
+        if (lifetime.IsInUse) {
+            throw new InvalidOperationException(
+                "The render texture is in use by a recorded or in-flight frame; a camera targets it, a "
+                    + "draw samples one of its views, or the recorded frame still references it. Resize it "
+                    + "only after the frame that uses it completed.");
+        }
+
+        ResizeRequest request = new(lifetime, width, height);
+        lock (_gate) {
+            if (_stopped || _closed) {
+                return Task.FromException(CreateStoppedException());
+            }
+
+            _resizes.Enqueue(request);
         }
 
         _workAvailable.Set();
@@ -168,6 +244,23 @@ internal sealed class RenderTextureService : IDisposable {
     }
 
     /// <summary>
+    /// Removes every queued resize request. The renderer completes each one after it recreated the target
+    /// or rejected the resize. Render-thread only.
+    /// </summary>
+    /// <returns>The queued requests, in request order.</returns>
+    internal ResizeRequest[] DrainResizes() {
+        lock (_gate) {
+            if (_resizes.Count == 0) {
+                return [];
+            }
+
+            ResizeRequest[] requests = [.. _resizes];
+            _resizes.Clear();
+            return requests;
+        }
+    }
+
+    /// <summary>
     /// Removes every queued destruction request. Render-thread only.
     /// </summary>
     /// <returns>The queued target lifetimes, in destruction order.</returns>
@@ -206,31 +299,39 @@ internal sealed class RenderTextureService : IDisposable {
     /// <see cref="ObjectDisposedException"/>. Idempotent.
     /// </summary>
     internal void Stop() {
-        CreateRequest[] requests;
+        CreateRequest[] creates;
+        ResizeRequest[] resizes;
         lock (_gate) {
             if (_stopped || _closed || _disposed) {
                 return;
             }
 
             _stopped = true;
-            requests = [.. _creates];
+            creates = [.. _creates];
             _creates.Clear();
+            resizes = [.. _resizes];
+            _resizes.Clear();
         }
 
         Exception exception = CreateStoppedException();
-        foreach (CreateRequest request in requests) {
+        foreach (CreateRequest request in creates) {
             request.DisposeRegistration();
+            request.Completion.TrySetException(exception);
+        }
+
+        foreach (ResizeRequest request in resizes) {
             request.Completion.TrySetException(exception);
         }
     }
 
     /// <summary>
-    /// Stops the service when the render loop ends. A queued creation request receives the loop failure
-    /// when there is one, or <see cref="ObjectDisposedException"/> for a graceful stop. Idempotent.
+    /// Stops the service when the render loop ends. A queued creation or resize request receives the loop
+    /// failure when there is one, or <see cref="ObjectDisposedException"/> for a graceful stop. Idempotent.
     /// </summary>
     /// <param name="failure">The render loop failure, or <see langword="null"/> for a graceful stop.</param>
     internal void Close(Exception? failure) {
-        CreateRequest[] requests;
+        CreateRequest[] creates;
+        ResizeRequest[] resizes;
         lock (_gate) {
             if (_closed || _disposed) {
                 return;
@@ -238,14 +339,20 @@ internal sealed class RenderTextureService : IDisposable {
 
             _closed = true;
             _stopped = true;
-            requests = [.. _creates];
+            creates = [.. _creates];
             _creates.Clear();
+            resizes = [.. _resizes];
+            _resizes.Clear();
             _destroys.Clear();
         }
 
         Exception exception = failure ?? CreateStoppedException();
-        foreach (CreateRequest request in requests) {
+        foreach (CreateRequest request in creates) {
             request.DisposeRegistration();
+            request.Completion.TrySetException(exception);
+        }
+
+        foreach (ResizeRequest request in resizes) {
             request.Completion.TrySetException(exception);
         }
     }
@@ -268,7 +375,36 @@ internal sealed class RenderTextureService : IDisposable {
 
     private static ObjectDisposedException CreateStoppedException() => new(
         nameof(RenderTextureService),
-        "The app has stopped; render textures cannot be created or used after shutdown.");
+        "The app has stopped; render textures cannot be created, resized, or used after shutdown.");
+
+    /// <summary>
+    /// One queued resize request and its single completion task.
+    /// </summary>
+    internal sealed class ResizeRequest {
+        internal ResizeRequest(RenderTextureTargetLifetime lifetime, int width, int height) {
+            ArgumentNullException.ThrowIfNull(lifetime);
+
+            Lifetime = lifetime;
+            Width = width;
+            Height = height;
+            Completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+
+        /// <summary>Gets the target lifetime to recreate.</summary>
+        internal RenderTextureTargetLifetime Lifetime { get; }
+
+        /// <summary>Gets the target id the request addresses.</summary>
+        internal long TargetId => Lifetime.TargetId;
+
+        /// <summary>Gets the new width in pixels.</summary>
+        internal int Width { get; }
+
+        /// <summary>Gets the new height in pixels.</summary>
+        internal int Height { get; }
+
+        /// <summary>Gets the completion task source.</summary>
+        internal TaskCompletionSource Completion { get; }
+    }
 
     /// <summary>
     /// One queued creation request and its single completion task.

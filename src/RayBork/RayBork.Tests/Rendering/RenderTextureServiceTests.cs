@@ -180,4 +180,193 @@ public sealed class RenderTextureServiceTests {
         await Assert.ThrowsAsync<ObjectDisposedException>(
             () => service.CreateAsync(new RenderTextureDescription(0, 0), CancellationToken.None));
     }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ResizeCompletesOnlyAfterTheRenderThreadProcessesTheRequest() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(
+            new RenderTextureDescription(64, 64),
+            CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task request = service.ResizeAsync(target.Lifetime, 96, 48);
+        Assert.False(request.IsCompleted);
+        Assert.True(service.HasPendingWork);
+        Assert.True(service.Signal.WaitOne(0));
+
+        host.ProcessRenderTextureRequests(service);
+        await request;
+        Assert.Equal(96, target.Width);
+        Assert.Equal(48, target.Height);
+        Assert.False(service.HasPendingWork);
+        Assert.Equal(1, host.LiveRenderTextureCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ResizeOfAnUnchangedSizeIsANoOpEvenWhileTheTargetIsHeld() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task unchanged = service.ResizeAsync(target.Lifetime, 64, 64);
+        Assert.True(unchanged.IsCompletedSuccessfully);
+        Assert.False(service.HasPendingWork);
+
+        target.Lifetime.AddFrameHold();
+        try {
+            Task held = service.ResizeAsync(target.Lifetime, 64, 64);
+            Assert.True(held.IsCompletedSuccessfully);
+        } finally {
+            target.Lifetime.ReleaseFrameHold();
+        }
+
+        Assert.Equal(64, target.Width);
+        Assert.Equal(64, target.Height);
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ResizeRejectsInvalidDimensionsBeforeItQueuesTheRequest() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => { _ = service.ResizeAsync(target.Lifetime, 0, 8); });
+        Assert.Throws<ArgumentOutOfRangeException>(() => { _ = service.ResizeAsync(target.Lifetime, 8, -1); });
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => { _ = service.ResizeAsync(target.Lifetime, RenderTextureValidation.MAX_DIMENSION + 1, 8); });
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => { _ = service.ResizeAsync(target.Lifetime, 8, RenderTextureValidation.MAX_DIMENSION + 1); });
+        Assert.False(service.HasPendingWork);
+        Assert.Equal(64, target.Width);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ResizeOfADisposedTargetThrowsObjectDisposedException() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        RenderTexture target = await create;
+        target.Dispose();
+        host.ProcessRenderTextureRequests(service);
+
+        Assert.Throws<ObjectDisposedException>(() => { _ = service.ResizeAsync(target.Lifetime, 96, 48); });
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ResizeOfATargetInUseThrowsInvalidOperationExceptionBeforeQueueing() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        target.Lifetime.AddFrameHold();
+        try {
+            Assert.Throws<InvalidOperationException>(() => { _ = service.ResizeAsync(target.Lifetime, 96, 48); });
+        } finally {
+            target.Lifetime.ReleaseFrameHold();
+        }
+
+        Assert.False(service.HasPendingWork);
+        Assert.Equal(64, target.Width);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AFrameHoldThatAppearsAfterQueueingFailsTheResizeOnTheRenderThread() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task request = service.ResizeAsync(target.Lifetime, 96, 48);
+        target.Lifetime.AddFrameHold();
+        try {
+            host.ProcessRenderTextureRequests(service);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => request);
+        } finally {
+            target.Lifetime.ReleaseFrameHold();
+        }
+
+        Assert.Equal(64, target.Width);
+        Assert.Equal(64, target.Height);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CloseFailsPendingResizesAndRejectsLaterResizes() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task pending = service.ResizeAsync(target.Lifetime, 96, 48);
+        service.Close(null);
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => pending);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => service.ResizeAsync(target.Lifetime, 128, 64));
+        Assert.False(service.HasPendingWork);
+        Assert.True(service.IsStopped);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task StopFailsPendingResizesAndRejectsLaterResizes() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(64, 64), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task pending = service.ResizeAsync(target.Lifetime, 96, 48);
+        service.Stop();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => pending);
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => service.ResizeAsync(target.Lifetime, 128, 64));
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task QueuedCreatesResizesAndDestroysAreServicedInOneRenderThreadRound() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> resizedRequest = service.CreateAsync(
+            new RenderTextureDescription(16, 16),
+            CancellationToken.None);
+        Task<RenderTexture> destroyedRequest = service.CreateAsync(
+            new RenderTextureDescription(8, 8),
+            CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture resized = await resizedRequest;
+        RenderTexture destroyed = await destroyedRequest;
+
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(32, 32), CancellationToken.None);
+        Task resize = service.ResizeAsync(resized.Lifetime, 48, 24);
+        destroyed.Dispose();
+        host.ProcessRenderTextureRequests(service);
+
+        using RenderTexture created = await create;
+        await resize;
+        Assert.Equal(48, resized.Width);
+        Assert.Equal(24, resized.Height);
+        Assert.True(host.IsRenderTargetLive(resized.TargetId));
+        Assert.True(host.IsRenderTargetLive(created.TargetId));
+        Assert.False(host.IsRenderTargetLive(destroyed.TargetId));
+    }
 }

@@ -69,4 +69,84 @@ public sealed class RenderTextureAppTests {
 
         Assert.Equal(1, game.SetupCount);
     }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ResizeRecreatesTheTargetAndUpdatesBothViewsInPlace() {
+        RenderTexture? target = null;
+        Texture? colorTexture = null;
+        Texture? depthTexture = null;
+        int sampleCount = 0;
+        ScriptedGame game = new();
+        using AppTestHost host = new(game);
+        game.SetupHandler = async setupContext => {
+            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(32, 16));
+            colorTexture = target.ColorTexture;
+            depthTexture = target.DepthTexture;
+            sampleCount = target.SampleCount;
+
+            target.Resize(48, 24);
+
+            Assert.Equal(48, target.Width);
+            Assert.Equal(24, target.Height);
+            Assert.Equal(sampleCount, target.SampleCount);
+            Assert.Same(colorTexture, target.ColorTexture);
+            Assert.Same(depthTexture, target.DepthTexture);
+            Assert.Equal(48, colorTexture.Width);
+            Assert.Equal(24, colorTexture.Height);
+            Assert.NotNull(depthTexture);
+            Assert.Equal(48, depthTexture.Width);
+            Assert.Equal(24, depthTexture.Height);
+            Assert.Equal(TextureFormat.Rgba16Float, colorTexture.Format);
+            Assert.Equal(TextureFormat.Depth32Float, depthTexture.Format);
+            Assert.Equal(string.Empty, colorTexture.Path);
+
+            // An unchanged size is a no-op: it does not queue another request or throw.
+            target.Resize(48, 24);
+            Assert.Equal(48, target.Width);
+        };
+        game.TickHandler = tickContext => tickContext.RequestExit();
+
+        host.App.Run();
+
+        Assert.NotNull(target);
+        // The app's render texture service stopped at shutdown, so a later resize reports the app state.
+        Assert.Throws<ObjectDisposedException>(() => target.Resize(64, 32));
+        target.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ResizeDuringACameraTargetingTheTargetThrowsInvalidOperationException() {
+        RenderTexture? target = null;
+        ScriptedGame game = new();
+        using AppTestHost host = new(game);
+        game.SetupHandler = async setupContext => {
+            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(16, 16));
+        };
+        game.TickHandler = tickContext => {
+            using (Camera camera = tickContext.CreateCamera(
+                Transform.Identity,
+                CameraProjection.Perspective,
+                60f,
+                0f,
+                ClearMode.ColorAndDepth,
+                null,
+                0.1f,
+                100f,
+                null,
+                target)) {
+                Assert.Same(target, camera.Target);
+                Assert.Throws<InvalidOperationException>(() => target!.Resize(32, 32));
+                Assert.Equal(16, target!.Width);
+            }
+
+            tickContext.RequestExit();
+        };
+
+        host.App.Run();
+
+        Assert.NotNull(target);
+        target.Dispose();
+    }
 }

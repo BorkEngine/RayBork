@@ -311,6 +311,17 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         }
     }
 
+    /// <summary>
+    /// Gets whether a target id is still live in the fake registry. Diagnostic, for service tests.
+    /// </summary>
+    /// <param name="targetId">The target id to check.</param>
+    /// <returns><see langword="true"/> when a target with the id is registered.</returns>
+    internal bool IsRenderTargetLive(long targetId) {
+        lock (_gate) {
+            return _renderTargets.ContainsKey(targetId);
+        }
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// The fake has no GPU, so it completes each request with a public <see cref="RenderTexture"/> over
@@ -368,7 +379,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                 depthTexture = new Texture(depthLifetime, depthDescriptor, isProcedural: false, isRenderTargetView: true);
             }
 
-            RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture);
+            RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture, service);
             lock (_gate) {
                 _renderTargets[targetId] = lifetime;
             }
@@ -379,6 +390,34 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                     _renderTargets.Remove(targetId);
                 }
             }
+        }
+
+        foreach (RenderTextureService.ResizeRequest request in service.DrainResizes()) {
+            if (request.Lifetime.IsDisposed) {
+                request.Completion.TrySetException(new ObjectDisposedException(nameof(RenderTexture)));
+                continue;
+            }
+
+            lock (_gate) {
+                if (!_renderTargets.ContainsKey(request.TargetId)) {
+                    request.Completion.TrySetException(new InvalidOperationException(
+                        $"The fake render target {request.TargetId} is no longer alive."));
+                    continue;
+                }
+            }
+
+            if (request.Lifetime.IsInUse) {
+                request.Completion.TrySetException(new InvalidOperationException(
+                    $"The fake render target {request.TargetId} is in use by a recorded or in-flight frame."));
+                continue;
+            }
+
+            RenderTextureDescription description = request.Lifetime.Description;
+            request.Lifetime.UpdateDescription(description with {
+                Width = request.Width,
+                Height = request.Height,
+            });
+            request.Completion.TrySetResult();
         }
 
         foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {

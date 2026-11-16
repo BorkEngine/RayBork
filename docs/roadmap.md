@@ -1240,19 +1240,19 @@ details:
 **Goal.** Offscreen rendering, post-processing building blocks, split-screen, and screenshots.
 
 **Progress.** The per-pass frame data (shader ABI v2), one render pass per camera pass on the HDR
-scene target, and the color and depth paths of public render targets ship: `RenderTexture`,
-`RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `Camera.Target`, and the
-`CreateCamera` `target` parameter, with a per-target render pass, MSAA color resolve, Vulkan 1.2
-depth/stencil resolve, the sampled `ColorTexture` and `DepthTexture` views, same-tick sampling,
-multiple targets in one frame, and target lifetime. `Depth: false` targets have no depth view. The
-scene target's resolved depth image is internal for a later SSAO pass. `Resize`, readback,
-post-processing/effects, and the render-target sample remain later M8 tasks; M8 is not complete.
+scene target, and the color, depth, and resize paths of public render targets ship: `RenderTexture`,
+`RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`,
+`Camera.Target`, and the `CreateCamera` `target` parameter, with a per-target render pass, MSAA color
+resolve, Vulkan 1.2 depth/stencil resolve, the sampled `ColorTexture` and `DepthTexture` views,
+same-tick sampling, multiple targets in one frame, target lifetime, and in-place target recreation at a
+new size. `Depth: false` targets have no depth view. The scene target's resolved depth image is internal
+for a later SSAO pass. Readback, post-processing/effects, and the render-target sample remain later M8
+tasks; M8 is not complete.
 
 **Scope.**
 
 - `RenderTexture` creation with `Rgba16Float` default, color/depth attachments, MSAA color and depth
-  resolve, resize, sampling, and lifetime. The color and depth paths are shipped; `Resize` is a later
-  task.
+  resolve, resize, sampling, and lifetime. The color, depth, and resize paths are shipped.
 - Camera target routing and viewport rectangles. Shipped.
 - Image and resolve barriers between passes; write-after-read validation. The color and depth paths are
   shipped; a same-camera write-and-sample of either view is rejected on the tick thread.
@@ -1271,7 +1271,7 @@ post-processing/effects, and the render-target sample remain later M8 tasks; M8 
 - Split-screen sample pass: two cameras, two viewports. Later M8 task.
 - Target format/sRGB rules; depth texture sampling. The three color formats, the sRGB sampling decode,
   and the resolved `DepthTexture` over a Vulkan 1.2 depth resolve ship. The scene target's resolved
-  depth image is internal for T5 SSAO; `Resize`, readback, and post-processing remain later tasks.
+  depth image is internal for T5 SSAO; readback and post-processing remain later tasks.
 
 **Exit criteria.**
 
@@ -1289,7 +1289,7 @@ post-processing/effects, and the render-target sample remain later M8 tasks; M8 
 - `ReadPixelsAsync` returns the expected top-left display-referred RGBA8 image and completes
   without stalling the next tick indefinitely. Later M8 task.
 - Resizing a target while it is not in use works; resizing while in use fails with a clear error.
-  Later M8 task.
+  Met by the render texture GPU, service, and app tests.
 - MSAA 4x offscreen color/depth resolves correctly; 1x and 8x are supported or fall back. Met for
   color and the sampled depth view.
 - Native AOT publish runs the RenderTarget sample on Windows and Linux. Later M8 task.

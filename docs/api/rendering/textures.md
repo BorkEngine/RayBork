@@ -69,7 +69,10 @@ public enum TextureFormat {
 
 - Textures are immutable GPU resources. A loaded texture's format, mip count, sRGB flag, and
   sampler come from the bake and cannot be changed at runtime. A procedural texture chooses its
-  sampler, format, and mip behavior in `TextureBuilder` and is immutable after `BuildAsync`.
+  sampler, format, and mip behavior in `TextureBuilder` and is immutable after `BuildAsync`. A
+  `RenderTexture` color or depth view is the one exception: `RenderTexture.Resize` recreates the
+  target's GPU image and updates the same view object's `Width` and `Height` in place. Its format,
+  sampler, empty `Path`, and owner stay fixed.
 - Procedural formats are `Rgba8Unorm`, `Rgba8Srgb`, and `R8Unorm`. `Rgba8` uses exactly four bytes
   per pixel and `R8Unorm` one byte per pixel. There is no runtime BC encoder or raw KTX2 upload in
   v1.
@@ -110,14 +113,17 @@ public enum TextureFormat {
   samples, batches, and is retained by a recorded frame exactly like a pack or procedural texture. The
   `RenderTexture` owns it: disposing the view directly throws `InvalidOperationException`; dispose the
   render texture instead, which retires the view and releases the target after the frames that used it
-  complete. A render-target view is never mounted, cached, or returned by the asset catalog.
+  complete. A render-target view is never mounted, cached, or returned by the asset catalog. A resize
+  keeps the same view object and updates its `Width` and `Height` in place; the color format, sampler,
+  and empty `Path` do not change, and there is no separate view dispose.
 - A `RenderTexture.DepthTexture` is the same kind of runtime view over the target's single-sample
   resolved depth image. It reports an empty `Path`, `IsProcedural = false`, `MipLevels = 1`,
   `Format = TextureFormat.Depth32Float`, `IsSrgb = false`, and a nearest-filter clamp sampler. It
   samples the stored reverse-Z depth as a float and is retained by a recorded frame like the color view.
   The `RenderTexture` owns it; a direct `Dispose` throws `InvalidOperationException`, and disposing the
-  render texture retires it. It is `null` when the target declares `Depth: false`. A scene target's
-  resolved depth image is internal and has no public `Texture` view.
+  render texture retires it. It is `null` when the target declares `Depth: false`. A resize keeps the
+  same view object and updates its `Width` and `Height` in place. A scene target's resolved depth image
+  is internal and has no public `Texture` view.
 - Bindless slots are allocated when a texture's GPU upload completes, not lazily at the first draw.
   The renderer creates a fixed table of 2048 slots, matching the shader ABI's
   `RayBorkTextures[2048]` descriptor array. A depth-bearing `RenderTexture` consumes one slot for
@@ -127,7 +133,10 @@ public enum TextureFormat {
   `maxDescriptorSetUpdateAfterBindSampledImages` limit is below 2048 is rejected during device
   selection with a clear diagnostic; the capacity is never reduced. Slot 0 is always reserved for
   the renderer's built-in 1x1 white texture, so a `null` texture binding and a texture binding that
-  uses the bake default sample white.
+  uses the bake default sample white. A render target keeps its one or two slots across a
+  `RenderTexture.Resize`; the renderer rewrites their descriptors to the recreated views before any
+  later frame samples them. A device recovery replaces the table, so every live target re-reserves its
+  slots behind the unchanged public views.
 - If the table is full, the texture upload fails with `AssetLoadException` (diagnostic code
   `RB1010`). The message names the table capacity and the failing texture path; the game must
   reduce the number of live textures or dispose unused textures and wait for frame retirement before

@@ -17,19 +17,22 @@ namespace RayBork;
 /// The texture does not expose CPU pixels: a loaded texture never retained them, and a procedural
 /// texture's pixels stay owned by its builder. <see cref="Path"/> and <see cref="IsDisposed"/> stay
 /// readable after disposal. Every other member throws <see cref="ObjectDisposedException"/> once the
-/// asset is disposed.
+/// asset is disposed. A <see cref="RenderTexture"/>'s color and depth views are the exception to
+/// immutability: resizing the target recreates the GPU image and updates the same view's
+/// <see cref="Width"/> and <see cref="Height"/> in place. Format, sampler, path, and owner stay fixed,
+/// and directly disposing the view still throws.
 /// </para>
 /// </remarks>
 public sealed class Texture : IAsset {
     private readonly ITextureOwner _owner;
-    private readonly int _width;
-    private readonly int _height;
     private readonly int _mipLevels;
     private readonly TextureFormat _format;
     private readonly bool _isSrgb;
     private readonly SamplerState _sampler;
     private readonly bool _isProcedural;
     private readonly bool _isRenderTargetView;
+    private int _width;
+    private int _height;
 
     /// <summary>
     /// Initializes a texture from its uploaded lifetime state and descriptor.
@@ -85,24 +88,26 @@ public sealed class Texture : IAsset {
     }
 
     /// <summary>
-    /// Gets the base-level width in pixels.
+    /// Gets the base-level width in pixels. A render target view reports the current target width, which
+    /// changes in place when the owning <see cref="RenderTexture"/> is resized.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
     public int Width {
         get {
             ThrowIfDisposed();
-            return _width;
+            return Volatile.Read(ref _width);
         }
     }
 
     /// <summary>
-    /// Gets the base-level height in pixels.
+    /// Gets the base-level height in pixels. A render target view reports the current target height, which
+    /// changes in place when the owning <see cref="RenderTexture"/> is resized.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
     public int Height {
         get {
             ThrowIfDisposed();
-            return _height;
+            return Volatile.Read(ref _height);
         }
     }
 
@@ -184,6 +189,28 @@ public sealed class Texture : IAsset {
     /// Gets the render target id when this texture is a render target view, or <c>0</c> otherwise.
     /// </summary>
     internal long RenderTargetId => _owner is RenderTextureViewLifetime view ? view.TargetId : 0;
+
+    /// <summary>
+    /// Updates a render target view's reported dimensions after the owning <see cref="RenderTexture"/>
+    /// recreated its GPU image at a new size. The view keeps its identity, sampler, format, and owner;
+    /// only <see cref="Width"/> and <see cref="Height"/> change.
+    /// </summary>
+    /// <param name="width">The new target width in pixels.</param>
+    /// <param name="height">The new target height in pixels.</param>
+    /// <exception cref="InvalidOperationException">The texture is not a render target view.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
+    internal void UpdateRenderTargetViewDimensions(int width, int height) {
+        if (!_isRenderTargetView) {
+            throw new InvalidOperationException(
+                "Only a render target color or depth view can change its dimensions after creation; "
+                    + "an asset texture is immutable.");
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        Volatile.Write(ref _width, width);
+        Volatile.Write(ref _height, height);
+    }
 
     /// <summary>
     /// Retires the view and releases the owner reference the render texture held on it when the

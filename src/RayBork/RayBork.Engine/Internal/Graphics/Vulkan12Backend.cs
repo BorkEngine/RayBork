@@ -270,6 +270,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
         }
 
+        foreach (RenderTextureService.ResizeRequest request in service.DrainResizes()) {
+            try {
+                ResizeRenderTextureTarget(request);
+            } catch (Exception exception) {
+                request.Completion.TrySetException(exception);
+            }
+        }
+
         foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {
             if (!_renderTargets.TryGetValue(lifetime.TargetId, out RenderTargetEntry? entry)) {
                 continue;
@@ -330,37 +338,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             sampleCount,
             format,
             description.Depth);
-        Sampler sampler = default;
-        Sampler depthSampler = default;
-        uint slot = 0;
-        uint depthSlot = 0;
+        Sampler sampler;
+        Sampler depthSampler;
+        uint slot;
+        uint depthSlot;
+        try {
+            CreateRenderTargetViewBindings(device, target, out sampler, out slot, out depthSampler, out depthSlot);
+        } catch {
+            target.Dispose();
+            throw;
+        }
+
         RenderTargetEntry? entry = null;
         bool success = false;
         try {
-            sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
-            if (!_bindlessTextures!.TryAllocate(out slot)) {
-                throw new GraphicsException(
-                    $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
-                        + "the reserved white slot), so the render texture color view has no slot.",
-                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
-            }
-
-            _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
-
-            if (target.HasDepth) {
-                depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
-                if (!_bindlessTextures.TryAllocate(out depthSlot)) {
-                    throw new GraphicsException(
-                        $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
-                            + "the reserved white slot), so the render texture depth view has no slot.",
-                        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                        null);
-                }
-
-                _bindlessTextures.WriteTexture(depthSlot, target.ResolvedDepthView, depthSampler);
-            }
-
             long targetId = service.NextTargetId();
             RenderTextureTargetLifetime lifetime = new(targetId, description, sampleCount, service.QueueDestruction);
             RenderTextureViewResource viewResource = new(target.ResolvedColorView, sampler) {
@@ -401,7 +392,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 MaxAnisotropy = 1f,
             };
             Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
-            RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture);
+            RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture, service);
             entry = new RenderTargetEntry(
                 targetId,
                 sampleCount,
@@ -418,34 +409,235 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             if (!success) {
                 _renderTargets.Remove(targetId);
             }
-
-            slot = 0;
-            depthSlot = 0;
         } finally {
             request.DisposeRegistration();
             if (!success) {
                 if (entry is not null) {
                     DestroyRenderTarget(entry, retireView: true);
                 } else {
-                    if (slot != 0 && _bindlessTextures is not null) {
-                        _bindlessTextures.Release(slot);
-                    }
-
-                    if (depthSlot != 0 && _bindlessTextures is not null) {
-                        _bindlessTextures.Release(depthSlot);
-                    }
-
-                    if (sampler.Handle != 0) {
-                        device.Vulkan.DestroySampler(device.Device, sampler, null);
-                    }
-
-                    if (depthSampler.Handle != 0) {
-                        device.Vulkan.DestroySampler(device.Device, depthSampler, null);
-                    }
-
+                    DestroyRenderTargetViewBindings(device, sampler, slot, depthSampler, depthSlot);
                     target.Dispose();
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Recreates one live render target's images, render pass, framebuffer, bindless views, and pipeline
+    /// cache at the request's size, then updates the target's retained description and public dimensions.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Render-thread only. The request is processed before the next frame is acquired, so the tick thread
+    /// that called <see cref="RenderTexture.Resize"/> is blocked and cannot record another frame while the
+    /// target is recreated. A frame hold is never waited on: a target that a published but not yet
+    /// rendered frame still holds fails the request with <see cref="InvalidOperationException"/> instead of
+    /// deadlocking the render loop. The last-use fence is waited on because a frame that was already
+    /// released can still be in flight on the GPU; the new images are not referenced by it.
+    /// </para>
+    /// <para>
+    /// The new target is fully created, and its samplers exist, before any live entry is changed; a
+    /// failure before that point leaves the old target usable and releases the partial new resources. The
+    /// target keeps its bindless slots and the descriptors are rewritten to the new views, so a resize
+    /// cannot exhaust the bindless table and never leaves a stale slot. The old pipeline cache is
+    /// destroyed before the old render pass, and the old target after the new resources are live.
+    /// </para>
+    /// </remarks>
+    /// <param name="request">The queued resize request.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The new size exceeds the current device's maximum 2D image dimension.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A recorded or in-flight frame holds the target, or the target is no longer live.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The render texture was disposed before the request ran.</exception>
+    /// <exception cref="GraphicsException">The renderer could not recreate the target's GPU objects.</exception>
+    private void ResizeRenderTextureTarget(RenderTextureService.ResizeRequest request) {
+        RenderTextureTargetLifetime lifetime = request.Lifetime;
+        if (lifetime.IsDisposed) {
+            throw new ObjectDisposedException(
+                nameof(RenderTexture),
+                "The render texture is disposed; it cannot be resized.");
+        }
+
+        if (!_renderTargets.TryGetValue(request.TargetId, out RenderTargetEntry? entry)) {
+            throw new InvalidOperationException(
+                $"The frame references render target {request.TargetId}, which is no longer alive. A resize "
+                    + "cannot recreate a target that was destroyed.");
+        }
+
+        if (lifetime.IsInUse) {
+            throw new InvalidOperationException(
+                $"Render target {request.TargetId} is in use by a recorded or in-flight frame; the resize "
+                    + "was not applied. Resize the render texture only after the frame that uses it completed.");
+        }
+
+        // The public Resize no-ops an unchanged size before it queues; keep the render thread idempotent
+        // in case a second request reaches it for the same size.
+        RenderTextureDescription description = lifetime.Description;
+        if (description.Width == request.Width && description.Height == request.Height) {
+            request.Completion.TrySetResult();
+            return;
+        }
+
+        VulkanDevice device = _device!;
+        PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice);
+        uint maxDimension = properties.Limits.MaxImageDimension2D;
+        if (request.Width > maxDimension || request.Height > maxDimension) {
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                $"{nameof(RenderTexture.Resize)} cannot resize render target {request.TargetId} to "
+                    + $"{request.Width}x{request.Height}: it exceeds the device's maximum 2D image dimension "
+                    + $"{maxDimension}. The target keeps its {description.Width}x{description.Height} images.");
+        }
+
+        WaitForRenderTargetIdle(lifetime);
+
+        VulkanRenderTarget target = VulkanRenderTarget.Create(
+            device,
+            new Extent2D { Width = checked((uint)request.Width), Height = checked((uint)request.Height) },
+            entry.SampleCount,
+            ToVulkanColorFormat(description.ColorFormat),
+            description.Depth);
+        Sampler sampler = default;
+        Sampler depthSampler = default;
+        try {
+            sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
+            if (target.HasDepth) {
+                depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
+            }
+        } catch {
+            DestroyRenderTargetSampler(device, sampler);
+            DestroyRenderTargetSampler(device, depthSampler);
+            target.Dispose();
+            throw;
+        }
+
+        // Every resource the new target needs is live, so the swap below only assigns fields and
+        // rewrites descriptors; it cannot fail and leave the entry pointing at a half-created target.
+        VulkanRenderTarget previousTarget = entry.Target;
+        Sampler previousSampler = entry.Sampler;
+        Sampler previousDepthSampler = entry.DepthSampler;
+        VulkanGeometryPipelineCache? previousPipelines = entry.Pipelines;
+        entry.Target = target;
+        entry.Sampler = sampler;
+        entry.ViewResource.View = target.ResolvedColorView;
+        entry.ViewResource.Sampler = sampler;
+        entry.ViewLifetime.SetBindingResource(entry.ViewResource);
+        _bindlessTextures!.WriteTexture(entry.ViewResource.BindlessSlot, target.ResolvedColorView, sampler);
+        if (target.HasDepth && entry.DepthViewResource is not null) {
+            entry.DepthSampler = depthSampler;
+            entry.DepthViewResource.View = target.ResolvedDepthView;
+            entry.DepthViewResource.Sampler = depthSampler;
+            entry.DepthViewLifetime!.SetBindingResource(entry.DepthViewResource);
+            _bindlessTextures.WriteTexture(entry.DepthViewResource.BindlessSlot, target.ResolvedDepthView, depthSampler);
+        }
+
+        entry.Pipelines = null;
+        lifetime.UpdateDescription(description with { Width = request.Width, Height = request.Height });
+        // The new images were never used by a frame; the previous images' last-use fence was waited on.
+        lifetime.SetLastUseFrameSlot(-1);
+
+        previousPipelines?.Dispose();
+        previousTarget.Dispose();
+        DestroyRenderTargetSampler(device, previousSampler);
+        DestroyRenderTargetSampler(device, previousDepthSampler);
+        request.Completion.TrySetResult();
+    }
+
+    /// <summary>
+    /// Creates the color and, when the target has depth, depth sampler and bindless slot and writes their
+    /// descriptors into every frame descriptor set.
+    /// </summary>
+    /// <remarks>
+    /// A failure releases the slots and samplers created so far before it rethrows, so the caller only has
+    /// to dispose the target. The color slot is reserved first and the depth slot second, matching the
+    /// entry's view order.
+    /// </remarks>
+    /// <param name="device">The current logical device.</param>
+    /// <param name="target">The created target whose resolved views are sampled.</param>
+    /// <param name="sampler">The color view's sampler.</param>
+    /// <param name="slot">The color view's bindless slot.</param>
+    /// <param name="depthSampler">The depth view's sampler, or a default handle for a depthless target.</param>
+    /// <param name="depthSlot">The depth view's bindless slot, or <c>0</c> for a depthless target.</param>
+    /// <exception cref="GraphicsException">
+    /// The bindless texture table is full. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    private void CreateRenderTargetViewBindings(
+        VulkanDevice device,
+        VulkanRenderTarget target,
+        out Sampler sampler,
+        out uint slot,
+        out Sampler depthSampler,
+        out uint depthSlot) {
+        sampler = default;
+        slot = 0;
+        depthSampler = default;
+        depthSlot = 0;
+        try {
+            sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
+            if (!_bindlessTextures!.TryAllocate(out slot)) {
+                throw new GraphicsException(
+                    $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
+                        + "the reserved white slot), so the render texture color view has no slot.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null);
+            }
+
+            _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
+
+            if (target.HasDepth) {
+                depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
+                if (!_bindlessTextures.TryAllocate(out depthSlot)) {
+                    throw new GraphicsException(
+                        $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
+                            + "the reserved white slot), so the render texture depth view has no slot.",
+                        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                        null);
+                }
+
+                _bindlessTextures.WriteTexture(depthSlot, target.ResolvedDepthView, depthSampler);
+            }
+        } catch {
+            DestroyRenderTargetViewBindings(device, sampler, slot, depthSampler, depthSlot);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Releases a color and depth bindless slot and destroys their samplers. Safe with default handles.
+    /// </summary>
+    /// <param name="device">The device that owns the samplers.</param>
+    /// <param name="sampler">The color sampler, or a default handle.</param>
+    /// <param name="slot">The color bindless slot, or <c>0</c>.</param>
+    /// <param name="depthSampler">The depth sampler, or a default handle.</param>
+    /// <param name="depthSlot">The depth bindless slot, or <c>0</c>.</param>
+    private void DestroyRenderTargetViewBindings(
+        VulkanDevice device,
+        Sampler sampler,
+        uint slot,
+        Sampler depthSampler,
+        uint depthSlot) {
+        if (slot != 0 && _bindlessTextures is not null) {
+            _bindlessTextures.Release(slot);
+        }
+
+        if (depthSlot != 0 && _bindlessTextures is not null) {
+            _bindlessTextures.Release(depthSlot);
+        }
+
+        DestroyRenderTargetSampler(device, sampler);
+        DestroyRenderTargetSampler(device, depthSampler);
+    }
+
+    /// <summary>
+    /// Destroys one render-target sampler when it has a handle. Safe with a default handle.
+    /// </summary>
+    /// <param name="device">The device that owns the sampler.</param>
+    /// <param name="sampler">The sampler to destroy.</param>
+    private static void DestroyRenderTargetSampler(VulkanDevice device, Sampler sampler) {
+        if (sampler.Handle != 0) {
+            device.Vulkan.DestroySampler(device.Device, sampler, null);
         }
     }
 
@@ -496,6 +688,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             null);
     }
 
+    /// <summary>
+    /// Gets whether the frame slot that last used the target signaled its fence, so a destroy or resize
+    /// can safely release or replace the target images. Render-thread only.
+    /// </summary>
+    /// <param name="lifetime">The target lifetime to check.</param>
+    /// <returns><see langword="true"/> when the last-use fence signaled or the target was never used.</returns>
     private bool IsRenderTargetIdle(RenderTextureTargetLifetime lifetime) {
         if (_device is null || _fences.Length == 0) {
             return true;
@@ -507,6 +705,31 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
 
         return _device.Vulkan.GetFenceStatus(_device.Device, _fences[frameSlot]) == Result.Success;
+    }
+
+    /// <summary>
+    /// Waits for the frame slot that last used the target to signal its fence. Render-thread only.
+    /// </summary>
+    /// <remarks>
+    /// A replacement target must not be created while the GPU still reads or writes the old images. The
+    /// wait is bounded by the frame's GPU completion; the frame hold check has already rejected a target a
+    /// recorded but not yet rendered frame still references, which is the only case that could deadlock.
+    /// </remarks>
+    /// <param name="lifetime">The target lifetime to wait for.</param>
+    private void WaitForRenderTargetIdle(RenderTextureTargetLifetime lifetime) {
+        if (_device is null || _fences.Length == 0) {
+            return;
+        }
+
+        int frameSlot = lifetime.LastUseFrameSlot;
+        if (frameSlot < 0 || frameSlot >= _fences.Length) {
+            return;
+        }
+
+        Fence fence = _fences[frameSlot];
+        ThrowIfFailed(
+            _device.Vulkan.WaitForFences(_device.Device, 1, &fence, true, WAIT_TIMEOUT),
+            "vkWaitForFences");
     }
 
     private void DestroyRenderTarget(RenderTargetEntry entry, bool retireView) {
@@ -1413,75 +1636,37 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 sampleCount,
                 ToVulkanColorFormat(description.ColorFormat),
                 description.Depth);
-            Sampler sampler = default;
-            Sampler depthSampler = default;
-            uint slot = 0;
-            uint depthSlot = 0;
+            Sampler sampler;
+            Sampler depthSampler;
+            uint slot;
+            uint depthSlot;
             try {
-                sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
-                if (!_bindlessTextures!.TryAllocate(out slot)) {
-                    throw new GraphicsException(
-                        $"The bindless texture table is full ({_bindlessTextures.Capacity} slots) while "
-                            + "recreating a render texture after a device loss.",
-                        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                        null);
-                }
-
-                _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
-
-                if (target.HasDepth) {
-                    depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
-                    if (!_bindlessTextures.TryAllocate(out depthSlot)) {
-                        throw new GraphicsException(
-                            $"The bindless texture table is full ({_bindlessTextures.Capacity} slots) while "
-                                + "recreating a render texture depth view after a device loss.",
-                            DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                            null);
-                    }
-
-                    _bindlessTextures.WriteTexture(depthSlot, target.ResolvedDepthView, depthSampler);
-                }
-
-                entry.Target.Dispose();
-                entry.Target = target;
-                entry.SampleCount = sampleCount;
-                entry.Lifetime.SetSampleCount(sampleCount);
-                entry.Sampler = sampler;
-                entry.ViewResource.View = target.ResolvedColorView;
-                entry.ViewResource.Sampler = sampler;
-                entry.ViewResource.BindlessSlot = slot;
-                entry.ViewLifetime.SetBindingResource(entry.ViewResource);
-                if (target.HasDepth && entry.DepthViewResource is not null) {
-                    entry.DepthSampler = depthSampler;
-                    entry.DepthViewResource.View = target.ResolvedDepthView;
-                    entry.DepthViewResource.Sampler = depthSampler;
-                    entry.DepthViewResource.BindlessSlot = depthSlot;
-                    entry.DepthViewLifetime!.SetBindingResource(entry.DepthViewResource);
-                }
-
-                entry.Pipelines = null;
-                slot = 0;
-                depthSlot = 0;
+                CreateRenderTargetViewBindings(device, target, out sampler, out slot, out depthSampler, out depthSlot);
             } catch {
-                if (slot != 0 && _bindlessTextures is not null) {
-                    _bindlessTextures.Release(slot);
-                }
-
-                if (depthSlot != 0 && _bindlessTextures is not null) {
-                    _bindlessTextures.Release(depthSlot);
-                }
-
-                if (sampler.Handle != 0) {
-                    device.Vulkan.DestroySampler(device.Device, sampler, null);
-                }
-
-                if (depthSampler.Handle != 0) {
-                    device.Vulkan.DestroySampler(device.Device, depthSampler, null);
-                }
-
                 target.Dispose();
                 throw;
             }
+
+            // Every new resource is live; the swap only assigns fields and cannot leave the entry
+            // pointing at a half-created target.
+            entry.Target.Dispose();
+            entry.Target = target;
+            entry.SampleCount = sampleCount;
+            entry.Lifetime.SetSampleCount(sampleCount);
+            entry.Sampler = sampler;
+            entry.ViewResource.View = target.ResolvedColorView;
+            entry.ViewResource.Sampler = sampler;
+            entry.ViewResource.BindlessSlot = slot;
+            entry.ViewLifetime.SetBindingResource(entry.ViewResource);
+            if (target.HasDepth && entry.DepthViewResource is not null) {
+                entry.DepthSampler = depthSampler;
+                entry.DepthViewResource.View = target.ResolvedDepthView;
+                entry.DepthViewResource.Sampler = depthSampler;
+                entry.DepthViewResource.BindlessSlot = depthSlot;
+                entry.DepthViewLifetime!.SetBindingResource(entry.DepthViewResource);
+            }
+
+            entry.Pipelines = null;
         }
     }
 
