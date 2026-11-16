@@ -252,7 +252,7 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
                 ImageLayout.Undefined,
                 ImageLayout.DepthStencilAttachmentOptimal,
                 AccessFlags.None,
-                DEPTH_ATTACHMENT_ACCESS);
+                ResolvedDepthWriteAccess());
         }
 
         _multisampledColorLayout = multisampled ? ImageLayout.ColorAttachmentOptimal : ImageLayout.Undefined;
@@ -322,8 +322,8 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
                 ImageAspectFlags.DepthBit,
                 _resolvedDepthLayout,
                 ImageLayout.DepthStencilAttachmentOptimal,
-                DepthSourceAccess(_resolvedDepthLayout),
-                DEPTH_ATTACHMENT_ACCESS);
+                ResolvedDepthSourceAccess(_resolvedDepthLayout),
+                ResolvedDepthWriteAccess());
         }
 
         // TopOfPipe waits for every earlier command, which covers an attachment that was Undefined, but
@@ -380,13 +380,13 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
         }
 
         if (!depthReadable) {
-            sourceStage |= DepthSourceStage(_resolvedDepthLayout);
+            sourceStage |= ResolvedDepthSourceStage(_resolvedDepthLayout);
             barriers[count++] = CreateImageBarrier(
                 _resolvedDepthImage,
                 ImageAspectFlags.DepthBit,
                 _resolvedDepthLayout,
                 ImageLayout.ShaderReadOnlyOptimal,
-                DepthSourceAccess(_resolvedDepthLayout),
+                ResolvedDepthSourceAccess(_resolvedDepthLayout),
                 AccessFlags.ShaderReadBit);
             _resolvedDepthLayout = ImageLayout.ShaderReadOnlyOptimal;
         }
@@ -435,22 +435,31 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
 
         if (_hasDepth) {
             if (_resolvedDepthLayout == ImageLayout.ShaderReadOnlyOptimal) {
+                PipelineStageFlags depthSourceStage =
+                    PipelineStageFlags.FragmentShaderBit | PipelineStageFlags.LateFragmentTestsBit;
+                AccessFlags depthSourceAccess = AccessFlags.ShaderReadBit;
+                if (IsMultisampled) {
+                    // The previous frame's resolve wrote the image at the color-attachment stage.
+                    depthSourceStage |= PipelineStageFlags.ColorAttachmentOutputBit;
+                    depthSourceAccess |= AccessFlags.ColorAttachmentWriteBit;
+                }
+
                 barriers[count++] = CreateImageBarrier(
                     _resolvedDepthImage,
                     ImageAspectFlags.DepthBit,
                     ImageLayout.ShaderReadOnlyOptimal,
                     ImageLayout.ShaderReadOnlyOptimal,
-                    AccessFlags.ShaderReadBit,
+                    depthSourceAccess,
                     AccessFlags.ShaderReadBit);
-                sourceStage |= PipelineStageFlags.FragmentShaderBit | PipelineStageFlags.LateFragmentTestsBit;
+                sourceStage |= depthSourceStage;
             } else {
-                sourceStage |= DepthSourceStage(_resolvedDepthLayout);
+                sourceStage |= ResolvedDepthSourceStage(_resolvedDepthLayout);
                 barriers[count++] = CreateImageBarrier(
                     _resolvedDepthImage,
                     ImageAspectFlags.DepthBit,
                     _resolvedDepthLayout,
                     ImageLayout.ShaderReadOnlyOptimal,
-                    DepthSourceAccess(_resolvedDepthLayout),
+                    ResolvedDepthSourceAccess(_resolvedDepthLayout),
                     AccessFlags.ShaderReadBit);
                 _resolvedDepthLayout = ImageLayout.ShaderReadOnlyOptimal;
             }
@@ -505,8 +514,8 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
                 ImageAspectFlags.DepthBit,
                 ImageLayout.DepthStencilAttachmentOptimal,
                 ImageLayout.DepthStencilAttachmentOptimal,
-                AccessFlags.DepthStencilAttachmentWriteBit,
-                DEPTH_ATTACHMENT_ACCESS);
+                ResolvedDepthSourceAccess(ImageLayout.DepthStencilAttachmentOptimal),
+                ResolvedDepthWriteAccess());
         }
 
         RecordImageBarriers(
@@ -546,6 +555,23 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
         ImageLayout.DepthStencilAttachmentOptimal => PipelineStageFlags.LateFragmentTestsBit,
         _ => PipelineStageFlags.AllCommandsBit,
     };
+
+    // Vulkan performs a depth/stencil resolve in the color-attachment output stage and with
+    // color-attachment write access even though the destination is a depth image. The resolved depth
+    // image is therefore written at ColorAttachmentOutput/ColorAttachmentWrite, not at the depth
+    // attachment's LateFragmentTests/DepthStencilAttachmentWrite scope. A single-sample depth image has
+    // no resolve: the depth test writes it in late fragment tests.
+    private AccessFlags ResolvedDepthSourceAccess(ImageLayout layout) => IsMultisampled
+        ? DepthSourceAccess(layout) | AccessFlags.ColorAttachmentWriteBit
+        : DepthSourceAccess(layout);
+
+    private PipelineStageFlags ResolvedDepthSourceStage(ImageLayout layout) => IsMultisampled
+        ? DepthSourceStage(layout) | PipelineStageFlags.ColorAttachmentOutputBit
+        : DepthSourceStage(layout);
+
+    private AccessFlags ResolvedDepthWriteAccess() => IsMultisampled
+        ? DEPTH_ATTACHMENT_ACCESS | AccessFlags.ColorAttachmentWriteBit
+        : DEPTH_ATTACHMENT_ACCESS;
 
     private void CreateResources() {
         PhysicalDeviceMemoryProperties memoryProperties = _vulkan.GetPhysicalDeviceMemoryProperties(_physicalDevice);

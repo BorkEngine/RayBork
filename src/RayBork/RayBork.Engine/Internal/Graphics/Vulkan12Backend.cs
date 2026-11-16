@@ -2094,8 +2094,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Resolves one texture binding to its bindless slot. A render target color view resolves exactly
-    /// like a packed or procedural texture; the frame's retention set already kept its target alive.
+    /// Resolves one texture binding to its bindless slot. A render target color or depth view resolves
+    /// exactly like a packed or procedural texture; the frame's retention set already kept its target
+    /// alive.
     /// </summary>
     private static uint ResolveTextureSlot(Texture? texture) {
         if (texture is null) {
@@ -2122,7 +2123,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     private static string DescribeTexture(Texture texture) =>
-        texture.Path.Length == 0 ? "The render target color texture" : $"The texture '{texture.Path}'";
+        texture.Path.Length == 0 ? "The render target texture view" : $"The texture '{texture.Path}'";
 
     private static VulkanShaderAssetResource RequireShaderResource(EngineAsset shader) {
         if (shader.Resource is VulkanShaderAssetResource resource) {

@@ -120,7 +120,9 @@ public enum TextureFormat {
   resolved depth image is internal and has no public `Texture` view.
 - Bindless slots are allocated when a texture's GPU upload completes, not lazily at the first draw.
   The renderer creates a fixed table of 2048 slots, matching the shader ABI's
-  `RayBorkTextures[2048]` descriptor array. A device whose
+  `RayBorkTextures[2048]` descriptor array. A depth-bearing `RenderTexture` consumes one slot for
+  `ColorTexture` and a second slot for `DepthTexture`; a depthless target consumes only the color slot.
+  A device whose
   `maxPerStageDescriptorUpdateAfterBindSampledImages` or
   `maxDescriptorSetUpdateAfterBindSampledImages` limit is below 2048 is rejected during device
   selection with a clear diagnostic; the capacity is never reduced. Slot 0 is always reserved for

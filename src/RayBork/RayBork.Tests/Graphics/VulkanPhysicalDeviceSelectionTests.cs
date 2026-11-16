@@ -177,8 +177,10 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
             Candidate(0, "Small Table", bindlessTextureCapacity: 2047)));
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
             Candidate(0, "No Resolve", supportedDepthResolveModes: ResolveModeFlags.None)));
-        Assert.True(VulkanPhysicalDeviceSelector.IsSuitable(
+        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
             Candidate(0, "Min Resolve", supportedDepthResolveModes: ResolveModeFlags.MinBit)));
+        Assert.True(VulkanPhysicalDeviceSelector.IsSuitable(
+            Candidate(0, "Sample Zero Resolve", supportedDepthResolveModes: ResolveModeFlags.SampleZeroBit)));
     }
 
     private static VulkanPhysicalDeviceCandidate Candidate(

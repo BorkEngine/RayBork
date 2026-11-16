@@ -423,7 +423,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     }
 
     /// <summary>
-    /// Reads one reverse-Z scene depth pixel from a single-sample target.
+    /// Reads one reverse-Z scene depth pixel from the resolved depth image. A multisampled scene target
+    /// reads its resolved depth image; a single-sample target reads its depth attachment.
     /// </summary>
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>

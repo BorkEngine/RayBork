@@ -11,9 +11,10 @@ namespace RayBork.Internal;
 /// Selection is pure so it can be unit tested without a GPU. A device qualifies only when it
 /// supports Vulkan 1.2 or newer, graphics and presentation queues, <c>VK_KHR_swapchain</c>, the
 /// M4 descriptor-indexing subset the bindless texture table needs, enough update-after-bind sampled
-/// images for the fixed <c>RayBorkTextures[2048]</c> array, and a usable Vulkan 1.2 depth resolve
-/// mode. A device without the bindless subset, the capacity, or depth resolve is not suitable; the
-/// renderer never falls back to one texture per draw, a smaller array, or an unsampleable depth view.
+/// images for the fixed <c>RayBorkTextures[2048]</c> array, and the Vulkan 1.2 sample-zero depth resolve
+/// mode. A device without the bindless subset, the capacity, or sample-zero depth resolve is not
+/// suitable; the renderer never falls back to one texture per draw, a smaller array, a min/max resolve,
+/// or an unsampleable depth view.
 /// </remarks>
 internal static class VulkanPhysicalDeviceSelector {
     private const uint REQUIRED_API_VERSION = (1u << 22) | (2u << 12);
@@ -120,11 +121,10 @@ internal static class VulkanPhysicalDeviceSelector {
         if (VulkanDepthStencilResolve.SelectDepthResolveMode(candidate.SupportedDepthResolveModes)
             == ResolveModeFlags.None) {
             reasons.Add(
-                "no usable depth/stencil resolve mode "
+                "no sample-zero depth/stencil resolve mode "
                 + $"({VulkanDepthStencilResolve.PROPERTY_NAME} is "
                 + $"{VulkanDepthStencilResolve.Describe(candidate.SupportedDepthResolveModes)}; need "
-                + "VK_RESOLVE_MODE_SAMPLE_ZERO_BIT, VK_RESOLVE_MODE_MIN_BIT, or "
-                + "VK_RESOLVE_MODE_MAX_BIT)");
+                + $"{VulkanDepthStencilResolve.MODE_NAME})");
         }
 
         return $"- [{candidate.Index}] {candidate.Name}: {string.Join("; ", reasons)}.";

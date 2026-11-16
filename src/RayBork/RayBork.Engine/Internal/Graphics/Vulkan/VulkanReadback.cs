@@ -106,7 +106,7 @@ internal static unsafe class VulkanReadback {
         byte[] pixel = ReadPixel(
             device,
             target.ResolvedDepthImage,
-            CreateDepthBarrier(target.ResolvedDepthLayout),
+            CreateDepthBarrier(target.ResolvedDepthLayout, target.IsMultisampled),
             DEPTH_PIXEL_BYTES,
             x,
             y);
@@ -481,7 +481,7 @@ internal static unsafe class VulkanReadback {
         return new PixelCopyBarrier(aspect, originalLayout, stage, access);
     }
 
-    private static PixelCopyBarrier CreateDepthBarrier(ImageLayout originalLayout) {
+    private static PixelCopyBarrier CreateDepthBarrier(ImageLayout originalLayout, bool multisampledResolve) {
         PipelineStageFlags stage;
         AccessFlags access;
         switch (originalLayout) {
@@ -490,8 +490,17 @@ internal static unsafe class VulkanReadback {
                 access = AccessFlags.ShaderReadBit;
                 break;
             case ImageLayout.DepthStencilAttachmentOptimal:
-                stage = PipelineStageFlags.LateFragmentTestsBit;
-                access = AccessFlags.DepthStencilAttachmentWriteBit;
+                // Vulkan performs a multisampled depth resolve in the color-attachment output stage with
+                // color-attachment write access, even though the image is a depth image. A single-sample
+                // depth image has no resolve and is written by the depth test in late fragment tests.
+                if (multisampledResolve) {
+                    stage = PipelineStageFlags.ColorAttachmentOutputBit;
+                    access = AccessFlags.ColorAttachmentWriteBit;
+                } else {
+                    stage = PipelineStageFlags.LateFragmentTestsBit;
+                    access = AccessFlags.DepthStencilAttachmentWriteBit;
+                }
+
                 break;
             default:
                 stage = PipelineStageFlags.AllCommandsBit;

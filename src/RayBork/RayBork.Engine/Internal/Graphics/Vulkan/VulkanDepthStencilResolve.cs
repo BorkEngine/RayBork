@@ -9,25 +9,24 @@ namespace RayBork.Internal;
 /// <para>
 /// The renderer resolves a multisampled depth attachment into the single-sample depth image a shader
 /// samples. Vulkan 1.2 exposes the supported modes through
-/// <c>VkPhysicalDeviceDepthStencilResolveProperties</c>; the renderer prefers
-/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> and falls back to <c>MIN</c> and then <c>MAX</c>. A device
-/// that advertises no depth resolve mode is rejected instead of creating a depth view that can never
-/// be sampled.
+/// <c>VkPhysicalDeviceDepthStencilResolveProperties</c>; a conformant Vulkan 1.2 device advertises
+/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>, which is the only mode the renderer accepts because the
+/// public depth view must expose the stored reverse-Z value unchanged. A device that does not advertise
+/// sample-zero is rejected instead of creating a depth view whose values would depend on a min/max
+/// resolve.
 /// </para>
 /// <para>
-/// The engine has no stencil attachment, so only the depth mode is selected. Every member is pure and
-/// safe on any thread.
+/// The engine has no stencil attachment, so only the depth mode is selected. The selection and diagnostic
+/// helpers are pure and safe on any thread; <see cref="Query"/> reads the physical device and is
+/// render-thread only.
 /// </para>
 /// </remarks>
 internal static class VulkanDepthStencilResolve {
     /// <summary>The property the renderer reads to select the depth resolve mode.</summary>
     internal const string PROPERTY_NAME = "VkPhysicalDeviceDepthStencilResolveProperties.supportedDepthResolveModes";
 
-    private static readonly ResolveModeFlags[] _depthModePreference = [
-        ResolveModeFlags.SampleZeroBit,
-        ResolveModeFlags.MinBit,
-        ResolveModeFlags.MaxBit,
-    ];
+    /// <summary>The depth resolve mode every conformant Vulkan 1.2 device advertises and the renderer requires.</summary>
+    internal const string MODE_NAME = "VK_RESOLVE_MODE_SAMPLE_ZERO_BIT";
 
     /// <summary>
     /// Queries a physical device's depth/stencil resolve support.
@@ -57,18 +56,13 @@ internal static class VulkanDepthStencilResolve {
     /// </summary>
     /// <param name="supported">The modes the device advertises for depth.</param>
     /// <returns>
-    /// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> when supported, otherwise <c>MIN</c> or <c>MAX</c>, or
-    /// <see cref="ResolveModeFlags.None"/> when the device advertises no usable depth mode.
+    /// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> when the device advertises it, or
+    /// <see cref="ResolveModeFlags.None"/> when it does not.
     /// </returns>
-    internal static ResolveModeFlags SelectDepthResolveMode(ResolveModeFlags supported) {
-        foreach (ResolveModeFlags mode in _depthModePreference) {
-            if ((supported & mode) != 0) {
-                return mode;
-            }
-        }
-
-        return ResolveModeFlags.None;
-    }
+    internal static ResolveModeFlags SelectDepthResolveMode(ResolveModeFlags supported) =>
+        (supported & ResolveModeFlags.SampleZeroBit) != 0
+            ? ResolveModeFlags.SampleZeroBit
+            : ResolveModeFlags.None;
 
     /// <summary>
     /// Describes a resolve-mode mask for a diagnostic.
@@ -109,7 +103,7 @@ internal static class VulkanDepthStencilResolve {
     internal static string CreateMissingModeMessage(string deviceName, ResolveModeFlags supported) =>
         $"The Vulkan device '{deviceName}' supports no usable depth/stencil resolve mode: "
         + $"{PROPERTY_NAME} is {Describe(supported)} (0x{(uint)supported:X8}). A multisampled "
-        + "depth-bearing render target needs VK_RESOLVE_MODE_SAMPLE_ZERO_BIT, "
-        + "VK_RESOLVE_MODE_MIN_BIT, or VK_RESOLVE_MODE_MAX_BIT; the renderer does not create an "
-        + "unsampleable depth view.";
+        + $"depth-bearing render target needs {MODE_NAME}; the renderer does not create an "
+        + "unsampleable depth view or fall back to a min/max resolve that would change the stored "
+        + "reverse-Z value.";
 }

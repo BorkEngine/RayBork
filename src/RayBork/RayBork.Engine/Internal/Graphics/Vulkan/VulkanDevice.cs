@@ -23,8 +23,9 @@ namespace RayBork.Internal;
 /// textures and may request anisotropic filtering, and <see cref="Camera.DrawWireModel"/> needs
 /// <c>fillModeNonSolid</c> to create its polygon-mode-line pipeline. Update-after-bind stays disabled
 /// for uniform and storage buffers, and variable descriptor counts are never used. A physical device
-/// must also advertise a usable Vulkan 1.2 depth resolve mode, because every multisampled depth-bearing
-/// render target resolves its depth attachment into a sampled depth image.
+/// must also advertise the Vulkan 1.2 sample-zero depth resolve mode, because every multisampled
+/// depth-bearing render target resolves its depth attachment into a sampled depth image with
+/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>.
 /// </para>
 /// <para>
 /// Every member is render-thread only. Dispose the device before the surface and the instance.

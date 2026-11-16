@@ -141,20 +141,23 @@ no-op.
 target's `Width`/`Height`, and a nearest-filter clamp sampler. It samples the stored reverse-Z value as
 a float. The view is single-sample even when the target's depth attachment is multisampled: the
 renderer resolves the attachment into the view's image for every camera pass' render area. The depth
-resolve uses Vulkan 1.2 `VkSubpassDescriptionDepthStencilResolve`; the renderer prefers
-`VK_RESOLVE_MODE_SAMPLE_ZERO_BIT` and falls back to a supported min or max depth mode. Device selection
-rejects a physical device that advertises no usable depth resolve mode instead of creating a depth view
-that can never be sampled. A single-sample target has no resolve attachment: its depth attachment is the
-resolved depth image. After a writing pass the renderer transitions the resolved depth image to
-`ShaderReadOnlyOptimal`, and a later pass that writes the target transitions it back to
-`DepthStencilAttachmentOptimal`. After a device recovery the same public `Texture` object remains valid;
-only its GPU image and bindless slot are replaced. `DepthTexture` is `null` for a `Depth: false` target.
+resolve uses Vulkan 1.2 `VkSubpassDescriptionDepthStencilResolve` with
+`VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, which every conformant Vulkan 1.2 device advertises and which leaves
+the stored reverse-Z value unchanged. Device selection rejects a physical device that does not advertise
+sample-zero instead of creating a depth view that can never be sampled or substituting a min/max resolve.
+A single-sample target has no resolve attachment: its depth attachment is the resolved depth image. After
+a writing pass the renderer transitions the resolved depth image to `ShaderReadOnlyOptimal`, and a later
+pass that writes the target transitions it back to `DepthStencilAttachmentOptimal`. After a device
+recovery the same public `Texture` object remains valid; only its GPU image and bindless slot are
+replaced. `DepthTexture` is `null` for a `Depth: false` target.
 
 The app scene target also owns a resolved depth image, but it is internal: there is no public scene-target
 depth view. It is the input a later internal consumer such as T5 SSAO samples. The scene target discards
 its attachments, including the resolved depth image, at the start of every frame, and
 `VulkanReadback.ReadSceneDepthPixel` reads the resolved depth image for both single-sample and
-multisampled scene targets.
+multisampled scene targets. Resolving scene depth costs bandwidth on every camera pass; T5 SSAO is the
+consumer, and until it lands the only reader is the diagnostic probe. That cost is a known property of
+the depth path, not a hidden regression; T5 can decide whether a pass needs the resolve.
 
 **Remaining M8 work.** `Resize` (T3c), `ReadPixelsAsync`/`ReadColorsAsync` (T4), and
 post-processing/effects (T5) remain later M8 tasks. This section covers the color path and the depth

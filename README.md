@@ -125,8 +125,9 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   Vulkan path is not a target.
 - High-density backbuffer (`SDL_WINDOW_HIGH_PIXEL_DENSITY`); `RenderWidth`/`RenderHeight` are
   physical pixels and may exceed the logical window size.
-- Vulkan 1.2 with descriptor indexing and bindless textures; the renderer is replaceable behind an
-  internal seam for future mobile/web backends.
+- Vulkan 1.2 with descriptor indexing, bindless textures (2048 slots; a depth-bearing render target
+  uses one color and one depth slot), and the sample-zero depth resolve mode; the renderer is replaceable
+  behind an internal seam for future mobile/web backends.
 - Linear HDR rendering with Godot 4.7's HDR-aware AgX tone mapping, MSAA (4x default), and reverse-Z
   depth.
 - SDL3 for windowing, input, and (post-1.0) audio.

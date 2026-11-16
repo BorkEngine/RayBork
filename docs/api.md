@@ -409,7 +409,11 @@ zero for the draw counters. Textures allocate a bindless slot when their GPU upl
 0 is always the built-in white fallback, and a full table fails the upload with
 `AssetLoadException` `RB1010`. The bindless table has exactly 2048 slots matching the shader ABI's
 `RayBorkTextures[2048]` array; a device whose update-after-bind sampled-image limits are below 2048
-is rejected during device selection, and the capacity is never reduced.
+is rejected during device selection, and the capacity is never reduced. A depth-bearing render target
+also consumes a second bindless slot for its resolved depth view. Device selection additionally requires
+the Vulkan 1.2 `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT` depth resolve mode, because every multisampled
+depth-bearing target and the scene target resolve depth with that mode; a device without it is rejected
+instead of falling back to a min/max resolve or an unsampleable depth view.
 
 `samples/PrimitiveGallery` was the M5 AOT gate. It is one project in its own solution,
 `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It has no

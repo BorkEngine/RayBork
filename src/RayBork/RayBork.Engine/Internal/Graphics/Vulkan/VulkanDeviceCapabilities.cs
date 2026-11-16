@@ -24,8 +24,9 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// <see cref="DepthResolveMode"/> is the Vulkan 1.2 depth resolve mode the backend writes into every
-/// multisampled depth-bearing render pass. The snapshot is probed once with the logical device and
-/// re-probed only when the device is recreated.
+/// multisampled depth-bearing render pass. It is always sample-zero; a device that does not advertise
+/// it is rejected. The snapshot is probed once with the logical device and re-probed only when the
+/// device is recreated.
 /// </para>
 /// </remarks>
 internal sealed class VulkanDeviceCapabilities {
@@ -143,8 +144,9 @@ internal sealed class VulkanDeviceCapabilities {
 
     /// <summary>
     /// Gets the Vulkan 1.2 depth resolve mode the renderer uses for a multisampled depth attachment.
-    /// It is <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> when the device advertises it, otherwise
-    /// <c>MIN</c> or <c>MAX</c>. Device selection rejects a device that advertises no usable mode.
+    /// It is always <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>; device selection rejects a device that does
+    /// not advertise sample-zero. The renderer never uses a min/max resolve because that would change
+    /// the stored reverse-Z value a depth view exposes.
     /// </summary>
     internal ResolveModeFlags DepthResolveMode { get; }
 

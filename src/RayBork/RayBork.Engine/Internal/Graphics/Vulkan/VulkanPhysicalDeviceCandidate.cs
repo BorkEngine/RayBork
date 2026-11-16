@@ -24,7 +24,8 @@ namespace RayBork.Internal;
 /// </param>
 /// <param name="SupportedDepthResolveModes">
 /// The depth resolve modes <c>VkPhysicalDeviceDepthStencilResolveProperties</c> advertises. The
-/// renderer needs at least one of sample-zero, min, or max to resolve a multisampled depth attachment.
+/// renderer requires <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> to resolve a multisampled depth attachment
+/// without changing the stored reverse-Z value.
 /// </param>
 internal readonly record struct VulkanPhysicalDeviceCandidate(
     int Index,
@@ -36,4 +37,4 @@ internal readonly record struct VulkanPhysicalDeviceCandidate(
     bool HasSwapchainExtension,
     uint BindlessTextureCapacity = VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
     string MissingBindlessFeatures = "",
-    ResolveModeFlags SupportedDepthResolveModes = ResolveModeFlags.SampleZeroBit);
+    ResolveModeFlags SupportedDepthResolveModes = ResolveModeFlags.None);

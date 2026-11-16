@@ -34,7 +34,10 @@ namespace RayBork;
 /// The color format: <see cref="TextureFormat.Rgba16Float"/> (the default),
 /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.Rgba8Srgb"/>.
 /// </param>
-/// <param name="Depth">Whether the target owns an internal depth attachment.</param>
+/// <param name="Depth">
+/// Whether the target owns a depth attachment and the public <see cref="RenderTexture.DepthTexture"/> view
+/// over its single-sample resolved depth image.
+/// </param>
 /// <param name="SampleCount">The requested MSAA sample count: <c>1</c>, <c>2</c>, <c>4</c>, or <c>8</c>.</param>
 public readonly record struct RenderTextureDescription(
     int Width,

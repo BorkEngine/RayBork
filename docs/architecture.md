@@ -560,11 +560,13 @@ wait for the render loop to finish with it   wait for newest ready
   still reads. That hazard is unchanged in M8 and is a follow-up, not part of the render texture path.
 - A multisampled depth-bearing target resolves its depth attachment through Vulkan 1.2
   `VkSubpassDescriptionDepthStencilResolve` in a `vkCreateRenderPass2` render pass. Device selection
-  requires a usable depth resolve mode and prefers `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`. The resolved depth
-  image carries a sampled view for the public `DepthTexture` (runtime targets) or stays internal (the
-  app scene target); the scene target's resolved depth is the input an internal later consumer such as
-  T5 SSAO samples. `VulkanReadback.ReadSceneDepthPixel` reads that resolved image for both single-sample
-  and multisampled scene targets.
+  requires `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, so the sampled depth value is the stored reverse-Z value
+  rather than a min/max resolve. The resolved depth image carries a sampled view for the public
+  `DepthTexture` (runtime targets) or stays internal (the app scene target); the scene target's resolved
+  depth is the input an internal later consumer such as T5 SSAO samples. `VulkanReadback.ReadSceneDepthPixel`
+  reads that resolved image for both single-sample and multisampled scene targets. The scene target
+  resolves depth on every camera pass even though the only reader before T5 is the diagnostic probe; that
+  is a known bandwidth cost recorded for T5 rather than a hidden regression.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
   starts in `Setup` completes without waiting for the first tick and does not stall frame
@@ -1548,16 +1550,18 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   staying empty with the views retained by a recorded frame and released with the target, target reuse
   across frames, a real `Camera`/`CameraService` route that targets the render texture and is sampled
   by a later real camera, a live target and its depth view across a simulated device loss, and shutdown
-  disposal. The depth tests draw known reverse-Z geometry into a 1x and a 4x depth-bearing target and
+  disposal. The depth tests draw known reverse-Z geometry into 1x/2x/4x/8x depth-bearing targets and
   sample `DepthTexture` through a later camera, assert the resolved value against the view-projection
   matrix with a tolerance, prove the depth resolve is independent of the three color formats, read the
-  resolved depth of a multisampled scene target with `VulkanReadback.ReadSceneDepthPixel`, and assert
-  the depth view's format, nearest clamp sampler, empty path, and ownership. `RenderTextureDescriptionTests`
+  resolved depth of a multisampled scene target with `VulkanReadback.ReadSceneDepthPixel`, exercise
+  write→sample→write→sample, a later-frame sample without a rewrite, viewport-scoped depth resolve,
+  two depth targets in one frame, `ClearMode.None`/`ClearMode.Depth` loads and clears, and assert the
+  depth view's format, nearest clamp sampler, empty path, and ownership. `RenderTextureDescriptionTests`
   and `RenderTextureServiceTests` cover validation, the sample-count fallback, depth-view nullability
   and ownership, cancellation, the shutdown failure, and the target lifetime without a GPU;
   `RenderTextureAppTests` covers creation in `Setup` and `Tick` and the post-shutdown
-  `ObjectDisposedException`. `VulkanDepthStencilResolveTests` covers the sample-zero preference, the
-  min/max fallback, and the missing-mode diagnostic without a GPU.
+  `ObjectDisposedException`. `VulkanDepthStencilResolveTests` covers the required sample-zero selection,
+  the rejection of min/max-only modes, and the missing-mode diagnostic without a GPU.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
