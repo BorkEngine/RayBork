@@ -4,15 +4,15 @@ using Silk.NET.Vulkan;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Creates and caches the geometry pipelines of one scene render pass.
+/// Creates and caches the geometry pipelines of one render pass: the app scene target or one runtime render target.
 /// </summary>
 /// <remarks>
 /// <para>
 /// A pipeline is keyed by the shader GPU resource, the effective <see cref="RenderState"/>, the mesh
 /// topology, and the polygon mode. Every pipeline shares the one geometry pipeline layout and the fixed
-/// 88-byte vertex input layout, and is created against the current scene render pass and its sample
-/// count, so the cache is discarded when the scene target, render pass, or logical device is
-/// recreated.
+/// 88-byte vertex input layout, and is created against the render pass it serves and that target's
+/// sample count. The backend keeps one cache for the scene target and one per runtime render target, so
+/// a cache is discarded when its target, render pass, or logical device is recreated.
 /// </para>
 /// <para>
 /// A wireframe pipeline uses <c>VK_POLYGON_MODE_LINE</c>, which Vulkan exposes only when the device
@@ -62,17 +62,17 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
     internal int Count => _pipelines.Count;
 
     /// <summary>
-    /// Creates a cache for one scene render pass and sample count.
+    /// Creates a cache for one render pass and sample count.
     /// </summary>
     /// <remarks>
     /// The cache snapshots the device's <c>fillModeNonSolid</c> support and name for the wireframe
     /// pipelines it may create. A device recreated with different features gets a new cache because the
-    /// backend discards it with the scene render pass.
+    /// backend discards it with the render pass it serves.
     /// </remarks>
     /// <param name="device">The device that owns the pipelines.</param>
-    /// <param name="renderPass">The scene render pass the pipelines render into.</param>
+    /// <param name="renderPass">The render pass the pipelines render into.</param>
     /// <param name="pipelineLayout">The shared geometry pipeline layout.</param>
-    /// <param name="sampleCount">The scene target's sample count.</param>
+    /// <param name="sampleCount">The render target's sample count.</param>
     /// <param name="deviceGeneration">The logical-device generation that owns the shader modules.</param>
     /// <returns>The created cache.</returns>
     internal static VulkanGeometryPipelineCache Create(
@@ -83,7 +83,7 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         int deviceGeneration) {
         ArgumentNullException.ThrowIfNull(device);
         if (renderPass.Handle == 0) {
-            throw new ArgumentException("The scene render pass must not be the default handle.", nameof(renderPass));
+            throw new ArgumentException("The render pass must not be the default handle.", nameof(renderPass));
         }
 
         if (pipelineLayout.Handle == 0) {
@@ -157,8 +157,8 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
     }
 
     /// <summary>
-    /// Destroys every cached pipeline. The call is idempotent and must run before the scene render pass
-    /// and the logical device are destroyed.
+    /// Destroys every cached pipeline. The call is idempotent and must run before the render pass it
+    /// serves and the logical device are destroyed.
     /// </summary>
     public void Dispose() {
         if (_disposed) {

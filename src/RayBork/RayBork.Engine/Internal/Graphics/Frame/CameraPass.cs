@@ -57,6 +57,11 @@ internal sealed class CameraPass {
     /// <summary>Gets the linear color written when color is cleared.</summary>
     internal Color ClearColor { get; private set; }
 
+    /// <summary>
+    /// Gets the render target the pass writes, or <c>0</c> for the app's linear HDR scene target.
+    /// </summary>
+    internal long TargetId { get; private set; }
+
     /// <summary>Gets the sealed draw records in recording order.</summary>
     internal ReadOnlySpan<RenderDrawRecord> Draws => _draws.AsSpan(0, _drawCount);
 
@@ -80,7 +85,8 @@ internal sealed class CameraPass {
         int viewportWidth,
         int viewportHeight,
         ClearMode clearMode,
-        Color clearColor) {
+        Color clearColor,
+        long targetId = 0) {
         Index = index;
         View = view;
         Projection = projection;
@@ -92,6 +98,7 @@ internal sealed class CameraPass {
         ViewportHeight = viewportHeight;
         ClearMode = clearMode;
         ClearColor = clearColor;
+        TargetId = targetId;
         _drawCount = 0;
         _sealed = false;
     }
@@ -140,5 +147,6 @@ internal sealed class CameraPass {
         ViewportHeight = 0;
         ClearMode = ClearMode.None;
         ClearColor = default;
+        TargetId = 0;
     }
 }

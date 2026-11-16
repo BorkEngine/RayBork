@@ -45,7 +45,7 @@ internal static unsafe class VulkanReadback {
     /// </exception>
     internal static void ReadSceneColorPixel(
         VulkanDevice device,
-        VulkanSceneTarget target,
+        VulkanRenderTarget target,
         uint x,
         uint y,
         out float r,
@@ -87,12 +87,17 @@ internal static unsafe class VulkanReadback {
     /// </exception>
     internal static void ReadSceneDepthPixel(
         VulkanDevice device,
-        VulkanSceneTarget target,
+        VulkanRenderTarget target,
         uint x,
         uint y,
         out float depth) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(target);
+        if (!target.HasDepth) {
+            throw new InvalidOperationException(
+                "The render target has no depth attachment to read.");
+        }
+
         if (target.SampleCount != 1) {
             throw new InvalidOperationException(
                 $"The scene target is multisampled with {target.SampleCount} samples and has no single-sample depth attachment to read.");
@@ -108,6 +113,73 @@ internal static unsafe class VulkanReadback {
             x,
             y);
         depth = BitConverter.ToSingle(pixel, 0);
+    }
+
+    /// <summary>
+    /// Reads one resolved linear color pixel from a runtime render target.
+    /// </summary>
+    /// <remarks>
+    /// The probe transitions the resolved color image out of its current layout and back, so the caller
+    /// runs it after the frame completed. An sRGB target returns the linear value the sampling shader
+    /// sees; the raw stored bytes are decoded with the sRGB transfer function.
+    /// </remarks>
+    /// <param name="device">The device that owns the target.</param>
+    /// <param name="target">The render target to read.</param>
+    /// <param name="x">The pixel column, in pixels from the left edge.</param>
+    /// <param name="y">The pixel row, in pixels from the top edge.</param>
+    /// <param name="r">The linear red component.</param>
+    /// <param name="g">The linear green component.</param>
+    /// <param name="b">The linear blue component.</param>
+    /// <exception cref="NotSupportedException">
+    /// The target color format is not one of the supported render-target color formats.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">The pixel lies outside the target extent.</exception>
+    /// <exception cref="GraphicsException">
+    /// A Vulkan object could not be created or the copy failed. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    internal static void ReadRenderTargetColorPixel(
+        VulkanDevice device,
+        VulkanRenderTarget target,
+        uint x,
+        uint y,
+        out float r,
+        out float g,
+        out float b) {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(target);
+        ValidatePixel(target, x, y);
+
+        uint pixelBytes = target.ColorFormat switch {
+            Format.R16G16B16A16Sfloat => COLOR_PIXEL_BYTES,
+            Format.R8G8B8A8Unorm or Format.R8G8B8A8Srgb => PRESENTED_BYTE_PIXEL_BYTES,
+            _ => throw new NotSupportedException(
+                $"The render target color format {VulkanFormatInfo.Describe(target.ColorFormat)} is not "
+                    + "a supported color probe format."),
+        };
+        byte[] pixel = ReadPixel(
+            device,
+            target.ResolvedColorImage,
+            CreateAttachmentBarrier(ImageAspectFlags.ColorBit, target.ResolvedColorLayout),
+            pixelBytes,
+            x,
+            y);
+        if (target.ColorFormat == Format.R16G16B16A16Sfloat) {
+            r = (float)BitConverter.ToHalf(pixel, 0);
+            g = (float)BitConverter.ToHalf(pixel, 2);
+            b = (float)BitConverter.ToHalf(pixel, 4);
+            return;
+        }
+
+        if (target.ColorFormat == Format.R8G8B8A8Srgb) {
+            r = SrgbDecode(pixel[0]);
+            g = SrgbDecode(pixel[1]);
+            b = SrgbDecode(pixel[2]);
+            return;
+        }
+
+        r = pixel[0] / 255f;
+        g = pixel[1] / 255f;
+        b = pixel[2] / 255f;
     }
 
     /// <summary>
@@ -485,7 +557,7 @@ internal static unsafe class VulkanReadback {
             null);
     }
 
-    private static void ValidatePixel(VulkanSceneTarget target, uint x, uint y) {
+    private static void ValidatePixel(VulkanRenderTarget target, uint x, uint y) {
         if (x >= target.Extent.Width || y >= target.Extent.Height) {
             throw new ArgumentOutOfRangeException(
                 nameof(x),

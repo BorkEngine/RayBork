@@ -167,7 +167,11 @@ the core 3D renderer, camera draws, and shader ABI; M5 ships the primitive, bill
 collision surface plus the HDR AgX rework; M6 ships the managed font parser, on-demand MSDF glyph
 pipeline, layout, built-in default and monospaced fonts, and world-space text draws; M7 ships the
 unified camera entry point, `Camera.ScreenToWorldTransform`, the world-space quad, disc, and
-transformable-grid primitives, the ninth primitive mesh, and the Pong sample. The remaining
+transformable-grid primitives, the ninth primitive mesh, and the Pong sample. M8 ships shader ABI v2
+(one frame block per camera pass), one render pass per camera pass on the scene target, and the color
+path of public render textures: `RenderTexture` creation, `Camera.Target` routing, MSAA color resolve,
+same-tick sampling, and lifetime. The public depth view, `Resize`, readback, post-processing, and the
+render-target sample remain later M8 tasks. The remaining
 rows name the milestone that owns the deferred surface; the full code blocks in the section pages stay
 the 1.0 contract.
 
@@ -197,7 +201,7 @@ the 1.0 contract.
 | Unified `EngineContext.CreateCamera(Transform, CameraProjection, fieldOfView, orthographicHeight, ...)` with `CameraProjection.Perspective`/`CameraProjection.Orthographic` | M7 |
 | `Camera.ScreenToWorldTransform(Vector2, float)` | M7 |
 | `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
-| `RenderTexture` and `RenderTextureDescription` | M8 |
+| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `Camera.Target`, and the `CreateCamera` `target` parameter (color path; depth view, resize, and readback are later M8 tasks) | M8 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
 current asset surface after M4; see §6.
@@ -238,7 +242,7 @@ orthographic projection into it with the `orthographicHeight` parameter describe
 `Model` is a caller-owned composition of parts and meshes, not an
 engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
 write that material's cursor. `Load<Shader>` returns a new independent material over a cached
-internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
+internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` ships in M8),
 no `Font`, and no text draw helpers; the font asset and `DrawText`/`DrawTextBillboard` ship in M6. The
 primitive, line, billboard, and wireframe-model helpers ship in M5. Clear
 control is per camera:

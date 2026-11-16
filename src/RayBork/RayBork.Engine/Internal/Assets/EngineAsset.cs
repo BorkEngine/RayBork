@@ -30,7 +30,7 @@ namespace RayBork.Internal;
 /// waiter or a public <c>Dispose</c> never blocks the render thread on asset bookkeeping.
 /// </para>
 /// </remarks>
-internal sealed class EngineAsset : IAssetRetentionTarget {
+internal sealed class EngineAsset : ITextureOwner {
     private readonly Lock _gate = new();
     private readonly GpuAssetResource? _resource;
     private readonly Action<GpuAssetResource> _queueDestruction;
@@ -91,6 +91,24 @@ internal sealed class EngineAsset : IAssetRetentionTarget {
     /// no GPU resource. It is valid until the destruction request is queued.
     /// </summary>
     internal GpuAssetResource? Resource => _resource;
+
+    /// <inheritdoc/>
+    EngineAsset? ITextureOwner.EngineAsset => this;
+
+    /// <inheritdoc/>
+    ITextureBindingResource? ITextureOwner.BindingResource => _resource as ITextureBindingResource;
+
+    /// <inheritdoc/>
+    string ITextureOwner.Path => Path;
+
+    /// <inheritdoc/>
+    bool ITextureOwner.IsDisposed => IsDisposed;
+
+    /// <inheritdoc/>
+    void ITextureOwner.AddOwnerReference() => AddOwnerReference();
+
+    /// <inheritdoc/>
+    void ITextureOwner.ReleaseOwnerReference() => ReleaseOwnerReference();
 
     /// <summary>
     /// Gets whether the asset was disposed. It stays readable after disposal.

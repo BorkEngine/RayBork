@@ -164,7 +164,13 @@ public sealed class RenderLoopAssetGpuTests {
                 }
             };
 
-            Loop = new RenderLoop(Ring, () => Backend, CreateOptions(), new RenderStatus(), Bridge);
+            Loop = new RenderLoop(
+                Ring,
+                () => Backend,
+                CreateOptions(),
+                new RenderStatus(),
+                Bridge,
+                RenderTextures);
             Loop.Start();
         }
 
@@ -173,6 +179,8 @@ public sealed class RenderLoopAssetGpuTests {
         internal FakeAssetGpuWorker Worker { get; } = new();
 
         internal GpuAssetBridge Bridge { get; } = new();
+
+        internal RenderTextureService RenderTextures { get; } = new();
 
         internal FrameRing Ring { get; } = new();
 
@@ -207,6 +215,7 @@ public sealed class RenderLoopAssetGpuTests {
 
         public void Dispose() {
             Stop();
+            RenderTextures.Dispose();
             _frameSubmitted.Dispose();
             _secondFramePresented.Dispose();
         }

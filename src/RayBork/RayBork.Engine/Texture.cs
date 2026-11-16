@@ -21,7 +21,7 @@ namespace RayBork;
 /// </para>
 /// </remarks>
 public sealed class Texture : IAsset {
-    private readonly EngineAsset _asset;
+    private readonly ITextureOwner _owner;
     private readonly int _width;
     private readonly int _height;
     private readonly int _mipLevels;
@@ -29,6 +29,7 @@ public sealed class Texture : IAsset {
     private readonly bool _isSrgb;
     private readonly SamplerState _sampler;
     private readonly bool _isProcedural;
+    private readonly bool _isRenderTargetView;
 
     /// <summary>
     /// Initializes a texture from its uploaded lifetime state and descriptor.
@@ -37,11 +38,26 @@ public sealed class Texture : IAsset {
     /// <param name="descriptor">The packed or synthetic texture descriptor.</param>
     /// <param name="isProcedural">Whether the texture was built by a <see cref="TextureBuilder"/>.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal Texture(EngineAsset asset, TextureAssetDescriptor descriptor, bool isProcedural = false) {
-        ArgumentNullException.ThrowIfNull(asset);
+    internal Texture(EngineAsset asset, TextureAssetDescriptor descriptor, bool isProcedural = false)
+        : this((ITextureOwner)asset, descriptor, isProcedural, isRenderTargetView: false) {
+    }
+
+    /// <summary>
+    /// Initializes a texture over a non-asset lifetime.
+    /// </summary>
+    /// <param name="owner">The lifetime state that owns the GPU view.</param>
+    /// <param name="descriptor">The synthetic texture descriptor.</param>
+    /// <param name="isProcedural">Whether the texture was built by a <see cref="TextureBuilder"/>.</param>
+    /// <param name="isRenderTargetView">
+    /// Whether the texture is a render target's color view, which the owning <see cref="RenderTexture"/>
+    /// creates and disposes.
+    /// </param>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    internal Texture(ITextureOwner owner, TextureAssetDescriptor descriptor, bool isProcedural, bool isRenderTargetView) {
+        ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(descriptor);
 
-        _asset = asset;
+        _owner = owner;
         _width = checked((int)descriptor.Width);
         _height = checked((int)descriptor.Height);
         _mipLevels = checked((int)descriptor.MipLevels);
@@ -49,10 +65,11 @@ public sealed class Texture : IAsset {
         _isSrgb = descriptor.IsSrgb;
         _sampler = new SamplerState(descriptor.Filter, descriptor.Wrap, descriptor.MaxAnisotropy);
         _isProcedural = isProcedural;
+        _isRenderTargetView = isRenderTargetView;
     }
 
     /// <inheritdoc/>
-    public string Path => _asset.Path;
+    public string Path => _owner.Path;
 
     /// <summary>
     /// Gets whether the texture was built by a <see cref="TextureBuilder"/> instead of loaded from a
@@ -135,21 +152,83 @@ public sealed class Texture : IAsset {
     }
 
     /// <inheritdoc/>
-    public bool IsDisposed => _asset.IsDisposed;
+    public bool IsDisposed => _owner.IsDisposed;
 
     /// <summary>
-    /// Gets the internal retention state the M4 draw recorder will retain per frame. The catalog or the
-    /// builder owns the asset and exposes the lifetime only inside the engine assembly.
+    /// Gets the retention target the draw recorder keeps alive for the frame that references this
+    /// texture, or the render target lifetime when the texture is a render target view.
     /// </summary>
-    internal EngineAsset Lifetime => _asset;
+    internal IAssetRetentionTarget RetentionTarget => _owner;
 
-    /// <inheritdoc/>
-    /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
-    public void Dispose() {
-        ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
+    /// <summary>
+    /// Gets the engine-asset lifetime. Only an asset texture has one; a render target view is owned by
+    /// its <see cref="RenderTexture"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The texture is a render target view.</exception>
+    internal EngineAsset Lifetime => _owner.EngineAsset
+        ?? throw new InvalidOperationException(
+            "A render target color texture has no engine-asset lifetime; its RenderTexture owns it.");
 
-        _asset.ReleaseOwnerReference();
+    /// <summary>
+    /// Gets the bindless binding resource the renderer samples, or <see langword="null"/> when the GPU
+    /// resource does not exist yet.
+    /// </summary>
+    internal ITextureBindingResource? BindingResource => _owner.BindingResource;
+
+    /// <summary>
+    /// Gets whether this texture is a render target's color view.
+    /// </summary>
+    internal bool IsRenderTargetView => _isRenderTargetView;
+
+    /// <summary>
+    /// Gets the render target id when this texture is a render target view, or <c>0</c> otherwise.
+    /// </summary>
+    internal long RenderTargetId => _owner is RenderTextureViewLifetime view ? view.TargetId : 0;
+
+    /// <summary>
+    /// Retires the color view and releases the owner reference the render texture held on it when the
+    /// owning render texture is disposed. A non-view texture is unaffected.
+    /// </summary>
+    internal void RetireRenderTargetView() {
+        if (_owner is RenderTextureViewLifetime view) {
+            view.Retire();
+            view.ReleaseOwnerReference();
+        }
     }
 
-    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
+    /// <summary>
+    /// Adds one owner reference to the texture's lifetime.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
+    internal void AddOwnerReference() => _owner.AddOwnerReference();
+
+    /// <summary>
+    /// Releases one owner reference from the texture's lifetime.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The owner count is already zero.</exception>
+    internal void ReleaseOwnerReference() => _owner.ReleaseOwnerReference();
+
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">
+    /// The texture is a render target's color view; dispose the owning <see cref="RenderTexture"/>
+    /// instead.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1065",
+        Justification = "Disposing the color view of a render texture is a documented usage error; throwing a clear InvalidOperationException tells the caller to dispose the owning RenderTexture instead of silently leaking the target.")]
+    public void Dispose() {
+        if (_isRenderTargetView) {
+            throw new InvalidOperationException(
+                "A render target's ColorTexture is owned by its RenderTexture; dispose the RenderTexture "
+                    + "instead of the color view.");
+        }
+
+        ObjectDisposedException.ThrowIf(_owner.IsDisposed, this);
+
+        _owner.ReleaseOwnerReference();
+    }
+
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_owner.IsDisposed, this);
 }

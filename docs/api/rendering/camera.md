@@ -237,8 +237,10 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
   loads the previous pass' stored color and depth, clears that rectangle when the camera asks, and
   resolves the color for that rectangle only. Several cameras in one tick therefore render
   split-screen views and layered HUD passes into the same scene target correctly.
-- MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
-  is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
+- MSAA is a property of the target. The app scene target uses the builder's `WithMSAA` sample count; a
+  `RenderTexture` created by `CreateRenderTextureAsync` uses its own `SampleCount` and effective
+  count. A camera records into the target passed to `CreateCamera`, or into the app's linear HDR
+  scene target when `target` is `null`.
 
 > **M5, M6, and M7 surface.** `Camera` ships the raylib-style helper surface: the line, point, and triangle
 > helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
@@ -253,9 +255,10 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > `ScreenToWorldTransform`, the three `DrawQuad` overloads, `DrawDisc`, and
 > `DrawGrid(Transform, ...)`; they are specified under **Screen transform and 2D primitives** below.
 > There is no `DrawTexture`, no 2D destination-rectangle draw, and no `DrawText(Vector2)` overload.
-> The `Target` property and the `target` parameter arrive with `RenderTexture` in M8.
-> The camera always records into the app's linear HDR scene target, and the present pass
-> applies AgX after all cameras finish.
+> M8 adds `Camera.Target` and the `target` parameter: a camera records into a runtime
+> `RenderTexture` instead of the app's linear HDR scene target. The present pass applies AgX after
+> all cameras finish; a render texture reaches the screen through a later camera that samples its
+> `ColorTexture`.
 
 Properties:
 
@@ -267,6 +270,7 @@ Properties:
 | `Near`, `Far` | Clip distances. `Far` may be `+infinity` for perspective, never for orthographic. |
 | `ClearMode` | Which buffers this pass clears. |
 | `ClearColor` | Linear color used when `ClearMode.Color` is set. |
+| `Target` | The render texture this pass writes, or `null` for the app's linear HDR scene target. |
 | `Viewport` | Pixel rectangle in the target, clamped when the camera was created. Defaults to the full target. |
 | `ViewMatrix` | Inverse of `Transform.ToMatrix()`. |
 | `ProjectionMatrix` | Reverse-Z `[0, 1]` projection with the Vulkan Y-flip already applied. |
@@ -285,7 +289,8 @@ public Camera CreateCamera(
     Color? clearColor = null,
     float near = 0.01f,
     float far = 1000f,
-    Rect? viewport = null);
+    Rect? viewport = null,
+    RenderTexture? target = null);
 ```
 
 It sets the aspect ratio from the clamped viewport. A perspective camera uses `fieldOfView` and
@@ -293,7 +298,12 @@ rejects a nonzero `orthographicHeight`; an orthographic camera uses `orthographi
 a nonzero `fieldOfView`. The projection is built with
 reverse-Z; the `ProjectionMatrix` already contains Vulkan's Y-flip. Custom code that builds its own
 projection must preserve both conventions if it wants to match the engine's depth and screen-space
-helpers.
+helpers. `target` selects the pass' render target: `null` is the app's linear HDR scene target, and a
+`RenderTexture` routes the pass into that target. The viewport defaults to the full target and is
+clamped to the target size, and the aspect ratio uses the clamped viewport. A disposed target is
+`ObjectDisposedException`. A target declared `Depth: false` has no depth attachment: depth-tested and
+depth-writing draws are not rejected, but their depth test and write are no-ops for that target, and
+`ClearMode.Depth` is a no-op.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`
@@ -666,9 +676,11 @@ public sealed class TonemappingSettings {
   so a frame with several camera passes submits each pass' own matrices, camera position, and
   viewport to its draws.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
-  tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
-  target inside the same pass that writes it is invalid and is reported as a validation error. The
-  render-target surface is a later M8 task; the current renderer has no render target.
+  tick are ordered by creation order; the renderer inserts the required image and layout barriers.
+  Sampling a target inside the same pass that writes it is invalid and throws
+  `InvalidOperationException` from the draw call before the frame is published. A target is reused
+  only after the frame that last used it completed. `Camera.Target` reports the target and a disposed
+  target is `ObjectDisposedException` when the camera is created.
 
 There is no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
 the scene clear control for its pass. A later camera that does not clear color leaves the earlier
@@ -813,7 +825,8 @@ the swapchain images are single-sample. Scene color is resolved into a single-sa
 before the present pass, and each camera pass resolves only its own render area. The multisampled
 color and depth attachments are stored between camera passes so a later camera can load them. Depth is
 cleared to `0.0` and the reverse-Z state is defined; multisampled depth is not resolved because
-nothing samples depth. A `RenderTexture` uses its own `SampleCount` (a later M8 task).
+nothing samples depth. A `RenderTexture` uses its own `SampleCount` and its own render pass, resolved
+single-sample color image, and geometry pipeline cache; the app scene target is unaffected.
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
 not advertise it; a requested `Fifo` falls back to `Mailbox` when FIFO is unavailable. `Immediate` is

@@ -1,7 +1,7 @@
 # RayBork Architecture
 
-Status: M7 as-built for the orthographic and screen-space surface, on top of the M6 font and text
-runtime, the M5 primitive and collision surface,
+Status: M8 as-built through the render texture color path, on top of the M7 orthographic and
+screen-space surface, the M6 font and text runtime, the M5 primitive and collision surface,
 the M4 core 3D renderer, the M3 asset pipeline, the M2 renderer foundation, and the M1 host,
 platform, threads, frame handoff, HDR presentation, recovery, and time. M0 established the build,
 dependency, and AOT guardrails. M1
@@ -32,7 +32,12 @@ M7 adds the unified `EngineContext.CreateCamera` with a `CameraProjection` and o
 the ninth internal primitive mesh (the unit disc), the `BoundingFrustum.Intersects` plane tolerance,
 the Pong sample and Native AOT gate, and the removal of the M1-M3 `samples/HelloInterop` host. There
 is no `DrawTexture`, no 2D or screen-space draw API, and no separate screen-space renderer:
-screen-space content is world-space geometry on a screen-aligned transform. `RenderTexture` is M8.
+screen-space content is world-space geometry on a screen-aligned transform. M8 adds shader ABI v2 (one
+frame block per camera pass), one render pass per camera pass on the scene target, and the color path
+of runtime render textures: `RenderTexture` creation, `Camera.Target` routing, a per-target render
+pass and geometry pipeline cache, the multisampled color attachment with its single-sample resolved
+view, and that view sampled as a normal bindless `Texture`. The depth view, resize, and readback are
+later M8 tasks.
 
 ## Goals
 
@@ -241,10 +246,11 @@ The backend owns:
 | --- | --- | --- |
 | `Initialize` | Render | Creates the instance, requests the native surface through `RendererBackendOptions.SurfaceProvider`, then creates the device, queues, swapchain, scene target, present pipeline, and frame resources. Failure is fatal (`RB3001`; a platform surface failure surfaces as `RB2003` on the main thread and is wrapped as `RB3001` on the render thread). |
 | `Resize` | Render | Recreates the swapchain, scene target, present pipeline framebuffers, and per-image semaphores when the selected extent changes. A zero width or height marks the surface as having no drawable extent and keeps the presentation path. It is idempotent for an unchanged extent. |
-| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area, loads/stores the scene attachments between passes, resolves each pass' render area, transitions the resolved color for the present pass, records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
+| `ProcessRenderTextureRequests` | Render | Drains the render texture request queue before the frame wait: it creates a target's images, sampler, bindless color view, and public `RenderTexture` for a queued creation, and destroys a released target's GPU objects and bindless slot after the frame that last used it completed. A creation failure completes its request with the failure and never stops the loop. |
+| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area and the camera's target as the framebuffer, loads/stores the scene attachments between passes, resolves each pass' render area, transitions the resolved color for the present pass (and for a later camera's sample), records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
-| `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
+| `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, every live render target and its pipeline cache, the scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
 
 `Submit` takes a **sealed frame packet**, not a live game object or a draw command. The packet
 carries the frame index, the camera passes, the frame's tone-mapping snapshot, and the recorded draws
@@ -274,6 +280,13 @@ immutable draw records.
   platform failure is captured and rethrown on the render thread as `GraphicsException`.
 - The tick thread records into the frame ring and never calls the backend. The render thread never
   calls user code: there are no callbacks or virtual methods from the backend into the game.
+- The app-lifetime `RenderTextureService` is the render-texture handoff, not a second backend. The tick
+  thread queues a validated creation request and awaits its completion task; the render loop's render
+  thread creates the images and completes the task before it acquires the next frame. The service owns
+  no GPU object: the backend owns the target registry and maps the recorded target id to the target
+  resource. A public `RenderTexture` holds one owner reference on its target lifetime; a recorded frame
+  adds a frame hold through the frame's retention set, and the target is destroyed only after both are
+  gone.
 - `EngineInfo` is projected from backend capabilities at startup and after a recovery that changes
   the device or presentation path. It is an immutable public value; no backend type, native handle,
   or live capability query crosses the seam.
@@ -297,7 +310,7 @@ Recoverable failures are handled on the render thread without calling user code:
 | Swapchain out of date | Resize, restore, or display change | Wait for the device to idle, drop the pending present, recreate the swapchain, scene target, present pipeline framebuffers, and per-image semaphores at a frame boundary. |
 | Swapchain suboptimal | Driver hint on acquire or present | Finish the present, then recreate the presentation path at the next frame boundary; presentation continues meanwhile. |
 | Surface lost | Window or display topology change | Destroy the old native surface through the provider, have the main thread create a replacement inside the recovery, then recreate the presentation path. A failure is fatal. |
-| Recoverable device loss | Driver reset or timeout where a new device succeeds | Recreate the logical device, re-probe capabilities, rebuild the swapchain, scene target, present pipeline, and frame resources from the retained settings. |
+| Recoverable device loss | Driver reset or timeout where a new device succeeds | Recreate the logical device, re-probe capabilities, rebuild the swapchain, scene target, present pipeline, and frame resources from the retained settings, and recreate every live render texture's images, sampler, bindless view, and pipeline cache from its retained description. |
 | Minimized / zero extent | Window state | Do not acquire or present; report a zero-draw frame and idle the renderer while the 30 FPS tick cap continues. |
 
 A recovery waits for the device to idle, drops the frame that was waiting for presentation,
@@ -314,11 +327,12 @@ a recoverable presentation status throws `GraphicsException` with `RB3003`, and 
 is fatal with `RB3001`. The tick loop stops, `Shutdown` runs, and `Run` rethrows; no partial frame
 is presented, and disposal remains safe after a failed recovery.
 
-The backend also exposes internal GPU-test accessors (`Instance`, `Device`, `SceneTarget`), fault
-injection for the recovery tests, and the `VulkanReadback` single-pixel probes. These are
-diagnostics, not seam members: a readback creates its own command pool, staging buffer, and fence
-and stalls the GPU, so it is never used by the frame path. Each camera pass resolves its own render
-area to the single-sample image the present pass samples; multisampled depth is not resolved.
+The backend also exposes internal GPU-test accessors (`Instance`, `Device`, `SceneTarget`,
+`TryGetRenderTarget`), fault injection for the recovery tests, and the `VulkanReadback` single-pixel
+probes. These are diagnostics, not seam members: a readback creates its own command pool, staging
+buffer, and fence and stalls the GPU, so it is never used by the frame path. Each camera pass resolves
+its own render area to the single-sample image the present pass samples; multisampled depth is not
+resolved.
 
 M3 adds the `GpuAssetBridge` as an internal companion to the backend, not a new seam operation. The
 render loop drains upload and destroy requests before frame waits and recreates live asset resources
@@ -526,6 +540,23 @@ wait for the render loop to finish with it   wait for newest ready
   draw stays alive until the consuming frame completes. A model and a material are not engine assets
   and add no hold; materials are value snapshots in the record, and a model draw retains the internal
   program of each part material.
+- A camera pass carries the render target id its camera was created with (`0` is the app scene
+  target). A runtime target is not an engine asset: its color view is a `Texture` with an empty `Path`
+  owned by the `RenderTexture`, and the frame's retention set holds the target lifetime, not a catalog
+  entry. `RenderTexture.Dispose` queues the target for destruction, but the renderer destroys it only
+  after every recorded frame that wrote or sampled it completed.
+- The render loop services the render texture queue at each loop turn before it acquires the next
+  frame, so `CreateRenderTextureAsync` completes after the render thread allocated the images and a
+  render target created in `Setup` exists before the first tick. Cancellation, a shutdown, or a render
+  loop failure completes the request without leaking a target.
+- A render target records the layout of its color images. The first write of a frame transitions the
+  single-sample resolved color from its previous read layout to the color-attachment layout, and the
+  pass transitions it back to a shader read so a later camera in the same tick samples it. The render
+  thread waits for the frame that last used a target before it records a new use, so a render target
+  is never overwritten or sampled while the previous frame that used it is in flight. The app scene
+  target keeps its pre-existing cross-frame behavior: its single set of images is reused by up to
+  three in-flight frames, so a frame can overwrite content an earlier submitted frame still reads. That
+  hazard is unchanged in M8 and is a follow-up, not part of the render texture path.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
   starts in `Setup` completes without waiting for the first tick and does not stall frame
@@ -1475,10 +1506,10 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   in one frame, a full-viewport quad that survives frustum culling, and 3D orthographic cube
   geometry. `PrimitiveDrawTests` covers the new draw records, validation, zero-extent behavior,
   disposed assets, retention, and batching; `CameraTests` covers `ScreenToWorldTransform`. The
-  Windows hardware run is 2,695
-  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed
-  and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes only SDR,
-  and the GPU-filtered run is 107 passed with the same 7 skips.
+  Windows hardware run is 2,778
+  tests, 142 of them GPU integration tests, with no skips. The lavapipe Linux run skips the seven
+  existing HDR/scRGB-present tests because lavapipe exposes only SDR; the remaining full-suite and
+  GPU-filtered tests pass.
 - M8 adds the per-camera render-pass suite (`CameraRenderPassGpuTests`): two camera passes in one
   frame render split-screen views with two viewport rectangles and different projections, a later
   camera with `ClearMode.None` loads the earlier pass' color, a later camera with `ClearMode.Depth`
@@ -1491,13 +1522,24 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   validation-clean submission. The host validates core Vulkan usage, not synchronization, so the
   suite does not prove the access masks against the validation layer's synchronization model.
   `PerPassFrameGpuTests` keeps covering the shader ABI v2 per-pass frame block.
+- M8 adds the render texture color-path suite (`RenderTextureGpuTests`): a 64x64 HDR target drawn by
+  a camera and sampled by a later scene camera, write-then-sample-then-write-then-sample in one tick,
+  the same-pass self-sample rejection, the three color formats at 1x and 4x (including the sRGB
+  sampling decode), a smaller camera viewport updating only its target region, two targets in one
+  frame without cross-talk, `ColorTexture.Path` staying empty with the view retained by a recorded
+  frame and released with the target, target reuse across frames, a real `Camera`/`CameraService`
+  route that targets the render texture and is sampled by a later real camera, a live target across a
+  simulated device loss, and shutdown disposal. `RenderTextureDescriptionTests`
+  and `RenderTextureServiceTests` cover validation, the sample-count fallback, cancellation, the
+  shutdown failure, and the target lifetime without a GPU; `RenderTextureAppTests` covers creation in
+  `Setup` and `Tick` and the post-shutdown `ObjectDisposedException`.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
   physical device, or SDL cannot create a Vulkan window or surface. Programming errors and
   capability failures throw and fail the test; they are never silently skipped. On the lavapipe
   Linux host the seven HDR/scRGB-present tests skip with the reason that the driver exposes only SDR
-  `B8G8R8A8_SRGB`; the other 107 GPU tests pass.
+  `B8G8R8A8_SRGB`; the remaining GPU tests pass.
 - CI has a `gpu` job on `ubuntu-latest`. It installs `libvulkan1`, `mesa-vulkan-drivers`,
   `vulkan-validationlayers`, and `xvfb`, resolves the lavapipe ICD
   (`/usr/share/vulkan/icd.d/lvp_icd*.json`), and runs the GPU-filtered tests under `xvfb-run` with
@@ -1541,9 +1583,14 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
     generation runs on the app-lifetime `RayBork.Font` thread, and the tick thread never waits for
     it. The per-font glyph texture cache is hard-capped and its eviction is coordinated with frame
     holds.
+15. A runtime render target is not an engine asset: its color view reports an empty `Path`, is owned
+    by its `RenderTexture`, and is never mounted, cached, or disposed by the game. A frame that writes
+    or samples a target holds its lifetime until the frame completes, and the renderer waits for the
+    frame that last used a target before it records a new use. The pre-existing scene-target
+    cross-frame overwrite hazard is unchanged.
 
 Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3; 2-4, 7, and 10 are exercised end to end by
 the camera and draw path, and 7 and 10 by the M7 `samples/Pong` AOT gate; 13 is enforced by the
 collision unit tests and the loader tests for the baked payload; 14 is enforced by the glyph
-pipeline, font asset, and text draw tests. M3 enforced the asset and frame-retention parts of 3, 7,
-and 10 before the draw recorder existed.
+pipeline, font asset, and text draw tests; 15 is enforced by the render texture unit and GPU tests.
+M3 enforced the asset and frame-retention parts of 3, 7, and 10 before the draw recorder existed.
