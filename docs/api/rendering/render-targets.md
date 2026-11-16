@@ -10,12 +10,9 @@ public sealed class RenderTexture : IDisposable {
     public int Height { get; }
     public int SampleCount { get; }
     public Texture ColorTexture { get; }
-    public Texture? DepthTexture { get; }
     public bool IsHdr { get; }
     public bool IsDisposed { get; }
 
-    public void Resize(int width, int height);
-    public Task<byte[]> ReadPixelsAsync(CancellationToken cancellationToken = default);
     public void Dispose();
 }
 
@@ -25,6 +22,10 @@ public readonly record struct RenderTextureDescription(
     TextureFormat ColorFormat = TextureFormat.Rgba16Float,
     bool Depth = true,
     int SampleCount = 4);
+
+public Task<RenderTexture> CreateRenderTextureAsync(
+    RenderTextureDescription description,
+    CancellationToken cancellationToken = default);
 ```
 
 ```csharp
@@ -55,31 +56,69 @@ using (var screen = ctx.CreateCamera(
 }
 ```
 
-The snippet is inside `Tick`; `CreateRenderTextureAsync` would normally be awaited in `Setup`
-and the target stored in a field. The screen pass uses `ScreenToWorldTransform` and a textured
-world-space `DrawQuad`; there is no `DrawTexture`, and the full-screen target is a normal quad on
-the plane. The `target` parameter and `RenderTexture` are M8, not part of the M7 surface; M7 authors
-screen-space content on the app's scene target instead.
+The snippet is inside `Tick`; a game normally awaits `CreateRenderTextureAsync` in `Setup` and stores
+the target in a field. The screen pass uses `ScreenToWorldTransform` and a textured world-space
+`DrawQuad`; there is no `DrawTexture`, and the full-screen target is a normal quad on the plane.
 
-- `CreateRenderTextureAsync` returns after the render thread has allocated the image. It is legal
-  in `Setup` and `Tick`.
-- The default color format is `Rgba16Float` because the renderer works in linear HDR. An SDR
-  `Rgba8Unorm` or `Rgba8Srgb` target is allowed for LDR intermediate work; the present pass still
-  applies the configured tone mapping when the target is presented.
-- `ColorTexture` and `DepthTexture` are views owned by the `RenderTexture`. Do not dispose them
-  separately; dispose the render texture. Sampling them is legal. A runtime-created texture view
-  reports an empty `Path` because it is not a pack asset.
-- `SampleCount` is 1, 2, 4, or 8; the default is 4. HDR color and depth are resolved to a
-  single-sample texture before sampling. Unsupported counts fall back to the highest supported
-  count and log a warning.
-- `Resize` recreates the images. It must not be called while a camera targets the texture or while
-  a frame that samples it is in flight; the method blocks until it is safe and then recreates.
-- `ReadPixelsAsync` returns display-referred RGBA8, top-left origin, **after** AgX and the output
-  transfer function, matching what the user would see. It stalls the pipeline and is intended for
-  screenshots and tests, not per-frame work. Raw linear HDR readback is post-1.0.
-- A camera targeting a `RenderTexture` is a normal pass. A later pass in the same tick can sample
-  the texture; the renderer inserts the image and resolve barriers. Sampling a target inside the
-  pass that writes it is invalid.
+**Creation and validation.** `CreateRenderTextureAsync` returns after the render thread allocated the
+images, so the result is usable for the next camera recorded in the same tick. It is legal in `Setup`
+and `Tick`; awaiting it suspends the tick's continuation like an asset load, while the render thread
+keeps servicing the request, so the tick thread never deadlocks. Cancellation before completion
+completes the call as `OperationCanceledException` and a target created for a canceled request is
+destroyed instead of leaking. After shutdown every call fails with `ObjectDisposedException`.
+
+- `Width` and `Height` must be positive and at most `16384`. The renderer also rejects a target that
+  exceeds the device's maximum 2D image dimension.
+- The color format is `Rgba16Float` (the default), `Rgba8Unorm`, or `Rgba8Srgb`. The packed
+  block-compressed formats and `Depth32Float` are rejected. The default is linear HDR; the SDR formats
+  are for LDR intermediate work, and the present pass still applies the configured tone mapping when
+  the target is presented.
+- `SampleCount` is `1`, `2`, `4`, or `8`; the default is `4`. The effective count is the highest
+  device-supported count that does not exceed the request, or `1` when none is supported, and a
+  fallback logs a warning. `RenderTexture.SampleCount` reports the effective count. The multisampled
+  color attachment is resolved into a single-sample sampled image; `ColorTexture` is that resolved
+  image.
+- `Depth` controls an internal depth attachment. This color-path task has no public depth view; a
+  target declared `Depth: false` still records color-only draws, while a 3D depth-tested draw needs the
+  declared attachment.
+- `IsHdr` is `true` for `Rgba16Float`.
+- The target's contents are undefined after creation until a camera renders into them.
+
+**Camera target and viewport.** `EngineContext.CreateCamera` takes `target:` as its last parameter.
+A camera targeting a `RenderTexture` records its pass into that target instead of the app's linear HDR
+scene target; `Camera.Target` returns the target object. The target's viewport defaults to the full
+target and clamps to the target size, not the window, and the projection aspect ratio uses the clamped
+viewport. `ScreenToWorldRay`, `WorldToScreen`, and `ScreenToWorldTransform` keep their documented
+camera-viewport behavior. A camera targeting a disposed target throws `ObjectDisposedException`.
+
+**Same-tick sampling and barriers.** Passes run in camera creation order. A later camera in the same
+tick can sample `ColorTexture` with `Shader.SetUniform`, `DrawQuad`, or `DrawMesh`: the renderer
+transitions the target's single-sample resolved color from the color-attachment layout to
+`ShaderReadOnlyOptimal` after the writing pass, and transitions it back if a later pass writes the
+target again. Sampling the target in the same camera pass that writes it is invalid and throws
+`InvalidOperationException` from the draw call, before the frame is published; it is not only a
+validation-layer error. A render target is reused only after the frame that last used it completed, so
+a frame cannot overwrite or sample content an in-flight frame still reads. The app scene target keeps
+its pre-existing cross-frame overwrite behavior; that hazard is unchanged and is a separate follow-up.
+
+Multiple targets work in one frame: each camera selects its target, each target has its own render
+pass and geometry pipeline cache, and cameras on the scene target and on runtime targets can interleave
+in one tick. There is no render graph and no automatic pass dependency analysis in v1; creation order
+is the pass order, and a write-after-read across passes is synchronized by the per-target barriers.
+
+**The `ColorTexture` view.** `ColorTexture` is a `Texture` view owned by the `RenderTexture`. It
+reports an empty `Path` because it is not a pack asset, it samples and batches like any texture, and
+the recorded frame retains the target until the renderer released the frame slot. Disposing the view
+directly throws `InvalidOperationException`; dispose the `RenderTexture` instead. Disposing the render
+texture retires the view and releases the target; `Dispose` is idempotent, and a target that is the
+destination or a sample source of a recorded in-flight frame is not destroyed until that frame
+completes.
+
+**Not in this task.** The public `DepthTexture` (T3b), `Resize` (T3c), `ReadPixelsAsync`/`ReadColorsAsync`
+(T4), and post-processing/effects (T5) remain later M8 tasks. The render target surface described in
+this section is the color path: creation, camera routing, MSAA color resolve, same-tick sampling, and
+lifetime.
+
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or
   `ClearMode.Depth` as appropriate. Each camera pass is its own render pass with the clamped viewport
@@ -87,9 +126,9 @@ screen-space content on the app's scene target instead.
   rectangle. Each camera pass reads its own frame block from shader ABI v2, so passes with different
   views are correct. A HUD is an ordinary later camera: `ClearMode.Depth` loads the scene color and
   clears depth when the HUD must not be occluded, and `ClearMode.None` keeps both when the HUD should
-  remain depth-tested. There is no separate overlay or layer pass. The render-target surface described
-  in this section is a later M8 task; split-screen to the HDR scene target uses per-camera render
-  passes and needs no render target.
+  remain depth-tested. There is no separate overlay or layer pass.
+- The present pass samples the app scene target only. A runtime target's content reaches the screen
+  through a camera on the scene target that samples `ColorTexture`.
 - There is no render graph and no automatic pass dependency analysis in v1. Creation order is the
   pass order. Cycles and write-after-read hazards are validation errors.
 

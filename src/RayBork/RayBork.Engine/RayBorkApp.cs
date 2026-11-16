@@ -277,6 +277,7 @@ public sealed class RayBorkApp : IDisposable {
         CameraService? cameraService = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
+        RenderTextureService? renderTextures = null;
         bool tickStarted = false;
         bool renderStarted = false;
         Exception? failure = null;
@@ -312,7 +313,14 @@ public sealed class RayBorkApp : IDisposable {
 
             frameRing = new FrameRing();
             GpuAssetBridge gpuAssetBridge = new();
-            renderLoop = new RenderLoop(frameRing, _rendererBackendFactory, backendOptions, _renderStatus, gpuAssetBridge);
+            renderTextures = new RenderTextureService();
+            renderLoop = new RenderLoop(
+                frameRing,
+                _rendererBackendFactory,
+                backendOptions,
+                _renderStatus,
+                gpuAssetBridge,
+                renderTextures);
             _renderLoop = renderLoop;
             renderLoop.Start();
             renderStarted = true;
@@ -351,7 +359,8 @@ public sealed class RayBorkApp : IDisposable {
                 () => clock.Time,
                 _renderStatus,
                 cameraService,
-                tonemapping);
+                tonemapping,
+                renderTextures);
 
             tickRunner = new TickRunner(
                 platform,
@@ -412,6 +421,7 @@ public sealed class RayBorkApp : IDisposable {
             cameraService,
             tickRunner,
             renderLoop,
+            renderTextures,
             tickStarted,
             renderStarted,
             teardownQueue,
@@ -544,6 +554,7 @@ public sealed class RayBorkApp : IDisposable {
         CameraService? cameraService,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
+        RenderTextureService? renderTextures,
         bool tickStarted,
         bool renderStarted,
         MainThreadTeardownQueue teardownQueue,
@@ -578,6 +589,17 @@ public sealed class RayBorkApp : IDisposable {
                     logger.LogError(tickRunner.Failure, "The tick runner also failed while the app was stopping.");
                 }
             }
+        }
+
+        // Shutdown already ran on the tick thread, so the game can no longer request a render texture.
+        // Stop rejects later requests and fails the queued ones; the render thread still services the
+        // target destructions until it joins.
+        if (renderTextures is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "stopping the render texture service",
+                failure,
+                renderTextures.Stop);
         }
 
         // Shutdown already ran on the tick thread, so the game can no longer use the defaults. Release
@@ -632,6 +654,16 @@ public sealed class RayBorkApp : IDisposable {
 
         if (surfaceChannel is not null) {
             failure = RunCleanupStep(logger, "closing the surface channel", failure, surfaceChannel.Close);
+        }
+
+        // The render thread has stopped, so no request can be serviced. The wait handle is released
+        // after the loop that waited on it joined.
+        if (renderTextures is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "disposing the render texture service",
+                failure,
+                renderTextures.Dispose);
         }
 
         // The render thread has stopped, so the deferred teardown can run on this thread now. It must

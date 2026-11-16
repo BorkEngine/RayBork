@@ -64,7 +64,8 @@ public enum TextureFormat {
 
 > **M3 subset.** M3 loads packed textures and adds procedural `TextureBuilder` creation for the
 > uncompressed formats. `Rgba16Float`/`Depth32Float` remain render-target formats, and BC formats
-> remain bake-produced texture payloads.
+> remain bake-produced texture payloads. M8 adds runtime render-target color views over a
+> `RenderTexture`'s resolved image; they are textures but not assets.
 
 - Textures are immutable GPU resources. A loaded texture's format, mip count, sRGB flag, and
   sampler come from the bake and cannot be changed at runtime. A procedural texture chooses its
@@ -102,6 +103,13 @@ public enum TextureFormat {
   `DrawTexture`; a sprite is a textured `DrawQuad` or `DrawBillboard(faceCamera: false)`.
 - `Rgba16Float` is the default HDR render-target format. Ordinary packed color textures are usually
   `Bc7Srgb`; linear data textures use `Bc7Unorm`, `Bc5Unorm`, or `R8Unorm`.
+- A `RenderTexture.ColorTexture` is a runtime `Texture` view over the target's single-sample resolved
+  image. It reports an empty `Path` because it is not a pack asset, `IsProcedural = false`,
+  `MipLevels = 1`, the target's `Width`/`Height`/`Format`/`IsSrgb`, and a linear clamp sampler. It
+  samples, batches, and is retained by a recorded frame exactly like a pack or procedural texture. The
+  `RenderTexture` owns it: disposing the view directly throws `InvalidOperationException`; dispose the
+  render texture instead, which retires the view and releases the target after the frames that used it
+  complete. A render-target view is never mounted, cached, or returned by the asset catalog.
 - Bindless slots are allocated when a texture's GPU upload completes, not lazily at the first draw.
   The renderer creates a fixed table of 2048 slots, matching the shader ABI's
   `RayBorkTextures[2048]` descriptor array. A device whose

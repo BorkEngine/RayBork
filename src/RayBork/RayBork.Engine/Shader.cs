@@ -368,7 +368,7 @@ public sealed class Shader : IDisposable {
         }
 
         if (texture is not null) {
-            texture.Lifetime.AddOwnerReference();
+            texture.AddOwnerReference();
         }
 
         Texture? previous;
@@ -380,14 +380,14 @@ public sealed class Shader : IDisposable {
             }
         } catch {
             if (texture is not null) {
-                texture.Lifetime.ReleaseOwnerReference();
+                texture.ReleaseOwnerReference();
             }
 
             throw;
         }
 
         if (previous is not null) {
-            previous.Lifetime.ReleaseOwnerReference();
+            previous.ReleaseOwnerReference();
         }
     }
 
@@ -414,7 +414,7 @@ public sealed class Shader : IDisposable {
 
         foreach (Texture? texture in previous) {
             if (texture is not null) {
-                texture.Lifetime.ReleaseOwnerReference();
+                texture.ReleaseOwnerReference();
             }
         }
     }
@@ -439,7 +439,7 @@ public sealed class Shader : IDisposable {
 
         foreach (Texture? texture in owned) {
             if (texture is not null) {
-                texture.Lifetime.ReleaseOwnerReference();
+                texture.ReleaseOwnerReference();
             }
         }
 

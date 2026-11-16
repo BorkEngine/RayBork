@@ -17,12 +17,19 @@ public sealed class EngineContextTests {
             FakeEnginePlatform platform = new();
             CameraService cameras = new(platform.Window);
             TonemappingSettings tonemapping = new(1f, 4f, 2f);
+            using RenderTextureService renderTextures = new();
 
             ArgumentNullException thrown = Assert.Throws<ArgumentNullException>(
-                () => CreateContext(platform, harness.Catalog, defaults, cameras, null!));
+                () => CreateContext(platform, harness.Catalog, defaults, cameras, null!, renderTextures));
             Assert.Equal("tonemapping", thrown.ParamName);
 
-            EngineContext context = CreateContext(platform, harness.Catalog, defaults, cameras, tonemapping);
+            EngineContext context = CreateContext(
+                platform,
+                harness.Catalog,
+                defaults,
+                cameras,
+                tonemapping,
+                renderTextures);
             Assert.Same(tonemapping, context.Tonemapping);
         } finally {
             defaults.Dispose();
@@ -34,7 +41,8 @@ public sealed class EngineContextTests {
         IAssetCatalog catalog,
         EngineDefaults defaults,
         CameraService cameras,
-        TonemappingSettings tonemapping) => new(
+        TonemappingSettings tonemapping,
+        RenderTextureService renderTextures) => new(
             platform,
             NullLoggerFactory.Instance,
             catalog,
@@ -45,7 +53,8 @@ public sealed class EngineContextTests {
             static () => 0.0,
             new RenderStatus(),
             cameras,
-            tonemapping);
+            tonemapping,
+            renderTextures);
 
     private static byte[] BuildEngineDefaultsPack() => CatalogTestData.BuildPack([
         ("shaders/mesh", AssetEntryType.Shader, AssetSerialization.Serialize(CatalogTestData.CreateShaderDescriptor())),

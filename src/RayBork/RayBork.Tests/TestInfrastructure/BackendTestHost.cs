@@ -74,7 +74,28 @@ internal sealed class BackendTestHost : IDisposable {
     /// <summary>
     /// Gets the backend's current scene target for readback probes.
     /// </summary>
-    internal VulkanSceneTarget SceneTarget => _backend.SceneTarget;
+    internal VulkanRenderTarget SceneTarget => _backend.SceneTarget;
+
+    /// <summary>
+    /// Gets the render texture request service the host services on its render thread.
+    /// </summary>
+    internal RenderTextureService RenderTextures { get; } = new();
+
+    /// <summary>
+    /// Creates one runtime render texture through the real service handoff and render-thread allocation.
+    /// </summary>
+    /// <param name="description">The target description.</param>
+    /// <returns>The created render texture.</returns>
+    internal RenderTexture CreateRenderTexture(RenderTextureDescription description) {
+        Task<RenderTexture> request = RenderTextures.CreateAsync(description, CancellationToken.None);
+        _backend.ProcessRenderTextureRequests(RenderTextures);
+        return request.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Services one pending render texture request or destruction round.
+    /// </summary>
+    internal void ProcessRenderTextures() => _backend.ProcessRenderTextureRequests(RenderTextures);
 
     /// <summary>
     /// Gets the direct surface provider the backend creates and destroys the native surface through.
@@ -205,7 +226,9 @@ internal sealed class BackendTestHost : IDisposable {
         }
 
         _disposed = true;
+        RenderTextures.Close(null);
         _backend.Dispose();
+        RenderTextures.Dispose();
         _teardownQueue.RunPending(NullLogger.Instance);
         _sdlHost.Dispose();
     }

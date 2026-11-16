@@ -331,7 +331,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
                 spec.ViewportWidth,
                 spec.ViewportHeight,
                 spec.ClearMode,
-                spec.ClearColor);
+                spec.ClearColor,
+                spec.TargetId);
             AddDraws(packet, pass, spec.Draws);
         }
 
@@ -391,6 +392,23 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     internal void RestoreAssets() {
         AssertNotDisposed();
         _uploads.Restore();
+    }
+
+    /// <summary>
+    /// Reads one resolved linear color pixel from a runtime render target.
+    /// </summary>
+    /// <param name="target">The render texture to read.</param>
+    /// <param name="x">The pixel column.</param>
+    /// <param name="y">The pixel row.</param>
+    /// <returns>The linear RGB values.</returns>
+    internal (float R, float G, float B) ReadRenderTargetColor(RenderTexture target, uint x, uint y) {
+        ArgumentNullException.ThrowIfNull(target);
+        if (!_host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? renderTarget) || renderTarget is null) {
+            throw new InvalidOperationException($"The render target {target.TargetId} is not live.");
+        }
+
+        VulkanReadback.ReadRenderTargetColorPixel(_host.Device, renderTarget, x, y, out float r, out float g, out float b);
+        return (r, g, b);
     }
 
     /// <summary>
@@ -585,6 +603,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     /// <param name="ClearMode">The buffers the pass clears before it draws.</param>
     /// <param name="ClearColor">The linear color written when color is cleared.</param>
     /// <param name="Draws">The draw records in recording order.</param>
+    /// <param name="TargetId">The runtime render target id, or <c>0</c> for the scene target.</param>
     internal sealed record PassSpec(
         CameraView Camera,
         int ViewportX,
@@ -593,7 +612,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         int ViewportHeight,
         ClearMode ClearMode,
         Color ClearColor,
-        DrawSpec[] Draws);
+        DrawSpec[] Draws,
+        long TargetId = 0);
 
     /// <summary>
     /// One draw record for <see cref="CreateFrame"/>.

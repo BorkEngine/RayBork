@@ -19,6 +19,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
     private readonly Lock _gate = new();
     private readonly List<long> _submitFrames = [];
+    private readonly Dictionary<long, RenderTextureTargetLifetime> _renderTargets = [];
 
     private RendererBackendOptions? _options;
     private IntPtr _surfaceHandle;
@@ -298,6 +299,74 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
     /// <inheritdoc />
     public IAssetGpuWorker CreateAssetGpuWorker() => AssetGpuWorker;
+
+    /// <summary>
+    /// Gets the number of live fake render textures. Diagnostic, for app and service tests.
+    /// </summary>
+    internal int LiveRenderTextureCount {
+        get {
+            lock (_gate) {
+                return _renderTargets.Count;
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The fake has no GPU, so it completes each request with a public <see cref="RenderTexture"/> over
+    /// fake lifetimes and destroys the target entry when the request's lifetime is released. The public
+    /// API, the request handoff, and the shutdown behavior are exercised without a device.
+    /// </remarks>
+    public void ProcessRenderTextureRequests(RenderTextureService service) {
+        ArgumentNullException.ThrowIfNull(service);
+
+        foreach (RenderTextureService.CreateRequest request in service.DrainCreates()) {
+            if (request.Completion.Task.IsCompleted) {
+                request.DisposeRegistration();
+                continue;
+            }
+
+            long targetId = service.NextTargetId();
+            RenderTextureDescription description = request.Description;
+            int sampleCount = RenderTextureValidation.SelectSampleCount(
+                description.SampleCount,
+                [1, 2, 4, 8]);
+            RenderTextureTargetLifetime lifetime = new(targetId, description, service.QueueDestruction);
+            RenderTextureViewResource viewResource = new(default, default) {
+                BindlessSlot = 1,
+            };
+            RenderTextureViewLifetime viewLifetime = new(lifetime, viewResource);
+            TextureAssetDescriptor descriptor = new() {
+                Payload = string.Empty,
+                Width = checked((uint)description.Width),
+                Height = checked((uint)description.Height),
+                MipLevels = 1,
+                Format = description.ColorFormat,
+                IsSrgb = description.ColorFormat == TextureFormat.Rgba8Srgb,
+                Filter = TextureFilter.Linear,
+                Wrap = TextureWrap.Clamp,
+                MaxAnisotropy = 1f,
+            };
+            Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
+            RenderTexture renderTexture = new(lifetime, colorTexture, sampleCount);
+            lock (_gate) {
+                _renderTargets[targetId] = lifetime;
+            }
+
+            request.DisposeRegistration();
+            if (!request.Completion.TrySetResult(renderTexture)) {
+                lock (_gate) {
+                    _renderTargets.Remove(targetId);
+                }
+            }
+        }
+
+        foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {
+            lock (_gate) {
+                _renderTargets.Remove(lifetime.TargetId);
+            }
+        }
+    }
 
     /// <inheritdoc />
     public void Dispose() {

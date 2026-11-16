@@ -34,8 +34,11 @@ namespace RayBork;
 /// configuration, and <see cref="ScreenToWorldTransform"/> does not compensate for it.
 /// </para>
 /// <para>
-/// M4 does not ship a render target: the <c>Target</c> property and the <c>target</c> parameter arrive
-/// with <c>RenderTexture</c> in M8. A camera always records into the app's linear HDR scene target.
+/// A camera records into the app's linear HDR scene target by default, or into the
+/// <see cref="RenderTexture"/> passed as the <c>target</c> parameter. A camera that targets a render
+/// texture writes that target; a later camera in the same tick can sample its
+/// <see cref="RenderTexture.ColorTexture"/>, and a camera that samples the target it writes is
+/// rejected.
 /// </para>
 /// </remarks>
 public sealed class Camera : IDisposable {
@@ -92,6 +95,8 @@ public sealed class Camera : IDisposable {
     private readonly Matrix4x4 _projectionMatrix;
     private readonly Matrix4x4 _viewProjectionMatrix;
     private readonly BoundingFrustum _frustum;
+    private readonly RenderTexture? _target;
+    private readonly long _targetId;
     private bool _disposed;
 
     /// <summary>
@@ -113,7 +118,8 @@ public sealed class Camera : IDisposable {
         Rect viewport,
         Matrix4x4 viewMatrix,
         Matrix4x4 projectionMatrix,
-        Matrix4x4 viewProjectionMatrix) {
+        Matrix4x4 viewProjectionMatrix,
+        RenderTexture? target) {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(packet);
         ArgumentNullException.ThrowIfNull(pass);
@@ -135,6 +141,8 @@ public sealed class Camera : IDisposable {
         _projectionMatrix = projectionMatrix;
         _viewProjectionMatrix = viewProjectionMatrix;
         _frustum = new BoundingFrustum(viewProjectionMatrix);
+        _target = target;
+        _targetId = target?.TargetId ?? 0;
     }
 
     /// <summary>Gets the one-based camera number used to name the camera in leak diagnostics.</summary>
@@ -212,6 +220,18 @@ public sealed class Camera : IDisposable {
         get {
             ThrowIfDisposed();
             return _clearColor;
+        }
+    }
+
+    /// <summary>
+    /// Gets the render texture this pass writes, or <see langword="null"/> when the pass writes the
+    /// app's linear HDR scene target.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    public RenderTexture? Target {
+        get {
+            ThrowIfDisposed();
+            return _target;
         }
     }
 
@@ -3552,10 +3572,24 @@ public sealed class Camera : IDisposable {
         _packet.Retention.Add(shader.Program.Lifetime);
         foreach (Texture? texture in textures) {
             if (texture is not null) {
-                _packet.Retention.Add(texture.Lifetime);
+                if (texture.IsRenderTargetView && IsSamePassRenderTargetView(texture)) {
+                    throw new InvalidOperationException(
+                        $"Camera {Number} writes a render texture and samples that texture's ColorTexture "
+                            + "in the same pass. A render texture can be sampled only from a later camera "
+                            + "pass in the same tick; the frame was not recorded.");
+                }
+
+                _packet.Retention.Add(texture.RetentionTarget);
             }
         }
     }
+
+    /// <summary>
+    /// Gets whether a render target color view belongs to the render texture the recording camera
+    /// writes.
+    /// </summary>
+    private bool IsSamePassRenderTargetView(Texture texture) =>
+        _targetId != 0 && texture.RenderTargetId == _targetId;
 
     private PrimitiveAssets RequirePrimitives() {
         PrimitiveAssets? primitives = _service.Primitives;

@@ -72,6 +72,20 @@ internal interface IRendererBackend : IDisposable {
     void Resize(int renderWidth, int renderHeight);
 
     /// <summary>
+    /// Services queued render texture creation and destruction requests. Runs on the render thread before
+    /// the loop acquires the next frame.
+    /// </summary>
+    /// <remarks>
+    /// The implementation creates each queued target's images on the current device, reserves its
+    /// bindless color view slot, and completes the request with a public <see cref="RenderTexture"/>. A
+    /// released target's images and slot are destroyed only after the frame that last used it completed.
+    /// A failed creation completes its request with the failure and never stops the render loop.
+    /// </remarks>
+    /// <param name="service">The app-lifetime request queue.</param>
+    /// <exception cref="GraphicsException">A target's GPU objects could not be created.</exception>
+    void ProcessRenderTextureRequests(RenderTextureService service);
+
+    /// <summary>
     /// Consumes one sealed frame: waits for a frame slot, acquires the presentation image, records
     /// and submits the passes, and tracks the frame fence.
     /// </summary>

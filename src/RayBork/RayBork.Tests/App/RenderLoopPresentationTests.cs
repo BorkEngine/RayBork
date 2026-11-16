@@ -46,9 +46,16 @@ public sealed class RenderLoopPresentationTests {
 
     private sealed class Harness : IDisposable {
         private readonly GpuAssetBridge _bridge = new();
+        private readonly RenderTextureService _renderTextures = new();
 
         internal Harness() {
-            Loop = new RenderLoop(Ring, () => Backend, CreateOptions(), new RenderStatus(), _bridge);
+            Loop = new RenderLoop(
+                Ring,
+                () => Backend,
+                CreateOptions(),
+                new RenderStatus(),
+                _bridge,
+                _renderTextures);
             Loop.Start();
         }
 
@@ -67,6 +74,7 @@ public sealed class RenderLoopPresentationTests {
         public void Dispose() {
             Ring.Complete();
             Assert.True(Loop.Thread.Join(_timeout));
+            _renderTextures.Dispose();
         }
     }
 

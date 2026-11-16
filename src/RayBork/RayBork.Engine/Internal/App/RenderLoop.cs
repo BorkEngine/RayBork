@@ -15,14 +15,16 @@ namespace RayBork.Internal;
 /// marshalled to the main thread through <see cref="RendererBackendOptions.SurfaceProvider"/>.
 /// </para>
 /// <para>
-/// The loop waits on the frame-ring ready signal and the GPU asset bridge signal together, so an
-/// upload queued during <c>Setup</c> starts without waiting for the first tick and no loop turn
-/// busy-spins. While the bridge still has a queued or in-flight upload the wait is bounded to a few
-/// milliseconds so the loop keeps polling the GPU copy even when no frame is being published; with no
-/// upload in flight it waits indefinitely. The bridge is serviced before each wait and after every
-/// wake. When the backend's <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the
-/// bridge to recreate the live resources before the next frame is submitted; presentation-only
-/// recoveries leave the generation unchanged and do not re-upload assets.
+/// The loop waits on the frame-ring ready signal, the GPU asset bridge signal, and the render texture
+/// signal together, so an upload queued during <c>Setup</c> and a render texture requested in
+/// <c>Setup</c> both start without waiting for the first tick and no loop turn busy-spins. While the
+/// bridge still has a queued or in-flight upload, or a render texture creation or destruction is
+/// pending, the wait is bounded to a few milliseconds so the loop keeps servicing that work even when
+/// no frame is being published; with no pending work it waits indefinitely. The bridge and the render
+/// texture queue are serviced before each wait and after every wake. When the backend's
+/// <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the bridge to recreate the
+/// live resources before the next frame is submitted; presentation-only recoveries leave the
+/// generation unchanged and do not re-upload assets.
 /// </para>
 /// <para>
 /// <see cref="IsReady"/> becomes <see langword="true"/> after the backend initialized, its
@@ -34,10 +36,11 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// Teardown order in the loop's final block: the frame ring is already complete and drained, so the
-/// bridge closes first (completing pending uploads with the failure or
-/// <see cref="ObjectDisposedException"/> and destroying live resources), then the backend is disposed.
-/// <see cref="Start"/> may be called once. Read <see cref="Failure"/> after <see cref="Join"/>
-/// returned or after <see cref="IsCompleted"/> became <see langword="true"/>.
+/// render texture service closes first (failing pending creations with the failure or
+/// <see cref="ObjectDisposedException"/>), then the bridge closes (completing pending uploads and
+/// destroying live resources), then the backend is disposed. <see cref="Start"/> may be called once.
+/// Read <see cref="Failure"/> after <see cref="Join"/> returned or after <see cref="IsCompleted"/>
+/// became <see langword="true"/>.
 /// </para>
 /// </remarks>
 internal sealed class RenderLoop {
@@ -55,6 +58,7 @@ internal sealed class RenderLoop {
     private readonly RendererBackendOptions _options;
     private readonly RenderStatus _status;
     private readonly GpuAssetBridge _gpuAssetBridge;
+    private readonly RenderTextureService _renderTextures;
     private readonly WaitHandle[] _waitHandles;
     private readonly Thread _thread;
 
@@ -76,25 +80,31 @@ internal sealed class RenderLoop {
     /// The bridge that receives GPU asset uploads and destructions from any thread and is serviced by
     /// this loop on the render thread.
     /// </param>
+    /// <param name="renderTextures">
+    /// The render-texture request queue serviced on the render thread before each frame.
+    /// </param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal RenderLoop(
         FrameRing frameRing,
         RendererBackendFactory backendFactory,
         RendererBackendOptions options,
         RenderStatus status,
-        GpuAssetBridge gpuAssetBridge) {
+        GpuAssetBridge gpuAssetBridge,
+        RenderTextureService renderTextures) {
         ArgumentNullException.ThrowIfNull(frameRing);
         ArgumentNullException.ThrowIfNull(backendFactory);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(status);
         ArgumentNullException.ThrowIfNull(gpuAssetBridge);
+        ArgumentNullException.ThrowIfNull(renderTextures);
 
         _frameRing = frameRing;
         _backendFactory = backendFactory;
         _options = options;
         _status = status;
         _gpuAssetBridge = gpuAssetBridge;
-        _waitHandles = [frameRing.ReadySignal, gpuAssetBridge.Signal];
+        _renderTextures = renderTextures;
+        _waitHandles = [frameRing.ReadySignal, gpuAssetBridge.Signal, renderTextures.Signal];
         _thread = new Thread(RunThread) {
             IsBackground = true,
             Name = THREAD_NAME,
@@ -169,6 +179,7 @@ internal sealed class RenderLoop {
             int appliedDeviceGeneration = backend.DeviceGeneration;
             while (true) {
                 ProcessPendingAssets();
+                backend.ProcessRenderTextureRequests(_renderTextures);
 
                 if (_frameRing.TryAcquireNewest(out FrameLease lease)) {
                     try {
@@ -209,7 +220,9 @@ internal sealed class RenderLoop {
                 // bridge signal covers queues, but neither a GPU copy finishing nor a fence retiring
                 // a frame signals. A minimized window therefore keeps polling instead of stranding
                 // the work.
-                int timeout = _gpuAssetBridge.HasPendingWork || _gpuAssetBridge.HasPendingDestroys
+                int timeout = _gpuAssetBridge.HasPendingWork
+                    || _gpuAssetBridge.HasPendingDestroys
+                    || _renderTextures.HasPendingWork
                     ? UPLOAD_POLL_TIMEOUT_MILLISECONDS
                     : Timeout.Infinite;
                 WaitHandle.WaitAny(_waitHandles, timeout);
@@ -218,6 +231,16 @@ internal sealed class RenderLoop {
             _failure = exception;
         } finally {
             WaitForFrameResourcesIdle();
+            try {
+                _renderTextures.Close(_failure);
+            } catch (Exception exception) {
+                if (_failure is null) {
+                    _failure = exception;
+                } else {
+                    _options.Logger.LogWarning(exception, "The render texture service failed to close after the render loop stopped.");
+                }
+            }
+
             try {
                 _gpuAssetBridge.Close(_failure);
             } catch (Exception exception) {

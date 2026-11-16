@@ -1239,41 +1239,56 @@ details:
 
 **Goal.** Offscreen rendering, post-processing building blocks, split-screen, and screenshots.
 
+**Progress.** The per-pass frame data (shader ABI v2), one render pass per camera pass on the HDR
+scene target, and the color path of public render targets ship: `RenderTexture`,
+`RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `Camera.Target`, and the
+`CreateCamera` `target` parameter, with a per-target render pass, MSAA color resolve, a sampled
+`ColorTexture`, same-tick sampling, multiple targets in one frame, and target lifetime. The public
+depth view, `Resize`, readback, post-processing/effects, and the render-target sample remain later M8
+tasks; M8 is not complete.
+
 **Scope.**
 
 - `RenderTexture` creation with `Rgba16Float` default, color/depth attachments, MSAA resolve,
-  resize, sampling, and lifetime.
-- Camera target routing and viewport rectangles.
-- Image and resolve barriers between passes; write-after-read validation.
-- Multiple cameras to the HDR scene target and to offscreen targets.
+  resize, sampling, and lifetime. The color path is shipped; `Resize` is a later task.
+- Camera target routing and viewport rectangles. Shipped.
+- Image and resolve barriers between passes; write-after-read validation. The color path is shipped;
+  a same-camera write-and-sample is rejected on the tick thread.
+- Multiple cameras to the HDR scene target and to offscreen targets. Shipped for the color path.
 - One render pass per camera pass on the HDR scene target, with the clamped viewport as the render
   area, viewport-scoped clears, and load/store between passes. Each pass carries its own frame block,
   so split-screen views and layered HUD cameras are correct. A HUD is an ordinary later camera, not a
-  separate overlay or layer pass.
+  separate overlay or layer pass. Shipped.
 - Per-pass frame data: one frame block per camera pass, so multiple cameras with different
-  views are correct instead of sharing the last pass' values.
+  views are correct instead of sharing the last pass' values. Shipped.
 - `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots; raw HDR readback is post-1.0.
+  Later M8 task.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
-  simple post-process shader, and present.
-- Split-screen sample pass: two cameras, two viewports.
-- Target format/sRGB rules; depth texture sampling.
+  simple post-process shader, and present. Later M8 task.
+- Split-screen sample pass: two cameras, two viewports. Later M8 task.
+- Target format/sRGB rules; depth texture sampling. The three color formats and the sRGB sampling
+  decode ship; depth texture sampling is a later task.
 
 **Exit criteria.**
 
-- Render-to-texture produces the same visible image as the direct path (within tolerance).
-- A post-process shader samples the color target without validation errors.
+- Render-to-texture produces the same visible image as the direct path (within tolerance). Met for
+  the shipped color path by the GPU tests.
+- A post-process shader samples the color target without validation errors. Met for a normal sampled
+  color target; the post-process sample is later.
 - Split-screen renders two independent camera views into the HDR scene target in one frame, and each
-  camera's clear stays inside its clamped viewport.
+  camera's clear stays inside its clamped viewport. Met.
 - A later camera with `ClearMode.None` keeps the earlier pass' color and depth; `ClearMode.Depth`
   clears depth only, and the frame passes validation with both the multisampled and single-sample
-  scene targets.
+  scene targets. Met.
 - A HUD that must not be occluded renders as an ordinary later camera; there is no separate overlay
-  or layer pass.
+  or layer pass. Met.
 - `ReadPixelsAsync` returns the expected top-left display-referred RGBA8 image and completes
-  without stalling the next tick indefinitely.
+  without stalling the next tick indefinitely. Later M8 task.
 - Resizing a target while it is not in use works; resizing while in use fails with a clear error.
-- MSAA 4x offscreen color/depth resolves correctly; 1x and 8x are supported or fall back.
-- Native AOT publish runs the RenderTarget sample on Windows and Linux.
+  Later M8 task.
+- MSAA 4x offscreen color/depth resolves correctly; 1x and 8x are supported or fall back. Met for
+  color; depth sampling is later.
+- Native AOT publish runs the RenderTarget sample on Windows and Linux. Later M8 task.
 
 ### M9 — Input and window polish
 

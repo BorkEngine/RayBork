@@ -192,7 +192,7 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   `DrawQuad`, `DrawDisc`, `DrawGrid(Transform, ...)`, `DrawText`, and
   `DrawBillboard(faceCamera: false)` draw in the plane that `ScreenToWorldTransform` returns, which
   carries the camera rotation and a world-units-per-render-pixel scale. `DrawTexture` is not shipped;
-  `RenderTexture` arrives in M8.
+  `RenderTexture` ships in M8's color path, sampled through `DrawQuad`.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, the
@@ -321,10 +321,11 @@ presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware Vulkan path is not
 
 ## Next step
 
-M8 adds render targets, multiple cameras, and readback: `RenderTexture` with color/depth attachments,
-MSAA resolve, resize, and sampling; camera target routing, per-camera render passes with
-viewport-scoped clears, and per-pass frame data; image barriers between passes; `ReadPixelsAsync`; and
-the RenderTarget and split-screen samples. Multiple cameras and split-screen viewports render to the
-HDR scene target, and a HUD is an ordinary later camera rather than a separate overlay pass. It builds
-on the M7 screen-space surface and the M4 camera; the shipped surface is listed in
+M8 ships render targets, multiple cameras, and readback. The per-pass frame data, one render pass per
+camera pass, and the color path of `RenderTexture` ship: creation, `Camera.Target` routing, MSAA
+color resolve, a sampled `ColorTexture`, and target lifetime. The public depth view, `Resize`,
+`ReadPixelsAsync`, post-processing, and the RenderTarget and split-screen samples remain. Multiple
+cameras and split-screen viewports render to the HDR scene target, and a HUD is an ordinary later
+camera rather than a separate overlay pass. It builds on the M7 screen-space surface and the M4
+camera; the shipped surface is listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).

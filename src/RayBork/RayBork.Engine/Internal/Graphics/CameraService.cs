@@ -243,6 +243,11 @@ internal sealed class CameraService {
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The far clip distance.</param>
     /// <param name="viewport">The requested pixel viewport, or <see langword="null"/> for the full target.</param>
+    /// <param name="target">
+    /// The render texture the pass writes, or <see langword="null"/> for the app's linear HDR scene
+    /// target. The viewport defaults to the target's full size and is clamped to it; the aspect ratio
+    /// uses the clamped viewport.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
     /// viewport is invalid or empty, or the clear color has a non-finite component.
@@ -251,6 +256,7 @@ internal sealed class CameraService {
     /// <paramref name="projection"/> is not defined, the clear mode has unknown bits, or a selected
     /// projection or clip-plane parameter is outside its range.
     /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera's <paramref name="target"/> is disposed.</exception>
     /// <exception cref="InvalidOperationException">
     /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
     /// transform is singular.
@@ -264,8 +270,13 @@ internal sealed class CameraService {
         Color? clearColor,
         float near,
         float far,
-        Rect? viewport) {
+        Rect? viewport,
+        RenderTexture? target = null) {
         ValidateRecordingState(nameof(EngineContext.CreateCamera));
+        if (target is not null) {
+            ObjectDisposedException.ThrowIf(target.IsDisposed, target);
+        }
+
         CameraMath.ValidateProjection(projection, fieldOfView, orthographicHeight, near, far);
         if ((clearMode & ~ClearMode.All) != 0) {
             throw new ArgumentOutOfRangeException(
@@ -274,10 +285,12 @@ internal sealed class CameraService {
                 "The clear mode contains bits outside ClearMode.All.");
         }
 
+        int targetWidth = target?.Width ?? _window.RenderWidth;
+        int targetHeight = target?.Height ?? _window.RenderHeight;
         Rect clampedViewport = CameraMath.ResolveViewport(
             viewport,
-            _window.RenderWidth,
-            _window.RenderHeight,
+            targetWidth,
+            targetHeight,
             nameof(viewport));
         Color resolvedClearColor = CameraMath.ResolveClearColor(clearColor, nameof(clearColor));
         Matrix4x4 view = CameraMath.CreateViewMatrix(transform);
@@ -300,7 +313,14 @@ internal sealed class CameraService {
             (int)clampedViewport.Width,
             (int)clampedViewport.Height,
             clearMode,
-            resolvedClearColor);
+            resolvedClearColor,
+            target?.TargetId ?? 0);
+
+        if (target is not null) {
+            // The recorded frame keeps the target alive until the render thread released its slot, so a
+            // RenderTexture disposed before then is not destroyed under the frame.
+            packet.Retention.Add(target.Lifetime);
+        }
 
         // Font frame clocks are begun once per camera and font, so a new camera starts a fresh set.
         _textFontsStarted.Clear();
@@ -320,7 +340,8 @@ internal sealed class CameraService {
             clampedViewport,
             view,
             projectionMatrix,
-            viewProjection);
+            viewProjection,
+            target);
         _nextCameraNumber++;
         _activeCamera = camera;
         return camera;
