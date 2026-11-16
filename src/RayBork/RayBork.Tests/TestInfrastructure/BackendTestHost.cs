@@ -101,6 +101,33 @@ internal sealed class BackendTestHost : IDisposable {
     internal void ProcessRenderTextures() => _backend.ProcessRenderTextureRequests(RenderTextures);
 
     /// <summary>
+    /// Queues a color readback and services it on this thread, which plays the render thread.
+    /// </summary>
+    /// <param name="target">The render texture to read.</param>
+    /// <returns>The raw scene-linear colors.</returns>
+    internal Task<Color[,]> ReadColorsAsync(RenderTexture target) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        Task<Color[,]> request = target.ReadColorsAsync();
+        ProcessRenderTextures();
+        return request;
+    }
+
+    /// <summary>
+    /// Queues a display-referred pixel readback and services it on this thread, which plays the render
+    /// thread.
+    /// </summary>
+    /// <param name="target">The render texture to read.</param>
+    /// <returns>The display-referred RGBA8 pixels.</returns>
+    internal Task<byte[]> ReadPixelsAsync(RenderTexture target) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        Task<byte[]> request = target.ReadPixelsAsync();
+        ProcessRenderTextures();
+        return request;
+    }
+
+    /// <summary>
     /// Runs <see cref="RenderTexture.Resize"/> on a second thread while this thread plays the render
     /// thread and services the real request queue, so the blocking public call is exercised without a
     /// render loop.
@@ -195,12 +222,14 @@ internal sealed class BackendTestHost : IDisposable {
     /// <param name="sampleCount">The requested MSAA sample count.</param>
     /// <param name="presentMode">The requested present mode.</param>
     /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
+    /// <param name="tonemapping">The startup tone-mapping mode.</param>
     /// <returns>The created and initialized host.</returns>
     internal static BackendTestHost CreateOrSkip(
         int sampleCount = 4,
         PresentMode presentMode = PresentMode.Mailbox,
-        WindowHdrState? hdr = null) {
-        if (!TryCreate(out BackendTestHost? host, out string skipReason, sampleCount, presentMode, hdr)) {
+        WindowHdrState? hdr = null,
+        TonemappingMode tonemapping = TonemappingMode.AgX) {
+        if (!TryCreate(out BackendTestHost? host, out string skipReason, sampleCount, presentMode, hdr, tonemapping)) {
             Assert.Skip(skipReason);
         }
 
@@ -215,13 +244,15 @@ internal sealed class BackendTestHost : IDisposable {
     /// <param name="sampleCount">The requested MSAA sample count.</param>
     /// <param name="presentMode">The requested present mode.</param>
     /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
+    /// <param name="tonemapping">The startup tone-mapping mode.</param>
     /// <returns><see langword="true"/> when the host was created.</returns>
     internal static bool TryCreate(
         out BackendTestHost? host,
         out string skipReason,
         int sampleCount = 4,
         PresentMode presentMode = PresentMode.Mailbox,
-        WindowHdrState? hdr = null) {
+        WindowHdrState? hdr = null,
+        TonemappingMode tonemapping = TonemappingMode.AgX) {
         host = null;
         skipReason = string.Empty;
         if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
@@ -245,7 +276,7 @@ internal sealed class BackendTestHost : IDisposable {
                 sdlHost.Platform.Window.IsMinimized,
                 sdlHost.Platform.Window.IsFocused,
                 hdr ?? sdlHost.Platform.WindowHdrState);
-            RenderSettings settings = CreateSettings(sampleCount, presentMode);
+            RenderSettings settings = CreateSettings(sampleCount, presentMode, tonemapping);
             candidate = new BackendTestHost(sdlHost, settings, extensions, initialState);
             try {
                 candidate.Initialize();
@@ -312,13 +343,18 @@ internal sealed class BackendTestHost : IDisposable {
 
     private WindowSurfaceState GetSurfaceState() => _state;
 
-    private static RenderSettings CreateSettings(int sampleCount, PresentMode presentMode) => new() {
-        PresentMode = presentMode,
-        SampleCount = sampleCount,
-        Tonemapping = TonemappingMode.AgX,
-        Exposure = 0f,
-        ValidationEnabled = true,
-    };
+    private static RenderSettings CreateSettings(
+        int sampleCount,
+        PresentMode presentMode,
+        TonemappingMode tonemapping) {
+        return new RenderSettings {
+            PresentMode = presentMode,
+            SampleCount = sampleCount,
+            Tonemapping = tonemapping,
+            Exposure = 0f,
+            ValidationEnabled = true,
+        };
+    }
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>
         exception.InnerException is DllNotFoundException or SymbolLoadingException or TypeInitializationException or PlatformException

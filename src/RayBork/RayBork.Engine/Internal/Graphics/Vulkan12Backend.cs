@@ -153,6 +153,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
+    /// Gets whether a live render target has had color content written by a completed frame, for GPU
+    /// tests. Test-only; it is not part of the renderer seam. Render-thread only.
+    /// </summary>
+    /// <param name="targetId">The render texture target id.</param>
+    /// <returns><see langword="true"/> when the target's written flag is set.</returns>
+    internal bool HasRenderTargetColorContentForTests(long targetId) =>
+        _renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry) && entry.HasResolvedColorContent;
+
+    /// <summary>
     /// Gets the current swapchain, for GPU-test presented-pixel probes.
     /// </summary>
     /// <remarks>
@@ -275,6 +284,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 ResizeRenderTextureTarget(request, request.Width, request.Height);
             } catch (Exception exception) {
                 request.Completion.TrySetException(exception);
+            }
+        }
+
+        // Readbacks run before destructions in the same round: a target disposed while its request was
+        // queued fails on the render thread with the disposed-target exception instead of disappearing
+        // from the registry first. A target is only read after its last-use frame fence signaled.
+        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks()) {
+            try {
+                ProcessReadback(request);
+            } catch (Exception exception) {
+                request.TrySetException(exception);
+            } finally {
+                request.DisposeRegistration();
             }
         }
 
@@ -410,7 +432,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 sampler,
                 depthViewLifetime,
                 depthViewResource,
-                depthSampler);
+                depthSampler,
+                _options!.Settings.Tonemapping);
             _renderTargets.Add(targetId, entry);
             success = request.Completion.TrySetResult(renderTexture);
             if (!success) {
@@ -542,12 +565,93 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         entry.ViewLifetime.SetDimensions(width, height);
         entry.DepthViewLifetime?.SetDimensions(width, height);
         lifetime.UpdateDescription(description with { Width = width, Height = height });
-        // The new images were never used by a frame; the previous images' last-use fence was waited on.
+        // The new images were never used by a frame; the previous images' last-use fence was waited on,
+        // and their content does not carry to the recreated images.
+        entry.HasResolvedColorContent = false;
         lifetime.SetLastUseFrameSlot(-1);
 
         previousPipelines?.Dispose();
         previousTarget.Dispose();
         request.Completion.TrySetResult();
+    }
+
+    /// <summary>
+    /// Services one queued readback: waits for the target's last-use fence, then copies and converts its
+    /// resolved color image when a completed frame wrote content, or completes with the defined
+    /// opaque-black default without copying otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Render-thread only. The request is serviced between frames, so a target recorded by the next
+    /// pending frame is read at its last submitted content rather than racing that frame's recording.
+    /// A copied color image is restored to its layout before this method returns, and the target's
+    /// bindless slots, views, sampler, and lifetime are untouched. The default path neither copies nor
+    /// transitions the image. A target disposed after the request was queued
+    /// fails with <see cref="ObjectDisposedException"/>; an id that is no longer live fails with
+    /// <see cref="InvalidOperationException"/>.
+    /// </remarks>
+    /// <param name="request">The queued readback request.</param>
+    /// <exception cref="ObjectDisposedException">The target was disposed before the request ran.</exception>
+    /// <exception cref="InvalidOperationException">The target id is no longer live.</exception>
+    /// <exception cref="GraphicsException">The color image could not be copied.</exception>
+    private void ProcessReadback(RenderTextureService.ReadbackRequest request) {
+        RenderTextureTargetLifetime lifetime = request.Lifetime;
+        if (lifetime.IsDisposed) {
+            throw new ObjectDisposedException(
+                nameof(RenderTexture),
+                "The render texture is disposed; it cannot be read back.");
+        }
+
+        if (!_renderTargets.TryGetValue(request.TargetId, out RenderTargetEntry? entry)) {
+            throw new InvalidOperationException(
+                $"The readback addresses render target {request.TargetId}, which is no longer alive. A "
+                    + "render texture must be alive when its readback is serviced.");
+        }
+
+        if (request.IsCompleted) {
+            return;
+        }
+
+        WaitForRenderTargetIdle(lifetime);
+        BeforeReadbackCopyForTests?.Invoke();
+        int width = checked((int)entry.Target.Extent.Width);
+        int height = checked((int)entry.Target.Extent.Height);
+        Color[,] colors;
+        if (!entry.HasResolvedColorContent) {
+            // No completed frame wrote the target. Its GPU content is undefined, and a sampled-only
+            // frame may have moved it to ShaderReadOnlyOptimal without writing it. Return the defined
+            // opaque-black default instead of copying undefined GPU memory, and leave the image and its
+            // tracked layout untouched.
+            colors = RenderTextureReadbackConverter.CreateOpaqueBlackColors(width, height);
+        } else {
+            ReadbackCopyCountForTests++;
+            byte[] pixels = VulkanReadback.ReadRenderTargetColorImage(_device!, entry.Target);
+            if (request.IsCompleted) {
+                // A cancellation that arrived during the fence wait or the copy discards the result;
+                // the copy helper already restored the layout, so the target is unchanged.
+                return;
+            }
+
+            colors = RenderTextureReadbackConverter.DecodeColors(
+                pixels,
+                width,
+                height,
+                entry.Lifetime.Description.ColorFormat);
+        }
+
+        switch (request) {
+            case RenderTextureService.ReadbackRequest<byte[]> pixelRequest:
+                pixelRequest.Completion.TrySetResult(RenderTextureReadbackConverter.EncodePixels(
+                    colors,
+                    entry.Tone,
+                    entry.StartupTonemappingMode));
+                break;
+            case RenderTextureService.ReadbackRequest<Color[,]> colorRequest:
+                colorRequest.Completion.TrySetResult(colors);
+                break;
+            default:
+                throw new InvalidOperationException(
+                    "The readback request has an unsupported completion value; only pixels and colors are queued.");
+        }
     }
 
     /// <summary>
@@ -1148,6 +1252,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     internal Action? BeforeAcquireForTests { get; set; }
 
     /// <summary>
+    /// Gets or sets a hook invoked immediately before the readback copy. Test-only; it is not part of
+    /// the renderer seam. The cancellation test uses it to cancel a request after it was dequeued and
+    /// while its copy is about to run.
+    /// </summary>
+    internal Action? BeforeReadbackCopyForTests { get; set; }
+
+    /// <summary>
     /// Gets or sets a test-only override for the device's maximum 2D image dimension. The default
     /// <see langword="null"/> uses the real device limit.
     /// </summary>
@@ -1163,6 +1274,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// the renderer seam.
     /// </summary>
     internal int RenderTargetFenceWaitCountForTests { get; private set; }
+
+    /// <summary>
+    /// Gets the number of full render-target color copies performed by readbacks, for GPU tests.
+    /// Test-only; it is not part of the renderer seam. The never-written default path does not increment
+    /// it.
+    /// </summary>
+    internal int ReadbackCopyCountForTests { get; private set; }
 
     /// <summary>
     /// Gets whether no submitted frame can still reference a GPU asset resource.
@@ -1702,6 +1820,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             entry.Pipelines = null;
+            // The recreated images have no content until a completed frame writes the target.
+            entry.HasResolvedColorContent = false;
         }
     }
 
@@ -1967,9 +2087,22 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             PassPlan passPlan = plan.Passes[passIndex];
             CameraPass pass = passPlan.Pass;
             long targetId = pass.TargetId;
-            VulkanRenderTarget target = targetId == 0 ? sceneTarget : RequireRenderTarget(targetId).Target;
+            RenderTargetEntry? targetEntry = targetId == 0 ? null : RequireRenderTarget(targetId);
+            VulkanRenderTarget target = targetEntry?.Target ?? sceneTarget;
             if (!TryResolveViewport(pass, target.Extent, out Viewport viewport, out Rect2D scissor)) {
                 continue;
+            }
+
+            if (targetEntry is not null) {
+                // Only a pass that can write color marks the target as content-bearing and records its
+                // tone snapshot. ClearMode.None/Depth with no surviving draw batches leaves the color
+                // untouched, so a later readback must keep the earlier content and tone. A later T5
+                // post-effect store-back that writes color must set the same flag and snapshot.
+                bool writesColor = (pass.ClearMode & ClearMode.Color) != 0 || passPlan.Batches.Count > 0;
+                if (writesColor) {
+                    targetEntry.HasResolvedColorContent = true;
+                    targetEntry.Tone = frame.Tonemapping;
+                }
             }
 
             if (targetId == 0) {
@@ -2006,7 +2139,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             if (passPlan.Batches.Count > 0) {
                 VulkanGeometryPipelineCache geometryPipelines = targetId == 0
                     ? _geometryPipelines!
-                    : GetRenderTargetPipelines(RequireRenderTarget(targetId));
+                    : GetRenderTargetPipelines(targetEntry!);
                 foreach (PlannedBatch batch in passPlan.Batches) {
                     VulkanShaderAssetResource shader = RequireShaderResource(batch.Program);
                     VulkanMeshAssetResource mesh = RequireMeshResource(batch.Mesh);
@@ -2626,7 +2759,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             Sampler sampler,
             RenderTextureViewLifetime? depthViewLifetime,
             RenderTextureViewResource? depthViewResource,
-            Sampler depthSampler) {
+            Sampler depthSampler,
+            TonemappingMode startupTonemappingMode) {
             Id = id;
             SampleCount = sampleCount;
             Target = target;
@@ -2637,6 +2771,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             DepthViewLifetime = depthViewLifetime;
             DepthViewResource = depthViewResource;
             DepthSampler = depthSampler;
+            StartupTonemappingMode = startupTonemappingMode;
         }
 
         internal long Id { get; }
@@ -2660,5 +2795,27 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         internal Sampler DepthSampler { get; set; }
 
         internal VulkanGeometryPipelineCache? Pipelines { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether a completed frame has written the target since its images were created.
+        /// A sampled-only frame does not set it, and a resize or device recovery clears it. The readback
+        /// returns its opaque-black default while it is <see langword="false"/>, because the resolved
+        /// image has no content even if a sample transition moved it out of <c>UNDEFINED</c>.
+        /// </summary>
+        internal bool HasResolvedColorContent { get; set; }
+
+        /// <summary>
+        /// Gets or sets the tone-mapping snapshot of the last completed frame that wrote the target. It
+        /// starts at <see cref="TonemappingSnapshot.Default"/> and is replaced when one of the target's
+        /// passes writes color (a color clear or at least one surviving draw batch). A sampled-only or
+        /// no-write pass does not replace it.
+        /// </summary>
+        internal TonemappingSnapshot Tone { get; set; } = TonemappingSnapshot.Default;
+
+        /// <summary>
+        /// Gets the app's startup tone-mapping mode. The runtime mode cannot change, so the readback
+        /// uses this value instead of reading the live settings object on the render thread.
+        /// </summary>
+        internal TonemappingMode StartupTonemappingMode { get; }
     }
 }

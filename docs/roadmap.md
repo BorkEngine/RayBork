@@ -1240,14 +1240,16 @@ details:
 **Goal.** Offscreen rendering, post-processing building blocks, split-screen, and screenshots.
 
 **Progress.** The per-pass frame data (shader ABI v2), one render pass per camera pass on the HDR
-scene target, and the color, depth, and resize paths of public render targets ship: `RenderTexture`,
-`RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`,
+scene target, and the color, depth, resize, and readback paths of public render targets ship:
+`RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`,
+`RenderTexture.Resize`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ReadColorsAsync`,
 `Camera.Target`, and the `CreateCamera` `target` parameter, with a per-target render pass, MSAA color
 resolve, Vulkan 1.2 depth/stencil resolve, the sampled `ColorTexture` and `DepthTexture` views,
-same-tick sampling, multiple targets in one frame, target lifetime, and in-place target recreation at a
-new size. `Depth: false` targets have no depth view. The scene target's resolved depth image is internal
-for a later SSAO pass. Readback, post-processing/effects, and the render-target sample remain later M8
-tasks; M8 is not complete.
+same-tick sampling, multiple targets in one frame, target lifetime, in-place target recreation at a new
+size, and top-left color readback (raw scene-linear HDR colors and display-referred RGBA8). `Depth:
+false` targets have no depth view. The scene target's resolved depth image is internal for a later SSAO
+pass. Post-processing/effects and the RenderTarget and split-screen samples remain later M8 tasks; M8
+is not complete.
 
 **Scope.**
 
@@ -1264,14 +1266,15 @@ tasks; M8 is not complete.
   separate overlay or layer pass. Shipped.
 - Per-pass frame data: one frame block per camera pass, so multiple cameras with different
   views are correct instead of sharing the last pass' values. Shipped.
-- `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots; raw HDR readback is post-1.0.
-  Later M8 task.
+- `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots, and `ReadColorsAsync` raw
+  scene-linear HDR colors for tests and tooling. Both are top-left, wait for the target's last-use
+  fence, and leave the target state unchanged. Shipped.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
   simple post-process shader, and present. Later M8 task.
 - Split-screen sample pass: two cameras, two viewports. Later M8 task.
 - Target format/sRGB rules; depth texture sampling. The three color formats, the sRGB sampling decode,
   and the resolved `DepthTexture` over a Vulkan 1.2 depth resolve ship. The scene target's resolved
-  depth image is internal for T5 SSAO; readback and post-processing remain later tasks.
+  depth image is internal for T5 SSAO; post-processing remains a later task.
 
 **Exit criteria.**
 
@@ -1286,8 +1289,9 @@ tasks; M8 is not complete.
   scene targets. Met.
 - A HUD that must not be occluded renders as an ordinary later camera; there is no separate overlay
   or layer pass. Met.
-- `ReadPixelsAsync` returns the expected top-left display-referred RGBA8 image and completes
-  without stalling the next tick indefinitely. Later M8 task.
+- `ReadPixelsAsync` returns the expected top-left display-referred RGBA8 image and `ReadColorsAsync`
+  returns the raw scene-linear top-left colors, both after the last completed frame and without leaving
+  the target in a different layout. Met by the render texture GPU, service, and app tests.
 - Resizing a target while it is not in use works; resizing while in use fails with a clear error.
   Met by the render texture GPU, service, and app tests.
 - MSAA 4x offscreen color/depth resolves correctly; 1x and 8x are supported or fall back. Met for
@@ -1467,7 +1471,7 @@ The matrix is the scope contract.
 | Screen-space helpers | Covered | M4, M7 | `ScreenToWorldRay`, `WorldToScreen`, `ScreenToWorldTransform`, orthographic cameras, and screen-aligned HUD text; no 2D draw overloads. |
 | Timing | Covered | M1 | `Stopwatch`; double seconds; no fixed step in v1. |
 | Random | Not engine | — | Use `System.Random`; no global RNG. |
-| Misc (screenshot, OpenURL) | Partial | M8/M9 | Display-referred readback screenshot; `OpenURL` out. |
+| Misc (screenshot, OpenURL) | Partial | M8/M9 | Display-referred readback screenshot and raw linear HDR color readback; `OpenURL` out. |
 | Logging | Covered | M1 | `Microsoft.Extensions.Logging` + ZLogger; custom providers supported. |
 | Memory allocators | Not public | — | Engine-internal pools; no `MemAlloc` API. |
 | File system | Partial | M3 | Pack reads; user-data file API post-1.0. |

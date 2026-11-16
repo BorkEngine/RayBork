@@ -65,7 +65,9 @@ public enum TextureFormat {
 > **M3 subset.** M3 loads packed textures and adds procedural `TextureBuilder` creation for the
 > uncompressed formats. `Rgba16Float`/`Depth32Float` remain render-target formats, and BC formats
 > remain bake-produced texture payloads. M8 adds runtime render-target color and depth views over a
-> `RenderTexture`'s resolved images; they are textures but not assets.
+> `RenderTexture`'s resolved images; they are textures but not assets. `RenderTexture.ReadColorsAsync`
+> and `ReadPixelsAsync` read the resolved color image behind `ColorTexture`; they do not read
+> `DepthTexture`, and they leave the views, samplers, and bindless slots unchanged.
 
 - Textures are immutable GPU resources. A loaded texture's format, mip count, sRGB flag, and
   sampler come from the bake and cannot be changed at runtime. A procedural texture chooses its
@@ -116,6 +118,11 @@ public enum TextureFormat {
   complete. A render-target view is never mounted, cached, or returned by the asset catalog. A resize
   keeps the same view object and updates its `Width` and `Height` in place; the color format, sampler,
   and empty `Path` do not change, and there is no separate view dispose.
+- `RenderTexture.ReadColorsAsync` reads the resolved color image behind `ColorTexture` as raw
+  scene-linear `[y, x]` colors, and `ReadPixelsAsync` reads the same image as display-referred RGBA8.
+  The readback does not sample through the view's sampler and does not change the view's metadata,
+  bindless slot, or descriptor; the target's layout is restored after the copy. The scene target has no
+  public color view and no public readback: only a `RenderTexture` exposes these methods.
 - A `RenderTexture.DepthTexture` is the same kind of runtime view over the target's single-sample
   resolved depth image. It reports an empty `Path`, `IsProcedural = false`, `MipLevels = 1`,
   `Format = TextureFormat.Depth32Float`, `IsSrgb = false`, and a nearest-filter clamp sampler. It

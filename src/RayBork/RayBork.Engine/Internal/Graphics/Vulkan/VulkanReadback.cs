@@ -4,19 +4,20 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Single-pixel readback probes for the scene target and the presented swapchain image, used by GPU
-/// tests to assert clear and resolve values numerically.
+/// Single-pixel readback probes and the full-image render-target color copy used by GPU tests and the
+/// public render texture readback.
 /// </summary>
 /// <remarks>
 /// <para>
-/// These probes are diagnostics, not a renderer path: each call creates its own command pool, staging
-/// buffer, and fence, submits one copy, and waits for the GPU. The call stalls the render thread and
-/// must never be used per frame. Every temporary object is destroyed in a <c>finally</c> block so a
+/// The single-pixel probes are diagnostics, not a renderer path: each call creates its own command pool,
+/// staging buffer, and fence, submits one copy, and waits for the GPU. The full-image color read uses the
+/// same temporary objects for one copy of the target's resolved color image. Both stall the render thread
+/// and must never be used per frame. Every temporary object is destroyed in a <c>finally</c> block so a
 /// failed probe cannot leak.
 /// </para>
 /// <para>
-/// The caller passes a device and scene target or swapchain from a single backend and runs on that
-/// backend's render thread. Nothing here is thread-safe.
+/// The caller passes a device and scene target, swapchain, or runtime target from a single backend and
+/// runs on that backend's render thread. Nothing here is thread-safe.
 /// </para>
 /// </remarks>
 internal static unsafe class VulkanReadback {
@@ -25,7 +26,6 @@ internal static unsafe class VulkanReadback {
     private const uint DEPTH_PIXEL_BYTES = 4;
     private const uint PRESENTED_FLOAT_PIXEL_BYTES = 8;
     private const uint PRESENTED_BYTE_PIXEL_BYTES = 4;
-    private const float SRGB_ENCODED_CUTOFF = 0.04045f;
 
     /// <summary>
     /// Reads one resolved linear scene color pixel.
@@ -181,6 +181,76 @@ internal static unsafe class VulkanReadback {
     }
 
     /// <summary>
+    /// Copies a runtime render target's full resolved color image to a tightly packed top-left staging
+    /// buffer and returns its raw bytes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The copy uses a dedicated transient command pool, command buffer, staging buffer, and fence. It
+    /// transitions the resolved color image from the layout the target tracker recorded to
+    /// <c>TRANSFER_SRC_OPTIMAL</c>, copies the full extent with tightly packed rows, and transitions the
+    /// image back to the same layout in the same submission. The tracker state is unchanged, so a later
+    /// frame samples or writes the target exactly as before.
+    /// </para>
+    /// <para>
+    /// The caller waits for the target's last-use frame fence before it calls this method. The returned
+    /// bytes are decoded by <see cref="RenderTextureReadbackConverter"/>; this helper performs no
+    /// format conversion, tone mapping, or origin flip.
+    /// </para>
+    /// </remarks>
+    /// <param name="device">The device that owns the target.</param>
+    /// <param name="target">The render target whose resolved color image is read.</param>
+    /// <returns>The tightly packed staging bytes in top-left row order.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The target has no defined resolved color layout. A never-written target has no content to copy,
+    /// and Vulkan cannot restore the undefined layout after a transition; the backend returns its
+    /// opaque-black default instead.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The target color format is not one of the supported render-target color formats.
+    /// </exception>
+    /// <exception cref="GraphicsException">
+    /// A Vulkan object could not be created, the copy failed, or the image is too large for one host
+    /// buffer. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    internal static byte[] ReadRenderTargetColorImage(VulkanDevice device, VulkanRenderTarget target) {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.ResolvedColorLayout == ImageLayout.Undefined) {
+            throw new InvalidOperationException(
+                "The render target's resolved color image has no defined layout; it was never written, "
+                    + "so the backend returns the opaque-black default instead of copying it.");
+        }
+
+        uint pixelBytes = target.ColorFormat switch {
+            Format.R16G16B16A16Sfloat => COLOR_PIXEL_BYTES,
+            Format.R8G8B8A8Unorm or Format.R8G8B8A8Srgb => PRESENTED_BYTE_PIXEL_BYTES,
+            _ => throw new NotSupportedException(
+                $"The render target color format {VulkanFormatInfo.Describe(target.ColorFormat)} is not "
+                    + "a supported color readback format."),
+        };
+        uint width = target.Extent.Width;
+        uint height = target.Extent.Height;
+        ulong byteCount = (ulong)width * height * pixelBytes;
+        if (byteCount > int.MaxValue) {
+            throw new GraphicsException(
+                $"The {width}x{height} render target needs {byteCount} byte(s) for readback, which "
+                    + "exceeds the host staging buffer limit.",
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                null);
+        }
+
+        return ReadImage(
+            device,
+            target.ResolvedColorImage,
+            CreateColorReadBarrier(target.ResolvedColorLayout),
+            checked((uint)byteCount),
+            new Offset3D { X = 0, Y = 0, Z = 0 },
+            new Extent3D { Width = width, Height = height, Depth = 1 });
+    }
+
+    /// <summary>
     /// Reads one pixel from the swapchain image a submitted frame rendered, decoded to display-linear
     /// values.
     /// </summary>
@@ -299,7 +369,21 @@ internal static unsafe class VulkanReadback {
         PixelCopyBarrier barrierInfo,
         uint byteCount,
         uint x,
-        uint y) {
+        uint y) => ReadImage(
+            device,
+            image,
+            barrierInfo,
+            byteCount,
+            new Offset3D { X = (int)x, Y = (int)y, Z = 0 },
+            new Extent3D { Width = 1, Height = 1, Depth = 1 });
+
+    private static byte[] ReadImage(
+        VulkanDevice device,
+        Image image,
+        PixelCopyBarrier barrierInfo,
+        uint byteCount,
+        Offset3D imageOffset,
+        Extent3D imageExtent) {
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
         CommandPool commandPool = default;
@@ -350,7 +434,7 @@ internal static unsafe class VulkanReadback {
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             ThrowIfFailed(vulkan.BeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
-            RecordCopy(vulkan, commandBuffer, image, barrierInfo, stagingBuffer, x, y);
+            RecordCopy(vulkan, commandBuffer, image, barrierInfo, stagingBuffer, imageOffset, imageExtent);
             ThrowIfFailed(vulkan.EndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
             FenceCreateInfo fenceInfo = new() { SType = StructureType.FenceCreateInfo };
@@ -399,8 +483,8 @@ internal static unsafe class VulkanReadback {
         Image image,
         PixelCopyBarrier barrierInfo,
         Buffer stagingBuffer,
-        uint x,
-        uint y) {
+        Offset3D imageOffset,
+        Extent3D imageExtent) {
         ImageMemoryBarrier barrier = new() {
             SType = StructureType.ImageMemoryBarrier,
             SrcAccessMask = barrierInfo.Access,
@@ -439,8 +523,8 @@ internal static unsafe class VulkanReadback {
                 BaseArrayLayer = 0,
                 LayerCount = 1,
             },
-            ImageOffset = new Offset3D { X = (int)x, Y = (int)y, Z = 0 },
-            ImageExtent = new Extent3D { Width = 1, Height = 1, Depth = 1 },
+            ImageOffset = imageOffset,
+            ImageExtent = imageExtent,
         };
         vulkan.CmdCopyImageToBuffer(
             commandBuffer,
@@ -479,6 +563,29 @@ internal static unsafe class VulkanReadback {
             ? AccessFlags.DepthStencilAttachmentWriteBit
             : AccessFlags.ColorAttachmentWriteBit | AccessFlags.ShaderReadBit;
         return new PixelCopyBarrier(aspect, originalLayout, stage, access);
+    }
+
+    private static PixelCopyBarrier CreateColorReadBarrier(ImageLayout originalLayout) {
+        PipelineStageFlags stage;
+        AccessFlags access;
+        switch (originalLayout) {
+            case ImageLayout.ShaderReadOnlyOptimal:
+                stage = PipelineStageFlags.FragmentShaderBit;
+                access = AccessFlags.ShaderReadBit;
+                break;
+            case ImageLayout.ColorAttachmentOptimal:
+                stage = PipelineStageFlags.ColorAttachmentOutputBit;
+                access = AccessFlags.ColorAttachmentWriteBit;
+                break;
+            default:
+                // Defensive fallback for a defined layout this helper does not expect: order the copy
+                // after all earlier work and restore the same layout.
+                stage = PipelineStageFlags.AllCommandsBit;
+                access = AccessFlags.None;
+                break;
+        }
+
+        return new PixelCopyBarrier(ImageAspectFlags.ColorBit, originalLayout, stage, access);
     }
 
     private static PixelCopyBarrier CreateDepthBarrier(ImageLayout originalLayout, bool multisampledResolve) {
@@ -554,12 +661,7 @@ internal static unsafe class VulkanReadback {
         b = SrgbDecode(pixel[blueIndex]);
     }
 
-    private static float SrgbDecode(byte encoded) {
-        float channel = encoded / 255f;
-        return channel <= SRGB_ENCODED_CUTOFF
-            ? channel / 12.92f
-            : MathF.Pow((channel + 0.055f) / 1.055f, 2.4f);
-    }
+    private static float SrgbDecode(byte encoded) => AgxToneMap.SrgbDecodeChannel(encoded);
 
     private readonly record struct PixelCopyBarrier(
         ImageAspectFlags Aspect,

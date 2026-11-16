@@ -31,7 +31,8 @@ namespace RayBork;
 /// the target's images in place: the target id, the color format, the depth flag, the effective sample
 /// count, and the two view objects are unchanged, while <see cref="Width"/>, <see cref="Height"/>, and
 /// the views' dimensions report the new size. The target's contents are undefined after a resize.
-/// Readback and post-processing are later M8 tasks.
+/// <see cref="ReadColorsAsync"/> and <see cref="ReadPixelsAsync"/> read the target's resolved color
+/// image, not its depth image; post-processing is a later M8 task.
 /// </para>
 /// </remarks>
 public sealed class RenderTexture : IDisposable {
@@ -194,6 +195,95 @@ public sealed class RenderTexture : IDisposable {
     public void Resize(int width, int height) {
         ThrowIfDisposed();
         _service.ResizeAsync(_lifetime, width, height).GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Reads the target's resolved color image as raw scene-linear colors, indexed <c>[y, x]</c> with the
+    /// first dimension as the height and row zero at the top.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the readback before the render thread completes it.</param>
+    /// <returns>
+    /// The raw scene-linear colors, alpha included. HDR components above <c>1</c> are preserved; no AgX
+    /// tone mapping or sRGB encoding is applied.
+    /// </returns>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was canceled before the render thread completed the readback.
+    /// Cancellation after the request was queued is best effort; the target is never left in a partial
+    /// state.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The render texture is disposed, or the app's renderer stopped.
+    /// </exception>
+    /// <exception cref="GraphicsException">The renderer could not copy the target's color image.</exception>
+    /// <remarks>
+    /// <para>
+    /// The value comes from the single-sample resolved color image after the last completed frame that
+    /// wrote or sampled the target, after any post-processed output that later writes the target. The
+    /// render thread reads the current description and image, so the dimensions survive
+    /// <see cref="Resize"/> and a device recovery. It reads the color image only, never depth.
+    /// </para>
+    /// <para>
+    /// The formats are decoded from their stored values: <see cref="TextureFormat.Rgba16Float"/> half
+    /// floats with HDR preserved, <see cref="TextureFormat.Rgba8Unorm"/> bytes divided by 255, and
+    /// <see cref="TextureFormat.Rgba8Srgb"/> sRGB-decoded to linear. Alpha is linear and included for
+    /// every format. The target's contents are undefined before a camera writes them; an unwritten or
+    /// just-resized target, including one that a frame only sampled, returns the defined default of
+    /// opaque black.
+    /// </para>
+    /// <para>
+    /// The call is legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/>. It stalls the render
+    /// thread while it waits for the target's last-use fence and copies the image when content exists, so
+    /// it is intended for screenshots and tests, not per-frame work. <see cref="IGame.Setup"/> can
+    /// <c>await</c> it; <see cref="IGame.Tick"/> is <c>void</c>, so a tick caller blocks on the returned
+    /// task with <c>GetAwaiter().GetResult()</c> and stalls that tick until the readback completes.
+    /// </para>
+    /// </remarks>
+    public Task<Color[,]> ReadColorsAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
+        return _service.ReadColorsAsync(_lifetime, cancellationToken);
+    }
+
+    /// <summary>
+    /// Reads the target's resolved color image as display-referred RGBA8 pixels in row-major top-left
+    /// order, after exposure, AgX tone mapping, and sRGB encoding.
+    /// </summary>
+    /// <param name="cancellationToken">Cancels the readback before the render thread completes it.</param>
+    /// <returns>
+    /// The RGBA8 pixels, row-major from the top-left, with length <c>Width * Height * 4</c>. Every alpha
+    /// channel is <c>255</c> because the SDR present path writes opaque output; the pixels are not
+    /// premultiplied.
+    /// </returns>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was canceled before the render thread completed the readback.
+    /// Cancellation after the request was queued is best effort; the target is never left in a partial
+    /// state.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The render texture is disposed, or the app's renderer stopped.
+    /// </exception>
+    /// <exception cref="GraphicsException">The renderer could not copy the target's color image.</exception>
+    /// <remarks>
+    /// <para>
+    /// This is the SDR screenshot path, not scRGB/HDR output. It uses the exposure, AgX white, and AgX
+    /// contrast of the last completed frame that wrote the target, and the app's startup
+    /// <see cref="TonemappingMode"/>; the runtime tone values are never read from the game's live
+    /// settings on the render thread. A target that no frame wrote uses the built-in default tone
+    /// snapshot and the startup mode and returns opaque black, because it has no resolved content yet.
+    /// The conversion matches the present shader's SDR path within a small rounding tolerance because it
+    /// uses the same CPU AgX reference.
+    /// </para>
+    /// <para>
+    /// The color image is read after the last completed frame that wrote or sampled the target, with the
+    /// current dimensions after <see cref="Resize"/> and device recovery. It reads color only, never
+    /// depth. The call is legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/> and stalls the
+    /// render thread, so use it for screenshots and tests, not per-frame work. A <see cref="IGame.Tick"/>
+    /// caller blocks on the returned task with <c>GetAwaiter().GetResult()</c> because
+    /// <see cref="IGame.Tick"/> is <c>void</c>.
+    /// </para>
+    /// </remarks>
+    public Task<byte[]> ReadPixelsAsync(CancellationToken cancellationToken = default) {
+        ThrowIfDisposed();
+        return _service.ReadPixelsAsync(_lifetime, cancellationToken);
     }
 
     /// <summary>

@@ -324,11 +324,12 @@ presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware Vulkan path is not
 ## Next step
 
 M8's goal is render targets, multiple cameras, and readback. The per-pass frame data, one render pass
-per camera pass, and the color and depth paths of `RenderTexture` ship: creation, `Camera.Target`
-routing, MSAA color and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, and target
-lifetime. `Resize`, `ReadPixelsAsync`, post-processing, and the RenderTarget and split-screen samples
-remain as later M8 tasks. Multiple
-cameras and split-screen viewports render to the HDR scene target, and a HUD is an ordinary later
-camera rather than a separate overlay pass. It builds on the M7 screen-space surface and the M4
+per camera pass, and the color, depth, resize, and readback paths of `RenderTexture` ship: creation,
+`Camera.Target` routing, MSAA color and depth resolve, the sampled `ColorTexture` and `DepthTexture`
+views, target lifetime, `Resize`, and top-left color readback through `ReadColorsAsync` (raw
+scene-linear HDR colors) and `ReadPixelsAsync` (display-referred RGBA8 for screenshots).
+Post-processing/effects and the RenderTarget and split-screen samples remain as later M8 tasks.
+Multiple cameras and split-screen viewports render to the HDR scene target, and a HUD is an ordinary
+later camera rather than a separate overlay pass. It builds on the M7 screen-space surface and the M4
 camera; the shipped surface is listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).
