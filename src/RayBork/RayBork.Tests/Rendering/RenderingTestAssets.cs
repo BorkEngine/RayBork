@@ -46,6 +46,7 @@ internal static class RenderingTestAssets {
         string[]? textures = null) {
         string[] declaredTextures = textures ?? [TEXTURE_BINDING];
         ShaderAssetDescriptor descriptor = new() {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
             VertexEntry = "main_vertex",

@@ -608,6 +608,7 @@ public sealed class GpuAssetBridgeTests {
     private static ShaderGpuUpload CreateShaderUpload(string path) => new(
         path,
         new ShaderAssetDescriptor {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = "payloads/vert",
             FragmentPayload = "payloads/frag",
             VertexEntry = "main_vertex",

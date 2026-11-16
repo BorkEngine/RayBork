@@ -18,6 +18,16 @@ public sealed class ShaderAbiConstantsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TheFrameStructArrayStrideIsTheBlockSize() {
+        // Every member is a mat4 or vec4, so std430 keeps the std140 offsets and a 256-byte stride.
+        // The last member is the vec4 at offset 240, which ends exactly at the block size.
+        Assert.Equal(256, ShaderAbiFrame.BLOCK_SIZE);
+        Assert.Equal(ShaderAbiFrame.BLOCK_SIZE, ShaderAbiFrame.SCREEN_SIZE_OFFSET + 16);
+        Assert.Equal(ShaderAbiFrame.BLOCK_SIZE, VulkanFrameResources.FRAME_BLOCK_SIZE);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void BindlessTextureCapacityMatchesTheFixedShaderArray() {
         Assert.Equal(2048u, VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY);
         Assert.Equal(ShaderAbiNames.TEXTURE_CAPACITY, VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY);
@@ -26,8 +36,14 @@ public sealed class ShaderAbiConstantsTests {
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void GeneratedGlslIdentifiersMatchTheShaderAbiContract() {
+        Assert.Equal(2, ShaderAbiNames.ABI_VERSION);
         Assert.Equal("RayBorkFrame", ShaderAbiNames.FRAME_TYPE);
-        Assert.Equal("RayBorkFrameBlock", ShaderAbiNames.FRAME_BLOCK);
+        Assert.Equal("RayBorkFrameBuffer", ShaderAbiNames.FRAME_BLOCK);
+        Assert.Equal("rbFrameBlock", ShaderAbiNames.FRAME_BLOCK_INSTANCE);
+        Assert.Equal("frames", ShaderAbiNames.FRAME_FIELD);
+        Assert.Equal("RayBorkPushConstants", ShaderAbiNames.PUSH_CONSTANTS);
+        Assert.Equal("rbPushConstants", ShaderAbiNames.PUSH_CONSTANTS_INSTANCE);
+        Assert.Equal("passIndex", ShaderAbiNames.PASS_INDEX);
         Assert.Equal("RayBorkTextures", ShaderAbiNames.TEXTURES);
         Assert.Equal(2048u, ShaderAbiNames.TEXTURE_CAPACITY);
         Assert.Equal("RayBorkInstance", ShaderAbiNames.INSTANCE_TYPE);

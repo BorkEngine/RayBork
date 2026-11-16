@@ -410,6 +410,7 @@ public sealed class ShaderUniformCursorTests {
 
     private static Shader CreateShader() {
         ShaderAssetDescriptor descriptor = new() {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = "shaders/test-vert",
             FragmentPayload = "shaders/test-frag",
             VertexEntry = "main_vertex",

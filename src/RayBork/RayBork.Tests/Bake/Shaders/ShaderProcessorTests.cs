@@ -19,6 +19,7 @@ public sealed class ShaderProcessorTests {
         Assert.True(archive.TryGetEntry("shaders/castle", out PackEntry? entry));
         Assert.Equal(AssetEntryType.Shader, entry.Type);
         ShaderAssetDescriptor descriptor = ReadDescriptor(archive, entry);
+        Assert.Equal(ShaderAbiNames.ABI_VERSION, descriptor.AbiVersion);
         Assert.Equal("shaders/castle-vert", descriptor.VertexPayload);
         Assert.Equal("shaders/castle-frag", descriptor.FragmentPayload);
         Assert.Equal("main_vertex", descriptor.VertexEntry);

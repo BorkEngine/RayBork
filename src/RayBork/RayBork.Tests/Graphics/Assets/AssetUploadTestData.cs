@@ -78,6 +78,7 @@ internal static class AssetUploadTestData {
         ReadOnlyMemory<byte>? fragmentSpirv = null,
         string path = SHADER_PATH) {
         ShaderAssetDescriptor descriptor = new() {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
             VertexEntry = "main",

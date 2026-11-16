@@ -6,13 +6,19 @@ namespace RayBork.Internal;
 /// The packed descriptor of a shader asset. Its stage modules are sibling raw entries.
 /// </summary>
 /// <remarks>
-/// M3 records the compiled SPIR-V modules, entry points, reflected metadata declared by the bake
-/// sidecar, and the default render state. The generated prologue and full SPIR-V reflection arrive
-/// with the M4 shader ABI.
+/// The descriptor records the compiled SPIR-V modules, entry points, reflected metadata declared by
+/// the bake sidecar, the default render state, and the shader ABI version the modules were generated
+/// for. The frame and instance block layouts are documented in the API reference.
 /// </remarks>
 [GenerateShape]
 internal sealed partial class ShaderAssetDescriptor {
-
+    /// <summary>Gets the shader ABI version the bake wrote the descriptor with.</summary>
+    /// <remarks>
+    /// The runtime accepts only <see cref="ShaderAbiNames.ABI_VERSION"/>. The member is optional so a
+    /// descriptor baked before the version existed still deserializes with the default zero and is
+    /// rejected with the rebake diagnostic instead of a serialization failure.
+    /// </remarks>
+    public int AbiVersion { get; init; }
 
     /// <summary>Gets the canonical path of the vertex SPIR-V payload entry.</summary>
     public required string VertexPayload { get; init; }

@@ -116,6 +116,7 @@ public sealed class AssetCatalogFailureTests {
     public async Task MissingSiblingPayloadFailsAsAssetLoadWithoutUpload() {
         ShaderAssetDescriptor template = CatalogTestData.CreateShaderDescriptor();
         ShaderAssetDescriptor descriptor = new() {
+            AbiVersion = template.AbiVersion,
             VertexPayload = "shaders/missing-vert",
             FragmentPayload = CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH,
             VertexEntry = template.VertexEntry,
@@ -134,6 +135,39 @@ public sealed class AssetCatalogFailureTests {
             () => harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken));
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AShaderBakedWithAnOlderAbiVersionFailsAsAssetLoadWithARebakeMessage(int abiVersion) {
+        ShaderAssetDescriptor template = CatalogTestData.CreateShaderDescriptor();
+        ShaderAssetDescriptor descriptor = new() {
+            AbiVersion = abiVersion,
+            VertexPayload = template.VertexPayload,
+            FragmentPayload = template.FragmentPayload,
+            VertexEntry = template.VertexEntry,
+            FragmentEntry = template.FragmentEntry,
+            Stages = template.Stages,
+            DefaultRenderState = template.DefaultRenderState,
+            Uniforms = template.Uniforms,
+            Textures = template.Textures,
+        };
+        byte[] pack = CatalogTestData.BuildPack(
+            (CatalogTestData.SHADER_PATH, AssetEntryType.Shader, AssetSerialization.Serialize(descriptor)),
+            (CatalogTestData.SHADER_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
+            (CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()));
+        using CatalogTestHarness harness = new(userPacks: [pack]);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("/shaders/basic", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("shader ABI version", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("rebake", thrown.Message, StringComparison.Ordinal);
         Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 

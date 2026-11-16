@@ -9,20 +9,37 @@ namespace RayBork.Internal;
 /// bake, the runtime pipeline layout, and the API reference to change together.
 /// </remarks>
 internal static class ShaderAbiNames {
-    /// <summary>The frame uniform block struct type: <c>RayBorkFrame</c>.</summary>
+    /// <summary>The shader ABI version a baked shader descriptor records: 2.</summary>
+    /// <remarks>
+    /// Version 2 selects the per-pass frame block array: binding 0 is a storage buffer of
+    /// <see cref="FRAME_TYPE"/> records and a push-constant pass index selects the element. A
+    /// descriptor written by an older bake must be rebaked before it can load.
+    /// </remarks>
+    internal const int ABI_VERSION = 2;
+
+    /// <summary>The frame block struct type: <c>RayBorkFrame</c>.</summary>
     internal const string FRAME_TYPE = "RayBorkFrame";
 
-    /// <summary>The frame uniform block type: <c>RayBorkFrameBlock</c>.</summary>
-    internal const string FRAME_BLOCK = "RayBorkFrameBlock";
+    /// <summary>The frame block storage buffer type: <c>RayBorkFrameBuffer</c>.</summary>
+    internal const string FRAME_BLOCK = "RayBorkFrameBuffer";
 
-    /// <summary>The frame uniform block instance: <c>rbFrameBlock</c>.</summary>
+    /// <summary>The frame block storage buffer instance: <c>rbFrameBlock</c>.</summary>
     internal const string FRAME_BLOCK_INSTANCE = "rbFrameBlock";
 
-    /// <summary>The frame block member name: <c>frame</c>.</summary>
-    internal const string FRAME_FIELD = "frame";
+    /// <summary>The frame block array member name: <c>frames</c>.</summary>
+    internal const string FRAME_FIELD = "frames";
 
     /// <summary>The frame accessor macro: <c>rbFrame</c>.</summary>
     internal const string FRAME_ACCESSOR = "rbFrame";
+
+    /// <summary>The push-constant block type: <c>RayBorkPushConstants</c>.</summary>
+    internal const string PUSH_CONSTANTS = "RayBorkPushConstants";
+
+    /// <summary>The push-constant block instance: <c>rbPushConstants</c>.</summary>
+    internal const string PUSH_CONSTANTS_INSTANCE = "rbPushConstants";
+
+    /// <summary>The push-constant pass-index member: <c>passIndex</c>.</summary>
+    internal const string PASS_INDEX = "passIndex";
 
     /// <summary>The bindless sampler array: <c>RayBorkTextures</c>.</summary>
     internal const string TEXTURES = "RayBorkTextures";

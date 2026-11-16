@@ -376,9 +376,12 @@ primitive meshes or their materials. `BoundingFrustum.Intersects` accepts a smal
 
 The screen-space HUD is same-pass text, not a separate overlay pass: `ScreenToWorldTransform(point,
 1f)` plus `DrawText(..., 18f, ...)` draws screen-aligned text that is alpha-blended with no depth
-write, so geometry closer than the overlay plane can still occlude it. A separate multi-camera
-overlay pass and per-pass frame data are deferred to M8; the M4 one-frame-block limitation is
-unchanged. `samples/Pong` is the M7 sample and Native AOT gate, and `samples/Castle` and
+write, so geometry closer than the overlay plane can still occlude it. The shader ABI v2 provides
+per-pass frame data: every camera pass in a frame writes its own 256-byte frame block and a
+push-constant pass index selects it, so multiple cameras with different views read their own
+matrices, camera position, and viewport. A separate multi-camera overlay pass for HUD text and
+sprites that must not be occluded by scene depth is deferred to the remaining M8 render-pass work.
+`samples/Pong` is the M7 sample and Native AOT gate, and `samples/Castle` and
 `samples/PrimitiveGallery` draw their status lines through the same screen transform.
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,

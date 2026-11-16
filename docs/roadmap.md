@@ -432,12 +432,12 @@ automatic instancing, and per-instance textures/uniforms.
   dzn) is not a target and is not part of the gate; the Linux gate uses the conformant lavapipe ICD.
   The fixed `RayBorkTextures[2048]` array is the shader ABI and table capacity, not a
   driver-specific workaround.
-- **M4 limitation: one frame block per frame slot.** The renderer writes one 256-byte `rbFrame`
-  block per frame slot. A frame that records more than one camera pass overwrites that block for
-  each pass, so every pass in that frame sees the last recorded pass' view-projection, view,
-  projection, camera position, and viewport. Single-camera frames are correct; split-screen
-  cameras and multiple cameras with different views need per-pass frame data, which lands with the
-  M8 multiple-camera work. This is the honest M4 limitation, not an M8 feature already shipped.
+- **M4 frame-block limitation, resolved by the M8 shader ABI v2.** M4 wrote one 256-byte `rbFrame`
+  block per frame slot, so a frame that recorded more than one camera pass gave every pass the last
+  recorded pass' view-projection, view, projection, camera position, and viewport. The M8 shader ABI
+  v2 writes one frame block per camera pass into a storage-buffer array and selects it with a
+  push-constant pass index, so multiple cameras with different views are correct. Split-screen layout
+  and the separate multi-camera overlay pass remain the M8 render-pass work.
 
 **Risks.** This is the largest milestone. The shader ABI and per-instance layout can force changes
 in the bake, the renderer, and the sample at the same time. Prototype the ABI on two shaders before
@@ -1238,7 +1238,7 @@ details:
 - Camera target routing and viewport rectangles.
 - Image and resolve barriers between passes; write-after-read validation.
 - Multiple cameras to the HDR scene target and to offscreen targets.
-- Per-pass frame data: one frame uniform block per camera pass, so multiple cameras with different
+- Per-pass frame data: one frame block per camera pass, so multiple cameras with different
   views are correct instead of sharing the last pass' values.
 - A separate multi-camera overlay pass for HUD text and sprites that must not be occluded by scene
   depth; the M7 HUD is same-pass and is the deferred input to this work.

@@ -10,9 +10,9 @@ namespace RayBork.Bake.Shaders;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The prologue declares the frame block, the fixed 2048-element bindless texture array, the
-/// per-instance record and storage buffer, the texture macros, and the stage wrapper that forwards to
-/// the user entry point.
+/// The prologue declares the per-pass frame block array, the fixed 2048-element bindless texture
+/// array, the push-constant pass index that selects the frame element, the per-instance record and
+/// storage buffer, the texture macros, and the stage wrapper that forwards to the user entry point.
 /// It is inserted immediately after the <c>#version</c> directive; a source without one gets
 /// <c>#version 450</c> prepended first. The shaderc entry point is always the generated <c>main</c>
 /// function, and the compiled module is renamed to <c>main_vertex</c> or <c>main_fragment</c>.
@@ -35,6 +35,9 @@ internal static class ShaderPrologueGenerator {
         ShaderAbiNames.FRAME_BLOCK,
         ShaderAbiNames.FRAME_BLOCK_INSTANCE,
         ShaderAbiNames.FRAME_ACCESSOR,
+        ShaderAbiNames.PUSH_CONSTANTS,
+        ShaderAbiNames.PUSH_CONSTANTS_INSTANCE,
+        ShaderAbiNames.PASS_INDEX,
         ShaderAbiNames.TEXTURES,
         ShaderAbiNames.INSTANCE_TYPE,
         ShaderAbiNames.INSTANCE_BUFFER,
@@ -193,16 +196,22 @@ internal static class ShaderPrologueGenerator {
         text.Append("    vec4 ScreenSize;\n");
         text.Append("};\n");
         text.Append('\n');
-        text.Append("layout(set = 0, binding = 0, std140) uniform ")
+        text.Append("layout(std430, set = 0, binding = 0) readonly buffer ")
             .Append(ShaderAbiNames.FRAME_BLOCK)
             .Append(" {\n");
         text.Append("    ").Append(ShaderAbiNames.FRAME_TYPE).Append(' ')
-            .Append(ShaderAbiNames.FRAME_FIELD).Append(";\n");
+            .Append(ShaderAbiNames.FRAME_FIELD).Append("[];\n");
         text.Append("} ").Append(ShaderAbiNames.FRAME_BLOCK_INSTANCE).Append(";\n");
+        text.Append('\n');
+        text.Append("layout(push_constant) uniform ").Append(ShaderAbiNames.PUSH_CONSTANTS).Append(" {\n");
+        text.Append("    uint ").Append(ShaderAbiNames.PASS_INDEX).Append(";\n");
+        text.Append("} ").Append(ShaderAbiNames.PUSH_CONSTANTS_INSTANCE).Append(";\n");
         text.Append('\n');
         text.Append("#define ").Append(ShaderAbiNames.FRAME_ACCESSOR).Append(' ')
             .Append(ShaderAbiNames.FRAME_BLOCK_INSTANCE).Append('.')
-            .Append(ShaderAbiNames.FRAME_FIELD).Append('\n');
+            .Append(ShaderAbiNames.FRAME_FIELD).Append('[')
+            .Append(ShaderAbiNames.PUSH_CONSTANTS_INSTANCE).Append('.')
+            .Append(ShaderAbiNames.PASS_INDEX).Append("]\n");
 
         if (layout.Textures.Count > 0) {
             text.Append('\n');

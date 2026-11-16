@@ -642,10 +642,11 @@ public sealed class TonemappingSettings {
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
 - Multiple cameras can clear different passes sequentially in one tick. The first camera usually
-  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. The engine shares
-  one frame uniform block per frame slot across every camera pass: a frame with more than one camera
-  pass submits the same `rbFrame` values (the last recorded pass') to every pass. Split-screen
-  cameras in one frame are therefore a known limitation rather than a supported layout.
+  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. The shader ABI v2
+  gives every camera pass its own 256-byte frame block, selected by a push-constant pass index, so a
+  frame with several camera passes submits each pass' own matrices, camera position, and viewport to
+  its draws. The M8 render-pass work that owns dedicated split-screen and overlay passes is tracked
+  separately.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
   target inside the same pass that writes it is invalid and is reported as a validation error. This

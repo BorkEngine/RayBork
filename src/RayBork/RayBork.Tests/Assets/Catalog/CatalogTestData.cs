@@ -129,6 +129,7 @@ internal static class CatalogTestData {
     internal static byte[] CreateTexturePayload() => CreatePattern(128, 5);
 
     internal static ShaderAssetDescriptor CreateShaderDescriptor() => new() {
+        AbiVersion = ShaderAbiNames.ABI_VERSION,
         VertexPayload = SHADER_VERTEX_PAYLOAD_PATH,
         FragmentPayload = SHADER_FRAGMENT_PAYLOAD_PATH,
         VertexEntry = "main_vertex",

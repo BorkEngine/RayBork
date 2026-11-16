@@ -199,10 +199,10 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   MSDF text shader, the white/error textures, and the default Fira Sans and JetBrains Mono faces with
   their payloads: 20 entries in all.
 - Shaders are GLSL compiled to SPIR-V ahead of runtime by the bake; the runtime never compiles
-  shaders. The shader ABI generates the prologue and reflection for a frame uniform block, a fixed
-  2048-element bindless texture array, and a per-instance storage buffer. `/shaders/primitive` has no
-  reflected uniforms or textures, so its prologue omits the texture array and uses only the 96-byte
-  instance header.
+  shaders. The shader ABI generates the prologue and reflection for a per-pass frame block array
+  selected by a push-constant pass index, a fixed 2048-element bindless texture array, and a
+  per-instance storage buffer. `/shaders/primitive` has no reflected uniforms or textures, so its
+  prologue omits the texture array and uses only the 96-byte instance header.
 - Fonts are TTF/OTF parsed at runtime by a managed sfnt parser: cmap 0/4/6/12, TrueType `glyf`
   simple and composite glyphs, CFF Type 2 outlines, `kern`/GPOS pair kerning, and `.notdef`. MSDF is
   generated deterministically per glyph on the app-lifetime `RayBork.Font` thread: one padded texture
@@ -214,9 +214,9 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   fonts, emoji, variable axes, and CFF2 are out of scope for v1.
 - The renderer recovers from swapchain/device loss where possible; failed recovery is fatal. Live
   GPU assets are re-uploaded from their retained CPU descriptors after a device recovery.
-- The engine keeps one 256-byte frame uniform block per frame slot, so multiple camera passes
-  recorded in one tick share the last pass' `rbFrame` values. Single-camera frames are correct;
-  per-pass frame data arrives with the multiple-camera work in M8.
+- The engine keeps one 256-byte frame block per camera pass in each frame slot's storage buffer, so
+  multiple camera passes recorded in one tick each read their own `rbFrame` values. A stale pack
+  baked with an older shader ABI is rejected at load with a rebake message.
 
 ## Repository layout
 
