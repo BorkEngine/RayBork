@@ -17,7 +17,10 @@ namespace RayBork;
 /// The texture does not expose CPU pixels: a loaded texture never retained them, and a procedural
 /// texture's pixels stay owned by its builder. <see cref="Path"/> and <see cref="IsDisposed"/> stay
 /// readable after disposal. Every other member throws <see cref="ObjectDisposedException"/> once the
-/// asset is disposed.
+/// asset is disposed. A <see cref="RenderTexture"/>'s color and depth views are the exception to
+/// immutability: resizing the target recreates the GPU image and updates the same view's
+/// <see cref="Width"/> and <see cref="Height"/> in place. Format, sampler, path, and owner stay fixed,
+/// and directly disposing the view still throws.
 /// </para>
 /// </remarks>
 public sealed class Texture : IAsset {
@@ -85,24 +88,26 @@ public sealed class Texture : IAsset {
     }
 
     /// <summary>
-    /// Gets the base-level width in pixels.
+    /// Gets the base-level width in pixels. A render target view reports the current target width, which
+    /// changes in place when the owning <see cref="RenderTexture"/> is resized.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
     public int Width {
         get {
             ThrowIfDisposed();
-            return _width;
+            return _owner is RenderTextureViewLifetime view ? view.Width : _width;
         }
     }
 
     /// <summary>
-    /// Gets the base-level height in pixels.
+    /// Gets the base-level height in pixels. A render target view reports the current target height, which
+    /// changes in place when the owning <see cref="RenderTexture"/> is resized.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
     public int Height {
         get {
             ThrowIfDisposed();
-            return _height;
+            return _owner is RenderTextureViewLifetime view ? view.Height : _height;
         }
     }
 

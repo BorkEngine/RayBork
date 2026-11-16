@@ -16,7 +16,10 @@ namespace RayBork.Internal;
 /// throws <see cref="ObjectDisposedException"/> even when a shader still holds a reference. Disposing the
 /// public <see cref="Texture"/> directly is invalid and is rejected by <see cref="Texture.Dispose"/>.
 /// This type never creates or destroys GPU objects: the target resource owns the image view and the
-/// bindless slot.
+/// bindless slot. It does own the view's current dimensions: a resize updates them together with the
+/// target description on the render thread before it completes the request, and the public
+/// <see cref="Texture.Width"/>/<see cref="Texture.Height"/> read them, so the view and the target never
+/// report a split state.
 /// </para>
 /// </remarks>
 internal sealed class RenderTextureViewLifetime : ITextureOwner {
@@ -24,6 +27,8 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
     private readonly RenderTextureTargetLifetime _target;
     private ITextureBindingResource? _resource;
     private int _ownerCount = 1;
+    private int _width;
+    private int _height;
     private bool _retired;
 
     /// <summary>
@@ -31,17 +36,48 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
     /// </summary>
     /// <param name="target">The target lifetime that owns the image view and the bindless slot.</param>
     /// <param name="resource">The bindless view resource, or <see langword="null"/> before allocation.</param>
+    /// <param name="width">The initial view width in pixels.</param>
+    /// <param name="height">The initial view height in pixels.</param>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
     internal RenderTextureViewLifetime(
         RenderTextureTargetLifetime target,
-        ITextureBindingResource? resource) {
+        ITextureBindingResource? resource,
+        int width,
+        int height) {
         ArgumentNullException.ThrowIfNull(target);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+
         _target = target;
         _resource = resource;
+        _width = width;
+        _height = height;
     }
 
     /// <summary>Gets the target id; <c>0</c> for a texture that is not a render target view.</summary>
     internal long TargetId => _target.TargetId;
+
+    /// <summary>Gets the current view width in pixels.</summary>
+    internal int Width => Volatile.Read(ref _width);
+
+    /// <summary>Gets the current view height in pixels.</summary>
+    internal int Height => Volatile.Read(ref _height);
+
+    /// <summary>
+    /// Replaces the view dimensions after the renderer recreated the target's image at a new size.
+    /// Render-thread only; the resize completes its request only after this update, so a tick thread that
+    /// observes the completed resize sees the new dimensions.
+    /// </summary>
+    /// <param name="width">The new width in pixels.</param>
+    /// <param name="height">The new height in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
+    internal void SetDimensions(int width, int height) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        Volatile.Write(ref _width, width);
+        Volatile.Write(ref _height, height);
+    }
 
     /// <inheritdoc/>
     public string Path => string.Empty;

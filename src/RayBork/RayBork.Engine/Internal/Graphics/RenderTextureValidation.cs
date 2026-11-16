@@ -41,10 +41,7 @@ internal static class RenderTextureValidation {
     /// </exception>
     /// <exception cref="ArgumentException">The color format is not a supported render-target format.</exception>
     internal static void Validate(int width, int height, TextureFormat colorFormat, int sampleCount) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(width, MAX_DIMENSION);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(height, MAX_DIMENSION);
+        ValidateDimensions(width, height);
         if (!IsSupportedColorFormat(colorFormat)) {
             throw new ArgumentException(
                 $"The render texture color format '{colorFormat}' is not supported; use "
@@ -59,6 +56,21 @@ internal static class RenderTextureValidation {
                 sampleCount,
                 "The render texture sample count must be 1, 2, 4, or 8.");
         }
+    }
+
+    /// <summary>
+    /// Validates that a render target width and height are positive and within the public limit.
+    /// </summary>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A dimension is not positive or exceeds <see cref="MAX_DIMENSION"/>.
+    /// </exception>
+    internal static void ValidateDimensions(int width, int height) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(width, MAX_DIMENSION);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(height, MAX_DIMENSION);
     }
 
     /// <summary>

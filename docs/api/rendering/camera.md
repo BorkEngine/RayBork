@@ -305,7 +305,10 @@ clamped to the target size, and the aspect ratio uses the clamped viewport. A di
 `DepthTexture`; sampling either view in the camera pass that writes the target is rejected with
 `InvalidOperationException` from the draw call. A target declared `Depth: false` has no depth attachment:
 depth-tested and depth-writing draws are not rejected, but their depth test and write are no-ops for
-that target, and `ClearMode.Depth` is a no-op.
+that target, and `ClearMode.Depth` is a no-op. After a target resize, a camera created with that target
+uses the new target size, and a later camera pass that samples the target's views sees their new
+`Width` and `Height`. The views keep their identity and are owned by the `RenderTexture`; dispose the
+render texture, not a view.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`

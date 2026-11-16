@@ -1126,6 +1126,598 @@ public sealed class RenderTextureGpuTests {
         Assert.True(target.IsDisposed);
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizeRecreatesTheTargetAndBothViewsInPlace() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(64, 64));
+        Texture colorTexture = target.ColorTexture;
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        long targetId = target.TargetId;
+        int sampleCount = target.SampleCount;
+        int liveSlots = host.Backend.BindlessTextures.LiveCount;
+        uint colorSlot = colorTexture.BindingResource!.BindlessSlot;
+        uint depthSlot = depthTexture.BindingResource!.BindlessSlot;
+        Assert.NotEqual(0u, colorSlot);
+        Assert.NotEqual(0u, depthSlot);
+        Assert.True(host.Backend.TryGetRenderTarget(targetId, out VulkanRenderTarget? before));
+        Assert.NotNull(before);
+        ulong previousRenderPass = before.RenderPass.Handle;
+        ulong previousFramebuffer = before.Framebuffer.Handle;
+        ulong previousColorView = before.ResolvedColorView.Handle;
+        ulong previousDepthView = before.ResolvedDepthView.Handle;
+
+        host.ResizeRenderTexture(target, 96, 48);
+
+        Assert.Equal(targetId, target.TargetId);
+        Assert.Equal(96, target.Width);
+        Assert.Equal(48, target.Height);
+        Assert.Equal(sampleCount, target.SampleCount);
+        Assert.True(target.IsHdr);
+        Assert.Same(colorTexture, target.ColorTexture);
+        Assert.Same(depthTexture, target.DepthTexture);
+        Assert.Equal(96, colorTexture.Width);
+        Assert.Equal(48, colorTexture.Height);
+        Assert.Equal(96, depthTexture.Width);
+        Assert.Equal(48, depthTexture.Height);
+        Assert.Equal(TextureFormat.Rgba16Float, colorTexture.Format);
+        Assert.Equal(TextureFormat.Depth32Float, depthTexture.Format);
+        Assert.Equal(string.Empty, colorTexture.Path);
+        Assert.Equal(string.Empty, depthTexture.Path);
+        Assert.Equal(liveSlots, host.Backend.BindlessTextures.LiveCount);
+        // The resize keeps the same view resource objects and bindless slots; only the descriptors change.
+        Assert.Equal(colorSlot, colorTexture.BindingResource!.BindlessSlot);
+        Assert.Equal(depthSlot, depthTexture.BindingResource!.BindlessSlot);
+        Assert.True(host.Backend.TryGetRenderTarget(targetId, out VulkanRenderTarget? resized));
+        Assert.NotNull(resized);
+        Assert.NotSame(before, resized);
+        Assert.Equal(96u, resized.Extent.Width);
+        Assert.Equal(48u, resized.Extent.Height);
+        Assert.NotEqual(previousRenderPass, resized.RenderPass.Handle);
+        Assert.NotEqual(previousFramebuffer, resized.Framebuffer.Handle);
+        Assert.NotEqual(previousColorView, resized.ResolvedColorView.Handle);
+        Assert.NotEqual(previousDepthView, resized.ResolvedDepthView.Handle);
+
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-resize-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-resize-sample");
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-resize-depth-sample");
+        Mesh targetQuad = harness.CreateQuad(
+            "meshes/render-target-resize-quad",
+            halfWidth: target.Width / (float)target.Height,
+            halfHeight: 1f);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec colorPass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            colorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        Color known = new(0.2f, 0.4f, 0.8f, 1f);
+        (int centerX, int centerY) = SceneCenter(host);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(target, targetQuad, tintShader, known, Color.Black),
+            colorPass));
+        AssertColorNear(known, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+        AssertColorNear(known, harness.ReadRenderTargetColor(target, 48, 24), HDR_TOLERANCE);
+
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        float expectedDepth = ExpectedReverseZDepth(targetCamera);
+        (VulkanDrawTestHarness.PassSpec depthPass, Mesh _) = CreateSamplePass(
+            harness,
+            depthShader,
+            depthTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            depthPass));
+        AssertDepthNear(expectedDepth, harness.ReadColor((uint)centerX, (uint)centerY).R, DEPTH_TOLERANCE);
+
+        // An unchanged size recreates nothing: the render pass and the bindless slots stay the same.
+        ulong currentRenderPass = resized.RenderPass.Handle;
+        target.Resize(96, 48);
+        Assert.True(host.Backend.TryGetRenderTarget(targetId, out VulkanRenderTarget? unchanged));
+        Assert.NotNull(unchanged);
+        Assert.Equal(currentRenderPass, unchanged.RenderPass.Handle);
+        Assert.Equal(liveSlots, host.Backend.BindlessTextures.LiveCount);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizeIsRejectedWhileACameraOrRecordedFrameHoldsTheTargetThenWorksWhenIdle() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(64, 64));
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-resize-in-use-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-resize-in-use-sample");
+        sampleShader.SetUniform("mainTexture", target.ColorTexture);
+        Mesh targetQuad = harness.CreateQuad("meshes/render-target-resize-in-use-quad");
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        float sceneAspect = sceneWidth / (float)sceneHeight;
+        Mesh sceneQuad = harness.CreateQuad(
+            "meshes/render-target-resize-in-use-scene",
+            halfWidth: sceneAspect,
+            halfHeight: 1f);
+        Color known = new(0.3f, 0.6f, 0.9f, 1f);
+        CameraService cameras = new(
+            new FakePlatformWindow(static () => { }) {
+                Width = sceneWidth,
+                Height = sceneHeight,
+            });
+        RenderFramePacket packet = new(1);
+        packet.BeginRecording(0.0, 0.0);
+        cameras.BeginFrame(packet, 0.0, 0.0);
+        try {
+            using (Camera offscreen = cameras.CreateCamera(
+                new Transform(new Vector3(0f, 0f, 1f)),
+                CameraProjection.Orthographic,
+                0f,
+                2f,
+                ClearMode.ColorAndDepth,
+                null,
+                0.1f,
+                10f,
+                null,
+                target)) {
+                offscreen.DrawMesh(
+                    targetQuad,
+                    Transform.Identity,
+                    tintShader,
+                    RenderState.Opaque with { Cull = CullMode.None },
+                    known);
+                // The current frame holds the target because a camera targets it.
+                Assert.Throws<InvalidOperationException>(() => target.Resize(96, 48));
+                Assert.Equal(64, target.Width);
+            }
+
+            using (Camera screen = cameras.CreateCamera(
+                new Transform(new Vector3(0f, 0f, 1f)),
+                CameraProjection.Orthographic,
+                0f,
+                2f,
+                ClearMode.ColorAndDepth,
+                null,
+                0.1f,
+                10f,
+                null)) {
+                screen.DrawMesh(
+                    sceneQuad,
+                    Transform.Identity,
+                    sampleShader,
+                    RenderState.Opaque with { Cull = CullMode.None });
+            }
+
+            cameras.EndFrame();
+            // The sealed frame still references the target, so the recorded frame's hold rejects a resize.
+            Assert.Throws<InvalidOperationException>(() => target.Resize(96, 48));
+
+            harness.Submit(packet);
+            (int centerX, int centerY) = SceneCenter(host);
+            AssertColorNear(known, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+            Assert.Throws<InvalidOperationException>(() => target.Resize(96, 48));
+            Assert.Equal(0, host.Backend.RenderTargetFenceWaitCountForTests);
+
+            // The render loop releases the packet's retention after present; the test owns it here. The
+            // frame is still likely executing on the GPU, so the resize must wait for its last-use fence
+            // before it replaces the images rather than relying on the test to idle the device.
+            packet.Retention.Release();
+            host.ResizeRenderTexture(target, 96, 48);
+            Assert.Equal(1, host.Backend.RenderTargetFenceWaitCountForTests);
+            Assert.Equal(96, target.Width);
+            Assert.Equal(48, target.Height);
+            Assert.Equal(96, target.ColorTexture.Width);
+            Assert.Equal(48, target.ColorTexture.Height);
+
+            // The recreated target is usable: draw and sample it at the new size.
+            Mesh resizedQuad = harness.CreateQuad(
+                "meshes/render-target-resize-in-use-resized",
+                halfWidth: target.Width / (float)target.Height,
+                halfHeight: 1f);
+            (VulkanDrawTestHarness.PassSpec resizedPass, Mesh _) = CreateSamplePass(
+                harness,
+                sampleShader,
+                target.ColorTexture,
+                sceneWidth,
+                sceneHeight,
+                ClearMode.ColorAndDepth,
+                Color.Black);
+            Color resized = new(0.1f, 0.2f, 0.3f, 1f);
+            harness.Submit(harness.CreateFrameWithPasses(
+                2,
+                CreateTargetDrawPass(target, resizedQuad, tintShader, resized, Color.Black),
+                resizedPass));
+            AssertColorNear(resized, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+            Assert.Empty(host.Instance.ConsumeValidationErrors());
+        } finally {
+            cameras.AbandonFrame();
+            if (!packet.Retention.IsReleased) {
+                packet.Retention.Release();
+            }
+
+            target.Dispose();
+        }
+    }
+
+    [Theory]
+    [InlineData(TextureFormat.Rgba16Float, 1, true)]
+    [InlineData(TextureFormat.Rgba16Float, 4, true)]
+    [InlineData(TextureFormat.Rgba8Unorm, 2, true)]
+    [InlineData(TextureFormat.Rgba8Srgb, 4, true)]
+    [InlineData(TextureFormat.Rgba16Float, 4, false)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizeKeepsTheTargetDescription(TextureFormat format, int requestedSampleCount, bool depth) {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(32, 32, format, depth, requestedSampleCount));
+        int effectiveSampleCount = VulkanSampleCountSelection.Select(
+            requestedSampleCount,
+            host.Device.Capabilities.SupportedSampleCounts);
+        Texture colorTexture = target.ColorTexture;
+        Texture? depthTexture = target.DepthTexture;
+
+        host.ResizeRenderTexture(target, 40, 24);
+
+        Assert.Equal(40, target.Width);
+        Assert.Equal(24, target.Height);
+        Assert.Equal(effectiveSampleCount, target.SampleCount);
+        Assert.Same(colorTexture, target.ColorTexture);
+        Assert.Equal(40, colorTexture.Width);
+        Assert.Equal(24, colorTexture.Height);
+        Assert.Equal(format, colorTexture.Format);
+        Assert.Equal(format == TextureFormat.Rgba8Srgb, colorTexture.IsSrgb);
+        Assert.Equal(string.Empty, colorTexture.Path);
+        Assert.Equal(1, colorTexture.MipLevels);
+        InvalidOperationException colorDispose = Assert.Throws<InvalidOperationException>(colorTexture.Dispose);
+        Assert.Contains("RenderTexture", colorDispose.Message, StringComparison.Ordinal);
+        if (depth) {
+            Texture view = Assert.IsType<Texture>(target.DepthTexture);
+            Assert.Same(depthTexture, view);
+            Assert.Equal(TextureFormat.Depth32Float, view.Format);
+            Assert.Equal(40, view.Width);
+            Assert.Equal(24, view.Height);
+            Assert.Equal(string.Empty, view.Path);
+            InvalidOperationException depthDispose = Assert.Throws<InvalidOperationException>(view.Dispose);
+            Assert.Contains("RenderTexture", depthDispose.Message, StringComparison.Ordinal);
+        } else {
+            Assert.Null(target.DepthTexture);
+        }
+
+        Shader tintShader = harness.CreateShader(
+            $"shaders/render-target-resize-description-tint-{format}-{depth}",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Mesh targetQuad = harness.CreateQuad(
+            $"meshes/render-target-resize-description-quad-{format}-{depth}",
+            halfWidth: target.Width / (float)target.Height,
+            halfHeight: 1f);
+        Color known = new(0.25f, 0.5f, 0.75f, 1f);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        Shader colorShader = CreateSampleShader(harness, $"shaders/render-target-resize-description-sample-{format}-{depth}");
+        (VulkanDrawTestHarness.PassSpec colorPass, Mesh _) = CreateSamplePass(
+            harness,
+            colorShader,
+            colorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(target, targetQuad, tintShader, known, Color.Black),
+            colorPass));
+        (int centerX, int centerY) = SceneCenter(host);
+        float tolerance = format == TextureFormat.Rgba16Float ? HDR_TOLERANCE : BYTE_TOLERANCE;
+        AssertColorNear(known, harness.ReadColor((uint)centerX, (uint)centerY), tolerance);
+
+        if (depth) {
+            Shader depthShader = CreateDepthSampleShader(
+                harness,
+                $"shaders/render-target-resize-description-depth-{format}");
+            (VulkanDrawTestHarness.PassSpec depthPass, Mesh _) = CreateSamplePass(
+                harness,
+                depthShader,
+                target.DepthTexture!,
+                sceneWidth,
+                sceneHeight,
+                ClearMode.ColorAndDepth,
+                Color.Black);
+            VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+            float expectedDepth = ExpectedReverseZDepth(targetCamera);
+            harness.Submit(harness.CreateFrameWithPasses(
+                2,
+                CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+                depthPass));
+            AssertDepthNear(expectedDepth, harness.ReadColor((uint)centerX, (uint)centerY).R, DEPTH_TOLERANCE);
+        }
+
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ADeviceRecoveryRecreatesAResizedTargetFromTheUpdatedDescription() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+
+        host.ResizeRenderTexture(target, 48, 24);
+        Assert.Equal(48, target.Width);
+        Assert.Equal(24, target.Height);
+        Assert.Equal(48, target.ColorTexture.Width);
+        Assert.Equal(24, target.ColorTexture.Height);
+
+        host.Backend.SimulateDeviceLossForTests();
+        // The next frame runs the recovery and is dropped; the live render texture is recreated from
+        // the description the resize updated.
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, Color.Red)));
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
+        harness.RestoreAssets();
+
+        Assert.Equal(48, target.Width);
+        Assert.Equal(24, target.Height);
+        Assert.Equal(48, target.ColorTexture.Width);
+        Assert.Equal(24, target.ColorTexture.Height);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? recovered));
+        Assert.NotNull(recovered);
+        Assert.Equal(48u, recovered.Extent.Width);
+        Assert.Equal(24u, recovered.Extent.Height);
+        Assert.Equal(target.SampleCount, recovered.SampleCount);
+
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-resize-recovery-sample");
+        Color green = new(0f, 1f, 0f, 1f);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            target.ColorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            CreateTargetClearPass(target, green),
+            samplePass));
+        (int centerX, int centerY) = SceneCenter(host);
+        AssertColorNear(green, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+        AssertColorNear(green, harness.ReadRenderTargetColor(target, 24, 12), HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizeReusesTheBindlessSlotsAndWorksWithNoSpareSlots() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Texture colorTexture = target.ColorTexture;
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        ITextureBindingResource colorBinding = colorTexture.BindingResource!;
+        ITextureBindingResource depthBinding = depthTexture.BindingResource!;
+        uint colorSlot = colorBinding.BindlessSlot;
+        uint depthSlot = depthBinding.BindlessSlot;
+        Assert.NotEqual(0u, colorSlot);
+        Assert.NotEqual(0u, depthSlot);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-resize-full-table-sample");
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            colorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+
+        // Fill every spare slot so a resize that allocated a new slot would fail. The target keeps its
+        // existing pair, so the resize must still succeed.
+        List<uint> spareSlots = [];
+        while (host.Backend.BindlessTextures.TryAllocate(out uint spareSlot)) {
+            spareSlots.Add(spareSlot);
+        }
+
+        try {
+            Assert.Equal(
+                checked((int)host.Backend.BindlessTextures.Capacity),
+                host.Backend.BindlessTextures.LiveCount);
+            host.ResizeRenderTexture(target, 48, 24);
+            Assert.Equal(48, target.Width);
+            Assert.Equal(24, target.Height);
+            Assert.Equal(48, colorTexture.Width);
+            Assert.Equal(24, colorTexture.Height);
+            Assert.Same(colorBinding, colorTexture.BindingResource);
+            Assert.Same(depthBinding, depthTexture.BindingResource);
+            Assert.Equal(colorSlot, colorTexture.BindingResource!.BindlessSlot);
+            Assert.Equal(depthSlot, depthTexture.BindingResource!.BindlessSlot);
+            Assert.Equal(
+                checked((int)host.Backend.BindlessTextures.Capacity),
+                host.Backend.BindlessTextures.LiveCount);
+
+            Color known = new(0.4f, 0.2f, 0.6f, 1f);
+            harness.Submit(harness.CreateFrameWithPasses(
+                1,
+                CreateTargetClearPass(target, known),
+                samplePass));
+            (int centerX, int centerY) = SceneCenter(host);
+            AssertColorNear(known, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+            Assert.Empty(host.Instance.ConsumeValidationErrors());
+        } finally {
+            foreach (uint spareSlot in spareSlots) {
+                host.Backend.BindlessTextures.Release(spareSlot);
+            }
+        }
+
+        Assert.Equal(3, host.Backend.BindlessTextures.LiveCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ARenderThreadRecheckRejectsAResizeQueuedBeforeAFrameHold() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-resize-recheck-sample");
+        Color red = new(1f, 0f, 0f, 1f);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            target.ColorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+
+        // The tick-side check runs while the target is idle, then a frame hold appears before the render
+        // thread services the request. The backend must reject it instead of recreating the images.
+        Task request = host.RenderTextures.ResizeAsync(target.Lifetime, 64, 32);
+        Assert.False(request.IsCompleted);
+        target.Lifetime.AddFrameHold();
+        try {
+            host.ProcessRenderTextures();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => request);
+        } finally {
+            target.Lifetime.ReleaseFrameHold();
+        }
+
+        Assert.Equal(32, target.Width);
+        Assert.Equal(32, target.Height);
+        Assert.Equal(32, target.ColorTexture.Width);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? live));
+        Assert.NotNull(live);
+        Assert.Equal(32u, live.Extent.Width);
+        Assert.Equal(32u, live.Extent.Height);
+
+        // The failed re-check did not damage the target: it still renders and samples at its old size.
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetClearPass(target, red),
+            samplePass));
+        (int centerX, int centerY) = SceneCenter(host);
+        AssertColorNear(red, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizeAfterADeviceRecoveryRecreatesTheRecoveredTarget() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+
+        host.Backend.SimulateDeviceLossForTests();
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, Color.Red)));
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
+        harness.RestoreAssets();
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? recovered));
+        Assert.NotNull(recovered);
+        Assert.Equal(32u, recovered.Extent.Width);
+        Assert.Equal(32u, recovered.Extent.Height);
+
+        host.ResizeRenderTexture(target, 48, 24);
+
+        Assert.Equal(48, target.Width);
+        Assert.Equal(24, target.Height);
+        Assert.Equal(48, target.ColorTexture.Width);
+        Assert.Equal(24, target.ColorTexture.Height);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? resized));
+        Assert.NotNull(resized);
+        Assert.Equal(48u, resized.Extent.Width);
+        Assert.Equal(24u, resized.Extent.Height);
+        Assert.Equal(target.SampleCount, resized.SampleCount);
+
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-resize-after-recovery-sample");
+        Color green = new(0f, 1f, 0f, 1f);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            target.ColorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            CreateTargetClearPass(target, green),
+            samplePass));
+        (int centerX, int centerY) = SceneCenter(host);
+        AssertColorNear(green, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizeBeyondTheDeviceLimitFailsAndKeepsTheOldTarget() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Texture colorTexture = target.ColorTexture;
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        int liveSlots = host.Backend.BindlessTextures.LiveCount;
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? before));
+        Assert.NotNull(before);
+
+        // The public limit accepts 64x48, so a lower device limit proves the render-thread check. The
+        // override lets a conformant device with a 16384 limit exercise a rejection that is reachable on
+        // a device whose real maxImageDimension2D is smaller.
+        host.Backend.MaxImageDimension2DOverrideForTests = 40;
+        try {
+            Assert.Throws<ArgumentOutOfRangeException>(() => host.ResizeRenderTexture(target, 64, 48));
+        } finally {
+            host.Backend.MaxImageDimension2DOverrideForTests = null;
+        }
+
+        Assert.Equal(32, target.Width);
+        Assert.Equal(32, target.Height);
+        Assert.Equal(32, colorTexture.Width);
+        Assert.Equal(32, depthTexture.Width);
+        Assert.Equal(liveSlots, host.Backend.BindlessTextures.LiveCount);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? live));
+        Assert.NotNull(live);
+        Assert.Same(before, live);
+        Assert.Equal(32u, live.Extent.Width);
+        Assert.Equal(32u, live.Extent.Height);
+
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-resize-device-limit-sample");
+        Color red = new(1f, 0f, 0f, 1f);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            target.ColorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetClearPass(target, red),
+            samplePass));
+        (int centerX, int centerY) = SceneCenter(host);
+        AssertColorNear(red, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
     private static Shader CreateSampleShader(VulkanDrawTestHarness harness, string path) =>
         harness.CreateShader(
             path,

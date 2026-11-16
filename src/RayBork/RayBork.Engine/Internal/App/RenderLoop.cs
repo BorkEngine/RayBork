@@ -18,10 +18,10 @@ namespace RayBork.Internal;
 /// The loop waits on the frame-ring ready signal, the GPU asset bridge signal, and the render texture
 /// signal together, so an upload queued during <c>Setup</c> and a render texture requested in
 /// <c>Setup</c> both start without waiting for the first tick and no loop turn busy-spins. While the
-/// bridge still has a queued or in-flight upload, or a render texture creation or destruction is
-/// pending, the wait is bounded to a few milliseconds so the loop keeps servicing that work even when
-/// no frame is being published; with no pending work it waits indefinitely. The bridge and the render
-/// texture queue are serviced before each wait and after every wake. When the backend's
+/// bridge still has a queued or in-flight upload, or a render texture creation, resize, or destruction
+/// is pending, the wait is bounded to a few milliseconds so the loop keeps servicing that work even
+/// when no frame is being published; with no pending work it waits indefinitely. The bridge and the
+/// render texture queue are serviced before each wait and after every wake. When the backend's
 /// <see cref="IRendererBackend.DeviceGeneration"/> changes, the loop asks the bridge to recreate the
 /// live resources before the next frame is submitted; presentation-only recoveries leave the
 /// generation unchanged and do not re-upload assets.
@@ -36,7 +36,7 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// Teardown order in the loop's final block: the frame ring is already complete and drained, so the
-/// render texture service closes first (failing pending creations with the failure or
+/// render texture service closes first (failing pending creations and resizes with the failure or
 /// <see cref="ObjectDisposedException"/>), then the bridge closes (completing pending uploads and
 /// destroying live resources), then the backend is disposed. <see cref="Start"/> may be called once.
 /// Read <see cref="Failure"/> after <see cref="Join"/> returned or after <see cref="IsCompleted"/>

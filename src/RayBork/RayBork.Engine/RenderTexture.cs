@@ -27,12 +27,16 @@ namespace RayBork;
 /// </para>
 /// <para>
 /// The views keep their identity across a device recovery: the renderer replaces the GPU image and
-/// bindless slot behind the same public <see cref="Texture"/> objects. Resizing, readback, and
-/// post-processing are later M8 tasks.
+/// bindless slot behind the same public <see cref="Texture"/> objects. <see cref="Resize"/> recreates
+/// the target's images in place: the target id, the color format, the depth flag, the effective sample
+/// count, and the two view objects are unchanged, while <see cref="Width"/>, <see cref="Height"/>, and
+/// the views' dimensions report the new size. The target's contents are undefined after a resize.
+/// Readback and post-processing are later M8 tasks.
 /// </para>
 /// </remarks>
 public sealed class RenderTexture : IDisposable {
     private readonly RenderTextureTargetLifetime _lifetime;
+    private readonly RenderTextureService _service;
 
     /// <summary>
     /// Initializes a render texture after the render thread created its target and color and depth views.
@@ -44,17 +48,22 @@ public sealed class RenderTexture : IDisposable {
     /// The sampled depth view over the resolved depth image, or <see langword="null"/> when the target has
     /// no depth attachment.
     /// </param>
+    /// <param name="service">The request handoff that recreates the target on the render thread.</param>
     /// <exception cref="ArgumentNullException">
-    /// <paramref name="lifetime"/> or <paramref name="colorTexture"/> is <c>null</c>.
+    /// <paramref name="lifetime"/>, <paramref name="colorTexture"/>, or <paramref name="service"/> is
+    /// <c>null</c>.
     /// </exception>
     internal RenderTexture(
         RenderTextureTargetLifetime lifetime,
         Texture colorTexture,
-        Texture? depthTexture) {
+        Texture? depthTexture,
+        RenderTextureService service) {
         ArgumentNullException.ThrowIfNull(lifetime);
         ArgumentNullException.ThrowIfNull(colorTexture);
+        ArgumentNullException.ThrowIfNull(service);
 
         _lifetime = lifetime;
+        _service = service;
         ColorTexture = colorTexture;
         DepthTexture = depthTexture;
     }
@@ -145,6 +154,47 @@ public sealed class RenderTexture : IDisposable {
 
     /// <summary>Gets the target lifetime the frame's retention set holds.</summary>
     internal RenderTextureTargetLifetime Lifetime => _lifetime;
+
+    /// <summary>
+    /// Recreates the target's color and depth images, render pass, framebuffer, bindless views, and
+    /// pipeline cache at a new size. The target id, color format, depth attachment, effective sample
+    /// count, and both <see cref="ColorTexture"/>/<see cref="DepthTexture"/> objects keep their identity;
+    /// the public dimensions and the views' <see cref="Texture.Width"/>/<see cref="Texture.Height"/>
+    /// report the new size. The target's contents are undefined after the call.
+    /// </summary>
+    /// <param name="width">The new width in pixels.</param>
+    /// <param name="height">The new height in pixels.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A dimension is not positive, exceeds <c>16384</c>, or exceeds the current device's maximum 2D image
+    /// dimension.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A camera targets the target, a draw samples one of its views, or a recorded or in-flight frame
+    /// still references it. Resize the target only when no frame that used it is in flight; the call never
+    /// blocks on a current-frame hold.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The render texture or the app's renderer is disposed.</exception>
+    /// <exception cref="GraphicsException">The renderer could not recreate the target's images.</exception>
+    /// <remarks>
+    /// <para>
+    /// Call it from the tick thread, like <see cref="EngineContext.CreateRenderTextureAsync"/>. The call
+    /// blocks until the render thread recreated the target; the render thread services the request
+    /// independently of the tick thread, so a call from <see cref="IGame.Tick"/> stalls only that tick.
+    /// A resize to the current size recreates nothing and, for a live target with a running renderer,
+    /// does not throw. The render thread updates the target description and both views' dimensions
+    /// together before it completes the request, so the public dimensions and
+    /// <see cref="Texture.Width"/>/<see cref="Texture.Height"/> never report a split size.
+    /// </para>
+    /// <para>
+    /// The device-limit check runs on the render thread against the current device's maximum 2D image
+    /// dimension, so a size that is valid at creation can still be rejected after a device recreation.
+    /// A later device recovery recreates the resized target from the updated description.
+    /// </para>
+    /// </remarks>
+    public void Resize(int width, int height) {
+        ThrowIfDisposed();
+        _service.ResizeAsync(_lifetime, width, height).GetAwaiter().GetResult();
+    }
 
     /// <summary>
     /// Releases the color and depth views and queues the target's GPU images for destruction. Idempotent.

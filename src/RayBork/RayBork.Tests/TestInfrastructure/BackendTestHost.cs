@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Internal;
 using Silk.NET.Core.Loader;
@@ -23,6 +24,8 @@ namespace RayBork.Tests;
 /// </para>
 /// </remarks>
 internal sealed class BackendTestHost : IDisposable {
+    private const int SERVICE_TIMEOUT_MILLISECONDS = 30_000;
+
     private readonly SdlTestHost _sdlHost;
     private readonly RenderSettings _settings;
     private readonly IReadOnlyList<string> _instanceExtensions;
@@ -96,6 +99,68 @@ internal sealed class BackendTestHost : IDisposable {
     /// Services one pending render texture request or destruction round.
     /// </summary>
     internal void ProcessRenderTextures() => _backend.ProcessRenderTextureRequests(RenderTextures);
+
+    /// <summary>
+    /// Runs <see cref="RenderTexture.Resize"/> on a second thread while this thread plays the render
+    /// thread and services the real request queue, so the blocking public call is exercised without a
+    /// render loop.
+    /// </summary>
+    /// <param name="target">The render texture to resize.</param>
+    /// <param name="width">The new width in pixels.</param>
+    /// <param name="height">The new height in pixels.</param>
+    /// <exception cref="TimeoutException">The resize neither queued nor completed in time.</exception>
+    internal void ResizeRenderTexture(RenderTexture target, int width, int height) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        // Drain earlier queued work and its wakeup so the signal below belongs to this resize.
+        ProcessRenderTextures();
+        while (RenderTextures.Signal.WaitOne(0)) {
+            // A create or destroy already woke the loop; the resize needs its own wakeup.
+        }
+
+        Exception? failure = null;
+        using ManualResetEventSlim completed = new(false);
+        Thread tick = new(() => {
+            try {
+                target.Resize(width, height);
+            } catch (Exception exception) {
+                failure = exception;
+            } finally {
+                try {
+                    completed.Set();
+                } catch (ObjectDisposedException) {
+                    // A timeout on this thread disposes the event while a blocked resize is still unwinding.
+                }
+            }
+        }) {
+            IsBackground = true,
+            Name = "RayBork.Test.RenderTextureResize",
+        };
+        tick.Start();
+
+        int signaled = WaitHandle.WaitAny(
+            [RenderTextures.Signal, completed.WaitHandle],
+            SERVICE_TIMEOUT_MILLISECONDS);
+        if (signaled == WaitHandle.WaitTimeout) {
+            throw new TimeoutException(
+                $"The resize of render texture {target.TargetId} neither queued nor completed within "
+                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms.");
+        }
+
+        if (signaled == 0) {
+            ProcessRenderTextures();
+        }
+
+        if (!tick.Join(SERVICE_TIMEOUT_MILLISECONDS)) {
+            throw new TimeoutException(
+                $"The blocking resize of render texture {target.TargetId} did not return within "
+                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms.");
+        }
+
+        if (failure is not null) {
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+    }
 
     /// <summary>
     /// Gets the direct surface provider the backend creates and destroys the native surface through.

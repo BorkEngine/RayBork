@@ -1,6 +1,6 @@
 # RayBork Architecture
 
-Status: M8 as-built through the render texture color and depth paths, on top of the M7 orthographic and
+Status: M8 as-built through the render texture color, depth, and resize paths, on top of the M7 orthographic and
 screen-space surface, the M6 font and text runtime, the M5 primitive and collision surface,
 the M4 core 3D renderer, the M3 asset pipeline, the M2 renderer foundation, and the M1 host,
 platform, threads, frame handoff, HDR presentation, recovery, and time. M0 established the build,
@@ -37,7 +37,9 @@ frame block per camera pass), one render pass per camera pass on the scene targe
 depth paths of runtime render textures: `RenderTexture` creation, `Camera.Target` routing, a per-target
 render pass and geometry pipeline cache, the multisampled color and depth attachments with their
 single-sample resolved images, Vulkan 1.2 depth/stencil resolve, and the resolved color and depth images
-sampled as normal bindless `Texture` views. Resize, readback, and post-processing are later M8 tasks.
+sampled as normal bindless `Texture` views. `RenderTexture.Resize` recreates the target's images, render
+pass, framebuffer, bindless views, and pipeline cache in place while keeping the public view identity.
+Readback and post-processing are later M8 tasks.
 
 ## Goals
 
@@ -246,7 +248,7 @@ The backend owns:
 | --- | --- | --- |
 | `Initialize` | Render | Creates the instance, requests the native surface through `RendererBackendOptions.SurfaceProvider`, then creates the device, queues, swapchain, scene target, present pipeline, and frame resources. Failure is fatal (`RB3001`; a platform surface failure surfaces as `RB2003` on the main thread and is wrapped as `RB3001` on the render thread). |
 | `Resize` | Render | Recreates the swapchain, scene target, present pipeline framebuffers, and per-image semaphores when the selected extent changes. A zero width or height marks the surface as having no drawable extent and keeps the presentation path. It is idempotent for an unchanged extent. |
-| `ProcessRenderTextureRequests` | Render | Drains the render texture request queue before the frame wait: it creates a target's color and depth images, resolved images, samplers, bindless color and depth views, and public `RenderTexture` for a queued creation, and destroys a released target's GPU objects and bindless slots after the frame that last used it completed. A creation failure completes its request with the failure and never stops the loop. A device recovery recreates the images, samplers, slots, and the bindless view resources behind the unchanged public views. |
+| `ProcessRenderTextureRequests` | Render | Drains the render texture request queue before the frame wait: it creates a target's color and depth images, resolved images, samplers, bindless color and depth views, and public `RenderTexture` for a queued creation, recreates those resources at a new size for a queued resize after the target is idle, and destroys a released target's GPU objects and bindless slots after the frame that last used it completed. A creation or resize failure completes its request with the failure and never stops the loop. A device recovery recreates the images, samplers, slots, and the bindless view resources behind the unchanged public views from the retained description. |
 | `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area and the camera's target as the framebuffer, loads/stores the scene attachments between passes, resolves each pass' render area for color and depth, transitions the resolved color and depth images for the present pass and for a later camera's sample, records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
@@ -281,12 +283,12 @@ immutable draw records.
 - The tick thread records into the frame ring and never calls the backend. The render thread never
   calls user code: there are no callbacks or virtual methods from the backend into the game.
 - The app-lifetime `RenderTextureService` is the render-texture handoff, not a second backend. The tick
-  thread queues a validated creation request and awaits its completion task; the render loop's render
-  thread creates the images and completes the task before it acquires the next frame. The service owns
-  no GPU object: the backend owns the target registry and maps the recorded target id to the target
-  resource. A public `RenderTexture` holds one owner reference on its target lifetime; a recorded frame
-  adds a frame hold through the frame's retention set, and the target is destroyed only after both are
-  gone.
+  thread queues a validated creation or resize request and awaits (creation) or blocks on (resize) its
+  completion task; the render loop's render thread creates the images or recreates them at the new size
+  and completes the task before it acquires the next frame. The service owns no GPU object: the backend
+  owns the target registry and maps the recorded target id to the target resource. A public
+  `RenderTexture` holds one owner reference on its target lifetime; a recorded frame adds a frame hold
+  through the frame's retention set, and the target is destroyed only after both are gone.
 - `EngineInfo` is projected from backend capabilities at startup and after a recovery that changes
   the device or presentation path. It is an immutable public value; no backend type, native handle,
   or live capability query crosses the seam.
@@ -310,7 +312,7 @@ Recoverable failures are handled on the render thread without calling user code:
 | Swapchain out of date | Resize, restore, or display change | Wait for the device to idle, drop the pending present, recreate the swapchain, scene target, present pipeline framebuffers, and per-image semaphores at a frame boundary. |
 | Swapchain suboptimal | Driver hint on acquire or present | Finish the present, then recreate the presentation path at the next frame boundary; presentation continues meanwhile. |
 | Surface lost | Window or display topology change | Destroy the old native surface through the provider, have the main thread create a replacement inside the recovery, then recreate the presentation path. A failure is fatal. |
-| Recoverable device loss | Driver reset or timeout where a new device succeeds | Recreate the logical device, re-probe capabilities, rebuild the swapchain, scene target, present pipeline, and frame resources from the retained settings, and recreate every live render texture's images, sampler, bindless view, and pipeline cache from its retained description. |
+| Recoverable device loss | Driver reset or timeout where a new device succeeds | Recreate the logical device, re-probe capabilities, rebuild the swapchain, scene target, present pipeline, and frame resources from the retained settings, and recreate every live render texture's images, sampler, bindless view, and pipeline cache from its retained description (including a resized extent). |
 | Minimized / zero extent | Window state | Do not acquire or present; report a zero-draw frame and idle the renderer while the 30 FPS tick cap continues. |
 
 A recovery waits for the device to idle, drops the frame that was waiting for presentation,
@@ -558,6 +560,21 @@ wait for the render loop to finish with it   wait for newest ready
   in flight. The app scene target keeps its pre-existing cross-frame behavior: its single set of images
   is reused by up to three in-flight frames, so a frame can overwrite content an earlier submitted frame
   still reads. That hazard is unchanged in M8 and is a follow-up, not part of the render texture path.
+- `RenderTexture.Resize` is the third render texture request. The tick thread queues it with the target
+  lifetime and the new size and blocks on the completion; the render loop drains the resize queue after
+  creations and before destructions, so every request of a loop turn is serviced in one pass. The public
+  `Resize` validates the public size limit and rejects a target that a recorded or in-flight frame holds
+  with `InvalidOperationException` before it queues; the renderer re-checks the frame hold and then waits
+  for the last-use fence, so it never waits on a hold the blocked tick thread would have to release and
+  never replaces images an in-flight frame reads. It creates a new `VulkanRenderTarget` (color, optional
+  depth, resolved images, render pass, framebuffer), keeps the target's samplers, reuses its bindless
+  slots and rewrites their descriptors to the new views, updates both `RenderTextureViewLifetime`
+  resources behind the unchanged public `Texture` objects, updates their dimensions together with the
+  lifetime description on the render thread before it completes the request, and then disposes the old
+  pipeline cache (which references the old render pass) and the old target. A failure before the swap
+  leaves the old target live and releases the partial new resources. The view lifetime owns the current
+  view dimensions, so `Texture.Width`/`Height` and `RenderTexture.Width`/`Height` become authoritative at
+  the same point, and a later device recovery recreates the resized target from the updated description.
 - A multisampled depth-bearing target resolves its depth attachment through Vulkan 1.2
   `VkSubpassDescriptionDepthStencilResolve` in a `vkCreateRenderPass2` render pass. Device selection
   requires `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, so the sampled depth value is the stored reverse-Z value
@@ -1556,12 +1573,26 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   resolved depth of a multisampled scene target with `VulkanReadback.ReadSceneDepthPixel`, exercise
   write→sample→write→sample, a later-frame sample without a rewrite, viewport-scoped depth resolve,
   two depth targets in one frame, `ClearMode.None`/`ClearMode.Depth` loads and clears, and assert the
-  depth view's format, nearest clamp sampler, empty path, and ownership. `RenderTextureDescriptionTests`
-  and `RenderTextureServiceTests` cover validation, the sample-count fallback, depth-view nullability
-  and ownership, cancellation, the shutdown failure, and the target lifetime without a GPU;
-  `RenderTextureAppTests` covers creation in `Setup` and `Tick` and the post-shutdown
-  `ObjectDisposedException`. `VulkanDepthStencilResolveTests` covers the required sample-zero selection,
-  the rejection of min/max-only modes, and the missing-mode diagnostic without a GPU.
+  depth view's format, nearest clamp sampler, empty path, and ownership. M8 also covers resize: an idle
+  64x64 target resized to 96x48 recreates the target, render pass, framebuffer, and views while the two
+  `Texture` objects keep their identity and their bindless slots and report the new dimensions; the
+  resized target renders and samples color and depth; an unchanged size recreates nothing; resize while a
+  camera targets the target or a sealed frame holds it throws `InvalidOperationException` without
+  corrupting the frame, and works after the frame completes and the last-use fence is waited on; a resize
+  succeeds while every spare bindless slot is allocated; the render-thread re-check rejects a resize whose
+  frame hold appeared after queueing and leaves the target usable; a resize after a device recovery
+  recreates the recovered target; the device-limit rejection is exercised through a test-only limit
+  override and keeps the old target; depthless, `Rgba16Float`/`Rgba8Unorm`/`Rgba8Srgb`, and 1x/2x/4x
+  targets keep their format, depth, and sample count; and a device recovery recreates the resized target
+  from the updated description. `RenderTextureDescriptionTests` and `RenderTextureServiceTests` cover
+  validation, the sample-count fallback, depth-view nullability and ownership, cancellation, the shutdown
+  failure, the target lifetime, the resize request handoff and completion, the render-thread hold
+  re-check, the idempotent same-size no-op, the invalid and disposed resize failures, the public resize
+  after `Stop`, and the queued create/resize/destroy round without a GPU; `RenderTextureAppTests` covers
+  creation in `Setup` and `Tick`, a blocking resize with in-place view dimensions, the in-use rejection,
+  and the post-shutdown stopped-service `ObjectDisposedException`. `VulkanDepthStencilResolveTests`
+  covers the required sample-zero selection, the rejection of min/max-only modes, and the missing-mode
+  diagnostic without a GPU.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
