@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="RenderTarget.csproj" />
+  <Project Path="RenderTarget.Assets/RenderTarget.Assets.csproj" />
+</Solution>

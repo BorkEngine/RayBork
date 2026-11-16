@@ -1,0 +1,20 @@
+[shader]
+vertex = "vignette.vert"
+fragment = "vignette.frag"
+
+# The engine binds this reserved name to the camera target's resolved color. The material value is
+# ignored; it only has to be declared so the sidecar exposes the binding to the post-process pass.
+[[shader.textures]]
+name = "sourceColor"
+
+# Gentle warm tint applied in scene-linear space. Alpha stays in the output.
+[[shader.uniforms]]
+name = "uTint"
+type = "vec4"
+default = [1.0, 0.95, 0.87, 1.0]
+
+# Corner falloff: 0.35 keeps the vignette subtle.
+[[shader.uniforms]]
+name = "uVignette"
+type = "float"
+default = 0.35
