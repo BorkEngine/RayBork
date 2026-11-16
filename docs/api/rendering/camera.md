@@ -235,7 +235,7 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
   model or material object is not an engine asset and adds no hold.
 - Each camera pass is its own render pass. The renderer uses the clamped viewport as the render area,
   loads the previous pass' stored color and depth, clears that rectangle when the camera asks, and
-  resolves the color for that rectangle only. Several cameras in one tick therefore render
+  resolves the color and depth for that rectangle only. Several cameras in one tick therefore render
   split-screen views and layered HUD passes into the same scene target correctly.
 - MSAA is a property of the target. The app scene target uses the builder's `WithMSAA` sample count; a
   `RenderTexture` created by `CreateRenderTextureAsync` uses its own `SampleCount` and effective
@@ -258,7 +258,7 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > M8 adds `Camera.Target` and the `target` parameter: a camera records into a runtime
 > `RenderTexture` instead of the app's linear HDR scene target. The present pass applies AgX after
 > all cameras finish; a render texture reaches the screen through a later camera that samples its
-> `ColorTexture`.
+> `ColorTexture`, and a later camera can sample its resolved `DepthTexture` for depth-driven effects.
 
 Properties:
 
@@ -301,9 +301,11 @@ projection must preserve both conventions if it wants to match the engine's dept
 helpers. `target` selects the pass' render target: `null` is the app's linear HDR scene target, and a
 `RenderTexture` routes the pass into that target. The viewport defaults to the full target and is
 clamped to the target size, and the aspect ratio uses the clamped viewport. A disposed target is
-`ObjectDisposedException`. A target declared `Depth: false` has no depth attachment: depth-tested and
-depth-writing draws are not rejected, but their depth test and write are no-ops for that target, and
-`ClearMode.Depth` is a no-op.
+`ObjectDisposedException`. A later camera in the same tick can sample the target's `ColorTexture` or
+`DepthTexture`; sampling either view in the camera pass that writes the target is rejected with
+`InvalidOperationException` from the draw call. A target declared `Depth: false` has no depth attachment:
+depth-tested and depth-writing draws are not rejected, but their depth test and write are no-ops for
+that target, and `ClearMode.Depth` is a no-op.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`
@@ -654,7 +656,10 @@ public sealed class TonemappingSettings {
 - Later cameras load the previous camera pass' stored content for their own viewport. `ClearMode.None`
   keeps the earlier color and depth, `ClearMode.Color` clears color and keeps depth, and
   `ClearMode.Depth` clears depth and keeps color. The load is part of the camera's own render pass, so
-  a camera that draws over only part of the target keeps the earlier pixels everywhere else.
+  a camera that draws over only part of the target keeps the earlier pixels everywhere else. A
+  depth-bearing `RenderTexture` applies the same rules; `ClearMode.Depth` clears its depth attachment,
+  and a later camera can then sample the resolved `DepthTexture`. A depthless target treats
+  `ClearMode.Depth` as a no-op.
 - Multiple cameras render to the scene target in one frame: each pass is its own render pass with the
   clamped viewport as the render area, and each pass resolves its own render area. That makes
   split-screen to the scene target correct, including passes with different views, projections, and
@@ -675,12 +680,12 @@ public sealed class TonemappingSettings {
   ABI v2 gives every camera pass its own 256-byte frame block, selected by a push-constant pass index,
   so a frame with several camera passes submits each pass' own matrices, camera position, and
   viewport to its draws.
-- A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
-  tick are ordered by creation order; the renderer inserts the required image and layout barriers.
-  Sampling a target inside the same pass that writes it is invalid and throws
-  `InvalidOperationException` from the draw call before the frame is published. A target is reused
-  only after the frame that last used it completed. `Camera.Target` reports the target and a disposed
-  target is `ObjectDisposedException` when the camera is created.
+- A camera that targets a `RenderTexture` and a later camera that samples that texture's `ColorTexture`
+  or `DepthTexture` in the same tick are ordered by creation order; the renderer inserts the required
+  image and layout barriers. Sampling either view inside the same pass that writes the target is invalid
+  and throws `InvalidOperationException` from the draw call before the frame is published. A target is
+  reused only after the frame that last used it completed. `Camera.Target` reports the target and a
+  disposed target is `ObjectDisposedException` when the camera is created.
 
 There is no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
 the scene clear control for its pass. A later camera that does not clear color leaves the earlier
@@ -824,9 +829,12 @@ a fallback logs a warning. The scene target color and depth attachments use the 
 the swapchain images are single-sample. Scene color is resolved into a single-sample sampled image
 before the present pass, and each camera pass resolves only its own render area. The multisampled
 color and depth attachments are stored between camera passes so a later camera can load them. Depth is
-cleared to `0.0` and the reverse-Z state is defined; multisampled depth is not resolved because
-nothing samples depth. A `RenderTexture` uses its own `SampleCount` and its own render pass, resolved
-single-sample color image, and geometry pipeline cache; the app scene target is unaffected.
+cleared to `0.0` and the reverse-Z state is defined. Scene depth is also resolved into a single-sample
+internal depth image with the Vulkan 1.2 depth/stencil resolve path; it is the input a later internal
+consumer such as T5 SSAO samples, and there is no public scene-target depth view. A `RenderTexture`
+uses its own `SampleCount` and its own render pass, resolved single-sample color and depth images, and
+geometry pipeline cache; the app scene target is unaffected. The public `DepthTexture` is the resolved
+multisampled depth image, or the depth attachment itself for a single-sample target.
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
 not advertise it; a requested `Fifo` falls back to `Mailbox` when FIFO is unavailable. `Immediate` is

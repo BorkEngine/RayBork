@@ -11,8 +11,8 @@ namespace RayBork.Internal;
 
 /// <summary>
 /// The Vulkan 1.2 renderer backend: the swapchain, the linear HDR scene target, the M4 geometry pass
-/// with bindless textures and automatic instancing, and the AgX/scRGB present path behind
-/// <see cref="IRendererBackend"/>.
+/// with bindless textures and automatic instancing, the runtime render target color and depth paths, and
+/// the AgX/scRGB present path behind <see cref="IRendererBackend"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -331,11 +331,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             format,
             description.Depth);
         Sampler sampler = default;
+        Sampler depthSampler = default;
         uint slot = 0;
+        uint depthSlot = 0;
         RenderTargetEntry? entry = null;
         bool success = false;
         try {
-            sampler = CreateRenderTargetSampler(device);
+            sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
             if (!_bindlessTextures!.TryAllocate(out slot)) {
                 throw new GraphicsException(
                     $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
@@ -346,12 +348,47 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
             _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
 
+            if (target.HasDepth) {
+                depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
+                if (!_bindlessTextures.TryAllocate(out depthSlot)) {
+                    throw new GraphicsException(
+                        $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
+                            + "the reserved white slot), so the render texture depth view has no slot.",
+                        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                        null);
+                }
+
+                _bindlessTextures.WriteTexture(depthSlot, target.ResolvedDepthView, depthSampler);
+            }
+
             long targetId = service.NextTargetId();
             RenderTextureTargetLifetime lifetime = new(targetId, description, sampleCount, service.QueueDestruction);
             RenderTextureViewResource viewResource = new(target.ResolvedColorView, sampler) {
                 BindlessSlot = slot,
             };
             RenderTextureViewLifetime viewLifetime = new(lifetime, viewResource);
+            RenderTextureViewResource? depthViewResource = null;
+            RenderTextureViewLifetime? depthViewLifetime = null;
+            Texture? depthTexture = null;
+            if (target.HasDepth) {
+                depthViewResource = new RenderTextureViewResource(target.ResolvedDepthView, depthSampler) {
+                    BindlessSlot = depthSlot,
+                };
+                depthViewLifetime = new RenderTextureViewLifetime(lifetime, depthViewResource);
+                TextureAssetDescriptor depthDescriptor = new() {
+                    Payload = string.Empty,
+                    Width = checked((uint)description.Width),
+                    Height = checked((uint)description.Height),
+                    MipLevels = 1,
+                    Format = TextureFormat.Depth32Float,
+                    IsSrgb = false,
+                    Filter = TextureFilter.Nearest,
+                    Wrap = TextureWrap.Clamp,
+                    MaxAnisotropy = 1f,
+                };
+                depthTexture = new Texture(depthViewLifetime, depthDescriptor, isProcedural: false, isRenderTargetView: true);
+            }
+
             TextureAssetDescriptor descriptor = new() {
                 Payload = string.Empty,
                 Width = checked((uint)description.Width),
@@ -364,8 +401,18 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 MaxAnisotropy = 1f,
             };
             Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
-            RenderTexture renderTexture = new(lifetime, colorTexture);
-            entry = new RenderTargetEntry(targetId, sampleCount, target, lifetime, viewLifetime, viewResource, sampler);
+            RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture);
+            entry = new RenderTargetEntry(
+                targetId,
+                sampleCount,
+                target,
+                lifetime,
+                viewLifetime,
+                viewResource,
+                sampler,
+                depthViewLifetime,
+                depthViewResource,
+                depthSampler);
             _renderTargets.Add(targetId, entry);
             success = request.Completion.TrySetResult(renderTexture);
             if (!success) {
@@ -373,6 +420,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             slot = 0;
+            depthSlot = 0;
         } finally {
             request.DisposeRegistration();
             if (!success) {
@@ -383,8 +431,16 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                         _bindlessTextures.Release(slot);
                     }
 
+                    if (depthSlot != 0 && _bindlessTextures is not null) {
+                        _bindlessTextures.Release(depthSlot);
+                    }
+
                     if (sampler.Handle != 0) {
                         device.Vulkan.DestroySampler(device.Device, sampler, null);
+                    }
+
+                    if (depthSampler.Handle != 0) {
+                        device.Vulkan.DestroySampler(device.Device, depthSampler, null);
                     }
 
                     target.Dispose();
@@ -403,11 +459,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             "The format is not a supported render texture color format."),
     };
 
-    private static Sampler CreateRenderTargetSampler(VulkanDevice device) {
+    private static Sampler CreateRenderTargetSampler(VulkanDevice device, TextureFilter filter) {
+        bool nearest = filter == TextureFilter.Nearest;
         SamplerCreateInfo createInfo = new() {
             SType = StructureType.SamplerCreateInfo,
-            MagFilter = Filter.Linear,
-            MinFilter = Filter.Linear,
+            MagFilter = nearest ? Filter.Nearest : Filter.Linear,
+            MinFilter = nearest ? Filter.Nearest : Filter.Linear,
             MipmapMode = SamplerMipmapMode.Nearest,
             AddressModeU = SamplerAddressMode.ClampToEdge,
             AddressModeV = SamplerAddressMode.ClampToEdge,
@@ -461,13 +518,26 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             entry.ViewResource.BindlessSlot = 0;
         }
 
+        if (entry.DepthViewResource is not null
+            && entry.DepthViewResource.BindlessSlot != 0
+            && _bindlessTextures is not null) {
+            _bindlessTextures.Release(entry.DepthViewResource.BindlessSlot);
+            entry.DepthViewResource.BindlessSlot = 0;
+        }
+
         if (entry.Sampler.Handle != 0 && _device is not null) {
             _device.Vulkan.DestroySampler(_device.Device, entry.Sampler, null);
             entry.Sampler = default;
         }
 
+        if (entry.DepthSampler.Handle != 0 && _device is not null) {
+            _device.Vulkan.DestroySampler(_device.Device, entry.DepthSampler, null);
+            entry.DepthSampler = default;
+        }
+
         if (retireView) {
             entry.ViewLifetime.Retire();
+            entry.DepthViewLifetime?.Retire();
             // The backend retired the target without a public Dispose (shutdown, or a canceled
             // creation). The public object must report IsDisposed even though no destroy request ran.
             entry.Lifetime.MarkDestroyed();
@@ -1344,9 +1414,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 ToVulkanColorFormat(description.ColorFormat),
                 description.Depth);
             Sampler sampler = default;
+            Sampler depthSampler = default;
             uint slot = 0;
+            uint depthSlot = 0;
             try {
-                sampler = CreateRenderTargetSampler(device);
+                sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
                 if (!_bindlessTextures!.TryAllocate(out slot)) {
                     throw new GraphicsException(
                         $"The bindless texture table is full ({_bindlessTextures.Capacity} slots) while "
@@ -1357,6 +1429,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
                 _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
 
+                if (target.HasDepth) {
+                    depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
+                    if (!_bindlessTextures.TryAllocate(out depthSlot)) {
+                        throw new GraphicsException(
+                            $"The bindless texture table is full ({_bindlessTextures.Capacity} slots) while "
+                                + "recreating a render texture depth view after a device loss.",
+                            DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                            null);
+                    }
+
+                    _bindlessTextures.WriteTexture(depthSlot, target.ResolvedDepthView, depthSampler);
+                }
+
                 entry.Target.Dispose();
                 entry.Target = target;
                 entry.SampleCount = sampleCount;
@@ -1366,15 +1451,32 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 entry.ViewResource.Sampler = sampler;
                 entry.ViewResource.BindlessSlot = slot;
                 entry.ViewLifetime.SetBindingResource(entry.ViewResource);
+                if (target.HasDepth && entry.DepthViewResource is not null) {
+                    entry.DepthSampler = depthSampler;
+                    entry.DepthViewResource.View = target.ResolvedDepthView;
+                    entry.DepthViewResource.Sampler = depthSampler;
+                    entry.DepthViewResource.BindlessSlot = depthSlot;
+                    entry.DepthViewLifetime!.SetBindingResource(entry.DepthViewResource);
+                }
+
                 entry.Pipelines = null;
                 slot = 0;
+                depthSlot = 0;
             } catch {
                 if (slot != 0 && _bindlessTextures is not null) {
                     _bindlessTextures.Release(slot);
                 }
 
+                if (depthSlot != 0 && _bindlessTextures is not null) {
+                    _bindlessTextures.Release(depthSlot);
+                }
+
                 if (sampler.Handle != 0) {
                     device.Vulkan.DestroySampler(device.Device, sampler, null);
+                }
+
+                if (depthSampler.Handle != 0) {
+                    device.Vulkan.DestroySampler(device.Device, depthSampler, null);
                 }
 
                 target.Dispose();
@@ -1610,11 +1712,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// resolved.
     /// </para>
     /// <para>
-    /// The app scene target discards its content before the first pass and its resolved color is
-    /// transitioned to <c>ShaderReadOnlyOptimal</c> for the present pass after the last one. A runtime
-    /// render target keeps its content: the frame waits for the last frame that used each target, the
-    /// writing pass transitions the target's color images to their attachment layouts, and the resolved
-    /// color transitions back to a shader read after the pass so a later camera can sample it.
+    /// The app scene target discards its content before the first pass and its resolved color and depth
+    /// are transitioned to <c>ShaderReadOnlyOptimal</c> for the present pass and a later internal
+    /// consumer after the last one. A runtime render target keeps its content: the frame waits for the
+    /// last frame that used each target, the writing pass transitions the target's color and depth
+    /// images to their attachment layouts, and the resolved images transition back to a shader read
+    /// after the pass so a later camera can sample them.
     /// </para>
     /// </remarks>
     private void RecordScenePass(
@@ -2289,7 +2392,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
     /// <summary>
     /// The render-thread resources of one runtime render target: the images and render pass, the bindless
-    /// color view, the target's linear clamp sampler, and the lazily created geometry pipeline cache.
+    /// color and depth views, the target's samplers, and the lazily created geometry pipeline cache.
     /// </summary>
     private sealed class RenderTargetEntry {
         internal RenderTargetEntry(
@@ -2299,7 +2402,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             RenderTextureTargetLifetime lifetime,
             RenderTextureViewLifetime viewLifetime,
             RenderTextureViewResource viewResource,
-            Sampler sampler) {
+            Sampler sampler,
+            RenderTextureViewLifetime? depthViewLifetime,
+            RenderTextureViewResource? depthViewResource,
+            Sampler depthSampler) {
             Id = id;
             SampleCount = sampleCount;
             Target = target;
@@ -2307,6 +2413,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             ViewLifetime = viewLifetime;
             ViewResource = viewResource;
             Sampler = sampler;
+            DepthViewLifetime = depthViewLifetime;
+            DepthViewResource = depthViewResource;
+            DepthSampler = depthSampler;
         }
 
         internal long Id { get; }
@@ -2322,6 +2431,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         internal RenderTextureViewResource ViewResource { get; }
 
         internal Sampler Sampler { get; set; }
+
+        internal RenderTextureViewLifetime? DepthViewLifetime { get; }
+
+        internal RenderTextureViewResource? DepthViewResource { get; }
+
+        internal Sampler DepthSampler { get; set; }
 
         internal VulkanGeometryPipelineCache? Pipelines { get; set; }
     }

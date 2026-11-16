@@ -143,6 +143,28 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void MissingDepthResolveModeIsRejectedAndNamed() {
+        VulkanPhysicalDeviceCandidate[] candidates = [
+            Candidate(
+                0,
+                "No Resolve GPU",
+                supportedDepthResolveModes: ResolveModeFlags.AverageBit),
+        ];
+
+        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+
+        Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
+        Assert.Contains("No Resolve GPU", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "VkPhysicalDeviceDepthStencilResolveProperties.supportedDepthResolveModes",
+            exception.Message,
+            StringComparison.Ordinal);
+        Assert.Contains("VK_RESOLVE_MODE_AVERAGE_BIT", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("VK_RESOLVE_MODE_SAMPLE_ZERO_BIT", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void IsSuitableRequiresEveryM2Fact() {
         Assert.True(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "Suitable", PhysicalDeviceType.DiscreteGpu)));
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "No Graphics", supportsGraphics: false)));
@@ -153,6 +175,10 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
             Candidate(0, "No Bindless", missingBindlessFeatures: "shaderSampledImageArrayNonUniformIndexing")));
         Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
             Candidate(0, "Small Table", bindlessTextureCapacity: 2047)));
+        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
+            Candidate(0, "No Resolve", supportedDepthResolveModes: ResolveModeFlags.None)));
+        Assert.True(VulkanPhysicalDeviceSelector.IsSuitable(
+            Candidate(0, "Min Resolve", supportedDepthResolveModes: ResolveModeFlags.MinBit)));
     }
 
     private static VulkanPhysicalDeviceCandidate Candidate(
@@ -164,7 +190,8 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
         bool supportsPresent = true,
         bool hasSwapchainExtension = true,
         uint bindlessTextureCapacity = VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
-        string missingBindlessFeatures = "") =>
+        string missingBindlessFeatures = "",
+        ResolveModeFlags supportedDepthResolveModes = ResolveModeFlags.SampleZeroBit) =>
         new(
             index,
             name,
@@ -174,5 +201,6 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
             supportsPresent,
             hasSwapchainExtension,
             bindlessTextureCapacity,
-            missingBindlessFeatures);
+            missingBindlessFeatures,
+            supportedDepthResolveModes);
 }

@@ -10,10 +10,10 @@ namespace RayBork.Internal;
 /// <remarks>
 /// Selection is pure so it can be unit tested without a GPU. A device qualifies only when it
 /// supports Vulkan 1.2 or newer, graphics and presentation queues, <c>VK_KHR_swapchain</c>, the
-/// M4 descriptor-indexing subset the bindless texture table needs, and enough update-after-bind
-/// sampled images for the fixed <c>RayBorkTextures[2048]</c> array. A device without the bindless
-/// subset or the capacity is not suitable; the renderer never falls back to one texture per draw or
-/// to a smaller array.
+/// M4 descriptor-indexing subset the bindless texture table needs, enough update-after-bind sampled
+/// images for the fixed <c>RayBorkTextures[2048]</c> array, and a usable Vulkan 1.2 depth resolve
+/// mode. A device without the bindless subset, the capacity, or depth resolve is not suitable; the
+/// renderer never falls back to one texture per draw, a smaller array, or an unsampleable depth view.
 /// </remarks>
 internal static class VulkanPhysicalDeviceSelector {
     private const uint REQUIRED_API_VERSION = (1u << 22) | (2u << 12);
@@ -29,7 +29,9 @@ internal static class VulkanPhysicalDeviceSelector {
         && candidate.SupportsPresentQueue
         && candidate.HasSwapchainExtension
         && candidate.BindlessTextureCapacity >= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY
-        && string.IsNullOrEmpty(candidate.MissingBindlessFeatures);
+        && string.IsNullOrEmpty(candidate.MissingBindlessFeatures)
+        && VulkanDepthStencilResolve.SelectDepthResolveMode(candidate.SupportedDepthResolveModes)
+            != ResolveModeFlags.None;
 
     /// <summary>
     /// Selects the preferred suitable device and returns its index in the loader's device array.
@@ -113,6 +115,16 @@ internal static class VulkanPhysicalDeviceSelector {
 
         if (!string.IsNullOrEmpty(candidate.MissingBindlessFeatures)) {
             reasons.Add($"descriptor-indexing features missing: {candidate.MissingBindlessFeatures}");
+        }
+
+        if (VulkanDepthStencilResolve.SelectDepthResolveMode(candidate.SupportedDepthResolveModes)
+            == ResolveModeFlags.None) {
+            reasons.Add(
+                "no usable depth/stencil resolve mode "
+                + $"({VulkanDepthStencilResolve.PROPERTY_NAME} is "
+                + $"{VulkanDepthStencilResolve.Describe(candidate.SupportedDepthResolveModes)}; need "
+                + "VK_RESOLVE_MODE_SAMPLE_ZERO_BIT, VK_RESOLVE_MODE_MIN_BIT, or "
+                + "VK_RESOLVE_MODE_MAX_BIT)");
         }
 
         return $"- [{candidate.Index}] {candidate.Name}: {string.Join("; ", reasons)}.";

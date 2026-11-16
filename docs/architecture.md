@@ -1,6 +1,6 @@
 # RayBork Architecture
 
-Status: M8 as-built through the render texture color path, on top of the M7 orthographic and
+Status: M8 as-built through the render texture color and depth paths, on top of the M7 orthographic and
 screen-space surface, the M6 font and text runtime, the M5 primitive and collision surface,
 the M4 core 3D renderer, the M3 asset pipeline, the M2 renderer foundation, and the M1 host,
 platform, threads, frame handoff, HDR presentation, recovery, and time. M0 established the build,
@@ -33,11 +33,11 @@ the ninth internal primitive mesh (the unit disc), the `BoundingFrustum.Intersec
 the Pong sample and Native AOT gate, and the removal of the M1-M3 `samples/HelloInterop` host. There
 is no `DrawTexture`, no 2D or screen-space draw API, and no separate screen-space renderer:
 screen-space content is world-space geometry on a screen-aligned transform. M8 adds shader ABI v2 (one
-frame block per camera pass), one render pass per camera pass on the scene target, and the color path
-of runtime render textures: `RenderTexture` creation, `Camera.Target` routing, a per-target render
-pass and geometry pipeline cache, the multisampled color attachment with its single-sample resolved
-view, and that view sampled as a normal bindless `Texture`. The depth view, resize, and readback are
-later M8 tasks.
+frame block per camera pass), one render pass per camera pass on the scene target, and the color and
+depth paths of runtime render textures: `RenderTexture` creation, `Camera.Target` routing, a per-target
+render pass and geometry pipeline cache, the multisampled color and depth attachments with their
+single-sample resolved images, Vulkan 1.2 depth/stencil resolve, and the resolved color and depth images
+sampled as normal bindless `Texture` views. Resize, readback, and post-processing are later M8 tasks.
 
 ## Goals
 
@@ -246,8 +246,8 @@ The backend owns:
 | --- | --- | --- |
 | `Initialize` | Render | Creates the instance, requests the native surface through `RendererBackendOptions.SurfaceProvider`, then creates the device, queues, swapchain, scene target, present pipeline, and frame resources. Failure is fatal (`RB3001`; a platform surface failure surfaces as `RB2003` on the main thread and is wrapped as `RB3001` on the render thread). |
 | `Resize` | Render | Recreates the swapchain, scene target, present pipeline framebuffers, and per-image semaphores when the selected extent changes. A zero width or height marks the surface as having no drawable extent and keeps the presentation path. It is idempotent for an unchanged extent. |
-| `ProcessRenderTextureRequests` | Render | Drains the render texture request queue before the frame wait: it creates a target's images, sampler, bindless color view, and public `RenderTexture` for a queued creation, and destroys a released target's GPU objects and bindless slot after the frame that last used it completed. A creation failure completes its request with the failure and never stops the loop. |
-| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area and the camera's target as the framebuffer, loads/stores the scene attachments between passes, resolves each pass' render area, transitions the resolved color for the present pass (and for a later camera's sample), records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
+| `ProcessRenderTextureRequests` | Render | Drains the render texture request queue before the frame wait: it creates a target's color and depth images, resolved images, samplers, bindless color and depth views, and public `RenderTexture` for a queued creation, and destroys a released target's GPU objects and bindless slots after the frame that last used it completed. A creation failure completes its request with the failure and never stops the loop. A device recovery recreates the images, samplers, slots, and the bindless view resources behind the unchanged public views. |
+| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area and the camera's target as the framebuffer, loads/stores the scene attachments between passes, resolves each pass' render area for color and depth, transitions the resolved color and depth images for the present pass and for a later camera's sample, records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
 | `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, every live render target and its pipeline cache, the scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
@@ -541,22 +541,30 @@ wait for the render loop to finish with it   wait for newest ready
   and add no hold; materials are value snapshots in the record, and a model draw retains the internal
   program of each part material.
 - A camera pass carries the render target id its camera was created with (`0` is the app scene
-  target). A runtime target is not an engine asset: its color view is a `Texture` with an empty `Path`
-  owned by the `RenderTexture`, and the frame's retention set holds the target lifetime, not a catalog
-  entry. `RenderTexture.Dispose` queues the target for destruction, but the renderer destroys it only
-  after every recorded frame that wrote or sampled it completed.
+  target). A runtime target is not an engine asset: its color and depth views are `Texture` objects with
+  empty `Path` values owned by the `RenderTexture`, and the frame's retention set holds the target
+  lifetime, not a catalog entry. `RenderTexture.Dispose` queues the target for destruction, but the
+  renderer destroys it only after every recorded frame that wrote or sampled it completed.
 - The render loop services the render texture queue at each loop turn before it acquires the next
   frame, so `CreateRenderTextureAsync` completes after the render thread allocated the images and a
   render target created in `Setup` exists before the first tick. Cancellation, a shutdown, or a render
   loop failure completes the request without leaking a target.
-- A render target records the layout of its color images. The first write of a frame transitions the
-  single-sample resolved color from its previous read layout to the color-attachment layout, and the
-  pass transitions it back to a shader read so a later camera in the same tick samples it. The render
-  thread waits for the frame that last used a target before it records a new use, so a render target
-  is never overwritten or sampled while the previous frame that used it is in flight. The app scene
-  target keeps its pre-existing cross-frame behavior: its single set of images is reused by up to
-  three in-flight frames, so a frame can overwrite content an earlier submitted frame still reads. That
-  hazard is unchanged in M8 and is a follow-up, not part of the render texture path.
+- A render target records the layout of its color and depth images. The first write of a frame
+  transitions the single-sample resolved color and resolved depth from their previous read layouts to
+  their attachment layouts, and the pass transitions them back to shader reads so a later camera in the
+  same tick samples them. A multisampled depth-bearing target also tracks the layout of its multisampled
+  depth attachment. The render thread waits for the frame that last used a target before it records a
+  new use, so a render target is never overwritten or sampled while the previous frame that used it is
+  in flight. The app scene target keeps its pre-existing cross-frame behavior: its single set of images
+  is reused by up to three in-flight frames, so a frame can overwrite content an earlier submitted frame
+  still reads. That hazard is unchanged in M8 and is a follow-up, not part of the render texture path.
+- A multisampled depth-bearing target resolves its depth attachment through Vulkan 1.2
+  `VkSubpassDescriptionDepthStencilResolve` in a `vkCreateRenderPass2` render pass. Device selection
+  requires a usable depth resolve mode and prefers `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`. The resolved depth
+  image carries a sampled view for the public `DepthTexture` (runtime targets) or stays internal (the
+  app scene target); the scene target's resolved depth is the input an internal later consumer such as
+  T5 SSAO samples. `VulkanReadback.ReadSceneDepthPixel` reads that resolved image for both single-sample
+  and multisampled scene targets.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
   starts in `Setup` completes without waiting for the first tick and does not stall frame
@@ -609,7 +617,14 @@ wait for the render loop to finish with it   wait for newest ready
 - MSAA defaults to 4x; scene color is resolved to a single-sample image before presentation, and
   the swapchain images are single-sample. The HDR and SDR paths share the resolve. Each camera pass
   resolves its own render area, and the multisampled color and depth attachments are stored between
-  camera passes so a later camera can load them.
+  camera passes so a later camera can load them. Scene depth is also resolved into a single-sample
+  internal depth image with Vulkan 1.2 depth/stencil resolve; it is the input a later internal consumer
+  such as T5 SSAO samples, and there is no public scene-target depth view. A runtime depth-bearing
+  target resolves its depth attachment into the image behind `RenderTexture.DepthTexture`.
+- A render target's color and depth views are separate bindless textures over separate single-sample
+  images. The render-target entry owns one `RenderTextureViewLifetime`, `RenderTextureViewResource`,
+  sampler, and bindless slot per view; a device recovery replaces their GPU handles and slots while the
+  public `Texture` objects stay the same.
 - Projection is built for Vulkan's `[0,1]` depth range and reverse-Z:
   - near plane maps to depth `1.0`;
   - infinity maps to `0.0`;
@@ -704,8 +719,11 @@ supported, and a mismatch logs a warning. The scene target color and depth attac
 effective count; the color attachment is resolved to a single-sample sampled image once per camera
 render area. Depth is cleared to `0.0` per camera pass and the reverse-Z comparison state is defined;
 the multisampled color and depth attachments are stored between camera passes so a later pass can
-load them, but multisampled depth is not resolved because nothing samples depth. The present triangle
-is not depth-tested; the geometry pipelines consume the reverse-Z state.
+load them. The depth attachment is also resolved into a single-sample image per camera render area
+with Vulkan 1.2 depth/stencil resolve; the scene target's resolved depth stays internal for a later
+internal consumer such as T5 SSAO, while a runtime target exposes its resolved depth as
+`RenderTexture.DepthTexture`. The present triangle is not depth-tested; the geometry pipelines consume
+the reverse-Z state.
 
 The reverse-Z perspective projection used by the engine is, for row vectors:
 
@@ -1518,21 +1536,28 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   camera with `ClearMode.None` records validation-clean undefined content, a negative and oversized
   viewport clamps to the target, and a frame with no camera pass presents with zero scene
   statistics. The suite asserts draw/instance/triangle statistics, single-pixel resolved-color
-  probes, and single-sample depth probes with explicit tolerances, and every test requires a
+  probes, and resolved depth probes with explicit tolerances, and every test requires a
   validation-clean submission. The host validates core Vulkan usage, not synchronization, so the
   suite does not prove the access masks against the validation layer's synchronization model.
   `PerPassFrameGpuTests` keeps covering the shader ABI v2 per-pass frame block.
-- M8 adds the render texture color-path suite (`RenderTextureGpuTests`): a 64x64 HDR target drawn by
+- M8 adds the render texture suite (`RenderTextureGpuTests`): a 64x64 HDR target drawn by
   a camera and sampled by a later scene camera, write-then-sample-then-write-then-sample in one tick,
-  the same-pass self-sample rejection, the three color formats at 1x and 4x (including the sRGB
-  sampling decode), a smaller camera viewport updating only its target region, two targets in one
-  frame without cross-talk, `ColorTexture.Path` staying empty with the view retained by a recorded
-  frame and released with the target, target reuse across frames, a real `Camera`/`CameraService`
-  route that targets the render texture and is sampled by a later real camera, a live target across a
-  simulated device loss, and shutdown disposal. `RenderTextureDescriptionTests`
-  and `RenderTextureServiceTests` cover validation, the sample-count fallback, cancellation, the
-  shutdown failure, and the target lifetime without a GPU; `RenderTextureAppTests` covers creation in
-  `Setup` and `Tick` and the post-shutdown `ObjectDisposedException`.
+  the same-pass self-sample rejection (including the `DepthTexture` view), the three color formats at
+  1x and 4x (including the sRGB sampling decode), a smaller camera viewport updating only its target
+  region, two targets in one frame without cross-talk, `ColorTexture.Path` and `DepthTexture.Path`
+  staying empty with the views retained by a recorded frame and released with the target, target reuse
+  across frames, a real `Camera`/`CameraService` route that targets the render texture and is sampled
+  by a later real camera, a live target and its depth view across a simulated device loss, and shutdown
+  disposal. The depth tests draw known reverse-Z geometry into a 1x and a 4x depth-bearing target and
+  sample `DepthTexture` through a later camera, assert the resolved value against the view-projection
+  matrix with a tolerance, prove the depth resolve is independent of the three color formats, read the
+  resolved depth of a multisampled scene target with `VulkanReadback.ReadSceneDepthPixel`, and assert
+  the depth view's format, nearest clamp sampler, empty path, and ownership. `RenderTextureDescriptionTests`
+  and `RenderTextureServiceTests` cover validation, the sample-count fallback, depth-view nullability
+  and ownership, cancellation, the shutdown failure, and the target lifetime without a GPU;
+  `RenderTextureAppTests` covers creation in `Setup` and `Tick` and the post-shutdown
+  `ObjectDisposedException`. `VulkanDepthStencilResolveTests` covers the sample-zero preference, the
+  min/max fallback, and the missing-mode diagnostic without a GPU.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
@@ -1583,11 +1608,11 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
     generation runs on the app-lifetime `RayBork.Font` thread, and the tick thread never waits for
     it. The per-font glyph texture cache is hard-capped and its eviction is coordinated with frame
     holds.
-15. A runtime render target is not an engine asset: its color view reports an empty `Path`, is owned
-    by its `RenderTexture`, and is never mounted, cached, or disposed by the game. A frame that writes
-    or samples a target holds its lifetime until the frame completes, and the renderer waits for the
-    frame that last used a target before it records a new use. The pre-existing scene-target
-    cross-frame overwrite hazard is unchanged.
+15. A runtime render target is not an engine asset: its color and depth views report empty `Path`
+    values, are owned by their `RenderTexture`, and are never mounted, cached, or disposed by the game.
+    A frame that writes or samples a target holds its lifetime until the frame completes, and the
+    renderer waits for the frame that last used a target before it records a new use. The pre-existing
+    scene-target cross-frame overwrite hazard is unchanged.
 
 Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3; 2-4, 7, and 10 are exercised end to end by
 the camera and draw path, and 7 and 10 by the M7 `samples/Pong` AOT gate; 13 is enforced by the

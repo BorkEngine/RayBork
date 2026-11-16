@@ -1288,6 +1288,7 @@ RayBork.Camera.Target.get -> RayBork.RenderTexture?
 RayBork.EngineContext.CreateRenderTextureAsync(RayBork.RenderTextureDescription description, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<RayBork.RenderTexture!>!
 RayBork.RenderTexture
 RayBork.RenderTexture.ColorTexture.get -> RayBork.Texture!
+RayBork.RenderTexture.DepthTexture.get -> RayBork.Texture?
 RayBork.RenderTexture.Dispose() -> void
 RayBork.RenderTexture.Height.get -> int
 RayBork.RenderTexture.IsDisposed.get -> bool

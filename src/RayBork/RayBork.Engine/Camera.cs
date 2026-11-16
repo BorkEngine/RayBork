@@ -3574,8 +3574,8 @@ public sealed class Camera : IDisposable {
             if (texture is not null) {
                 if (texture.IsRenderTargetView && IsSamePassRenderTargetView(texture)) {
                     throw new InvalidOperationException(
-                        $"Camera {Number} writes a render texture and samples that texture's ColorTexture "
-                            + "in the same pass. A render texture can be sampled only from a later camera "
+                        $"Camera {Number} writes a render texture and samples that target's color or depth "
+                            + "view in the same pass. A render texture can be sampled only from a later camera "
                             + "pass in the same tick; the frame was not recorded.");
                 }
 
@@ -3585,8 +3585,8 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
-    /// Gets whether a render target color view belongs to the render texture the recording camera
-    /// writes.
+    /// Gets whether a render target color or depth view belongs to the render texture the recording
+    /// camera writes.
     /// </summary>
     private bool IsSamePassRenderTargetView(Texture texture) =>
         _targetId != 0 && texture.RenderTargetId == _targetId;

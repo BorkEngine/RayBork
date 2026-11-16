@@ -61,9 +61,23 @@ public sealed class VulkanDeviceTests {
         Assert.NotEmpty(capabilities.Swapchain.PresentModes);
         Assert.True(capabilities.Swapchain.IsUsable);
         Assert.Contains(1, capabilities.SupportedSampleCounts);
+        Assert.NotEqual(ResolveModeFlags.None, capabilities.DepthResolveMode);
         Assert.True(capabilities.MaxFramebufferWidth > 0);
         Assert.True(capabilities.MaxFramebufferHeight > 0);
         Assert.False(string.IsNullOrEmpty(capabilities.DeviceName));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void CapabilitiesReportAUsableDepthResolveMode() {
+        using GpuTestHost host = GpuTestHost.CreateOrSkip();
+
+        ResolveModeFlags mode = host.Device.Capabilities.DepthResolveMode;
+
+        Assert.NotEqual(ResolveModeFlags.None, mode);
+        Assert.True(
+            mode is ResolveModeFlags.SampleZeroBit or ResolveModeFlags.MinBit or ResolveModeFlags.MaxBit,
+            $"The selected depth resolve mode {mode} is not a usable depth mode.");
     }
 
     [Fact]

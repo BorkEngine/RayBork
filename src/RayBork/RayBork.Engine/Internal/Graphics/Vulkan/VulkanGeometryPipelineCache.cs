@@ -11,8 +11,10 @@ namespace RayBork.Internal;
 /// A pipeline is keyed by the shader GPU resource, the effective <see cref="RenderState"/>, the mesh
 /// topology, and the polygon mode. Every pipeline shares the one geometry pipeline layout and the fixed
 /// 88-byte vertex input layout, and is created against the render pass it serves and that target's
-/// sample count. The backend keeps one cache for the scene target and one per runtime render target, so
-/// a cache is discarded when its target, render pass, or logical device is recreated.
+/// sample count. The render pass may carry a Vulkan 1.2 color resolve and depth/stencil resolve, so a
+/// depth-bearing target's multisampled pipelines use the resolve attachment configuration of that
+/// target. The backend keeps one cache for the scene target and one per runtime render target, so a
+/// cache is discarded when its target, render pass, or logical device is recreated.
 /// </para>
 /// <para>
 /// A wireframe pipeline uses <c>VK_POLYGON_MODE_LINE</c>, which Vulkan exposes only when the device

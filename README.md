@@ -192,7 +192,8 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   `DrawQuad`, `DrawDisc`, `DrawGrid(Transform, ...)`, `DrawText`, and
   `DrawBillboard(faceCamera: false)` draw in the plane that `ScreenToWorldTransform` returns, which
   carries the camera rotation and a world-units-per-render-pixel scale. `DrawTexture` is not shipped;
-  `RenderTexture` ships in M8's color path, sampled through `DrawQuad`.
+  `RenderTexture` ships in M8, sampled through `DrawQuad`; its `ColorTexture` and `DepthTexture` are
+  ordinary runtime `Texture` views.
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, the
@@ -322,10 +323,10 @@ presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware Vulkan path is not
 ## Next step
 
 M8's goal is render targets, multiple cameras, and readback. The per-pass frame data, one render pass
-per camera pass, and the color path of `RenderTexture` ship: creation, `Camera.Target` routing, MSAA
-color resolve, a sampled `ColorTexture`, and target lifetime. The public depth view, `Resize`,
-`ReadPixelsAsync`, post-processing, and the RenderTarget and split-screen samples remain as later M8
-tasks. Multiple
+per camera pass, and the color and depth paths of `RenderTexture` ship: creation, `Camera.Target`
+routing, MSAA color and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, and target
+lifetime. `Resize`, `ReadPixelsAsync`, post-processing, and the RenderTarget and split-screen samples
+remain as later M8 tasks. Multiple
 cameras and split-screen viewports render to the HDR scene target, and a HUD is an ordinary later
 camera rather than a separate overlay pass. It builds on the M7 screen-space surface and the M4
 camera; the shipped surface is listed in

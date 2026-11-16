@@ -22,6 +22,11 @@ namespace RayBork.Internal;
 /// capacity is never reduced. Device selection rejects a device without the feature subset or with
 /// update-after-bind sampled-image limits below the capacity.
 /// </para>
+/// <para>
+/// <see cref="DepthResolveMode"/> is the Vulkan 1.2 depth resolve mode the backend writes into every
+/// multisampled depth-bearing render pass. The snapshot is probed once with the logical device and
+/// re-probed only when the device is recreated.
+/// </para>
 /// </remarks>
 internal sealed class VulkanDeviceCapabilities {
     /// <summary>
@@ -46,6 +51,7 @@ internal sealed class VulkanDeviceCapabilities {
         uint maxFramebufferWidth,
         uint maxFramebufferHeight,
         int[] supportedSampleCounts,
+        ResolveModeFlags depthResolveMode,
         bool descriptorIndexing,
         uint maxPerStageDescriptorUpdateAfterBindSampledImages,
         uint maxDescriptorSetUpdateAfterBindSampledImages,
@@ -69,6 +75,7 @@ internal sealed class VulkanDeviceCapabilities {
         MaxFramebufferWidth = maxFramebufferWidth;
         MaxFramebufferHeight = maxFramebufferHeight;
         _supportedSampleCounts = supportedSampleCounts;
+        DepthResolveMode = depthResolveMode;
         DescriptorIndexing = descriptorIndexing;
         MaxPerStageDescriptorUpdateAfterBindSampledImages = maxPerStageDescriptorUpdateAfterBindSampledImages;
         MaxDescriptorSetUpdateAfterBindSampledImages = maxDescriptorSetUpdateAfterBindSampledImages;
@@ -133,6 +140,13 @@ internal sealed class VulkanDeviceCapabilities {
     /// Gets the supported MSAA sample counts in ascending order. The list always contains one.
     /// </summary>
     internal IReadOnlyList<int> SupportedSampleCounts => _supportedSampleCounts;
+
+    /// <summary>
+    /// Gets the Vulkan 1.2 depth resolve mode the renderer uses for a multisampled depth attachment.
+    /// It is <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> when the device advertises it, otherwise
+    /// <c>MIN</c> or <c>MAX</c>. Device selection rejects a device that advertises no usable mode.
+    /// </summary>
+    internal ResolveModeFlags DepthResolveMode { get; }
 
     /// <summary>
     /// Gets whether the device supports and the renderer enables the M4 descriptor-indexing subset:
@@ -262,6 +276,20 @@ internal sealed class VulkanDeviceCapabilities {
         int[] supportedSampleCounts = SelectSupportedSampleCounts(
             properties.Limits.FramebufferColorSampleCounts,
             properties.Limits.FramebufferDepthSampleCounts);
+        PhysicalDeviceDepthStencilResolveProperties resolveProperties = VulkanDepthStencilResolve.Query(
+            vulkan,
+            physicalDevice);
+        ResolveModeFlags depthResolveMode = VulkanDepthStencilResolve.SelectDepthResolveMode(
+            resolveProperties.SupportedDepthResolveModes);
+        if (depthResolveMode == ResolveModeFlags.None) {
+            throw new GraphicsException(
+                VulkanDepthStencilResolve.CreateMissingModeMessage(
+                    deviceName,
+                    resolveProperties.SupportedDepthResolveModes),
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                null);
+        }
+
         uint sampledImageCapacity = VulkanBindlessFeatures.GetTextureCapacity(vulkan12Properties);
         if (sampledImageCapacity < TARGET_BINDLESS_TEXTURE_CAPACITY) {
             throw new GraphicsException(
@@ -290,6 +318,7 @@ internal sealed class VulkanDeviceCapabilities {
             properties.Limits.MaxFramebufferWidth,
             properties.Limits.MaxFramebufferHeight,
             supportedSampleCounts,
+            depthResolveMode,
             descriptorIndexing,
             vulkan12Properties.MaxPerStageDescriptorUpdateAfterBindSampledImages,
             vulkan12Properties.MaxDescriptorSetUpdateAfterBindSampledImages,

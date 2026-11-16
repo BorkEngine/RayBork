@@ -49,8 +49,8 @@ public sealed class Texture : IAsset {
     /// <param name="descriptor">The synthetic texture descriptor.</param>
     /// <param name="isProcedural">Whether the texture was built by a <see cref="TextureBuilder"/>.</param>
     /// <param name="isRenderTargetView">
-    /// Whether the texture is a render target's color view, which the owning <see cref="RenderTexture"/>
-    /// creates and disposes.
+    /// Whether the texture is a render target's color or depth view, which the owning
+    /// <see cref="RenderTexture"/> creates and disposes.
     /// </param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal Texture(ITextureOwner owner, TextureAssetDescriptor descriptor, bool isProcedural, bool isRenderTargetView) {
@@ -167,7 +167,7 @@ public sealed class Texture : IAsset {
     /// <exception cref="InvalidOperationException">The texture is a render target view.</exception>
     internal EngineAsset Lifetime => _owner.EngineAsset
         ?? throw new InvalidOperationException(
-            "A render target color texture has no engine-asset lifetime; its RenderTexture owns it.");
+            "A render target view has no engine-asset lifetime; its RenderTexture owns it.");
 
     /// <summary>
     /// Gets the bindless binding resource the renderer samples, or <see langword="null"/> when the GPU
@@ -176,7 +176,7 @@ public sealed class Texture : IAsset {
     internal ITextureBindingResource? BindingResource => _owner.BindingResource;
 
     /// <summary>
-    /// Gets whether this texture is a render target's color view.
+    /// Gets whether this texture is a render target's color or depth view.
     /// </summary>
     internal bool IsRenderTargetView => _isRenderTargetView;
 
@@ -186,7 +186,7 @@ public sealed class Texture : IAsset {
     internal long RenderTargetId => _owner is RenderTextureViewLifetime view ? view.TargetId : 0;
 
     /// <summary>
-    /// Retires the color view and releases the owner reference the render texture held on it when the
+    /// Retires the view and releases the owner reference the render texture held on it when the
     /// owning render texture is disposed. A non-view texture is unaffected.
     /// </summary>
     internal void RetireRenderTargetView() {
@@ -210,19 +210,19 @@ public sealed class Texture : IAsset {
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">
-    /// The texture is a render target's color view; dispose the owning <see cref="RenderTexture"/>
+    /// The texture is a render target's color or depth view; dispose the owning <see cref="RenderTexture"/>
     /// instead.
     /// </exception>
     /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Design",
         "CA1065",
-        Justification = "Disposing the color view of a render texture is a documented usage error; throwing a clear InvalidOperationException tells the caller to dispose the owning RenderTexture instead of silently leaking the target.")]
+        Justification = "Disposing a render target view is a documented usage error; throwing a clear InvalidOperationException tells the caller to dispose the owning RenderTexture instead of silently leaking the target.")]
     public void Dispose() {
         if (_isRenderTargetView) {
             throw new InvalidOperationException(
-                "A render target's ColorTexture is owned by its RenderTexture; dispose the RenderTexture "
-                    + "instead of the color view.");
+                "A render target view is owned by its RenderTexture; dispose the RenderTexture "
+                    + "instead of the view.");
         }
 
         ObjectDisposedException.ThrowIf(_owner.IsDisposed, this);
