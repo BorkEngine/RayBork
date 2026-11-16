@@ -255,18 +255,24 @@ public sealed class EngineContext {
     /// <paramref name="cancellationToken"/> was canceled before the render thread created the target.
     /// </exception>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The creation queue is full (256 pending requests) because the render thread is not draining it.
+    /// </exception>
     /// <exception cref="GraphicsException">The renderer could not create the target's images.</exception>
     /// <remarks>
     /// <para>
     /// The call is legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/>. It returns after the
-    /// render thread allocated the target's images; awaiting it on the tick thread suspends that tick's
-    /// continuation like an asset load, while the render thread keeps servicing the request, so the tick
-    /// thread never deadlocks.
+    /// render thread allocated the target's images; the render thread services the request independently
+    /// of the tick thread, so the tick thread never deadlocks. <see cref="IGame.Setup"/> can
+    /// <c>await</c> the call directly. <see cref="IGame.Tick"/> is <c>void</c>, so a target created in a
+    /// tick uses the blocking form <c>GetAwaiter().GetResult()</c> and stalls that tick until the
+    /// allocation finished; creating the target in <c>Setup</c> is the preferred pattern.
     /// </para>
     /// <para>
     /// The returned target's contents are undefined until a camera writes them. The effective MSAA count
     /// is the highest device-supported count not exceeding the request, or <c>1</c>; a fallback logs a
-    /// warning. <see cref="RenderTexture.SampleCount"/> reports the effective count.
+    /// warning. <see cref="RenderTexture.SampleCount"/> reports the effective count; a device recovery
+    /// re-selects it from the recreated device and updates the property.
     /// </para>
     /// </remarks>
     public async Task<RenderTexture> CreateRenderTextureAsync(

@@ -30,7 +30,6 @@ namespace RayBork;
 /// </remarks>
 public sealed class RenderTexture : IDisposable {
     private readonly RenderTextureTargetLifetime _lifetime;
-    private readonly int _sampleCount;
 
     /// <summary>
     /// Initializes a render texture after the render thread created its target and color view. The
@@ -38,18 +37,15 @@ public sealed class RenderTexture : IDisposable {
     /// </summary>
     /// <param name="lifetime">The target lifetime, holding the single owner reference.</param>
     /// <param name="colorTexture">The sampled color view over the resolved image.</param>
-    /// <param name="sampleCount">The effective MSAA sample count.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
     internal RenderTexture(
         RenderTextureTargetLifetime lifetime,
-        Texture colorTexture,
-        int sampleCount) {
+        Texture colorTexture) {
         ArgumentNullException.ThrowIfNull(lifetime);
         ArgumentNullException.ThrowIfNull(colorTexture);
 
         _lifetime = lifetime;
         ColorTexture = colorTexture;
-        _sampleCount = sampleCount;
     }
 
     /// <summary>Gets the target width in pixels.</summary>
@@ -70,12 +66,15 @@ public sealed class RenderTexture : IDisposable {
         }
     }
 
-    /// <summary>Gets the effective MSAA sample count of the target's color and depth attachments.</summary>
+    /// <summary>
+    /// Gets the effective MSAA sample count of the target's color and depth attachments. A device
+    /// recovery re-selects the count from the recreated device and updates this value.
+    /// </summary>
     /// <exception cref="ObjectDisposedException">The render texture is disposed.</exception>
     public int SampleCount {
         get {
             ThrowIfDisposed();
-            return _sampleCount;
+            return _lifetime.SampleCount;
         }
     }
 
@@ -103,7 +102,8 @@ public sealed class RenderTexture : IDisposable {
     }
 
     /// <summary>
-    /// Gets whether the render texture was disposed. It stays readable after disposal.
+    /// Gets whether the render texture was disposed. It stays readable after disposal, including after
+    /// the renderer destroyed every live target at shutdown.
     /// </summary>
     public bool IsDisposed => _lifetime.IsDisposed;
 
@@ -112,9 +112,6 @@ public sealed class RenderTexture : IDisposable {
 
     /// <summary>Gets the target lifetime the frame's retention set holds.</summary>
     internal RenderTextureTargetLifetime Lifetime => _lifetime;
-
-    /// <summary>Gets the description the target was created from.</summary>
-    internal RenderTextureDescription Description => _lifetime.Description;
 
     /// <summary>
     /// Releases the color view and queues the target's GPU images for destruction. Idempotent.

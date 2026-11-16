@@ -76,6 +76,14 @@ internal sealed class RenderTextureService : IDisposable {
     internal Task<RenderTexture> CreateAsync(
         RenderTextureDescription description,
         CancellationToken cancellationToken) {
+        // A stopped service answers with ObjectDisposedException before any argument or cancellation
+        // check, so a call after shutdown reports the documented state instead of a validation error.
+        lock (_gate) {
+            if (_stopped || _closed) {
+                return Task.FromException<RenderTexture>(CreateStoppedException());
+            }
+        }
+
         RenderTextureValidation.Validate(description);
         if (cancellationToken.IsCancellationRequested) {
             return Task.FromCanceled<RenderTexture>(cancellationToken);

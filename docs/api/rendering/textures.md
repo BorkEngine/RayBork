@@ -91,7 +91,8 @@ public enum TextureFormat {
   the returned texture exactly once. After app shutdown every builder member throws
   `ObjectDisposedException`.
 - `IsSrgb` is true for color textures stored as sRGB. Data textures (normal, mask, MSDF) are linear.
-  The renderer decodes sRGB texture samples to linear before shading.
+  An sRGB image view and sampler decode the stored samples to linear in the texture unit, so the
+  shader reads linear values; the shader does not decode sRGB itself.
 - `Sampler` is per texture. Loaded textures use the baked sampler; procedural textures use the
   sampler passed to `CreateTextureBuilder`, defaulting to `Linear` + `Repeat` with anisotropy `1`.
 - A texture is sampled through the material binding of the draw that uses it. The textured

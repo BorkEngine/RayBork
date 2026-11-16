@@ -1506,8 +1506,8 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   in one frame, a full-viewport quad that survives frustum culling, and 3D orthographic cube
   geometry. `PrimitiveDrawTests` covers the new draw records, validation, zero-extent behavior,
   disposed assets, retention, and batching; `CameraTests` covers `ScreenToWorldTransform`. The
-  Windows hardware run is 2,767
-  tests, 136 of them GPU integration tests, with no skips. The lavapipe Linux run skips the seven
+  Windows hardware run is 2,777
+  tests, 142 of them GPU integration tests, with no skips. The lavapipe Linux run skips the seven
   existing HDR/scRGB-present tests because lavapipe exposes only SDR; the remaining full-suite and
   GPU-filtered tests pass.
 - M8 adds the per-camera render-pass suite (`CameraRenderPassGpuTests`): two camera passes in one
@@ -1527,7 +1527,9 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   the same-pass self-sample rejection, the three color formats at 1x and 4x (including the sRGB
   sampling decode), a smaller camera viewport updating only its target region, two targets in one
   frame without cross-talk, `ColorTexture.Path` staying empty with the view retained by a recorded
-  frame and released with the target, and target reuse across frames. `RenderTextureDescriptionTests`
+  frame and released with the target, target reuse across frames, a real `Camera`/`CameraService`
+  route that targets the render texture and is sampled by a later real camera, a live target across a
+  simulated device loss, and shutdown disposal. `RenderTextureDescriptionTests`
   and `RenderTextureServiceTests` cover validation, the sample-count fallback, cancellation, the
   shutdown failure, and the target lifetime without a GPU; `RenderTextureAppTests` covers creation in
   `Setup` and `Tick` and the post-shutdown `ObjectDisposedException`.

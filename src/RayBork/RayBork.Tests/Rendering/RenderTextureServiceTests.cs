@@ -122,4 +122,32 @@ public sealed class RenderTextureServiceTests {
             });
         Assert.False(service.HasPendingWork);
     }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ASampleCountChangeFromRecoveryIsVisibleOnTheRenderTexture() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> request = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await request;
+        int original = target.SampleCount;
+        try {
+            // The backend updates the lifetime when a recreated device selects a different fallback.
+            target.Lifetime.SetSampleCount(1);
+            Assert.Equal(1, target.SampleCount);
+        } finally {
+            target.Lifetime.SetSampleCount(original);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AStoppedServiceReportsObjectDisposedBeforeDescriptionValidation() {
+        using RenderTextureService service = new();
+        service.Close(null);
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => service.CreateAsync(new RenderTextureDescription(0, 0), CancellationToken.None));
+    }
 }

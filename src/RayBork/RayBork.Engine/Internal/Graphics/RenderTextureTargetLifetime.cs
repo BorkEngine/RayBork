@@ -25,6 +25,7 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     private readonly Action<RenderTextureTargetLifetime> _queueDestruction;
     private int _frameHoldCount;
     private int _lastUseFrameSlot = -1;
+    private int _sampleCount;
     private bool _disposed;
     private bool _destroyQueued;
 
@@ -33,21 +34,27 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// </summary>
     /// <param name="targetId">The unique render-thread target id; it is never reused.</param>
     /// <param name="description">The validated description the target was created from.</param>
+    /// <param name="sampleCount">The effective MSAA sample count selected for the target.</param>
     /// <param name="queueDestruction">
     /// Queues the target for destruction on the render thread. It runs exactly once, after the owner and
     /// every frame hold are gone.
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="queueDestruction"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="targetId"/> is not positive.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="targetId"/> is not positive, or <paramref name="sampleCount"/> is not positive.
+    /// </exception>
     internal RenderTextureTargetLifetime(
         long targetId,
         RenderTextureDescription description,
+        int sampleCount,
         Action<RenderTextureTargetLifetime> queueDestruction) {
         ArgumentNullException.ThrowIfNull(queueDestruction);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targetId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleCount);
 
         TargetId = targetId;
         Description = description;
+        _sampleCount = sampleCount;
         _queueDestruction = queueDestruction;
     }
 
@@ -56,6 +63,43 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
 
     /// <summary>Gets the description the target was created from.</summary>
     internal RenderTextureDescription Description { get; }
+
+    /// <summary>
+    /// Gets the effective MSAA sample count of the current target images. A device recovery can select
+    /// a different fallback count, so the value is read from the lifetime rather than frozen on the
+    /// public object.
+    /// </summary>
+    internal int SampleCount {
+        get {
+            lock (_gate) {
+                return _sampleCount;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Replaces the effective MSAA sample count after a device recovery recreated the target with a
+    /// different fallback. Render-thread only.
+    /// </summary>
+    /// <param name="sampleCount">The new effective sample count.</param>
+    internal void SetSampleCount(int sampleCount) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleCount);
+        lock (_gate) {
+            _sampleCount = sampleCount;
+        }
+    }
+
+    /// <summary>
+    /// Marks the target destroyed without a destruction request. The backend uses it when it destroys
+    /// every live render target during shutdown, so a public <see cref="RenderTexture"/> that the game
+    /// still holds reports <see cref="IsDisposed"/> and its later <c>Dispose</c> is a no-op.
+    /// </summary>
+    internal void MarkDestroyed() {
+        lock (_gate) {
+            _disposed = true;
+            _destroyQueued = true;
+        }
+    }
 
     /// <summary>Gets whether the owner reference was released. It stays readable after disposal.</summary>
     internal bool IsDisposed {

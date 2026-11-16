@@ -331,11 +331,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             format,
             description.Depth);
         Sampler sampler = default;
+        uint slot = 0;
         RenderTargetEntry? entry = null;
         bool success = false;
         try {
             sampler = CreateRenderTargetSampler(device);
-            if (!_bindlessTextures!.TryAllocate(out uint slot)) {
+            if (!_bindlessTextures!.TryAllocate(out slot)) {
                 throw new GraphicsException(
                     $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
                         + "the reserved white slot), so the render texture color view has no slot.",
@@ -343,15 +344,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     null);
             }
 
-            try {
-                _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
-            } catch {
-                _bindlessTextures.Release(slot);
-                throw;
-            }
+            _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
 
             long targetId = service.NextTargetId();
-            RenderTextureTargetLifetime lifetime = new(targetId, description, service.QueueDestruction);
+            RenderTextureTargetLifetime lifetime = new(targetId, description, sampleCount, service.QueueDestruction);
             RenderTextureViewResource viewResource = new(target.ResolvedColorView, sampler) {
                 BindlessSlot = slot,
             };
@@ -368,19 +364,25 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 MaxAnisotropy = 1f,
             };
             Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
-            RenderTexture renderTexture = new(lifetime, colorTexture, sampleCount);
+            RenderTexture renderTexture = new(lifetime, colorTexture);
             entry = new RenderTargetEntry(targetId, sampleCount, target, lifetime, viewLifetime, viewResource, sampler);
             _renderTargets.Add(targetId, entry);
             success = request.Completion.TrySetResult(renderTexture);
             if (!success) {
                 _renderTargets.Remove(targetId);
             }
+
+            slot = 0;
         } finally {
             request.DisposeRegistration();
             if (!success) {
                 if (entry is not null) {
                     DestroyRenderTarget(entry, retireView: true);
                 } else {
+                    if (slot != 0 && _bindlessTextures is not null) {
+                        _bindlessTextures.Release(slot);
+                    }
+
                     if (sampler.Handle != 0) {
                         device.Vulkan.DestroySampler(device.Device, sampler, null);
                     }
@@ -466,6 +468,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         if (retireView) {
             entry.ViewLifetime.Retire();
+            // The backend retired the target without a public Dispose (shutdown, or a canceled
+            // creation). The public object must report IsDisposed even though no destroy request ran.
+            entry.Lifetime.MarkDestroyed();
         }
 
         entry.Target.Dispose();
@@ -1309,8 +1314,21 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             VulkanDevice device = _device!;
+            RenderTextureDescription description = entry.Lifetime.Description;
+            PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice);
+            if (description.Width > properties.Limits.MaxImageDimension2D
+                || description.Height > properties.Limits.MaxImageDimension2D) {
+                throw new GraphicsException(
+                    $"Render target {entry.Id} cannot be recreated on the new device: its "
+                        + $"{description.Width}x{description.Height} extent exceeds the device's maximum 2D "
+                        + $"image dimension {properties.Limits.MaxImageDimension2D}. Dispose and recreate the "
+                        + "render texture with a supported size.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null);
+            }
+
             int sampleCount = RenderTextureValidation.SelectSampleCount(
-                entry.Lifetime.Description.SampleCount,
+                description.SampleCount,
                 device.Capabilities.SupportedSampleCounts);
             if (sampleCount != entry.SampleCount) {
                 _options!.Logger.LogWarning(
@@ -1319,7 +1337,6 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     sampleCount);
             }
 
-            RenderTextureDescription description = entry.Lifetime.Description;
             VulkanRenderTarget target = VulkanRenderTarget.Create(
                 device,
                 new Extent2D { Width = checked((uint)description.Width), Height = checked((uint)description.Height) },
@@ -1327,9 +1344,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 ToVulkanColorFormat(description.ColorFormat),
                 description.Depth);
             Sampler sampler = default;
+            uint slot = 0;
             try {
                 sampler = CreateRenderTargetSampler(device);
-                if (!_bindlessTextures!.TryAllocate(out uint slot)) {
+                if (!_bindlessTextures!.TryAllocate(out slot)) {
                     throw new GraphicsException(
                         $"The bindless texture table is full ({_bindlessTextures.Capacity} slots) while "
                             + "recreating a render texture after a device loss.",
@@ -1337,23 +1355,24 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                         null);
                 }
 
-                try {
-                    _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
-                } catch {
-                    _bindlessTextures.Release(slot);
-                    throw;
-                }
+                _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
 
                 entry.Target.Dispose();
                 entry.Target = target;
                 entry.SampleCount = sampleCount;
+                entry.Lifetime.SetSampleCount(sampleCount);
                 entry.Sampler = sampler;
                 entry.ViewResource.View = target.ResolvedColorView;
                 entry.ViewResource.Sampler = sampler;
                 entry.ViewResource.BindlessSlot = slot;
                 entry.ViewLifetime.SetBindingResource(entry.ViewResource);
                 entry.Pipelines = null;
+                slot = 0;
             } catch {
+                if (slot != 0 && _bindlessTextures is not null) {
+                    _bindlessTextures.Release(slot);
+                }
+
                 if (sampler.Handle != 0) {
                     device.Vulkan.DestroySampler(device.Device, sampler, null);
                 }

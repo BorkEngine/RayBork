@@ -56,31 +56,42 @@ using (var screen = ctx.CreateCamera(
 }
 ```
 
-The snippet is inside `Tick`; a game normally awaits `CreateRenderTextureAsync` in `Setup` and stores
-the target in a field. The screen pass uses `ScreenToWorldTransform` and a textured world-space
-`DrawQuad`; there is no `DrawTexture`, and the full-screen target is a normal quad on the plane.
+The code above is the `Setup` pattern: `CreateRenderTextureAsync` is awaited while `Setup` runs, the
+target is stored in a field, and the cameras are created in `Tick`. `IGame.Tick` is `void`, so a
+target created during `Tick` cannot be awaited there; the working pattern in `Tick` is the blocking
+form `ctx.CreateRenderTextureAsync(description).GetAwaiter().GetResult()`, which returns after the
+render thread allocated the images. Creating targets in `Setup` is preferred because a target created
+in `Tick` can stall that tick for the allocation. The screen pass uses `ScreenToWorldTransform` and a
+textured world-space `DrawQuad`; there is no `DrawTexture`, and the full-screen target is a normal quad
+on the plane.
 
 **Creation and validation.** `CreateRenderTextureAsync` returns after the render thread allocated the
 images, so the result is usable for the next camera recorded in the same tick. It is legal in `Setup`
-and `Tick`; awaiting it suspends the tick's continuation like an asset load, while the render thread
-keeps servicing the request, so the tick thread never deadlocks. Cancellation before completion
-completes the call as `OperationCanceledException` and a target created for a canceled request is
-destroyed instead of leaking. After shutdown every call fails with `ObjectDisposedException`.
+and `Tick`; the request is serviced by the render thread independently of the tick thread, so the tick
+thread never deadlocks. Cancellation before completion completes the call as
+`OperationCanceledException` and a target created for a canceled request is destroyed instead of
+leaking. After shutdown every call fails with `ObjectDisposedException`, even when the description is
+invalid. The creation queue holds at most 256 pending requests; a full queue fails the call with
+`InvalidOperationException` rather than waiting for the render thread.
 
 - `Width` and `Height` must be positive and at most `16384`. The renderer also rejects a target that
   exceeds the device's maximum 2D image dimension.
 - The color format is `Rgba16Float` (the default), `Rgba8Unorm`, or `Rgba8Srgb`. The packed
   block-compressed formats and `Depth32Float` are rejected. The default is linear HDR; the SDR formats
-  are for LDR intermediate work, and the present pass still applies the configured tone mapping when
-  the target is presented.
+  are for LDR intermediate work. Tone mapping is not applied when the target is written: a runtime
+  target is never presented directly, and AgX is applied only by the present pass when the content
+  reaches the screen through the scene target.
 - `SampleCount` is `1`, `2`, `4`, or `8`; the default is `4`. The effective count is the highest
   device-supported count that does not exceed the request, or `1` when none is supported, and a
   fallback logs a warning. `RenderTexture.SampleCount` reports the effective count. The multisampled
   color attachment is resolved into a single-sample sampled image; `ColorTexture` is that resolved
-  image.
-- `Depth` controls an internal depth attachment. This color-path task has no public depth view; a
-  target declared `Depth: false` still records color-only draws, while a 3D depth-tested draw needs the
-  declared attachment.
+  image. A device recovery re-selects the count from the recreated device and updates
+  `RenderTexture.SampleCount`.
+- `Depth` controls an internal depth attachment. This color-path task has no public depth view. A target
+  declared `Depth: false` has no depth attachment at all: depth-tested and depth-writing render states
+  are not rejected, but the depth test and depth write are no-ops for that target, and
+  `ClearMode.Depth` is a no-op. Such a target still records color-only draws, while a draw that must be
+  occluded by 3D depth needs `Depth: true`.
 - `IsHdr` is `true` for `Rgba16Float`.
 - The target's contents are undefined after creation until a camera renders into them.
 
@@ -104,7 +115,9 @@ its pre-existing cross-frame overwrite behavior; that hazard is unchanged and is
 Multiple targets work in one frame: each camera selects its target, each target has its own render
 pass and geometry pipeline cache, and cameras on the scene target and on runtime targets can interleave
 in one tick. There is no render graph and no automatic pass dependency analysis in v1; creation order
-is the pass order, and a write-after-read across passes is synchronized by the per-target barriers.
+is the pass order. A write-after-read between two passes is a synchronization error that the renderer's
+per-target barriers do not silently repair; the camera that samples a target must be created before the
+camera that writes it again.
 
 **The `ColorTexture` view.** `ColorTexture` is a `Texture` view owned by the `RenderTexture`. It
 reports an empty `Path` because it is not a pack asset, it samples and batches like any texture, and
@@ -112,7 +125,8 @@ the recorded frame retains the target until the renderer released the frame slot
 directly throws `InvalidOperationException`; dispose the `RenderTexture` instead. Disposing the render
 texture retires the view and releases the target; `Dispose` is idempotent, and a target that is the
 destination or a sample source of a recorded in-flight frame is not destroyed until that frame
-completes.
+completes. A target destroyed by the renderer at shutdown also reports `IsDisposed = true`, and its
+later `Dispose` is a no-op.
 
 **Not in this task.** The public `DepthTexture` (T3b), `Resize` (T3c), `ReadPixelsAsync`/`ReadColorsAsync`
 (T4), and post-processing/effects (T5) remain later M8 tasks. The render target surface described in
@@ -130,7 +144,8 @@ lifetime.
 - The present pass samples the app scene target only. A runtime target's content reaches the screen
   through a camera on the scene target that samples `ColorTexture`.
 - There is no render graph and no automatic pass dependency analysis in v1. Creation order is the
-  pass order. Cycles and write-after-read hazards are validation errors.
+  pass order; a cycle is invalid, and a write-after-read that creation order does not order is a
+  synchronization error rather than a graph-detected validation error.
 
 ### 7.12 Render statistics
 

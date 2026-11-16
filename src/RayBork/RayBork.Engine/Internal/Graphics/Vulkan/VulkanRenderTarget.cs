@@ -47,7 +47,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
     private Image _resolvedColorImage;
     private Image _depthImage;
     private ImageView _resolvedColorView;
-    private ImageView _depthView;
     private Extent2D _extent;
     private ImageLayout _multisampledColorLayout = ImageLayout.Undefined;
     private ImageLayout _resolvedColorLayout = ImageLayout.Undefined;
@@ -90,11 +89,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
     /// <summary>Gets the framebuffer that binds the target attachments for the render pass.</summary>
     internal Framebuffer Framebuffer => _framebuffer;
 
-    /// <summary>
-    /// Gets the multisampled color image, or the single-sample resolved color image when the target is
-    /// single-sample.
-    /// </summary>
-    internal Image ColorImage => IsMultisampled ? _multisampledColorImage : _resolvedColorImage;
 
     /// <summary>Gets the single-sample color image a shader samples.</summary>
     internal Image ResolvedColorImage => _resolvedColorImage;
@@ -105,8 +99,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
     /// <summary>Gets the depth image, or the default handle when the target has no depth attachment.</summary>
     internal Image DepthImage => _depthImage;
 
-    /// <summary>Gets the depth image view, or the default handle when the target has no depth attachment.</summary>
-    internal ImageView DepthView => _depthView;
 
     /// <summary>Gets the current layout of the single-sample resolved color image.</summary>
     internal ImageLayout ResolvedColorLayout => _resolvedColorLayout;
@@ -188,7 +180,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
         _resolvedColorImage = default;
         _depthImage = default;
         _resolvedColorView = default;
-        _depthView = default;
         _multisampledColorLayout = ImageLayout.Undefined;
         _resolvedColorLayout = ImageLayout.Undefined;
         _depthLayout = ImageLayout.Undefined;
@@ -481,7 +472,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
         _resolvedColorImage = resolvedColor.Image;
         _resolvedColorView = resolvedColor.View;
         _depthImage = depth.Image;
-        _depthView = depth.View;
     }
 
     private ImageResources CreateAttachment(

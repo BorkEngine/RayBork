@@ -25,23 +25,38 @@ internal static class RenderTextureValidation {
     /// The color format is not <see cref="TextureFormat.Rgba16Float"/>,
     /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.Rgba8Srgb"/>.
     /// </exception>
-    internal static void Validate(RenderTextureDescription description) {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(description.Width, nameof(description));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(description.Width, MAX_DIMENSION, nameof(description));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(description.Height, nameof(description));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(description.Height, MAX_DIMENSION, nameof(description));
-        if (!IsSupportedColorFormat(description.ColorFormat)) {
+    internal static void Validate(RenderTextureDescription description) =>
+        Validate(description.Width, description.Height, description.ColorFormat, description.SampleCount);
+
+    /// <summary>
+    /// Validates the description components.
+    /// </summary>
+    /// <param name="width">The target width in pixels.</param>
+    /// <param name="height">The target height in pixels.</param>
+    /// <param name="colorFormat">The target color format.</param>
+    /// <param name="sampleCount">The requested MSAA sample count.</param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A dimension is not positive or exceeds <see cref="MAX_DIMENSION"/>, or the sample count is not
+    /// <c>1</c>, <c>2</c>, <c>4</c>, or <c>8</c>.
+    /// </exception>
+    /// <exception cref="ArgumentException">The color format is not a supported render-target format.</exception>
+    internal static void Validate(int width, int height, TextureFormat colorFormat, int sampleCount) {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(width, MAX_DIMENSION);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(height, MAX_DIMENSION);
+        if (!IsSupportedColorFormat(colorFormat)) {
             throw new ArgumentException(
-                $"The render texture color format '{description.ColorFormat}' is not supported; use "
+                $"The render texture color format '{colorFormat}' is not supported; use "
                     + "Rgba16Float, Rgba8Unorm, or Rgba8Srgb. The packed block-compressed formats and "
                     + "Depth32Float are not render-target color formats.",
-                nameof(description));
+                nameof(colorFormat));
         }
 
-        if (description.SampleCount is not (1 or 2 or 4 or 8)) {
+        if (sampleCount is not (1 or 2 or 4 or 8)) {
             throw new ArgumentOutOfRangeException(
-                nameof(description),
-                description.SampleCount,
+                nameof(sampleCount),
+                sampleCount,
                 "The render texture sample count must be 1, 2, 4, or 8.");
         }
     }

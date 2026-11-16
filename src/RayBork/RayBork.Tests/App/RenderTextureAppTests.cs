@@ -48,7 +48,7 @@ public sealed class RenderTextureAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateRenderTextureAsyncHonorsCancellationBeforeCompletion() {
+    public void CreateRenderTextureAsyncRejectsAPreCanceledToken() {
         ScriptedGame game = new();
         using AppTestHost host = new(game);
         game.SetupHandler = async setupContext => {

@@ -30,6 +30,7 @@ public sealed class RenderTextureCameraTests {
                 target)) {
                 Assert.Same(target, fullViewport.Target);
                 Assert.Equal(new Rect(0f, 0f, 64f, 32f), fullViewport.Viewport);
+                Assert.Equal(target.TargetId, host.Packet.Passes[0].TargetId);
             }
 
             using (Camera clamped = host.Service.CreateCamera(

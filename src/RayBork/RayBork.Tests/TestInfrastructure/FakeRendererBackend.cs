@@ -331,7 +331,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             int sampleCount = RenderTextureValidation.SelectSampleCount(
                 description.SampleCount,
                 [1, 2, 4, 8]);
-            RenderTextureTargetLifetime lifetime = new(targetId, description, service.QueueDestruction);
+            RenderTextureTargetLifetime lifetime = new(targetId, description, sampleCount, service.QueueDestruction);
             RenderTextureViewResource viewResource = new(default, default) {
                 BindlessSlot = 1,
             };
@@ -348,7 +348,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                 MaxAnisotropy = 1f,
             };
             Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
-            RenderTexture renderTexture = new(lifetime, colorTexture, sampleCount);
+            RenderTexture renderTexture = new(lifetime, colorTexture);
             lock (_gate) {
                 _renderTargets[targetId] = lifetime;
             }

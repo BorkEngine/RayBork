@@ -301,7 +301,9 @@ projection must preserve both conventions if it wants to match the engine's dept
 helpers. `target` selects the pass' render target: `null` is the app's linear HDR scene target, and a
 `RenderTexture` routes the pass into that target. The viewport defaults to the full target and is
 clamped to the target size, and the aspect ratio uses the clamped viewport. A disposed target is
-`ObjectDisposedException`.
+`ObjectDisposedException`. A target declared `Depth: false` has no depth attachment: depth-tested and
+depth-writing draws are not rejected, but their depth test and write are no-ops for that target, and
+`ClearMode.Depth` is a no-op.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`
