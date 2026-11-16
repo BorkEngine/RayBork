@@ -265,7 +265,8 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > `postProcess` parameter and the `PostProcessStack`/`PostProcessEffect`/`ShaderPostProcessEffect`
 > surface: a camera's stack runs after its geometry pass and before the next camera or the present
 > pass, on the scene target or a render texture target, and its post-processed output is what a later
-> sample and both readback methods observe. Built-in SSAO and bloom effects remain later M8 tasks.
+> sample and both readback methods observe. The built-in `SsaoEffect` is available on the same stack
+> and requires a target with depth; built-in bloom remains a later M8 task.
 
 Properties:
 
@@ -324,7 +325,9 @@ skipped. A custom effect must be a `ShaderPostProcessEffect` over a baked shader
 sidecar declares the reserved `sourceColor` binding; `sourceDepth` is optional and is rejected on a
 depth-less target. A missing `sourceColor`, a shader without both stages, or `sourceDepth` on a
 depth-less target is `InvalidOperationException` from `CreateCamera`; a disposed effect shader or bound
-texture is `ObjectDisposedException`. See [Post-processing](post-processing.md).
+texture is `ObjectDisposedException`. The built-in `SsaoEffect` is snapshotted the same way: its
+`Quality` and every setting are frozen, it requires a target with depth, and a depth-less target is
+`InvalidOperationException` from `CreateCamera`. See [Post-processing](post-processing.md).
 
 A later camera in the same tick can sample the target's `ColorTexture` or
 `DepthTexture`; sampling either view in the camera pass that writes the target is rejected with
@@ -863,8 +866,8 @@ the swapchain images are single-sample. Scene color is resolved into a single-sa
 before the present pass, and each camera pass resolves only its own render area. The multisampled
 color and depth attachments are stored between camera passes so a later camera can load them. Depth is
 cleared to `0.0` and the reverse-Z state is defined. Scene depth is also resolved into a single-sample
-internal depth image with the Vulkan 1.2 depth/stencil resolve path; it is the input a later internal
-consumer such as the SSAO effect samples, and there is no public scene-target depth view. A `RenderTexture`
+internal depth image with the Vulkan 1.2 depth/stencil resolve path; it is the input `SsaoEffect`
+samples, and there is no public scene-target depth view. A `RenderTexture`
 uses its own `SampleCount` and its own render pass, resolved single-sample color and depth images, and
 geometry pipeline cache; the app scene target is unaffected. The public `DepthTexture` is the resolved
 multisampled depth image, or the depth attachment itself for a single-sample target.

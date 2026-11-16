@@ -29,6 +29,7 @@ internal sealed class CameraService {
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
     private PrimitiveAssets? _primitives;
+    private SsaoAssets? _ssaoAssets;
     private TonemappingSettings? _tonemapping;
     private Matrix4x4[] _textGlyphMatrices = [];
     private Texture?[] _textGlyphTextures = [];
@@ -75,6 +76,23 @@ internal sealed class CameraService {
     /// tick thread joined.
     /// </summary>
     internal void DetachPrimitives() => _primitives = null;
+
+    /// <summary>
+    /// Attaches the app-lifetime preloaded SSAO assets used by <see cref="SsaoEffect"/> captures.
+    /// </summary>
+    /// <param name="assets">The loaded engine-owned SSAO assets.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
+    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    internal void AttachSsaoAssets(SsaoAssets assets) {
+        ArgumentNullException.ThrowIfNull(assets);
+        _ssaoAssets = assets;
+    }
+
+    /// <summary>
+    /// Detaches the SSAO assets before the app disposes them. Called on the main thread after the tick
+    /// thread joined.
+    /// </summary>
+    internal void DetachSsaoAssets() => _ssaoAssets = null;
 
     /// <summary>
     /// Attaches the app-lifetime runtime tone-mapping settings whose values every sealed frame
@@ -417,7 +435,7 @@ internal sealed class CameraService {
         try {
             foreach (PostProcessEffect effect in postProcess.Effects) {
                 _postProcessScratch.Add(
-                    PostProcessSnapshots.Capture(effect, targetHasDepth, targetDescription));
+                    PostProcessSnapshots.Capture(effect, targetHasDepth, targetDescription, _ssaoAssets));
             }
         } catch {
             // A rejected effect leaves no snapshot behind; the already captured ones release the program

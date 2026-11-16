@@ -274,6 +274,7 @@ public sealed class RayBorkApp : IDisposable {
         AssetCatalog? assetCatalog = null;
         EngineDefaults? engineDefaults = null;
         PrimitiveAssets? primitiveAssets = null;
+        SsaoAssets? ssaoAssets = null;
         CameraService? cameraService = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
@@ -348,6 +349,12 @@ public sealed class RayBorkApp : IDisposable {
             primitiveAssets = LoadPrimitiveAssets(assetCatalog);
             cameraService.AttachPrimitives(primitiveAssets);
 
+            // The built-in SSAO shader variants and blue-noise texture are engine-owned, so the app
+            // loads them before Setup and attaches them to the camera service. The effect snapshot only
+            // ever reads these preloaded assets on the tick thread.
+            ssaoAssets = LoadSsaoAssets(assetCatalog);
+            cameraService.AttachSsaoAssets(ssaoAssets);
+
             EngineContext context = new(
                 platform,
                 loggerFactory,
@@ -418,6 +425,7 @@ public sealed class RayBorkApp : IDisposable {
             assetCatalog,
             engineDefaults,
             primitiveAssets,
+            ssaoAssets,
             cameraService,
             tickRunner,
             renderLoop,
@@ -539,6 +547,22 @@ public sealed class RayBorkApp : IDisposable {
     private static PrimitiveAssets LoadPrimitiveAssets(IAssetCatalog assets)
         => PrimitiveAssets.LoadAsync(assets).GetAwaiter().GetResult();
 
+    /// <summary>
+    /// Loads the engine-owned SSAO shader variants and blue-noise texture before <see cref="IGame.Setup"/>
+    /// runs.
+    /// </summary>
+    /// <remarks>
+    /// The tick thread has not started yet, so blocking on the loads is safe: the loader and render
+    /// thread service the reads and uploads. A missing or corrupt built-in is reported as an
+    /// <see cref="AssetLoadException"/> by <see cref="SsaoAssets.LoadAsync"/>.
+    /// </remarks>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The returned SsaoAssets is stored by RunCore and disposed by the cleanup path that owns it.")]
+    private static SsaoAssets LoadSsaoAssets(IAssetCatalog assets)
+        => SsaoAssets.LoadAsync(assets).GetAwaiter().GetResult();
+
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -551,6 +575,7 @@ public sealed class RayBorkApp : IDisposable {
         AssetCatalog? assetCatalog,
         EngineDefaults? engineDefaults,
         PrimitiveAssets? primitiveAssets,
+        SsaoAssets? ssaoAssets,
         CameraService? cameraService,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
@@ -611,6 +636,19 @@ public sealed class RayBorkApp : IDisposable {
                 "releasing the engine default assets",
                 failure,
                 engineDefaults.Dispose);
+        }
+
+        // The SSAO assets are engine-owned built-ins. Detach them before releasing their owner
+        // references so a later camera cannot capture an effect over disposed shader programs.
+        if (ssaoAssets is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "releasing the engine SSAO assets",
+                failure,
+                () => {
+                    cameraService?.DetachSsaoAssets();
+                    ssaoAssets.Dispose();
+                });
         }
 
         // The primitive assets are engine-owned and required built-ins. Detach them from the camera

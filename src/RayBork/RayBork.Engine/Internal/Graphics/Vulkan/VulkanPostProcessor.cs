@@ -7,8 +7,8 @@ namespace RayBork.Internal;
 
 /// <summary>
 /// Executes the camera post-process chain on the render thread: the target-sized Rgba16Float ping-pong
-/// targets, the custom-effect fullscreen pass, the engine store-back pass, and the per-target store-back
-/// framebuffers.
+/// targets, the custom-effect and built-in SSAO fullscreen passes, the engine store-back pass, and the
+/// per-target store-back framebuffers.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -30,13 +30,15 @@ namespace RayBork.Internal;
 /// Render-thread only; the normal path allocates nothing after warm-up.
 /// </para>
 /// <para>
-/// The SSAO and bloom effects hook in through <see cref="PostProcessEffectSnapshot"/> and
-/// <see cref="PostProcessContext"/>. A built-in rents a target-sized or smaller color target from the
-/// same pool, creates a fullscreen pipeline against the post render pass, writes one instance record per
+/// SSAO hooks in through <see cref="PostProcessEffectSnapshot"/> and
+/// <see cref="PostProcessContext"/>; bloom will use the same path. A built-in rents a target-sized or
+/// smaller color target from the same pool, creates a fullscreen pipeline against the post render pass,
+/// writes one instance record per
 /// pass, and records the pass with the engine quad and frame descriptor set. It completes its final
 /// target-sized result with <see cref="PostProcessContext.CompleteColorTarget"/>, or releases an
 /// intermediate target with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>; this processor then
-/// runs the same store-back. No built-in effect exists in this task.
+/// runs the same store-back. <see cref="SsaoEffect"/> is the first built-in effect on these hooks; bloom
+/// uses the same path later.
 /// </para>
 /// </remarks>
 internal sealed unsafe class VulkanPostProcessor : IDisposable {
@@ -290,11 +292,26 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     /// engine pipeline layout and the requested render state.
     /// </summary>
     /// <param name="program">The internal shader program asset.</param>
-    /// <param name="renderState">The render state to bake into the pipeline.</param>
+    /// <param name="renderState">
+    /// The render state to bake into the pipeline. It must be the forced fullscreen state, because the
+    /// post render pass has no depth attachment; a depth-tested, culled, or blended state is rejected
+    /// before pipeline creation.
+    /// </param>
     /// <returns>The cached pipeline.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="renderState"/> is not <see cref="FullscreenRenderState"/>.
+    /// </exception>
     internal Pipeline GetOrCreateFullscreenPipeline(EngineAsset program, RenderState renderState) {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(program);
+        if (renderState != _forcedRenderState) {
+            throw new ArgumentException(
+                "A post-process fullscreen pipeline must use the forced post render state: opaque "
+                    + "blending, no culling, and no depth test or write. The post render pass has no "
+                    + "depth attachment, so a depth-tested, culled, or blended state is invalid.",
+                nameof(renderState));
+        }
+
         VulkanShaderAssetResource shader = Vulkan12Backend.RequireShaderResource(program);
         return _postPipelines!.GetOrCreate(shader, renderState, RayBork.PrimitiveTopology.TriangleList);
     }
@@ -327,6 +344,16 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         ArgumentNullException.ThrowIfNull(context);
         if (extent.Width == 0 || extent.Height == 0) {
             throw new ArgumentOutOfRangeException(nameof(extent), extent, "The post target extent must be positive.");
+        }
+
+        if (extent.Width > _device.Capabilities.MaxFramebufferWidth
+            || extent.Height > _device.Capabilities.MaxFramebufferHeight) {
+            throw new ArgumentOutOfRangeException(
+                nameof(extent),
+                extent,
+                $"The post target extent {extent.Width}x{extent.Height} exceeds the device's maximum "
+                    + $"framebuffer size {_device.Capabilities.MaxFramebufferWidth}x"
+                    + $"{_device.Capabilities.MaxFramebufferHeight}.");
         }
 
         PostTargetSlot slot = _activeSlot ?? throw new InvalidOperationException(

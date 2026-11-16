@@ -5,8 +5,9 @@
 ### 7.13 Camera post-processing
 
 Camera post-processing is an app-lifetime stack of effects that runs after a camera's geometry and
-resolve pass and before the next camera or the present pass. M8 ships the extensible core and the
-custom-shader effect; SSAO and bloom are later M8 tasks built on the same core.
+resolve pass and before the next camera or the present pass. M8 ships the extensible core, the
+custom-shader effect, and the built-in SSAO effect; bloom remains a later M8 task built on the same
+core.
 
 ```csharp
 public sealed class PostProcessStack {
@@ -20,6 +21,27 @@ public sealed class PostProcessStack {
 
 public abstract class PostProcessEffect {
     public bool Enabled { get; set; }
+}
+
+public enum SsaoQuality {
+    Performance,
+    Low,
+    Medium,
+    High,
+    Ultra
+}
+
+public sealed class SsaoEffect : PostProcessEffect {
+    public SsaoEffect();
+    public SsaoQuality Quality { get; set; } = SsaoQuality.Medium;
+    public float Radius { get; set; } = 1.5f;
+    public float DistanceFalloff { get; set; } = 1f;
+    public float Intensity { get; set; } = 2f;
+    public Color Color { get; set; } = Color.Black;
+    public int DenoiseRadius { get; set; } = 12;
+    public bool ScreenSpaceRadius { get; set; }
+    public float BiasOffset { get; set; }
+    public float BiasMultiplier { get; set; } = 1f;
 }
 
 public sealed class ShaderPostProcessEffect : PostProcessEffect {
@@ -86,6 +108,56 @@ does not shift the captured order. Disposing the effect's shader after the camer
 corrupt the recorded frame. Snapshots are pooled per effect and reused after the recorded frame is
 released, so steady-state camera creation does not allocate a new snapshot, uniform buffer, or texture
 array.
+
+**Built-in SSAO.** `SsaoEffect` is the engine's N8AO 2.0-derived, full-resolution GTAO effect. It
+reconstructs view-space positions and normals from the camera target's resolved reverse-Z depth (no
+normal buffer), rotates a golden-angle hemisphere kernel with the N8AO blue-noise texture, applies a
+range check and bias, runs two bilateral denoise iterations, and composites the AO over the original
+scene color. Perspective and orthographic cameras use the same path; `near`/`far` and the projection
+kind come from the camera's projection matrix.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `Quality` | `Medium` | Selects a baked AO/denoise variant. |
+| `Radius` | `1.5` | World-space AO radius, or a pixel radius when `ScreenSpaceRadius` is `true`. Must be finite and greater than zero. |
+| `DistanceFalloff` | `1` | How quickly AO fades with distance relative to the radius. Must be finite and greater than zero. World-radius mode uses `0.2 * radius * DistanceFalloff`; screen-space mode uses `radius * DistanceFalloff`. |
+| `Intensity` | `2` | Composite exponent: `pow(ao, Intensity)`. `0` leaves the scene unchanged. Must be finite and non-negative. |
+| `Color` | `Color.Black` | AO tint multiplied into occluded scene color. All components must be finite. |
+| `DenoiseRadius` | `12` | Denoise tap radius in screen pixels, independent of quality. `0` leaves each denoise pass at the center pixel. Must be non-negative. |
+| `ScreenSpaceRadius` | `false` | Treats `Radius` as pixels and reconstructs its world size from the center depth. |
+| `BiasOffset` | `0` | Constant bias added to the depth comparison. Must be finite. |
+| `BiasMultiplier` | `1` | Multiplier on the normal-derivative bias heuristic. Must be finite. |
+
+`Quality` maps to compile-time shader variants, never a runtime sample loop:
+
+| Quality | AO samples | Denoise samples per iteration | Denoise iterations |
+| --- | ---: | ---: | ---: |
+| `Performance` | 8 | 4 | 2 |
+| `Low` | 16 | 4 | 2 |
+| `Medium` | 16 | 8 | 2 |
+| `High` | 64 | 8 | 2 |
+| `Ultra` | 64 | 16 | 2 |
+
+The AO kernels, denoise Poisson disk, and sample counts are GLSL constants in the committed SPIR-V
+variants. There is one AO variant for 8, 16, and 64 samples, one denoise variant for 4, 8, and 16
+samples, and one composite variant. The seven shader assets and the N8AO 128x128 RGBA8 blue-noise
+texture are engine-owned built-in assets preloaded from the built-in pack before `IGame.Setup`; the
+effect has no public `Shader` parameter and never compiles or loads an asset on the render thread.
+Every setting and `Quality` is frozen when the camera is created, so later changes affect later
+cameras only.
+
+The effect **requires a camera target with a depth attachment**. A `RenderTexture` created with
+`Depth: false` is rejected from `CreateCamera` with `InvalidOperationException` before the pass is
+recorded. The app scene target always has depth. SSAO preserves the depth image, so a later camera
+can still sample it; the AO, denoise, and composite passes rent two camera-target-sized
+`Rgba16Float` post targets and release them through the engine post-target pool.
+
+SSAO is several fullscreen passes over the full target, so its cost scales with target pixels:
+`Ultra` does 64 AO samples and two 16-tap denoise iterations per pixel. Prefer `Performance` or `Low`
+on integrated GPUs and `Medium` as the balanced default. The effect is on by default in the Castle
+and PrimitiveGallery samples; `A` toggles `SsaoEffect.Enabled` and the status line reports the state.
+The HUD camera in each sample has no post-process stack. Disabling the effect or the stack skips the
+whole chain and renders the geometry result unchanged.
 
 **Custom shader contract.** A `ShaderPostProcessEffect` takes an ordinary baked engine shader with
 both the vertex and fragment stages. It is drawn once as a fullscreen pass through the engine's
@@ -198,7 +270,7 @@ targeting the scene target and another targeting a render texture in the same fr
 own content. A render texture written by a camera with a stack can be sampled by a later
 camera through its `ColorTexture`, and `ReadColorsAsync`/`ReadPixelsAsync` read the post-processed
 color through the same resolved image and tone snapshot as a non-post-processed write. A target's
-depth is never modified by the chain, so `DepthTexture` and a later SSAO-style consumer still see the
+depth is never modified by the chain, so `DepthTexture` and the built-in SSAO effect still see the
 geometry depth.
 
 **Ownership and retention.** A stack, an effect, and a `ShaderPostProcessEffect` own no engine asset.
@@ -206,10 +278,11 @@ They never dispose the shader. The recorded frame retains the effect's internal 
 non-reserved texture the material had bound, exactly like a draw record, so disposing the material or a
 texture after camera creation leaves the recorded frame valid until the frame completes.
 
-**Built-in effects.** SSAO and bloom are later M8 tasks. A built-in is engine code, not a new public
-effect type: it subclasses the internal effect snapshot and uses the internal per-pass context. The
-shipped core gives it everything a multi-pass effect needs without touching the public stack, the
-camera snapshot path, or the store-back:
+**Built-in effects.** `SsaoEffect` is a built-in effect: engine code with an approved public effect
+type, backed by an internal snapshot rather than the custom-shader path. Its snapshot subclasses the
+internal effect snapshot and uses the internal per-pass context. Bloom remains a later M8 task on the
+same hooks. The shipped core gives SSAO everything a multi-pass effect needs without
+touching the public stack, the camera snapshot path, or the store-back:
 
 - `RentColorTarget()` for a camera-target-sized target and `RentColorTarget(Extent2D)` for an
   intermediate from the same per-extent pool (two targets per extent, alternating);
@@ -221,7 +294,16 @@ camera snapshot path, or the store-back:
 - `CompleteAuxiliaryTarget` to release an intermediate and `CompleteColorTarget` to make a
   camera-target-sized result the chain source, after which the engine runs the same store-back.
 
+SSAO records four passes into the two-target pair: AO into the first target, denoise into the second,
+the second denoise into the first, and the composite into the second. The AO and denoise targets are
+auxiliary and become readable before the next pass samples them; the composite target is completed as
+the chain source and the engine's single store-back writes it to the camera viewport. The original
+scene color slot is captured before the first completion so the composite samples the unmodified
+scene. SSAO reports four ordered instance-record entries (AO, denoise, denoise, composite) so the
+frame's instance buffer is sized for every pass even though the denoise entry repeats.
+
 The effect snapshot reports its ordered instance-record layout (per-pass stride and count), so a
 built-in can append passes with different shaders and uniform sizes and the frame's instance buffer is
-sized for all of them. A built-in supplies its own shaders, effect type, and pass scheduling; there is
-no built-in effect in this task.
+sized for all of them. A built-in supplies its own shaders, effect type, and pass scheduling. The
+fullscreen pipeline cache is keyed by the baked shader asset and the forced post render state, so the
+per-quality AO and denoise programs are cached without a second quality selector.

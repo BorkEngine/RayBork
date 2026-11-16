@@ -198,8 +198,9 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
 - Built-in assets are ordinary `IAssetProcessor` outputs; there is no special engine-only bake path.
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, the
-  MSDF text shader, the white/error textures, and the default Fira Sans and JetBrains Mono faces with
-  their payloads: 20 entries in all.
+  MSDF text shader, the seven SSAO shader variants and their shared vertex payload, the white/error
+  and CC0 blue-noise textures, and the default Fira Sans and JetBrains Mono faces with their
+  payloads: 37 entries in all.
 - Shaders are GLSL compiled to SPIR-V ahead of runtime by the bake; the runtime never compiles
   shaders. The shader ABI generates the prologue and reflection for a per-pass frame block array
   selected by a push-constant pass index, a fixed 2048-element bindless texture array, and a
@@ -332,8 +333,11 @@ camera post-process core ships too: `PostProcessStack`, `PostProcessEffect`, `Sh
 the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float` chains over the engine
 fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader contract, and camera-viewport
 store-back on the scene target and render targets, with the post-processed output included in a later
-sample and both readback methods. Built-in SSAO and bloom effects and the RenderTarget and split-screen
-samples remain as later M8 tasks. Multiple cameras and split-screen viewports render to the HDR scene
-target, and a HUD is an ordinary later camera rather than a separate overlay pass. It builds on the M7
+sample and both readback methods. Built-in SSAO also ships: `SsaoEffect`/`SsaoQuality` use the N8AO
+2.0 full-resolution GTAO path with baked 8/16/64 AO and 4/8/16 denoise variants and an engine-owned
+128x128 blue-noise texture; Castle and PrimitiveGallery enable it by default and toggle it with `A`.
+Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 work. Multiple cameras and
+split-screen viewports render to the HDR scene target, and a HUD is an ordinary later camera rather
+than a separate overlay pass. It builds on the M7
 screen-space surface and the M4 camera; the shipped surface is listed in
 [API reference §1.6](docs/api.md#16-milestone-availability).

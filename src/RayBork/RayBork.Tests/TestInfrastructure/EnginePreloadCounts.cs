@@ -12,7 +12,9 @@ namespace RayBork.Tests;
 /// destroy, so they add nothing to these counts. The engine primitive assets then add
 /// <see cref="ADDITIONAL_PRIMITIVE_PROGRAMS"/> programs (the <c>/shaders/primitive</c> and
 /// <c>/shaders/msdf</c> programs; the mesh program is already cached) and
-/// <see cref="PRIMITIVE_MESHES"/> procedural mesh uploads.
+/// <see cref="PRIMITIVE_MESHES"/> procedural mesh uploads. The app then preloads the
+/// <see cref="SSAO_ASSETS"/> built-in SSAO resources: the seven shader programs and the blue-noise
+/// texture.
 /// </para>
 /// <para>
 /// The three engine materials create no GPU resource of their own, so they add nothing to these counts.
@@ -29,6 +31,10 @@ internal static class EnginePreloadCounts {
     /// <summary>The procedural primitive meshes.</summary>
     internal const int PRIMITIVE_MESHES = 9;
 
+    /// <summary>The built-in SSAO shader variants and blue-noise texture.</summary>
+    internal const int SSAO_ASSETS = 8;
+
     /// <summary>The total GPU uploads the startup preload performs.</summary>
-    internal const int TOTAL_UPLOADS = DEFAULTS + ADDITIONAL_PRIMITIVE_PROGRAMS + PRIMITIVE_MESHES;
+    internal const int TOTAL_UPLOADS =
+        DEFAULTS + ADDITIONAL_PRIMITIVE_PROGRAMS + PRIMITIVE_MESHES + SSAO_ASSETS;
 }

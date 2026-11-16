@@ -1,0 +1,164 @@
+#extension GL_EXT_nonuniform_qualifier : require
+
+// The generated shader ABI prologue, kept in one include for the SSAO stage variants. These shaders
+// are compiled to committed SPIR-V by scripts/compile-shaders.ps1 rather than by the bake, so the
+// stage source owns the declarations the bake would otherwise generate.
+struct RayBorkFrame {
+    mat4 ViewProjection;
+    mat4 View;
+    mat4 Projection;
+    vec4 CameraPosition;
+    vec4 Viewport;
+    vec4 Time;
+    vec4 ScreenSize;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer RayBorkFrameBuffer {
+    RayBorkFrame frames[];
+} rbFrameBlock;
+
+layout(push_constant) uniform RayBorkPushConstants {
+    uint passIndex;
+} rbPushConstants;
+
+#define rbFrame rbFrameBlock.frames[rbPushConstants.passIndex]
+
+layout(set = 0, binding = 1) uniform sampler2D RayBorkTextures[2048];
+
+#if defined(SSAO_PASS_AO)
+struct RayBorkInstance {
+    mat4 Transform;
+    vec4 Color;
+    vec4 UvRect;
+    uint sceneDepthIndex;
+    uint blueNoiseIndex;
+    mat4 uProjectionInverse;
+    float uRadius;
+    float uDistanceFalloff;
+    float uBiasOffset;
+    float uBiasMultiplier;
+    bool uScreenSpaceRadius;
+};
+#elif defined(SSAO_PASS_DENOISE)
+struct RayBorkInstance {
+    mat4 Transform;
+    vec4 Color;
+    vec4 UvRect;
+    uint aoTextureIndex;
+    uint sceneDepthIndex;
+    uint blueNoiseIndex;
+    mat4 uProjectionInverse;
+    float uDenoiseRadius;
+    float uRadius;
+    float uDistanceFalloff;
+    bool uScreenSpaceRadius;
+    uint uIteration;
+};
+#elif defined(SSAO_PASS_COMPOSITE)
+struct RayBorkInstance {
+    mat4 Transform;
+    vec4 Color;
+    vec4 UvRect;
+    uint sourceColorIndex;
+    uint aoTextureIndex;
+    vec4 uAoColor;
+    float uIntensity;
+};
+#else
+#error "SsaoAbi.glslinc requires SSAO_PASS_AO, SSAO_PASS_DENOISE, or SSAO_PASS_COMPOSITE."
+#endif
+
+layout(set = 0, binding = 2, std430) readonly buffer RayBorkInstanceBuffer {
+    RayBorkInstance instances[];
+} RayBorkInstances;
+
+layout(location = 15) flat in uint rbInstanceIndex;
+
+#define rbInstance RayBorkInstances.instances[rbInstanceIndex]
+
+#if defined(SSAO_PASS_AO)
+#define sceneDepth RayBorkTextures[nonuniformEXT(rbInstance.sceneDepthIndex)]
+#define blueNoise RayBorkTextures[nonuniformEXT(rbInstance.blueNoiseIndex)]
+#define uProjectionInverse rbInstance.uProjectionInverse
+#define uRadius rbInstance.uRadius
+#define uDistanceFalloff rbInstance.uDistanceFalloff
+#define uBiasOffset rbInstance.uBiasOffset
+#define uBiasMultiplier rbInstance.uBiasMultiplier
+#define uScreenSpaceRadius rbInstance.uScreenSpaceRadius
+#elif defined(SSAO_PASS_DENOISE)
+#define aoTexture RayBorkTextures[nonuniformEXT(rbInstance.aoTextureIndex)]
+#define sceneDepth RayBorkTextures[nonuniformEXT(rbInstance.sceneDepthIndex)]
+#define blueNoise RayBorkTextures[nonuniformEXT(rbInstance.blueNoiseIndex)]
+#define uProjectionInverse rbInstance.uProjectionInverse
+#define uDenoiseRadius rbInstance.uDenoiseRadius
+#define uRadius rbInstance.uRadius
+#define uDistanceFalloff rbInstance.uDistanceFalloff
+#define uScreenSpaceRadius rbInstance.uScreenSpaceRadius
+#define uIteration rbInstance.uIteration
+#elif defined(SSAO_PASS_COMPOSITE)
+#define sourceColor RayBorkTextures[nonuniformEXT(rbInstance.sourceColorIndex)]
+#define aoTexture RayBorkTextures[nonuniformEXT(rbInstance.aoTextureIndex)]
+#define uAoColor rbInstance.uAoColor
+#define uIntensity rbInstance.uIntensity
+#endif
+
+#if defined(SSAO_PASS_AO) || defined(SSAO_PASS_DENOISE)
+vec2 ssaoResolution() {
+    return max(rbFrame.ScreenSize.xy, vec2(1.0));
+}
+
+vec3 ssaoViewPosition(float depth, vec2 uv) {
+    vec4 clip = vec4((uv * 2.0) - 1.0, depth, 1.0);
+    vec4 view = uProjectionInverse * clip;
+    return view.xyz / view.w;
+}
+
+vec3 ssaoDepthNormal(vec3 viewPosition, vec2 uv) {
+    ivec2 size = ivec2(ssaoResolution());
+    ivec2 p = clamp(ivec2(uv * vec2(size)), ivec2(0), size - ivec2(1));
+    ivec2 one = ivec2(1, 0);
+    ivec2 two = ivec2(2, 0);
+
+    float center = texelFetch(sceneDepth, p, 0).x;
+    float left2 = texelFetch(sceneDepth, clamp(p - two, ivec2(0), size - ivec2(1)), 0).x;
+    float left1 = texelFetch(sceneDepth, clamp(p - one, ivec2(0), size - ivec2(1)), 0).x;
+    float right1 = texelFetch(sceneDepth, clamp(p + one, ivec2(0), size - ivec2(1)), 0).x;
+    float right2 = texelFetch(sceneDepth, clamp(p + two, ivec2(0), size - ivec2(1)), 0).x;
+    float bottom2 = texelFetch(sceneDepth, clamp(p - ivec2(0, 2), ivec2(0), size - ivec2(1)), 0).x;
+    float bottom1 = texelFetch(sceneDepth, clamp(p - ivec2(0, 1), ivec2(0), size - ivec2(1)), 0).x;
+    float top1 = texelFetch(sceneDepth, clamp(p + ivec2(0, 1), ivec2(0), size - ivec2(1)), 0).x;
+    float top2 = texelFetch(sceneDepth, clamp(p + ivec2(0, 2), ivec2(0), size - ivec2(1)), 0).x;
+
+    float dl = abs((2.0 * left1 - left2) - center);
+    float dr = abs((2.0 * right1 - right2) - center);
+    float db = abs((2.0 * bottom1 - bottom2) - center);
+    float dt = abs((2.0 * top1 - top2) - center);
+    vec2 texel = 1.0 / ssaoResolution();
+
+    vec3 dpdx = dl < dr
+        ? viewPosition - ssaoViewPosition(left1, uv - vec2(texel.x, 0.0))
+        : ssaoViewPosition(right1, uv + vec2(texel.x, 0.0)) - viewPosition;
+    vec3 dpdy = db < dt
+        ? viewPosition - ssaoViewPosition(bottom1, uv - vec2(0.0, texel.y))
+        : ssaoViewPosition(top1, uv + vec2(0.0, texel.y)) - viewPosition;
+    vec3 normal = cross(dpdx, dpdy);
+    if (dot(normal, normal) < 1e-10) {
+        return vec3(0.0, 0.0, 1.0);
+    }
+
+    normal = normalize(normal);
+    return dot(normal, -viewPosition) < 0.0 ? -normal : normal;
+}
+
+float ssaoPixelRadius(vec3 viewPosition, float depth, vec2 uv, float radius) {
+    return uScreenSpaceRadius
+        ? distance(viewPosition, ssaoViewPosition(depth, uv + (vec2(radius, 0.0) / ssaoResolution())))
+        : radius;
+}
+
+float ssaoFalloffDistance(float radius) {
+    return uScreenSpaceRadius
+        ? radius * uDistanceFalloff
+        : radius * uDistanceFalloff * 0.2;
+}
+#endif

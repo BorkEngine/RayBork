@@ -48,6 +48,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     private readonly AssetCatalog _catalog;
     private readonly ProceduralAssetService _proceduralAssets;
     private readonly PrimitiveAssets _primitives;
+    private readonly SsaoAssets _ssaoAssets;
     private readonly CameraTestHost _frames;
     private readonly List<Texture> _textures = [];
     private readonly List<Font> _fonts = [];
@@ -60,14 +61,17 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         AssetCatalog catalog,
         ProceduralAssetService proceduralAssets,
         PrimitiveAssets primitives,
+        SsaoAssets ssaoAssets,
         CameraTestHost frames) {
         _host = host;
         _uploads = uploads;
         _catalog = catalog;
         _proceduralAssets = proceduralAssets;
         _primitives = primitives;
+        _ssaoAssets = ssaoAssets;
         _frames = frames;
         _frames.Service.AttachPrimitives(primitives);
+        _frames.Service.AttachSsaoAssets(ssaoAssets);
     }
 
     /// <summary>Gets the backend host the frames are submitted to.</summary>
@@ -91,6 +95,14 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         }
     }
 
+    /// <summary>Gets the loaded built-in SSAO assets attached to the camera service.</summary>
+    internal SsaoAssets SsaoAssets {
+        get {
+            AssertNotDisposed();
+            return _ssaoAssets;
+        }
+    }
+
     /// <summary>
     /// Creates the backend and loads the real primitive assets, or skips the test when the GPU host is
     /// environmentally unavailable.
@@ -102,6 +114,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         AssetGpuUploadHarness? uploads = null;
         AssetCatalog? catalog = null;
         PrimitiveAssets? primitives = null;
+        SsaoAssets? ssaoAssets = null;
         CameraTestHost? frames = null;
         try {
             uploads = new AssetGpuUploadHarness(host.Backend);
@@ -123,13 +136,34 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
                 completed,
                 "The engine primitive assets did not finish loading through the built-in pack and the GPU asset bridge.");
             primitives = load.GetAwaiter().GetResult();
+
+            Task<SsaoAssets> ssaoLoad = SsaoAssets.LoadAsync(catalog);
+            completed = SpinWait.SpinUntil(
+                () => {
+                    uploads.Pump();
+                    return ssaoLoad.IsCompleted;
+                },
+                AssetGpuUploadHarness.Timeout);
+            Assert.True(
+                completed,
+                "The built-in SSAO assets did not finish loading through the built-in pack and the GPU asset bridge.");
+            ssaoAssets = ssaoLoad.GetAwaiter().GetResult();
+
             frames = new CameraTestHost(
                 checked((int)host.SceneTarget.Extent.Width),
                 checked((int)host.SceneTarget.Extent.Height));
             ProceduralAssetService proceduralAssets = ((IProceduralAssetProvider)catalog).ProceduralAssets;
-            return new PrimitiveDrawGpuHarness(host, uploads, catalog, proceduralAssets, primitives, frames);
+            return new PrimitiveDrawGpuHarness(
+                host,
+                uploads,
+                catalog,
+                proceduralAssets,
+                primitives,
+                ssaoAssets,
+                frames);
         } catch {
             primitives?.Dispose();
+            ssaoAssets?.Dispose();
             frames?.Dispose();
             catalog?.Stop();
             uploads?.Dispose();
@@ -251,6 +285,10 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <param name="fieldOfView">The vertical field of view in degrees.</param>
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The far clip distance; positive infinity is allowed.</param>
+    /// <param name="postProcess">The post-process stack to snapshot, or <see langword="null"/>.</param>
+    /// <param name="target">
+    /// The render texture the camera writes, or <see langword="null"/> for the app scene target.
+    /// </param>
     /// <returns>The sealed packet that was submitted.</returns>
     internal RenderFramePacket SubmitPerspective(
         Action<Camera> record,
@@ -258,7 +296,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         Color? clearColor = null,
         float fieldOfView = 60f,
         float near = 0.1f,
-        float far = float.PositiveInfinity) {
+        float far = float.PositiveInfinity,
+        PostProcessStack? postProcess = null,
+        RenderTexture? target = null) {
         AssertNotDisposed();
         return SubmitFrame(service => {
             using Camera camera = service.CreateCamera(
@@ -270,7 +310,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
                 clearColor,
                 near,
                 far,
-                viewport: null);
+                viewport: null,
+                target,
+                postProcess);
             record(camera);
         });
     }
@@ -329,6 +371,10 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <param name="height">The visible world-space height.</param>
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The finite far clip distance.</param>
+    /// <param name="postProcess">The post-process stack to snapshot, or <see langword="null"/>.</param>
+    /// <param name="target">
+    /// The render texture the camera writes, or <see langword="null"/> for the app scene target.
+    /// </param>
     /// <returns>The sealed packet that was submitted.</returns>
     internal RenderFramePacket SubmitOrthographic(
         Action<Camera> record,
@@ -336,7 +382,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         Color? clearColor = null,
         float height = 4f,
         float near = 0.1f,
-        float far = 100f) {
+        float far = 100f,
+        PostProcessStack? postProcess = null,
+        RenderTexture? target = null) {
         AssertNotDisposed();
         return SubmitFrame(service => {
             using Camera camera = service.CreateCamera(
@@ -348,7 +396,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
                 clearColor,
                 near,
                 far,
-                viewport: null);
+                viewport: null,
+                target,
+                postProcess);
             record(camera);
         });
     }
@@ -365,6 +415,32 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         return (r, g, b);
     }
 
+    /// <summary>
+    /// Reads one resolved linear color pixel from a runtime render target.
+    /// </summary>
+    /// <param name="target">The render texture to read.</param>
+    /// <param name="x">The pixel column.</param>
+    /// <param name="y">The pixel row.</param>
+    /// <returns>The linear RGB values.</returns>
+    internal (float R, float G, float B) ReadRenderTargetColor(RenderTexture target, uint x, uint y) {
+        AssertNotDisposed();
+        ArgumentNullException.ThrowIfNull(target);
+        if (!_host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? renderTarget)
+            || renderTarget is null) {
+            throw new InvalidOperationException($"The render target {target.TargetId} is not live.");
+        }
+
+        VulkanReadback.ReadRenderTargetColorPixel(
+            _host.Device,
+            renderTarget,
+            x,
+            y,
+            out float r,
+            out float g,
+            out float b);
+        return (r, g, b);
+    }
+
     /// <inheritdoc />
     public void Dispose() {
         if (_disposed) {
@@ -375,6 +451,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         try {
             _host.Backend.WaitForFrameResourcesIdle();
             _frames.Service.DetachPrimitives();
+            _frames.Service.DetachSsaoAssets();
             _frames.Dispose();
             foreach (Font font in _fonts) {
                 if (!font.IsDisposed) {
@@ -387,6 +464,7 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
             }
 
             _primitives.Dispose();
+            _ssaoAssets.Dispose();
             _catalog.Stop();
             _uploads.Dispose();
         } finally {

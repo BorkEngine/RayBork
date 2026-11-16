@@ -3,10 +3,12 @@
 `Castle` is a small RayBork sample: an orbitable castle scene with a model, a diffuse texture, an
 orbital camera that toggles between perspective and orthographic, and the reference XZ grid. It
 loads the model and texture, binds the
-texture on the model's materials, draws the castle solid and the grid every tick in the scene camera,
-outlines the castle with a surface hit point when the pointer is over it, and draws a small
-presented-FPS and render-statistics line from a later HUD camera at the top-left of the view. The
-source is kept small and commented so the scene can be read and adapted as a starting point.
+texture on the model's materials, draws the castle solid and the grid every tick in the scene camera
+with the built-in SSAO effect, outlines the castle with a surface hit point when the pointer is over
+it, and draws a small presented-FPS and render-statistics line from a later HUD camera at the top-left
+of the view. `A` toggles SSAO, which is on by default at Medium quality; the HUD camera keeps no
+post-process stack. The source is kept small and commented so the scene can be read and adapted as a
+starting point.
 
 `samples/Pong` is the M7 Native AOT gate. This sample remains a buildable and publishable
 example, and it contains no test-only logic: it opens the window, draws the scene, and exits cleanly.
@@ -51,6 +53,7 @@ prints an error and exits `1`.
 | Left mouse drag | Orbit the camera around the castle. Pitch is clamped to ±89 degrees. |
 | Mouse wheel | Zoom the orbit distance, clamped to 5–500. |
 | `O` | Toggle the camera between perspective and orthographic. |
+| `A` | Toggle the built-in SSAO effect. |
 | Mouse hover | Outline the castle's world bounds and mark the nearest surface point. |
 | Escape | Request exit. |
 
@@ -74,7 +77,12 @@ draws the castle model with its built-in mesh material, the reference grid under
 overlays when the pointer is over the castle:
 
 ```csharp
-using (Camera scene = CreatePass(context, cameraTransform, ClearMode.ColorAndDepth, Color.WhiteSmoke)) {
+using (Camera scene = CreatePass(
+    context,
+    cameraTransform,
+    ClearMode.ColorAndDepth,
+    Color.WhiteSmoke,
+    _postProcess)) {
     scene.DrawModel(_model!, Transform.Identity, Color.White);
     scene.DrawGrid(GRID_SLICES, GRID_SPACING, Color.Gray);
     DrawHoverOverlay(scene, context);
@@ -140,8 +148,8 @@ the model, so geometry in front of them occludes them.
 
 `DrawStatusOverlay` records the HUD camera pass: an `18`-pixel line in the built-in JetBrains Mono
 font showing presented frames per second, the tick rate, the render CPU time, draw calls and
-instances, and the current projection. The monospaced face keeps the changing counters from shifting
-the text around them.
+instances, the current projection, and whether SSAO is on. The monospaced face keeps the changing
+counters from shifting the text around them.
 The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
 presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`, because it is not the
 presented rate. The render time is `ctx.Stats.CpuFrameMilliseconds`, which measures only the render
@@ -160,6 +168,31 @@ This is the `DrawFPS`-style overlay the sample deferred since M4, when runtime t
 The line is `Color.Black` against the `Color.WhiteSmoke` background. The HUD camera uses
 `ClearMode.Depth`, so it loads the scene color and clears depth: the text is not occluded by scene
 geometry, and the sample has no separate overlay pass.
+
+### Ambient occlusion
+
+The sample owns one app-lifetime `SsaoEffect` and one `PostProcessStack`, adds the effect to the stack
+in `Setup`, and passes the stack only to the scene camera:
+
+```csharp
+private readonly PostProcessStack _postProcess = new();
+private readonly SsaoEffect _ssao = new();
+
+// Setup
+_postProcess.Add(_ssao);
+
+// Tick
+if (context.Input.IsKeyPressed(Key.A)) {
+    _ssao.Enabled = !_ssao.Enabled;
+}
+```
+
+The effect is enabled by default at `SsaoQuality.Medium` with the public defaults (`Radius` 1.5,
+`DistanceFalloff` 1, `Intensity` 2, black tint, denoise radius 12). `A` toggles
+`SsaoEffect.Enabled`; the change is snapshotted by cameras created after the tick. The scene camera is
+the only camera with a stack, so the HUD text is not post-processed. The HUD status line reports
+`ssao on` or `ssao off`. SSAO preserves depth, works in both perspective and orthographic modes, and
+uses the same 800x450 target as the scene.
 
 The sample's hover math does not allocate: the bounds are computed once, the box and mesh queries are
 allocation-free static math, and the part loop is indexed so the `IReadOnlyList<ModelPart>` enumerator

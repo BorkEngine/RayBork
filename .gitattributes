@@ -21,6 +21,8 @@
 *.7z binary
 *.gz binary
 *.pck binary
+*.spv binary
+*.rgba8 binary
 *.dll binary
 *.exe binary
 *.pdb binary

@@ -259,17 +259,17 @@ depth view. It is the input an internal consumer such as the SSAO effect samples
 its attachments, including the resolved depth image, at the start of every frame, and
 `VulkanReadback.ReadSceneDepthPixel` reads the resolved depth image for both single-sample and
 multisampled scene targets. Resolving scene depth costs bandwidth on every camera pass; the SSAO
-effect is the internal consumer, and until it lands the only reader is the diagnostic probe and a
-custom post effect that declares `sourceDepth`. That cost is a known property of the depth path, not a
-hidden regression; a built-in effect can decide whether a pass needs the resolve.
+effect and the built-in `SsaoEffect` are the internal consumers; SSAO also samples it for every frame
+with a depth-bearing post-process stack. That cost is a known property of the depth path, not a hidden
+regression; a built-in effect can decide whether a pass needs the resolve.
 
-**Remaining M8 work.** The extensible camera post-process core and the custom-shader effect ship:
-the stack API, the target-sized chain, viewport store-back, the reserved `sourceColor`/`sourceDepth`
-contract, and the scene-target and render-target source slots. Built-in SSAO and bloom effects and the
-RenderTarget and split-screen samples remain later M8 tasks. This section covers the color path, the
-depth view, resize, and color readback: creation, camera routing, MSAA color and depth resolve,
-same-tick sampling of both views, resize, lifetime, raw linear color readback, display-referred pixel
-readback, and camera post-processing.
+**Remaining M8 work.** The extensible camera post-process core, the custom-shader effect, and the
+built-in SSAO effect ship: the stack API, the target-sized chain, viewport store-back, the reserved
+`sourceColor`/`sourceDepth` contract, the scene-target and render-target source slots, and SSAO with
+the app/Castle/PrimitiveGallery toggles. Bloom and the RenderTarget and split-screen samples remain
+later M8 tasks. This section covers the color path, the depth view, resize, and color readback:
+creation, camera routing, MSAA color and depth resolve, same-tick sampling of both views, resize,
+lifetime, raw linear color readback, display-referred pixel readback, and camera post-processing.
 
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or

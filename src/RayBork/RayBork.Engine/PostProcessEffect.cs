@@ -10,7 +10,7 @@ namespace RayBork;
 /// <para>
 /// The type is an engine-fixed base: its constructor and capture member are internal, so a game cannot
 /// derive its own effect type. A custom effect is a <see cref="ShaderPostProcessEffect"/> over a baked
-/// shader; built-in effects such as SSAO and bloom are engine types added in later M8 tasks.
+/// shader; <see cref="SsaoEffect"/> is the built-in SSAO effect, and bloom is a later M8 engine type.
 /// </para>
 /// <para>
 /// <see cref="Enabled"/> is read and written on the tick thread. A camera snapshots the stack, the

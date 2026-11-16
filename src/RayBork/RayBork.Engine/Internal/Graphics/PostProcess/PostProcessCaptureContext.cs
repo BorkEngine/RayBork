@@ -11,4 +11,11 @@ namespace RayBork.Internal;
 /// A human-readable name of the target for exception messages, such as "the app scene target" or
 /// "render texture 3".
 /// </param>
-internal readonly record struct PostProcessCaptureContext(bool TargetHasDepth, string TargetDescription);
+/// <param name="SsaoAssets">
+/// The app's preloaded built-in SSAO assets, or <see langword="null"/> when the app did not attach
+/// them. A custom effect ignores them; <see cref="SsaoEffect"/> requires them.
+/// </param>
+internal readonly record struct PostProcessCaptureContext(
+    bool TargetHasDepth,
+    string TargetDescription,
+    SsaoAssets? SsaoAssets = null);

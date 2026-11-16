@@ -31,7 +31,18 @@ public sealed class BuiltInPackTests {
     private const string FONT_FACE_PAYLOAD_PATH = "fonts/fira-sans-face";
     private const string MONO_FONT_PATH = "fonts/jetbrains-mono";
     private const string MONO_FONT_FACE_PAYLOAD_PATH = "fonts/jetbrains-mono-face";
-    private const int ENTRY_COUNT = 20;
+    private const string BLUE_NOISE_PATH = "textures/blue-noise";
+    private const string BLUE_NOISE_PAYLOAD_PATH = "textures/blue-noise-ktx2";
+    private const string SSAO_VERTEX_PAYLOAD_PATH = "shaders/ssao/fullscreen-vert";
+    private const string SSAO_AO_8_PATH = "shaders/ssao/ao-8";
+    private const string SSAO_AO_8_FRAGMENT_PATH = "shaders/ssao/ao-8-frag";
+    private const string SSAO_AO_64_PATH = "shaders/ssao/ao-64";
+    private const string SSAO_AO_64_FRAGMENT_PATH = "shaders/ssao/ao-64-frag";
+    private const string SSAO_DENOISE_16_PATH = "shaders/ssao/denoise-16";
+    private const string SSAO_DENOISE_16_FRAGMENT_PATH = "shaders/ssao/denoise-16-frag";
+    private const string SSAO_COMPOSITE_PATH = "shaders/ssao/composite";
+    private const string SSAO_COMPOSITE_FRAGMENT_PATH = "shaders/ssao/composite-frag";
+    private const int ENTRY_COUNT = 37;
     private const uint FONT_BYTE_LENGTH = 456996;
     private const uint MONO_FONT_BYTE_LENGTH = 187208;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
@@ -95,6 +106,17 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, FONT_FACE_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, MONO_FONT_PATH, AssetEntryType.Font, isGpuPayload: false);
         AssertEntry(archive, MONO_FONT_FACE_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, BLUE_NOISE_PATH, AssetEntryType.Texture, isGpuPayload: false);
+        AssertEntry(archive, BLUE_NOISE_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, SSAO_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, SSAO_AO_8_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, SSAO_AO_8_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, SSAO_AO_64_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, SSAO_AO_64_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, SSAO_DENOISE_16_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, SSAO_DENOISE_16_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, SSAO_COMPOSITE_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, SSAO_COMPOSITE_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
     }
 
     [Fact]
@@ -147,6 +169,58 @@ public sealed class BuiltInPackTests {
         Assert.Equal(TextureWrap.Clamp, descriptor.Wrap);
         Assert.Equal(1f, descriptor.MaxAnisotropy);
         AssertKtx2Payload(archive, descriptor.Payload);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void BlueNoiseTextureIsTheLinear128SquareRepeatImage() {
+        using PackArchive archive = OpenBuiltInPack();
+        TextureAssetDescriptor descriptor = ReadTextureDescriptor(archive, BLUE_NOISE_PATH);
+
+        Assert.Equal(BLUE_NOISE_PAYLOAD_PATH, descriptor.Payload);
+        Assert.Equal(128u, descriptor.Width);
+        Assert.Equal(128u, descriptor.Height);
+        Assert.Equal(8u, descriptor.MipLevels);
+        Assert.Equal(TextureFormat.Rgba8Unorm, descriptor.Format);
+        Assert.False(descriptor.IsSrgb);
+        Assert.Equal(TextureFilter.Nearest, descriptor.Filter);
+        Assert.Equal(TextureWrap.Repeat, descriptor.Wrap);
+        Assert.Equal(1f, descriptor.MaxAnisotropy);
+        AssertKtx2Payload(archive, descriptor.Payload);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SsaoShadersUseTheCommittedMainEntryPointAndTheBakedContracts() {
+        using PackArchive archive = OpenBuiltInPack();
+
+        ShaderAssetDescriptor ao = ReadShaderDescriptor(archive, SSAO_AO_64_PATH);
+        Assert.Equal(SSAO_VERTEX_PAYLOAD_PATH, ao.VertexPayload);
+        Assert.Equal(SSAO_AO_64_FRAGMENT_PATH, ao.FragmentPayload);
+        Assert.Equal("main", ao.VertexEntry);
+        Assert.Equal("main", ao.FragmentEntry);
+        Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, ao.Stages);
+        Assert.Equal(RenderState.Opaque, ao.DefaultRenderState);
+        Assert.Equal(["uProjectionInverse", "uRadius", "uDistanceFalloff", "uBiasOffset", "uBiasMultiplier", "uScreenSpaceRadius"], ao.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(["sceneDepth", "blueNoise"], ao.Textures);
+        AssertSpirvPayload(archive, ao.VertexPayload);
+        AssertSpirvPayload(archive, ao.FragmentPayload);
+
+        ShaderAssetDescriptor denoise = ReadShaderDescriptor(archive, SSAO_DENOISE_16_PATH);
+        Assert.Equal(SSAO_VERTEX_PAYLOAD_PATH, denoise.VertexPayload);
+        Assert.Equal(SSAO_DENOISE_16_FRAGMENT_PATH, denoise.FragmentPayload);
+        Assert.Equal(["uProjectionInverse", "uDenoiseRadius", "uRadius", "uDistanceFalloff", "uScreenSpaceRadius", "uIteration"], denoise.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(["aoTexture", "sceneDepth", "blueNoise"], denoise.Textures);
+        AssertSpirvPayload(archive, denoise.VertexPayload);
+        AssertSpirvPayload(archive, denoise.FragmentPayload);
+
+        ShaderAssetDescriptor composite = ReadShaderDescriptor(archive, SSAO_COMPOSITE_PATH);
+        Assert.Equal(SSAO_VERTEX_PAYLOAD_PATH, composite.VertexPayload);
+        Assert.Equal(SSAO_COMPOSITE_FRAGMENT_PATH, composite.FragmentPayload);
+        Assert.Equal(["uAoColor", "uIntensity"], composite.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(["sourceColor", "aoTexture"], composite.Textures);
+        AssertSpirvPayload(archive, composite.VertexPayload);
+        AssertSpirvPayload(archive, composite.FragmentPayload);
     }
 
     [Fact]

@@ -15,6 +15,10 @@ internal static class PostProcessSnapshots {
     /// <param name="effect">The effect to capture.</param>
     /// <param name="targetHasDepth">Whether the camera target has a resolved depth image.</param>
     /// <param name="targetDescription">The target name used in contract diagnostics.</param>
+    /// <param name="ssaoAssets">
+    /// The app's preloaded SSAO built-ins, or <see langword="null"/> for a harness that does not run
+    /// SSAO.
+    /// </param>
     /// <returns>The immutable snapshot the pass records.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">The effect's shader or a bound texture is disposed.</exception>
@@ -22,7 +26,8 @@ internal static class PostProcessSnapshots {
     internal static PostProcessEffectSnapshot Capture(
         PostProcessEffect effect,
         bool targetHasDepth,
-        string targetDescription) {
+        string targetDescription,
+        SsaoAssets? ssaoAssets = null) {
         ArgumentNullException.ThrowIfNull(effect);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetDescription);
 
@@ -30,7 +35,8 @@ internal static class PostProcessSnapshots {
             return DisabledPostProcessEffectSnapshot.Instance;
         }
 
-        PostProcessEffectSnapshot snapshot = effect.Capture(new PostProcessCaptureContext(targetHasDepth, targetDescription));
+        PostProcessEffectSnapshot snapshot = effect.Capture(
+            new PostProcessCaptureContext(targetHasDepth, targetDescription, ssaoAssets));
         snapshot.Attach(effect);
         return snapshot;
     }
