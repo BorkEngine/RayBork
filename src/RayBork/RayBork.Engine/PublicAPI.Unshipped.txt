@@ -90,6 +90,7 @@ RayBork.Camera.OrthographicHeight.get -> float
 RayBork.Camera.Projection.get -> RayBork.CameraProjection
 RayBork.Camera.ProjectionMatrix.get -> System.Numerics.Matrix4x4
 RayBork.Camera.ScreenToWorldRay(System.Numerics.Vector2 screenPosition) -> RayBork.Ray
+RayBork.Camera.ScreenToWorldTransform(System.Numerics.Vector2 point, float distance) -> RayBork.Transform
 RayBork.Camera.Transform.get -> RayBork.Transform
 RayBork.Camera.ViewMatrix.get -> System.Numerics.Matrix4x4
 RayBork.Camera.Viewport.get -> RayBork.Rect
@@ -139,8 +140,7 @@ RayBork.EngineContext
 RayBork.EngineContext.Assets.get -> RayBork.IAssetCatalog!
 RayBork.EngineContext.Defaults.get -> RayBork.EngineDefaults!
 RayBork.EngineContext.CreateMeshBuilder(RayBork.PrimitiveTopology topology = RayBork.PrimitiveTopology.TriangleList) -> RayBork.MeshBuilder!
-RayBork.EngineContext.CreateOrthographicCamera(RayBork.Transform transform, float height, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = 1000, RayBork.Rect? viewport = null) -> RayBork.Camera!
-RayBork.EngineContext.CreateCamera(RayBork.Transform transform, RayBork.CameraProjection projection, float fieldOfView, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = Infinity, RayBork.Rect? viewport = null) -> RayBork.Camera!
+RayBork.EngineContext.CreateCamera(RayBork.Transform transform, RayBork.CameraProjection projection, float fieldOfView = 0, float orthographicHeight = 0, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = 1000, RayBork.Rect? viewport = null) -> RayBork.Camera!
 RayBork.EngineContext.CreateTextureBuilder(int width, int height, RayBork.TextureFormat format = RayBork.TextureFormat.Rgba8Srgb, bool generateMips = true, RayBork.SamplerState? sampler = null) -> RayBork.TextureBuilder!
 RayBork.EngineContext.DeltaTime.get -> double
 RayBork.EngineContext.Fps.get -> double
@@ -1279,3 +1279,8 @@ RayBork.Camera.DrawWireSphere(System.Numerics.Vector3 center, float radius, int 
 RayBork.Camera.DrawText(RayBork.Font! font, System.ReadOnlySpan<char> text, RayBork.Transform transform, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left, RayBork.TextWrapping wrapping = RayBork.TextWrapping.None, float maxWidth = 0) -> void
 RayBork.Camera.DrawTextBillboard(RayBork.Font! font, System.ReadOnlySpan<char> text, System.Numerics.Vector3 position, float size, RayBork.Color color, RayBork.TextAlignment alignment = RayBork.TextAlignment.Left) -> void
 static RayBork.Collision.GetRayQuad(RayBork.Ray ray, System.Numerics.Vector3 a, System.Numerics.Vector3 b, System.Numerics.Vector3 c, System.Numerics.Vector3 d) -> RayBork.RayCollision
+RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Color color, RayBork.RenderState? renderState = null) -> void
+RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Texture! texture, RayBork.Color? tint = null, RayBork.RenderState? renderState = null) -> void
+RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Texture! texture, RayBork.Rect source, RayBork.Color? tint = null, RayBork.RenderState? renderState = null) -> void
+RayBork.Camera.DrawDisc(RayBork.Transform transform, float radius, RayBork.Color color) -> void
+RayBork.Camera.DrawGrid(RayBork.Transform transform, int slices, float spacing, RayBork.Color color) -> void

@@ -263,7 +263,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         return SubmitFrame(service => {
             using Camera camera = service.CreateCamera(
                 transform ?? Transform.Identity,
+                CameraProjection.Perspective,
                 fieldOfView,
+                orthographicHeight: 0f,
                 ClearMode.ColorAndDepth,
                 clearColor,
                 near,
@@ -292,7 +294,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         return SubmitFrame(service => {
             using (Camera camera = service.CreateCamera(
                 firstTransform ?? Transform.Identity,
+                CameraProjection.Perspective,
                 60f,
+                orthographicHeight: 0f,
                 ClearMode.ColorAndDepth,
                 clearColor,
                 0.1f,
@@ -303,7 +307,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
 
             using (Camera camera = service.CreateCamera(
                 secondTransform ?? Transform.Identity,
+                CameraProjection.Perspective,
                 60f,
+                orthographicHeight: 0f,
                 ClearMode.ColorAndDepth,
                 clearColor,
                 0.1f,
@@ -333,8 +339,10 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         float far = 100f) {
         AssertNotDisposed();
         return SubmitFrame(service => {
-            using Camera camera = service.CreateOrthographicCamera(
+            using Camera camera = service.CreateCamera(
                 transform ?? Transform.Identity,
+                CameraProjection.Orthographic,
+                fieldOfView: 0f,
                 height,
                 ClearMode.ColorAndDepth,
                 clearColor,

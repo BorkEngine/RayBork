@@ -47,39 +47,56 @@ is visible.
 </Project>
 ```
 
-Publish commands used by the M6 gate:
+Publish commands used by the M7 gate:
 
 ```text
-dotnet build samples/Text/Text.slnx -c Release
-dotnet publish samples/Text/Text.csproj -c Release -r win-x64   -p:PublishAot=true
-dotnet publish samples/Text/Text.csproj -c Release -r linux-x64 -p:PublishAot=true
-samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30
+dotnet build samples/Pong/Pong.slnx -c Release
+dotnet publish samples/Pong/Pong.csproj -c Release -r win-x64   -p:PublishAot=true
+dotnet publish samples/Pong/Pong.csproj -c Release -r linux-x64 -p:PublishAot=true
+samples/Pong/bin/Release/net11.0/win-x64/publish/Pong.exe --frames 30
 # WSL, from the repository root, on the WSLg display with the conformant lavapipe ICD:
-# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Pong/bin/Release/net11.0/linux-x64/publish/Pong --frames 30
 ```
 
-`samples/Text` is the M6 sample and Native AOT gate. It is its own solution,
-`samples/Text/Text.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample and the JIT
-`Text.Assets` executable. The sample build bakes `text.pck` from the checked-in Lora Regular 3.008
-face and copies it beside the sample executable; the sample loads it automatically and has no
-`--assets` argument. The built-in Fira Sans Regular and JetBrains Mono (default instance Regular)
-faces come from the
-engine's built-in pack and are used through `EngineDefaults.DefaultFont` and
-`EngineDefaults.DefaultMonoFont`. The scene draws the same paragraph at several sizes, rotations,
-alignments, and wrapping modes, Latin and Cyrillic paragraphs in both proportional faces, a
-camera-facing billboard, a Greek line that gains a lazily generated glyph every 30 ticks, and a
-world-space mono status line. `--frames` and `--help` are the only options.
+`samples/Pong` is the M7 sample and Native AOT gate. It is its own solution,
+`samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample and the JIT
+`Pong.Assets` executable. The solution builds `Pong` once and then `Pong.Assets`; the assets
+project runs the bake executable out of process, bakes `pong.pck` from the original 32x128 opaque
+paddle PNG and the `Pong.PongSettings` TOML data, and copies it beside the sample executable. The
+sample loads it automatically and has no `--assets` argument. `PongSettings` lives only in the
+sample project and `Pong.Assets` references that project directly; `Pong` does not reference the
+assets project, so the graph has no cycle. Every tick records one orthographic camera at
+`(0, 0, 1)` with `orthographicHeight = Window.RenderHeight`, fits the `1280x720` design playfield
+into the render pixels, and anchors every draw with `Camera.ScreenToWorldTransform`. `DrawQuad`
+draws the playfield, border, net, score panels, shaded overlay, and textured paddles; `DrawDisc`
+draws the ball; `DrawText` draws the scores, status line, and pause/winner overlay. The match is
+player vs AI: the human moves the left paddle with W/S, Up/Down, or gamepad 0 left stick/d-pad, and
+a deterministic AI moves the right paddle at `AiPaddleSpeed` while tracking the ball. The match uses
+a fixed opening serve, fixed `1/120` second substeps, `Collision.CheckBoxSphere` paddle collisions,
+a paddle-hit speed-up of `BallSpeedupPerHit` up to `MaxBallSpeed`, scoring with the serve going to
+the loser, a max-score win, and pause/restart. `--frames` and `--help` are the only options.
 
-The publish directory must contain the host, its native libraries, and `text.pck` beside the host,
-and must not contain `Text.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the
-shaderc native libraries, or the glTF packages.
+The publish does not build `Pong.Assets`; the Release solution build above produces `pong.pck`
+beside the sample executable, and `PongCopyPackToPublish` copies it into the publish directory. A
+missing pack fails the publish with a clear error that names the Release solution build. The publish
+directory must contain the host, its native libraries, and `pong.pck` beside the host, and must not
+contain `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native
+libraries, or the glTF packages.
 
-Both M6 publishes must start, load the built-in fonts and the baked Lora face, generate glyphs on
-demand, draw the text scene, and shut down. Both finish with zero AOT/trim warnings, and both
-published hosts ran `--frames 30` to exit `0`: the Windows host on the hardware driver and the Linux
-host on the conformant lavapipe software driver.
+Both M7 publishes started, loaded the baked settings and paddle texture, played the player-vs-AI
+match, and shut down. The Windows `win-x64` publish finished with zero AOT/trim warnings: its
+publish directory contains `pong.pck` beside `Pong.exe` and no bake tooling, and the published host
+ran `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with
+zero warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the published host ran
+`--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
+`B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware
+Vulkan path (Mesa dzn) is not a target.
 
-`samples/Castle` remains a buildable and publishable sample, but it is not the M6 gate. Its build
+`samples/Text` was the M6 sample and Native AOT gate, and it remains a buildable and publishable
+sample. Its solution is `samples/Text/Text.slnx`; it bakes `text.pck` from the checked-in Lora face
+and draws the world-space text scene with the built-in Fira Sans and JetBrains Mono faces. It is no
+longer the gate. `samples/Castle` remains a buildable and publishable sample, but it is not the M7
+gate. Its build
 invokes the JIT assets executable out of process with the sample's configuration but without its
 publish settings, bakes `castle.pck`, and copies the pack beside the sample executable; `dotnet
 publish` copies the same pack into the publish directory, so the published hosts load the adjacent
@@ -89,15 +106,15 @@ the shaderc native libraries, or the glTF packages. `samples/PrimitiveGallery` r
 and publishable single-project sample with no assets executable and no pack; it builds its only
 texture at runtime.
 
-AOT publish is a per-milestone gate, not a release-only check. The M6 gate is `samples/Text`: the
-published hosts open a window, load the built-in faces and the sample Lora face from their packs,
-generate and upload the glyph textures through the real `RayBork.Font` thread, draw the text through
-the built-in `/shaders/msdf` program, and exit `0`. The gate path exercises the font descriptor and
-face payload decode, the managed sfnt parser, the MSDF generator, the glyph pipeline and cache, the
-layout engine, the `Camera.DrawText`/`Camera.DrawTextBillboard` draw records, and the per-instance
-bindless glyph texture path. The sample is a plain user-facing example and contains no test-only
-draw assertion. The suite is 2,625 tests, 106 of them GPU integration tests, and every sample
-solution builds.
+AOT publish is a per-milestone gate, not a release-only check. The M7 gate is `samples/Pong`: the
+published hosts open a window, load the baked `Pong.PongSettings` data and texture and the built-in
+texture, shader, and font assets, record the player-vs-AI orthographic screen-space pass through
+`ScreenToWorldTransform`, and exit `0`. The gate path exercises the custom-data descriptor decode,
+the texture upload and sampler path, the orthographic projection, `DrawQuad`/`DrawDisc`, the
+`DrawText` HUD path with glyph generation, and the same batch planner as the 3D draws. The sample is
+a plain user-facing example and contains no test-only draw assertion. The Windows suite is 2,695
+tests with no skips (114 GPU); the lavapipe Linux run is 2,688 passed with 7 skipped HDR/
+scRGB-present tests because the driver exposes only SDR.
 
 On WSL, run the Linux host with the conformant lavapipe ICD:
 `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. WSLg's hardware Vulkan path (Mesa dzn) is

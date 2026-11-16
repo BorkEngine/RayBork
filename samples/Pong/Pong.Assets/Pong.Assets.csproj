@@ -1,0 +1,69 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <!-- The builder uses WithProjectRoot("."), so a direct `dotnet run` must start in this
+             directory for the checked-in Assets/ sources to resolve. The bake target passes the
+             project root and output root explicitly, so the solution bake is independent of the
+             working directory. The output root still defaults to AppContext.BaseDirectory, which puts
+             pong.pck next to the assets executable for a direct run. -->
+        <RunWorkingDirectory>$(MSBuildProjectDirectory)</RunWorkingDirectory>
+        <!-- Build-time tooling: this executable is JIT and must never enter a runtime publish graph. -->
+        <PublishAot>false</PublishAot>
+        <!-- Sample build tooling is not shipped API, so it is held to the recommended analyzer set. -->
+        <AnalysisLevel>latest-recommended</AnalysisLevel>
+        <PongPackFileName Condition="'$(PongPackFileName)' == ''">pong.pck</PongPackFileName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="PolyType" />
+    </ItemGroup>
+
+    <!--
+        PongSettings lives only in the sample project, and the bake binds that type through this
+        reference. The solution builds the sample first and this project second; the sample does not
+        reference this project, so the graph has no cycle and the sample is built once.
+    -->
+    <ItemGroup>
+        <ProjectReference Include="..\..\..\src\RayBork\RayBork.Bake\RayBork.Bake.csproj" />
+        <ProjectReference Include="..\Pong.csproj" />
+    </ItemGroup>
+
+    <!-- libshaderc is a JIT build-time dependency of the bake. The package's native asset lives
+         under runtimes/<rid>/native, which is not on the native loader's search path for a net11.0
+         tool; this shared target copies the pinned library beside the assets executable. -->
+    <Import Project="..\..\..\build\RayBork.Shaderc.targets" />
+
+    <!-- Record the generated pack as a build output so dotnet clean removes it. The path is under the
+         intermediate output and is known after the SDK has set IntermediateOutputPath. -->
+    <ItemGroup Condition="'$(DesignTimeBuild)' != 'true'">
+        <FileWrites Include="$(IntermediateOutputPath)pong-pack\$(PongPackFileName)" />
+    </ItemGroup>
+
+    <!--
+        The sample's bake step. The solution builds this executable in-process and then runs it out of
+        process over the checked-in Assets/ sources. The pack is copied beside the sample executable so
+        both a normal build and a later AOT publish can mount it, and the output-root pack stays under
+        the intermediate output so dotnet clean removes it. Explicit project and output roots keep the
+        bake independent of the working directory.
+    -->
+    <Target Name="PongBakeAssets"
+            AfterTargets="Build"
+            DependsOnTargets="RayBorkCopyShadercNative"
+            Condition="'$(DesignTimeBuild)' != 'true'">
+        <PropertyGroup>
+            <_PongPackDirectory>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)pong-pack</_PongPackDirectory>
+            <_PongPackPath>$(_PongPackDirectory)\$(PongPackFileName)</_PongPackPath>
+            <_PongSamplePackDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\bin\$(Configuration)\$(TargetFramework)'))</_PongSamplePackDirectory>
+        </PropertyGroup>
+        <MakeDir Directories="$(_PongPackDirectory);$(_PongSamplePackDirectory)" />
+        <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(TargetPath)&quot; bake --project-root &quot;$(MSBuildProjectDirectory)&quot; --output-root &quot;$(_PongPackDirectory)&quot;"
+              WorkingDirectory="$(MSBuildProjectDirectory)"
+              StandardOutputImportance="high"
+              StandardErrorImportance="high" />
+        <Error Condition="!Exists('$(_PongPackPath)')"
+               Text="RayBork Pong sample: the bake did not produce '$(_PongPackPath)'." />
+        <Copy SourceFiles="$(_PongPackPath)" DestinationFolder="$(_PongSamplePackDirectory)" SkipUnchangedFiles="true" />
+    </Target>
+
+</Project>

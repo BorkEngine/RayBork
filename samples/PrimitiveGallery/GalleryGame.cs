@@ -29,8 +29,8 @@ internal sealed class GalleryGame : IGame {
     private const int TEXTURE_SIZE = 128;
     private const int CHECKER_SIZE = 16;
 
-    // The status line is world-space text until M7 adds the screen-space HUD path. It sits on a
-    // camera-facing plane one world unit in front of the camera.
+    // The status line is same-pass, screen-aligned text drawn on a plane this far in front of the
+    // camera. The screen transform's scale makes the text size below render pixels.
     private const float OVERLAY_DISTANCE = 1f;
     private const float OVERLAY_PIXEL_HEIGHT = 18f;
     private const float OVERLAY_MARGIN_PIXELS = 8f;
@@ -154,7 +154,7 @@ internal sealed class GalleryGame : IGame {
         DrawGallery(camera);
 
         // A small presented-FPS and render-statistics line at the top-left of the view. It is
-        // recorded last and, like every other text draw in M6, is world-space text.
+        // recorded last in the same pass as the scene.
         DrawStatusOverlay(camera, context);
 
         _frameCount++;
@@ -353,32 +353,23 @@ internal sealed class GalleryGame : IGame {
     /// of the view.
     /// </summary>
     /// <remarks>
-    /// Screen-space text arrives in M7. Until then the line is world-space text on a camera-facing
-    /// plane one unit in front of the camera, positioned and oriented with the camera's own axes.
+    /// The line is same-pass, screen-aligned text: it is drawn on a plane
+    /// <see cref="OVERLAY_DISTANCE"/> world unit in front of the camera. It is alpha-blended and
+    /// writes no depth, so geometry closer than that plane can still occlude it.
     /// </remarks>
     private void DrawStatusOverlay(Camera camera, EngineContext context) {
-        // One render pixel spans worldPerPixel world units at the overlay distance. The text size is
-        // an em height in world units, so an 18-pixel line uses 18 * worldPerPixel. The built-in mono
-        // face keeps the changing counters from shifting the text around them.
-        float halfHeight = OVERLAY_DISTANCE * MathF.Tan(camera.FieldOfView * (MathF.PI / 180f) * 0.5f);
-        float worldPerPixel = (2f * halfHeight) / camera.Viewport.Height;
-        float halfWidth = halfHeight * (camera.Viewport.Width / camera.Viewport.Height);
-        float margin = OVERLAY_MARGIN_PIXELS * worldPerPixel;
-
-        // The camera transform's axes are the screen axes: +X is right, +Y is up, and +Z points back
-        // toward the viewer. The text layout origin is the top-left of the first line, so placing it
-        // at the inset corner of the plane and reusing the camera rotation keeps the line upright,
-        // facing the camera, and where a HUD would sit.
-        Vector3 position = camera.Transform.Position
-            + (camera.Transform.Forward * OVERLAY_DISTANCE)
-            + (camera.Transform.Up * (halfHeight - margin))
-            - (camera.Transform.Right * (halfWidth - margin));
+        // The returned transform's scale is world units per render pixel, so an em height of 18 local
+        // units is 18 render pixels. The built-in mono face keeps the changing counters from shifting
+        // the text around them.
+        Transform overlay = camera.ScreenToWorldTransform(
+            new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
+            OVERLAY_DISTANCE);
 
         camera.DrawText(
             context.Defaults.DefaultMonoFont,
             _overlay.Build(context),
-            new Transform(position, camera.Transform.Rotation, Vector3.One),
-            OVERLAY_PIXEL_HEIGHT * worldPerPixel,
+            overlay,
+            OVERLAY_PIXEL_HEIGHT,
             Color.White);
     }
 

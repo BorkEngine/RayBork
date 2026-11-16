@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using RayBork.Internal;
 
@@ -10,11 +11,10 @@ namespace RayBork;
 /// <remarks>
 /// <para>
 /// A camera is not a GPU object and not a reusable scene camera. Create it with
-/// <see cref="EngineContext.CreateCamera"/> or <see cref="EngineContext.CreateOrthographicCamera"/>
-/// during <see cref="IGame.Tick"/>, record draws, and dispose it before the callback returns. Cameras
-/// are sequential: creating one while another is active throws <see cref="InvalidOperationException"/>,
-/// and a camera left undisposed when the tick ends is an <see cref="InvalidOperationException"/> that
-/// names it.
+/// <see cref="EngineContext.CreateCamera"/> during <see cref="IGame.Tick"/>, record draws, and dispose
+/// it before the callback returns. Cameras are sequential: creating one while another is active throws
+/// <see cref="InvalidOperationException"/>, and a camera left undisposed when the tick ends is an
+/// <see cref="InvalidOperationException"/> that names it.
 /// </para>
 /// <para>
 /// Each draw copies value snapshots of the mesh, material cursor state, tint, and transforms into the
@@ -28,6 +28,10 @@ namespace RayBork;
 /// top of the screen. <see cref="Dispose"/> seals the pass and is idempotent; after disposal every
 /// property and every draw throws <see cref="ObjectDisposedException"/>, while <see cref="IsDisposed"/>
 /// stays readable. All members are tick-thread only.
+/// </para>
+/// <para>
+/// The camera transform must have unit scale. A scaled camera transform is not a supported camera
+/// configuration, and <see cref="ScreenToWorldTransform"/> does not compensate for it.
 /// </para>
 /// <para>
 /// M4 does not ship a render target: the <c>Target</c> property and the <c>target</c> parameter arrive
@@ -1659,6 +1663,181 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
+    /// Records one solid quad of <paramref name="size"/> in the transform's local <c>XY</c> plane.
+    /// </summary>
+    /// <param name="transform">The quad transform; its position is the quad center.</param>
+    /// <param name="size">The local-space width along <c>X</c> and height along <c>Y</c> before the
+    /// transform scale.</param>
+    /// <param name="color">The linear quad color.</param>
+    /// <param name="renderState">
+    /// The effective render state, or <see langword="null"/> for <see cref="RenderState.Opaque"/>. Use
+    /// <see cref="RenderState.AlphaBlend"/> for an alpha-blended sprite.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The quad's local surface is the <c>XY</c> plane facing local <c>+Z</c>, so the instance matrix is
+    /// <c>Matrix4x4.CreateScale(size.X, size.Y, 1) * transform.ToMatrix()</c> under the row-vector
+    /// convention: the transform position is the quad center, the rotation orients the surface, and
+    /// the transform's X and Y scale components multiply the width and height. The draw is one
+    /// instance of the engine quad mesh over the built-in <c>/shaders/primitive</c> material.
+    /// </para>
+    /// <para>
+    /// The effective render state is written to the draw record and is part of the batch key, so an
+    /// alpha-blended quad never merges with an opaque quad. A zero size component or a zero transform
+    /// scale component records nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">A transform or size component, or a color component, is not
+    /// finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
+    /// is negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    [SuppressMessage(
+        "ApiDesign",
+        "RS0026:Do not add multiple overloads with optional parameters",
+        Justification = "The approved M7 contract gives every DrawQuad overload optional tint/renderState parameters; the overloads stay unambiguous because the required Color and Texture arguments cannot convert to each other and the source form adds a required Rect.")]
+    public void DrawQuad(Transform transform, Vector2 size, Color color, RenderState? renderState = null) {
+        EnsureDrawable(nameof(DrawQuad));
+        ValidateTransform(transform);
+        ValidateFinite(size, nameof(size));
+        ValidateNonNegative(size, nameof(size));
+        ValidateFinite(color, nameof(color));
+        if (size.X == 0f || size.Y == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Quad,
+            material,
+            renderState ?? RenderState.Opaque,
+            color,
+            instanceCount: 1);
+        matrices[0] = Matrix4x4.CreateScale(size.X, size.Y, 1f) * transform.ToMatrix();
+    }
+
+    /// <summary>
+    /// Records one textured quad of <paramref name="size"/> in the transform's local <c>XY</c> plane,
+    /// sampling the full texture.
+    /// </summary>
+    /// <param name="transform">The quad transform; its position is the quad center.</param>
+    /// <param name="size">The local-space width along <c>X</c> and height along <c>Y</c> before the
+    /// transform scale.</param>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
+    /// <param name="renderState">
+    /// The effective render state, or <see langword="null"/> for <see cref="RenderState.Opaque"/>. Use
+    /// <see cref="RenderState.AlphaBlend"/> for an alpha-blended sprite.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// This is the full-texture form of
+    /// <see cref="DrawQuad(Transform, Vector2, Texture, Rect, Color?, RenderState?)"/>: it samples the
+    /// normalized <c>(0, 0, 1, 1)</c> rectangle and records the per-instance UV rectangle as
+    /// <c>(0, 0, 1, 1)</c>. The quad's local surface is the <c>XY</c> plane facing local <c>+Z</c>, and
+    /// the instance matrix is <c>Matrix4x4.CreateScale(size.X, size.Y, 1) * transform.ToMatrix()</c>.
+    /// </para>
+    /// <para>
+    /// The draw is one instance of the engine quad mesh over the built-in <c>/shaders/mesh</c>
+    /// material. The shared material's <c>mainTexture</c> binding is set immediately before the draw
+    /// is recorded and cleared immediately afterwards, so it never keeps a game texture past the call;
+    /// the recorded frame retains the texture until the renderer releases the frame slot. A zero size
+    /// component or a zero transform scale component records nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A transform or size component, or <paramref name="tint"/>, is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">A size component or a transform scale component
+    /// is negative.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    [SuppressMessage(
+        "ApiDesign",
+        "RS0026:Do not add multiple overloads with optional parameters",
+        Justification = "The approved M7 contract gives every DrawQuad overload optional tint/renderState parameters; the overloads stay unambiguous because the required Color and Texture arguments cannot convert to each other and the source form adds a required Rect.")]
+    public void DrawQuad(
+        Transform transform,
+        Vector2 size,
+        Texture texture,
+        Color? tint = null,
+        RenderState? renderState = null) {
+        DrawTexturedQuad(transform, size, texture, _fullTextureRect, tint, renderState);
+    }
+
+    /// <summary>
+    /// Records one textured quad of <paramref name="size"/> in the transform's local <c>XY</c> plane,
+    /// sampling a normalized sub-rectangle of the texture.
+    /// </summary>
+    /// <param name="transform">The quad transform; its position is the quad center.</param>
+    /// <param name="size">The local-space width along <c>X</c> and height along <c>Y</c> before the
+    /// transform scale.</param>
+    /// <param name="texture">The texture to sample; the record retains it until the frame ends.</param>
+    /// <param name="source">
+    /// The normalized source rectangle: <see cref="Rect.X"/> and <see cref="Rect.Y"/> are the top-left
+    /// corner and <see cref="Rect.Width"/> and <see cref="Rect.Height"/> are the extents in the
+    /// <c>[0, 1]</c> texture rectangle.
+    /// </param>
+    /// <param name="tint">The per-instance tint, or <see langword="null"/> for opaque white.</param>
+    /// <param name="renderState">
+    /// The effective render state, or <see langword="null"/> for <see cref="RenderState.Opaque"/>. Use
+    /// <see cref="RenderState.AlphaBlend"/> for an alpha-blended sprite.
+    /// </param>
+    /// <remarks>
+    /// <para>
+    /// The draw is one instance of the engine quad mesh over the built-in <c>/shaders/mesh</c>
+    /// material, like <see cref="DrawQuad(Transform, Vector2, Texture, Color?, RenderState?)"/>. The
+    /// normalized rectangle is recorded as the per-instance UV rectangle
+    /// <c>(source.X, source.Y, source.Width, source.Height)</c>; the built-in mesh shader computes
+    /// <c>UvRect.xy + uv * UvRect.zw</c>, so the shared material still samples the bound
+    /// <c>mainTexture</c>. The rectangle is per-instance data and never splits a batch.
+    /// </para>
+    /// <para>
+    /// The shared material's <c>mainTexture</c> binding is set immediately before the draw is recorded
+    /// and cleared immediately afterwards, so it never keeps a game texture past the call; the recorded
+    /// frame retains the texture until the renderer releases the frame slot. A zero size component or a
+    /// zero transform scale component records nothing.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="texture"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">
+    /// A transform or size component, a source rectangle component, or <paramref name="tint"/> is not
+    /// finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A size or transform scale component is negative, or <paramref name="source"/> has a non-positive
+    /// width or height or lies outside the normalized <c>[0, 1]</c> texture rectangle.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera, <paramref name="texture"/>, or an engine primitive asset is disposed.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    [SuppressMessage(
+        "ApiDesign",
+        "RS0026:Do not add multiple overloads with optional parameters",
+        Justification = "The approved M7 contract gives every DrawQuad overload optional tint/renderState parameters; the overloads stay unambiguous because the required Color and Texture arguments cannot convert to each other and the source form adds a required Rect.")]
+    public void DrawQuad(
+        Transform transform,
+        Vector2 size,
+        Texture texture,
+        Rect source,
+        Color? tint = null,
+        RenderState? renderState = null) {
+        DrawTexturedQuad(transform, size, texture, source, tint, renderState);
+    }
+
+    /// <summary>
     /// Records a uniform XZ grid centered at the world origin.
     /// </summary>
     /// <param name="slices">The number of grid cells per axis; must be at least one.</param>
@@ -1668,7 +1847,8 @@ public sealed class Camera : IDisposable {
     /// The grid has <c>slices + 1</c> lines per axis, so it is recorded as one instanced line draw
     /// with <c>2 * (slices + 1)</c> instances. Every line is horizontal and <paramref name="spacing"/>
     /// world units from its neighbor; the grid spans <c>slices * spacing</c> world units per axis. It
-    /// contributes no triangles.
+    /// contributes no triangles. This overload is
+    /// <see cref="DrawGrid(Transform, int, float, Color)"/> with <see cref="Transform.Identity"/>.
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="spacing"/> is not finite.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
@@ -1678,8 +1858,42 @@ public sealed class Camera : IDisposable {
     /// The camera service has no primitive assets, or the caller is not the tick thread.
     /// </exception>
     /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
-    public void DrawGrid(int slices, float spacing, Color color) {
+    public void DrawGrid(int slices, float spacing, Color color) =>
+        DrawGrid(Transform.Identity, slices, spacing, color);
+
+    /// <summary>
+    /// Records a uniform XZ grid in the transform's local <c>XZ</c> plane.
+    /// </summary>
+    /// <param name="transform">The grid transform; its position is the grid center and its local
+    /// <c>+Y</c> is the grid normal.</param>
+    /// <param name="slices">The number of grid cells per axis; must be at least one.</param>
+    /// <param name="spacing">The local-space distance between adjacent lines before the transform
+    /// scale; must be positive.</param>
+    /// <param name="color">The linear grid color.</param>
+    /// <remarks>
+    /// The grid has <c>slices + 1</c> lines per axis, so it is recorded as one instanced line draw
+    /// with <c>2 * (slices + 1)</c> instances. The base grid is the local <c>XZ</c> plane with local
+    /// <c>+Y</c> as its normal, matching <see cref="DrawPlane(Transform, Vector2, Color)"/> and
+    /// <see cref="DrawCircle(Transform, float, Color)"/>. Every line instance is composed as
+    /// <c>CreateLineMatrix(localStart, localEnd) * transform.ToMatrix()</c>, so the transform position
+    /// is the grid center, the rotation orients the plane, and the scale multiplies both the local
+    /// <paramref name="spacing"/> and the line extents. The grid contributes no triangles. A zero
+    /// transform scale component records nothing.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="spacing"/> or a transform component is not finite.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="slices"/> is less than one, <paramref name="spacing"/> is not positive, or a
+    /// transform scale component is negative.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawGrid(Transform transform, int slices, float spacing, Color color) {
         EnsureDrawable(nameof(DrawGrid));
+        ValidateTransform(transform);
         ValidateFinite(spacing, nameof(spacing));
         if (slices < 1) {
             throw new ArgumentOutOfRangeException(
@@ -1689,6 +1903,9 @@ public sealed class Camera : IDisposable {
         }
 
         ValidatePositive(spacing, nameof(spacing));
+        if (HasZeroScale(transform)) {
+            return;
+        }
 
         PrimitiveAssets primitives = RequirePrimitives();
         Shader material = primitives.PrimitiveMaterial;
@@ -1698,20 +1915,21 @@ public sealed class Camera : IDisposable {
             material.DefaultRenderState,
             color,
             (slices + 1) * 2);
+        Matrix4x4 transformMatrix = transform.ToMatrix();
         float halfExtent = slices * spacing * 0.5f;
         int matrixIndex = 0;
         for (int line = 0; line <= slices; line++) {
             float offset = (-halfExtent) + (line * spacing);
             matrices[matrixIndex++] = CreateLineMatrix(
                 new Vector3(-halfExtent, 0f, offset),
-                new Vector3(halfExtent, 0f, offset));
+                new Vector3(halfExtent, 0f, offset)) * transformMatrix;
         }
 
         for (int line = 0; line <= slices; line++) {
             float offset = (-halfExtent) + (line * spacing);
             matrices[matrixIndex++] = CreateLineMatrix(
                 new Vector3(offset, 0f, -halfExtent),
-                new Vector3(offset, 0f, halfExtent));
+                new Vector3(offset, 0f, halfExtent)) * transformMatrix;
         }
     }
 
@@ -2263,7 +2481,8 @@ public sealed class Camera : IDisposable {
     /// <param name="color">The linear line color.</param>
     /// <remarks>
     /// The base circle is the local <c>XZ</c> plane with local <c>+Y</c> as its normal, matching
-    /// <see cref="DrawPlane(Transform, Vector2, Color)"/> and <see cref="DrawGrid"/>. Its instance
+    /// <see cref="DrawPlane(Transform, Vector2, Color)"/> and
+    /// <see cref="DrawGrid(Transform, int, float, Color)"/>. Its instance
     /// matrix is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c>, so the transform position
     /// is the center, the rotation orients the plane, and the scale multiplies the radius on the local
     /// X and Z axes (a non-uniform scale produces an ellipse). The circle is 36 line segments and
@@ -2286,6 +2505,52 @@ public sealed class Camera : IDisposable {
         }
 
         DrawCircleCore(Matrix4x4.CreateScale(radius) * transform.ToMatrix(), color);
+    }
+
+    /// <summary>
+    /// Records one solid disc of <paramref name="radius"/> in the transform's local <c>XY</c> plane.
+    /// </summary>
+    /// <param name="transform">The disc transform; its position is the disc center.</param>
+    /// <param name="radius">The local-space radius before the transform scale.</param>
+    /// <param name="color">The linear disc color.</param>
+    /// <remarks>
+    /// <para>
+    /// The disc's local surface is the <c>XY</c> plane facing local <c>+Z</c>, and its instance matrix
+    /// is <c>Matrix4x4.CreateScale(radius) * transform.ToMatrix()</c> under the row-vector convention:
+    /// the transform position is the disc center, the rotation orients the surface, and the scale
+    /// multiplies the radius on each local axis, so a non-uniform scale produces an ellipse. The draw
+    /// is one instance of the engine unit disc mesh over the built-in <c>/shaders/primitive</c>
+    /// material and uses the opaque render state.
+    /// </para>
+    /// <para>A zero radius or a zero transform scale component records nothing.</para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The radius, a transform component, or a color component is
+    /// not finite.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The radius or a transform scale component is
+    /// negative.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The camera service has no primitive assets, or the caller is not the tick thread.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera or an engine primitive asset is disposed.</exception>
+    public void DrawDisc(Transform transform, float radius, Color color) {
+        EnsureDrawable(nameof(DrawDisc));
+        ValidateTransform(transform);
+        ValidateFinite(radius, nameof(radius));
+        ValidateNonNegative(radius, nameof(radius));
+        ValidateFinite(color, nameof(color));
+        if (radius == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        PrimitiveAssets primitives = RequirePrimitives();
+        Shader material = primitives.PrimitiveMaterial;
+        Span<Matrix4x4> matrices = BeginPrimitiveDraw(
+            primitives.Disc,
+            material,
+            material.DefaultRenderState,
+            color,
+            instanceCount: 1);
+        matrices[0] = Matrix4x4.CreateScale(radius) * transform.ToMatrix();
     }
 
     /// <summary>
@@ -2920,24 +3185,68 @@ public sealed class Camera : IDisposable {
     }
 
     /// <summary>
-    /// Binds the texture, records the one-instance billboard draw, and clears the shared binding.
+    /// Validates and records one textured quad in a transform's local <c>XY</c> plane.
     /// </summary>
     /// <remarks>
-    /// The caller has already validated every argument and composed the world matrix.
+    /// Validation runs before any retention or record mutation. A non-finite argument is
+    /// <see cref="ArgumentException"/>, a negative size or transform scale component or a source
+    /// rectangle that has non-positive extents or lies outside the normalized texture rectangle is
+    /// <see cref="ArgumentOutOfRangeException"/>, and a zero size component or a zero transform scale
+    /// component records nothing.
     /// </remarks>
-    private void RecordBillboard(Texture texture, Rect source, Color color, Matrix4x4 matrix) {
+    private void DrawTexturedQuad(
+        Transform transform,
+        Vector2 size,
+        Texture texture,
+        Rect source,
+        Color? tint,
+        RenderState? renderState) {
+        EnsureDrawable(nameof(DrawQuad));
+        ArgumentNullException.ThrowIfNull(texture);
+        ValidateTransform(transform);
+        ValidateFinite(size, nameof(size));
+        ValidateNonNegative(size, nameof(size));
+        ValidateBillboardSource(source, nameof(source));
+        Color effectiveTint = tint ?? Color.White;
+        ValidateFinite(effectiveTint, nameof(tint));
+        ObjectDisposedException.ThrowIf(texture.IsDisposed, texture);
+        if (size.X == 0f || size.Y == 0f || HasZeroScale(transform)) {
+            return;
+        }
+
+        RecordTexturedQuad(
+            texture,
+            source,
+            effectiveTint,
+            renderState ?? RenderState.Opaque,
+            Matrix4x4.CreateScale(size.X, size.Y, 1f) * transform.ToMatrix());
+    }
+
+    /// <summary>
+    /// Binds the texture, records one textured quad with the effective render state, and clears the
+    /// shared binding.
+    /// </summary>
+    /// <remarks>
+    /// The caller has already validated every argument and composed the world matrix. The engine mesh
+    /// material is shared, so the binding exists only around this recording call; the record keeps its
+    /// own texture reference, and the UV rectangle is per-instance data that never affects batching.
+    /// </remarks>
+    private void RecordTexturedQuad(
+        Texture texture,
+        Rect source,
+        Color tint,
+        RenderState renderState,
+        Matrix4x4 matrix) {
         PrimitiveAssets primitives = RequirePrimitives();
         Shader material = primitives.MeshMaterial;
         Vector4 uvRect = new(source.X, source.Y, source.Width, source.Height);
-        // The engine material is shared by every billboard, so the binding exists only around this
-        // recording call; the record keeps its own texture reference.
         material.SetUniform(MESH_TEXTURE_BINDING, texture);
         try {
             Span<Matrix4x4> matrices = BeginPrimitiveDraw(
                 primitives.Quad,
                 material,
-                RenderState.AlphaBlend,
-                color,
+                renderState,
+                tint,
                 instanceCount: 1,
                 uvRect);
             matrices[0] = matrix;
@@ -2945,6 +3254,16 @@ public sealed class Camera : IDisposable {
             material.SetUniform(MESH_TEXTURE_BINDING, null);
         }
     }
+
+    /// <summary>
+    /// Records one billboard instance through <see cref="RecordTexturedQuad"/> with the alpha-blended
+    /// state.
+    /// </summary>
+    /// <remarks>
+    /// The caller has already validated every argument and composed the world matrix.
+    /// </remarks>
+    private void RecordBillboard(Texture texture, Rect source, Color color, Matrix4x4 matrix) =>
+        RecordTexturedQuad(texture, source, color, RenderState.AlphaBlend, matrix);
 
     /// <summary>
     /// Acquires each ready glyph texture, records one MSDF draw with one instance per ready glyph, and
@@ -3027,7 +3346,11 @@ public sealed class Camera : IDisposable {
     /// <summary>
     /// Converts a render-pixel coordinate with a top-left origin into a world-space ray.
     /// </summary>
-    /// <param name="screenPosition">The render-pixel position, in target space (not window space).</param>
+    /// <param name="screenPosition">
+    /// The render-pixel position in target space, not window space or viewport space. This differs from
+    /// <see cref="ScreenToWorldTransform"/>, whose input is relative to the camera viewport; add the
+    /// camera <see cref="Viewport"/> origin before passing a viewport-relative position here.
+    /// </param>
     /// <returns>
     /// A normalized world-space ray starting at the camera position for a perspective camera, or at the
     /// near-plane point for an orthographic camera.
@@ -3087,6 +3410,81 @@ public sealed class Camera : IDisposable {
         return new Vector2(
             _viewport.X + ((ndcX * 0.5f) + 0.5f) * _viewport.Width,
             _viewport.Y + ((ndcY * 0.5f) + 0.5f) * _viewport.Height);
+    }
+
+    /// <summary>
+    /// Converts a render-pixel coordinate relative to the camera viewport into a world transform on the
+    /// plane at <paramref name="distance"/> along the camera's forward axis.
+    /// </summary>
+    /// <param name="point">
+    /// The render-pixel position relative to the camera viewport, with a top-left origin. It is not a
+    /// target-space position: <c>(0, 0)</c> is the viewport's top-left corner. This differs from
+    /// <see cref="ScreenToWorldRay"/>, whose input is in target space, and from <see cref="WorldToScreen"/>,
+    /// whose output is in target space; subtract the camera <see cref="Viewport"/> origin to convert a
+    /// target-space position, or add it to compare the plane position with <see cref="WorldToScreen"/>.
+    /// </param>
+    /// <param name="distance">
+    /// The plane distance from the camera along its forward axis, in world units. It must be finite and
+    /// greater than zero.
+    /// </param>
+    /// <returns>
+    /// A transform whose position is the world point on that plane at <paramref name="point"/>, whose
+    /// rotation is the camera transform's rotation, and whose scale is uniform world units per render
+    /// pixel at that plane.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// The returned transform's local XY plane is screen-aligned and its local <c>+Z</c> faces the
+    /// camera, so a sprite or text quad authored in local XY reads upright at the screen point. This is
+    /// the anchored-plane counterpart of <see cref="ScreenToWorldRay"/>: the ray gives only a direction,
+    /// while this member also supplies the world position, the screen-aligned rotation, and the
+    /// world-units-per-pixel scale for that plane.
+    /// </para>
+    /// <para>
+    /// The uniform scale is <c>2 * distance * tan(fieldOfView / 2) / viewport.Height</c> for a
+    /// perspective camera and <c>orthographicHeight / viewport.Height</c> for an orthographic camera. A
+    /// quad of <c>width > 0</c> and <c>height > 0</c> authored in render pixels therefore maps to
+    /// exactly the requested pixel extents at that plane.
+    /// </para>
+    /// <para>
+    /// The camera transform must have unit scale. A scaled camera transform is not supported by this
+    /// member: the view-to-world transform would scale the plane position, while
+    /// <paramref name="distance"/> and the returned units-per-pixel scale are unscaled.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="point"/> has a non-finite component.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="distance"/> is not finite or is not greater than zero.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The camera is disposed.</exception>
+    public Transform ScreenToWorldTransform(Vector2 point, float distance) {
+        ThrowIfDisposed();
+        ValidateFinite(point, nameof(point));
+        if (!float.IsFinite(distance) || distance <= 0f) {
+            throw new ArgumentOutOfRangeException(
+                nameof(distance),
+                distance,
+                "The plane distance must be finite and greater than zero.");
+        }
+
+        float ndcX = (point.X / _viewport.Width * 2f) - 1f;
+        float ndcY = (point.Y / _viewport.Height * 2f) - 1f;
+        float aspectRatio = _viewport.Width / _viewport.Height;
+        float halfHeight;
+        float unitsPerPixel;
+        if (_projection == CameraProjection.Perspective) {
+            float tangent = MathF.Tan(_fieldOfView * DEGREES_TO_RADIANS * 0.5f);
+            halfHeight = distance * tangent;
+            unitsPerPixel = 2f * distance * tangent / _viewport.Height;
+        } else {
+            halfHeight = _orthographicHeight * 0.5f;
+            unitsPerPixel = _orthographicHeight / _viewport.Height;
+        }
+
+        float halfWidth = halfHeight * aspectRatio;
+        Vector3 viewPosition = new(ndcX * halfWidth, -ndcY * halfHeight, -distance);
+        Vector3 worldPosition = Vector3.Transform(viewPosition, _transform.ToMatrix());
+        return new Transform(worldPosition, _transform.Rotation, new Vector3(unitsPerPixel));
     }
 
     /// <summary>

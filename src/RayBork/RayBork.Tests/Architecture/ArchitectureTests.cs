@@ -11,7 +11,7 @@ public sealed class ArchitectureTests {
     private const string ENGINE_PROJECT_PATH = "src/RayBork/RayBork.Engine/RayBork.Engine.csproj";
     private const string BAKE_PROJECT_PATH = "src/RayBork/RayBork.Bake/RayBork.Bake.csproj";
     private const string TESTS_PROJECT_PATH = "src/RayBork/RayBork.Tests/RayBork.Tests.csproj";
-    private const string HELLO_INTEROP_PROJECT_PATH = "samples/HelloInterop/HelloInterop.csproj";
+    private const string SAMPLE_PROJECT_PATH = "samples/Text/Text.csproj";
     private const string DIRECTORY_PACKAGES_PATH = "Directory.Packages.props";
     private const string BUILD_PROPS_PATH = "Directory.Build.props";
     private const string NUGET_CONFIG_PATH = "NuGet.config";
@@ -43,16 +43,16 @@ public sealed class ArchitectureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BakeReferencesEngineAndTestsReferenceBoth() {
+    public void BakeReferencesEngineAndTestsReferenceBothAndSampleDoesNotReferenceBake() {
         XDocument bakeProject = DependencyInspector.Load(RepositoryLayout.PathOf(BAKE_PROJECT_PATH));
         XDocument testsProject = DependencyInspector.Load(RepositoryLayout.PathOf(TESTS_PROJECT_PATH));
-        XDocument helloInteropProject = DependencyInspector.Load(RepositoryLayout.PathOf(HELLO_INTEROP_PROJECT_PATH));
+        XDocument sampleProject = DependencyInspector.Load(RepositoryLayout.PathOf(SAMPLE_PROJECT_PATH));
 
         Assert.True(DependencyInspector.HasProjectReferenceTo(bakeProject, ENGINE_PROJECT_NAME));
         Assert.True(DependencyInspector.HasProjectReferenceTo(testsProject, ENGINE_PROJECT_NAME));
         Assert.True(DependencyInspector.HasProjectReferenceTo(testsProject, BAKE_PROJECT_NAME));
-        Assert.True(DependencyInspector.HasProjectReferenceTo(helloInteropProject, ENGINE_PROJECT_NAME));
-        Assert.False(DependencyInspector.HasProjectReferenceTo(helloInteropProject, BAKE_PROJECT_NAME));
+        Assert.True(DependencyInspector.HasProjectReferenceTo(sampleProject, ENGINE_PROJECT_NAME));
+        Assert.False(DependencyInspector.HasProjectReferenceTo(sampleProject, BAKE_PROJECT_NAME));
     }
 
     [Fact]

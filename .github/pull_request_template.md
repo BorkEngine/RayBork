@@ -30,6 +30,10 @@ manual bake and no `--assets` argument are required.
 - [ ] `dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore`
 - [ ] `pwsh scripts/check-docs.ps1`
 - [ ] `git diff --check`
+- [ ] `dotnet build samples/Pong/Pong.slnx -c Debug`
+- [ ] `dotnet build samples/Pong/Pong.slnx -c Release`
+- [ ] `dotnet format samples/Pong/Pong.slnx --verify-no-changes --no-restore`
+- [ ] `dotnet run --project samples/Pong/Pong.csproj -c Debug -- --frames 30` exits `0`, and `samples/Pong/bin/Debug/net11.0/pong.pck` exists
 - [ ] `dotnet build samples/Castle/Castle.slnx -c Debug`
 - [ ] `dotnet build samples/Castle/Castle.slnx -c Release`
 - [ ] `dotnet format samples/Castle/Castle.slnx --verify-no-changes --no-restore`
@@ -38,15 +42,11 @@ manual bake and no `--assets` argument are required.
 - [ ] `dotnet build samples/Text/Text.slnx -c Release`
 - [ ] `dotnet format samples/Text/Text.slnx --verify-no-changes --no-restore`
 - [ ] `dotnet run --project samples/Text/Text.csproj -c Debug -- --frames 30` exits `0`, and `samples/Text/bin/Debug/net11.0/text.pck` exists
-- [ ] `dotnet build samples/HelloInterop/HelloInterop.slnx -c Debug`
-- [ ] `dotnet build samples/HelloInterop/HelloInterop.slnx -c Release`
-- [ ] `dotnet format samples/HelloInterop/HelloInterop.slnx --verify-no-changes --no-restore`
-- [ ] `dotnet run --project samples/HelloInterop/HelloInterop.csproj -c Debug -- --frames 30` exits `0`, auto-mounts the pack, and `samples/HelloInterop/bin/Debug/net11.0/hello.pck` exists
-- [ ] Text AOT publish for `win-x64` on Windows: `dotnet publish samples/Text/Text.csproj -c Release -r win-x64 -p:PublishAot=true`; the publish directory contains `text.pck` beside the executable and no bake tooling (`Text.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc natives, glTF packages)
-- [ ] Windows host run: `samples/Text/bin/Release/net11.0/win-x64/publish/Text.exe --frames 30` exits `0` and loads `text.pck` beside the executable
-- [ ] Text AOT publish for `linux-x64` from the repository root in WSL: `dotnet publish samples/Text/Text.csproj -c Release -r linux-x64 -p:PublishAot=true`; the publish directory contains `text.pck` beside the executable and no bake tooling
-- [ ] Linux host run under lavapipe: `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Text/bin/Release/net11.0/linux-x64/publish/Text --frames 30` exits `0`
-- [ ] Both AOT publishes finish with zero AOT/trim warnings
+- [ ] Pong AOT publish for `win-x64` on Windows: `dotnet publish samples/Pong/Pong.csproj -c Release -r win-x64 -p:PublishAot=true` after the Release solution build above, which is what bakes `pong.pck`; the publish directory contains `pong.pck` beside the executable and no bake tooling (`Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc natives, glTF packages)
+- [ ] Windows host run: `samples/Pong/bin/Release/net11.0/win-x64/publish/Pong.exe --frames 30` exits `0` and loads `pong.pck` beside the executable
+- [ ] Pong AOT publish for `linux-x64` from the repository root in WSL after the Release solution build: `dotnet publish samples/Pong/Pong.csproj -c Release -r linux-x64 -p:PublishAot=true`; the publish directory contains `pong.pck` beside the executable and no bake tooling
+- [ ] Linux host run under lavapipe: `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Pong/bin/Release/net11.0/linux-x64/publish/Pong --frames 30` exits `0`
+- [ ] Both Pong AOT publishes finish with zero AOT/trim warnings; the Text, Castle, and PrimitiveGallery samples remain buildable but are not the AOT gate
 
 ## Docs
 

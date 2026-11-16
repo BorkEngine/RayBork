@@ -40,19 +40,26 @@ using (var offscreen = ctx.CreateCamera(
     offscreen.DrawModel(model, Transform.Identity);
 }
 
-using (var screen = ctx.CreateOrthographicCamera(
+using (var screen = ctx.CreateCamera(
     new Transform { Position = new Vector3(0f, 0f, 1f) },
-    height: ctx.Window.RenderHeight,
+    CameraProjection.Orthographic,
+    orthographicHeight: ctx.Window.RenderHeight,
     clearMode: ClearMode.ColorAndDepth)) {
-    screen.DrawTexture(
-        target.ColorTexture,
-        new Rect(0, 0, ctx.Window.RenderWidth, ctx.Window.RenderHeight));
+    Transform full = screen.ScreenToWorldTransform(
+        new Vector2(ctx.Window.RenderWidth * 0.5f, ctx.Window.RenderHeight * 0.5f),
+        1f);
+    screen.DrawQuad(
+        full,
+        new Vector2(ctx.Window.RenderWidth, ctx.Window.RenderHeight),
+        target.ColorTexture);
 }
 ```
 
 The snippet is inside `Tick`; `CreateRenderTextureAsync` would normally be awaited in `Setup`
-and the target stored in a field. `DrawTexture` is the M7 sprite helper and is not part of the M6
-surface; its destination is in render pixels relative to the camera viewport.
+and the target stored in a field. The screen pass uses `ScreenToWorldTransform` and a textured
+world-space `DrawQuad`; there is no `DrawTexture`, and the full-screen target is a normal quad on
+the plane. The `target` parameter and `RenderTexture` are M8, not part of the M7 surface; M7 authors
+screen-space content on the app's scene target instead.
 
 - `CreateRenderTextureAsync` returns after the render thread has allocated the image. It is legal
   in `Setup` and `Tick`.
@@ -75,6 +82,9 @@ surface; its destination is in render pixels relative to the camera viewport.
   pass that writes it is invalid.
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None` or `ClearMode.Depth` as appropriate.
+  Per-pass frame data and the separate multi-camera overlay pass arrive with this work in M8; M7's
+  HUD is same-pass text on a screen-aligned plane, and multiple cameras with different views still
+  share the current one-frame-block limitation.
 - There is no render graph and no automatic pass dependency analysis in v1. Creation order is the
   pass order. Cycles and write-after-read hazards are validation errors.
 

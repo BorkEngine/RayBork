@@ -220,19 +220,95 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateCameraRejectsTheOrthographicProjection() {
-        Exception? failure = null;
+    public void CreateCameraUsesThePublicPerspectiveDefaults() {
+        float? near = null;
+        float? far = null;
+        ScriptedGame game = new() {
+            TickHandler = context => {
+                using Camera camera = context.CreateCamera(
+                    Transform.Identity,
+                    CameraProjection.Perspective,
+                    60f);
+                near = camera.Near;
+                far = camera.Far;
+                context.RequestExit();
+            },
+        };
+        using AppTestHost host = new(game);
+
+        host.App.Run();
+
+        Assert.Equal(0.01f, near);
+        Assert.Equal(1000f, far);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void OrthographicCameraIsCreatedThroughThePublicWrapperAndRecordsAPass() {
+        CameraProjection? projection = null;
+        float? orthographicHeight = null;
+        float? far = null;
+        int passCount = 0;
+        Lock gate = new();
+        ScriptedGame game = new();
+        using AppTestHost host = new(game);
+        host.FakeRenderer.OnSubmit = packet => {
+            lock (gate) {
+                passCount = Math.Max(passCount, packet.PassCount);
+            }
+        };
+        game.TickHandler = context => {
+            using Camera camera = context.CreateCamera(
+                Transform.Identity,
+                CameraProjection.Orthographic,
+                orthographicHeight: 4.5f,
+                near: 0.5f,
+                far: 50f);
+            projection = camera.Projection;
+            orthographicHeight = camera.OrthographicHeight;
+            far = camera.Far;
+            context.RequestExit();
+        };
+
+        host.App.Run();
+
+        Assert.Equal(CameraProjection.Orthographic, projection);
+        Assert.Equal(4.5f, orthographicHeight);
+        Assert.Equal(50f, far);
+        lock (gate) {
+            Assert.Equal(1, passCount);
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CreateCameraRejectsTheSizeArgumentOfTheOtherProjection() {
+        Exception? orthographicFailure = null;
+        Exception? perspectiveFailure = null;
         ScriptedGame game = new() {
             TickHandler = context => {
                 try {
                     context.CreateCamera(
                         Transform.Identity,
                         CameraProjection.Orthographic,
-                        60f,
+                        fieldOfView: 60f,
+                        orthographicHeight: 4f,
                         near: 0.1f,
                         far: 100f);
                 } catch (Exception exception) {
-                    failure = exception;
+                    orthographicFailure = exception;
+                }
+
+                try {
+                    context.CreateCamera(
+                        Transform.Identity,
+                        CameraProjection.Perspective,
+                        fieldOfView: 60f,
+                        orthographicHeight: 4f,
+                        near: 0.1f,
+                        far: 100f);
+                } catch (Exception exception) {
+                    perspectiveFailure = exception;
                 }
 
                 context.RequestExit();
@@ -242,8 +318,10 @@ public sealed class CameraAppTests {
 
         host.App.Run();
 
-        ArgumentException thrown = Assert.IsType<ArgumentException>(failure);
-        Assert.Equal("projection", thrown.ParamName);
+        ArgumentException orthographic = Assert.IsType<ArgumentException>(orthographicFailure);
+        Assert.Equal("fieldOfView", orthographic.ParamName);
+        ArgumentException perspective = Assert.IsType<ArgumentException>(perspectiveFailure);
+        Assert.Equal("orthographicHeight", perspective.ParamName);
     }
 
     private readonly record struct SubmittedFrame(

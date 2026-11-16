@@ -1,6 +1,6 @@
 # RayBork API Reference
 
-Status: **v0.1 M6**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M7**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
@@ -21,15 +21,22 @@ runtime tone-mapping surface: `TonemappingSettings` behind `EngineContext.Tonema
 `Color.FromSrgbBytes`, and `Color.ToSrgb` helpers. The M5 present pass replaces the M4 AgX curve and
 its separate HDR highlight path with Godot 4.7's HDR-aware AgX curve: SDR uses an output maximum of
 `1`, scRGB HDR uses the reported display headroom, and the curve output is scaled by paper white.
-`DrawTexture` is not part of M6; it moves to M7 with the orthographic sprite contract. M6 ships the
+M6 ships the
 font and text surface: `Font` and `Glyph`, `Load<Font>`, `TryGetGlyph`, `Measure`, on-demand
 asynchronous MSDF glyph generation, the built-in Fira Sans Regular default font and the JetBrains Mono
 variable monospaced font (default instance Regular) exposed as `EngineDefaults.DefaultFont` and
 `EngineDefaults.DefaultMonoFont`, and the world-space `Camera.DrawText` and
 `Camera.DrawTextBillboard` draws. The text alignment and wrapping enums and the text draw contract are
-described in §7.10. The M6 Native AOT gate is `samples/Text`, which loads the built-in faces and a
-baked custom face and draws the world-space text scene. The rest of the API reference remains the 1.0
-contract, not a description of shipped behavior.
+described in §7.10. The M6 Native AOT gate was `samples/Text`, which loads the built-in faces and a
+baked custom face and draws the world-space text scene. M7 ships the orthographic and screen-space
+surface: the unified `EngineContext.CreateCamera(Transform, CameraProjection, fieldOfView,
+orthographicHeight, ...)` entry point, `Camera.ScreenToWorldTransform`, the world-space
+`Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`,
+and `Camera.DrawGrid(Transform, ...)` primitives, and the ninth primitive mesh, the unit disc.
+`DrawTexture` is not shipped, there is no 2D or screen-space draw overload, and `DrawText` remains
+world-space. The M7 Native AOT gate is `samples/Pong`, an orthographic player-vs-AI match drawn
+through `ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. The rest of the API
+reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -158,7 +165,9 @@ with HDR/SDR output, the scRGB HDR present path, AgX tone mapping, MSAA with col
 reverse-Z depth, bounded recovery, and the GPU tests. M3 ships the asset pipeline and pack; M4 ships
 the core 3D renderer, camera draws, and shader ABI; M5 ships the primitive, billboard, wireframe, and
 collision surface plus the HDR AgX rework; M6 ships the managed font parser, on-demand MSDF glyph
-pipeline, layout, built-in default and monospaced fonts, and world-space text draws. The remaining
+pipeline, layout, built-in default and monospaced fonts, and world-space text draws; M7 ships the
+unified camera entry point, `Camera.ScreenToWorldTransform`, the world-space quad, disc, and
+transformable-grid primitives, the ninth primitive mesh, and the Pong sample. The remaining
 rows name the milestone that owns the deferred surface; the full code blocks in the section pages stay
 the 1.0 contract.
 
@@ -185,7 +194,9 @@ the 1.0 contract.
 | `Color.FromSrgb`, `Color.FromSrgbBytes`, `Color.ToSrgb`, and the 158 restored Bork2d/Unity presets | M5 |
 | `Font`, `Glyph`, `TextAlignment`, and `TextWrapping` | M6 |
 | `EngineDefaults.DefaultFont`, `EngineDefaults.DefaultMonoFont`, the built-in Fira Sans Regular font, and the built-in JetBrains Mono variable font (default instance Regular) | M6 |
-| `DrawTexture` with destination rectangles and sprite/orthographic sampling | M7 |
+| Unified `EngineContext.CreateCamera(Transform, CameraProjection, fieldOfView, orthographicHeight, ...)` with `CameraProjection.Perspective`/`CameraProjection.Orthographic` | M7 |
+| `Camera.ScreenToWorldTransform(Vector2, float)` | M7 |
+| `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
 | `RenderTexture` and `RenderTextureDescription` | M8 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
@@ -213,22 +224,23 @@ and `WithAssetType<T>`. M3 ships the loading, creation, and metadata surface of 
 and `Shader`: `Path`, `IsDisposed`, `Dispose`, the metadata getters in §7.3, §7.5, and §7.6, the
 procedural `MeshBuilder`/`TextureBuilder` API, and CPU mesh vertices/indices. It does not ship
 `Model`, `Font`, cameras, render textures, `Shader.SetUniform`, `ResetUniforms`, or any `Draw*`
-member; those arrive in M4, M6, and M8. The M3 sample loads a texture, a mesh part, a shader, and
-registered custom data, and reads back their metadata without drawing.
+member; those arrive in M4, M6, and M8. The M3 sample loaded a texture, a mesh part, a shader, and
+registered custom data, and read back their metadata without drawing.
 
-**M4 subset.** `EngineContext` additionally exposes `CreateCamera` and `CreateOrthographicCamera`,
-both legal only on the tick thread during `Tick`, and `Defaults`, which exposes the preloaded mesh
+**M4 subset.** `EngineContext` additionally exposes `CreateCamera`, legal only on the tick thread
+during `Tick`, and `Defaults`, which exposes the preloaded mesh
 shader program and white/error textures. `Camera` ships as a frame-scoped recorder with the
 `DrawModel`, `DrawMesh`, `DrawInstanced`, and `DrawModelInstanced` draw methods, `Viewport`,
 `ViewMatrix`, `ProjectionMatrix`, `ViewProjectionMatrix`, `Frustum`, `ScreenToWorldRay`, and
 `WorldToScreen`. `CameraProjection`, `ClearMode`, `Model`, `ModelPart`, `Ray`, and
-`BoundingFrustum` ship in M4. `Model` is a caller-owned composition of parts and meshes, not an
+`BoundingFrustum` ship in M4. The M4 entry point creates a perspective camera; M7 unifies the
+orthographic projection into it with the `orthographicHeight` parameter described in the M7 subset.
+`Model` is a caller-owned composition of parts and meshes, not an
 engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
 write that material's cursor. `Load<Shader>` returns a new independent material over a cached
 internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
 no `Font`, and no text draw helpers; the font asset and `DrawText`/`DrawTextBillboard` ship in M6. The
-primitive, line, billboard, and wireframe-model helpers ship in M5, while `DrawTexture` moves to M7
-with the sprite path. Clear
+primitive, line, billboard, and wireframe-model helpers ship in M5. Clear
 control is per camera:
 `RayBorkAppBuilder.WithClearColor` is removed, and each pass clears its clamped viewport with its
 `ClearMode` and `ClearColor`. A camera left undisposed when `Tick` returns is an
@@ -265,7 +277,7 @@ white. `Color` remains a linear value; its full 158-color Bork2d/Unity preset se
 and stored linear through the same explicit conversion, so `Color.Gray` is the display mid-gray
 (linear `0.214041`) and `Color.WhiteSmoke` is `0.913099`. `Color.FromSrgb`, `Color.FromSrgbBytes`,
 and `Color.ToSrgb` add the explicit display-encoded conversions. `Camera.Target` remains a later
-milestone (M8), and `DrawTexture` is M7.
+milestone (M8); the screen-space surface is described in the M7 subset.
 
 The M5 limitations are deliberate: lines are one pixel wide and never request `wideLines`; wire
 shapes are line geometry rather than polygon-mode rasterization; `DrawWireModel` needs
@@ -291,6 +303,84 @@ preload range: the bake packs the whole face and any mapped glyph can be generat
 pack baked before M6 still loads because its removed `Ranges` member is just an unknown descriptor
 member; only an old TOML sidecar that still declares `ranges` fails the bake (`RB4002`).
 
+**M7 subset.** `EngineContext.CreateCamera` is the one camera entry point:
+
+```csharp
+public Camera CreateCamera(
+    Transform transform,
+    CameraProjection projection,
+    float fieldOfView = 0f,
+    float orthographicHeight = 0f,
+    ClearMode clearMode = ClearMode.ColorAndDepth,
+    Color? clearColor = null,
+    float near = 0.01f,
+    float far = 1000f,
+    Rect? viewport = null);
+```
+
+A perspective camera uses `fieldOfView` and rejects a nonzero `orthographicHeight`; an orthographic
+camera uses `orthographicHeight` and rejects a nonzero `fieldOfView`. A perspective `far` may be
+`float.PositiveInfinity`; an orthographic `far` must be finite. The default `far` for a perspective
+camera is `1000` (M4's default was infinity), so a caller that needs an infinite far plane passes
+`float.PositiveInfinity` explicitly. `CreateOrthographicCamera` is removed; its `height` argument is
+the unified `orthographicHeight`. The rest of the camera contract, including the `Camera` properties,
+is unchanged, and every camera still records into the app's linear HDR scene target.
+
+`Camera.ScreenToWorldTransform(Vector2 point, float distance)` returns a `Transform` for a
+viewport-relative render-pixel point (`(0, 0)` is the viewport's top-left corner) on the view-depth
+plane at `distance`: the position is the world point at that screen pixel, the rotation is the
+camera transform's rotation, and the uniform scale is world units per render pixel at that plane
+(`2 * distance * tan(fieldOfView / 2) / viewport.Height` for perspective,
+`orthographicHeight / viewport.Height` for orthographic). Local `XY` is screen-aligned and local `+Z`
+faces the camera. `distance` must be finite and greater than zero; the camera transform must have
+unit scale. There is no `ScreenToWorldPoint` and no 2D draw overload.
+
+`Camera` adds the world-space primitive helpers: `DrawQuad(Transform, Vector2 size, Color color,
+RenderState? renderState = null)` draws one solid quad in the transform's local `XY` plane, centered,
+with local `+Z` front, through the built-in `/shaders/primitive` material;
+`DrawQuad(Transform, Vector2 size, Texture texture, Color? tint = null, RenderState? renderState =
+null)` draws a textured quad through the built-in `/shaders/mesh` material, sampling the full texture;
+`DrawQuad(Transform, Vector2 size, Texture texture, Rect source, Color? tint = null, RenderState?
+renderState = null)` takes a normalized `[0, 1]` source rectangle, recorded as the per-instance UV
+rectangle; `DrawDisc(Transform, float radius, Color color)` draws the unit disc mesh in the local `XY`
+plane, centered, local `+Z` front, opaque; and `DrawGrid(Transform, int slices, float spacing, Color
+color)` draws a uniform grid in the transform's local `XZ` plane, with the transform's position as
+the grid center and local `+Y` as the normal. `DrawGrid(int, float, Color)` keeps its exact identity
+behavior and is the transform form with `Transform.Identity`.
+
+A `null` `renderState` means `RenderState.Opaque`; pass `RenderState.AlphaBlend` for a sprite or
+alpha quad. The effective state is written to the draw record and is part of the batch key, so an
+opaque and an alpha quad never merge. `DrawDisc` and `DrawGrid` are opaque. The text and billboard
+paths keep their own states: text is alpha/no-depth-write and the billboard is alpha-blended.
+
+The new primitives validate before any retention or record mutation. For `DrawQuad` and `DrawDisc`,
+a non-finite size, radius, transform component, color, or source-rectangle component is
+`ArgumentException`; a negative size, radius, or transform scale component is
+`ArgumentOutOfRangeException`; an exactly zero size, radius, or transform scale component records
+nothing. `DrawGrid` validates a non-finite `spacing` or transform component as `ArgumentException`,
+`slices < 1` or `spacing <= 0` as `ArgumentOutOfRangeException`, records nothing for a zero transform
+scale component, and keeps the M5 grid's color behavior (it does not validate its color). A null
+texture is `ArgumentNullException` and a disposed texture, camera, or primitive asset is
+`ObjectDisposedException`; a source rectangle with a non-finite component is `ArgumentException`, and
+a non-positive width or height or a rectangle outside the normalized `[0, 1]` texture rectangle is
+`ArgumentOutOfRangeException`.
+
+`DrawTexture` is not shipped. A textured `DrawQuad` or `DrawBillboard(faceCamera: false)` covers a
+sprite, and `ScreenToWorldTransform` plus `DrawText` covers screen-space text with pixel-sized text;
+there is no `DrawText(Vector2)` screen overload and the `Transform` overload stays world-space. The
+engine builds a ninth internal primitive mesh, the unit disc (36 segments), alongside cube, sphere,
+plane, quad, triangle, line, wire cube, and wire sphere; there is still no public accessor for the
+primitive meshes or their materials. `BoundingFrustum.Intersects` accepts a small plane tolerance
+(`1e-4`) so a full-viewport or boundary-aligned quad is not culled by plane-extraction drift;
+`Contains` keeps its exact non-negative test.
+
+The screen-space HUD is same-pass text, not a separate overlay pass: `ScreenToWorldTransform(point,
+1f)` plus `DrawText(..., 18f, ...)` draws screen-aligned text that is alpha-blended with no depth
+write, so geometry closer than the overlay plane can still occlude it. A separate multi-camera
+overlay pass and per-pass frame data are deferred to M8; the M4 one-frame-block limitation is
+unchanged. `samples/Pong` is the M7 sample and Native AOT gate, and `samples/Castle` and
+`samples/PrimitiveGallery` draw their status lines through the same screen transform.
+
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
 `RayBorkAppBuilder.WithAssetLoader<T>`. See [Assets §6.7](api/assets.md#67-custom-asset-loaders).
@@ -313,11 +403,12 @@ is rejected during device selection, and the capacity is never reduced.
 `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It has no
 assets executable and no pack: `Setup` builds its only texture with `CreateTextureBuilder`, and the
 sample draws the M5 primitive helpers in one perspective pass at 800x450 with orbit controls and the
-`--frames` and `--help` options. Its published `win-x64` and `linux-x64` hosts ran with zero AOT/trim
+`--frames` and `--help` options, and draws its status line through `ScreenToWorldTransform`. Its
+published `win-x64` and `linux-x64` hosts ran with zero AOT/trim
 warnings, and the publish directory contains no bake tooling. The M5 suite was 1,899 tests, 93 of
 them GPU integration tests, and every sample solution built.
 
-`samples/Text` is the M6 AOT gate. It is a two-project solution, `samples/Text/Text.slnx`, outside
+`samples/Text` was the M6 AOT gate. It is a two-project solution, `samples/Text/Text.slnx`, outside
 `src/RayBork/RayBork.slnx`: the sample and a JIT `Text.Assets` executable that bakes `text.pck` from
 the checked-in Lora face and copies it beside the sample executable, so the sample has no `--assets`
 argument. It draws the built-in Fira Sans and custom Lora faces at several sizes, rotations,
@@ -327,21 +418,58 @@ shows presented FPS, the tick rate, render CPU time, draw calls, and instances; 
 orbit/zoom controls and the `--frames` and `--help` options.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; the engine default remains Mailbox for games that want the decoupled path. The published
-`win-x64` and `linux-x64` hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
-Windows hardware driver and on the conformant lavapipe software driver. The M6
-suite is 2,625 tests, 106 of them GPU integration tests, and every sample solution builds. The Text
+`win-x64` and `linux-x64` M6 hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
+Windows hardware driver and on the conformant lavapipe software driver. The current
+suite is 2,695 tests, 114 of them GPU integration tests, and every sample solution builds. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
+
+`samples/Pong` is the M7 AOT gate. It is a two-project solution, `samples/Pong/Pong.slnx`, outside
+`src/RayBork/RayBork.slnx`: the sample and a JIT `Pong.Assets` executable that bakes `pong.pck`
+during the solution build and copies it beside the sample executable and into the publish directory,
+so the sample has no `--assets` argument. `PongSettings` lives only in the sample project;
+`Pong.Assets` references `Pong.csproj` directly instead of linking the settings source file. The
+solution builds `Pong` once and then `Pong.Assets`, which runs the assets executable out of process,
+bakes `pong.pck`, and copies it beside the sample executable; `Pong` does not reference the assets
+project, so the graph has no cycle. The publish target copies the pack produced by the Release
+solution build into the publish directory and fails with a clear error if it is missing. The pack
+contains `/data/game`, a `Pong.PongSettings` TOML data asset (paddle texture path, ball radius, max
+score, paddle width/height/speed, ball speed, ball speed-up per hit, maximum ball speed, and AI
+paddle speed), and `/textures/paddle`, a 32x128 original opaque paddle PNG baked by the ordinary
+texture processor with its KTX2 raw payload. The match is player vs AI: the human moves the left
+paddle and a deterministic AI moves the right paddle at `AiPaddleSpeed` (`400` design pixels per
+second), tracking the ball while it approaches and returning to center otherwise with a `5`
+design-pixel deadzone. The match records one orthographic camera per tick, fits a `1280x720` 16:9
+design space into the current render pixels, and anchors every draw with `ScreenToWorldTransform`.
+`DrawQuad` draws the playfield, border, net, score panels, and textured paddles; `DrawDisc` draws
+the ball; `DrawText` draws the scores, status line, and pause/winner overlay. The simulation uses a
+fixed opening serve, fixed `1/120` second substeps, top and bottom bounces,
+`Collision.CheckBoxSphere` paddle collisions, a paddle-hit speed-up of `BallSpeedupPerHit` (`24`) up
+to `MaxBallSpeed` (`900`) with the serve restoring `BallSpeed` (`420`), scoring with the serve going
+to the loser, a max-score win, and pause/restart. The left-paddle controls are W/S, Up/Down, and
+gamepad 0 left stick or d-pad; the sample accepts `--frames` and `--help`. The build bakes the pack
+without manual steps. The Windows `win-x64` publish finished with zero AOT/trim warnings and
+contains `pong.pck` beside `Pong.exe` with no bake tooling; the published Windows host ran
+`--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
+warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the published host ran
+`--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
+`B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The Windows suite is
+2,695 tests with no skips (114 GPU); the lavapipe run is 2,688 passed with 7 skipped HDR/
+scRGB-present tests, because lavapipe exposes only SDR. The sample is a plain user-facing example
+and contains no test-only draw assertion.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
 executable out of process, bakes `/models/obj/castle` and `/models/obj/castle_diffuse` into
 `castle.pck`, and copies the pack beside the sample executable, so the published hosts load it
 without a manual bake or an `--assets` argument. The model parts use the built-in mesh material, the
-pass draws the castle, `DrawGrid(20, 10f, Color.Gray)`, and now a world-space presented-FPS and
-render-statistics status line, and the sample ray-casts the pointer against the model bounds and mesh
+pass draws the castle and `DrawGrid(20, 10f, Color.Gray)`, and `O` toggles the one camera between
+perspective and orthographic. The orthographic height reproduces the perspective framing at the
+current orbit distance (`2 * distance * tan(fieldOfView / 2)`), and its finite far plane is derived
+from the maximum orbit distance. Castle draws its presented-FPS and render-statistics status line
+through `ScreenToWorldTransform` at an 18-pixel em height, and appends the current projection to the
+status block. The sample ray-casts the pointer against the model bounds and mesh
 with `Collision.GetRayBox` and `Collision.GetRayMesh`, drawing `Camera.DrawBoundingBox` and a small hit
 sphere while hovered. The hosts exit `0`. It is not the AOT gate. The Windows hardware path and the
-conformant lavapipe Linux path pass; WSLg hardware Vulkan is not a target. `samples/HelloInterop`
-remains the M1-M3 diagnostic host; it is not the AOT gate.
+conformant lavapipe Linux path pass; WSLg hardware Vulkan is not a target.
 
 ## 2. Quick start
 

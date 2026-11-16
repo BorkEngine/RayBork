@@ -231,83 +231,42 @@ internal sealed class CameraService {
     }
 
     /// <summary>
-    /// Creates a perspective camera and appends its pass to the recording frame.
+    /// Creates a camera for the requested projection and appends its pass to the recording frame.
+    /// Exactly the size argument selected by <paramref name="projection"/> is used.
     /// </summary>
+    /// <param name="transform">The world-space camera transform.</param>
+    /// <param name="projection">The projection kind.</param>
+    /// <param name="fieldOfView">The perspective vertical field of view in degrees.</param>
+    /// <param name="orthographicHeight">The orthographic visible world-space height.</param>
+    /// <param name="clearMode">The buffers the pass clears.</param>
+    /// <param name="clearColor">The linear clear color, or <see langword="null"/> for opaque black.</param>
+    /// <param name="near">The near clip distance.</param>
+    /// <param name="far">The far clip distance.</param>
+    /// <param name="viewport">The requested pixel viewport, or <see langword="null"/> for the full target.</param>
+    /// <exception cref="ArgumentException">
+    /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
+    /// viewport is invalid or empty, or the clear color has a non-finite component.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="projection"/> is not defined, the clear mode has unknown bits, or a selected
+    /// projection or clip-plane parameter is outside its range.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, or another camera is active.
+    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
+    /// transform is singular.
     /// </exception>
     internal Camera CreateCamera(
         Transform transform,
+        CameraProjection projection,
         float fieldOfView,
+        float orthographicHeight,
         ClearMode clearMode,
         Color? clearColor,
         float near,
         float far,
         Rect? viewport) {
         ValidateRecordingState(nameof(EngineContext.CreateCamera));
-        CameraMath.ValidatePerspective(fieldOfView, near, far);
-        return CreateCameraCore(
-            transform,
-            CameraProjection.Perspective,
-            fieldOfView,
-            orthographicHeight: 0f,
-            near,
-            far,
-            clearMode,
-            clearColor,
-            viewport);
-    }
-
-    /// <summary>
-    /// Creates an orthographic camera and appends its pass to the recording frame.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, or another camera is active.
-    /// </exception>
-    internal Camera CreateOrthographicCamera(
-        Transform transform,
-        float height,
-        ClearMode clearMode,
-        Color? clearColor,
-        float near,
-        float far,
-        Rect? viewport) {
-        ValidateRecordingState(nameof(EngineContext.CreateOrthographicCamera));
-        CameraMath.ValidateOrthographic(height, near, far);
-        return CreateCameraCore(
-            transform,
-            CameraProjection.Orthographic,
-            fieldOfView: 0f,
-            height,
-            near,
-            far,
-            clearMode,
-            clearColor,
-            viewport);
-    }
-
-    /// <summary>
-    /// Clears the active camera slot when the camera is disposed. Called by <see cref="Camera.Dispose"/>.
-    /// </summary>
-    /// <param name="camera">The disposed camera.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="camera"/> is <c>null</c>.</exception>
-    internal void Release(Camera camera) {
-        ArgumentNullException.ThrowIfNull(camera);
-        if (ReferenceEquals(_activeCamera, camera)) {
-            _activeCamera = null;
-        }
-    }
-
-    private Camera CreateCameraCore(
-        Transform transform,
-        CameraProjection projection,
-        float fieldOfView,
-        float orthographicHeight,
-        float near,
-        float far,
-        ClearMode clearMode,
-        Color? clearColor,
-        Rect? viewport) {
+        CameraMath.ValidateProjection(projection, fieldOfView, orthographicHeight, near, far);
         if ((clearMode & ~ClearMode.All) != 0) {
             throw new ArgumentOutOfRangeException(
                 nameof(clearMode),
@@ -365,6 +324,18 @@ internal sealed class CameraService {
         _nextCameraNumber++;
         _activeCamera = camera;
         return camera;
+    }
+
+    /// <summary>
+    /// Clears the active camera slot when the camera is disposed. Called by <see cref="Camera.Dispose"/>.
+    /// </summary>
+    /// <param name="camera">The disposed camera.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="camera"/> is <c>null</c>.</exception>
+    internal void Release(Camera camera) {
+        ArgumentNullException.ThrowIfNull(camera);
+        if (ReferenceEquals(_activeCamera, camera)) {
+            _activeCamera = null;
+        }
     }
 
     private void ValidateRecordingState(string operation) {
