@@ -93,9 +93,13 @@ disc, triangle, line, wire cube, and wire sphere. `BoundingFrustum.Intersects` a
 tolerance (`1e-4`) so full-screen and boundary quads are not culled, while `Contains` stays exact.
 Castle gains an `O` toggle between perspective and orthographic and uses `ScreenToWorldTransform`
 for its status line; PrimitiveGallery uses the same screen transform for its HUD. `samples/Pong` is
-the M7 sample and Native AOT gate: a two-project solution with a build-time bake into `pong.pck`, one
-orthographic camera per tick, a `1280x720` 16:9 design space fitted into the render pixels,
-`ScreenToWorldTransform` for every draw, and `DrawQuad`/`DrawDisc`/`DrawText` for the whole match.
+the M7 sample and Native AOT gate: a player-vs-AI match in a two-project solution with a build-time
+bake into `pong.pck`, one orthographic camera per tick, a `1280x720` 16:9 design space fitted into the
+render pixels, `ScreenToWorldTransform` for every draw, and `DrawQuad`/`DrawDisc`/`DrawText` for the
+whole match. The human moves the left paddle; a deterministic AI moves the right one at
+`AiPaddleSpeed` (`400` design pixels per second) and chases the ball only while it approaches. Every
+paddle hit adds `BallSpeedupPerHit` (`24`) to the ball speed up to `MaxBallSpeed` (`900`), and a
+serve restores `BallSpeed`.
 The suite is 2,695 tests, 114 of them GPU integration tests, and every sample builds. The Windows
 hardware path runs all 2,695 with no skips (114 GPU); the conformant lavapipe Linux path reports
 2,688 passed, 0 failed, and 7 skipped, because lavapipe exposes only SDR and the seven existing
@@ -224,10 +228,10 @@ src/RayBork/RayBork.Engine/   runtime engine (public API + internals)
 src/RayBork/RayBork.Bake/     JIT asset tooling (pack writer, processors, TOML, CLI)
 src/RayBork/RayBork.Tests/    unit, architecture, GPU, and AOT tests
 build/RayBork.BuiltInAssets/  JIT build-time built-in pack generator
-samples/Pong/                 M7 sample and Native AOT gate (orthographic screen-space match with a
-                              baked paddle texture, settings data, and a mono HUD)
+samples/Pong/                 M7 sample and Native AOT gate (player-vs-AI orthographic screen-space
+                              match with a baked paddle texture, settings data, and a mono HUD)
   Pong.slnx                   sample-owned solution (sample + assets executable)
-  Pong.Assets/                JIT assets executable (bakes pong.pck at sample build time)
+  Pong.Assets/                JIT assets executable (bakes and copies pong.pck at sample build time)
 samples/Text/                 M6 sample (was the M6 Native AOT gate; world-space text with two
                               proportional faces and a mono status line)
   Text.slnx                   sample-owned solution (sample + assets executable)
@@ -253,13 +257,13 @@ and test projects.
 
 Run the samples from the repository root with a Vulkan 1.2 device and a real window system. On WSL,
 use the WSLg display with the lavapipe ICD; WSLg's hardware Vulkan path is not a target. The Pong
-build bakes `pong.pck` with the paddle texture and the `Pong.PongSettings` data beside the executable
-and loads it automatically; the sample has no `--assets` argument. The Castle
-build bakes `castle.pck` beside the executable, and the sample loads
-it automatically; `--assets` is only an optional override. The Text build bakes `text.pck` with the
-custom Lora face beside the executable and loads it automatically; the built-in Fira Sans and
-JetBrains Mono faces come from the engine's built-in pack. The gallery has no assets executable and
-no pack: it builds its only texture at runtime.
+solution builds the sample and then the JIT assets executable; the assets build bakes `pong.pck`
+with the paddle texture and the `Pong.PongSettings` data beside the executable, and the sample
+loads it automatically, so it has no `--assets` argument. The Castle build bakes `castle.pck`
+beside the executable, and the sample loads it automatically; `--assets` is only an optional
+override. The Text build bakes `text.pck` with the custom Lora face beside the executable and loads
+it automatically; the built-in Fira Sans and JetBrains Mono faces come from the engine's built-in
+pack. The gallery has no assets executable and no pack: it builds its only texture at runtime.
 
 ```powershell
 dotnet build samples/Pong/Pong.slnx -c Debug
@@ -284,30 +288,34 @@ regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; a normal
 committed blobs. The bake, the built-in pack generator, and the sample builds compile their GLSL with
 the pinned native shaderc package; they do not need the Vulkan SDK.
 
-`samples/Pong` is the M7 Native AOT gate. Publish and run it from the repository root:
+`samples/Pong` is the M7 Native AOT gate. Build the solution in Release first so `Pong.Assets` bakes
+and copies `pong.pck`, then publish and run it from the repository root:
 
 ```powershell
+dotnet build samples/Pong/Pong.slnx -c Release
 dotnet publish samples/Pong/Pong.csproj -c Release -r win-x64 -p:PublishAot=true
 samples/Pong/bin/Release/net11.0/win-x64/publish/Pong.exe --frames 30
 ```
 
-In WSL, publish the Linux host from the repository root and run it on the WSLg display with the
-conformant lavapipe ICD:
+In WSL, build the Release solution and publish the Linux host from the repository root, then run it
+on the WSLg display with the conformant lavapipe ICD:
 
 ```bash
+$HOME/.dotnet/dotnet build samples/Pong/Pong.slnx -c Release
 $HOME/.dotnet/dotnet publish samples/Pong/Pong.csproj -c Release -r linux-x64 -p:PublishAot=true
 VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
 DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/Pong/bin/Release/net11.0/linux-x64/publish/Pong --frames 30
 ```
 
-Both publishes must finish with zero AOT/trim warnings. The Windows `win-x64` publish finished with
-zero warnings: its publish directory contains `pong.pck` (22,648 bytes) beside `Pong.exe`
-(11,271,680 bytes) and no `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder,
-shaderc native libraries, or glTF packages, and the published host ran `--frames 30` to exit `0` on
-the hardware driver. The Linux `linux-x64` publish also finished with zero warnings, contains
-`pong.pck` beside `Pong` and no bake tooling, and the published host ran `--frames 30` to exit `0`
-on the conformant lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO
+The Release solution build produces the pack; the publish copies it beside the host and fails with
+a clear error if it is missing. Both publishes must finish with zero AOT/trim warnings. The Windows
+`win-x64` publish finished with zero warnings: its publish directory contains `pong.pck` beside
+`Pong.exe` and no `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc
+native libraries, or glTF packages, and the published host ran `--frames 30` to exit `0` on the
+hardware driver. The Linux `linux-x64` publish also finished with zero warnings, contains `pong.pck`
+beside `Pong` and no bake tooling, and the published host ran `--frames 30` to exit `0` on the
+conformant lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO
 presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware Vulkan path is not a target.
 [samples/Pong/README.md](samples/Pong/README.md) carries the same Linux command.
 

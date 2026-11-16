@@ -53,10 +53,9 @@ the project root defaults to the working directory and the output root defaults 
 #### Build-time bake in a game or sample project
 
 A game or sample can run its assets executable as part of its own build instead of a manual step.
-`samples/Castle/Castle.csproj`, `samples/Text/Text.csproj`, and `samples/Pong/Pong.csproj` use the
-same
-out-of-process pattern as the engine's built-in pack: an `AfterTargets="Build"` target invokes the
-assets project with the `MSBuild` task (passing only `Configuration` and removing the sample's
+`samples/Castle/Castle.csproj` and `samples/Text/Text.csproj` use the same out-of-process pattern as
+the engine's built-in pack: an `AfterTargets="Build"` target in the sample project invokes the assets
+project with the `MSBuild` task (passing only `Configuration` and removing the sample's
 runtime/publish properties), runs the built assets executable as
 `<sample>.dll bake --project-root <assets dir> --output-root <intermediate pack dir>`, and copies
 `<sample>.pck` beside the sample executable as a recorded build output. A separate target after
@@ -64,7 +63,16 @@ runtime/publish properties), runs the built assets executable as
 it is missing. The pack lives under the sample's intermediate output, so `dotnet clean` removes it
 and the next build bakes again.
 
-Because the assets executable is only invoked out of process, the sample project never references
+`samples/Pong/Pong.slnx` uses the dependency direction instead. Its `Pong` project does not reference
+`Pong.Assets`; the assets project references `Pong` so the bake binds `PongSettings`, and the
+solution builds `Pong` once and then `Pong.Assets`. That project's own `AfterTargets="Build"` target
+runs the assets executable out of process, bakes `pong.pck` under its intermediate output, and copies
+it beside the sample executable. The `Pong` project adds only a `Publish` target that copies the pack
+produced by the Release solution build into the publish directory and fails with a clear error when
+it is missing; `dotnet publish` does not build the assets project. This ordering keeps `Pong` out of
+the assets build's reference graph, so the sample is built once and the graph has no cycle.
+
+Because the bake is a separate JIT assets project, the sample project never references
 `RayBork.Bake`, and the JIT tooling never enters the sample's Native AOT publish graph. The explicit
 `--project-root` and `--output-root` arguments keep the bake independent of the working directory.
 The samples are separate solutions (`samples/Castle/Castle.slnx`,
@@ -74,10 +82,11 @@ The samples are separate solutions (`samples/Castle/Castle.slnx`,
 `samples/Pong` is the smallest worked example of a baked custom-data asset. Its
 `Pong.Assets/Assets` holds `textures/paddle.png` (an ordinary texture source, baked to
 `/textures/paddle` with its KTX2 payload) and `data/game.toml` (a registered `Pong.PongSettings`
-data source, baked to `/data/game`). The sample registers the type with `WithAssetType<PongSettings>()`
-at runtime and the assets executable registers it with `RegisterAsset<PongSettings>()`, so the same
-`[GenerateShape]` type is baked and loaded without reflection. The sample needs no `--assets`
-argument at run time.
+data source, baked to `/data/game`). `PongSettings` lives only in the sample project, and the assets
+executable references that project instead of linking the settings source. The sample registers the
+type with `WithAssetType<PongSettings>()` at runtime and the assets executable registers it with
+`RegisterAsset<PongSettings>()`, so the same `[GenerateShape]` type is baked and loaded without
+reflection. The sample needs no `--assets` argument at run time.
 
 M3's public bake surface is `BakeApplicationBuilder`, `BakeApplication`, `IAssetProcessor`,
 `AssetProcessor<TSidecar>`, `AssetProcessorContext`, `IAssetOutputSink`,

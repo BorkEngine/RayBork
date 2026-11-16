@@ -65,7 +65,7 @@ RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, St
                       System.IO.Hashing (JIT)
 build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
 samples/Pong -> RayBork.Engine (M7 sample and Native AOT gate)
-samples/Pong/Pong.Assets -> RayBork.Bake (M7 assets executable, JIT)
+samples/Pong/Pong.Assets -> RayBork.Bake, samples/Pong (M7 assets executable, JIT)
 samples/Text -> RayBork.Engine (M6 sample, was the M6 Native AOT gate)
 samples/Text/Text.Assets -> RayBork.Bake (M6 assets executable, JIT)
 samples/PrimitiveGallery -> RayBork.Engine (M5 sample, was the M5 Native AOT gate)
@@ -80,8 +80,8 @@ Samples (M11) -> RayBork.Engine
 | `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, KTX2/BC encoding, GLSL compilation, pack writer, incremental manifest. Not referenced by a runtime project. |
 | `build/RayBork.BuiltInAssets` | JIT build-only generator: runs the ordinary bake over the checked-in built-in sources and emits a C# byte array compiled into `RayBork.Engine`. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/Pong` | M7 sample and Native AOT gate: a two-paddle match in one orthographic screen-space pass. It mounts the adjacent `pong.pck` produced by `Pong.Assets`, fits a `1280x720` design space into the render pixels, anchors every draw with `ScreenToWorldTransform`, draws the playfield, border, net, panels, textured paddles, and shaded overlay with `DrawQuad`, the ball with `DrawDisc`, and the scores, status line, and pause/winner overlay with `DrawText` in the built-in mono face. It simulates with fixed `1/120` substeps and `Collision.CheckBoxSphere` paddle collisions, supports keyboard and gamepad 0, and exits on Escape or `--frames`. |
-| `samples/Pong/Pong.Assets` | M7 assets executable: bakes `pong.pck` from the checked-in original paddle PNG and the `Pong.PongSettings` TOML data at sample build time. JIT only. |
+| `samples/Pong` | M7 sample and Native AOT gate: a player-vs-AI match in one orthographic screen-space pass. It mounts the adjacent `pong.pck` produced by `Pong.Assets`, fits a `1280x720` design space into the render pixels, anchors every draw with `ScreenToWorldTransform`, draws the playfield, border, net, panels, textured paddles, and shaded overlay with `DrawQuad`, the ball with `DrawDisc`, and the scores, status line, and pause/winner overlay with `DrawText` in the built-in mono face. The left paddle is the human; the right paddle is a deterministic AI that tracks the ball while it approaches and returns to center otherwise, moving at `AiPaddleSpeed` inside the fixed substeps. Every paddle hit adds `BallSpeedupPerHit` to the ball speed up to `MaxBallSpeed`. It simulates with fixed `1/120` substeps and `Collision.CheckBoxSphere` paddle collisions, accepts W/S, Up/Down, and gamepad 0 left stick or d-pad for the left paddle, and exits on Escape or `--frames`. |
+| `samples/Pong/Pong.Assets` | M7 assets executable: references `RayBork.Bake` and the `samples/Pong` project (so `PongSettings` has one definition), bakes `pong.pck` from the checked-in original paddle PNG and the `Pong.PongSettings` TOML data at sample build time, and copies it beside the sample executable. JIT only. |
 | `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It also draws a presented-FPS/render-statistics status line in the built-in mono face, anchored with `ScreenToWorldTransform`. |
 | `samples/Text` | M6 sample, was the M6 Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans and JetBrains Mono faces and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both proportional faces, a camera-facing billboard, a lazily generated Greek line, a mono status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
 | `samples/Text/Text.Assets` | M6 assets executable: bakes `text.pck` from the checked-in Lora face at sample build time. JIT only. |
@@ -147,16 +147,16 @@ Silk.NET.Vulkan with the presenter; the M3 gate extended the host with a baked p
 upload, a mesh upload, a shader-module upload, and a MessagePack custom-data load; the M4 gate drew
 the castle model with the built-in mesh material; the M5 gate drew the primitive helpers from the
 built-in pack; the M6 gate loaded the built-in Fira Sans and JetBrains Mono faces and the baked Lora
-face from its own `text.pck`, generated glyph textures on demand, and drew the text scene; the M7 gate
-is `samples/Pong`, which loads the baked `Pong.PongSettings` data and paddle texture from its own
-`pong.pck`, draws the orthographic screen-space match through `DrawQuad`/`DrawDisc`/`DrawText` on
+face from its own `text.pck`, generated glyph textures on demand, and drew the text scene; the M7
+gate is `samples/Pong`, which loads the baked `Pong.PongSettings` data and paddle texture from its
+own `pong.pck`, plays the player-vs-AI match through `DrawQuad`/`DrawDisc`/`DrawText` on
 `ScreenToWorldTransform`, and exits. Both publishes must finish with zero AOT/trim warnings. The
-sample solutions are
-outside the engine solution, and a sample build bakes its pack beside the sample executable when it
-has one, so the JIT bake tool and its packages stay out of the sample's AOT publish graph. The Vulkan
-loader is a system/GPU-driver component, not a NuGet dependency. The bake's source-format tooling is
-JIT only and never enters the runtime publish graph; `build/RayBork.BuiltInAssets` invokes it at
-engine build time but its output is only the generated byte array.
+sample solutions are outside the engine solution, and a sample build bakes its pack beside the
+sample executable when it has one, so the JIT bake tool and its packages stay out of the sample's
+AOT publish graph. The Vulkan loader is a system/GPU-driver component, not a NuGet dependency. The
+bake's source-format tooling is JIT only and never enters the runtime publish graph;
+`build/RayBork.BuiltInAssets` invokes it at engine build time but its output is only the generated
+byte array.
 
 ## Platform seam (M1, Vulkan surface in M2)
 
@@ -1345,16 +1345,20 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
   hardware driver and on the conformant lavapipe software driver. M7 moves the gate to
   `samples/Pong`: it bakes `pong.pck` from the original paddle PNG and the `Pong.PongSettings` data,
-  loads the settings and texture, records the orthographic screen-space match with
-  `DrawQuad`/`DrawDisc`/`DrawText` on `ScreenToWorldTransform`, and shuts down. The Windows `win-x64`
-  publish finished with zero AOT/trim warnings: its publish directory contains `pong.pck` (22,648
-  bytes) beside `Pong.exe` (11,271,680 bytes) and no bake tooling, and the published host ran
-  `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
-  warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the published host ran
-  `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
-  `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The
-  suite is 2,695 tests, 114 of them GPU integration tests, and every sample solution builds.
-  `samples/Text`, `samples/Castle`, and `samples/PrimitiveGallery` remain buildable and publishable
+  loads the settings and texture, records the player-vs-AI orthographic screen-space match with
+  `DrawQuad`/`DrawDisc`/`DrawText` on `ScreenToWorldTransform`, and shuts down. `PongSettings` lives
+  only in the sample project and `Pong.Assets` references that project directly; the solution builds
+  `Pong` once and then `Pong.Assets`, which bakes `pong.pck` beside the sample executable. `Pong`
+  does not build the assets project, so the graph has no cycle. The publish target copies that
+  Release-built pack beside the published host and fails with a clear error if it is missing. The
+  Windows `win-x64` publish finished with zero AOT/trim warnings: its publish directory contains
+  `pong.pck` beside `Pong.exe` and no bake tooling, and the published host ran `--frames 30` to exit
+  `0` on the hardware driver. The `linux-x64` publish also finished with zero warnings, contains
+  `pong.pck` beside `Pong` and no bake tooling, and the published host ran `--frames 30` to exit `0`
+  on the conformant lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO
+  presentation, 4x MSAA, and a 1280x720 window. The suite is 2,695 tests, 114 of them GPU
+  integration tests, and every sample solution builds. `samples/Text`, `samples/Castle`, and
+  `samples/PrimitiveGallery` remain buildable and publishable
   samples but are not the M7 gate. The M1-M3 diagnostic host was removed in M7.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the
