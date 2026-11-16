@@ -162,11 +162,13 @@ change; a later frame samples or writes the target exactly as before.
 - The target's contents are undefined after creation and after a resize. A readback before a camera
   writes the target has no resolved content to copy: the renderer returns a defined default of opaque
   black (raw `Color.Black` and RGBA8 `(0, 0, 0, 255)`) with the default tone settings and leaves the
-  target's undefined GPU layout untouched. Reading after a completed frame returns that frame's content.
+  image and its tracked layout untouched. This includes a target that a frame only sampled, because
+  sampling moves the image out of the undefined layout without writing it. Reading after a completed
+  frame that wrote the target returns that frame's content.
 - Both calls use the target's current description and recreated color image, so a readback after
-  `Resize` or a device recovery reads the new dimensions and image. Every supported color format and
-  sample count works: the resolved color image is always single-sample, and the readback uses the
-  target's effective sample count only as part of the target's existing resources.
+  `Resize` or a device recovery reads the new dimensions and image. Every supported color format works,
+  and the readback is independent of the sample count because the resolved color image is always
+  single-sample; GPU tests cover 1x, 4x, and 8x where the device supports them.
 - Cancellation before the render thread completes the readback completes the task as
   `OperationCanceledException`. Cancellation after the request is queued is best effort: the render
   thread may already be copying the image, in which case it finishes, restores the target layout, and
@@ -179,9 +181,10 @@ change; a later frame samples or writes the target exactly as before.
   waits for the target's last-use frame fence, uses a dedicated command buffer and fence, transitions
   the resolved color image from the layout the target tracker recorded to `TransferSrcOptimal`, copies
   the full image into a host-visible staging buffer with top-left row order, and transitions the image
-  back to the same layout in the same submission. It does not use `vkDeviceWaitIdle`; the per-target
-  fence wait is the only GPU wait. A post-processed later write to the target is read back like any
-  other content.
+  back to the same layout in the same submission. It never uses a device-wide idle; the per-target
+  fence wait and the copy's own fence are the only GPU waits. A never-written target skips the copy and
+  transition entirely and returns the default. A post-processed later write to the target is read back
+  like any other content.
 
 **Camera target and viewport.** `EngineContext.CreateCamera` takes `target:` as its last parameter.
 A camera targeting a `RenderTexture` records its pass into that target instead of the app's linear HDR

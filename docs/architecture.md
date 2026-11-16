@@ -592,7 +592,8 @@ wait for the render loop to finish with it   wait for newest ready
   fails with `InvalidOperationException` before any GPU work. The render thread waits for the target's
   last-use frame fence with the same bounded per-target wait the resize path uses, never
   `vkDeviceWaitIdle`; the pending frame that is not submitted yet is not part of that content, so a
-  readback observes the last completed frame and does not race the recording of the next one. The render
+  readback observes the last completed frame and does not race the recording of the next one. When a
+  completed frame has written the target, the render
   thread then uses a dedicated transient command pool, command buffer, fence, and host-visible staging
   buffer: it transitions the target's resolved color image from the tracker's current layout to
   `TRANSFER_SRC_OPTIMAL`, copies the full tightly packed image in top-left row order, and transitions it
@@ -602,11 +603,13 @@ wait for the render loop to finish with it   wait for newest ready
   `Rgba8Srgb` sRGB bytes to raw scene-linear `Color[y, x]`, and `ReadPixelsAsync` then reuses
   `AgxToneMap.Present` with the SDR `ManualSrgb` encoding and `WindowHdrState.Sdr` to apply the tone
   snapshot of the last frame that wrote the target and the startup `TonemappingMode`. The render-target
-  entry stores that snapshot when a camera targets it and the startup mode at creation, so the render
+  entry stores that snapshot and a written flag when a camera targets it in the frame's write set, and
+  the startup mode at creation, so the render
   thread never reads the live `EngineContext.Tonemapping`. A never-written target reports
-  `TonemappingSnapshot.Default` and the startup mode and returns opaque black without touching the
-  undefined image, because Vulkan cannot transition a layout back to `UNDEFINED`; a later frame still
-  writes it normally. Cancellation before the
+  `TonemappingSnapshot.Default` and the startup mode and returns opaque black without copying or
+  transitioning the image, because it has no resolved content even when a sampled-only frame moved it
+  out of the undefined layout; the written flag is cleared on resize and device recovery, and a later
+  frame still writes the target normally. Cancellation before the
   request runs completes it as canceled; cancellation during the copy is best effort, the copy still
   restores the layout, and only the result is discarded.
 - A multisampled depth-bearing target resolves its depth attachment through Vulkan 1.2
@@ -1627,19 +1630,23 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   and the post-shutdown stopped-service `ObjectDisposedException`. `VulkanDepthStencilResolveTests`
   covers the required sample-zero selection, the rejection of min/max-only modes, and the missing-mode
   diagnostic without a GPU.
-- M8 readback coverage: the GPU suite clears a target with known linear and HDR colors, reads
-  `ReadColorsAsync` with `[height, width]`, top-left rows, alpha, and HDR values, and asserts
-  `ReadPixelsAsync` length, row order, and every byte against the CPU AgX/sRGB reference within one
-  byte. It exercises all three color formats at 1x and 4x, the sRGB decode, the `Rgba8Unorm` raw and
+- M8 readback coverage: the GPU suite clears a target with known linear and HDR colors and a
+  top-half/bottom-half split, reads `ReadColorsAsync` with `[height, width]`, top-left rows, alpha, and
+  HDR values, and asserts `ReadPixelsAsync` length, row order (including the first and last pixel row),
+  and every byte against the CPU AgX/sRGB reference within one byte. It exercises all three color formats
+  at 1x and 4x, plus the HDR format at 8x where supported, the sRGB decode, the `Rgba8Unorm` raw and
   display paths, the frame's tone snapshot and the startup `TonemappingMode.None`, readback before the
-  first write (opaque-black default and the target remains usable), readback of an unsubmitted frame
-  (last completed content), readback of a target only sampled in a later frame, and readback after resize
-  and a simulated device recovery. `RenderTextureReadbackConverterTests` pins the half-float, `Rgba8Unorm`,
-  and sRGB decodes, the top-left `[y, x]` layout, the `ManualSrgb` AgX reference, clamping, and opaque
-  alpha. `RenderTextureServiceTests` covers readback handoff, cancellation before queue/processing and
-  after dequeue, close/stop, disposed and unknown targets, failure without target mutation, and target
-  state preservation; `RenderTextureAppTests` covers an awaited `Setup` readback, a blocking `Tick`
-  readback, and the post-shutdown `ObjectDisposedException` without a deadlock.
+  first write (opaque-black default and the target remains usable), a target only sampled before any
+  write (still the opaque-black default and the sample layout is untouched), a readback while a recorded
+  frame waits unsubmitted (last completed content), readback of a target only sampled in a later frame,
+  and readback after resize and a simulated device recovery. `RenderTextureReadbackConverterTests` pins
+  the half-float, `Rgba8Unorm`, and sRGB decodes, the top-left `[y, x]` layout, independently computed
+  display bytes, clamping, and opaque alpha. `RenderTextureServiceTests` covers readback handoff,
+  cancellation before queue/processing and after dequeue, late cancellation registration during
+  shutdown, close/stop, disposed and unknown targets including a target disposed after queueing, failure
+  without target mutation, and target state preservation; `RenderTextureAppTests` covers an awaited
+  `Setup` readback, a blocking `Tick` readback, and the post-shutdown `ObjectDisposedException` without
+  a deadlock.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer for the
   diagnostic probes and the full resolved color image for the public readback; the full-image path
   waits for the target's last-use fence, restores the layout, and is a screenshot/diagnostic path that

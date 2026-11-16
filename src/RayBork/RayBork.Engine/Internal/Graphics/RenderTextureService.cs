@@ -515,7 +515,9 @@ internal sealed class RenderTextureService : IDisposable {
     /// </remarks>
     internal abstract class ReadbackRequest {
         private readonly RenderTextureService _owner;
+        private readonly Lock _registrationGate = new();
         private CancellationTokenRegistration _registration;
+        private bool _registrationDisposed;
 
         protected ReadbackRequest(
             RenderTextureService owner,
@@ -541,15 +543,35 @@ internal sealed class RenderTextureService : IDisposable {
         /// <summary>Gets whether the completion task already is completed, canceled, or faulted.</summary>
         internal abstract bool IsCompleted { get; }
 
-        /// <summary>Registers the caller's cancellation callback for a cancelable token.</summary>
+        /// <summary>
+        /// Registers the caller's cancellation callback for a cancelable token. If the service already
+        /// disposed the request's registration during shutdown, the late registration is skipped: the
+        /// request was completed by <see cref="Stop"/> or <see cref="Close"/> and must not leave a live
+        /// callback behind.
+        /// </summary>
         internal void RegisterCancellation() {
-            _registration = CancellationToken.Register(
-                static state => ((ReadbackRequest)state!).Cancel(),
-                this);
+            lock (_registrationGate) {
+                if (_registrationDisposed) {
+                    return;
+                }
+
+                _registration = CancellationToken.Register(
+                    static state => ((ReadbackRequest)state!).Cancel(),
+                    this);
+            }
         }
 
         /// <summary>Disposes the cancellation registration. Safe when cancellation was never registered.</summary>
-        internal void DisposeRegistration() => _registration.Dispose();
+        internal void DisposeRegistration() {
+            CancellationTokenRegistration registration;
+            lock (_registrationGate) {
+                _registrationDisposed = true;
+                registration = _registration;
+                _registration = default;
+            }
+
+            registration.Dispose();
+        }
 
         /// <summary>Completes the request as canceled by its caller's token.</summary>
         /// <returns><see langword="true"/> when this call completed the task.</returns>

@@ -489,6 +489,25 @@ public sealed class RenderTextureServiceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReadbackOfATargetDisposedAfterQueueingFailsWithObjectDisposed() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        RenderTexture target = await create;
+
+        Task<Color[,]> request = service.ReadColorsAsync(target.Lifetime, CancellationToken.None);
+        Assert.False(request.IsCompleted);
+        target.Dispose();
+        host.ProcessRenderTextureRequests(service);
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => request);
+        Assert.False(host.IsRenderTargetLive(target.TargetId));
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task ReadbackOfADisposedTargetFailsWithObjectDisposed() {
         using RenderTextureService service = new();
         using FakeRendererBackend host = new();
@@ -547,6 +566,30 @@ public sealed class RenderTextureServiceTests {
         drained[0].DisposeRegistration();
         Assert.True(host.IsRenderTargetLive(target.TargetId));
         Assert.Equal(8, target.Width);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task LateCancellationRegistrationAfterDisposalIsIgnored() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        using CancellationTokenSource cancellation = new();
+
+        // Shutdown can dispose the request's registration between its enqueue and the queueing
+        // thread's RegisterCancellation. The late registration must not leave a live callback behind.
+        RenderTextureService.ReadbackRequest<byte[]> request = new(
+            service,
+            target.Lifetime,
+            cancellation.Token);
+        request.DisposeRegistration();
+        request.RegisterCancellation();
+        await cancellation.CancelAsync();
+
+        Assert.False(request.IsCompleted);
+        Assert.False(service.HasPendingWork);
     }
 
     [Fact]
@@ -617,7 +660,7 @@ public sealed class RenderTextureServiceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ReadbackInTheSameRoundAsACreateResizeAndDestroyIsServiced() {
+    public async Task ReadbackInTheSameRoundAsAResizeIsServiced() {
         using RenderTextureService service = new();
         using FakeRendererBackend host = new();
         Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(16, 16), CancellationToken.None);

@@ -85,6 +85,7 @@ public sealed class RenderTextureReadbackConverterTests {
         Assert.Equal(1f, color.B, TOLERANCE);
         Assert.Equal(128f / 255f, color.A, TOLERANCE);
         Assert.InRange(color.G, 0.2158f, 0.2159f);
+        Assert.Equal(0.2158605f, color.G, 6);
     }
 
     [Fact]
@@ -153,8 +154,13 @@ public sealed class RenderTextureReadbackConverterTests {
             Assert.Equal(byte.MaxValue, pixels[(index * 4) + 3]);
         }
 
-        // AgX maps neutral white to 0.5961 display-linear, which is 203 after the sRGB encode.
+        // AgX maps neutral white to 0.5961 display-linear, which is 203 after the sRGB encode; the
+        // neutral 4.0 input maps to 0.8660 display-linear, which is 239.
         Assert.Equal(203, pixels[0]);
+        Assert.Equal(239, pixels[4]);
+        Assert.Equal(236, pixels[8]);
+        Assert.Equal(178, pixels[9]);
+        Assert.Equal(129, pixels[10]);
     }
 
     [Fact]

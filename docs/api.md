@@ -183,9 +183,11 @@ encoding. `RenderTexture.ReadPixelsAsync` returns display-referred RGBA8 in row-
 with length `width * height * 4`, after the exposure, AgX white, and AgX contrast of the last completed
 frame that wrote the target, the app's startup `TonemappingMode`, AgX, and the sRGB encode; alpha is
 `255` and is not premultiplied. Both read the resolved single-sample color image, not depth, after the
-last completed frame that wrote or sampled the target; a target that no frame wrote has undefined
-content and returns the defined default of opaque black, with the default tone settings on the pixels
-path. Both are legal from `Setup` and `Tick` and
+last completed frame that wrote or sampled the target. A target that no frame wrote has undefined GPU
+content; rather than reading undefined memory, both methods return the defined opaque-black default
+(raw `Color.Black` and RGBA8 `(0, 0, 0, 255)`) with the default tone settings on the pixels path. This
+includes a target that a frame only sampled, because sampling moves its image out of the undefined
+layout without writing it. Both are legal from `Setup` and `Tick` and
 stall the render thread while they wait for the target's last-use fence and copy the image, so they are
 for screenshots and tests, not per-frame work; a `Tick` caller blocks on the returned task. Cancellation
 before the render thread completes the call is `OperationCanceledException`; cancellation after the

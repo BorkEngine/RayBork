@@ -1726,6 +1726,7 @@ public sealed class RenderTextureGpuTests {
         using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(8, 4));
         Color background = new(0.25f, 0.5f, 0.75f, 1f);
         Color hdrLeft = new(2f, 4f, 0.5f, 1f);
+        Color top = new(0.1f, 0.2f, 0.3f, 1f);
         TonemappingSnapshot snapshot = new(0.5f, 4f, 1.5f);
         VulkanDrawTestHarness.CameraView camera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
         VulkanDrawTestHarness.PassSpec backgroundPass = new(
@@ -1748,7 +1749,17 @@ public sealed class RenderTextureGpuTests {
             hdrLeft,
             [],
             target.TargetId);
-        RenderFramePacket packet = harness.CreateFrameWithPasses(1, backgroundPass, leftPass);
+        VulkanDrawTestHarness.PassSpec topPass = new(
+            camera,
+            0,
+            0,
+            target.Width,
+            target.Height / 2,
+            ClearMode.ColorAndDepth,
+            top,
+            [],
+            target.TargetId);
+        RenderFramePacket packet = harness.CreateFrameWithPasses(1, backgroundPass, leftPass, topPass);
         packet.Tonemapping = snapshot;
         harness.Submit(packet);
 
@@ -1757,20 +1768,47 @@ public sealed class RenderTextureGpuTests {
 
         Assert.Equal(target.Height, colors.GetLength(0));
         Assert.Equal(target.Width, colors.GetLength(1));
-        AssertColorNear(hdrLeft, colors[0, 0], HDR_TOLERANCE);
-        AssertColorNear(background, colors[0, target.Width - 1], HDR_TOLERANCE);
+        // Row zero is the top row: the top-half pass overwrites both top corners, while the bottom row
+        // keeps the left-half HDR color and the background.
+        AssertColorNear(top, colors[0, 0], HDR_TOLERANCE);
+        AssertColorNear(top, colors[0, target.Width - 1], HDR_TOLERANCE);
         AssertColorNear(hdrLeft, colors[target.Height - 1, 0], HDR_TOLERANCE);
         AssertColorNear(background, colors[target.Height - 1, target.Width - 1], HDR_TOLERANCE);
         // The HDR component above 1 survives ReadColorsAsync; ReadPixelsAsync tone maps it instead.
-        Assert.True(colors[0, 0].G > 1f);
+        Assert.True(colors[target.Height - 1, 0].G > 1f);
         Assert.Equal(checked(target.Width * target.Height * 4), pixels.Length);
         AssertPixelsMatchReference(pixels, colors, snapshot, TonemappingMode.AgX);
+
+        // The first pixel row is the top color and the last is the bottom-left HDR color; this would
+        // fail for a vertically flipped copy even when the colors array and pixels agree.
+        int lastRowOffset = (target.Height - 1) * target.Width * 4;
+        Vector3 topPresent = AgxToneMap.Present(
+            new Vector3(top.R, top.G, top.B),
+            MathF.Pow(2f, snapshot.Exposure),
+            TonemappingMode.AgX,
+            PresentEncoding.ManualSrgb,
+            WindowHdrState.Sdr,
+            snapshot.AgxWhite,
+            snapshot.AgxContrast);
+        Vector3 bottomPresent = AgxToneMap.Present(
+            new Vector3(hdrLeft.R, hdrLeft.G, hdrLeft.B),
+            MathF.Pow(2f, snapshot.Exposure),
+            TonemappingMode.AgX,
+            PresentEncoding.ManualSrgb,
+            WindowHdrState.Sdr,
+            snapshot.AgxWhite,
+            snapshot.AgxContrast);
+        AssertByteWithinOne(Quantize(topPresent.X), pixels[0], 0, 0, "red");
+        AssertByteWithinOne(Quantize(topPresent.Y), pixels[1], 0, 0, "green");
+        AssertByteWithinOne(Quantize(bottomPresent.X), pixels[lastRowOffset], 0, target.Height - 1, "red");
+        AssertByteWithinOne(Quantize(bottomPresent.Y), pixels[lastRowOffset + 1], 0, target.Height - 1, "green");
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Theory]
     [InlineData(TextureFormat.Rgba16Float, 1)]
     [InlineData(TextureFormat.Rgba16Float, 4)]
+    [InlineData(TextureFormat.Rgba16Float, 8)]
     [InlineData(TextureFormat.Rgba8Unorm, 1)]
     [InlineData(TextureFormat.Rgba8Unorm, 4)]
     [InlineData(TextureFormat.Rgba8Srgb, 1)]
@@ -1966,8 +2004,9 @@ public sealed class RenderTextureGpuTests {
         using VulkanDrawTestHarness harness = new(host);
         using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(4, 2));
 
-        // The contents are undefined before a camera writes the target, but the readback must still copy
-        // the image, restore its undefined layout, and leave the target usable for the first frame.
+        // The contents are undefined before a camera writes the target. The readback returns the
+        // documented opaque-black default without copying or transitioning the image, and leaves the
+        // target usable for the first frame.
         Color[,] unwritten = await host.ReadColorsAsync(target);
         byte[] unwrittenPixels = await host.ReadPixelsAsync(target);
         Assert.Equal(2, unwritten.GetLength(0));
@@ -1989,6 +2028,115 @@ public sealed class RenderTextureGpuTests {
         Assert.Equal(
             Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal,
             unwrittenTarget.ResolvedColorLayout);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadbackOfATargetOnlySampledBeforeAnyWriteReturnsTheDefaultAndStaysUsable() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(4, 4));
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-readback-sampled-unwritten");
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            target.ColorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+
+        // The frame only samples the target. A sample transition moves the image out of UNDEFINED
+        // without writing it, so the layout alone cannot decide whether content exists.
+        harness.Submit(harness.CreateFrameWithPasses(1, samplePass));
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? sampled));
+        Assert.Equal(Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal, sampled!.ResolvedColorLayout);
+
+        Color[,] colors = await host.ReadColorsAsync(target);
+        byte[] pixels = await host.ReadPixelsAsync(target);
+        Assert.Equal(4, colors.GetLength(0));
+        Assert.Equal(4, colors.GetLength(1));
+        AssertColorNear(Color.Black, colors[0, 0], HDR_TOLERANCE);
+        Assert.Equal(1f, colors[0, 0].A, HDR_TOLERANCE);
+        Assert.Equal(4 * 4 * 4, pixels.Length);
+        for (int index = 0; index < pixels.Length; index += 4) {
+            Assert.Equal(byte.MinValue, pixels[index]);
+            Assert.Equal(byte.MinValue, pixels[index + 1]);
+            Assert.Equal(byte.MinValue, pixels[index + 2]);
+            Assert.Equal(byte.MaxValue, pixels[index + 3]);
+        }
+        // The default path neither copies nor transitions the image.
+        Assert.Equal(Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal, sampled.ResolvedColorLayout);
+
+        // The target remains usable: the first real write is read back normally.
+        Color known = new(0.2f, 0.4f, 0.6f, 1f);
+        harness.Submit(harness.CreateFrameWithPasses(2, CreateTargetClearPass(target, known)));
+        Color[,] written = await host.ReadColorsAsync(target);
+        AssertColorNear(known, written[0, 0], HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task CancellationAfterDequeueRestoresTheLayoutAndDiscardsTheResult() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(4, 4));
+        Color known = new(0.2f, 0.4f, 0.6f, 1f);
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, known)));
+        using CancellationTokenSource cancellation = new();
+        using ManualResetEventSlim copyStarted = new(false);
+        using ManualResetEventSlim cancellationRequested = new(false);
+        host.Backend.BeforeReadbackCopyForTests = () => {
+            copyStarted.Set();
+            // Hold the render thread before the copy until the test canceled the request. The backend
+            // must still complete the copy and restore the layout, then discard the canceled result.
+            Assert.True(cancellationRequested.Wait(TimeSpan.FromSeconds(10)));
+        };
+
+        Exception? failure = null;
+        Thread renderThread = new(() => {
+            try {
+                host.ProcessRenderTextures();
+            } catch (Exception exception) {
+                failure = exception;
+            }
+        }) {
+            IsBackground = true,
+            Name = "RayBork.Test.RenderTextureReadbackCancel",
+        };
+        try {
+            // The test cancels its own token to exercise cancellation after the request was dequeued;
+            // the xUnit test token would cancel the test instead.
+#pragma warning disable xUnit1051
+            Task<Color[,]> request = target.ReadColorsAsync(cancellation.Token);
+#pragma warning restore xUnit1051
+            renderThread.Start();
+            // The analyzer treats ManualResetEventSlim.Wait and Thread.Join as cancellation-token
+            // candidates; these waits use the test's own timeout instead.
+#pragma warning disable xUnit1051
+            Assert.True(copyStarted.Wait(TimeSpan.FromSeconds(10)));
+#pragma warning restore xUnit1051
+            cancellation.Cancel();
+            cancellationRequested.Set();
+#pragma warning disable xUnit1051
+            Assert.True(renderThread.Join(TimeSpan.FromSeconds(10)));
+#pragma warning restore xUnit1051
+            Assert.Null(failure);
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        } finally {
+            host.Backend.BeforeReadbackCopyForTests = null;
+            if (!renderThread.Join(TimeSpan.FromSeconds(10))) {
+                Assert.Fail("The readback render-thread helper did not finish.");
+            }
+        }
+
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? live));
+        Assert.Equal(Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal, live!.ResolvedColorLayout);
+        Color[,] after = await host.ReadColorsAsync(target);
+        AssertColorNear(known, after[0, 0], HDR_TOLERANCE);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 

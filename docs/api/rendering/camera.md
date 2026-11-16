@@ -314,8 +314,9 @@ uses the new target size, and a later camera pass that samples the target's view
 render texture, not a view. A later camera or the game can sample the views, and the game can call
 `RenderTexture.ReadColorsAsync`/`ReadPixelsAsync` after a completed frame to read the resolved color
 image without changing the camera routing or the target's state. The readback returns the content of
-the last completed frame that wrote or sampled the target, so a readback issued before the first
-camera writes the target returns undefined content.
+the last completed frame that wrote or sampled the target. A target no camera has written has undefined
+GPU content; rather than reading undefined memory, the readback returns the defined opaque-black
+default (`Color.Black` and RGBA8 `(0, 0, 0, 255)`), including when a frame only sampled the target.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`

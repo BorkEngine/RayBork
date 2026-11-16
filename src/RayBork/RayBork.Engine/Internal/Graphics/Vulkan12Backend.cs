@@ -556,7 +556,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         entry.ViewLifetime.SetDimensions(width, height);
         entry.DepthViewLifetime?.SetDimensions(width, height);
         lifetime.UpdateDescription(description with { Width = width, Height = height });
-        // The new images were never used by a frame; the previous images' last-use fence was waited on.
+        // The new images were never used by a frame; the previous images' last-use fence was waited on,
+        // and their content does not carry to the recreated images.
+        entry.HasResolvedColorContent = false;
         lifetime.SetLastUseFrameSlot(-1);
 
         previousPipelines?.Dispose();
@@ -599,12 +601,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
 
         WaitForRenderTargetIdle(lifetime);
+        BeforeReadbackCopyForTests?.Invoke();
         int width = checked((int)entry.Target.Extent.Width);
         int height = checked((int)entry.Target.Extent.Height);
         Color[,] colors;
-        if (entry.Target.ResolvedColorLayout == ImageLayout.Undefined) {
-            // Vulkan cannot transition an image back to UNDEFINED, and no completed frame produced
-            // content. Return a defined default instead of copying undefined GPU memory.
+        if (!entry.HasResolvedColorContent) {
+            // No completed frame wrote the target. Its GPU content is undefined, and a sampled-only
+            // frame may have moved it to ShaderReadOnlyOptimal without writing it. Return the defined
+            // opaque-black default instead of copying undefined GPU memory, and leave the image and its
+            // tracked layout untouched.
             colors = RenderTextureReadbackConverter.CreateOpaqueBlackColors(width, height);
         } else {
             byte[] pixels = VulkanReadback.ReadRenderTargetColorImage(_device!, entry.Target);
@@ -1235,6 +1240,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     internal Action? BeforeAcquireForTests { get; set; }
 
     /// <summary>
+    /// Gets or sets a hook invoked immediately before the readback copy. Test-only; it is not part of
+    /// the renderer seam. The cancellation test uses it to cancel a request after it was dequeued and
+    /// while its copy is about to run.
+    /// </summary>
+    internal Action? BeforeReadbackCopyForTests { get; set; }
+
+    /// <summary>
     /// Gets or sets a test-only override for the device's maximum 2D image dimension. The default
     /// <see langword="null"/> uses the real device limit.
     /// </summary>
@@ -1789,6 +1801,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             entry.Pipelines = null;
+            // The recreated images have no content until a completed frame writes the target.
+            entry.HasResolvedColorContent = false;
         }
     }
 
@@ -2170,6 +2184,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             // The readback uses the tone settings that produced the last completed frame that wrote the
             // target. A later sampled-only frame keeps these values.
             entry.Tone = frame.Tonemapping;
+            entry.HasResolvedColorContent = true;
         }
 
         foreach (RenderTargetEntry entry in _frameSampledRenderTargets) {
@@ -2752,6 +2767,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         internal Sampler DepthSampler { get; set; }
 
         internal VulkanGeometryPipelineCache? Pipelines { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether a completed frame has written the target since its images were created.
+        /// A sampled-only frame does not set it, and a resize or device recovery clears it. The readback
+        /// returns its opaque-black default while it is <see langword="false"/>, because the resolved
+        /// image has no content even if a sample transition moved it out of <c>UNDEFINED</c>.
+        /// </summary>
+        internal bool HasResolvedColorContent { get; set; }
 
         /// <summary>
         /// Gets or sets the tone-mapping snapshot of the last completed frame that wrote the target. It

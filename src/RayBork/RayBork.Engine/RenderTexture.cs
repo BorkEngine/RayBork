@@ -227,7 +227,8 @@ public sealed class RenderTexture : IDisposable {
     /// floats with HDR preserved, <see cref="TextureFormat.Rgba8Unorm"/> bytes divided by 255, and
     /// <see cref="TextureFormat.Rgba8Srgb"/> sRGB-decoded to linear. Alpha is linear and included for
     /// every format. The target's contents are undefined before a camera writes them; an unwritten or
-    /// just-resized target returns the defined default of opaque black.
+    /// just-resized target, including one that a frame only sampled, returns the defined default of
+    /// opaque black.
     /// </para>
     /// <para>
     /// The call is legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/>. It stalls the render
