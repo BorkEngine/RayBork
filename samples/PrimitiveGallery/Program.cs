@@ -11,7 +11,7 @@ internal static class Program {
     private const string WINDOW_TITLE = "RayBork Primitive Gallery";
 
     private const string USAGE_TEXT = """
-        Primitive Gallery - every M5 primitive helper in one camera pass
+        Primitive Gallery - every M5 primitive helper in one scene camera pass
 
         Draws the solid and wire shape families (cube, sphere, cylinder, cone, capsule, plane,
         circle, triangle, triangle strip, point, line, polyline, ray, and bounding box), a
