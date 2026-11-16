@@ -115,9 +115,11 @@ its pre-existing cross-frame overwrite behavior; that hazard is unchanged and is
 Multiple targets work in one frame: each camera selects its target, each target has its own render
 pass and geometry pipeline cache, and cameras on the scene target and on runtime targets can interleave
 in one tick. There is no render graph and no automatic pass dependency analysis in v1; creation order
-is the pass order. A write-after-read between two passes is a synchronization error that the renderer's
-per-target barriers do not silently repair; the camera that samples a target must be created before the
-camera that writes it again.
+is the pass order. Write→sample and sample→write between two different passes are both synchronized by
+the per-target barriers: a later write transitions the resolved color back from
+`ShaderReadOnlyOptimal` to the color-attachment layout, and a later sample sees the content the earlier
+write stored. Creation order decides which content a sample observes. The only rejected ordering is
+sampling the target inside the same camera pass that writes it.
 
 **The `ColorTexture` view.** `ColorTexture` is a `Texture` view owned by the `RenderTexture`. It
 reports an empty `Path` because it is not a pack asset, it samples and batches like any texture, and
@@ -144,8 +146,8 @@ lifetime.
 - The present pass samples the app scene target only. A runtime target's content reaches the screen
   through a camera on the scene target that samples `ColorTexture`.
 - There is no render graph and no automatic pass dependency analysis in v1. Creation order is the
-  pass order; a cycle is invalid, and a write-after-read that creation order does not order is a
-  synchronization error rather than a graph-detected validation error.
+  pass order. Write→read and read→write between different passes are synchronized by the per-target
+  barriers; a cycle, or sampling a target in the pass that writes it, is invalid.
 
 ### 7.12 Render statistics
 

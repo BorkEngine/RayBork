@@ -638,6 +638,7 @@ public sealed class RenderTextureGpuTests {
 
         Assert.True(target.IsDisposed);
         Assert.True(target.ColorTexture.IsDisposed);
+        Assert.False(host.Backend.TryGetRenderTarget(target.TargetId, out _));
         target.Dispose();
         Assert.True(target.IsDisposed);
     }

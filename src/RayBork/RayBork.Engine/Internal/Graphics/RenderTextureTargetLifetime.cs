@@ -101,7 +101,10 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
         }
     }
 
-    /// <summary>Gets whether the owner reference was released. It stays readable after disposal.</summary>
+    /// <summary>
+    /// Gets whether the target is disposed: its owner reference was released, or the backend destroyed
+    /// every live target at shutdown. It stays readable after disposal.
+    /// </summary>
     internal bool IsDisposed {
         get {
             lock (_gate) {

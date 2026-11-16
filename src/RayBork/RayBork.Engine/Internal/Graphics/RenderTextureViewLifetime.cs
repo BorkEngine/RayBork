@@ -40,7 +40,6 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
         _resource = resource;
     }
 
-
     /// <summary>Gets the target id; <c>0</c> for a texture that is not a render target view.</summary>
     internal long TargetId => _target.TargetId;
 

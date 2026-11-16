@@ -36,6 +36,57 @@ public sealed class EngineContextTests {
         }
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CreateCameraForwardsTheRenderTargetToTheCameraService() {
+        using CatalogTestHarness harness = new(userPacks: [BuildEngineDefaultsPack()]);
+        EngineDefaults defaults = await EngineDefaults.LoadAsync(harness.Catalog);
+        using RenderTextureService renderTextures = new();
+        using FakeRendererBackend renderer = new();
+        Task<RenderTexture> create = renderTextures.CreateAsync(
+            new RenderTextureDescription(16, 16),
+            CancellationToken.None);
+        renderer.ProcessRenderTextureRequests(renderTextures);
+        using RenderTexture target = await create;
+        try {
+            FakeEnginePlatform platform = new();
+            CameraService cameras = new(platform.Window);
+            EngineContext context = CreateContext(
+                platform,
+                harness.Catalog,
+                defaults,
+                cameras,
+                new TonemappingSettings(0f, 16.29f, 1.25f),
+                renderTextures);
+            RenderFramePacket packet = new(1);
+            TickThread.Attach();
+            try {
+                packet.BeginRecording(0.0, 0.0);
+                cameras.BeginFrame(packet, 0.0, 0.0);
+                using Camera camera = context.CreateCamera(
+                    Transform.Identity,
+                    CameraProjection.Perspective,
+                    60f,
+                    0f,
+                    ClearMode.ColorAndDepth,
+                    null,
+                    0.1f,
+                    100f,
+                    null,
+                    target);
+
+                Assert.Same(target, camera.Target);
+                Assert.Equal(target.TargetId, packet.Passes[0].TargetId);
+            } finally {
+                cameras.AbandonFrame();
+                packet.Retention.Release();
+                TickThread.Detach();
+            }
+        } finally {
+            defaults.Dispose();
+        }
+    }
+
     private static EngineContext CreateContext(
         IEnginePlatform platform,
         IAssetCatalog catalog,

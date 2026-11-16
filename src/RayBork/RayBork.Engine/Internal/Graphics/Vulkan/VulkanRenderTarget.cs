@@ -89,7 +89,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
     /// <summary>Gets the framebuffer that binds the target attachments for the render pass.</summary>
     internal Framebuffer Framebuffer => _framebuffer;
 
-
     /// <summary>Gets the single-sample color image a shader samples.</summary>
     internal Image ResolvedColorImage => _resolvedColorImage;
 
@@ -98,7 +97,6 @@ internal sealed unsafe class VulkanRenderTarget : IDisposable {
 
     /// <summary>Gets the depth image, or the default handle when the target has no depth attachment.</summary>
     internal Image DepthImage => _depthImage;
-
 
     /// <summary>Gets the current layout of the single-sample resolved color image.</summary>
     internal ImageLayout ResolvedColorLayout => _resolvedColorLayout;

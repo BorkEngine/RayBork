@@ -1506,7 +1506,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   in one frame, a full-viewport quad that survives frustum culling, and 3D orthographic cube
   geometry. `PrimitiveDrawTests` covers the new draw records, validation, zero-extent behavior,
   disposed assets, retention, and batching; `CameraTests` covers `ScreenToWorldTransform`. The
-  Windows hardware run is 2,777
+  Windows hardware run is 2,778
   tests, 142 of them GPU integration tests, with no skips. The lavapipe Linux run skips the seven
   existing HDR/scRGB-present tests because lavapipe exposes only SDR; the remaining full-suite and
   GPU-filtered tests pass.
