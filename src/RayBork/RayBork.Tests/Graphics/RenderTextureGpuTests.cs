@@ -4,12 +4,12 @@ using RayBork.Internal;
 namespace RayBork.Tests;
 
 /// <summary>
-/// GPU tests for the public render texture color path: a camera routing into a runtime target, the
-/// resolved color view sampled by a later camera, the per-target image barriers, the render target
-/// formats and sample counts, and the target lifetime.
+/// GPU tests for the public render texture color and depth paths: a camera routing into a runtime target,
+/// the resolved color and depth views sampled by a later camera, the per-target image barriers, the
+/// render target formats and sample counts, MSAA depth resolve, and the target lifetime.
 /// </summary>
 /// <remarks>
-/// The tests read the scene target and the render target's resolved color through the diagnostic
+/// The tests read the scene target and the render target's resolved images through the diagnostic
 /// readback probes and assert numeric tolerances. They also assert validation-layer cleanliness. The
 /// test host requests core validation, not synchronization validation, so the access masks are proven
 /// by the rendered result and the clean core validation, not by the synchronization model.
@@ -17,6 +17,7 @@ namespace RayBork.Tests;
 public sealed class RenderTextureGpuTests {
     private const float HDR_TOLERANCE = 3e-3f;
     private const float BYTE_TOLERANCE = 6e-3f;
+    private const float DEPTH_TOLERANCE = 3e-3f;
 
     private const string POSITION_VERTEX_SOURCE = """
         #version 450
@@ -51,6 +52,19 @@ public sealed class RenderTextureGpuTests {
 
         void main_fragment() {
             oColor = texture(mainTexture, vUv);
+        }
+        """;
+
+    private const string DEPTH_SAMPLE_FRAGMENT_SOURCE = """
+        #version 450
+
+        layout(location = 0) in vec2 vUv;
+
+        layout(location = 0) out vec4 oColor;
+
+        void main_fragment() {
+            float depth = texture(mainTexture, vUv).r;
+            oColor = vec4(depth, depth, depth, 1.0);
         }
         """;
 
@@ -94,6 +108,365 @@ public sealed class RenderTextureGpuTests {
         AssertColorNear(known, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
         AssertColorNear(known, harness.ReadRenderTargetColor(target, 32, 32), HDR_TOLERANCE);
         Assert.Equal(2, host.Backend.Stats.DrawCalls);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Theory]
+    [InlineData(TextureFormat.Rgba16Float, 1)]
+    [InlineData(TextureFormat.Rgba16Float, 2)]
+    [InlineData(TextureFormat.Rgba16Float, 4)]
+    [InlineData(TextureFormat.Rgba16Float, 8)]
+    [InlineData(TextureFormat.Rgba8Unorm, 4)]
+    [InlineData(TextureFormat.Rgba8Srgb, 4)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void DepthTextureSamplesTheResolvedReverseZValue(TextureFormat format, int requestedSampleCount) {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(32, 32, format, Depth: true, SampleCount: requestedSampleCount));
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-depth-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-depth-sample");
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        Mesh targetQuad = harness.CreateQuad(
+            "meshes/render-target-depth-quad",
+            halfWidth: target.Width / (float)target.Height,
+            halfHeight: 1f);
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        float expectedDepth = ExpectedReverseZDepth(targetCamera);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh sampleQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            depthTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+
+        Assert.Equal(TextureFormat.Depth32Float, depthTexture.Format);
+        Assert.False(depthTexture.IsSrgb);
+        Assert.Equal(TextureFilter.Nearest, depthTexture.Sampler.Filter);
+        Assert.Equal(TextureWrap.Clamp, depthTexture.Sampler.Wrap);
+        Assert.Equal(string.Empty, depthTexture.Path);
+        Assert.False(depthTexture.IsProcedural);
+        Assert.Equal(1, depthTexture.MipLevels);
+        Assert.Equal(target.Width, depthTexture.Width);
+        Assert.Equal(target.Height, depthTexture.Height);
+        Assert.NotNull(target.ColorTexture);
+        Assert.Equal(
+            VulkanSampleCountSelection.Select(requestedSampleCount, host.Device.Capabilities.SupportedSampleCounts),
+            target.SampleCount);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            samplePass));
+
+        (int centerX, int centerY) = SceneCenter(host);
+        (float r, float g, float b) = harness.ReadColor((uint)centerX, (uint)centerY);
+        AssertDepthNear(expectedDepth, r, DEPTH_TOLERANCE);
+        AssertDepthNear(expectedDepth, g, DEPTH_TOLERANCE);
+        AssertDepthNear(expectedDepth, b, DEPTH_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ReadSceneDepthReadsTheResolvedMultisampledDepth() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: 4, hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        if (host.SceneTarget.SampleCount <= 1) {
+            Assert.Skip("The host device supports no multisampled depth attachment.");
+        }
+
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-scene-depth-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.OrthographicCamera(host);
+        float aspect = host.SceneTarget.Extent.Width / (float)host.SceneTarget.Extent.Height;
+        Mesh quad = harness.CreateQuad("meshes/render-target-scene-depth", halfWidth: aspect, halfHeight: 1f);
+        VulkanDrawTestHarness.DrawSpec draw = new(
+            quad,
+            tintShader,
+            [Matrix4x4.Identity],
+            RenderState: RenderState.Opaque with { Cull = CullMode.None },
+            Tint: Color.White);
+        float expectedDepth = ExpectedReverseZDepth(camera);
+
+        harness.SubmitFrame(1, Color.Black, camera, draw);
+
+        (int centerX, int centerY) = SceneCenter(host);
+        AssertDepthNear(expectedDepth, harness.ReadDepth((uint)centerX, (uint)centerY), DEPTH_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void DepthWriteSampleWriteSampleKeepsBothValues() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-depth-read-write-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-depth-read-write");
+        Mesh targetQuad = harness.CreateQuad("meshes/render-target-depth-read-write", halfWidth: 1f, halfHeight: 1f);
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        float nearDepth = ExpectedReverseZDepth(targetCamera, Vector3.Zero);
+        float farDepth = ExpectedReverseZDepth(targetCamera, new Vector3(0f, 0f, 0.5f));
+        int sceneWidth = checked((int)host.SceneTarget.Extent.Width);
+        int sceneHeight = checked((int)host.SceneTarget.Extent.Height);
+        int leftWidth = sceneWidth / 2;
+        int rightWidth = sceneWidth - leftWidth;
+        (VulkanDrawTestHarness.PassSpec leftPass, Mesh leftQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            depthTexture,
+            leftWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        (VulkanDrawTestHarness.PassSpec rightPass, Mesh rightQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            depthTexture,
+            rightWidth,
+            sceneHeight,
+            ClearMode.None,
+            Color.Black);
+        rightPass = rightPass with { ViewportX = leftWidth };
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            leftPass,
+            CreateTargetDrawPass(
+                target,
+                targetQuad,
+                tintShader,
+                Color.White,
+                Color.Black,
+                Matrix4x4.CreateTranslation(0f, 0f, 0.5f),
+                ClearMode.ColorAndDepth),
+            rightPass));
+
+        int centerY = sceneHeight / 2;
+        AssertDepthNear(nearDepth, harness.ReadColor((uint)(leftWidth / 2), (uint)centerY).R, DEPTH_TOLERANCE);
+        AssertDepthNear(
+            farDepth,
+            harness.ReadColor((uint)(leftWidth + (rightWidth / 2)), (uint)centerY).R,
+            DEPTH_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void DepthTextureCanBeSampledFromALaterFrameWithoutARewrite() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-depth-later-frame-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-depth-later-frame");
+        Mesh targetQuad = harness.CreateQuad("meshes/render-target-depth-later-frame", halfWidth: 1f, halfHeight: 1f);
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        float expectedDepth = ExpectedReverseZDepth(targetCamera);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh sampleQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            target.DepthTexture!,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            samplePass));
+        AssertDepthNear(expectedDepth, harness.ReadColor((uint)(sceneWidth / 2), (uint)(sceneHeight / 2)).R, DEPTH_TOLERANCE);
+
+        // The target is not rewritten; the sampled target enters the frame in ShaderReadOnlyOptimal and
+        // PrepareSampled synchronizes the previous frame's resolve with this frame's fragment reads.
+        harness.Submit(harness.CreateFrameWithPasses(2, samplePass));
+
+        AssertDepthNear(expectedDepth, harness.ReadColor((uint)(sceneWidth / 2), (uint)(sceneHeight / 2)).R, DEPTH_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void DepthResolveOnlyCoversTheCameraViewport() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-depth-viewport-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-depth-viewport");
+        Mesh targetQuad = harness.CreateQuad("meshes/render-target-depth-viewport", halfWidth: 1f, halfHeight: 1f);
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        float drawnDepth = ExpectedReverseZDepth(targetCamera, new Vector3(0f, 0f, 0.5f));
+        int halfWidth = target.Width / 2;
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh sampleQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            target.DepthTexture!,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetClearPass(target, Color.Black),
+            samplePass));
+        AssertDepthNear(0f, harness.ReadColor((uint)(sceneWidth / 2), (uint)(sceneHeight / 2)).R, DEPTH_TOLERANCE);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            CreateTargetClearPass(target, Color.Black),
+            CreateTargetDrawPass(
+                target,
+                targetQuad,
+                tintShader,
+                Color.White,
+                Color.Black,
+                Matrix4x4.CreateTranslation(0f, 0f, 0.5f),
+                ClearMode.None,
+                0,
+                0,
+                halfWidth,
+                target.Height),
+            samplePass));
+
+        int centerY = sceneHeight / 2;
+        int sceneHalfWidth = sceneWidth / 2;
+        AssertDepthNear(drawnDepth, harness.ReadColor((uint)(sceneHalfWidth / 2), (uint)centerY).R, DEPTH_TOLERANCE);
+        AssertDepthNear(
+            0f,
+            harness.ReadColor((uint)(sceneHalfWidth + (sceneWidth - sceneHalfWidth) / 2), (uint)centerY).R,
+            DEPTH_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void TwoDepthTargetsInOneFrameKeepTheirOwnDepth() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture nearTarget = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        using RenderTexture farTarget = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-two-depth-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-two-depth");
+        Mesh targetQuad = harness.CreateQuad("meshes/render-target-two-depth", halfWidth: 1f, halfHeight: 1f);
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, 32, 32, 2f);
+        float nearDepth = ExpectedReverseZDepth(targetCamera);
+        float farDepth = ExpectedReverseZDepth(targetCamera, new Vector3(0f, 0f, 0.5f));
+        int sceneWidth = checked((int)host.SceneTarget.Extent.Width);
+        int sceneHeight = checked((int)host.SceneTarget.Extent.Height);
+        int leftWidth = sceneWidth / 2;
+        int rightWidth = sceneWidth - leftWidth;
+        (VulkanDrawTestHarness.PassSpec leftPass, Mesh leftQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            nearTarget.DepthTexture!,
+            leftWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        (VulkanDrawTestHarness.PassSpec rightPass, Mesh rightQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            farTarget.DepthTexture!,
+            rightWidth,
+            sceneHeight,
+            ClearMode.None,
+            Color.Black);
+        rightPass = rightPass with { ViewportX = leftWidth };
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(nearTarget, targetQuad, tintShader, Color.White, Color.Black),
+            CreateTargetDrawPass(
+                farTarget,
+                targetQuad,
+                tintShader,
+                Color.White,
+                Color.Black,
+                Matrix4x4.CreateTranslation(0f, 0f, 0.5f),
+                ClearMode.ColorAndDepth),
+            leftPass,
+            rightPass));
+
+        int centerY = sceneHeight / 2;
+        AssertDepthNear(nearDepth, harness.ReadColor((uint)(leftWidth / 2), (uint)centerY).R, DEPTH_TOLERANCE);
+        AssertDepthNear(
+            farDepth,
+            harness.ReadColor((uint)(leftWidth + (rightWidth / 2)), (uint)centerY).R,
+            DEPTH_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void DepthClearModeNoneLoadsAndDepthClearSamplesZero() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-depth-clear-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-depth-clear");
+        Mesh targetQuad = harness.CreateQuad("meshes/render-target-depth-clear", halfWidth: 1f, halfHeight: 1f);
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        float drawnDepth = ExpectedReverseZDepth(targetCamera);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh sampleQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            target.DepthTexture!,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        (uint centerX, uint centerY) = ((uint)(sceneWidth / 2), (uint)(sceneHeight / 2));
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            CreateTargetPass(target, ClearMode.None, Color.Black),
+            samplePass));
+        AssertDepthNear(drawnDepth, harness.ReadColor(centerX, centerY).R, DEPTH_TOLERANCE);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            CreateTargetPass(target, ClearMode.Depth, Color.Black),
+            samplePass));
+        AssertDepthNear(0f, harness.ReadColor(centerX, centerY).R, DEPTH_TOLERANCE);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -163,7 +536,7 @@ public sealed class RenderTextureGpuTests {
         packet.BeginRecording(0.0, 0.0);
         cameras.BeginFrame(packet, 0.0, 0.0);
         try {
-            using Camera camera = cameras.CreateCamera(
+            using (Camera camera = cameras.CreateCamera(
                 Transform.Identity,
                 CameraProjection.Perspective,
                 60f,
@@ -173,15 +546,42 @@ public sealed class RenderTextureGpuTests {
                 0.1f,
                 100f,
                 null,
-                target);
-            InvalidOperationException meshException = Assert.Throws<InvalidOperationException>(
-                () => camera.DrawMesh(quad, Transform.Identity, sampleShader));
-            Assert.Contains("same pass", meshException.Message, StringComparison.Ordinal);
+                target)) {
+                InvalidOperationException meshException = Assert.Throws<InvalidOperationException>(
+                    () => camera.DrawMesh(quad, Transform.Identity, sampleShader));
+                Assert.Contains("same pass", meshException.Message, StringComparison.Ordinal);
 
-            // DrawModel records through the part material path; it must run the same check.
-            InvalidOperationException modelException = Assert.Throws<InvalidOperationException>(
-                () => camera.DrawModel(model, Transform.Identity));
-            Assert.Contains("same pass", modelException.Message, StringComparison.Ordinal);
+                // DrawModel records through the part material path; it must run the same check.
+                InvalidOperationException modelException = Assert.Throws<InvalidOperationException>(
+                    () => camera.DrawModel(model, Transform.Identity));
+                Assert.Contains("same pass", modelException.Message, StringComparison.Ordinal);
+
+                // The depth view carries the same target id, so the same-pass check rejects it too.
+                sampleShader.SetUniform("mainTexture", target.DepthTexture);
+                InvalidOperationException depthMeshException = Assert.Throws<InvalidOperationException>(
+                    () => camera.DrawMesh(quad, Transform.Identity, sampleShader));
+                Assert.Contains("same pass", depthMeshException.Message, StringComparison.Ordinal);
+                InvalidOperationException depthModelException = Assert.Throws<InvalidOperationException>(
+                    () => camera.DrawModel(model, Transform.Identity));
+                Assert.Contains("same pass", depthModelException.Message, StringComparison.Ordinal);
+            }
+
+            // A later camera pass may sample the same depth view; only the writing pass is rejected.
+            Mesh sceneQuad = harness.CreateQuad("meshes/render-target-self-scene-quad");
+            using (Camera screen = cameras.CreateCamera(
+                Transform.Identity,
+                CameraProjection.Perspective,
+                60f,
+                0f,
+                ClearMode.ColorAndDepth,
+                null,
+                0.1f,
+                100f,
+                null)) {
+                screen.DrawMesh(sceneQuad, Transform.Identity, sampleShader);
+            }
+
+            Assert.Equal(2, packet.Passes.Length);
         } finally {
             cameras.AbandonFrame();
             packet.Retention.Release();
@@ -342,6 +742,7 @@ public sealed class RenderTextureGpuTests {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
         Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-retention");
         Color known = new(0.1f, 0.6f, 0.2f, 1f);
         (int sceneWidth, int sceneHeight) = SceneSize(host);
@@ -355,19 +756,25 @@ public sealed class RenderTextureGpuTests {
             Color.Black);
 
         Assert.Equal(string.Empty, target.ColorTexture.Path);
+        Assert.Equal(string.Empty, depthTexture.Path);
         Assert.Throws<InvalidOperationException>(target.ColorTexture.Dispose);
+        Assert.Throws<InvalidOperationException>(depthTexture.Dispose);
         Assert.False(target.ColorTexture.IsDisposed);
+        Assert.False(depthTexture.IsDisposed);
 
         RenderFramePacket packet = harness.CreateFrameWithPasses(
             1,
             CreateTargetClearPass(target, known),
             samplePass);
-        // Model the frame ring: the recorded frame holds the target's view until the renderer released
-        // the slot, so disposing the target before submission must not destroy it.
+        // Model the frame ring: the recorded frame holds the target's views until the renderer released
+        // the slot, so disposing the target before submission must not destroy it. Both views forward
+        // their hold to the same target lifetime.
         packet.Retention.Add(target.ColorTexture.RetentionTarget);
+        packet.Retention.Add(depthTexture.RetentionTarget);
         target.Dispose();
         Assert.True(target.IsDisposed);
         Assert.True(target.ColorTexture.IsDisposed);
+        Assert.True(depthTexture.IsDisposed);
 
         harness.Submit(packet);
 
@@ -382,6 +789,7 @@ public sealed class RenderTextureGpuTests {
         Assert.False(host.Backend.TryGetRenderTarget(target.TargetId, out _));
         target.Dispose();
         Assert.Equal(string.Empty, target.ColorTexture.Path);
+        Assert.Equal(string.Empty, depthTexture.Path);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -477,6 +885,7 @@ public sealed class RenderTextureGpuTests {
         Assert.Equal(
             VulkanSampleCountSelection.Select(sampleCount, host.Device.Capabilities.SupportedSampleCounts),
             target.SampleCount);
+        Assert.Null(target.DepthTexture);
         (int centerX, int centerY) = SceneCenter(host);
         AssertColorNear(known, harness.ReadColor((uint)centerX, (uint)centerY), HDR_TOLERANCE);
         AssertColorNear(known, harness.ReadRenderTargetColor(target, 16, 16), HDR_TOLERANCE);
@@ -630,14 +1039,88 @@ public sealed class RenderTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ADeviceRecoveryRecreatesTheDepthViewAndItsResolvedImage() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(32, 32));
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        Shader tintShader = harness.CreateShader(
+            "shaders/render-target-depth-recovery-tint",
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader depthShader = CreateDepthSampleShader(harness, "shaders/render-target-depth-recovery-sample");
+        Mesh targetQuad = harness.CreateQuad(
+            "meshes/render-target-depth-recovery-quad",
+            halfWidth: target.Width / (float)target.Height,
+            halfHeight: 1f);
+        VulkanDrawTestHarness.CameraView targetCamera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        float expectedDepth = ExpectedReverseZDepth(targetCamera);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh sampleQuad) = CreateSamplePass(
+            harness,
+            depthShader,
+            depthTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+        (int centerX, int centerY) = SceneCenter(host);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            samplePass));
+        (float beforeRed, _, _) = harness.ReadColor((uint)centerX, (uint)centerY);
+        AssertDepthNear(expectedDepth, beforeRed, DEPTH_TOLERANCE);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? before));
+        Assert.NotNull(before);
+        Assert.NotEqual(0ul, before.ResolvedDepthView.Handle);
+
+        host.Backend.SimulateDeviceLossForTests();
+        // The next frame runs the recovery and is dropped; the live depth view is recreated from the
+        // retained description behind the same public Texture object.
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            samplePass));
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
+        harness.RestoreAssets();
+
+        Assert.Same(depthTexture, target.DepthTexture);
+        Assert.False(depthTexture.IsDisposed);
+        Assert.Equal(string.Empty, depthTexture.Path);
+        Assert.Equal(TextureFormat.Depth32Float, depthTexture.Format);
+        Assert.Equal(
+            VulkanSampleCountSelection.Select(4, host.Device.Capabilities.SupportedSampleCounts),
+            target.SampleCount);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? recovered));
+        Assert.NotNull(recovered);
+        Assert.True(recovered.HasDepth);
+        Assert.Equal(target.SampleCount, recovered.SampleCount);
+        Assert.NotEqual(0ul, recovered.ResolvedDepthView.Handle);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            3,
+            CreateTargetDrawPass(target, targetQuad, tintShader, Color.White, Color.Black),
+            samplePass));
+        (float afterRed, _, _) = harness.ReadColor((uint)centerX, (uint)centerY);
+        AssertDepthNear(expectedDepth, afterRed, DEPTH_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void BackendShutdownDisposesLiveRenderTextures() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(16, 16));
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
 
         host.Backend.Dispose();
 
         Assert.True(target.IsDisposed);
         Assert.True(target.ColorTexture.IsDisposed);
+        Assert.True(depthTexture.IsDisposed);
         Assert.False(host.Backend.TryGetRenderTarget(target.TargetId, out _));
         target.Dispose();
         Assert.True(target.IsDisposed);
@@ -648,6 +1131,14 @@ public sealed class RenderTextureGpuTests {
             path,
             POSITION_VERTEX_SOURCE,
             SAMPLE_FRAGMENT_SOURCE,
+            textures: ["mainTexture"],
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+
+    private static Shader CreateDepthSampleShader(VulkanDrawTestHarness harness, string path) =>
+        harness.CreateShader(
+            path,
+            POSITION_VERTEX_SOURCE,
+            DEPTH_SAMPLE_FRAGMENT_SOURCE,
             textures: ["mainTexture"],
             defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
 
@@ -672,22 +1163,60 @@ public sealed class RenderTextureGpuTests {
         Mesh quad,
         Shader shader,
         Color tint,
-        Color clearColor) {
+        Color clearColor) =>
+        CreateTargetDrawPass(
+            target,
+            quad,
+            shader,
+            tint,
+            clearColor,
+            Matrix4x4.Identity,
+            ClearMode.ColorAndDepth);
+
+    private static VulkanDrawTestHarness.PassSpec CreateTargetDrawPass(
+        RenderTexture target,
+        Mesh quad,
+        Shader shader,
+        Color tint,
+        Color clearColor,
+        Matrix4x4 world,
+        ClearMode clearMode,
+        int viewportX = 0,
+        int viewportY = 0,
+        int viewportWidth = 0,
+        int viewportHeight = 0) {
         VulkanDrawTestHarness.CameraView camera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
         VulkanDrawTestHarness.DrawSpec draw = new(
             quad,
             shader,
-            [Matrix4x4.Identity],
+            [world],
             Tint: tint);
+        return new VulkanDrawTestHarness.PassSpec(
+            camera,
+            viewportX,
+            viewportY,
+            viewportWidth == 0 ? target.Width : viewportWidth,
+            viewportHeight == 0 ? target.Height : viewportHeight,
+            clearMode,
+            clearColor,
+            [draw],
+            target.TargetId);
+    }
+
+    private static VulkanDrawTestHarness.PassSpec CreateTargetPass(
+        RenderTexture target,
+        ClearMode clearMode,
+        Color clearColor) {
+        VulkanDrawTestHarness.CameraView camera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
         return new VulkanDrawTestHarness.PassSpec(
             camera,
             0,
             0,
             target.Width,
             target.Height,
-            ClearMode.ColorAndDepth,
+            clearMode,
             clearColor,
-            [draw],
+            [],
             target.TargetId);
     }
 
@@ -755,6 +1284,22 @@ public sealed class RenderTextureGpuTests {
     private static (int X, int Y) SceneCenter(BackendTestHost host) => (
         checked((int)host.SceneTarget.Extent.Width) / 2,
         checked((int)host.SceneTarget.Extent.Height) / 2);
+
+    private static float ExpectedReverseZDepth(VulkanDrawTestHarness.CameraView camera) =>
+        ExpectedReverseZDepth(camera, Vector3.Zero);
+
+    private static float ExpectedReverseZDepth(
+        VulkanDrawTestHarness.CameraView camera,
+        Vector3 worldPoint) {
+        Vector4 clip = Vector4.Transform(new Vector4(worldPoint, 1f), camera.ViewProjection);
+        return clip.Z / clip.W;
+    }
+
+    private static void AssertDepthNear(float expected, float actual, float tolerance) {
+        Assert.True(
+            MathF.Abs(expected - actual) <= tolerance,
+            $"Depth {actual} is not within {tolerance} of {expected}.");
+    }
 
     private static void AssertColorNear(Color expected, (float R, float G, float B) actual, float tolerance) {
         Assert.True(

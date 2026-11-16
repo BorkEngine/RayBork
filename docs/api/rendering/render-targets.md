@@ -10,6 +10,7 @@ public sealed class RenderTexture : IDisposable {
     public int Height { get; }
     public int SampleCount { get; }
     public Texture ColorTexture { get; }
+    public Texture? DepthTexture { get; }
     public bool IsHdr { get; }
     public bool IsDisposed { get; }
 
@@ -84,14 +85,17 @@ invalid. The creation queue holds at most 256 pending requests; a full queue fai
 - `SampleCount` is `1`, `2`, `4`, or `8`; the default is `4`. The effective count is the highest
   device-supported count that does not exceed the request, or `1` when none is supported, and a
   fallback logs a warning. `RenderTexture.SampleCount` reports the effective count. The multisampled
-  color attachment is resolved into a single-sample sampled image; `ColorTexture` is that resolved
-  image. A device recovery re-selects the count from the recreated device and updates
-  `RenderTexture.SampleCount`.
-- `Depth` controls an internal depth attachment. This color-path task has no public depth view. A target
-  declared `Depth: false` has no depth attachment at all: depth-tested and depth-writing render states
-  are not rejected, but the depth test and depth write are no-ops for that target, and
-  `ClearMode.Depth` is a no-op. Such a target still records color-only draws, while a draw that must be
-  occluded by 3D depth needs `Depth: true`.
+  color and depth attachments are resolved into single-sample sampled images; `ColorTexture` and
+  `DepthTexture` are those resolved images. A device recovery re-selects the count from the recreated
+  device and updates `RenderTexture.SampleCount`.
+- `Depth` controls the target's depth attachment and its public `DepthTexture` view. With `Depth: true`
+  the target owns a `D32_SFLOAT` depth attachment and a single-sample resolved depth image; a
+  multisampled target resolves the depth attachment with the Vulkan 1.2 depth/stencil resolve path.
+  `DepthTexture` is a `Texture` view over that resolved image. With `Depth: false` there is no depth
+  attachment and `DepthTexture` is `null`: depth-tested and depth-writing render states are not rejected,
+  but the depth test and depth write are no-ops for that target, and `ClearMode.Depth` is a no-op. Such a
+  target still records color-only draws, while a draw that must be occluded by 3D depth needs
+  `Depth: true`.
 - `IsHdr` is `true` for `Rgba16Float`.
 - The target's contents are undefined after creation until a camera renders into them.
 
@@ -103,36 +107,61 @@ viewport. `ScreenToWorldRay`, `WorldToScreen`, and `ScreenToWorldTransform` keep
 camera-viewport behavior. A camera targeting a disposed target throws `ObjectDisposedException`.
 
 **Same-tick sampling and barriers.** Passes run in camera creation order. A later camera in the same
-tick can sample `ColorTexture` with `Shader.SetUniform`, `DrawQuad`, or `DrawMesh`: the renderer
-transitions the target's single-sample resolved color from the color-attachment layout to
-`ShaderReadOnlyOptimal` after the writing pass, and transitions it back if a later pass writes the
-target again. Sampling the target in the same camera pass that writes it is invalid and throws
-`InvalidOperationException` from the draw call, before the frame is published; it is not only a
-validation-layer error. A render target is reused only after the frame that last used it completed, so
-a frame cannot overwrite or sample content an in-flight frame still reads. The app scene target keeps
-its pre-existing cross-frame overwrite behavior; that hazard is unchanged and is a separate follow-up.
+tick can sample `ColorTexture` or `DepthTexture` with `Shader.SetUniform`, `DrawQuad`, or `DrawMesh`: the
+renderer transitions the target's single-sample resolved color and resolved depth from their
+attachment layouts to `ShaderReadOnlyOptimal` after the writing pass, and transitions them back if a
+later pass writes the target again. Sampling either view of the target in the same camera pass that
+writes it is invalid and throws `InvalidOperationException` from the draw call, before the frame is
+published; it is not only a validation-layer error. A render target is reused only after the frame that
+last used it completed, so a frame cannot overwrite or sample content an in-flight frame still reads.
+The app scene target keeps its pre-existing cross-frame overwrite behavior; that hazard is unchanged and
+is a separate follow-up.
 
 Multiple targets work in one frame: each camera selects its target, each target has its own render
 pass and geometry pipeline cache, and cameras on the scene target and on runtime targets can interleave
 in one tick. There is no render graph and no automatic pass dependency analysis in v1; creation order
 is the pass order. Write→sample and sample→write between two different passes are both synchronized by
-the per-target barriers: a later write transitions the resolved color back from
-`ShaderReadOnlyOptimal` to the color-attachment layout, and a later sample sees the content the earlier
+the per-target barriers: a later write transitions the resolved color and depth back from
+`ShaderReadOnlyOptimal` to their attachment layouts, and a later sample sees the content the earlier
 write stored. Creation order decides which content a sample observes. The only rejected ordering is
-sampling the target inside the same camera pass that writes it.
+sampling either view of the target inside the same camera pass that writes it.
 
-**The `ColorTexture` view.** `ColorTexture` is a `Texture` view owned by the `RenderTexture`. It
-reports an empty `Path` because it is not a pack asset, it samples and batches like any texture, and
-the recorded frame retains the target until the renderer released the frame slot. Disposing the view
-directly throws `InvalidOperationException`; dispose the `RenderTexture` instead. Disposing the render
-texture retires the view and releases the target; `Dispose` is idempotent, and a target that is the
-destination or a sample source of a recorded in-flight frame is not destroyed until that frame
-completes. A target destroyed by the renderer at shutdown also reports `IsDisposed = true`, and its
-later `Dispose` is a no-op.
+**The `ColorTexture` and `DepthTexture` views.** `ColorTexture` is a `Texture` view over the target's
+single-sample resolved color image, and `DepthTexture` is a `Texture` view over its single-sample
+resolved depth image when the target has depth. Both are owned by the `RenderTexture`. They report an
+empty `Path` because they are not pack assets, they sample and batch like any texture, and the recorded
+frame retains the target until the renderer released the frame slot. Disposing a view directly throws
+`InvalidOperationException`; dispose the `RenderTexture` instead. Disposing the render texture retires
+both views and releases the target; `Dispose` is idempotent, and a target that is the destination or a
+sample source of a recorded in-flight frame is not destroyed until that frame completes. A target
+destroyed by the renderer at shutdown also reports `IsDisposed = true`, and its later `Dispose` is a
+no-op.
 
-**Not in this task.** The public `DepthTexture` (T3b), `Resize` (T3c), `ReadPixelsAsync`/`ReadColorsAsync`
-(T4), and post-processing/effects (T5) remain later M8 tasks. The render target surface described in
-this section is the color path: creation, camera routing, MSAA color resolve, same-tick sampling, and
+`DepthTexture` reports `Format == TextureFormat.Depth32Float`, `IsSrgb == false`, `MipLevels == 1`, the
+target's `Width`/`Height`, and a nearest-filter clamp sampler. It samples the stored reverse-Z value as
+a float. The view is single-sample even when the target's depth attachment is multisampled: the
+renderer resolves the attachment into the view's image for every camera pass' render area. The depth
+resolve uses Vulkan 1.2 `VkSubpassDescriptionDepthStencilResolve` with
+`VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, which every conformant Vulkan 1.2 device advertises and which leaves
+the stored reverse-Z value unchanged. Device selection rejects a physical device that does not advertise
+sample-zero instead of creating a depth view that can never be sampled or substituting a min/max resolve.
+A single-sample target has no resolve attachment: its depth attachment is the resolved depth image. After
+a writing pass the renderer transitions the resolved depth image to `ShaderReadOnlyOptimal`, and a later
+pass that writes the target transitions it back to `DepthStencilAttachmentOptimal`. After a device
+recovery the same public `Texture` object remains valid; only its GPU image and bindless slot are
+replaced. `DepthTexture` is `null` for a `Depth: false` target.
+
+The app scene target also owns a resolved depth image, but it is internal: there is no public scene-target
+depth view. It is the input a later internal consumer such as T5 SSAO samples. The scene target discards
+its attachments, including the resolved depth image, at the start of every frame, and
+`VulkanReadback.ReadSceneDepthPixel` reads the resolved depth image for both single-sample and
+multisampled scene targets. Resolving scene depth costs bandwidth on every camera pass; T5 SSAO is the
+consumer, and until it lands the only reader is the diagnostic probe. That cost is a known property of
+the depth path, not a hidden regression; T5 can decide whether a pass needs the resolve.
+
+**Remaining M8 work.** `Resize` (T3c), `ReadPixelsAsync`/`ReadColorsAsync` (T4), and
+post-processing/effects (T5) remain later M8 tasks. This section covers the color path and the depth
+view: creation, camera routing, MSAA color and depth resolve, same-tick sampling of both views, and
 lifetime.
 
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera

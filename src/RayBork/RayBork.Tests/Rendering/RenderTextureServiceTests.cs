@@ -29,7 +29,28 @@ public sealed class RenderTextureServiceTests {
         Assert.False(target.IsDisposed);
         Assert.Equal(string.Empty, target.ColorTexture.Path);
         Assert.False(target.ColorTexture.IsProcedural);
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        Assert.Equal(TextureFormat.Depth32Float, depthTexture.Format);
+        Assert.False(depthTexture.IsSrgb);
+        Assert.Equal(TextureFilter.Nearest, depthTexture.Sampler.Filter);
+        Assert.Equal(TextureWrap.Clamp, depthTexture.Sampler.Wrap);
+        Assert.Equal(string.Empty, depthTexture.Path);
         Assert.Equal(1, host.LiveRenderTextureCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task DepthFalseCreatesNoDepthView() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> request = service.CreateAsync(
+            new RenderTextureDescription(8, 8, TextureFormat.Rgba16Float, Depth: false),
+            CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await request;
+
+        Assert.Null(target.DepthTexture);
+        Assert.NotNull(target.ColorTexture);
     }
 
     [Fact]
@@ -84,7 +105,7 @@ public sealed class RenderTextureServiceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TheRenderTextureOwnsTheColorViewAndDisposeIsIdempotent() {
+    public async Task TheRenderTextureOwnsBothViewsAndDisposeIsIdempotent() {
         using RenderTextureService service = new();
         using FakeRendererBackend host = new();
         Task<RenderTexture> request = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
@@ -93,18 +114,27 @@ public sealed class RenderTextureServiceTests {
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(target.ColorTexture.Dispose);
         Assert.Contains("RenderTexture", exception.Message, StringComparison.Ordinal);
+        Texture depthTexture = Assert.IsType<Texture>(target.DepthTexture);
+        InvalidOperationException depthException = Assert.Throws<InvalidOperationException>(depthTexture.Dispose);
+        Assert.Contains("RenderTexture", depthException.Message, StringComparison.Ordinal);
         Assert.False(target.ColorTexture.IsDisposed);
+        Assert.False(depthTexture.IsDisposed);
 
         // A material that bound the view can release its reference after the render texture was
         // disposed; retirement makes the view unusable without trapping the delayed internal release.
         target.ColorTexture.AddOwnerReference();
+        depthTexture.AddOwnerReference();
         target.Dispose();
         target.Dispose();
         Assert.True(target.IsDisposed);
         Assert.True(target.ColorTexture.IsDisposed);
+        Assert.True(depthTexture.IsDisposed);
         target.ColorTexture.ReleaseOwnerReference();
+        depthTexture.ReleaseOwnerReference();
         Assert.Equal(string.Empty, target.ColorTexture.Path);
+        Assert.Equal(string.Empty, depthTexture.Path);
         Assert.Throws<ObjectDisposedException>(() => _ = target.ColorTexture.Width);
+        Assert.Throws<ObjectDisposedException>(() => _ = depthTexture.Width);
     }
 
     [Fact]

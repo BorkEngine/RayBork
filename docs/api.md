@@ -169,8 +169,9 @@ pipeline, layout, built-in default and monospaced fonts, and world-space text dr
 unified camera entry point, `Camera.ScreenToWorldTransform`, the world-space quad, disc, and
 transformable-grid primitives, the ninth primitive mesh, and the Pong sample. M8 ships shader ABI v2
 (one frame block per camera pass), one render pass per camera pass on the scene target, and the color
-path of public render textures: `RenderTexture` creation, `Camera.Target` routing, MSAA color resolve,
-same-tick sampling, and lifetime. The public depth view, `Resize`, readback, post-processing, and the
+and depth paths of public render textures: `RenderTexture` creation, `Camera.Target` routing, MSAA color
+and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, same-tick sampling, and lifetime.
+The scene target's resolved depth image is internal. `Resize`, readback, post-processing, and the
 render-target sample remain later M8 tasks. The remaining
 rows name the milestone that owns the deferred surface; the full code blocks in the section pages stay
 the 1.0 contract.
@@ -201,7 +202,7 @@ the 1.0 contract.
 | Unified `EngineContext.CreateCamera(Transform, CameraProjection, fieldOfView, orthographicHeight, ...)` with `CameraProjection.Perspective`/`CameraProjection.Orthographic` | M7 |
 | `Camera.ScreenToWorldTransform(Vector2, float)` | M7 |
 | `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
-| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `Camera.Target`, and the `CreateCamera` `target` parameter (color path; depth view, resize, and readback are later M8 tasks) | M8 |
+| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color and depth paths; resize, readback, and post-processing are later M8 tasks) | M8 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
 current asset surface after M4; see §6.
@@ -408,7 +409,11 @@ zero for the draw counters. Textures allocate a bindless slot when their GPU upl
 0 is always the built-in white fallback, and a full table fails the upload with
 `AssetLoadException` `RB1010`. The bindless table has exactly 2048 slots matching the shader ABI's
 `RayBorkTextures[2048]` array; a device whose update-after-bind sampled-image limits are below 2048
-is rejected during device selection, and the capacity is never reduced.
+is rejected during device selection, and the capacity is never reduced. A depth-bearing render target
+also consumes a second bindless slot for its resolved depth view. Device selection additionally requires
+the Vulkan 1.2 `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT` depth resolve mode, because every multisampled
+depth-bearing target and the scene target resolve depth with that mode; a device without it is rejected
+instead of falling back to a min/max resolve or an unsampleable depth view.
 
 `samples/PrimitiveGallery` was the M5 AOT gate. It is one project in its own solution,
 `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It has no

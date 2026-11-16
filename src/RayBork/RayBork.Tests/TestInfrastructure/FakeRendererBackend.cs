@@ -348,7 +348,27 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                 MaxAnisotropy = 1f,
             };
             Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
-            RenderTexture renderTexture = new(lifetime, colorTexture);
+            Texture? depthTexture = null;
+            if (description.Depth) {
+                RenderTextureViewResource depthResource = new(default, default) {
+                    BindlessSlot = 2,
+                };
+                RenderTextureViewLifetime depthLifetime = new(lifetime, depthResource);
+                TextureAssetDescriptor depthDescriptor = new() {
+                    Payload = string.Empty,
+                    Width = checked((uint)description.Width),
+                    Height = checked((uint)description.Height),
+                    MipLevels = 1,
+                    Format = TextureFormat.Depth32Float,
+                    IsSrgb = false,
+                    Filter = TextureFilter.Nearest,
+                    Wrap = TextureWrap.Clamp,
+                    MaxAnisotropy = 1f,
+                };
+                depthTexture = new Texture(depthLifetime, depthDescriptor, isProcedural: false, isRenderTargetView: true);
+            }
+
+            RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture);
             lock (_gate) {
                 _renderTargets[targetId] = lifetime;
             }

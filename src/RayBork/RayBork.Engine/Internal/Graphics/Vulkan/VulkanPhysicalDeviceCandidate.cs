@@ -22,6 +22,11 @@ namespace RayBork.Internal;
 /// The M4 descriptor-indexing feature names the device does not advertise, separated by commas, or an
 /// empty string when the bindless subset is supported.
 /// </param>
+/// <param name="SupportedDepthResolveModes">
+/// The depth resolve modes <c>VkPhysicalDeviceDepthStencilResolveProperties</c> advertises. The
+/// renderer requires <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c> to resolve a multisampled depth attachment
+/// without changing the stored reverse-Z value.
+/// </param>
 internal readonly record struct VulkanPhysicalDeviceCandidate(
     int Index,
     string Name,
@@ -31,4 +36,5 @@ internal readonly record struct VulkanPhysicalDeviceCandidate(
     bool SupportsPresentQueue,
     bool HasSwapchainExtension,
     uint BindlessTextureCapacity = VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
-    string MissingBindlessFeatures = "");
+    string MissingBindlessFeatures = "",
+    ResolveModeFlags SupportedDepthResolveModes = ResolveModeFlags.None);

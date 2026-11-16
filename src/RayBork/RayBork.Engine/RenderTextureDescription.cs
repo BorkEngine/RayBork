@@ -12,10 +12,14 @@ namespace RayBork;
 /// <see cref="TextureFormat.Depth32Float"/> are not valid color formats.
 /// </para>
 /// <para>
-/// <see cref="Depth"/> creates an internal depth attachment. M8 T3a ships the color path only, so the
-/// depth attachment has no public view; the public <c>DepthTexture</c> arrives with T3b. A camera whose
-/// target declares <see cref="Depth"/> <see langword="false"/> still records color-only draws; a
-/// depth-tested 3D draw needs the declared depth attachment.
+/// <see cref="Depth"/> creates a depth attachment and, when <see langword="true"/>, gives the target a
+/// public <see cref="RenderTexture.DepthTexture"/> view over its single-sample resolved depth image. The
+/// depth format is always <see cref="TextureFormat.Depth32Float"/>; a multisampled target resolves the
+/// depth attachment with the Vulkan 1.2 depth/stencil resolve path. A target with
+/// <see cref="Depth"/> <see langword="false"/> has no depth attachment and
+/// <see cref="RenderTexture.DepthTexture"/> is <see langword="null"/>; a camera whose target declares no
+/// depth attachment still records color-only draws, and depth-tested and depth-writing draws are no-ops
+/// for that target.
 /// </para>
 /// <para>
 /// <see cref="SampleCount"/> is the requested MSAA count and must be <c>1</c>, <c>2</c>, <c>4</c>, or
@@ -30,7 +34,10 @@ namespace RayBork;
 /// The color format: <see cref="TextureFormat.Rgba16Float"/> (the default),
 /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.Rgba8Srgb"/>.
 /// </param>
-/// <param name="Depth">Whether the target owns an internal depth attachment.</param>
+/// <param name="Depth">
+/// Whether the target owns a depth attachment and the public <see cref="RenderTexture.DepthTexture"/> view
+/// over its single-sample resolved depth image.
+/// </param>
 /// <param name="SampleCount">The requested MSAA sample count: <c>1</c>, <c>2</c>, <c>4</c>, or <c>8</c>.</param>
 public readonly record struct RenderTextureDescription(
     int Width,

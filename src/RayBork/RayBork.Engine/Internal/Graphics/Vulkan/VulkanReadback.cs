@@ -69,16 +69,20 @@ internal static unsafe class VulkanReadback {
     }
 
     /// <summary>
-    /// Reads one reverse-Z scene depth pixel.
+    /// Reads one reverse-Z scene depth pixel from the resolved depth image.
     /// </summary>
+    /// <remarks>
+    /// A multisampled scene target resolves its depth attachment into the single-sample depth image the
+    /// probe reads; a single-sample target uses its depth attachment directly. The probe transitions
+    /// the image out of the layout the renderer recorded and back, so the caller runs it after the frame
+    /// completed.
+    /// </remarks>
     /// <param name="device">The device that owns the scene target.</param>
-    /// <param name="target">The single-sample scene target to read.</param>
+    /// <param name="target">The scene target to read.</param>
     /// <param name="x">The pixel column, in pixels from the left edge.</param>
     /// <param name="y">The pixel row, in pixels from the top edge.</param>
     /// <param name="depth">The stored depth value.</param>
-    /// <exception cref="InvalidOperationException">
-    /// The target is multisampled and has no single-sample depth attachment.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">The target has no depth attachment.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The pixel lies outside the target extent.
     /// </exception>
@@ -98,17 +102,11 @@ internal static unsafe class VulkanReadback {
                 "The render target has no depth attachment to read.");
         }
 
-        if (target.SampleCount != 1) {
-            throw new InvalidOperationException(
-                $"The scene target is multisampled with {target.SampleCount} samples and has no single-sample depth attachment to read.");
-        }
-
         ValidatePixel(target, x, y);
         byte[] pixel = ReadPixel(
             device,
-            target.DepthImage,
-            ImageAspectFlags.DepthBit,
-            ImageLayout.DepthStencilAttachmentOptimal,
+            target.ResolvedDepthImage,
+            CreateDepthBarrier(target.ResolvedDepthLayout, target.IsMultisampled),
             DEPTH_PIXEL_BYTES,
             x,
             y);
@@ -481,6 +479,36 @@ internal static unsafe class VulkanReadback {
             ? AccessFlags.DepthStencilAttachmentWriteBit
             : AccessFlags.ColorAttachmentWriteBit | AccessFlags.ShaderReadBit;
         return new PixelCopyBarrier(aspect, originalLayout, stage, access);
+    }
+
+    private static PixelCopyBarrier CreateDepthBarrier(ImageLayout originalLayout, bool multisampledResolve) {
+        PipelineStageFlags stage;
+        AccessFlags access;
+        switch (originalLayout) {
+            case ImageLayout.ShaderReadOnlyOptimal:
+                stage = PipelineStageFlags.FragmentShaderBit;
+                access = AccessFlags.ShaderReadBit;
+                break;
+            case ImageLayout.DepthStencilAttachmentOptimal:
+                // Vulkan performs a multisampled depth resolve in the color-attachment output stage with
+                // color-attachment write access, even though the image is a depth image. A single-sample
+                // depth image has no resolve and is written by the depth test in late fragment tests.
+                if (multisampledResolve) {
+                    stage = PipelineStageFlags.ColorAttachmentOutputBit;
+                    access = AccessFlags.ColorAttachmentWriteBit;
+                } else {
+                    stage = PipelineStageFlags.LateFragmentTestsBit;
+                    access = AccessFlags.DepthStencilAttachmentWriteBit;
+                }
+
+                break;
+            default:
+                stage = PipelineStageFlags.AllCommandsBit;
+                access = AccessFlags.None;
+                break;
+        }
+
+        return new PixelCopyBarrier(ImageAspectFlags.DepthBit, originalLayout, stage, access);
     }
 
     private static uint PresentedColorPixelBytes(Format format, out bool halfFloat) {

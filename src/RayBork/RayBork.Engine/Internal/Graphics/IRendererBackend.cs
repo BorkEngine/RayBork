@@ -77,9 +77,10 @@ internal interface IRendererBackend : IDisposable {
     /// </summary>
     /// <remarks>
     /// The implementation creates each queued target's images on the current device, reserves its
-    /// bindless color view slot, and completes the request with a public <see cref="RenderTexture"/>. A
-    /// released target's images and slot are destroyed only after the frame that last used it completed.
-    /// A failed creation completes its request with the failure and never stops the render loop.
+    /// bindless color view slot and, when the target has depth, its bindless depth view slot, and
+    /// completes the request with a public <see cref="RenderTexture"/>. A released target's images and
+    /// slots are destroyed only after the frame that last used it completed. A failed creation completes
+    /// its request with the failure and never stops the render loop.
     /// </remarks>
     /// <param name="service">The app-lifetime request queue.</param>
     /// <exception cref="GraphicsException">A target's GPU objects could not be created.</exception>

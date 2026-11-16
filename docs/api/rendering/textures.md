@@ -64,8 +64,8 @@ public enum TextureFormat {
 
 > **M3 subset.** M3 loads packed textures and adds procedural `TextureBuilder` creation for the
 > uncompressed formats. `Rgba16Float`/`Depth32Float` remain render-target formats, and BC formats
-> remain bake-produced texture payloads. M8 adds runtime render-target color views over a
-> `RenderTexture`'s resolved image; they are textures but not assets.
+> remain bake-produced texture payloads. M8 adds runtime render-target color and depth views over a
+> `RenderTexture`'s resolved images; they are textures but not assets.
 
 - Textures are immutable GPU resources. A loaded texture's format, mip count, sRGB flag, and
   sampler come from the bake and cannot be changed at runtime. A procedural texture chooses its
@@ -111,9 +111,18 @@ public enum TextureFormat {
   `RenderTexture` owns it: disposing the view directly throws `InvalidOperationException`; dispose the
   render texture instead, which retires the view and releases the target after the frames that used it
   complete. A render-target view is never mounted, cached, or returned by the asset catalog.
+- A `RenderTexture.DepthTexture` is the same kind of runtime view over the target's single-sample
+  resolved depth image. It reports an empty `Path`, `IsProcedural = false`, `MipLevels = 1`,
+  `Format = TextureFormat.Depth32Float`, `IsSrgb = false`, and a nearest-filter clamp sampler. It
+  samples the stored reverse-Z depth as a float and is retained by a recorded frame like the color view.
+  The `RenderTexture` owns it; a direct `Dispose` throws `InvalidOperationException`, and disposing the
+  render texture retires it. It is `null` when the target declares `Depth: false`. A scene target's
+  resolved depth image is internal and has no public `Texture` view.
 - Bindless slots are allocated when a texture's GPU upload completes, not lazily at the first draw.
   The renderer creates a fixed table of 2048 slots, matching the shader ABI's
-  `RayBorkTextures[2048]` descriptor array. A device whose
+  `RayBorkTextures[2048]` descriptor array. A depth-bearing `RenderTexture` consumes one slot for
+  `ColorTexture` and a second slot for `DepthTexture`; a depthless target consumes only the color slot.
+  A device whose
   `maxPerStageDescriptorUpdateAfterBindSampledImages` or
   `maxDescriptorSetUpdateAfterBindSampledImages` limit is below 2048 is rejected during device
   selection with a clear diagnostic; the capacity is never reduced. Slot 0 is always reserved for

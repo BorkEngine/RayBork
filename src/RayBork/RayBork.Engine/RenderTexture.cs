@@ -3,8 +3,8 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// One runtime render target: the multisampled color attachment, its single-sample resolved color image,
-/// and the sampled <see cref="ColorTexture"/> view.
+/// One runtime render target: the multisampled color and depth attachments, their single-sample resolved
+/// images, and the sampled <see cref="ColorTexture"/> and <see cref="DepthTexture"/> views.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -12,40 +12,51 @@ namespace RayBork;
 /// after the render thread allocated the images. A camera created with
 /// <see cref="EngineContext.CreateCamera"/> and the <c>target</c> parameter writes the target instead of
 /// the app's linear HDR scene target. A later camera pass in the same tick can sample
-/// <see cref="ColorTexture"/>; the renderer inserts the image barriers, and a camera that samples the
-/// target it writes is rejected. The target's contents are undefined until a camera writes them.
+/// <see cref="ColorTexture"/> or <see cref="DepthTexture"/>; the renderer inserts the image barriers, and
+/// a camera that samples the target it writes is rejected. The target's contents are undefined until a
+/// camera writes them.
 /// </para>
 /// <para>
-/// <see cref="ColorTexture"/> is a <see cref="Texture"/> view owned by this object. It reports an empty
-/// <see cref="Texture.Path"/>, it samples and batches like any texture, and disposing it directly throws
-/// <see cref="InvalidOperationException"/>; dispose the render texture instead. Disposing the render
-/// texture releases the view and queues the target's GPU images for destruction after every frame that
-/// used them completes. <see cref="Dispose"/> is idempotent.
+/// <see cref="ColorTexture"/> is a <see cref="Texture"/> view over the resolved color image, and
+/// <see cref="DepthTexture"/> is a view over the resolved depth image when
+/// <see cref="RenderTextureDescription.Depth"/> is <see langword="true"/>. Both report an empty
+/// <see cref="Texture.Path"/>, sample and batch like any texture, and are owned by this object. Disposing
+/// a view directly throws <see cref="InvalidOperationException"/>; dispose the render texture instead.
+/// Disposing the render texture releases the views and queues the target's GPU images for destruction
+/// after every frame that used them completes. <see cref="Dispose"/> is idempotent.
 /// </para>
 /// <para>
-/// The depth attachment is internal in this task: <see cref="RenderTextureDescription.Depth"/> controls
-/// whether one exists, but there is no public depth view yet. This task ships the color path only;
-/// resizing, depth sampling, and readback are later M8 tasks.
+/// The views keep their identity across a device recovery: the renderer replaces the GPU image and
+/// bindless slot behind the same public <see cref="Texture"/> objects. Resizing, readback, and
+/// post-processing are later M8 tasks.
 /// </para>
 /// </remarks>
 public sealed class RenderTexture : IDisposable {
     private readonly RenderTextureTargetLifetime _lifetime;
 
     /// <summary>
-    /// Initializes a render texture after the render thread created its target and color view. The
-    /// engine creates one per successful <see cref="EngineContext.CreateRenderTextureAsync"/> request.
+    /// Initializes a render texture after the render thread created its target and color and depth views.
+    /// The engine creates one per successful <see cref="EngineContext.CreateRenderTextureAsync"/> request.
     /// </summary>
     /// <param name="lifetime">The target lifetime, holding the single owner reference.</param>
-    /// <param name="colorTexture">The sampled color view over the resolved image.</param>
-    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <param name="colorTexture">The sampled color view over the resolved color image.</param>
+    /// <param name="depthTexture">
+    /// The sampled depth view over the resolved depth image, or <see langword="null"/> when the target has
+    /// no depth attachment.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// <paramref name="lifetime"/> or <paramref name="colorTexture"/> is <c>null</c>.
+    /// </exception>
     internal RenderTexture(
         RenderTextureTargetLifetime lifetime,
-        Texture colorTexture) {
+        Texture colorTexture,
+        Texture? depthTexture) {
         ArgumentNullException.ThrowIfNull(lifetime);
         ArgumentNullException.ThrowIfNull(colorTexture);
 
         _lifetime = lifetime;
         ColorTexture = colorTexture;
+        DepthTexture = depthTexture;
     }
 
     /// <summary>Gets the target width in pixels.</summary>
@@ -90,6 +101,28 @@ public sealed class RenderTexture : IDisposable {
     public Texture ColorTexture { get; }
 
     /// <summary>
+    /// Gets the single-sample resolved depth texture, or <see langword="null"/> when the target was
+    /// created with <see cref="RenderTextureDescription.Depth"/> <see langword="false"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The view reports <see cref="TextureFormat.Depth32Float"/>, <see cref="Texture.IsSrgb"/>
+    /// <see langword="false"/>, and a nearest-filter clamp sampler. The renderer resolves a multisampled
+    /// depth attachment into this image and transitions it to a shader-read layout after a writing pass,
+    /// so a later camera can sample it in the same tick. A camera that samples the depth view of the
+    /// target it writes is rejected.
+    /// </para>
+    /// <para>
+    /// The render texture owns the view: a direct <see cref="Texture.Dispose"/> throws
+    /// <see cref="InvalidOperationException"/>; dispose the render texture instead. The property returns
+    /// the same view object after a device recovery; only its GPU image is replaced. After disposal the
+    /// view stays readable through <see cref="Texture.IsDisposed"/> and <see cref="Texture.Path"/>; every
+    /// other view member throws <see cref="ObjectDisposedException"/>.
+    /// </para>
+    /// </remarks>
+    public Texture? DepthTexture { get; }
+
+    /// <summary>
     /// Gets whether the target's color format stores linear HDR values. It is <see langword="true"/> for
     /// <see cref="TextureFormat.Rgba16Float"/>.
     /// </summary>
@@ -114,7 +147,7 @@ public sealed class RenderTexture : IDisposable {
     internal RenderTextureTargetLifetime Lifetime => _lifetime;
 
     /// <summary>
-    /// Releases the color view and queues the target's GPU images for destruction. Idempotent.
+    /// Releases the color and depth views and queues the target's GPU images for destruction. Idempotent.
     /// </summary>
     /// <remarks>
     /// A target that is the destination or a sample source of a recorded in-flight frame stays alive
@@ -126,6 +159,7 @@ public sealed class RenderTexture : IDisposable {
         }
 
         ColorTexture.RetireRenderTargetView();
+        DepthTexture?.RetireRenderTargetView();
         RenderTextureService.ReleaseTarget(this);
     }
 

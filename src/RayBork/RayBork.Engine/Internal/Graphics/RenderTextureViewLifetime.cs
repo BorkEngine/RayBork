@@ -1,8 +1,8 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The lifetime of one render target's sampled color view: the public <see cref="Texture"/> wrapper's
-/// owner and retention state.
+/// The lifetime of one render target view: the public <see cref="Texture"/> wrapper's owner and
+/// retention state for the resolved color or depth image.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -95,7 +95,7 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
             if (_ownerCount <= 0) {
                 throw new ObjectDisposedException(
                     nameof(RenderTextureViewLifetime),
-                    "The render target color view owner count is already zero.");
+                    "The render target view owner count is already zero.");
             }
 
             // A material that still holds this view must be able to release its reference after the
