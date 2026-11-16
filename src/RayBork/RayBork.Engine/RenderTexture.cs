@@ -232,10 +232,10 @@ public sealed class RenderTexture : IDisposable {
     /// </para>
     /// <para>
     /// The call is legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/>. It stalls the render
-    /// thread while it waits for the target's last-use fence and copies the image, so it is intended for
-    /// screenshots and tests, not per-frame work. <see cref="IGame.Setup"/> can <c>await</c> it;
-    /// <see cref="IGame.Tick"/> is <c>void</c>, so a tick caller blocks on the returned task with
-    /// <c>GetAwaiter().GetResult()</c> and stalls that tick until the readback completes.
+    /// thread while it waits for the target's last-use fence and copies the image when content exists, so
+    /// it is intended for screenshots and tests, not per-frame work. <see cref="IGame.Setup"/> can
+    /// <c>await</c> it; <see cref="IGame.Tick"/> is <c>void</c>, so a tick caller blocks on the returned
+    /// task with <c>GetAwaiter().GetResult()</c> and stalls that tick until the readback completes.
     /// </para>
     /// </remarks>
     public Task<Color[,]> ReadColorsAsync(CancellationToken cancellationToken = default) {

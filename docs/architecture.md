@@ -593,25 +593,24 @@ wait for the render loop to finish with it   wait for newest ready
   last-use frame fence with the same bounded per-target wait the resize path uses, never
   `vkDeviceWaitIdle`; the pending frame that is not submitted yet is not part of that content, so a
   readback observes the last completed frame and does not race the recording of the next one. When a
-  completed frame has written the target, the render
-  thread then uses a dedicated transient command pool, command buffer, fence, and host-visible staging
-  buffer: it transitions the target's resolved color image from the tracker's current layout to
-  `TRANSFER_SRC_OPTIMAL`, copies the full tightly packed image in top-left row order, and transitions it
-  back to the same layout in one submission. The tracker state, bindless slots, descriptors, sampler,
-  views, and lifetime are unchanged. `VulkanReadback.ReadRenderTargetColorImage` performs the copy;
-  `RenderTextureReadbackConverter` decodes `Rgba16Float` half floats, `Rgba8Unorm` bytes, and
-  `Rgba8Srgb` sRGB bytes to raw scene-linear `Color[y, x]`, and `ReadPixelsAsync` then reuses
-  `AgxToneMap.Present` with the SDR `ManualSrgb` encoding and `WindowHdrState.Sdr` to apply the tone
-  snapshot of the last frame that wrote the target and the startup `TonemappingMode`. The render-target
-  entry stores that snapshot and a written flag when a camera targets it in the frame's write set, and
-  the startup mode at creation, so the render
-  thread never reads the live `EngineContext.Tonemapping`. A never-written target reports
-  `TonemappingSnapshot.Default` and the startup mode and returns opaque black without copying or
-  transitioning the image, because it has no resolved content even when a sampled-only frame moved it
-  out of the undefined layout; the written flag is cleared on resize and device recovery, and a later
-  frame still writes the target normally. Cancellation before the
-  request runs completes it as canceled; cancellation during the copy is best effort, the copy still
-  restores the layout, and only the result is discarded.
+  completed frame has written the target, the render thread then uses a dedicated transient command pool,
+  command buffer, fence, and host-visible staging buffer: it transitions the target's resolved color
+  image from the tracker's current layout to `TRANSFER_SRC_OPTIMAL`, copies the full tightly packed image
+  in top-left row order, and transitions it back to the same layout in one submission. The tracker state,
+  bindless slots, descriptors, sampler, views, and lifetime are unchanged.
+  `VulkanReadback.ReadRenderTargetColorImage` performs the copy; `RenderTextureReadbackConverter` decodes
+  `Rgba16Float` half floats, `Rgba8Unorm` bytes, and `Rgba8Srgb` sRGB bytes to raw scene-linear
+  `Color[y, x]`, and `ReadPixelsAsync` then reuses `AgxToneMap.Present` with the SDR `ManualSrgb`
+  encoding and `WindowHdrState.Sdr` to apply the tone snapshot of the last frame that wrote the target
+  and the startup `TonemappingMode`. The render-target entry stores that snapshot and a written flag when
+  one of its passes writes color (a color clear or at least one surviving draw batch), and the startup
+  mode at creation, so the render thread never reads the live `EngineContext.Tonemapping`. A
+  never-written target reports `TonemappingSnapshot.Default` and the startup mode and returns opaque black
+  without copying or transitioning the image, because it has no resolved content even when a sampled-only
+  frame moved it out of the undefined layout; the written flag is cleared on resize and device recovery,
+  and a later frame still writes the target normally. Cancellation before the request runs completes it as
+  canceled; cancellation during the copy is best effort, the copy still restores the layout, and only the
+  result is discarded.
 - A multisampled depth-bearing target resolves its depth attachment through Vulkan 1.2
   `VkSubpassDescriptionDepthStencilResolve` in a `vkCreateRenderPass2` render pass. Device selection
   requires `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, so the sampled depth value is the stored reverse-Z value
@@ -1637,7 +1636,9 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   at 1x and 4x, plus the HDR format at 8x where supported, the sRGB decode, the `Rgba8Unorm` raw and
   display paths, the frame's tone snapshot and the startup `TonemappingMode.None`, readback before the
   first write (opaque-black default and the target remains usable), a target only sampled before any
-  write (still the opaque-black default and the sample layout is untouched), a readback while a recorded
+  write (still the opaque-black default and the sample layout is untouched), a target pass with no color
+  clear and no surviving draws (no content and no tone claimed), a later no-write target pass keeping the
+  earlier frame's tone snapshot, a readback while a recorded
   frame waits unsubmitted (last completed content), readback of a target only sampled in a later frame,
   and readback after resize and a simulated device recovery. `RenderTextureReadbackConverterTests` pins
   the half-float, `Rgba8Unorm`, and sRGB decodes, the top-left `[y, x]` layout, independently computed

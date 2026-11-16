@@ -1978,6 +1978,93 @@ public sealed class RenderTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadPixelsKeepsTheLastColorWritingTonesWhenALaterPassWritesNoColor() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(2, 2));
+        Color known = new(0.5f, 1f, 1f, 1f);
+        TonemappingSnapshot writtenTone = new(1.5f, 4f, 1.5f);
+        TonemappingSnapshot noWriteTone = new(-1f, 2f, 2f);
+
+        RenderFramePacket written = harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, known));
+        written.Tonemapping = writtenTone;
+        harness.Submit(written);
+        Assert.True(host.Backend.HasRenderTargetColorContentForTests(target.TargetId));
+
+        // A target pass with no color clear and no surviving draw batches does not write color. It must
+        // not replace the written flag or the tone snapshot of the frame that produced the content.
+        VulkanDrawTestHarness.CameraView camera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        VulkanDrawTestHarness.PassSpec noWritePass = new(
+            camera,
+            0,
+            0,
+            target.Width,
+            target.Height,
+            ClearMode.None,
+            Color.Black,
+            [],
+            target.TargetId);
+        RenderFramePacket noWrite = harness.CreateFrameWithPasses(2, noWritePass);
+        noWrite.Tonemapping = noWriteTone;
+        harness.Submit(noWrite);
+
+        Color[,] colors = await host.ReadColorsAsync(target);
+        byte[] pixels = await host.ReadPixelsAsync(target);
+        AssertColorNear(known, colors[0, 0], HDR_TOLERANCE);
+        AssertPixelsMatchReference(pixels, colors, writtenTone, TonemappingMode.AgX);
+        byte[] noWriteReference = RenderTextureReadbackConverter.EncodePixels(
+            colors,
+            noWriteTone,
+            TonemappingMode.AgX);
+        Assert.NotEqual(noWriteReference[0], pixels[0]);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task TargetPassWithoutColorWriteDoesNotClaimReadbackContent() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(2, 2));
+        VulkanDrawTestHarness.CameraView camera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        VulkanDrawTestHarness.PassSpec noWritePass = new(
+            camera,
+            0,
+            0,
+            target.Width,
+            target.Height,
+            ClearMode.None,
+            Color.Black,
+            [],
+            target.TargetId);
+        RenderFramePacket packet = harness.CreateFrameWithPasses(1, noWritePass);
+        packet.Tonemapping = new TonemappingSnapshot(1f, 4f, 1.5f);
+        harness.Submit(packet);
+
+        Assert.False(host.Backend.HasRenderTargetColorContentForTests(target.TargetId));
+        int copiesBefore = host.Backend.ReadbackCopyCountForTests;
+        Color[,] colors = await host.ReadColorsAsync(target);
+        byte[] pixels = await host.ReadPixelsAsync(target);
+        Assert.Equal(copiesBefore, host.Backend.ReadbackCopyCountForTests);
+        Assert.Equal(2, colors.GetLength(0));
+        Assert.Equal(2, colors.GetLength(1));
+        AssertColorNear(Color.Black, colors[0, 0], HDR_TOLERANCE);
+        for (int index = 0; index < pixels.Length; index += 4) {
+            Assert.Equal(byte.MinValue, pixels[index]);
+            Assert.Equal(byte.MinValue, pixels[index + 1]);
+            Assert.Equal(byte.MinValue, pixels[index + 2]);
+            Assert.Equal(byte.MaxValue, pixels[index + 3]);
+        }
+
+        Color known = new(0.3f, 0.6f, 0.9f, 1f);
+        harness.Submit(harness.CreateFrameWithPasses(2, CreateTargetClearPass(target, known)));
+        Assert.True(host.Backend.HasRenderTargetColorContentForTests(target.TargetId));
+        AssertColorNear(known, (await host.ReadColorsAsync(target))[0, 0], HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public async Task ReadPixelsUsesTheStartupNoneMode() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(
             hdr: WindowHdrState.Sdr,
@@ -2053,9 +2140,12 @@ public sealed class RenderTextureGpuTests {
         harness.Submit(harness.CreateFrameWithPasses(1, samplePass));
         Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? sampled));
         Assert.Equal(Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal, sampled!.ResolvedColorLayout);
+        Assert.False(host.Backend.HasRenderTargetColorContentForTests(target.TargetId));
 
+        int copiesBefore = host.Backend.ReadbackCopyCountForTests;
         Color[,] colors = await host.ReadColorsAsync(target);
         byte[] pixels = await host.ReadPixelsAsync(target);
+        Assert.Equal(copiesBefore, host.Backend.ReadbackCopyCountForTests);
         Assert.Equal(4, colors.GetLength(0));
         Assert.Equal(4, colors.GetLength(1));
         AssertColorNear(Color.Black, colors[0, 0], HDR_TOLERANCE);
@@ -2095,6 +2185,7 @@ public sealed class RenderTextureGpuTests {
             // must still complete the copy and restore the layout, then discard the canceled result.
             Assert.True(cancellationRequested.Wait(TimeSpan.FromSeconds(10)));
         };
+        int copiesBefore = host.Backend.ReadbackCopyCountForTests;
 
         Exception? failure = null;
         Thread renderThread = new(() => {
@@ -2126,6 +2217,7 @@ public sealed class RenderTextureGpuTests {
 #pragma warning restore xUnit1051
             Assert.Null(failure);
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+            Assert.Equal(copiesBefore + 1, host.Backend.ReadbackCopyCountForTests);
         } finally {
             host.Backend.BeforeReadbackCopyForTests = null;
             if (!renderThread.Join(TimeSpan.FromSeconds(10))) {

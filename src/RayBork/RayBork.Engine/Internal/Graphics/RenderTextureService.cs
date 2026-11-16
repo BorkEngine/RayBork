@@ -23,9 +23,10 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// <see cref="ReadPixelsAsync"/> and <see cref="ReadColorsAsync"/> queue one color readback and return
-/// a task that the render thread completes after it copied the target's resolved color image. The
-/// render thread waits for the target's last-use fence, so the readback observes the last completed
-/// frame that wrote or sampled the target instead of racing it. Cancellation is checked before the
+/// a task that the render thread completes with the copied and converted resolved color image when a
+/// completed frame wrote content, or with the defined opaque-black default when it did not. The render
+/// thread waits for the target's last-use fence, so the readback observes the last completed frame that
+/// wrote or sampled the target instead of racing it. Cancellation is checked before the
 /// request is queued and again when the render thread services it; a cancellation that arrives while
 /// the copy is executing is best effort and discards the result without leaving the target in a
 /// different layout. Readback is a screenshot/diagnostic path that stalls the render thread, not a
@@ -201,7 +202,8 @@ internal sealed class RenderTextureService : IDisposable {
 
     /// <summary>
     /// Queues one display-referred RGBA8 readback of a target's resolved color image. The render thread
-    /// waits for the target's last-use fence, copies the full image, and converts it on the CPU.
+    /// waits for the target's last-use fence, copies and converts the full image when a completed frame
+    /// wrote content, and otherwise returns the defined opaque-black default without copying.
     /// </summary>
     /// <param name="lifetime">The target lifetime to read.</param>
     /// <param name="cancellationToken">The caller's cancellation token.</param>
@@ -216,7 +218,9 @@ internal sealed class RenderTextureService : IDisposable {
 
     /// <summary>
     /// Queues one scene-linear color readback of a target's resolved color image. The render thread waits
-    /// for the target's last-use fence and copies the full image; the CPU decode preserves HDR values.
+    /// for the target's last-use fence, copies the full image when a completed frame wrote content, and
+    /// otherwise returns the defined opaque-black default without copying; the CPU decode preserves HDR
+    /// values.
     /// </summary>
     /// <param name="lifetime">The target lifetime to read.</param>
     /// <param name="cancellationToken">The caller's cancellation token.</param>
@@ -350,8 +354,8 @@ internal sealed class RenderTextureService : IDisposable {
     }
 
     /// <summary>
-    /// Removes every queued readback request. The renderer completes each one after it copied and
-    /// converted the target, or failed it. Render-thread only.
+    /// Removes every queued readback request. The renderer completes each one after it read and converted
+    /// content, returned the defined default, or failed it. Render-thread only.
     /// </summary>
     /// <returns>The queued requests, in request order.</returns>
     internal ReadbackRequest[] DrainReadbacks() {
@@ -510,8 +514,9 @@ internal sealed class RenderTextureService : IDisposable {
     /// </summary>
     /// <remarks>
     /// Cancellation before the render thread starts completes the task as canceled and wakes the render
-    /// loop, which skips the request. Cancellation after the render thread started is best effort: the
-    /// copy and the layout restore still complete, and only the result is discarded.
+    /// loop, which skips the request. Cancellation after the render thread started is best effort: a
+    /// copy that already began and its layout restore still complete, and only the result is discarded;
+    /// the never-written default completes without a copy.
     /// </remarks>
     internal abstract class ReadbackRequest {
         private readonly RenderTextureService _owner;
