@@ -608,7 +608,8 @@ orthographic camera per tick, a `1280x720` design playfield fitted into the rend
 draw anchored with the screen transform. Castle uses the same screen transform for its status line
 and toggles its one camera between perspective and orthographic. The HUD is same-pass, screen-aligned
 alpha text; it is not a separate overlay pass, and geometry closer than its plane can occlude it. A
-multi-camera overlay pass and per-pass frame data are M8.
+multi-camera overlay pass is pending M8 render-pass work; shader ABI v2 already provides per-pass
+frame data.
 
 **HDR selection.** The cached `WindowHdrState` drives the swapchain choice. When the window has HDR
 enabled, the renderer selects `R16G16B16A16_SFLOAT` with
@@ -1183,7 +1184,7 @@ transform scale or empty text records nothing. Text is world-space geometry. M7 
 screen-space pattern: `ScreenToWorldTransform(point, distance)` returns a camera-rotation transform
 with a world-units-per-render-pixel scale, and passing it to `DrawText` anchors a pixel-sized block
 to a screen pixel. There is still no screen-space draw API, no `DrawText(Vector2)` overload, and no
-separate overlay pass; a multi-camera overlay pass with per-pass frame data is M8.
+separate overlay pass; a multi-camera overlay pass is pending M8 render-pass work.
 
 
 ### GPU upload bridge and frame retention

@@ -167,5 +167,5 @@ camera.DrawText(font, "HUD", hud, 18f, Color.White);
 This is same-pass geometry, not a separate overlay pass. The text render state is alpha blending,
 no culling, `greater_equal`, and no depth write, so the glyphs do not disturb 3D depth, but geometry
 closer than the overlay plane can still occlude them. Castle and PrimitiveGallery use this pattern
-for their status lines, and Pong uses it for its scores, status, and overlays. A dedicated
-multi-camera overlay pass with per-pass frame data is M8.
+for their status lines, and Pong uses it for its scores, status, and overlays. Shader ABI v2 already
+provides per-pass frame data; a dedicated multi-camera overlay pass is pending M8 render-pass work.

@@ -45,7 +45,8 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <summary>The byte size of the push-constant pass index: <c>4</c>.</summary>
     internal const uint PASS_INDEX_PUSH_CONSTANT_SIZE = 4;
 
-    private const ShaderStageFlags PUSH_CONSTANT_STAGES =
+    /// <summary>The stages that can read the pass-index push constant: vertex and fragment.</summary>
+    internal const ShaderStageFlags PUSH_CONSTANT_STAGES =
         ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit;
 
     private readonly Vk _vulkan;

@@ -1335,7 +1335,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         vulkan.CmdPushConstants(
             commandBuffer,
             _descriptorState!.PipelineLayout,
-            ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit,
+            VulkanDescriptorState.PUSH_CONSTANT_STAGES,
             VulkanDescriptorState.PASS_INDEX_PUSH_CONSTANT_OFFSET,
             VulkanDescriptorState.PASS_INDEX_PUSH_CONSTANT_SIZE,
             &index);

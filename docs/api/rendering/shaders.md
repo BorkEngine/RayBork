@@ -256,9 +256,9 @@ frame; the push constant is command-buffer state, so every pass sets it again.
 **Shader ABI version and rebaking**
 
 The bake writes the shader ABI version into every shader descriptor (`AbiVersion = 2`). The runtime
-accepts only version 2: loading a descriptor with a missing version or an older one fails with
-`AssetLoadException` (`RB1010`) that names the shader path and instructs the user to rebake the pack
-with the current bake tool. Rebuild the app's asset pack after updating the engine; there is no
+accepts only version 2: any other value, including a missing version (`0`) or a newer version, fails
+with `AssetLoadException` (`RB1008`) that names the shader path and instructs the user to rebake the
+pack with the current bake tool. Rebuild the app's asset pack after updating the engine; there is no
 runtime prologue compatibility path.
 
 **Present pass push constants**
@@ -382,7 +382,8 @@ and color, and the engine records only the transform, the tint, and the UV recta
 vertex stage multiplies the vertex color by `rbInstance.Color` and its fragment stage writes that
 color. `EngineDefaults` does not expose it; the engine loads it as an ordinary built-in shader entry.
 
-The prologue defines the frame block, its stage-specific accessor, and the instance accessor:
+The prologue defines the frame block, the `rbFrame` accessor, and the stage-specific `rbInstance`
+accessor:
 
 - `rbFrame` expands to `rbFrameBlock.frames[rbPushConstants.passIndex]`; `passIndex` is the push
   constant that selects the current camera pass's 256-byte block.

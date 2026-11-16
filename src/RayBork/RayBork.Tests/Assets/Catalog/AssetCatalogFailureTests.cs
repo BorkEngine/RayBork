@@ -141,8 +141,9 @@ public sealed class AssetCatalogFailureTests {
     [Theory]
     [InlineData(0)]
     [InlineData(1)]
+    [InlineData(3)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AShaderBakedWithAnOlderAbiVersionFailsAsAssetLoadWithARebakeMessage(int abiVersion) {
+    public async Task AShaderBakedWithADifferentAbiVersionFailsAsAssetLoadWithARebakeMessage(int abiVersion) {
         ShaderAssetDescriptor template = CatalogTestData.CreateShaderDescriptor();
         ShaderAssetDescriptor descriptor = new() {
             AbiVersion = abiVersion,
@@ -167,6 +168,36 @@ public sealed class AssetCatalogFailureTests {
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains("/shaders/basic", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("shader ABI version", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("rebake", thrown.Message, StringComparison.Ordinal);
+        Assert.Equal(0, harness.Worker.UploadCallCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AShaderDescriptorWithoutAnAbiVersionMemberFailsAsAssetLoadWithTheRebakeMessage() {
+        ShaderAssetDescriptor template = CatalogTestData.CreateShaderDescriptor();
+        LegacyShaderAssetDescriptor legacy = new() {
+            VertexPayload = template.VertexPayload,
+            FragmentPayload = template.FragmentPayload,
+            VertexEntry = template.VertexEntry,
+            FragmentEntry = template.FragmentEntry,
+            Stages = template.Stages,
+            DefaultRenderState = template.DefaultRenderState,
+            Uniforms = template.Uniforms,
+            Textures = template.Textures,
+        };
+        byte[] pack = CatalogTestData.BuildPack(
+            (CatalogTestData.SHADER_PATH, AssetEntryType.Shader, AssetSerialization.Serialize(legacy)),
+            (CatalogTestData.SHADER_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
+            (CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()));
+        using CatalogTestHarness harness = new(userPacks: [pack]);
+
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
+            () => harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken));
+
+        Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
+        Assert.Contains("/shaders/basic", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains("shader ABI version 0", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("rebake", thrown.Message, StringComparison.Ordinal);
         Assert.Equal(0, harness.Worker.UploadCallCount);
     }

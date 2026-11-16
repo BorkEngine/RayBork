@@ -317,9 +317,9 @@ depth_write = true
   `layout(set = ...)` binding or use varying location 15, which is reserved for the engine instance
   index. Declarations are detected on the comment-stripped source, and a violation is `RB4008` with
   the source line and no outputs.
-- Every baked shader descriptor records the shader ABI version (`2`). The runtime rejects a
-  descriptor with a missing or older version with `AssetLoadException` naming the shader and asking
-  for a rebake; there is no runtime compatibility path.
+- Every baked shader descriptor records the shader ABI version (`2`). The runtime rejects any other
+  value, including a missing version, with `AssetLoadException` naming the shader and asking for a
+  rebake; there is no runtime compatibility path.
 - Supported uniform types are `float`, `int`, `uint`, `bool`, `vec2`, `vec3`, `vec4`, `mat4`, and
   `sampler2D`. `default` is a scalar for `float`/`int`/`uint`/`bool`, and an array whose length
   matches the component count for the vector and matrix types. Arrays, structs, and extra uniform

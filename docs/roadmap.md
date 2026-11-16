@@ -1136,9 +1136,9 @@ details:
   `ScreenToWorldTransform(new Vector2(margin, margin), 1f)` and
   `DrawText(..., 18f, ...)`. The returned scale keeps 18 local units at 18 render pixels in either
   projection. This is same-pass, screen-aligned text: it is alpha-blended with no depth write, so
-  geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass,
-  and per-pass frame data is still absent, so the M4 one-frame-block limitation is unchanged. A
-  dedicated multi-camera overlay pass and per-pass frame data are deferred to M8.
+  geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass.
+  Shader ABI v2 provides per-pass frame data, so the M4 one-frame-block limitation no longer applies;
+  only a dedicated multi-camera overlay pass remains pending in the M8 render-pass work.
 - **Nine primitive meshes.** The engine builds one more internal primitive mesh, the unit disc,
   alongside cube, sphere, plane, quad, triangle, line, wire cube, and wire sphere. The disc is one
   center vertex plus 36 rim vertices and 36 triangles, built once before `IGame.Setup` through the
@@ -1200,7 +1200,7 @@ details:
   Text, Castle, and PrimitiveGallery samples and the test suite cover the host, input, time,
   logging, renderer, and asset-loading surface it exercised.
 - **Overlay pass deferred.** The M7 scope listed a screen-space overlay pass; the shipped HUD is
-  same-pass text, and the separate multi-camera overlay pass with per-pass frame data is M8 work.
+  same-pass text, and the separate multi-camera overlay pass is M8 render-pass work.
   M7 does not claim it as shipped.
 
 **Risks.**
@@ -1210,9 +1210,10 @@ details:
   pixel scale stays unscaled, so the member documents the requirement and does not support a scaled
   camera; the samples keep the camera transform at unit scale.
 - **Same-pass HUD occlusion.** The M7 HUD is depth-tested alpha text on a screen-aligned plane, so
-  geometry closer than the overlay plane can occlude it, and the one-frame-block limitation still
-  prevents different per-pass views in one frame. A dedicated overlay pass with per-pass frame data
-  is M8; the current behavior is documented rather than hidden.
+  geometry closer than the overlay plane can occlude it. Shader ABI v2 provides per-pass frame data,
+  so the one-frame-block limitation no longer prevents different per-pass views in one frame; only a
+  dedicated multi-camera overlay pass remains pending in the M8 render-pass work. The current
+  occlusion behavior is documented rather than hidden.
 - **No 2D draw API.** Games porting a raylib-style 2D renderer must draw through
   `ScreenToWorldTransform` and the world-space primitives instead of screen-coordinate overloads.
   This is a deliberate design choice: one draw path, one batch key, and no duplicate 2D renderer.

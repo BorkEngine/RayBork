@@ -208,7 +208,8 @@ is no `DrawTexture`, no destination-rectangle screen draw, and no 2D overload fa
 textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and it uses the normal batch key, culling,
 sorting, and statistics. Because a screen-space draw is ordinary world-space geometry on the
 returned plane, it participates in depth testing; HUD text is same-pass and geometry closer than the
-plane can occlude it. A separate overlay pass and per-pass frame data are M8.
+plane can occlude it. Shader ABI v2 provides per-pass frame data; only a separate multi-camera
+overlay pass is pending M8 render-pass work.
 
 **Validation.** All helpers are tick-thread only, and a disposed camera or primitive asset is
 `ObjectDisposedException`.

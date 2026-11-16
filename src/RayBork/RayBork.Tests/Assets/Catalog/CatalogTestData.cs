@@ -40,6 +40,29 @@ internal sealed partial class LegacyFontAssetDescriptor {
 }
 
 /// <summary>
+/// The pre-M8 shader descriptor shape: the runtime descriptor without the <c>AbiVersion</c> member. A
+/// pack baked before the shader ABI version existed serialized this shape.
+/// </summary>
+[GenerateShape]
+internal sealed partial class LegacyShaderAssetDescriptor {
+    public required string VertexPayload { get; init; }
+
+    public required string FragmentPayload { get; init; }
+
+    public required string VertexEntry { get; init; }
+
+    public required string FragmentEntry { get; init; }
+
+    public required ShaderStageMask Stages { get; init; }
+
+    public required RenderState DefaultRenderState { get; init; }
+
+    public required ShaderUniformAsset[] Uniforms { get; init; }
+
+    public required string[] Textures { get; init; }
+}
+
+/// <summary>
 /// Deterministic descriptors and pack inputs shared by the catalog tests.
 /// </summary>
 internal static class CatalogTestData {

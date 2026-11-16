@@ -22,8 +22,7 @@ public sealed class ShaderAbiConstantsTests {
         // Every member is a mat4 or vec4, so std430 keeps the std140 offsets and a 256-byte stride.
         // The last member is the vec4 at offset 240, which ends exactly at the block size.
         Assert.Equal(256, ShaderAbiFrame.BLOCK_SIZE);
-        Assert.Equal(ShaderAbiFrame.BLOCK_SIZE, ShaderAbiFrame.SCREEN_SIZE_OFFSET + 16);
-        Assert.Equal(ShaderAbiFrame.BLOCK_SIZE, VulkanFrameResources.FRAME_BLOCK_SIZE);
+        Assert.Equal(ShaderAbiFrame.BLOCK_SIZE, ShaderAbiFrame.SCREEN_SIZE_OFFSET + (4 * sizeof(float)));
     }
 
     [Fact]

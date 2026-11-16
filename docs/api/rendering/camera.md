@@ -352,8 +352,9 @@ camera.DrawText(font, "HUD", screen, 18f, Color.White);
 ```
 
 The HUD text is same-pass, screen-aligned text: it is alpha-blended with no depth write, so geometry
-closer than the overlay plane can still occlude it. The separate multi-camera overlay pass and
-per-pass frame data are deferred to M8; the M4 one-frame-block limitation is unchanged.
+closer than the overlay plane can still occlude it. Shader ABI v2 already gives every camera pass its
+own 256-byte frame block, so passes with different views read their own frame data; only the separate
+multi-camera overlay pass remains pending in the M8 render-pass work.
 
 **2D quad, disc, and grid primitives.** The `DrawQuad` overloads draw one instance of the engine
 quad in the transform's local `XY` plane, centered, with local `+Z` as the front and the instance

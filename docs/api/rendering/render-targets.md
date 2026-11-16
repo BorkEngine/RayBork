@@ -82,9 +82,9 @@ screen-space content on the app's scene target instead.
   pass that writes it is invalid.
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None` or `ClearMode.Depth` as appropriate.
-  Per-pass frame data and the separate multi-camera overlay pass arrive with this work in M8; M7's
-  HUD is same-pass text on a screen-aligned plane, and multiple cameras with different views still
-  share the current one-frame-block limitation.
+  Each camera pass reads its own frame block from shader ABI v2, so passes with different views are
+  correct. The separate multi-camera overlay pass arrives with this work in M8; M7's HUD is same-pass
+  text on a screen-aligned plane.
 - There is no render graph and no automatic pass dependency analysis in v1. Creation order is the
   pass order. Cycles and write-after-read hazards are validation errors.
 
