@@ -374,16 +374,20 @@ internal sealed unsafe class VulkanSceneTarget : IDisposable {
 
         // The backend transitions the attachments to their attachment layouts before the first pass
         // and records explicit barriers between passes, so the render pass needs only the external
-        // dependency that orders each load after the preceding scene work. There is no final
-        // dependency: the backend transitions the resolved color to ShaderReadOnlyOptimal after the
-        // last pass instead.
+        // dependency that orders each load after the preceding scene work. The destination access
+        // includes the attachment reads because every attachment uses LoadOp=Load: the load is a read
+        // of the previous pass' stored content, not only a write. There is no final dependency: the
+        // backend transitions the resolved color to ShaderReadOnlyOptimal after the last pass instead.
         SubpassDependency dependency = new() {
             SrcSubpass = SUBPASS_EXTERNAL,
             DstSubpass = 0,
             SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.LateFragmentTestsBit,
             DstStageMask = PipelineStageFlags.ColorAttachmentOutputBit | PipelineStageFlags.EarlyFragmentTestsBit,
             SrcAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit,
-            DstAccessMask = AccessFlags.ColorAttachmentWriteBit | AccessFlags.DepthStencilAttachmentWriteBit,
+            DstAccessMask = AccessFlags.ColorAttachmentReadBit
+                | AccessFlags.ColorAttachmentWriteBit
+                | AccessFlags.DepthStencilAttachmentReadBit
+                | AccessFlags.DepthStencilAttachmentWriteBit,
             DependencyFlags = 0,
         };
         fixed (AttachmentDescription* attachmentsPointer = attachments) {

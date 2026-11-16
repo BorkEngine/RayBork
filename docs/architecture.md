@@ -616,7 +616,8 @@ Multiple cameras and viewport rectangles are supported: each camera pass is its 
 the clamped viewport as the render area, so a game can render split-screen views and layered HUD
 passes into the HDR scene target in one tick. A HUD that must not be occluded is an ordinary later
 camera that loads the scene color and clears depth (`ClearMode.Depth`), or keeps both
-(`ClearMode.None`); there is no separate overlay or layer pass. Shader ABI v2 gives every camera pass
+(`ClearMode.None`) when the HUD should remain depth-tested; there is no separate overlay or layer
+pass. Shader ABI v2 gives every camera pass
 its own frame data.
 
 **HDR selection.** The cached `WindowHdrState` drives the swapchain choice. When the window has HDR
@@ -913,7 +914,8 @@ descriptor set stays bound once per frame; the frame buffer grows when a frame r
 and the slot fence has already signaled. Each camera pass is its own render pass with the clamped
 viewport as the render area, so a later camera loads the earlier pass' stored color and depth. A HUD
 that must not be occluded is an ordinary later camera that loads the scene color and clears depth
-(`ClearMode.Depth`), or keeps both (`ClearMode.None`); there is no separate overlay or layer pass.
+(`ClearMode.Depth`), or keeps both (`ClearMode.None`) when it should remain depth-tested; there is no
+separate overlay or layer pass.
 
 Vulkan instancing consumes one vertex/index buffer, so different meshes with the same shader are
 still separate draws in v1. Multi-draw indirect is post-1.0.
@@ -1480,12 +1482,15 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 - M8 adds the per-camera render-pass suite (`CameraRenderPassGpuTests`): two camera passes in one
   frame render split-screen views with two viewport rectangles and different projections, a later
   camera with `ClearMode.None` loads the earlier pass' color, a later camera with `ClearMode.Depth`
-  replaces the earlier depth while `ClearMode.None` keeps it, two cameras that clear their own
-  viewports keep their own color, and a frame with no camera pass presents with zero scene
+  replaces the earlier depth while `ClearMode.None` keeps it (on both the single-sample and
+  multisampled targets), two cameras that clear their own viewports keep their own color, a first
+  camera with `ClearMode.None` records validation-clean undefined content, a negative and oversized
+  viewport clamps to the target, and a frame with no camera pass presents with zero scene
   statistics. The suite asserts draw/instance/triangle statistics, single-pixel resolved-color
   probes, and single-sample depth probes with explicit tolerances, and every test requires a
-  validation-clean submission. `PerPassFrameGpuTests` keeps covering the shader ABI v2 per-pass frame
-  block.
+  validation-clean submission. The host validates core Vulkan usage, not synchronization, so the
+  suite does not prove the access masks against the validation layer's synchronization model.
+  `PerPassFrameGpuTests` keeps covering the shader ABI v2 per-pass frame block.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
   a diagnostic that stalls the GPU and is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no

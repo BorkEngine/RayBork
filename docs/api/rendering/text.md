@@ -172,6 +172,7 @@ closer than the overlay plane can still occlude them. Castle and PrimitiveGaller
 for their status lines, and Pong uses it for its scores, status, and overlays. A HUD that must not be
 occluded is an ordinary later camera: draw the scene cameras first, then record a later camera with
 `ClearMode.Depth` so it loads the scene color and clears depth, and draw the HUD text in that camera
-(`ClearMode.None` keeps both buffers instead). The renderer records one render pass per camera pass,
+(`ClearMode.None` keeps both buffers when the HUD should remain depth-tested). The renderer records
+one render pass per camera pass,
 so the later camera's clear only affects its viewport and the earlier scene stays visible. Each
 camera pass has its own frame block from shader ABI v2, so the camera's view and viewport are correct.

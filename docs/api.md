@@ -378,7 +378,8 @@ The screen-space HUD is same-pass text: `ScreenToWorldTransform(point, 1f)` plus
 `DrawText(..., 18f, ...)` draws screen-aligned text that is alpha-blended with no depth write, so
 geometry closer than the overlay plane can still occlude it. A HUD that must not be occluded is an
 ordinary later camera that loads the scene color and clears depth (`ClearMode.Depth`), or keeps both
-buffers (`ClearMode.None`); there is no separate overlay or layer pass. Multiple cameras and viewport
+buffers (`ClearMode.None`) when the HUD should remain depth-tested; there is no separate overlay or
+layer pass. Multiple cameras and viewport
 rectangles are supported: each camera pass is its own render pass with the clamped viewport as the
 render area, so split-screen views, viewport-scoped clears, and layered HUD cameras are correct in
 one frame. The shader ABI v2 provides per-pass frame data: every camera pass in a frame writes its own

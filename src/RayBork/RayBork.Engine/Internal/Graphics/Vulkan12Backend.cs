@@ -1348,23 +1348,25 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 ImageLayout.Undefined,
                 ImageLayout.ColorAttachmentOptimal,
                 AccessFlags.None,
-                AccessFlags.ColorAttachmentWriteBit);
+                AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit);
         }
 
+        // Every render pass loads its attachments, so the destination scope includes the attachment
+        // read access as well as the write even though Undefined discards the old content.
         barriers[count++] = CreateSceneImageBarrier(
             target.ResolvedColorImage,
             ImageAspectFlags.ColorBit,
             ImageLayout.Undefined,
             ImageLayout.ColorAttachmentOptimal,
             AccessFlags.None,
-            AccessFlags.ColorAttachmentWriteBit);
+            AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit);
         barriers[count++] = CreateSceneImageBarrier(
             target.DepthImage,
             ImageAspectFlags.DepthBit,
             ImageLayout.Undefined,
             ImageLayout.DepthStencilAttachmentOptimal,
             AccessFlags.None,
-            AccessFlags.DepthStencilAttachmentWriteBit);
+            AccessFlags.DepthStencilAttachmentReadBit | AccessFlags.DepthStencilAttachmentWriteBit);
         RecordSceneImageBarriers(
             vulkan,
             commandBuffer,
@@ -1397,23 +1399,26 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 ImageLayout.ColorAttachmentOptimal,
                 ImageLayout.ColorAttachmentOptimal,
                 AccessFlags.ColorAttachmentWriteBit,
-                AccessFlags.ColorAttachmentWriteBit);
+                AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit);
         }
 
+        // The next pass loads the previous pass' color and depth and resolves into the resolved
+        // color, so its destination scope includes the attachment reads and writes: this is the
+        // read-after-write that makes the load well-defined across the separate render passes.
         barriers[count++] = CreateSceneImageBarrier(
             target.ResolvedColorImage,
             ImageAspectFlags.ColorBit,
             ImageLayout.ColorAttachmentOptimal,
             ImageLayout.ColorAttachmentOptimal,
             AccessFlags.ColorAttachmentWriteBit,
-            AccessFlags.ColorAttachmentWriteBit);
+            AccessFlags.ColorAttachmentReadBit | AccessFlags.ColorAttachmentWriteBit);
         barriers[count++] = CreateSceneImageBarrier(
             target.DepthImage,
             ImageAspectFlags.DepthBit,
             ImageLayout.DepthStencilAttachmentOptimal,
             ImageLayout.DepthStencilAttachmentOptimal,
             AccessFlags.DepthStencilAttachmentWriteBit,
-            AccessFlags.DepthStencilAttachmentWriteBit);
+            AccessFlags.DepthStencilAttachmentReadBit | AccessFlags.DepthStencilAttachmentWriteBit);
         RecordSceneImageBarriers(
             vulkan,
             commandBuffer,

@@ -86,10 +86,10 @@ screen-space content on the app's scene target instead.
   as the render area, so a clear only touches that viewport and the pass resolves only its own
   rectangle. Each camera pass reads its own frame block from shader ABI v2, so passes with different
   views are correct. A HUD is an ordinary later camera: `ClearMode.Depth` loads the scene color and
-  clears depth when the HUD must not be occluded, and `ClearMode.None` keeps both. There is no
-  separate overlay or layer pass. The render-target surface described in this section is a later M8
-  task; split-screen to the HDR scene target uses per-camera render passes and needs no render
-  target.
+  clears depth when the HUD must not be occluded, and `ClearMode.None` keeps both when the HUD should
+  remain depth-tested. There is no separate overlay or layer pass. The render-target surface described
+  in this section is a later M8 task; split-screen to the HDR scene target uses per-camera render
+  passes and needs no render target.
 - There is no render graph and no automatic pass dependency analysis in v1. Creation order is the
   pass order. Cycles and write-after-read hazards are validation errors.
 

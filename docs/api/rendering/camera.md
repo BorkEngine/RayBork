@@ -633,8 +633,9 @@ public sealed class TonemappingSettings {
 
 - Default camera clear is `ClearMode.ColorAndDepth`.
 - Clears are scoped to the camera viewport, not the whole target. The renderer clears the clamped
-  viewport rectangle with the camera's clear state; a pass with a smaller viewport leaves the pixels
-  outside it untouched.
+  viewport rectangle with the camera's clear state. A later pass with a smaller viewport leaves the
+  pixels outside it untouched; for the first pass those pixels are undefined because the frame start
+  discards the target before any camera runs.
 - Depth clears to `0.0`. Color clears to `ClearColor`. `ClearMode.Stencil` is a no-op because the
   scene target has no stencil attachment; the flag is accepted and does not fail.
 - The scene target starts every frame with undefined color and depth content: the renderer discards
@@ -660,17 +661,19 @@ public sealed class TonemappingSettings {
 - Multiple cameras can render sequentially in one tick. The first camera usually clears; later
   cameras choose `ClearMode.None`, `ClearMode.Color`, or `ClearMode.Depth` for overlays. A HUD is an
   ordinary later camera: `ClearMode.Depth` loads the scene color and clears depth when the HUD must
-  not be occluded, and `ClearMode.None` keeps both. The shader ABI v2 gives every camera pass its own
-  256-byte frame block, selected by a push-constant pass index, so a frame with several camera passes
-  submits each pass' own matrices, camera position, and viewport to its draws.
+  not be occluded, and `ClearMode.None` keeps both when the HUD should remain depth-tested. The shader
+  ABI v2 gives every camera pass its own 256-byte frame block, selected by a push-constant pass index,
+  so a frame with several camera passes submits each pass' own matrices, camera position, and
+  viewport to its draws.
 - A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
   tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
   target inside the same pass that writes it is invalid and is reported as a validation error. The
   render-target surface is a later M8 task; the current renderer has no render target.
 
 There is no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
-the scene clear control for its pass. A camera that does not clear color leaves the earlier pass'
-color in place for its viewport, which is how a later HUD or overlay camera keeps the scene visible.
+the scene clear control for its pass. A later camera that does not clear color leaves the earlier
+pass' color in place for its viewport, which is how a later HUD or overlay camera keeps the scene
+visible.
 
 **Projection math.** The engine is right-handed and Y-up and the camera looks down local `-Z`.
 `ViewMatrix` is the inverse of `Transform.ToMatrix()`. `ProjectionMatrix` uses Vulkan's `[0, 1]`

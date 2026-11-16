@@ -9,13 +9,22 @@ namespace RayBork.Tests;
 /// color transition for the present pass.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The tests read single pixels of the resolved scene color, and the depth test reads the
 /// single-sample depth attachment, so they prove the attachment load/store and resolve semantics
 /// rather than only the recorded draw statistics.
+/// </para>
+/// <para>
+/// The test host requests core validation, not synchronization validation, so these tests prove the
+/// rendered result and validation-layer cleanliness; they do not prove the access masks against the
+/// validation layer's synchronization model. That model is a later hardening task.
+/// </para>
 /// </remarks>
 public sealed class CameraRenderPassGpuTests {
     private const float COLOR_TOLERANCE = 2e-3f;
     private const float DEPTH_TOLERANCE = 2e-3f;
+    private const string MULTISAMPLE_REQUIRED =
+        "The test needs a multisampled scene target to exercise the resolve path.";
 
     private const string POSITION_VERTEX_SOURCE = """
         #version 450
@@ -51,6 +60,7 @@ public sealed class CameraRenderPassGpuTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void TwoCameraPassesRenderSplitScreenViewsInTheirOwnViewports() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        Assert.True(host.SceneTarget.SampleCount > 1, MULTISAMPLE_REQUIRED);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = harness.CreateShader(
             "shaders/camera-split-screen",
@@ -116,12 +126,9 @@ public sealed class CameraRenderPassGpuTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void LaterCameraWithClearModeNoneLoadsTheEarlierPassColor() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        Assert.True(host.SceneTarget.SampleCount > 1, MULTISAMPLE_REQUIRED);
         using VulkanDrawTestHarness harness = new(host);
-        Shader shader = harness.CreateShader(
-            "shaders/camera-load",
-            POSITION_VERTEX_SOURCE,
-            TINT_FRAGMENT_SOURCE,
-            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader shader = CreateTintShader(harness, "shaders/camera-load");
         Mesh quad = harness.CreateQuad(halfWidth: 0.2f, halfHeight: 0.2f);
         int width = checked((int)host.SceneTarget.Extent.Width);
         int height = checked((int)host.SceneTarget.Extent.Height);
@@ -162,11 +169,7 @@ public sealed class CameraRenderPassGpuTests {
     public void LaterCameraDepthClearReplacesTheEarlierDepthAndGeometry() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: 1, hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
-        Shader shader = harness.CreateShader(
-            "shaders/camera-depth",
-            POSITION_VERTEX_SOURCE,
-            TINT_FRAGMENT_SOURCE,
-            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+        Shader shader = CreateTintShader(harness, "shaders/camera-depth");
         Mesh quad = harness.CreateQuad(halfWidth: 0.5f, halfHeight: 0.5f);
         int width = checked((int)host.SceneTarget.Extent.Width);
         int height = checked((int)host.SceneTarget.Extent.Height);
@@ -189,26 +192,16 @@ public sealed class CameraRenderPassGpuTests {
 
         // The second camera clears its viewport's depth, so the farther green quad passes the
         // reverse-Z test and wins over the earlier red quad.
-        harness.Submit(harness.CreateFrameWithPasses(
-            1,
-            new VulkanDrawTestHarness.PassSpec(
-                camera,
-                0,
-                0,
-                width,
-                height,
-                ClearMode.ColorAndDepth,
-                background,
-                [nearRed]),
-            new VulkanDrawTestHarness.PassSpec(
-                camera,
-                0,
-                0,
-                width,
-                height,
-                ClearMode.Depth,
-                Color.Black,
-                [farGreen])));
+        SubmitDepthComparisonFrame(
+            harness,
+            camera,
+            width,
+            height,
+            background,
+            nearRed,
+            farGreen,
+            ClearMode.Depth,
+            frameIndex: 1);
         AssertColorNear(green, harness.ReadColor(centerX, centerY));
         Assert.True(
             MathF.Abs(harness.ReadDepth(centerX, centerY) - (8f / 9.9f)) <= DEPTH_TOLERANCE,
@@ -216,30 +209,75 @@ public sealed class CameraRenderPassGpuTests {
 
         // Without the depth clear the second camera loads the earlier depth, so the farther green
         // quad fails the reverse-Z test and the earlier red quad stays visible.
-        harness.Submit(harness.CreateFrameWithPasses(
-            2,
-            new VulkanDrawTestHarness.PassSpec(
-                camera,
-                0,
-                0,
-                width,
-                height,
-                ClearMode.ColorAndDepth,
-                background,
-                [nearRed]),
-            new VulkanDrawTestHarness.PassSpec(
-                camera,
-                0,
-                0,
-                width,
-                height,
-                ClearMode.None,
-                Color.Black,
-                [farGreen])));
+        SubmitDepthComparisonFrame(
+            harness,
+            camera,
+            width,
+            height,
+            background,
+            nearRed,
+            farGreen,
+            ClearMode.None,
+            frameIndex: 2);
         AssertColorNear(red, harness.ReadColor(centerX, centerY));
         Assert.True(
             MathF.Abs(harness.ReadDepth(centerX, centerY) - (9f / 9.9f)) <= DEPTH_TOLERANCE,
             "The later camera's loaded depth did not keep the nearer red quad's depth.");
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void MultisampledDepthClearAndLoadFollowTheLaterCameraClearMode() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        Assert.True(host.SceneTarget.SampleCount > 1, MULTISAMPLE_REQUIRED);
+        using VulkanDrawTestHarness harness = new(host);
+        Shader shader = CreateTintShader(harness, "shaders/camera-depth-multisampled");
+        Mesh quad = harness.CreateQuad(halfWidth: 0.5f, halfHeight: 0.5f);
+        int width = checked((int)host.SceneTarget.Extent.Width);
+        int height = checked((int)host.SceneTarget.Extent.Height);
+        uint centerX = (uint)(width / 2);
+        uint centerY = (uint)(height / 2);
+        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.OrthographicCamera(host);
+        Color background = new(0.25f, 0.25f, 0.25f, 1f);
+        Color red = new(1f, 0f, 0f, 1f);
+        Color green = new(0f, 1f, 0f, 1f);
+        VulkanDrawTestHarness.DrawSpec nearRed = new(
+            quad,
+            shader,
+            [Matrix4x4.Identity],
+            Tint: red);
+        VulkanDrawTestHarness.DrawSpec farGreen = new(
+            quad,
+            shader,
+            [Matrix4x4.CreateTranslation(0f, 0f, -1f)],
+            Tint: green);
+
+        // The multisampled depth attachment is loaded and stored between the two render passes; a
+        // depth clear lets the farther green quad win, while ClearMode.None keeps the earlier depth
+        // and the nearer red quad stays visible.
+        SubmitDepthComparisonFrame(
+            harness,
+            camera,
+            width,
+            height,
+            background,
+            nearRed,
+            farGreen,
+            ClearMode.Depth,
+            frameIndex: 1);
+        AssertColorNear(green, harness.ReadColor(centerX, centerY));
+        SubmitDepthComparisonFrame(
+            harness,
+            camera,
+            width,
+            height,
+            background,
+            nearRed,
+            farGreen,
+            ClearMode.None,
+            frameIndex: 2);
+        AssertColorNear(red, harness.ReadColor(centerX, centerY));
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -266,6 +304,7 @@ public sealed class CameraRenderPassGpuTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void EachCameraClearOnlyTouchesItsOwnViewport() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        Assert.True(host.SceneTarget.SampleCount > 1, MULTISAMPLE_REQUIRED);
         using VulkanDrawTestHarness harness = new(host);
         int width = checked((int)host.SceneTarget.Extent.Width);
         int height = checked((int)host.SceneTarget.Extent.Height);
@@ -302,6 +341,115 @@ public sealed class CameraRenderPassGpuTests {
             harness.ReadColor((uint)(leftWidth + (rightWidth / 2)), (uint)(height / 2)));
         Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void FirstCameraWithClearModeNoneDoesNotFailValidation() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        int width = checked((int)host.SceneTarget.Extent.Width);
+        int height = checked((int)host.SceneTarget.Extent.Height);
+        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.OrthographicCamera(host);
+
+        // The frame-start transition discards the target, so a first camera with ClearMode.None
+        // loads undefined content. It must still record and pass validation without a clear.
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            new VulkanDrawTestHarness.PassSpec(
+                camera,
+                0,
+                0,
+                width,
+                height,
+                ClearMode.None,
+                Color.Black,
+                [])));
+
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ClampedViewportScopesTheRenderAreaAndClear() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        int width = checked((int)host.SceneTarget.Extent.Width);
+        int height = checked((int)host.SceneTarget.Extent.Height);
+        int clampedWidth = (width * 3) / 4;
+        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.OrthographicCamera(host);
+        Color background = new(0.25f, 0.25f, 0.25f, 1f);
+        Color red = new(1f, 0f, 0f, 1f);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            new VulkanDrawTestHarness.PassSpec(
+                camera,
+                0,
+                0,
+                width,
+                height,
+                ClearMode.ColorAndDepth,
+                background,
+                []),
+            new VulkanDrawTestHarness.PassSpec(
+                camera,
+                -width / 4,
+                -height / 4,
+                (width * 3) / 4,
+                height + (height / 4),
+                ClearMode.ColorAndDepth,
+                red,
+                [])));
+
+        // The negative offsets clamp to zero and the oversized extent clamps to the target, so the
+        // second camera clears only the left three quarters and the earlier background stays.
+        AssertColorNear(red, harness.ReadColor((uint)(clampedWidth / 2), (uint)(height / 2)));
+        AssertColorNear(
+            background,
+            harness.ReadColor((uint)(clampedWidth + ((width - clampedWidth) / 2)), (uint)(height / 2)));
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    private static Shader CreateTintShader(VulkanDrawTestHarness harness, string path) =>
+        harness.CreateShader(
+            path,
+            POSITION_VERTEX_SOURCE,
+            TINT_FRAGMENT_SOURCE,
+            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+
+    private static void SubmitDepthComparisonFrame(
+        VulkanDrawTestHarness harness,
+        VulkanDrawTestHarness.CameraView camera,
+        int width,
+        int height,
+        Color background,
+        VulkanDrawTestHarness.DrawSpec nearRed,
+        VulkanDrawTestHarness.DrawSpec farGreen,
+        ClearMode laterClearMode,
+        long frameIndex) {
+        harness.Submit(harness.CreateFrameWithPasses(
+            frameIndex,
+            new VulkanDrawTestHarness.PassSpec(
+                camera,
+                0,
+                0,
+                width,
+                height,
+                ClearMode.ColorAndDepth,
+                background,
+                [nearRed]),
+            new VulkanDrawTestHarness.PassSpec(
+                camera,
+                0,
+                0,
+                width,
+                height,
+                laterClearMode,
+                Color.Black,
+                [farGreen])));
     }
 
     private static VulkanDrawTestHarness.CameraView CreateCameraView(
