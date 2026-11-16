@@ -151,4 +151,75 @@ public sealed class RenderTextureAppTests {
         Assert.NotNull(target);
         target.Dispose();
     }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReadbackIsLegalInSetupAndTickAndFailsAfterShutdown() {
+        RenderTexture? target = null;
+        EngineContext? context = null;
+        Color[,]? setupColors = null;
+        byte[]? setupPixels = null;
+        Color[,]? tickColors = null;
+        byte[]? tickPixels = null;
+        ScriptedGame game = new();
+        using AppTestHost host = new(game);
+        game.SetupHandler = async setupContext => {
+            context = setupContext;
+            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(8, 4));
+            // Setup can await both readback forms; the fake renderer services the request on the render
+            // thread while this continuation is suspended.
+            setupColors = await target.ReadColorsAsync(TestContext.Current.CancellationToken);
+            setupPixels = await target.ReadPixelsAsync(TestContext.Current.CancellationToken);
+        };
+        game.TickHandler = tickContext => {
+            Assert.NotNull(target);
+            // IGame.Tick is void, so a tick caller blocks on the returned task. The render thread
+            // services the queued readback independently, so the tick does not deadlock.
+            tickColors = target.ReadColorsAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+            tickPixels = target.ReadPixelsAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+            tickContext.RequestExit();
+        };
+
+        host.App.Run();
+
+        Assert.NotNull(setupColors);
+        Assert.Equal(4, setupColors.GetLength(0));
+        Assert.Equal(8, setupColors.GetLength(1));
+        Assert.Equal(8 * 4 * 4, setupPixels?.Length);
+        Assert.NotNull(tickColors);
+        Assert.Equal(4, tickColors.GetLength(0));
+        Assert.Equal(8, tickColors.GetLength(1));
+        Assert.Equal(8 * 4 * 4, tickPixels?.Length);
+        Assert.NotNull(context);
+        Assert.NotNull(target);
+        Assert.False(target.IsDisposed);
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => target.ReadColorsAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => target.ReadPixelsAsync(TestContext.Current.CancellationToken));
+        target.Dispose();
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReadbackOfADisposedTargetThrowsObjectDisposed() {
+        RenderTexture? target = null;
+        ScriptedGame game = new();
+        using AppTestHost host = new(game);
+        game.SetupHandler = async setupContext => {
+            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(4, 4));
+            target.Dispose();
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                () => target.ReadColorsAsync(TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                () => target.ReadPixelsAsync(TestContext.Current.CancellationToken));
+        };
+        game.TickHandler = tickContext => tickContext.RequestExit();
+
+        host.App.Run();
+
+        Assert.NotNull(target);
+        Assert.True(target.IsDisposed);
+    }
 }

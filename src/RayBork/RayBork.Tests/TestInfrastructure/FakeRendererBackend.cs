@@ -97,6 +97,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     internal Action<RenderFramePacket>? OnSubmit { get; set; }
 
     /// <summary>
+    /// Gets or sets the exception that a queued readback request publishes. The default is
+    /// <see langword="null"/>, which returns a deterministic fake image.
+    /// </summary>
+    internal Exception? ReadbackException { get; set; }
+
+    /// <summary>
     /// Gets or sets an optional hook invoked at the end of <see cref="Present"/>.
     /// </summary>
     internal Action? OnPresent { get; set; }
@@ -434,11 +440,87 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             request.Completion.TrySetResult();
         }
 
+        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks()) {
+            try {
+                CompleteReadback(request);
+            } finally {
+                request.DisposeRegistration();
+            }
+        }
+
         foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {
             lock (_gate) {
                 _renderTargets.Remove(lifetime.TargetId);
             }
         }
+    }
+
+    private void CompleteReadback(RenderTextureService.ReadbackRequest request) {
+        if (request.IsCompleted) {
+            return;
+        }
+
+        FakeRenderTarget? target;
+        lock (_gate) {
+            _renderTargets.TryGetValue(request.TargetId, out target);
+        }
+
+        if (target is null) {
+            request.TrySetException(new InvalidOperationException(
+                $"The fake readback addresses render target {request.TargetId}, which is no longer alive."));
+            return;
+        }
+
+        if (target.Lifetime.IsDisposed) {
+            request.TrySetException(new ObjectDisposedException(nameof(RenderTexture)));
+            return;
+        }
+
+        if (ReadbackException is not null) {
+            request.TrySetException(ReadbackException);
+            return;
+        }
+
+        int width = target.Lifetime.Description.Width;
+        int height = target.Lifetime.Description.Height;
+        switch (request) {
+            case RenderTextureService.ReadbackRequest<byte[]> pixels:
+                pixels.Completion.TrySetResult(FakeReadbackPixels(width, height));
+                break;
+            case RenderTextureService.ReadbackRequest<Color[,]> colors:
+                colors.Completion.TrySetResult(FakeReadbackColors(width, height));
+                break;
+            default:
+                request.TrySetException(new InvalidOperationException(
+                    "The fake readback request has an unsupported completion value."));
+                break;
+        }
+    }
+
+    private static Color[,] FakeReadbackColors(int width, int height) {
+        Color[,] colors = new Color[height, width];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                colors[y, x] = new Color(x / (float)width, y / (float)height, 0.5f, 1f);
+            }
+        }
+
+        return colors;
+    }
+
+    private static byte[] FakeReadbackPixels(int width, int height) {
+        byte[] pixels = new byte[checked(width * height * 4)];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int offset = ((y * width) + x) * 4;
+                pixels[offset] = (byte)(x & 0xFF);
+                pixels[offset + 1] = (byte)(y & 0xFF);
+                pixels[offset + 2] = 128;
+                pixels[offset + 3] = byte.MaxValue;
+            }
+        }
+
+        return pixels;
     }
 
     /// <inheritdoc />

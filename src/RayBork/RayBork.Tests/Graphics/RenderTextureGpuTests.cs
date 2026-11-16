@@ -1718,6 +1718,280 @@ public sealed class RenderTextureGpuTests {
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadColorsAndPixelsReturnTheLastCompletedFrameInTopLeftOrder() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(8, 4));
+        Color background = new(0.25f, 0.5f, 0.75f, 1f);
+        Color hdrLeft = new(2f, 4f, 0.5f, 1f);
+        TonemappingSnapshot snapshot = new(0.5f, 4f, 1.5f);
+        VulkanDrawTestHarness.CameraView camera = CreateOrthoView(0, 0, target.Width, target.Height, 2f);
+        VulkanDrawTestHarness.PassSpec backgroundPass = new(
+            camera,
+            0,
+            0,
+            target.Width,
+            target.Height,
+            ClearMode.ColorAndDepth,
+            background,
+            [],
+            target.TargetId);
+        VulkanDrawTestHarness.PassSpec leftPass = new(
+            camera,
+            0,
+            0,
+            target.Width / 2,
+            target.Height,
+            ClearMode.ColorAndDepth,
+            hdrLeft,
+            [],
+            target.TargetId);
+        RenderFramePacket packet = harness.CreateFrameWithPasses(1, backgroundPass, leftPass);
+        packet.Tonemapping = snapshot;
+        harness.Submit(packet);
+
+        Color[,] colors = await host.ReadColorsAsync(target);
+        byte[] pixels = await host.ReadPixelsAsync(target);
+
+        Assert.Equal(target.Height, colors.GetLength(0));
+        Assert.Equal(target.Width, colors.GetLength(1));
+        AssertColorNear(hdrLeft, colors[0, 0], HDR_TOLERANCE);
+        AssertColorNear(background, colors[0, target.Width - 1], HDR_TOLERANCE);
+        AssertColorNear(hdrLeft, colors[target.Height - 1, 0], HDR_TOLERANCE);
+        AssertColorNear(background, colors[target.Height - 1, target.Width - 1], HDR_TOLERANCE);
+        // The HDR component above 1 survives ReadColorsAsync; ReadPixelsAsync tone maps it instead.
+        Assert.True(colors[0, 0].G > 1f);
+        Assert.Equal(checked(target.Width * target.Height * 4), pixels.Length);
+        AssertPixelsMatchReference(pixels, colors, snapshot, TonemappingMode.AgX);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Theory]
+    [InlineData(TextureFormat.Rgba16Float, 1)]
+    [InlineData(TextureFormat.Rgba16Float, 4)]
+    [InlineData(TextureFormat.Rgba8Unorm, 1)]
+    [InlineData(TextureFormat.Rgba8Unorm, 4)]
+    [InlineData(TextureFormat.Rgba8Srgb, 1)]
+    [InlineData(TextureFormat.Rgba8Srgb, 4)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task EveryColorFormatAndSampleCountReadsBackLinearColorsAndDisplayPixels(
+        TextureFormat format,
+        int requestedSampleCount) {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(6, 4, format, Depth: true, SampleCount: requestedSampleCount));
+        Color known = new(0.25f, 0.5f, 0.75f, 1f);
+        int expectedSampleCount = VulkanSampleCountSelection.Select(
+            requestedSampleCount,
+            host.Device.Capabilities.SupportedSampleCounts);
+        Assert.Equal(expectedSampleCount, target.SampleCount);
+        int liveSlots = host.Backend.BindlessTextures.LiveCount;
+        uint colorSlot = target.ColorTexture.BindingResource!.BindlessSlot;
+        uint depthSlot = target.DepthTexture!.BindingResource!.BindlessSlot;
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? live));
+        Assert.NotNull(live);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, known)));
+
+        Color[,] colors = await host.ReadColorsAsync(target);
+        byte[] pixels = await host.ReadPixelsAsync(target);
+        float tolerance = format == TextureFormat.Rgba16Float ? HDR_TOLERANCE : BYTE_TOLERANCE;
+
+        Assert.Equal(target.Height, colors.GetLength(0));
+        Assert.Equal(target.Width, colors.GetLength(1));
+        for (int y = 0; y < colors.GetLength(0); y++) {
+            for (int x = 0; x < colors.GetLength(1); x++) {
+                AssertColorNear(known, colors[y, x], tolerance);
+                Assert.Equal(1f, colors[y, x].A, tolerance);
+            }
+        }
+
+        Assert.Equal(checked(target.Width * target.Height * 4), pixels.Length);
+        AssertPixelsMatchReference(pixels, colors, TonemappingSnapshot.Default, TonemappingMode.AgX);
+        // The readback does not rewrite a descriptor or leave the image in the transfer layout.
+        Assert.Equal(liveSlots, host.Backend.BindlessTextures.LiveCount);
+        Assert.Equal(colorSlot, target.ColorTexture.BindingResource!.BindlessSlot);
+        Assert.Equal(depthSlot, target.DepthTexture!.BindingResource!.BindlessSlot);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? afterReadback));
+        Assert.Same(live, afterReadback);
+        Assert.Equal(Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal, afterReadback!.ResolvedColorLayout);
+        Assert.Equal((uint)target.Width, afterReadback.Extent.Width);
+        Assert.Equal((uint)target.Height, afterReadback.Extent.Height);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadbackUsesTheCurrentImageAfterResizeAndDeviceRecovery() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(8, 4));
+        Color red = new(1f, 0f, 0f, 1f);
+        Color green = new(0f, 1f, 0f, 1f);
+        Color blue = new(0f, 0f, 1f, 1f);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, red)));
+        Color[,] before = await host.ReadColorsAsync(target);
+        Assert.Equal(4, before.GetLength(0));
+        Assert.Equal(8, before.GetLength(1));
+        AssertColorNear(red, before[0, 0], HDR_TOLERANCE);
+
+        host.ResizeRenderTexture(target, 12, 6);
+        harness.Submit(harness.CreateFrameWithPasses(2, CreateTargetClearPass(target, green)));
+        Color[,] resized = await host.ReadColorsAsync(target);
+        byte[] resizedPixels = await host.ReadPixelsAsync(target);
+        Assert.Equal(6, resized.GetLength(0));
+        Assert.Equal(12, resized.GetLength(1));
+        AssertColorNear(green, resized[0, 0], HDR_TOLERANCE);
+        AssertColorNear(green, resized[5, 11], HDR_TOLERANCE);
+        Assert.Equal(12 * 6 * 4, resizedPixels.Length);
+
+        host.Backend.SimulateDeviceLossForTests();
+        harness.Submit(harness.CreateFrameWithPasses(3, CreateTargetClearPass(target, red)));
+        Assert.Equal(0, host.Backend.Stats.DrawCalls);
+        harness.RestoreAssets();
+        harness.Submit(harness.CreateFrameWithPasses(4, CreateTargetClearPass(target, blue)));
+        Color[,] recovered = await host.ReadColorsAsync(target);
+        byte[] recoveredPixels = await host.ReadPixelsAsync(target);
+        Assert.Equal(6, recovered.GetLength(0));
+        Assert.Equal(12, recovered.GetLength(1));
+        AssertColorNear(blue, recovered[0, 0], HDR_TOLERANCE);
+        Assert.Equal(12 * 6 * 4, recoveredPixels.Length);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadbackReturnsLastCompletedContentAndIgnoresAnUnsubmittedFrame() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(4, 4));
+        Color red = new(1f, 0f, 0f, 1f);
+        Color green = new(0f, 1f, 0f, 1f);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, red)));
+        AssertColorNear(red, (await host.ReadColorsAsync(target))[0, 0], HDR_TOLERANCE);
+
+        // Record but do not submit a second frame. The readback is serviced between frames, so it must
+        // observe the last completed content instead of racing the recording.
+        RenderFramePacket pending = harness.CreateFrameWithPasses(2, CreateTargetClearPass(target, green));
+        Color[,] beforeSubmit = await host.ReadColorsAsync(target);
+        AssertColorNear(red, beforeSubmit[0, 0], HDR_TOLERANCE);
+
+        harness.Submit(pending);
+        AssertColorNear(green, (await host.ReadColorsAsync(target))[0, 0], HDR_TOLERANCE);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadbackOfATargetOnlySampledInALaterFrameKeepsItsContent() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(4, 4));
+        Shader sampleShader = CreateSampleShader(harness, "shaders/render-target-readback-sampled-later");
+        Color known = new(0.1f, 0.6f, 0.2f, 1f);
+        (int sceneWidth, int sceneHeight) = SceneSize(host);
+        (VulkanDrawTestHarness.PassSpec samplePass, Mesh _) = CreateSamplePass(
+            harness,
+            sampleShader,
+            target.ColorTexture,
+            sceneWidth,
+            sceneHeight,
+            ClearMode.ColorAndDepth,
+            Color.Black);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, known)));
+        // The second frame only samples the target; no pass writes it.
+        harness.Submit(harness.CreateFrameWithPasses(2, samplePass));
+
+        Color[,] colors = await host.ReadColorsAsync(target);
+        AssertColorNear(known, colors[0, 0], HDR_TOLERANCE);
+        Assert.Equal(4, colors.GetLength(0));
+        Assert.Equal(4, colors.GetLength(1));
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadPixelsUsesTheFrameToneSnapshotAndNotTheDefault() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(2, 2));
+        Color known = new(1f, 1f, 1f, 1f);
+        TonemappingSnapshot bright = new(1.5f, 4f, 1.5f);
+        RenderFramePacket packet = harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, known));
+        packet.Tonemapping = bright;
+        harness.Submit(packet);
+
+        byte[] pixels = await host.ReadPixelsAsync(target);
+        Color[,] colors = await host.ReadColorsAsync(target);
+        AssertPixelsMatchReference(pixels, colors, bright, TonemappingMode.AgX);
+        byte[] defaultPixels = RenderTextureReadbackConverter.EncodePixels(
+            colors,
+            TonemappingSnapshot.Default,
+            TonemappingMode.AgX);
+        Assert.NotEqual(defaultPixels[0], pixels[0]);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadPixelsUsesTheStartupNoneMode() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(
+            hdr: WindowHdrState.Sdr,
+            tonemapping: TonemappingMode.None);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(2, 2));
+        Color known = new(0.25f, 0.5f, 0.75f, 1f);
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, known)));
+
+        byte[] pixels = await host.ReadPixelsAsync(target);
+        Color[,] colors = await host.ReadColorsAsync(target);
+        AssertPixelsMatchReference(pixels, colors, TonemappingSnapshot.Default, TonemappingMode.None);
+        Assert.Equal(ExpectedSrgbByte(0.25f), pixels[0]);
+        Assert.Equal(ExpectedSrgbByte(0.5f), pixels[1]);
+        Assert.Equal(ExpectedSrgbByte(0.75f), pixels[2]);
+        Assert.Equal(byte.MaxValue, pixels[3]);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public async Task ReadbackBeforeAnyFrameReturnsAnImageAndLeavesTheTargetUsable() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(new RenderTextureDescription(4, 2));
+
+        // The contents are undefined before a camera writes the target, but the readback must still copy
+        // the image, restore its undefined layout, and leave the target usable for the first frame.
+        Color[,] unwritten = await host.ReadColorsAsync(target);
+        byte[] unwrittenPixels = await host.ReadPixelsAsync(target);
+        Assert.Equal(2, unwritten.GetLength(0));
+        Assert.Equal(4, unwritten.GetLength(1));
+        Assert.Equal(4 * 2 * 4, unwrittenPixels.Length);
+        // The documented default for an unwritten target is opaque black; the undefined GPU memory is
+        // never copied, and the undefined layout stays untouched.
+        AssertColorNear(Color.Black, unwritten[0, 0], HDR_TOLERANCE);
+        Assert.Equal(1f, unwritten[0, 0].A, HDR_TOLERANCE);
+        Assert.All(unwrittenPixels[..2], value => Assert.Equal(byte.MinValue, value));
+        Assert.Equal(byte.MaxValue, unwrittenPixels[3]);
+        Assert.True(host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? unwrittenTarget));
+        Assert.Equal(Silk.NET.Vulkan.ImageLayout.Undefined, unwrittenTarget!.ResolvedColorLayout);
+
+        Color known = new(0.2f, 0.4f, 0.6f, 1f);
+        harness.Submit(harness.CreateFrameWithPasses(1, CreateTargetClearPass(target, known)));
+        Color[,] written = await host.ReadColorsAsync(target);
+        AssertColorNear(known, written[0, 0], HDR_TOLERANCE);
+        Assert.Equal(
+            Silk.NET.Vulkan.ImageLayout.ShaderReadOnlyOptimal,
+            unwrittenTarget.ResolvedColorLayout);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
     private static Shader CreateSampleShader(VulkanDrawTestHarness harness, string path) =>
         harness.CreateShader(
             path,
@@ -1886,6 +2160,53 @@ public sealed class RenderTextureGpuTests {
         Vector4 clip = Vector4.Transform(new Vector4(worldPoint, 1f), camera.ViewProjection);
         return clip.Z / clip.W;
     }
+
+    private static void AssertColorNear(Color expected, Color actual, float tolerance) {
+        AssertColorNear(expected, (actual.R, actual.G, actual.B), tolerance);
+        Assert.True(
+            MathF.Abs(expected.A - actual.A) <= tolerance,
+            $"Alpha {actual.A} is not within {tolerance} of {expected.A}.");
+    }
+
+    private static void AssertPixelsMatchReference(
+        byte[] pixels,
+        Color[,] colors,
+        TonemappingSnapshot snapshot,
+        TonemappingMode tonemappingMode) {
+        int height = colors.GetLength(0);
+        int width = colors.GetLength(1);
+        Assert.Equal(checked(width * height * 4), pixels.Length);
+        float exposureMultiplier = MathF.Pow(2f, snapshot.Exposure);
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Color color = colors[y, x];
+                Vector3 present = AgxToneMap.Present(
+                    new Vector3(color.R, color.G, color.B),
+                    exposureMultiplier,
+                    tonemappingMode,
+                    PresentEncoding.ManualSrgb,
+                    WindowHdrState.Sdr,
+                    snapshot.AgxWhite,
+                    snapshot.AgxContrast);
+                int offset = ((y * width) + x) * 4;
+                AssertByteWithinOne(Quantize(present.X), pixels[offset], x, y, "red");
+                AssertByteWithinOne(Quantize(present.Y), pixels[offset + 1], x, y, "green");
+                AssertByteWithinOne(Quantize(present.Z), pixels[offset + 2], x, y, "blue");
+                Assert.Equal(byte.MaxValue, pixels[offset + 3]);
+            }
+        }
+    }
+
+    private static void AssertByteWithinOne(int expected, byte actual, int x, int y, string channel) {
+        Assert.True(
+            Math.Abs(expected - actual) <= 1,
+            $"The {channel} byte at ({x}, {y}) is {actual}, expected {expected} within 1.");
+    }
+
+    private static byte Quantize(float channel) =>
+        (byte)Math.Clamp((int)MathF.Round(channel * 255f, MidpointRounding.AwayFromZero), 0, 255);
+
+    private static byte ExpectedSrgbByte(float displayLinear) => Quantize(AgxToneMap.SrgbEncodeChannel(displayLinear));
 
     private static void AssertDepthNear(float expected, float actual, float tolerance) {
         Assert.True(

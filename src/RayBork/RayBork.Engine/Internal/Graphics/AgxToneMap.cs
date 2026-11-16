@@ -38,6 +38,7 @@ internal static class AgxToneMap {
     private const double REC709_GREEN_WEIGHT = 0.7152;
     private const double REC709_BLUE_WEIGHT = 0.0722;
     private const float SRGB_LINEAR_CUTOFF = 0.0031308f;
+    private const float SRGB_ENCODED_CUTOFF = 0.04045f;
 
     // Columns of the combined inset and outset matrices in GLSL mat3 constructor order. GLSL
     // multiplies a column-major matrix by a column vector, so applying a matrix is the sum of each
@@ -160,6 +161,23 @@ internal static class AgxToneMap {
         SrgbEncodeChannel(color.X),
         SrgbEncodeChannel(color.Y),
         SrgbEncodeChannel(color.Z));
+
+    /// <summary>
+    /// Decodes one 8-bit sRGB-encoded channel to display-linear.
+    /// </summary>
+    /// <remarks>
+    /// This is the inverse of the 8-bit quantization of <see cref="SrgbEncodeChannel"/>. The render
+    /// target readback uses it to decode an <c>R8G8B8A8_SRGB</c> resolved image into scene-linear
+    /// colors.
+    /// </remarks>
+    /// <param name="encoded">The sRGB-encoded byte.</param>
+    /// <returns>The display-linear channel.</returns>
+    internal static float SrgbDecodeChannel(byte encoded) {
+        float channel = encoded / 255f;
+        return channel <= SRGB_ENCODED_CUTOFF
+            ? channel / 12.92f
+            : MathF.Pow((channel + 0.055f) / 1.055f, 2.4f);
+    }
 
     /// <summary>
     /// Evaluates the allenwp curve for one non-negative channel.

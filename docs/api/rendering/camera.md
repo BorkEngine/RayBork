@@ -259,6 +259,9 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > `RenderTexture` instead of the app's linear HDR scene target. The present pass applies AgX after
 > all cameras finish; a render texture reaches the screen through a later camera that samples its
 > `ColorTexture`, and a later camera can sample its resolved `DepthTexture` for depth-driven effects.
+> A camera-written target can also be read back with `RenderTexture.ReadColorsAsync` (raw scene-linear
+> `[y, x]` colors) or `RenderTexture.ReadPixelsAsync` (display-referred RGBA8 for a screenshot); the
+> readback is a `RenderTexture` member, not a camera member, and never reads depth.
 
 Properties:
 
@@ -308,7 +311,11 @@ depth-tested and depth-writing draws are not rejected, but their depth test and 
 that target, and `ClearMode.Depth` is a no-op. After a target resize, a camera created with that target
 uses the new target size, and a later camera pass that samples the target's views sees their new
 `Width` and `Height`. The views keep their identity and are owned by the `RenderTexture`; dispose the
-render texture, not a view.
+render texture, not a view. A later camera or the game can sample the views, and the game can call
+`RenderTexture.ReadColorsAsync`/`ReadPixelsAsync` after a completed frame to read the resolved color
+image without changing the camera routing or the target's state. The readback returns the content of
+the last completed frame that wrote or sampled the target, so a readback issued before the first
+camera writes the target returns undefined content.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`

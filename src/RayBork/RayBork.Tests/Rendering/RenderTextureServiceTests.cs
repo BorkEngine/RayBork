@@ -365,6 +365,229 @@ public sealed class RenderTextureServiceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReadbackCompletesOnlyAfterTheRenderThreadProcessesTheRequest() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(4, 2), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task<Color[,]> colorsRequest = service.ReadColorsAsync(target.Lifetime, CancellationToken.None);
+        Task<byte[]> pixelsRequest = service.ReadPixelsAsync(target.Lifetime, CancellationToken.None);
+        Assert.False(colorsRequest.IsCompleted);
+        Assert.False(pixelsRequest.IsCompleted);
+        Assert.True(service.HasPendingWork);
+        Assert.True(service.Signal.WaitOne(0));
+
+        host.ProcessRenderTextureRequests(service);
+
+        Color[,] colors = await colorsRequest;
+        byte[] pixels = await pixelsRequest;
+        Assert.Equal(2, colors.GetLength(0));
+        Assert.Equal(4, colors.GetLength(1));
+        Assert.Equal(4 * 2 * 4, pixels.Length);
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CancellationBeforeProcessingCompletesReadbacksAsCanceled() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        using CancellationTokenSource cancellation = new();
+
+        Task<Color[,]> colors = service.ReadColorsAsync(target.Lifetime, cancellation.Token);
+        Task<byte[]> pixels = service.ReadPixelsAsync(target.Lifetime, cancellation.Token);
+        await cancellation.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => colors);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pixels);
+        host.ProcessRenderTextureRequests(service);
+        Assert.False(service.HasPendingWork);
+        Assert.Equal(1, host.LiveRenderTextureCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task APreCanceledReadbackTokenDoesNotQueueWork() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        using CancellationTokenSource cancellation = new();
+        await cancellation.CancelAsync();
+
+        Task<Color[,]> request = service.ReadColorsAsync(target.Lifetime, cancellation.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AFailedReadbackKeepsTheTargetAndItsViewsUnchanged() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(
+            new RenderTextureDescription(32, 16, TextureFormat.Rgba8Srgb, Depth: true, SampleCount: 1),
+            CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        RenderTextureDescription before = target.Lifetime.Description;
+        Texture colorView = target.ColorTexture;
+        Texture depthView = Assert.IsType<Texture>(target.DepthTexture);
+
+        host.ReadbackException = new GraphicsException(
+            "The fake readback failed.",
+            DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+            null);
+        Task<byte[]> request = service.ReadPixelsAsync(target.Lifetime, CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+
+        await Assert.ThrowsAsync<GraphicsException>(() => request);
+        Assert.True(host.IsRenderTargetLive(target.TargetId));
+        Assert.Equal(before, target.Lifetime.Description);
+        Assert.Same(colorView, target.ColorTexture);
+        Assert.Same(depthView, target.DepthTexture);
+        Assert.Equal(32, colorView.Width);
+        Assert.Equal(16, depthView.Height);
+        Assert.Equal(1, host.LiveRenderTextureCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReadbackDoesNotMutateTheTargetDescriptionOrViews() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(
+            new RenderTextureDescription(8, 4, TextureFormat.Rgba8Unorm, Depth: true, SampleCount: 2),
+            CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        RenderTextureDescription before = target.Lifetime.Description;
+        int sampleCount = target.SampleCount;
+        long targetId = target.TargetId;
+        int liveCount = host.LiveRenderTextureCount;
+
+        Task<Color[,]> colors = service.ReadColorsAsync(target.Lifetime, CancellationToken.None);
+        Task<byte[]> pixels = service.ReadPixelsAsync(target.Lifetime, CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        await colors;
+        await pixels;
+
+        Assert.Equal(before, target.Lifetime.Description);
+        Assert.Equal(targetId, target.TargetId);
+        Assert.Equal(sampleCount, target.SampleCount);
+        Assert.Equal(8, target.Width);
+        Assert.Equal(4, target.Height);
+        Assert.Equal(liveCount, host.LiveRenderTextureCount);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReadbackOfADisposedTargetFailsWithObjectDisposed() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        RenderTexture target = await create;
+        target.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(
+            () => { _ = target.ReadColorsAsync(TestContext.Current.CancellationToken); });
+        Assert.Throws<ObjectDisposedException>(
+            () => { _ = target.ReadPixelsAsync(TestContext.Current.CancellationToken); });
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => service.ReadColorsAsync(target.Lifetime, CancellationToken.None));
+        host.ProcessRenderTextureRequests(service);
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task AnUnknownTargetIdFailsTheReadbackClearly() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        RenderTextureTargetLifetime orphan = new(
+            424242,
+            new RenderTextureDescription(8, 8),
+            1,
+            static _ => { });
+
+        Task<Color[,]> request = service.ReadColorsAsync(orphan, CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+
+        InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => request);
+        Assert.Contains("424242", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("no longer alive", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CancellationAfterTheRequestIsDequeuedCompletesTheTaskAsCanceled() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+        using CancellationTokenSource cancellation = new();
+
+        Task<byte[]> request = service.ReadPixelsAsync(target.Lifetime, cancellation.Token);
+        RenderTextureService.ReadbackRequest[] drained = service.DrainReadbacks();
+        Assert.Single(drained);
+        await cancellation.CancelAsync();
+
+        // The render thread would still finish its copy and restore the layout, but the canceled task is
+        // already completed and the result is discarded.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        drained[0].DisposeRegistration();
+        Assert.True(host.IsRenderTargetLive(target.TargetId));
+        Assert.Equal(8, target.Width);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task CloseFailsPendingReadbacksAndRejectsLaterReadbacks() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task<byte[]> pending = service.ReadPixelsAsync(target.Lifetime, CancellationToken.None);
+        service.Close(null);
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => pending);
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => service.ReadColorsAsync(target.Lifetime, CancellationToken.None));
+        Assert.False(service.HasPendingWork);
+        Assert.True(service.IsStopped);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task StopFailsPendingReadbacksAndRejectsLaterReadbacks() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(8, 8), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task<Color[,]> pending = service.ReadColorsAsync(target.Lifetime, CancellationToken.None);
+        service.Stop();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => pending);
+        await Assert.ThrowsAsync<ObjectDisposedException>(
+            () => service.ReadPixelsAsync(target.Lifetime, CancellationToken.None));
+        Assert.False(service.HasPendingWork);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public async Task QueuedCreatesResizesAndDestroysAreServicedInOneRenderThreadRound() {
         using RenderTextureService service = new();
         using FakeRendererBackend host = new();
@@ -390,5 +613,25 @@ public sealed class RenderTextureServiceTests {
         Assert.True(host.IsRenderTargetLive(resized.TargetId));
         Assert.True(host.IsRenderTargetLive(created.TargetId));
         Assert.False(host.IsRenderTargetLive(destroyed.TargetId));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task ReadbackInTheSameRoundAsACreateResizeAndDestroyIsServiced() {
+        using RenderTextureService service = new();
+        using FakeRendererBackend host = new();
+        Task<RenderTexture> create = service.CreateAsync(new RenderTextureDescription(16, 16), CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+        using RenderTexture target = await create;
+
+        Task resize = service.ResizeAsync(target.Lifetime, 32, 8);
+        Task<Color[,]> readback = service.ReadColorsAsync(target.Lifetime, CancellationToken.None);
+        host.ProcessRenderTextureRequests(service);
+
+        await resize;
+        Color[,] colors = await readback;
+        Assert.Equal(8, colors.GetLength(0));
+        Assert.Equal(32, colors.GetLength(1));
+        Assert.True(host.IsRenderTargetLive(target.TargetId));
     }
 }

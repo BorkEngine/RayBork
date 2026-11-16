@@ -1293,6 +1293,8 @@ RayBork.RenderTexture.Dispose() -> void
 RayBork.RenderTexture.Height.get -> int
 RayBork.RenderTexture.IsDisposed.get -> bool
 RayBork.RenderTexture.IsHdr.get -> bool
+RayBork.RenderTexture.ReadColorsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<RayBork.Color[,]!>!
+RayBork.RenderTexture.ReadPixelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
 RayBork.RenderTexture.Resize(int width, int height) -> void
 RayBork.RenderTexture.SampleCount.get -> int
 RayBork.RenderTexture.Width.get -> int

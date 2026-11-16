@@ -278,6 +278,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
         }
 
+        // Readbacks run before destructions in the same round: a target disposed while its request was
+        // queued fails on the render thread with the disposed-target exception instead of disappearing
+        // from the registry first. A target is only read after its last-use frame fence signaled.
+        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks()) {
+            try {
+                ProcessReadback(request);
+            } catch (Exception exception) {
+                request.TrySetException(exception);
+            } finally {
+                request.DisposeRegistration();
+            }
+        }
+
         foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {
             if (!_renderTargets.TryGetValue(lifetime.TargetId, out RenderTargetEntry? entry)) {
                 continue;
@@ -410,7 +423,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 sampler,
                 depthViewLifetime,
                 depthViewResource,
-                depthSampler);
+                depthSampler,
+                _options!.Settings.Tonemapping);
             _renderTargets.Add(targetId, entry);
             success = request.Completion.TrySetResult(renderTexture);
             if (!success) {
@@ -548,6 +562,79 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         previousPipelines?.Dispose();
         previousTarget.Dispose();
         request.Completion.TrySetResult();
+    }
+
+    /// <summary>
+    /// Services one queued readback: waits for the target's last-use fence, copies its resolved color
+    /// image, and completes the request with the raw colors or the display-referred pixels.
+    /// </summary>
+    /// <remarks>
+    /// Render-thread only. The request is serviced between frames, so a target recorded by the next
+    /// pending frame is read at its last submitted content rather than racing that frame's recording.
+    /// The copy helper restores the resolved color layout before it returns, and the target's bindless
+    /// slots, views, sampler, and lifetime are untouched. A target disposed after the request was queued
+    /// fails with <see cref="ObjectDisposedException"/>; an id that is no longer live fails with
+    /// <see cref="InvalidOperationException"/>.
+    /// </remarks>
+    /// <param name="request">The queued readback request.</param>
+    /// <exception cref="ObjectDisposedException">The target was disposed before the request ran.</exception>
+    /// <exception cref="InvalidOperationException">The target id is no longer live.</exception>
+    /// <exception cref="GraphicsException">The color image could not be copied.</exception>
+    private void ProcessReadback(RenderTextureService.ReadbackRequest request) {
+        RenderTextureTargetLifetime lifetime = request.Lifetime;
+        if (lifetime.IsDisposed) {
+            throw new ObjectDisposedException(
+                nameof(RenderTexture),
+                "The render texture is disposed; it cannot be read back.");
+        }
+
+        if (!_renderTargets.TryGetValue(request.TargetId, out RenderTargetEntry? entry)) {
+            throw new InvalidOperationException(
+                $"The readback addresses render target {request.TargetId}, which is no longer alive. A "
+                    + "render texture must be alive when its readback is serviced.");
+        }
+
+        if (request.IsCompleted) {
+            return;
+        }
+
+        WaitForRenderTargetIdle(lifetime);
+        int width = checked((int)entry.Target.Extent.Width);
+        int height = checked((int)entry.Target.Extent.Height);
+        Color[,] colors;
+        if (entry.Target.ResolvedColorLayout == ImageLayout.Undefined) {
+            // Vulkan cannot transition an image back to UNDEFINED, and no completed frame produced
+            // content. Return a defined default instead of copying undefined GPU memory.
+            colors = RenderTextureReadbackConverter.CreateOpaqueBlackColors(width, height);
+        } else {
+            byte[] pixels = VulkanReadback.ReadRenderTargetColorImage(_device!, entry.Target);
+            if (request.IsCompleted) {
+                // A cancellation that arrived during the fence wait or the copy discards the result;
+                // the copy helper already restored the layout, so the target is unchanged.
+                return;
+            }
+
+            colors = RenderTextureReadbackConverter.DecodeColors(
+                pixels,
+                width,
+                height,
+                entry.Lifetime.Description.ColorFormat);
+        }
+
+        switch (request) {
+            case RenderTextureService.ReadbackRequest<byte[]> pixelRequest:
+                pixelRequest.Completion.TrySetResult(RenderTextureReadbackConverter.EncodePixels(
+                    colors,
+                    entry.Tone,
+                    entry.StartupTonemappingMode));
+                break;
+            case RenderTextureService.ReadbackRequest<Color[,]> colorRequest:
+                colorRequest.Completion.TrySetResult(colors);
+                break;
+            default:
+                throw new InvalidOperationException(
+                    "The readback request has an unsupported completion value; only pixels and colors are queued.");
+        }
     }
 
     /// <summary>
@@ -2080,6 +2167,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         foreach (RenderTargetEntry entry in _frameRenderTargets) {
             PrepareRenderTargetUse(entry, frameSlot);
+            // The readback uses the tone settings that produced the last completed frame that wrote the
+            // target. A later sampled-only frame keeps these values.
+            entry.Tone = frame.Tonemapping;
         }
 
         foreach (RenderTargetEntry entry in _frameSampledRenderTargets) {
@@ -2626,7 +2716,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             Sampler sampler,
             RenderTextureViewLifetime? depthViewLifetime,
             RenderTextureViewResource? depthViewResource,
-            Sampler depthSampler) {
+            Sampler depthSampler,
+            TonemappingMode startupTonemappingMode) {
             Id = id;
             SampleCount = sampleCount;
             Target = target;
@@ -2637,6 +2728,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             DepthViewLifetime = depthViewLifetime;
             DepthViewResource = depthViewResource;
             DepthSampler = depthSampler;
+            StartupTonemappingMode = startupTonemappingMode;
         }
 
         internal long Id { get; }
@@ -2660,5 +2752,18 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         internal Sampler DepthSampler { get; set; }
 
         internal VulkanGeometryPipelineCache? Pipelines { get; set; }
+
+        /// <summary>
+        /// Gets or sets the tone-mapping snapshot of the last completed frame that wrote the target. It
+        /// starts at <see cref="TonemappingSnapshot.Default"/> and is replaced when a camera targets the
+        /// target in a submitted frame. A sampled-only later frame does not replace it.
+        /// </summary>
+        internal TonemappingSnapshot Tone { get; set; } = TonemappingSnapshot.Default;
+
+        /// <summary>
+        /// Gets the app's startup tone-mapping mode. The runtime mode cannot change, so the readback
+        /// uses this value instead of reading the live settings object on the render thread.
+        /// </summary>
+        internal TonemappingMode StartupTonemappingMode { get; }
     }
 }

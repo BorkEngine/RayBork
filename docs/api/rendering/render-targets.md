@@ -15,6 +15,8 @@ public sealed class RenderTexture : IDisposable {
     public bool IsDisposed { get; }
 
     public void Resize(int width, int height);
+    public Task<byte[]> ReadPixelsAsync(CancellationToken cancellationToken = default);
+    public Task<Color[,]> ReadColorsAsync(CancellationToken cancellationToken = default);
     public void Dispose();
 }
 
@@ -133,6 +135,54 @@ disposing a view still throws. The target's contents are undefined after a resiz
   sees one size. A later device recovery recreates the target from the updated description, so the
   resized dimensions survive.
 
+**Readback.** `ReadColorsAsync` and `ReadPixelsAsync` read the target's single-sample resolved color
+image after the last completed frame that wrote or sampled it. They never read the depth image. Both
+are legal from `Setup` and `Tick`. The call stalls the render thread while it waits for the target's
+last-use fence, copies the full image, and converts it, so it is intended for screenshots and tests,
+not per-frame work. `Setup` can `await` either call; `IGame.Tick` is `void`, so a tick caller blocks on
+the returned task with `GetAwaiter().GetResult()` and stalls that tick until the readback completes.
+The target's bindless slots, descriptors, sampler, views, lifetime, and public description do not
+change; a later frame samples or writes the target exactly as before.
+
+- `ReadColorsAsync` returns raw **scene-linear** colors indexed `[y, x]`, where the first dimension is
+  the height and row zero is the top row. The value is the resolved image's stored color, with alpha
+  included and HDR components above `1` preserved. It does not apply exposure, AgX, or sRGB encoding.
+  `Rgba16Float` decodes the stored half floats, `Rgba8Unorm` divides the stored bytes by 255, and
+  `Rgba8Srgb` decodes the stored RGB bytes with the sRGB transfer function; alpha is linear for every
+  format.
+- `ReadPixelsAsync` returns display-referred RGBA8 in row-major top-left order, with length
+  `Width * Height * 4`. It is the SDR screenshot path, not scRGB/HDR output: it applies the exposure,
+  AgX white, and AgX contrast of the last completed frame that **wrote** the target, then AgX and the
+  sRGB encode through the same CPU reference the present shader mirrors, clamps to `[0, 1]`, and
+  rounds to bytes. The app's startup `TonemappingMode` is used; the runtime mode cannot change after
+  `Build`. The runtime tone values are read from that frame's snapshot, never from the live
+  `EngineContext.Tonemapping` on the render thread. Alpha is `255`, because the SDR present path writes
+  opaque output, and the pixels are not premultiplied. A target that no frame wrote uses the default
+  tone settings (neutral exposure, AgX white `16.29`, contrast `1.25`) and the startup mode.
+- The target's contents are undefined after creation and after a resize. A readback before a camera
+  writes the target has no resolved content to copy: the renderer returns a defined default of opaque
+  black (raw `Color.Black` and RGBA8 `(0, 0, 0, 255)`) with the default tone settings and leaves the
+  target's undefined GPU layout untouched. Reading after a completed frame returns that frame's content.
+- Both calls use the target's current description and recreated color image, so a readback after
+  `Resize` or a device recovery reads the new dimensions and image. Every supported color format and
+  sample count works: the resolved color image is always single-sample, and the readback uses the
+  target's effective sample count only as part of the target's existing resources.
+- Cancellation before the render thread completes the readback completes the task as
+  `OperationCanceledException`. Cancellation after the request is queued is best effort: the render
+  thread may already be copying the image, in which case it finishes, restores the target layout, and
+  discards the result. A canceled readback never leaves the target in a partial layout and never
+  mutates its state. A disposed target, a stopped app, or a stopped render texture service throws
+  `ObjectDisposedException`. An internal target id that is no longer alive fails with
+  `InvalidOperationException`; a public call cannot produce that state unless the target was disposed
+  concurrently.
+- The render thread processes readbacks with creation, resize, and destruction between frames. It
+  waits for the target's last-use frame fence, uses a dedicated command buffer and fence, transitions
+  the resolved color image from the layout the target tracker recorded to `TransferSrcOptimal`, copies
+  the full image into a host-visible staging buffer with top-left row order, and transitions the image
+  back to the same layout in the same submission. It does not use `vkDeviceWaitIdle`; the per-target
+  fence wait is the only GPU wait. A post-processed later write to the target is read back like any
+  other content.
+
 **Camera target and viewport.** `EngineContext.CreateCamera` takes `target:` as its last parameter.
 A camera targeting a `RenderTexture` records its pass into that target instead of the app's linear HDR
 scene target; `Camera.Target` returns the target object. The target's viewport defaults to the full
@@ -194,9 +244,10 @@ multisampled scene targets. Resolving scene depth costs bandwidth on every camer
 consumer, and until it lands the only reader is the diagnostic probe. That cost is a known property of
 the depth path, not a hidden regression; T5 can decide whether a pass needs the resolve.
 
-**Remaining M8 work.** `ReadPixelsAsync`/`ReadColorsAsync` (T4) and post-processing/effects (T5)
-remain later M8 tasks. This section covers the color path, the depth view, and resize: creation, camera
-routing, MSAA color and depth resolve, same-tick sampling of both views, resize, and lifetime.
+**Remaining M8 work.** Post-processing/effects (T5) and the RenderTarget and split-screen samples
+remain later M8 tasks. This section covers the color path, the depth view, resize, and color readback:
+creation, camera routing, MSAA color and depth resolve, same-tick sampling of both views, resize,
+lifetime, raw linear color readback, and display-referred pixel readback.
 
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or

@@ -170,11 +170,28 @@ unified camera entry point, `Camera.ScreenToWorldTransform`, the world-space qua
 transformable-grid primitives, the ninth primitive mesh, and the Pong sample. M8 ships shader ABI v2
 (one frame block per camera pass), one render pass per camera pass on the scene target, and the color
 and depth paths of public render textures: `RenderTexture` creation, `Camera.Target` routing, MSAA color
-and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, same-tick sampling, lifetime, and
-`RenderTexture.Resize`. The scene target's resolved depth image is internal. Readback, post-processing,
-and the render-target sample remain later M8 tasks. The remaining
-rows name the milestone that owns the deferred surface; the full code blocks in the section pages stay
-the 1.0 contract.
+and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, same-tick sampling, lifetime,
+`RenderTexture.Resize`, and render-target color readback through `RenderTexture.ReadPixelsAsync`
+(display-referred RGBA8 for screenshots) and `RenderTexture.ReadColorsAsync` (raw scene-linear HDR
+colors). The scene target's resolved depth image is internal. Post-processing and the render-target
+sample remain later M8 tasks. The remaining rows name the milestone that owns the deferred surface; the
+full code blocks in the section pages stay the 1.0 contract.
+
+**M8 readback contract.** `RenderTexture.ReadColorsAsync` returns raw scene-linear `Color[y, x]` values
+(top-left origin, first dimension height, alpha included, HDR preserved) and never applies AgX or sRGB
+encoding. `RenderTexture.ReadPixelsAsync` returns display-referred RGBA8 in row-major top-left order
+with length `width * height * 4`, after the exposure, AgX white, and AgX contrast of the last completed
+frame that wrote the target, the app's startup `TonemappingMode`, AgX, and the sRGB encode; alpha is
+`255` and is not premultiplied. Both read the resolved single-sample color image, not depth, after the
+last completed frame that wrote or sampled the target; a target that no frame wrote has undefined
+content and returns the defined default of opaque black, with the default tone settings on the pixels
+path. Both are legal from `Setup` and `Tick` and
+stall the render thread while they wait for the target's last-use fence and copy the image, so they are
+for screenshots and tests, not per-frame work; a `Tick` caller blocks on the returned task. Cancellation
+before the render thread completes the call is `OperationCanceledException`; cancellation after the
+request is queued is best effort and never corrupts the target. A disposed target, a stopped app, or a
+stopped render texture service throws `ObjectDisposedException`. Raw linear HDR color readback is part
+of the public API; it is not deferred to post-1.0.
 
 | Surface | Milestone |
 | --- | --- |
@@ -202,7 +219,7 @@ the 1.0 contract.
 | Unified `EngineContext.CreateCamera(Transform, CameraProjection, fieldOfView, orthographicHeight, ...)` with `CameraProjection.Perspective`/`CameraProjection.Orthographic` | M7 |
 | `Camera.ScreenToWorldTransform(Vector2, float)` | M7 |
 | `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
-| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color, depth, and resize paths; readback and post-processing are later M8 tasks) | M8 |
+| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ReadColorsAsync`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color, depth, resize, and readback paths; post-processing is a later M8 task) | M8 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
 current asset surface after M4; see §6.
