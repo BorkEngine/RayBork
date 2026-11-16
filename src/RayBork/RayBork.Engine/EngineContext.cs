@@ -190,6 +190,13 @@ public sealed class EngineContext {
     /// target. The viewport defaults to the target's full size and is clamped to it; the aspect ratio
     /// uses the clamped viewport.
     /// </param>
+    /// <param name="postProcess">
+    /// The caller-owned post-process stack to snapshot for this camera, or <see langword="null"/> for no
+    /// post-processing. The stack runs after the camera's geometry pass and before the next camera or
+    /// the present pass. The stack, each effect's enabled value, and each custom effect's shader cursor
+    /// and texture bindings are frozen when the camera is created, so later changes apply to later
+    /// cameras only. Effects work on the scene target and on a <see cref="RenderTexture"/> target.
+    /// </param>
     /// <returns>The camera. Dispose it before <see cref="IGame.Tick"/> returns.</returns>
     /// <exception cref="ArgumentException">
     /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
@@ -199,10 +206,15 @@ public sealed class EngineContext {
     /// <paramref name="projection"/> is not defined, <paramref name="clearMode"/> contains bits outside
     /// <see cref="ClearMode.All"/>, or a selected projection or clip-plane parameter is outside its range.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera's <paramref name="target"/> is disposed.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera's <paramref name="target"/> or a post-process effect's shader, bound texture, or
+    /// sampled render target is disposed.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
-    /// transform is singular.
+    /// The caller is not the tick thread, no frame is recording, another camera is active, the camera
+    /// transform is singular, or a post-process effect violates the custom shader contract. A custom
+    /// effect whose shader does not declare the required <c>sourceColor</c> binding, or that declares
+    /// <c>sourceDepth</c> for a target without depth, is rejected here with a message naming the shader.
     /// </exception>
     /// <remarks>
     /// Legal only during <see cref="IGame.Tick"/>. Cameras are sequential: dispose one before creating
@@ -219,7 +231,8 @@ public sealed class EngineContext {
         float near = 0.01f,
         float far = 1000f,
         Rect? viewport = null,
-        RenderTexture? target = null)
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null)
         => _cameras.CreateCamera(
             transform,
             projection,
@@ -230,7 +243,8 @@ public sealed class EngineContext {
             near,
             far,
             viewport,
-            target);
+            target,
+            postProcess);
 
     /// <summary>
     /// Creates one runtime render texture and returns it after the render thread allocated its images.

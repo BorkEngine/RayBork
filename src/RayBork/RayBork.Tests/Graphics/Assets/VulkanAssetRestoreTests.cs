@@ -34,7 +34,7 @@ public sealed class VulkanAssetRestoreTests {
         Assert.Equal(generation + 1, host.Backend.DeviceGeneration);
         // The device recreation resets the bindless table, so the texture has no slot until Restore
         // re-uploads it and reserves a fresh one.
-        Assert.Equal(1, host.Backend.BindlessTextures.LiveCount);
+        Assert.Equal(3, host.Backend.BindlessTextures.LiveCount);
 
         // The harness keeps the worker created before the recovery; it must resolve the recreated
         // device on its own.
@@ -54,7 +54,7 @@ public sealed class VulkanAssetRestoreTests {
         Assert.NotEqual(0ul, mesh.VertexBuffer.Handle);
         Assert.NotEqual(0ul, shader.FragmentModule.Handle);
         Assert.NotEqual(0u, texture.BindlessSlot);
-        Assert.Equal(2, host.Backend.BindlessTextures.LiveCount);
+        Assert.Equal(4, host.Backend.BindlessTextures.LiveCount);
         Assert.Equal(3, harness.Bridge.LiveResourceCount);
 
         harness.Destroy(texture);
@@ -62,7 +62,7 @@ public sealed class VulkanAssetRestoreTests {
         harness.Destroy(shader);
 
         Assert.Equal(0u, texture.BindlessSlot);
-        Assert.Equal(1, host.Backend.BindlessTextures.LiveCount);
+        Assert.Equal(3, host.Backend.BindlessTextures.LiveCount);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }

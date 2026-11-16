@@ -25,6 +25,7 @@ internal sealed class CameraService {
     private readonly IWindow _window;
     private readonly TextLayoutBuffer _textLayout = new();
     private readonly HashSet<Font> _textFontsStarted = [];
+    private readonly List<PostProcessEffectSnapshot> _postProcessScratch = [];
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
     private PrimitiveAssets? _primitives;
@@ -248,6 +249,11 @@ internal sealed class CameraService {
     /// target. The viewport defaults to the target's full size and is clamped to it; the aspect ratio
     /// uses the clamped viewport.
     /// </param>
+    /// <param name="postProcess">
+    /// The caller-owned post-process stack to snapshot for this camera, or <see langword="null"/> for no
+    /// post-processing. The stack, every entry's enabled value, and each custom effect's shader cursor
+    /// and texture bindings are frozen here; later changes apply to later cameras only.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
     /// viewport is invalid or empty, or the clear color has a non-finite component.
@@ -256,10 +262,13 @@ internal sealed class CameraService {
     /// <paramref name="projection"/> is not defined, the clear mode has unknown bits, or a selected
     /// projection or clip-plane parameter is outside its range.
     /// </exception>
-    /// <exception cref="ObjectDisposedException">The camera's <paramref name="target"/> is disposed.</exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera's <paramref name="target"/> is disposed, or a post-process effect's shader or a texture
+    /// its material binds is disposed.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
-    /// transform is singular.
+    /// The caller is not the tick thread, no frame is recording, another camera is active, the camera
+    /// transform is singular, or a post-process effect violates the custom shader contract.
     /// </exception>
     internal Camera CreateCamera(
         Transform transform,
@@ -271,7 +280,8 @@ internal sealed class CameraService {
         float near,
         float far,
         Rect? viewport,
-        RenderTexture? target = null) {
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null) {
         ValidateRecordingState(nameof(EngineContext.CreateCamera));
         if (target is not null) {
             ObjectDisposedException.ThrowIf(target.IsDisposed, target);
@@ -301,6 +311,7 @@ internal sealed class CameraService {
         Matrix4x4 viewProjection = view * projectionMatrix;
 
         RenderFramePacket packet = _packet!;
+        CapturePostProcessEffects(postProcess, target);
         CameraPass pass = packet.BeginPass();
         pass.Begin(
             _nextCameraNumber - 1,
@@ -315,6 +326,15 @@ internal sealed class CameraService {
             clearMode,
             resolvedClearColor,
             target?.TargetId ?? 0);
+
+        try {
+            foreach (PostProcessEffectSnapshot effect in _postProcessScratch) {
+                pass.AddPostProcessEffect(effect);
+                effect.Retain(packet.Retention);
+            }
+        } finally {
+            _postProcessScratch.Clear();
+        }
 
         if (target is not null) {
             // The recorded frame keeps the target alive until the render thread released its slot, so a
@@ -371,6 +391,43 @@ internal sealed class CameraService {
             throw new InvalidOperationException(
                 $"Camera {active.Number} is still active. Cameras cannot be nested; dispose it before "
                     + "creating another camera.");
+        }
+    }
+
+    /// <summary>
+    /// Captures the stack entries into the scratch snapshots the pending pass records.
+    /// </summary>
+    /// <remarks>
+    /// The capture runs before the pass is appended, so a rejected effect leaves the frame packet
+    /// unchanged. The scratch list is reused for the app lifetime, so a camera with a stack allocates
+    /// only the snapshots themselves.
+    /// </remarks>
+    /// <param name="postProcess">The stack to snapshot, or <see langword="null"/> for none.</param>
+    /// <param name="target">The camera's target, or <see langword="null"/> for the scene target.</param>
+    private void CapturePostProcessEffects(PostProcessStack? postProcess, RenderTexture? target) {
+        _postProcessScratch.Clear();
+        if (postProcess is null || !postProcess.Enabled) {
+            return;
+        }
+
+        bool targetHasDepth = target is null || target.DepthTexture is not null;
+        string targetDescription = target is null
+            ? "the app scene target"
+            : $"render texture {target.TargetId}";
+        try {
+            foreach (PostProcessEffect effect in postProcess.Effects) {
+                _postProcessScratch.Add(
+                    PostProcessSnapshots.Capture(effect, targetHasDepth, targetDescription));
+            }
+        } catch {
+            // A rejected effect leaves no snapshot behind; the already captured ones release the program
+            // and texture references they would otherwise keep until the next camera.
+            foreach (PostProcessEffectSnapshot snapshot in _postProcessScratch) {
+                snapshot.Reset();
+            }
+
+            _postProcessScratch.Clear();
+            throw;
         }
     }
 }

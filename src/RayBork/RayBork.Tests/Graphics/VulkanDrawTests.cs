@@ -46,7 +46,8 @@ public sealed class VulkanDrawTests {
         Assert.Equal(1, stats.PipelineCount);
         Assert.Equal(2, stats.Triangles);
         Assert.Equal(0, stats.CulledInstances);
-        Assert.Equal(2, stats.TextureCount);
+        // The white slot, the scene target's two internal source slots, and the drawn texture.
+        Assert.Equal(4, stats.TextureCount);
         AssertColorNear(textureColor, harness.ReadColor(CenterX(host), CenterY(host)));
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
@@ -278,7 +279,8 @@ public sealed class VulkanDrawTests {
         _ = harness.CreateTexture("textures/sampler-b", new Color(0.5f, 0.5f, 0.5f, 1f));
 
         Assert.Equal(1, harness.Worker.SamplerCount);
-        Assert.Equal(3, harness.TextureCount);
+        // The white slot, the scene target's two internal source slots, and the two textures.
+        Assert.Equal(5, harness.TextureCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
@@ -308,10 +310,10 @@ public sealed class VulkanDrawTests {
             camera,
             new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity], TextureBindings: [texture])));
         Assert.Equal(0, host.Backend.Stats.DrawCalls);
-        Assert.Equal(1, host.Backend.BindlessTextures.LiveCount);
+        Assert.Equal(3, host.Backend.BindlessTextures.LiveCount);
 
         harness.RestoreAssets();
-        Assert.Equal(2, host.Backend.BindlessTextures.LiveCount);
+        Assert.Equal(4, host.Backend.BindlessTextures.LiveCount);
 
         harness.SubmitFrame(
             3,
@@ -372,9 +374,10 @@ public sealed class VulkanDrawTests {
         GpuAssetResource resource = texture.Lifetime.Resource
             ?? throw new InvalidOperationException("The texture has no GPU resource.");
         uint releasedSlot = ((VulkanTextureAssetResource)resource).BindlessSlot;
-        Assert.Equal(1u, releasedSlot);
+        // Slots 0, 1, and 2 are the white fallback and the scene target's internal source slots.
+        Assert.Equal(3u, releasedSlot);
         int liveBefore = harness.TextureCount;
-        Assert.Equal(2, liveBefore);
+        Assert.Equal(4, liveBefore);
 
         harness.SubmitFrame(
             1,

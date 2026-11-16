@@ -263,6 +263,7 @@ disposed first.
 | `Font`, `Glyph`, `TextAlignment`, `TextWrapping` | §7.10 |
 | `RenderTexture`, `RenderTextureDescription` | §7.11 |
 | `RenderStats` | §7.12 |
+| `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect` | §7.13 |
 | `IWindow`, `WindowState`, `CursorMode`, `Monitor`, `PresentMode` | §8 |
 | `IInput`, `Key`, `MouseButton`, `IGamepad`, `GamepadButton`, `GamepadAxis`, `GamepadTrigger` | §9 |
 | `ILoggerFactory` | §10.1 |

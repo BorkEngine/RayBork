@@ -48,7 +48,9 @@ internal sealed class CameraTestHost : IDisposable {
         Color? clearColor = null,
         float near = 0.1f,
         float far = float.PositiveInfinity,
-        Rect? viewport = null)
+        Rect? viewport = null,
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null)
         => Service.CreateCamera(
             transform ?? Transform.Identity,
             CameraProjection.Perspective,
@@ -58,7 +60,9 @@ internal sealed class CameraTestHost : IDisposable {
             clearColor,
             near,
             far,
-            viewport);
+            viewport,
+            target,
+            postProcess);
 
     internal Camera CreateOrthographicCamera(
         Transform? transform = null,
@@ -67,7 +71,9 @@ internal sealed class CameraTestHost : IDisposable {
         Color? clearColor = null,
         float near = 0.1f,
         float far = 100f,
-        Rect? viewport = null)
+        Rect? viewport = null,
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null)
         => Service.CreateCamera(
             transform ?? Transform.Identity,
             CameraProjection.Orthographic,
@@ -77,7 +83,9 @@ internal sealed class CameraTestHost : IDisposable {
             clearColor,
             near,
             far,
-            viewport);
+            viewport,
+            target,
+            postProcess);
 
     internal void EndFrame() => Service.EndFrame();
 

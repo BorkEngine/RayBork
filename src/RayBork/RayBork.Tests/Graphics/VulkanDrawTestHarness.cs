@@ -334,10 +334,25 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
                 spec.ClearColor,
                 spec.TargetId);
             AddDraws(packet, pass, spec.Draws);
+            AddPostProcessEffects(packet, pass, spec.PostProcessEffects);
         }
 
         packet.Seal();
         return packet;
+    }
+
+    private static void AddPostProcessEffects(
+        RenderFramePacket packet,
+        CameraPass pass,
+        PostProcessEffectSnapshot[]? effects) {
+        if (effects is null) {
+            return;
+        }
+
+        foreach (PostProcessEffectSnapshot effect in effects) {
+            pass.AddPostProcessEffect(effect);
+            effect.Retain(packet.Retention);
+        }
     }
 
     private static void AddDraws(RenderFramePacket packet, CameraPass pass, DrawSpec[] draws) {
@@ -605,6 +620,11 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     /// <param name="ClearColor">The linear color written when color is cleared.</param>
     /// <param name="Draws">The draw records in recording order.</param>
     /// <param name="TargetId">The runtime render target id, or <c>0</c> for the scene target.</param>
+    /// <param name="PostProcessEffects">
+    /// The already captured post-process effect snapshots to run after the pass, or <c>null</c> for no
+    /// post-processing. The harness records them in order and adds their engine-asset holds to the
+    /// frame's retention set, exactly like the camera service.
+    /// </param>
     internal sealed record PassSpec(
         CameraView Camera,
         int ViewportX,
@@ -614,7 +634,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         ClearMode ClearMode,
         Color ClearColor,
         DrawSpec[] Draws,
-        long TargetId = 0);
+        long TargetId = 0,
+        PostProcessEffectSnapshot[]? PostProcessEffects = null);
 
     /// <summary>
     /// One draw record for <see cref="CreateFrame"/>.

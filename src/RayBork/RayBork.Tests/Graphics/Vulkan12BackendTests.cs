@@ -46,7 +46,8 @@ public sealed class Vulkan12BackendTests {
         Assert.True(capabilities.DescriptorIndexing);
         Assert.Equal(VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY, capabilities.BindlessTextureCapacity);
         Assert.Equal(capabilities.BindlessTextureCapacity, table.Capacity);
-        Assert.Equal(1, table.LiveCount);
+        // The white slot plus the scene target's internal resolved color and depth source slots.
+        Assert.Equal(3, table.LiveCount);
         Assert.NotEqual(0ul, table.WhiteImage.Handle);
         Assert.NotEqual(0ul, table.WhiteView.Handle);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
@@ -101,7 +102,8 @@ public sealed class Vulkan12BackendTests {
         Assert.Equal(0, stats.Triangles);
         Assert.Equal(0, stats.CulledInstances);
         Assert.Equal(0, stats.PipelineCount);
-        Assert.Equal(1, stats.TextureCount);
+        // The white slot plus the scene target's internal resolved color and depth source slots.
+        Assert.Equal(3, stats.TextureCount);
         Assert.Equal(info.SampleCount, stats.SampleCount);
         Assert.Equal(info.HdrOutput, stats.HdrOutput);
         Assert.True(stats.CpuFrameMilliseconds >= 0);

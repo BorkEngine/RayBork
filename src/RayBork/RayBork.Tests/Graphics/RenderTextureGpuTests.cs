@@ -1566,7 +1566,8 @@ public sealed class RenderTextureGpuTests {
             }
         }
 
-        Assert.Equal(3, host.Backend.BindlessTextures.LiveCount);
+        // The white slot, the scene target's two internal source slots, and the target's two views.
+        Assert.Equal(5, host.Backend.BindlessTextures.LiveCount);
     }
 
     [Fact]
