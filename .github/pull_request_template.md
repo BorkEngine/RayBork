@@ -42,9 +42,9 @@ manual bake and no `--assets` argument are required.
 - [ ] `dotnet build samples/Text/Text.slnx -c Release`
 - [ ] `dotnet format samples/Text/Text.slnx --verify-no-changes --no-restore`
 - [ ] `dotnet run --project samples/Text/Text.csproj -c Debug -- --frames 30` exits `0`, and `samples/Text/bin/Debug/net11.0/text.pck` exists
-- [ ] Pong AOT publish for `win-x64` on Windows: `dotnet publish samples/Pong/Pong.csproj -c Release -r win-x64 -p:PublishAot=true`; the publish directory contains `pong.pck` beside the executable and no bake tooling (`Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc natives, glTF packages)
+- [ ] Pong AOT publish for `win-x64` on Windows: `dotnet publish samples/Pong/Pong.csproj -c Release -r win-x64 -p:PublishAot=true` after the Release solution build above, which is what bakes `pong.pck`; the publish directory contains `pong.pck` beside the executable and no bake tooling (`Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc natives, glTF packages)
 - [ ] Windows host run: `samples/Pong/bin/Release/net11.0/win-x64/publish/Pong.exe --frames 30` exits `0` and loads `pong.pck` beside the executable
-- [ ] Pong AOT publish for `linux-x64` from the repository root in WSL: `dotnet publish samples/Pong/Pong.csproj -c Release -r linux-x64 -p:PublishAot=true`; the publish directory contains `pong.pck` beside the executable and no bake tooling
+- [ ] Pong AOT publish for `linux-x64` from the repository root in WSL after the Release solution build: `dotnet publish samples/Pong/Pong.csproj -c Release -r linux-x64 -p:PublishAot=true`; the publish directory contains `pong.pck` beside the executable and no bake tooling
 - [ ] Linux host run under lavapipe: `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Pong/bin/Release/net11.0/linux-x64/publish/Pong --frames 30` exits `0`
 - [ ] Both Pong AOT publishes finish with zero AOT/trim warnings; the Text, Castle, and PrimitiveGallery samples remain buildable but are not the AOT gate
 

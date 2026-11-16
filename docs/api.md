@@ -34,9 +34,9 @@ orthographicHeight, ...)` entry point, `Camera.ScreenToWorldTransform`, the worl
 `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`,
 and `Camera.DrawGrid(Transform, ...)` primitives, and the ninth primitive mesh, the unit disc.
 `DrawTexture` is not shipped, there is no 2D or screen-space draw overload, and `DrawText` remains
-world-space. The M7 Native AOT gate is `samples/Pong`, an orthographic two-paddle match drawn through
-`ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. The rest of the API reference
-remains the 1.0 contract, not a description of shipped behavior.
+world-space. The M7 Native AOT gate is `samples/Pong`, an orthographic player-vs-AI match drawn
+through `ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. The rest of the API
+reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
 and no mandatory scene framework. The runtime shape and renderer seam are described in
@@ -424,25 +424,36 @@ suite is 2,695 tests, 114 of them GPU integration tests, and every sample soluti
 sample is a plain user-facing example and contains no test-only draw assertion.
 
 `samples/Pong` is the M7 AOT gate. It is a two-project solution, `samples/Pong/Pong.slnx`, outside
-`src/RayBork/RayBork.slnx`: the sample and a JIT `Pong.Assets` executable that bakes `pong.pck` at
-sample build time and copies it beside the sample executable and into the publish directory, so the
-sample has no `--assets` argument. The pack contains `/data/game`, a `Pong.PongSettings` TOML data
-asset (paddle texture path, ball radius, max score, paddle width/height/speed, and ball speed), and
-`/textures/paddle`, a 32x128 original opaque paddle PNG baked by the ordinary texture processor with
-its KTX2 raw payload. The match records one orthographic camera per tick, fits a `1280x720` 16:9
+`src/RayBork/RayBork.slnx`: the sample and a JIT `Pong.Assets` executable that bakes `pong.pck`
+during the solution build and copies it beside the sample executable and into the publish directory,
+so the sample has no `--assets` argument. `PongSettings` lives only in the sample project;
+`Pong.Assets` references `Pong.csproj` directly instead of linking the settings source file. The
+solution builds `Pong` once and then `Pong.Assets`, which runs the assets executable out of process,
+bakes `pong.pck`, and copies it beside the sample executable; `Pong` does not reference the assets
+project, so the graph has no cycle. The publish target copies the pack produced by the Release
+solution build into the publish directory and fails with a clear error if it is missing. The pack
+contains `/data/game`, a `Pong.PongSettings` TOML data asset (paddle texture path, ball radius, max
+score, paddle width/height/speed, ball speed, ball speed-up per hit, maximum ball speed, and AI
+paddle speed), and `/textures/paddle`, a 32x128 original opaque paddle PNG baked by the ordinary
+texture processor with its KTX2 raw payload. The match is player vs AI: the human moves the left
+paddle and a deterministic AI moves the right paddle at `AiPaddleSpeed` (`400` design pixels per
+second), tracking the ball while it approaches and returning to center otherwise with a `5`
+design-pixel deadzone. The match records one orthographic camera per tick, fits a `1280x720` 16:9
 design space into the current render pixels, and anchors every draw with `ScreenToWorldTransform`.
-`DrawQuad` draws the playfield, border, net, score panels, and textured paddles; `DrawDisc` draws the
-ball; `DrawText` draws the scores, status line, and pause/winner overlay. The simulation uses a fixed
-opening serve, fixed `1/120` second substeps, top and bottom bounces, `Collision.CheckBoxSphere`
-paddle collisions, scoring with the serve going to the loser, a max-score win, and pause/restart. The
-controls are keyboard plus gamepad 0, and the sample accepts `--frames` and `--help`. The build bakes
-the pack without manual steps. The Windows `win-x64` publish finished with zero AOT/trim warnings and
-contains `pong.pck` (22,648 bytes) beside `Pong.exe` (11,271,680 bytes) with no bake tooling; the
-published Windows host ran `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish
-also finished with zero warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the
-published host ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with
-an SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The Windows
-suite is 2,695 tests with no skips (114 GPU); the lavapipe run is 2,688 passed with 7 skipped HDR/
+`DrawQuad` draws the playfield, border, net, score panels, and textured paddles; `DrawDisc` draws
+the ball; `DrawText` draws the scores, status line, and pause/winner overlay. The simulation uses a
+fixed opening serve, fixed `1/120` second substeps, top and bottom bounces,
+`Collision.CheckBoxSphere` paddle collisions, a paddle-hit speed-up of `BallSpeedupPerHit` (`24`) up
+to `MaxBallSpeed` (`900`) with the serve restoring `BallSpeed` (`420`), scoring with the serve going
+to the loser, a max-score win, and pause/restart. The left-paddle controls are W/S, Up/Down, and
+gamepad 0 left stick or d-pad; the sample accepts `--frames` and `--help`. The build bakes the pack
+without manual steps. The Windows `win-x64` publish finished with zero AOT/trim warnings and
+contains `pong.pck` beside `Pong.exe` with no bake tooling; the published Windows host ran
+`--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
+warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the published host ran
+`--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
+`B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The Windows suite is
+2,695 tests with no skips (114 GPU); the lavapipe run is 2,688 passed with 7 skipped HDR/
 scRGB-present tests, because lavapipe exposes only SDR. The sample is a plain user-facing example
 and contains no test-only draw assertion.
 

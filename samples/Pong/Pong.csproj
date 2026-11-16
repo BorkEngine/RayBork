@@ -3,27 +3,21 @@
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <PublishAot>true</PublishAot>
-        <!-- The assets executable is JIT build-time tooling. The bake targets below build and run it
-             out of process, exactly like build/RayBork.BuiltInAssets.targets, so neither it nor
-             RayBork.Bake and its packages enter this project's Native AOT publish graph. -->
-        <PongAssetsProjectFile Condition="'$(PongAssetsProjectFile)' == ''">$(MSBuildProjectDirectory)\Pong.Assets\Pong.Assets.csproj</PongAssetsProjectFile>
         <PongPackFileName Condition="'$(PongPackFileName)' == ''">pong.pck</PongPackFileName>
         <!-- Samples are documentation, not shipped API, so they are held to the recommended set. -->
         <AnalysisLevel>latest-recommended</AnalysisLevel>
     </PropertyGroup>
 
     <!-- The assets project lives inside this sample directory (flat per-sample layout). Keep its
-         sources and its build output out of this project's default item globs. -->
+         sources out of this project's default item globs; the solution builds that project separately. -->
     <ItemGroup>
         <Compile Remove="Pong.Assets/**" />
         <None Remove="Pong.Assets/**" />
     </ItemGroup>
 
-    <!-- Record the generated pack as a build output so dotnet clean removes it and the next build
-         runs a full bake. These paths are evaluated after the SDK has set IntermediateOutputPath and
-         TargetDir. -->
+    <!-- The solution's Pong.Assets build writes the baked pack beside this executable. Record it as a
+         build output so dotnet clean removes it. The path is evaluated after the SDK has set TargetDir. -->
     <ItemGroup Condition="'$(DesignTimeBuild)' != 'true'">
-        <FileWrites Include="$(IntermediateOutputPath)pong-pack\$(PongPackFileName)" />
         <FileWrites Include="$(TargetDir)$(PongPackFileName)" />
     </ItemGroup>
 
@@ -38,64 +32,19 @@
     </ItemGroup>
 
     <!--
-        Bakes pong.pck as part of the sample build and copies it beside the sample executable.
-        The assets executable is built with the outer Configuration but without the outer publish
-        settings, so an AOT publish of this project never carries the JIT bake tool or its packages.
-        The pack is generated under the intermediate output, so dotnet clean removes it and the next
-        build bakes in full. Explicit project and output roots keep the checked-in Assets directory
-        and the generated pack independent of the working directory.
-    -->
-    <Target Name="PongBakeAssets"
-            AfterTargets="Build"
-            Condition="'$(DesignTimeBuild)' != 'true'">
-        <PropertyGroup>
-            <_PongAssetsDirectory>$([System.IO.Path]::GetDirectoryName('$(PongAssetsProjectFile)'))</_PongAssetsDirectory>
-            <_PongAssetsAssembly>$(_PongAssetsDirectory)\bin\$(Configuration)\$(TargetFramework)\Pong.Assets.dll</_PongAssetsAssembly>
-            <_PongPackDirectory>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)pong-pack</_PongPackDirectory>
-            <_PongPackPath>$(_PongPackDirectory)\$(PongPackFileName)</_PongPackPath>
-        </PropertyGroup>
-        <!-- Restore first so a standalone publish or a build on another host has the assets
-             project's NuGet state, then build it without the sample's runtime/publish settings. -->
-        <MSBuild Projects="$(PongAssetsProjectFile)"
-                 Targets="Restore"
-                 Properties="Configuration=$(Configuration)"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
-        <MSBuild Projects="$(PongAssetsProjectFile)"
-                 Targets="Build"
-                 Properties="Configuration=$(Configuration)"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
-        <!-- An AfterTargets hook is not reliable when Build is driven by another project's MSBuild
-             task, so invoke the pinned libshaderc copy explicitly before the bake needs it. -->
-        <MSBuild Projects="$(PongAssetsProjectFile)"
-                 Targets="RayBorkCopyShadercNative"
-                 Properties="Configuration=$(Configuration)"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
-        <Error Condition="!Exists('$(_PongAssetsAssembly)')"
-               Text="RayBork Pong sample: the assets executable was not produced at '$(_PongAssetsAssembly)'." />
-        <MakeDir Directories="$(_PongPackDirectory)" />
-        <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(_PongAssetsAssembly)&quot; bake --project-root &quot;$(_PongAssetsDirectory)&quot; --output-root &quot;$(_PongPackDirectory)&quot;"
-              WorkingDirectory="$(_PongAssetsDirectory)"
-              StandardOutputImportance="high"
-              StandardErrorImportance="high" />
-        <Error Condition="!Exists('$(_PongPackPath)')"
-               Text="RayBork Pong sample: the bake did not produce '$(_PongPackPath)'." />
-        <Copy SourceFiles="$(_PongPackPath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
-    </Target>
-
-    <!--
-        dotnet publish builds first, so PongBakeAssets has already written the pack under the
-        intermediate output. This target copies that pack beside the published executable. A missing
-        pack is an error instead of a published host that cannot start.
+        dotnet publish builds this project but not Pong.Assets, so the pack comes from the Release
+        solution build, where Pong.Assets bakes it beside this executable. A missing pack is an error
+        with the build command instead of a published host that cannot start.
     -->
     <Target Name="PongCopyPackToPublish"
             AfterTargets="Publish"
             Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'">
         <PropertyGroup>
-            <_PongPublishedPackPath>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)pong-pack\$(PongPackFileName)</_PongPublishedPackPath>
+            <_PongSamplePackPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\$(PongPackFileName)</_PongSamplePackPath>
         </PropertyGroup>
-        <Error Condition="!Exists('$(_PongPublishedPackPath)')"
-               Text="RayBork Pong sample: the baked pack '$(_PongPublishedPackPath)' is missing; the publish cannot place $(PongPackFileName) beside the published executable." />
-        <Copy SourceFiles="$(_PongPublishedPackPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+        <Error Condition="!Exists('$(_PongSamplePackPath)')"
+               Text="RayBork Pong sample: the baked pack '$(_PongSamplePackPath)' is missing. Build the Pong solution in Release first: dotnet build samples/Pong/Pong.slnx -c Release. Pong.Assets bakes $(PongPackFileName) beside the sample executable during that build." />
+        <Copy SourceFiles="$(_PongSamplePackPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
     </Target>
 
 </Project>

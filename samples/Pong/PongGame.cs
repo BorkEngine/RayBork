@@ -5,14 +5,15 @@ using RayBork;
 namespace Pong;
 
 /// <summary>
-/// A two-paddle Pong match drawn as one screen-space orthographic pass.
+/// A player-vs-AI Pong match drawn as one screen-space orthographic pass.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The gameplay runs on a 1280x720 design playfield with its origin at the top-left and <c>+Y</c>
-/// pointing down. Each tick fits that 16:9 playfield into the current render pixels, keeps the
-/// remainder as the camera's clear color, and maps design pixels to render pixels when it draws.
-/// Sizes passed to the draw helpers are therefore always render pixels.
+/// The left paddle is the human and the right paddle is the deterministic AI. The gameplay runs on a
+/// 1280x720 design playfield with its origin at the top-left and <c>+Y</c> pointing down. Each tick
+/// fits that 16:9 playfield into the current render pixels, keeps the remainder as the camera's clear
+/// color, and maps design pixels to render pixels when it draws. Sizes passed to the draw helpers are
+/// therefore always render pixels.
 /// </para>
 /// <para>
 /// Every draw anchors a camera-facing plane with
@@ -58,17 +59,21 @@ internal sealed class PongGame : IGame {
     private const float SERVE_SLOPE = 0.45f;
     private const float GAMEPAD_DEADZONE = 0.2f;
 
+    // The AI stops inside this design-pixel band around its target so a ball resting at the target Y
+    // does not make the paddle oscillate between two adjacent substeps.
+    private const float AI_DEADZONE = 5f;
+
     private const int PLAYER_ONE = 1;
-    private const int PLAYER_TWO = 2;
+    private const int AI_PLAYER = 2;
 
     private const string CONTROLS_TEXT =
-        "W/S and Up/Down move paddles   Space pause   R restart   Esc exit";
+        "W/S, Up/Down, left stick or d-pad move the left paddle   Space pause   R restart   Esc exit";
     private const string PAUSED_STATUS = "PAUSED   Space resumes   R restarts   Esc exits";
     private const string MATCH_OVER_STATUS = "MATCH OVER   R restarts   Esc exits";
     private const string PAUSE_TITLE = "PAUSED";
     private const string PAUSE_HINT = "Press Space to resume";
     private const string PLAYER_ONE_WINS = "PLAYER ONE WINS";
-    private const string PLAYER_TWO_WINS = "PLAYER TWO WINS";
+    private const string AI_WINS = "AI WINS";
     private const string RESTART_HINT = "Press R to play again";
 
     private static readonly Color _letterboxColor = Color.FromSrgbBytes(8, 10, 14);
@@ -93,6 +98,7 @@ internal sealed class PongGame : IGame {
     private Vector2 _rightPaddle;
     private Vector2 _ballPosition;
     private Vector2 _ballVelocity;
+    private float _ballSpeed;
     private int _leftScore;
     private int _rightScore;
     private int _winner;
@@ -123,9 +129,9 @@ internal sealed class PongGame : IGame {
 
     /// <inheritdoc/>
     public void Tick(EngineContext context) {
-        (float leftAxis, float rightAxis) = UpdateInput(context);
+        float leftAxis = UpdateInput(context);
         if (!_paused && _winner == 0) {
-            AdvanceSimulation((float)context.DeltaTime, leftAxis, rightAxis);
+            AdvanceSimulation((float)context.DeltaTime, leftAxis);
         }
 
         // One orthographic pass per tick. Its visible height is the render height, so the screen
@@ -167,6 +173,16 @@ internal sealed class PongGame : IGame {
         RequirePositive(settings.PaddleHeight, "PaddleHeight");
         RequirePositive(settings.PaddleSpeed, "PaddleSpeed");
         RequirePositive(settings.BallSpeed, "BallSpeed");
+        RequirePositive(settings.MaxBallSpeed, "MaxBallSpeed");
+        RequirePositive(settings.AiPaddleSpeed, "AiPaddleSpeed");
+        RequireNonNegative(settings.BallSpeedupPerHit, "BallSpeedupPerHit");
+
+        // A cap below the serve speed would make the first hit slow the ball down, which is not a
+        // speed-up; reject the inconsistent pair instead of clamping it silently.
+        if (settings.MaxBallSpeed < settings.BallSpeed) {
+            throw new InvalidOperationException(FormattableString.Invariant(
+                $"Pong settings '{SETTINGS_PATH}' require MaxBallSpeed at least BallSpeed ({settings.BallSpeed}); got {settings.MaxBallSpeed}."));
+        }
 
         // The gameplay math needs the paddle height to leave a non-empty clamp range and the ball
         // to fit between the top and bottom walls; reject impossible baked settings up front.
@@ -185,6 +201,13 @@ internal sealed class PongGame : IGame {
         if (!float.IsFinite(value) || value <= 0f) {
             throw new InvalidOperationException(FormattableString.Invariant(
                 $"Pong settings '{SETTINGS_PATH}' require a positive finite {name}; got {value}."));
+        }
+    }
+
+    private static void RequireNonNegative(float value, string name) {
+        if (!float.IsFinite(value) || value < 0f) {
+            throw new InvalidOperationException(FormattableString.Invariant(
+                $"Pong settings '{SETTINGS_PATH}' require a non-negative finite {name}; got {value}."));
         }
     }
 
@@ -210,11 +233,12 @@ internal sealed class PongGame : IGame {
 
     private void Serve(bool towardRight) {
         _ballPosition = _playfieldCenter;
+        _ballSpeed = _settings!.BallSpeed;
         Vector2 direction = new(towardRight ? 1f : -1f, SERVE_SLOPE);
-        _ballVelocity = Vector2.Normalize(direction) * _settings!.BallSpeed;
+        _ballVelocity = Vector2.Normalize(direction) * _ballSpeed;
     }
 
-    private (float Left, float Right) UpdateInput(EngineContext context) {
+    private float UpdateInput(EngineContext context) {
         IInput input = context.Input;
         IGamepad? gamepad = input.GetGamepad(0);
         if (gamepad is not null && !gamepad.IsConnected) {
@@ -229,11 +253,11 @@ internal sealed class PongGame : IGame {
             || (gamepad?.IsButtonPressed(GamepadButton.Back) ?? false);
         if (restartPressed) {
             ResetMatch();
-            return (0f, 0f);
+            return 0f;
         }
 
         if (_winner != 0) {
-            return (0f, 0f);
+            return 0f;
         }
 
         bool pausePressed = input.IsKeyPressed(Key.Space)
@@ -243,71 +267,49 @@ internal sealed class PongGame : IGame {
         }
 
         if (_paused) {
-            return (0f, 0f);
+            return 0f;
         }
 
-        float left = ReadPaddleAxis(
-            input,
-            Key.W,
-            Key.S,
-            gamepad,
-            GamepadAxis.LeftY,
-            includeDpad: false);
-        float right = ReadPaddleAxis(
-            input,
-            Key.Up,
-            Key.Down,
-            gamepad,
-            GamepadAxis.RightY,
-            includeDpad: true);
-        return (left, right);
+        return ReadPaddleAxis(input, gamepad);
     }
 
-    private static float ReadPaddleAxis(
-        IInput input,
-        Key up,
-        Key down,
-        IGamepad? gamepad,
-        GamepadAxis axis,
-        bool includeDpad) {
+    private static float ReadPaddleAxis(IInput input, IGamepad? gamepad) {
         float value = 0f;
-        if (input.IsKeyDown(up)) {
+        if (input.IsKeyDown(Key.W) || input.IsKeyDown(Key.Up)) {
             value -= 1f;
         }
 
-        if (input.IsKeyDown(down)) {
+        if (input.IsKeyDown(Key.S) || input.IsKeyDown(Key.Down)) {
             value += 1f;
         }
 
         if (gamepad is not null) {
             // The engine applies no deadzone, so the sample picks a small one to stop stick drift.
-            float stick = gamepad.GetAxis(axis);
+            float stick = gamepad.GetAxis(GamepadAxis.LeftY);
             value += MathF.Abs(stick) >= GAMEPAD_DEADZONE ? stick : 0f;
-            if (includeDpad) {
-                if (gamepad.IsButtonDown(GamepadButton.DpadUp)) {
-                    value -= 1f;
-                }
+            if (gamepad.IsButtonDown(GamepadButton.DpadUp)) {
+                value -= 1f;
+            }
 
-                if (gamepad.IsButtonDown(GamepadButton.DpadDown)) {
-                    value += 1f;
-                }
+            if (gamepad.IsButtonDown(GamepadButton.DpadDown)) {
+                value += 1f;
             }
         }
 
         return Math.Clamp(value, -1f, 1f);
     }
 
-    private void AdvanceSimulation(float deltaSeconds, float leftAxis, float rightAxis) {
+    private void AdvanceSimulation(float deltaSeconds, float leftAxis) {
         _simulationAccumulator = MathF.Min(
             _simulationAccumulator + deltaSeconds,
             MAX_SIMULATION_SECONDS);
         while (_simulationAccumulator >= SIMULATION_STEP_SECONDS && _winner == 0) {
-            Step(SIMULATION_STEP_SECONDS, leftAxis, rightAxis);
+            Step(SIMULATION_STEP_SECONDS, leftAxis);
             _simulationAccumulator -= SIMULATION_STEP_SECONDS;
         }
     }
 
-    private void Step(float deltaSeconds, float leftAxis, float rightAxis) {
+    private void Step(float deltaSeconds, float leftAxis) {
         PongSettings settings = _settings!;
         float halfPaddleHeight = settings.PaddleHeight * 0.5f;
         float minY = halfPaddleHeight;
@@ -318,10 +320,7 @@ internal sealed class PongGame : IGame {
             _leftPaddle.Y + (leftAxis * settings.PaddleSpeed * deltaSeconds),
             minY,
             maxY);
-        _rightPaddle.Y = Math.Clamp(
-            _rightPaddle.Y + (rightAxis * settings.PaddleSpeed * deltaSeconds),
-            minY,
-            maxY);
+        _rightPaddle.Y = Math.Clamp(NextAiY(deltaSeconds), minY, maxY);
 
         _ballPosition += _ballVelocity * deltaSeconds;
 
@@ -343,6 +342,24 @@ internal sealed class PongGame : IGame {
         }
     }
 
+    // The AI only chases a ball that is travelling toward it; once the ball moves away it drifts back
+    // to the center so it is in position for the next approach. It moves at most AiPaddleSpeed per
+    // fixed substep and stops at the deadzone edge, so the motion is deterministic and beatable: the
+    // ball outruns the paddle once the hit speed-up carries it past AiPaddleSpeed.
+    private float NextAiY(float deltaSeconds) {
+        PongSettings settings = _settings!;
+        float targetY = _ballVelocity.X > 0f ? _ballPosition.Y : _playfieldCenter.Y;
+        float offset = targetY - _rightPaddle.Y;
+        if (MathF.Abs(offset) <= AI_DEADZONE) {
+            return _rightPaddle.Y;
+        }
+
+        float travel = MathF.Min(
+            settings.AiPaddleSpeed * deltaSeconds,
+            MathF.Abs(offset) - AI_DEADZONE);
+        return _rightPaddle.Y + (MathF.Sign(offset) * travel);
+    }
+
     private void BounceOffPaddle(Vector2 paddle, bool isLeft) {
         PongSettings settings = _settings!;
         float halfWidth = settings.PaddleWidth * 0.5f;
@@ -361,12 +378,14 @@ internal sealed class PongGame : IGame {
             return;
         }
 
-        // The contact offset along the paddle sets the return angle and keeps the ball at the
-        // configured speed; the serve and every bounce therefore share one speed.
+        // Every paddle hit adds BallSpeedupPerHit up to MaxBallSpeed, for both players. The contact
+        // offset sets the return angle; normalizing that direction and scaling it to the new speed
+        // keeps the angle independent of the speed, and Serve restores the speed on every reset.
         float offset = Math.Clamp((_ballPosition.Y - paddle.Y) / halfHeight, -1f, 1f);
         float horizontal = isLeft ? 1f : -1f;
+        _ballSpeed = MathF.Min(_ballSpeed + settings.BallSpeedupPerHit, settings.MaxBallSpeed);
         _ballVelocity = Vector2.Normalize(new Vector2(horizontal, offset * MAX_BOUNCE_SLOPE))
-            * settings.BallSpeed;
+            * _ballSpeed;
 
         // Separate the sphere from the box so the next step does not retest the same overlap.
         float separation = halfWidth + settings.BallRadius + 0.01f;
@@ -384,12 +403,13 @@ internal sealed class PongGame : IGame {
         if (_leftScore >= maxScore) {
             _winner = PLAYER_ONE;
         } else if (_rightScore >= maxScore) {
-            _winner = PLAYER_TWO;
+            _winner = AI_PLAYER;
         }
 
         if (_winner != 0) {
             _ballPosition = _playfieldCenter;
             _ballVelocity = Vector2.Zero;
+            _ballSpeed = 0f;
             return;
         }
 
@@ -457,7 +477,7 @@ internal sealed class PongGame : IGame {
         if (showOverlay) {
             string title = _winner switch {
                 PLAYER_ONE => PLAYER_ONE_WINS,
-                PLAYER_TWO => PLAYER_TWO_WINS,
+                AI_PLAYER => AI_WINS,
                 _ => PAUSE_TITLE,
             };
             string hint = _winner != 0 ? RESTART_HINT : PAUSE_HINT;

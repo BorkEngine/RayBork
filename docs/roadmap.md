@@ -1044,8 +1044,9 @@ blocking glyph generation.
   authored linearly.
 - DPI and resize behavior; letterboxing is a game choice through the camera's clear color and a
   design-space fit, not an engine mode.
-- Pong sample: two paddles, ball, score text, keyboard/gamepad input, pause, restart; a two-project
-  solution with a build-time bake, and the M7 Native AOT gate.
+- Pong sample: a human left paddle and a deterministic AI right paddle, ball speed-up, score text,
+  keyboard/gamepad input, pause, restart; a two-project solution with a build-time bake, and the M7
+  Native AOT gate.
 - Remove the M1-M3 `samples/HelloInterop` diagnostic host.
 - **Deferred to M8, not shipped in M7:** a separate multi-camera overlay pass and per-pass frame
   data. The M7 HUD is same-pass text on a screen-aligned plane.
@@ -1148,29 +1149,40 @@ details:
   in the extracted planes. `Contains` keeps its exact non-negative test, and the tolerance applies
   only to the `Intersects` positive-vertex test.
 - **Pong sample and AOT gate.** `samples/Pong` is the M7 sample and Native AOT gate. It is a
-  two-project solution, `samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, containing the
-  sample and the JIT `Pong.Assets` executable. The sample build invokes the assets executable out of
-  process, bakes `pong.pck`, and copies it beside the sample executable; the publish target copies
-  the same pack beside the published host, so neither needs a manual bake or an `--assets` argument.
-  The pack contains `/data/game`, a `Pong.PongSettings` TOML data asset (paddle texture path, ball
-  radius, max score, paddle width/height/speed, and ball speed), and `/textures/paddle`, a 32x128
-  original opaque paddle PNG with its KTX2 raw payload. Every tick records one orthographic camera
-  at `(0, 0, 1)` looking down `-Z` with `orthographicHeight = Window.RenderHeight`, so the plane at
-  distance `1` has a world-units-per-pixel scale of exactly one. The `1280x720` 16:9 design
-  playfield is fitted into the current render pixels, letterboxed with the camera clear color, and
-  every draw uses `ScreenToWorldTransform`. `DrawQuad` draws the playfield, border, net, score
-  panels, shaded overlay, and textured paddles; `DrawDisc` draws the ball; `DrawText` draws the
-  scores, status line, and pause/winner overlay. The simulation uses a fixed opening serve, fixed
-  `1/120` second substeps capped at a `0.25` second tick delta, top and bottom bounces,
+  two-project solution, `samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, containing
+  the sample and the JIT `Pong.Assets` executable. The solution builds `Pong` once and then
+  `Pong.Assets`; the assets project runs the bake executable out of process over the checked-in
+  sources, bakes `pong.pck`, and copies it beside the sample executable. `Pong` does not reference
+  or build `Pong.Assets`, so the graph has no cycle. The publish target copies the pack produced by
+  the Release solution build into the publish directory and fails with a clear error when it is
+  missing, so neither path needs a manual bake or an `--assets` argument. The pack contains
+  `/data/game`, a `Pong.PongSettings` TOML data asset (paddle texture path, ball radius, max score,
+  paddle width/height/speed, ball speed, ball speed-up per hit, maximum ball speed, and AI paddle
+  speed), and `/textures/paddle`, a 32x128 original opaque paddle PNG with its KTX2 raw payload.
+  `PongSettings` lives only in the sample project; `Pong.Assets` references `Pong.csproj` directly
+  instead of linking the settings file, and the assets project also references `RayBork.Bake`.
+  Every tick records one orthographic camera at `(0, 0, 1)` looking down `-Z` with
+  `orthographicHeight = Window.RenderHeight`, so the plane at distance `1` has a
+  world-units-per-pixel scale of exactly one. The `1280x720` 16:9 design playfield is fitted into
+  the current render pixels, letterboxed with the camera clear color, and every draw uses
+  `ScreenToWorldTransform`. `DrawQuad` draws the playfield, border, net, score panels, shaded
+  overlay, and textured paddles; `DrawDisc` draws the ball; `DrawText` draws the scores, status
+  line, and pause/winner overlay. The left paddle is the human and the right paddle is a
+  deterministic AI that tracks the ball while it approaches and returns to the playfield center
+  otherwise, moving at `AiPaddleSpeed` (`400` design pixels per second) with a `5` design-pixel
+  deadzone inside the fixed substeps. The simulation uses a fixed opening serve, fixed `1/120`
+  second substeps capped at a `0.25` second tick delta, top and bottom bounces,
   `Collision.CheckBoxSphere` paddle collisions, scoring with the serve going to the loser, a
-  max-score win, and pause/restart. The controls are keyboard plus gamepad 0, and the sample accepts
-  `--frames` and `--help`. The Windows `win-x64` publish finished with zero AOT/trim warnings: its
-  publish directory contains `pong.pck` (22,648 bytes) beside `Pong.exe` (11,271,680 bytes) with no
-  bake tooling, and the published host ran `--frames 30` to exit `0` on the hardware driver. The
-  `linux-x64` publish also finished with zero warnings, contains `pong.pck` beside `Pong` and no
-  bake tooling, and the published host ran `--frames 30` to exit `0` on the conformant
-  lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x
-  MSAA, and a 1280x720 window.
+  max-score win, and pause/restart. Every paddle hit adds `BallSpeedupPerHit` (`24` design pixels
+  per second) to the ball speed up to `MaxBallSpeed` (`900`), and a serve or reset restores
+  `BallSpeed` (`420`). The controls are W/S, Up/Down, and gamepad 0 left stick or d-pad for the left
+  paddle, plus pause/restart/exit; the sample accepts `--frames` and `--help`. The Windows `win-x64`
+  publish finished with zero AOT/trim warnings: its publish directory contains `pong.pck` beside
+  `Pong.exe` with no bake tooling, and the published host ran `--frames 30` to exit `0` on the
+  hardware driver. The `linux-x64` publish also finished with zero warnings, contains `pong.pck`
+  beside `Pong` and no bake tooling, and the published host ran `--frames 30` to exit `0` on the
+  conformant lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO
+  presentation, 4x MSAA, and a 1280x720 window.
 - **Tests.** M7 adds `Graphics/ScreenDrawGpuTests`, which submits the production screen-space draws
   through the Vulkan backend and asserts validation-layer cleanliness, statistics, and single-pixel
   linear scene-target probes. It covers pixel-aligned textured quads, the normalized source

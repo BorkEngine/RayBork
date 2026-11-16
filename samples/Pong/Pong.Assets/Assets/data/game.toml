@@ -8,3 +8,6 @@ paddle_width = 18.0
 paddle_height = 110.0
 paddle_speed = 520.0
 ball_speed = 420.0
+ball_speedup_per_hit = 24.0
+max_ball_speed = 900.0
+ai_paddle_speed = 400.0

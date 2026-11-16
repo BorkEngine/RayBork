@@ -60,29 +60,37 @@ samples/Pong/bin/Release/net11.0/win-x64/publish/Pong.exe --frames 30
 
 `samples/Pong` is the M7 sample and Native AOT gate. It is its own solution,
 `samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample and the JIT
-`Pong.Assets` executable. The sample build bakes `pong.pck` from the original 32x128 opaque paddle
-PNG and the `Pong.PongSettings` TOML data and copies it beside the sample executable; the sample
-loads it automatically and has no `--assets` argument. Every tick records one orthographic camera at
-`(0, 0, 1)` with `orthographicHeight = Window.RenderHeight`, fits the `1280x720` design playfield into
-the render pixels, and anchors every draw with `Camera.ScreenToWorldTransform`. `DrawQuad` draws the
-playfield, border, net, score panels, shaded overlay, and textured paddles; `DrawDisc` draws the ball;
-`DrawText` draws the scores, status line, and pause/winner overlay. The match uses a fixed opening
-serve, fixed `1/120` second substeps, `Collision.CheckBoxSphere` paddle collisions, scoring with the
-serve going to the loser, a max-score win, and pause/restart; the controls are keyboard plus gamepad
-0. `--frames` and `--help` are the only options.
+`Pong.Assets` executable. The solution builds `Pong` once and then `Pong.Assets`; the assets
+project runs the bake executable out of process, bakes `pong.pck` from the original 32x128 opaque
+paddle PNG and the `Pong.PongSettings` TOML data, and copies it beside the sample executable. The
+sample loads it automatically and has no `--assets` argument. `PongSettings` lives only in the
+sample project and `Pong.Assets` references that project directly; `Pong` does not reference the
+assets project, so the graph has no cycle. Every tick records one orthographic camera at
+`(0, 0, 1)` with `orthographicHeight = Window.RenderHeight`, fits the `1280x720` design playfield
+into the render pixels, and anchors every draw with `Camera.ScreenToWorldTransform`. `DrawQuad`
+draws the playfield, border, net, score panels, shaded overlay, and textured paddles; `DrawDisc`
+draws the ball; `DrawText` draws the scores, status line, and pause/winner overlay. The match is
+player vs AI: the human moves the left paddle with W/S, Up/Down, or gamepad 0 left stick/d-pad, and
+a deterministic AI moves the right paddle at `AiPaddleSpeed` while tracking the ball. The match uses
+a fixed opening serve, fixed `1/120` second substeps, `Collision.CheckBoxSphere` paddle collisions,
+a paddle-hit speed-up of `BallSpeedupPerHit` up to `MaxBallSpeed`, scoring with the serve going to
+the loser, a max-score win, and pause/restart. `--frames` and `--help` are the only options.
 
-The publish directory must contain the host, its native libraries, and `pong.pck` beside the host,
-and must not contain `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the
-shaderc native libraries, or the glTF packages.
+The publish does not build `Pong.Assets`; the Release solution build above produces `pong.pck`
+beside the sample executable, and `PongCopyPackToPublish` copies it into the publish directory. A
+missing pack fails the publish with a clear error that names the Release solution build. The publish
+directory must contain the host, its native libraries, and `pong.pck` beside the host, and must not
+contain `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native
+libraries, or the glTF packages.
 
-Both M7 publishes started, loaded the baked settings and paddle texture, drew the screen-space
+Both M7 publishes started, loaded the baked settings and paddle texture, played the player-vs-AI
 match, and shut down. The Windows `win-x64` publish finished with zero AOT/trim warnings: its
-publish directory contains `pong.pck` (22,648 bytes) beside `Pong.exe` (11,271,680 bytes) and no
-bake tooling, and the published host ran `--frames 30` to exit `0` on the hardware driver. The
-`linux-x64` publish also finished with zero warnings, contains `pong.pck` beside `Pong` and no bake
-tooling, and the published host ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe
-software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720
-window. WSLg's hardware Vulkan path (Mesa dzn) is not a target.
+publish directory contains `pong.pck` beside `Pong.exe` and no bake tooling, and the published host
+ran `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with
+zero warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the published host ran
+`--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
+`B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware
+Vulkan path (Mesa dzn) is not a target.
 
 `samples/Text` was the M6 sample and Native AOT gate, and it remains a buildable and publishable
 sample. Its solution is `samples/Text/Text.slnx`; it bakes `text.pck` from the checked-in Lora face
@@ -100,7 +108,7 @@ texture at runtime.
 
 AOT publish is a per-milestone gate, not a release-only check. The M7 gate is `samples/Pong`: the
 published hosts open a window, load the baked `Pong.PongSettings` data and texture and the built-in
-texture, shader, and font assets, record the orthographic screen-space pass through
+texture, shader, and font assets, record the player-vs-AI orthographic screen-space pass through
 `ScreenToWorldTransform`, and exit `0`. The gate path exercises the custom-data descriptor decode,
 the texture upload and sampler path, the orthographic projection, `DrawQuad`/`DrawDisc`, the
 `DrawText` HUD path with glyph generation, and the same batch planner as the 3D draws. The sample is
