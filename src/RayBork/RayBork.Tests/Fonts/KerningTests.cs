@@ -8,14 +8,14 @@ namespace RayBork.Tests.Fonts;
 /// and 2, coverage and class definition formats, extension lookups, value record layout, the
 /// <c>kern</c> feature filter, and the documented GPOS-over-<c>kern</c> precedence.
 /// </summary>
-public sealed class KerningTests {
+public sealed class KerningTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KernTableFormat0PairsAreRead() {
+    public void KernTableFormat0PairsAreRead()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
-        byte[] faceBytes = builder
-            .WithKernPairs((a, v, -80), (v, a, -70), (a, t, 50))
-            .Build();
+        byte[] faceBytes = builder.WithKernPairs((a, v, -80), (v, a, -70), (a, t, 50)).Build();
         SfntFace face = SfntFace.Parse(faceBytes);
 
         Assert.Equal(-80, face.GetKerning(a, v));
@@ -27,7 +27,8 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingKerningTablesReturnZero() {
+    public void MissingKerningTablesReturnZero()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
         SfntFace face = SfntFace.Parse(builder.Build());
 
@@ -36,7 +37,8 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposPairPos1GlyphPairsAreRead() {
+    public void GposPairPos1GlyphPairsAreRead()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
         var gpos = new SyntheticGpos { PairPosFormat = 1, CoverageFormat = 1 }
             .AddPair(a, v, -90)
@@ -53,9 +55,11 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposPairPos1SkipsOptionalValueRecordFields() {
+    public void GposPairPos1SkipsOptionalValueRecordFields()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
-        var gpos = new SyntheticGpos {
+        var gpos = new SyntheticGpos
+        {
             PairPosFormat = 1,
             CoverageFormat = 2,
             ValueFormat1 = 0x001D,
@@ -74,9 +78,11 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposPairPos2ClassPairsAreRead() {
+    public void GposPairPos2ClassPairsAreRead()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
-        var gpos = new SyntheticGpos {
+        var gpos = new SyntheticGpos
+        {
             PairPosFormat = 2,
             CoverageFormat = 1,
             ClassDefFormat = 1,
@@ -96,9 +102,11 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposPairPos2ClassDefinitionFormat2IsRead() {
+    public void GposPairPos2ClassDefinitionFormat2IsRead()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
-        var gpos = new SyntheticGpos {
+        var gpos = new SyntheticGpos
+        {
             PairPosFormat = 2,
             CoverageFormat = 2,
             ClassDefFormat = 2,
@@ -117,13 +125,14 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposExtensionLookupIsRead() {
+    public void GposExtensionLookupIsRead()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
-        var gpos = new SyntheticGpos {
-            PairPosFormat = 2,
-            ExtensionLookup = true,
-        }
-            .AddPair(a, v, -77);
+        var gpos = new SyntheticGpos { PairPosFormat = 2, ExtensionLookup = true }.AddPair(
+            a,
+            v,
+            -77
+        );
         SfntFace face = SfntFace.Parse(builder.WithGpos(gpos).Build());
 
         Assert.Equal(-77, face.GetKerning(a, v));
@@ -134,7 +143,8 @@ public sealed class KerningTests {
     [InlineData("DFLT")]
     [InlineData("cyrl")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposScriptSelectionHonorsLatnThenDfltThenTheFirstScript(string scriptTag) {
+    public void GposScriptSelectionHonorsLatnThenDfltThenTheFirstScript(string scriptTag)
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
         var gpos = new SyntheticGpos { ScriptTag = scriptTag }.AddPair(a, v, -66);
         SfntFace face = SfntFace.Parse(builder.WithGpos(gpos).Build());
@@ -144,14 +154,13 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposWinsOverTheKernTable() {
+    public void GposWinsOverTheKernTable()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
         var gpos = new SyntheticGpos().AddPair(a, v, -80);
         SfntFace face = SfntFace.Parse(
-            builder
-                .WithKernPairs((a, v, 100), (t, o, 50))
-                .WithGpos(gpos)
-                .Build());
+            builder.WithKernPairs((a, v, 100), (t, o, 50)).WithGpos(gpos).Build()
+        );
 
         Assert.Equal(-80, face.GetKerning(a, v));
         Assert.Equal(0, face.GetKerning(t, o));
@@ -160,21 +169,19 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KernTableIsUsedWhenGposHasNoKernFeature() {
+    public void KernTableIsUsedWhenGposHasNoKernFeature()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
         var gpos = new SyntheticGpos { FeatureTag = "liga" }.AddPair(a, v, -55);
-        SfntFace face = SfntFace.Parse(
-            builder
-                .WithKernPairs((a, v, -80))
-                .WithGpos(gpos)
-                .Build());
+        SfntFace face = SfntFace.Parse(builder.WithKernPairs((a, v, -80)).WithGpos(gpos).Build());
 
         Assert.Equal(-80, face.GetKerning(a, v));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposWithoutKernFeatureAndNoKernTableReturnsZero() {
+    public void GposWithoutKernFeatureAndNoKernTableReturnsZero()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
         var gpos = new SyntheticGpos { FeatureTag = "liga" }.AddPair(a, v, -55);
         SfntFace face = SfntFace.Parse(builder.WithGpos(gpos).Build());
@@ -184,7 +191,8 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GposPairWithoutAnXAdvanceContributesZero() {
+    public void GposPairWithoutAnXAdvanceContributesZero()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
         var gpos = new SyntheticGpos { ValueFormat1 = 0x0001 }.AddPair(a, v, -55);
         SfntFace face = SfntFace.Parse(builder.WithGpos(gpos).Build());
@@ -194,10 +202,10 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KerningGlyphIdentifiersOutsideTheFaceAreRejected() {
+    public void KerningGlyphIdentifiersOutsideTheFaceAreRejected()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
-        SfntFace face = SfntFace.Parse(
-            builder.WithKernPairs((a, v, -10)).Build());
+        SfntFace face = SfntFace.Parse(builder.WithKernPairs((a, v, -10)).Build());
 
         Assert.Throws<ArgumentOutOfRangeException>(() => face.GetKerning(-1, v));
         Assert.Throws<ArgumentOutOfRangeException>(() => face.GetKerning(a, face.GlyphCount));
@@ -205,13 +213,15 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KernSubtablesFilterUnsupportedVersionAndCoverage() {
+    public void KernSubtablesFilterUnsupportedVersionAndCoverage()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateKerningBuilder();
         byte[] kern = SyntheticKern.Build(
             new SyntheticKernSubtable(1, 0x0001, (a, v, 111)),
             new SyntheticKernSubtable(0, 0x0101, (t, o, 222)),
             new SyntheticKernSubtable(0, 0x0000, (a, o, 333)),
-            new SyntheticKernSubtable(0, 0x0001, (a, v, -40)));
+            new SyntheticKernSubtable(0, 0x0001, (a, v, -40))
+        );
         SfntFace face = SfntFace.Parse(builder.WithRawKern(kern).Build());
 
         Assert.Equal(-40, face.GetKerning(a, v));
@@ -221,11 +231,13 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KernDuplicatePairsTakeTheLastSubtable() {
+    public void KernDuplicatePairsTakeTheLastSubtable()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
         byte[] kern = SyntheticKern.Build(
             new SyntheticKernSubtable(0, 0x0001, (a, v, -10)),
-            new SyntheticKernSubtable(0, 0x0001, (a, v, 50)));
+            new SyntheticKernSubtable(0, 0x0001, (a, v, 50))
+        );
         SfntFace face = SfntFace.Parse(builder.WithRawKern(kern).Build());
 
         Assert.Equal(50, face.GetKerning(a, v));
@@ -233,7 +245,8 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KernPairBudgetAllowsTheExactLimit() {
+    public void KernPairBudgetAllowsTheExactLimit()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateKerningBuilder();
         byte[] kern = BuildKernTable(CreatePairCounts(1_000_000));
         SfntFace face = SfntFace.Parse(builder.WithRawKern(kern).Build());
@@ -243,37 +256,46 @@ public sealed class KerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KernPairBudgetRejectsOnePastTheLimit() {
+    public void KernPairBudgetRejectsOnePastTheLimit()
+    {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateKerningBuilder();
         byte[] kern = BuildKernTable(CreatePairCounts(1_000_001));
         byte[] faceBytes = builder.WithRawKern(kern).Build();
 
         long before = GC.GetAllocatedBytesForCurrentThread();
-        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
-            () => SfntFace.Parse(faceBytes));
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(() =>
+            SfntFace.Parse(faceBytes)
+        );
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.Contains("kern", exception.Reason, StringComparison.Ordinal);
         Assert.Contains("1000000", exception.Reason, StringComparison.Ordinal);
-        Assert.True(allocated < 16 * 1024 * 1024, $"The rejected kern parse allocated {allocated} bytes.");
+        Assert.True(
+            allocated < 16 * 1024 * 1024,
+            $"The rejected kern parse allocated {allocated} bytes."
+        );
     }
 
-    private static int[] CreatePairCounts(int totalPairs) {
+    private static int[] CreatePairCounts(int totalPairs)
+    {
         const int pairsPerSubtable = 10_920;
         int fullSubtables = totalPairs / pairsPerSubtable;
         int remainder = totalPairs % pairsPerSubtable;
         int[] counts = new int[fullSubtables + (remainder > 0 ? 1 : 0)];
         Array.Fill(counts, pairsPerSubtable, 0, fullSubtables);
-        if (remainder > 0) {
+        if (remainder > 0)
+        {
             counts[^1] = remainder;
         }
 
         return counts;
     }
 
-    private static byte[] BuildKernTable(int[] pairCounts) {
+    private static byte[] BuildKernTable(int[] pairCounts)
+    {
         int totalLength = 4;
-        foreach (int pairCount in pairCounts) {
+        foreach (int pairCount in pairCounts)
+        {
             totalLength += 14 + (6 * pairCount);
         }
 
@@ -282,18 +304,24 @@ public sealed class KerningTests {
         BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(2), (ushort)pairCounts.Length);
         int position = 4;
         bool distinctPairWritten = false;
-        foreach (int pairCount in pairCounts) {
+        foreach (int pairCount in pairCounts)
+        {
             int subtableLength = 14 + (6 * pairCount);
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position), 0);
-            BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 2), (ushort)subtableLength);
+            BinaryPrimitives.WriteUInt16BigEndian(
+                kern.AsSpan(position + 2),
+                (ushort)subtableLength
+            );
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 4), 0x0001);
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(position + 6), (ushort)pairCount);
-            for (int pair = 0; pair < pairCount; pair++) {
+            for (int pair = 0; pair < pairCount; pair++)
+            {
                 int record = position + 14 + (6 * pair);
                 int left = 0;
                 int right = 0;
                 int value = 0;
-                if (!distinctPairWritten) {
+                if (!distinctPairWritten)
+                {
                     left = 1;
                     right = 2;
                     value = -42;
@@ -311,7 +339,8 @@ public sealed class KerningTests {
         return kern;
     }
 
-    private static (SyntheticFontBuilder Builder, int A, int V, int T, int O) CreateKerningBuilder() {
+    private static (SyntheticFontBuilder Builder, int A, int V, int T, int O) CreateKerningBuilder()
+    {
         var builder = SyntheticFontBuilder.Create();
         int a = AddGlyph(builder);
         int v = AddGlyph(builder);
@@ -321,10 +350,12 @@ public sealed class KerningTests {
         return (builder, a, v, t, o);
     }
 
-    private static int AddGlyph(SyntheticFontBuilder builder) => builder.AddSimple(
-        600,
-        10,
-        new SyntheticPoint(0, 0),
-        new SyntheticPoint(500, 0),
-        new SyntheticPoint(250, 700));
+    private static int AddGlyph(SyntheticFontBuilder builder) =>
+        builder.AddSimple(
+            600,
+            10,
+            new SyntheticPoint(0, 0),
+            new SyntheticPoint(500, 0),
+            new SyntheticPoint(250, 700)
+        );
 }

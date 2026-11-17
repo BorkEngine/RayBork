@@ -3,7 +3,8 @@ namespace RayBork.Internal;
 /// <summary>
 /// App-level exit control shared between the window/main thread and the tick loop.
 /// </summary>
-internal interface IAppControl {
+internal interface IAppControl
+{
     /// <summary>
     /// Requests a graceful exit. Idempotent and safe to call from any thread.
     /// </summary>

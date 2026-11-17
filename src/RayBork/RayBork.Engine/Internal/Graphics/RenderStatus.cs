@@ -15,7 +15,8 @@ namespace RayBork.Internal;
 /// <c>await</c>. A reader therefore blocks for at most one writer's copy.
 /// </para>
 /// </remarks>
-internal sealed class RenderStatus {
+internal sealed class RenderStatus
+{
     private readonly Lock _gate = new();
     private EngineInfo _info = CreateDefaultInfo();
     private RenderStats _stats;
@@ -24,9 +25,12 @@ internal sealed class RenderStatus {
     /// Gets the last written engine information. The render thread writes it at startup and after a
     /// recovery that changes the device or presentation state.
     /// </summary>
-    internal EngineInfo Info {
-        get {
-            lock (_gate) {
+    internal EngineInfo Info
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _info;
             }
         }
@@ -35,9 +39,12 @@ internal sealed class RenderStatus {
     /// <summary>
     /// Gets the last written render statistics, which describe the last completed frame.
     /// </summary>
-    internal RenderStats Stats {
-        get {
-            lock (_gate) {
+    internal RenderStats Stats
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _stats;
             }
         }
@@ -48,24 +55,28 @@ internal sealed class RenderStatus {
     /// version with no backend, device, or surface selected.
     /// </summary>
     /// <returns>The default engine information.</returns>
-    internal static EngineInfo CreateDefaultInfo() => new(
-        "RayBork",
-        EngineVersion.Current,
-        string.Empty,
-        string.Empty,
-        0u,
-        string.Empty,
-        false,
-        0,
-        PresentMode.Mailbox,
-        false);
+    internal static EngineInfo CreateDefaultInfo() =>
+        new(
+            "RayBork",
+            EngineVersion.Current,
+            string.Empty,
+            string.Empty,
+            0u,
+            string.Empty,
+            false,
+            0,
+            PresentMode.Mailbox,
+            false
+        );
 
     /// <summary>
     /// Replaces the engine information. Called on the render thread.
     /// </summary>
     /// <param name="info">The new value.</param>
-    internal void SetInfo(EngineInfo info) {
-        lock (_gate) {
+    internal void SetInfo(EngineInfo info)
+    {
+        lock (_gate)
+        {
             _info = info;
         }
     }
@@ -74,8 +85,10 @@ internal sealed class RenderStatus {
     /// Replaces the render statistics. Called on the render thread after a frame completes.
     /// </summary>
     /// <param name="stats">The new value.</param>
-    internal void SetStats(RenderStats stats) {
-        lock (_gate) {
+    internal void SetStats(RenderStats stats)
+    {
+        lock (_gate)
+        {
             _stats = stats;
         }
     }

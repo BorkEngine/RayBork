@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// Later M2 renderer tasks read this snapshot on the render thread. The builder is single-use, so no
 /// later builder call can change it.
 /// </remarks>
-internal sealed class RenderSettings {
+internal sealed class RenderSettings
+{
     /// <summary>
     /// Gets the requested present mode. The renderer may fall back to another supported mode and
     /// reports the effective mode in <see cref="EngineInfo.PresentMode"/>.

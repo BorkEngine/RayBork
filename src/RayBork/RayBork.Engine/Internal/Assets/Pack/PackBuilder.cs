@@ -16,7 +16,8 @@ namespace RayBork.Internal;
 /// <see cref="ArgumentException"/>; the reader's corruption diagnostics are separate.
 /// </para>
 /// </remarks>
-internal sealed class PackBuilder {
+internal sealed class PackBuilder
+{
     private readonly List<PackSourceEntry> _entries = [];
     private readonly HashSet<string> _paths = new(StringComparer.Ordinal);
     private readonly PackCompressionPolicy _compression;
@@ -29,14 +30,16 @@ internal sealed class PackBuilder {
     /// <param name="compression">The payload compression policy.</param>
     /// <exception cref="ArgumentException"><paramref name="displayPath"/> is empty or whitespace.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="compression"/> is not a known policy.</exception>
-    internal PackBuilder(string displayPath, PackCompressionPolicy compression) {
+    internal PackBuilder(string displayPath, PackCompressionPolicy compression)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayPath);
-        if (compression is not PackCompressionPolicy.Debug
-            and not PackCompressionPolicy.Release) {
+        if (compression is not PackCompressionPolicy.Debug and not PackCompressionPolicy.Release)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(compression),
                 compression,
-                "Unknown pack compression policy.");
+                "Unknown pack compression policy."
+            );
         }
 
         _displayPath = displayPath;
@@ -54,10 +57,13 @@ internal sealed class PackBuilder {
     internal PackBuilder(
         string displayPath,
         PackCompressionPolicy compression,
-        IEnumerable<PackSourceEntry> entries)
-        : this(displayPath, compression) {
+        IEnumerable<PackSourceEntry> entries
+    )
+        : this(displayPath, compression)
+    {
         ArgumentNullException.ThrowIfNull(entries);
-        foreach (PackSourceEntry entry in entries) {
+        foreach (PackSourceEntry entry in entries)
+        {
             Add(entry);
         }
     }
@@ -89,7 +95,9 @@ internal sealed class PackBuilder {
         string path,
         AssetEntryType type,
         ReadOnlySpan<byte> payload,
-        uint alignment = 1) {
+        uint alignment = 1
+    )
+    {
         ArgumentNullException.ThrowIfNull(path);
         ValidateNewEntry(path, type, alignment);
 
@@ -104,7 +112,8 @@ internal sealed class PackBuilder {
     /// <exception cref="ArgumentNullException"><paramref name="entry"/> is null.</exception>
     /// <exception cref="ArgumentException">The entry path is invalid or already queued.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The entry type or alignment is outside its v1 set.</exception>
-    internal void Add(PackSourceEntry entry) {
+    internal void Add(PackSourceEntry entry)
+    {
         ArgumentNullException.ThrowIfNull(entry);
         ValidateNewEntry(entry.Path, entry.Type, entry.Alignment);
 
@@ -118,8 +127,8 @@ internal sealed class PackBuilder {
     /// <param name="destination">The writable destination stream.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is not writable.</exception>
     /// <exception cref="ArgumentException">A queued entry is invalid or the pack exceeds a v1 limit.</exception>
-    internal void WriteTo(Stream destination)
-        => PackLayout.Create(_entries, _compression, _displayPath).WriteTo(destination);
+    internal void WriteTo(Stream destination) =>
+        PackLayout.Create(_entries, _compression, _displayPath).WriteTo(destination);
 
     /// <summary>
     /// Builds the complete pack in one array.
@@ -136,21 +145,30 @@ internal sealed class PackBuilder {
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or not a valid path.</exception>
     /// <exception cref="ArgumentException">A queued entry is invalid or the pack exceeds a v1 limit.</exception>
-    internal void Write(string path) {
+    internal void Write(string path)
+    {
         ArgumentNullException.ThrowIfNull(path);
-        if (string.IsNullOrWhiteSpace(path)) {
-            throw new ArgumentException("The pack path must not be empty or whitespace.", nameof(path));
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException(
+                "The pack path must not be empty or whitespace.",
+                nameof(path)
+            );
         }
 
         string fullPath;
-        try {
+        try
+        {
             fullPath = Path.GetFullPath(path);
-        } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-            or PathTooLongException) {
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
             throw new ArgumentException(
                 $"Invalid pack path '{path}': {exception.Message}",
                 nameof(path),
-                exception);
+                exception
+            );
         }
 
         PackLayout layout = PackLayout.Create(_entries, _compression, _displayPath);
@@ -160,43 +178,55 @@ internal sealed class PackBuilder {
             FileAccess.Write,
             FileShare.None,
             bufferSize: 4096,
-            FileOptions.SequentialScan);
+            FileOptions.SequentialScan
+        );
         layout.WriteTo(stream);
     }
 
-    private void ValidateNewEntry(string path, AssetEntryType type, uint alignment) {
-        if (!AssetPath.TryValidateCanonical(path, out string? pathReason)) {
+    private void ValidateNewEntry(string path, AssetEntryType type, uint alignment)
+    {
+        if (!AssetPath.TryValidateCanonical(path, out string? pathReason))
+        {
             throw new ArgumentException(
                 $"Asset pack '{_displayPath}' has the non-canonical path '{path}': {pathReason}.",
-                nameof(path));
+                nameof(path)
+            );
         }
 
-        if (!PackFormat.IsValidEntryType(type)) {
+        if (!PackFormat.IsValidEntryType(type))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(type),
                 type,
-                $"Asset pack '{_displayPath}' entry '{path}' has an unknown asset type.");
+                $"Asset pack '{_displayPath}' entry '{path}' has an unknown asset type."
+            );
         }
 
-        if (!PackFormat.IsValidAlignment(alignment)) {
+        if (!PackFormat.IsValidAlignment(alignment))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(alignment),
                 alignment,
                 $"Asset pack '{_displayPath}' entry '{path}' has an invalid alignment; v1 accepts "
-                    + "1, 16, 64, or 256.");
+                    + "1, 16, 64, or 256."
+            );
         }
 
-        if ((uint)_entries.Count >= PackFormat.MAX_ENTRY_COUNT) {
+        if ((uint)_entries.Count >= PackFormat.MAX_ENTRY_COUNT)
+        {
             throw new ArgumentException(
                 $"Asset pack '{_displayPath}' cannot hold more than "
                     + $"{PackFormat.MAX_ENTRY_COUNT} entries.",
-                nameof(path));
+                nameof(path)
+            );
         }
 
-        if (_paths.Contains(path)) {
+        if (_paths.Contains(path))
+        {
             throw new ArgumentException(
                 $"Asset pack '{_displayPath}' already has the path '{path}'.",
-                nameof(path));
+                nameof(path)
+            );
         }
     }
 }

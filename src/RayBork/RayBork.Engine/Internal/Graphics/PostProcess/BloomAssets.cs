@@ -16,7 +16,8 @@ namespace RayBork.Internal;
 /// recorded frame.
 /// </para>
 /// </remarks>
-internal sealed class BloomAssets : IDisposable {
+internal sealed class BloomAssets : IDisposable
+{
     private readonly ShaderProgram _prefilter;
     private readonly ShaderProgram _downsample;
     private readonly ShaderProgram _upsample;
@@ -27,7 +28,9 @@ internal sealed class BloomAssets : IDisposable {
         ShaderProgram prefilter,
         ShaderProgram downsample,
         ShaderProgram upsample,
-        ShaderProgram composite) {
+        ShaderProgram composite
+    )
+    {
         _prefilter = prefilter;
         _downsample = downsample;
         _upsample = upsample;
@@ -46,7 +49,8 @@ internal sealed class BloomAssets : IDisposable {
     /// <exception cref="AssetLoadException">
     /// A built-in bloom asset is missing, has the wrong shader ABI contract, or cannot upload.
     /// </exception>
-    internal static async Task<BloomAssets> LoadAsync(IAssetCatalog assets) {
+    internal static async Task<BloomAssets> LoadAsync(IAssetCatalog assets)
+    {
         ArgumentNullException.ThrowIfNull(assets);
 
         ShaderProgram? prefilter = null;
@@ -54,44 +58,56 @@ internal sealed class BloomAssets : IDisposable {
         ShaderProgram? upsample = null;
         ShaderProgram? composite = null;
 
-        try {
-            prefilter = await assets.Load<ShaderProgram>(BloomShaderContract.PREFILTER_PATH)
+        try
+        {
+            prefilter = await assets
+                .Load<ShaderProgram>(BloomShaderContract.PREFILTER_PATH)
                 .ConfigureAwait(false);
-            downsample = await assets.Load<ShaderProgram>(BloomShaderContract.DOWNSAMPLE_PATH)
+            downsample = await assets
+                .Load<ShaderProgram>(BloomShaderContract.DOWNSAMPLE_PATH)
                 .ConfigureAwait(false);
-            upsample = await assets.Load<ShaderProgram>(BloomShaderContract.UPSAMPLE_PATH)
+            upsample = await assets
+                .Load<ShaderProgram>(BloomShaderContract.UPSAMPLE_PATH)
                 .ConfigureAwait(false);
-            composite = await assets.Load<ShaderProgram>(BloomShaderContract.COMPOSITE_PATH)
+            composite = await assets
+                .Load<ShaderProgram>(BloomShaderContract.COMPOSITE_PATH)
                 .ConfigureAwait(false);
 
             ValidateProgram(
                 prefilter,
                 BloomShaderContract.PREFILTER_PATH,
                 BloomShaderContract.PREFILTER_UNIFORMS,
-                BloomShaderContract.PREFILTER_TEXTURES);
+                BloomShaderContract.PREFILTER_TEXTURES
+            );
             ValidateProgram(
                 downsample,
                 BloomShaderContract.DOWNSAMPLE_PATH,
                 BloomShaderContract.DOWNSAMPLE_UNIFORMS,
-                BloomShaderContract.DOWNSAMPLE_TEXTURES);
+                BloomShaderContract.DOWNSAMPLE_TEXTURES
+            );
             ValidateProgram(
                 upsample,
                 BloomShaderContract.UPSAMPLE_PATH,
                 BloomShaderContract.UPSAMPLE_UNIFORMS,
-                BloomShaderContract.UPSAMPLE_TEXTURES);
+                BloomShaderContract.UPSAMPLE_TEXTURES
+            );
             ValidateProgram(
                 composite,
                 BloomShaderContract.COMPOSITE_PATH,
                 BloomShaderContract.COMPOSITE_UNIFORMS,
-                BloomShaderContract.COMPOSITE_TEXTURES);
+                BloomShaderContract.COMPOSITE_TEXTURES
+            );
 
             return new BloomAssets(prefilter, downsample, upsample, composite);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             ReleaseQuietly(prefilter);
             ReleaseQuietly(downsample);
             ReleaseQuietly(upsample);
             ReleaseQuietly(composite);
-            if (exception is AssetLoadException) {
+            if (exception is AssetLoadException)
+            {
                 throw;
             }
 
@@ -100,14 +116,17 @@ internal sealed class BloomAssets : IDisposable {
                     + "upsample, and composite shader programs must all load from the built-in pack with "
                     + "the documented shader ABI.",
                 DiagnosticCodes.ASSET_LOAD_FAILED,
-                exception);
+                exception
+            );
         }
     }
 
     /// <summary>Gets the threshold and soft-knee prefilter program.</summary>
     /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
-    internal ShaderProgram PrefilterProgram {
-        get {
+    internal ShaderProgram PrefilterProgram
+    {
+        get
+        {
             ThrowIfDisposed();
             return _prefilter;
         }
@@ -115,8 +134,10 @@ internal sealed class BloomAssets : IDisposable {
 
     /// <summary>Gets the downsample program.</summary>
     /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
-    internal ShaderProgram DownsampleProgram {
-        get {
+    internal ShaderProgram DownsampleProgram
+    {
+        get
+        {
             ThrowIfDisposed();
             return _downsample;
         }
@@ -124,8 +145,10 @@ internal sealed class BloomAssets : IDisposable {
 
     /// <summary>Gets the tent upsample program.</summary>
     /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
-    internal ShaderProgram UpsampleProgram {
-        get {
+    internal ShaderProgram UpsampleProgram
+    {
+        get
+        {
             ThrowIfDisposed();
             return _upsample;
         }
@@ -133,16 +156,20 @@ internal sealed class BloomAssets : IDisposable {
 
     /// <summary>Gets the composite program.</summary>
     /// <exception cref="ObjectDisposedException">The assets are disposed.</exception>
-    internal ShaderProgram CompositeProgram {
-        get {
+    internal ShaderProgram CompositeProgram
+    {
+        get
+        {
             ThrowIfDisposed();
             return _composite;
         }
     }
 
     /// <summary>Releases every owner reference. Idempotent.</summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -157,51 +184,70 @@ internal sealed class BloomAssets : IDisposable {
         ShaderProgram program,
         string path,
         ShaderUniformAsset[] uniforms,
-        string[] textures) {
+        string[] textures
+    )
+    {
         ObjectDisposedException.ThrowIf(program.IsDisposed, program);
         const ShaderStageMask required = ShaderStageMask.Vertex | ShaderStageMask.Fragment;
-        if ((program.Stages & required) != required) {
+        if ((program.Stages & required) != required)
+        {
             throw new InvalidOperationException(
                 $"The built-in bloom shader '{path}' must declare both the vertex and fragment stages; "
-                    + $"it declares {program.Stages}.");
+                    + $"it declares {program.Stages}."
+            );
         }
 
-        if (program.Uniforms.Count != uniforms.Length || program.Textures.Count != textures.Length) {
+        if (program.Uniforms.Count != uniforms.Length || program.Textures.Count != textures.Length)
+        {
             throw new InvalidOperationException(
                 $"The built-in bloom shader '{path}' has {program.Uniforms.Count} uniform(s) and "
                     + $"{program.Textures.Count} texture(s); expected {uniforms.Length} and "
-                    + $"{textures.Length}.");
+                    + $"{textures.Length}."
+            );
         }
 
-        for (int index = 0; index < uniforms.Length; index++) {
+        for (int index = 0; index < uniforms.Length; index++)
+        {
             ShaderUniform uniform = program.Uniforms[index];
-            if (!string.Equals(uniform.Name, uniforms[index].Name, StringComparison.Ordinal)
-                || uniform.Type != uniforms[index].Type) {
+            if (
+                !string.Equals(uniform.Name, uniforms[index].Name, StringComparison.Ordinal)
+                || uniform.Type != uniforms[index].Type
+            )
+            {
                 throw new InvalidOperationException(
                     $"The built-in bloom shader '{path}' declares uniform {index} as "
                         + $"'{uniform.Name}' ({uniform.Type}); expected '{uniforms[index].Name}' "
-                        + $"({uniforms[index].Type}).");
+                        + $"({uniforms[index].Type})."
+                );
             }
         }
 
-        for (int index = 0; index < textures.Length; index++) {
+        for (int index = 0; index < textures.Length; index++)
+        {
             string name = program.Textures[index].Name;
-            if (!string.Equals(name, textures[index], StringComparison.Ordinal)) {
+            if (!string.Equals(name, textures[index], StringComparison.Ordinal))
+            {
                 throw new InvalidOperationException(
                     $"The built-in bloom shader '{path}' declares texture {index} as '{name}'; "
-                        + $"expected '{textures[index]}'.");
+                        + $"expected '{textures[index]}'."
+                );
             }
         }
     }
 
-    private static void ReleaseQuietly(ShaderProgram? program) {
-        if (program is null) {
+    private static void ReleaseQuietly(ShaderProgram? program)
+    {
+        if (program is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             program.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The catalog force-disposed the asset during shutdown; its reference is already gone.
         }
     }

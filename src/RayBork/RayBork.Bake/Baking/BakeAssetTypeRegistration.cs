@@ -6,7 +6,8 @@ namespace RayBork.Bake.Baking;
 /// <summary>
 /// One registered data type: its compiled shape binding, serialization delegate, and validators.
 /// </summary>
-internal sealed class BakeAssetTypeRegistration {
+internal sealed class BakeAssetTypeRegistration
+{
     private readonly Func<BakeBindContext, object?> _bind;
     private readonly Func<object, byte[]> _serialize;
     private readonly List<IBakeAssetValidator> _validators = [];
@@ -15,7 +16,9 @@ internal sealed class BakeAssetTypeRegistration {
         Type type,
         string typeName,
         Func<BakeBindContext, object?> bind,
-        Func<object, byte[]> serialize) {
+        Func<object, byte[]> serialize
+    )
+    {
         Type = type;
         TypeName = typeName;
         _bind = bind;
@@ -45,27 +48,32 @@ internal sealed class BakeAssetTypeRegistration {
     /// <typeparam name="T">The data type.</typeparam>
     /// <param name="validator">The validator.</param>
     internal void AddValidator<T>(IAssetValidator<T> validator)
-        where T : IShapeable<T>
-        => _validators.Add(new BakeAssetValidatorRegistration<T>(validator));
+        where T : IShapeable<T> =>
+        _validators.Add(new BakeAssetValidatorRegistration<T>(validator));
 
     /// <summary>Creates the registration for a compiled-shape type.</summary>
     /// <typeparam name="T">The shapeable type.</typeparam>
     /// <returns>The registration.</returns>
     internal static BakeAssetTypeRegistration Create<T>()
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         string typeName = typeof(T).FullName
-            ?? throw new InvalidOperationException($"The registered type '{typeof(T)}' has no full name.");
+            ?? throw new InvalidOperationException(
+                $"The registered type '{typeof(T)}' has no full name."
+            );
 
         return new BakeAssetTypeRegistration(
             typeof(T),
             typeName,
             context => TomlShapeBinder.Bind<T>(context),
-            value => RayBork.Internal.AssetSerialization.Serialize((T)value));
+            value => RayBork.Internal.AssetSerialization.Serialize((T)value)
+        );
     }
 }
 
 /// <summary>The non-generic seam over one semantic validator.</summary>
-internal interface IBakeAssetValidator {
+internal interface IBakeAssetValidator
+{
     /// <summary>Gets the validator CLR type for diagnostics.</summary>
     Type ValidatorType { get; }
 
@@ -79,12 +87,14 @@ internal interface IBakeAssetValidator {
 /// <summary>The typed registration over one public validator.</summary>
 /// <typeparam name="T">The validated data type.</typeparam>
 internal sealed class BakeAssetValidatorRegistration<T> : IBakeAssetValidator
-    where T : IShapeable<T> {
+    where T : IShapeable<T>
+{
     private readonly IAssetValidator<T> _validator;
 
     /// <summary>Initializes the validator registration.</summary>
     /// <param name="validator">The public validator.</param>
-    internal BakeAssetValidatorRegistration(IAssetValidator<T> validator) {
+    internal BakeAssetValidatorRegistration(IAssetValidator<T> validator)
+    {
         ArgumentNullException.ThrowIfNull(validator);
         _validator = validator;
         ValidatorType = validator.GetType();
@@ -94,6 +104,6 @@ internal sealed class BakeAssetValidatorRegistration<T> : IBakeAssetValidator
     public Type ValidatorType { get; }
 
     /// <inheritdoc/>
-    public void Validate(string assetPath, object asset, IAssetProcessorDiagnostics diagnostics)
-        => _validator.Validate(assetPath, (T)asset, diagnostics);
+    public void Validate(string assetPath, object asset, IAssetProcessorDiagnostics diagnostics) =>
+        _validator.Validate(assetPath, (T)asset, diagnostics);
 }

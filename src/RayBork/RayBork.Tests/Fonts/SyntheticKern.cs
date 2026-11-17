@@ -11,11 +11,14 @@ namespace RayBork.Tests.Fonts;
 /// encoded as a header-only subtable: the parser skips it because those variants are unsupported, and
 /// a real font can carry them.
 /// </remarks>
-internal static class SyntheticKern {
-    internal static byte[] Build(params SyntheticKernSubtable[] subtables) {
+internal static class SyntheticKern
+{
+    internal static byte[] Build(params SyntheticKernSubtable[] subtables)
+    {
         byte[][] bodies = new byte[subtables.Length][];
         int totalLength = 4;
-        for (int index = 0; index < subtables.Length; index++) {
+        for (int index = 0; index < subtables.Length; index++)
+        {
             bodies[index] = BuildSubtable(subtables[index]);
             totalLength += bodies[index].Length;
         }
@@ -24,7 +27,8 @@ internal static class SyntheticKern {
         BinaryPrimitives.WriteUInt16BigEndian(kern, 0);
         BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(2), (ushort)subtables.Length);
         int offset = 4;
-        foreach (byte[] body in bodies) {
+        foreach (byte[] body in bodies)
+        {
             body.CopyTo(kern, offset);
             offset += body.Length;
         }
@@ -32,9 +36,11 @@ internal static class SyntheticKern {
         return kern;
     }
 
-    private static byte[] BuildSubtable(SyntheticKernSubtable subtable) {
+    private static byte[] BuildSubtable(SyntheticKernSubtable subtable)
+    {
         bool supported = subtable.Version == 0 && (subtable.Coverage >> 8) == 0;
-        if (!supported) {
+        if (!supported)
+        {
             byte[] header = new byte[6];
             BinaryPrimitives.WriteUInt16BigEndian(header, (ushort)subtable.Version);
             BinaryPrimitives.WriteUInt16BigEndian(header.AsSpan(2), 6);
@@ -43,7 +49,8 @@ internal static class SyntheticKern {
         }
 
         (int Left, int Right, int Value)[] pairs = [.. subtable.Pairs];
-        Array.Sort(pairs, static (first, second) => {
+        Array.Sort(pairs, static (first, second) =>
+        {
             int byLeft = first.Left.CompareTo(second.Left);
             return byLeft != 0 ? byLeft : first.Right.CompareTo(second.Right);
         });
@@ -55,7 +62,8 @@ internal static class SyntheticKern {
         BinaryPrimitives.WriteUInt16BigEndian(body.AsSpan(6), (ushort)pairs.Length);
         int searchRange = 6;
         int entrySelector = 0;
-        while ((searchRange * 2) <= (pairs.Length * 6)) {
+        while ((searchRange * 2) <= (pairs.Length * 6))
+        {
             searchRange *= 2;
             entrySelector++;
         }
@@ -64,12 +72,20 @@ internal static class SyntheticKern {
         BinaryPrimitives.WriteUInt16BigEndian(body.AsSpan(10), (ushort)entrySelector);
         BinaryPrimitives.WriteUInt16BigEndian(
             body.AsSpan(12),
-            (ushort)((pairs.Length * 6) - searchRange));
-        for (int index = 0; index < pairs.Length; index++) {
+            (ushort)((pairs.Length * 6) - searchRange)
+        );
+        for (int index = 0; index < pairs.Length; index++)
+        {
             int offset = 14 + (6 * index);
             BinaryPrimitives.WriteUInt16BigEndian(body.AsSpan(offset), (ushort)pairs[index].Left);
-            BinaryPrimitives.WriteUInt16BigEndian(body.AsSpan(offset + 2), (ushort)pairs[index].Right);
-            BinaryPrimitives.WriteInt16BigEndian(body.AsSpan(offset + 4), (short)pairs[index].Value);
+            BinaryPrimitives.WriteUInt16BigEndian(
+                body.AsSpan(offset + 2),
+                (ushort)pairs[index].Right
+            );
+            BinaryPrimitives.WriteInt16BigEndian(
+                body.AsSpan(offset + 4),
+                (short)pairs[index].Value
+            );
         }
 
         return body;
@@ -77,11 +93,14 @@ internal static class SyntheticKern {
 }
 
 /// <summary>One synthetic <c>kern</c> subtable.</summary>
-internal readonly struct SyntheticKernSubtable {
+internal readonly struct SyntheticKernSubtable
+{
     internal SyntheticKernSubtable(
         int version,
         int coverage,
-        params (int Left, int Right, int Value)[] pairs) {
+        params (int Left, int Right, int Value)[] pairs
+    )
+    {
         Version = version;
         Coverage = coverage;
         Pairs = pairs;

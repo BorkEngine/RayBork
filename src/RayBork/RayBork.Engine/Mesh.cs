@@ -23,7 +23,8 @@ namespace RayBork;
 /// throws <see cref="ObjectDisposedException"/> once the asset is disposed.
 /// </para>
 /// </remarks>
-public sealed class Mesh : IAsset {
+public sealed class Mesh : IAsset
+{
     private readonly EngineAsset _asset;
     private readonly ReadOnlyMemory<Vertex> _vertices;
     private readonly ReadOnlyMemory<uint> _indices;
@@ -53,7 +54,9 @@ public sealed class Mesh : IAsset {
         Vertex[] vertices,
         uint[] indices,
         bool isProcedural,
-        MeshCollisionData? collision = null) {
+        MeshCollisionData? collision = null
+    )
+    {
         ArgumentNullException.ThrowIfNull(asset);
         ArgumentNullException.ThrowIfNull(descriptor);
         ArgumentNullException.ThrowIfNull(vertices);
@@ -66,7 +69,8 @@ public sealed class Mesh : IAsset {
         _indexCount = indices.Length;
         _bounds = new BoundingBox(
             new Vector3(descriptor.Bounds[0], descriptor.Bounds[1], descriptor.Bounds[2]),
-            new Vector3(descriptor.Bounds[3], descriptor.Bounds[4], descriptor.Bounds[5]));
+            new Vector3(descriptor.Bounds[3], descriptor.Bounds[4], descriptor.Bounds[5])
+        );
         _topology = descriptor.Topology;
         _isProcedural = isProcedural;
         _collision = collision;
@@ -80,8 +84,10 @@ public sealed class Mesh : IAsset {
     /// A procedural mesh has a reserved synthetic <see cref="Path"/> under <c>/_procedural/mesh/</c>.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public bool IsProcedural {
-        get {
+    public bool IsProcedural
+    {
+        get
+        {
             ThrowIfDisposed();
             return _isProcedural;
         }
@@ -91,8 +97,10 @@ public sealed class Mesh : IAsset {
     /// Gets the number of vertices in the vertex buffer.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public int VertexCount {
-        get {
+    public int VertexCount
+    {
+        get
+        {
             ThrowIfDisposed();
             return _vertexCount;
         }
@@ -102,8 +110,10 @@ public sealed class Mesh : IAsset {
     /// Gets the number of 32-bit indices in the index buffer.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public int IndexCount {
-        get {
+    public int IndexCount
+    {
+        get
+        {
             ThrowIfDisposed();
             return _indexCount;
         }
@@ -118,8 +128,10 @@ public sealed class Mesh : IAsset {
     /// disposed.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public ReadOnlyMemory<Vertex> Vertices {
-        get {
+    public ReadOnlyMemory<Vertex> Vertices
+    {
+        get
+        {
             ThrowIfDisposed();
             return _vertices;
         }
@@ -134,8 +146,10 @@ public sealed class Mesh : IAsset {
     /// disposed.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public ReadOnlyMemory<uint> Indices {
-        get {
+    public ReadOnlyMemory<uint> Indices
+    {
+        get
+        {
             ThrowIfDisposed();
             return _indices;
         }
@@ -145,8 +159,10 @@ public sealed class Mesh : IAsset {
     /// Gets the mesh-space bounds.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public BoundingBox Bounds {
-        get {
+    public BoundingBox Bounds
+    {
+        get
+        {
             ThrowIfDisposed();
             return _bounds;
         }
@@ -169,8 +185,10 @@ public sealed class Mesh : IAsset {
     /// </para>
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public bool HasCollisionAcceleration {
-        get {
+    public bool HasCollisionAcceleration
+    {
+        get
+        {
             ThrowIfDisposed();
             return _collision is not null;
         }
@@ -180,8 +198,10 @@ public sealed class Mesh : IAsset {
     /// Gets the primitive topology of the mesh.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    public PrimitiveTopology Topology {
-        get {
+    public PrimitiveTopology Topology
+    {
+        get
+        {
             ThrowIfDisposed();
             return _topology;
         }
@@ -204,8 +224,10 @@ public sealed class Mesh : IAsset {
     /// <see cref="Indices"/> expose.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The mesh is disposed.</exception>
-    internal MeshCollisionData? Collision {
-        get {
+    internal MeshCollisionData? Collision
+    {
+        get
+        {
             ThrowIfDisposed();
             return _collision;
         }
@@ -213,7 +235,8 @@ public sealed class Mesh : IAsset {
 
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">Every reference was already released.</exception>
-    public void Dispose() {
+    public void Dispose()
+    {
         ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
 
         _asset.ReleaseOwnerReference();

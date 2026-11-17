@@ -30,7 +30,8 @@ namespace RayBork.Internal;
 /// frame's retention set.
 /// </para>
 /// </remarks>
-internal sealed class RenderDrawRecord {
+internal sealed class RenderDrawRecord
+{
     /// <summary>
     /// The largest per-instance binding count a template byte count can describe without overflowing a
     /// 32-bit multiplication.
@@ -52,8 +53,11 @@ internal sealed class RenderDrawRecord {
 
     /// <summary>Gets the mesh asset. It is retained by the frame's retention set until the frame ends.</summary>
     /// <exception cref="InvalidOperationException">The record was reset.</exception>
-    internal EngineAsset Mesh => _mesh
-        ?? throw new InvalidOperationException("The draw record has no mesh; it was reset or never recorded.");
+    internal EngineAsset Mesh =>
+        _mesh
+        ?? throw new InvalidOperationException(
+            "The draw record has no mesh; it was reset or never recorded."
+        );
 
     /// <summary>Gets the mesh primitive topology.</summary>
     internal PrimitiveTopology Topology { get; private set; }
@@ -66,8 +70,11 @@ internal sealed class RenderDrawRecord {
 
     /// <summary>Gets the internal shader program asset. It is retained by the frame's retention set until the frame ends.</summary>
     /// <exception cref="InvalidOperationException">The record was reset.</exception>
-    internal EngineAsset Program => _program
-        ?? throw new InvalidOperationException("The draw record has no shader program; it was reset or never recorded.");
+    internal EngineAsset Program =>
+        _program
+        ?? throw new InvalidOperationException(
+            "The draw record has no shader program; it was reset or never recorded."
+        );
 
     /// <summary>Gets the effective render state of this draw.</summary>
     internal RenderState RenderState { get; private set; }
@@ -97,7 +104,8 @@ internal sealed class RenderDrawRecord {
     internal int InstanceCount => _instanceCount;
 
     /// <summary>Gets the per-instance shader uniform template, without the 96-byte instance header.</summary>
-    internal ReadOnlySpan<byte> InstanceTemplate => _instanceTemplate.AsSpan(0, _instanceTemplateLength);
+    internal ReadOnlySpan<byte> InstanceTemplate =>
+        _instanceTemplate.AsSpan(0, _instanceTemplateLength);
 
     /// <summary>
     /// Gets the world matrices in recording order, one per instance. The matrix already includes the
@@ -109,7 +117,8 @@ internal sealed class RenderDrawRecord {
     /// Gets the shared per-texture object in shader sidecar declaration order. A <see langword="null"/>
     /// entry uses the built-in white fallback.
     /// </summary>
-    internal ReadOnlySpan<Texture?> GetTextureBindings() => _textureBindings.AsSpan(0, _textureCount);
+    internal ReadOnlySpan<Texture?> GetTextureBindings() =>
+        _textureBindings.AsSpan(0, _textureCount);
 
     /// <summary>
     /// Gets whether this draw carries one texture-binding set per instance instead of one shared set.
@@ -136,8 +145,8 @@ internal sealed class RenderDrawRecord {
     /// Each rendered instance reads its own contiguous run, so instance 0's bindings are followed by
     /// instance 1's and so on.
     /// </remarks>
-    internal ReadOnlySpan<Texture?> GetInstanceTextureBindings()
-        => _instanceTextureBindings.AsSpan(0, _instanceTextureBindingLength);
+    internal ReadOnlySpan<Texture?> GetInstanceTextureBindings() =>
+        _instanceTextureBindings.AsSpan(0, _instanceTextureBindingLength);
 
     /// <summary>
     /// Starts a new record and resets its per-draw values. Called only with a record rented from the
@@ -163,7 +172,9 @@ internal sealed class RenderDrawRecord {
         EngineAsset program,
         RenderState renderState,
         Color tint,
-        bool wireframe = false) {
+        bool wireframe = false
+    )
+    {
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentNullException.ThrowIfNull(program);
 
@@ -200,17 +211,26 @@ internal sealed class RenderDrawRecord {
     /// The record already carries a per-instance set; see
     /// <see cref="SetPerInstanceShaderState(Shader)"/>.
     /// </exception>
-    internal void SetShaderState(ReadOnlySpan<byte> instanceTemplate, ReadOnlySpan<Texture?> textureBindings) {
-        if (HasPerInstanceTextureBindings) {
+    internal void SetShaderState(
+        ReadOnlySpan<byte> instanceTemplate,
+        ReadOnlySpan<Texture?> textureBindings
+    )
+    {
+        if (HasPerInstanceTextureBindings)
+        {
             throw new InvalidOperationException(
                 "The draw record already carries per-instance texture bindings and cannot also record "
                     + "a shared texture set. A record uses either SetShaderState or "
-                    + "SetPerInstanceShaderState for its texture bindings.");
+                    + "SetPerInstanceShaderState for its texture bindings."
+            );
         }
 
         SetInstanceTemplate(instanceTemplate);
-        if (_textureBindings.Length < textureBindings.Length) {
-            _textureBindings = new Texture?[Math.Max(textureBindings.Length, _textureBindings.Length * 2)];
+        if (_textureBindings.Length < textureBindings.Length)
+        {
+            _textureBindings = new Texture?[
+                Math.Max(textureBindings.Length, _textureBindings.Length * 2)
+            ];
         }
 
         textureBindings.CopyTo(_textureBindings);
@@ -266,21 +286,26 @@ internal sealed class RenderDrawRecord {
     /// program (including a record that has not begun), or the record already declared the shared form.
     /// The record is left unchanged.
     /// </exception>
-    internal void SetPerInstanceShaderState(Shader material) {
+    internal void SetPerInstanceShaderState(Shader material)
+    {
         ArgumentNullException.ThrowIfNull(material);
         // Reading the declared bindings first surfaces a disposed material as ObjectDisposedException.
         int textureBindingCount = material.Textures.Count;
-        if (textureBindingCount == 0) {
+        if (textureBindingCount == 0)
+        {
             throw new InvalidOperationException(
                 $"The shader '{material.Path}' declares no texture bindings, so it has no per-instance "
-                    + "texture set to fill. Record the draw with SetShaderState instead.");
+                    + "texture set to fill. Record the draw with SetShaderState instead."
+            );
         }
 
-        if (!ReferenceEquals(material.Program.Lifetime, _program)) {
+        if (!ReferenceEquals(material.Program.Lifetime, _program))
+        {
             throw new InvalidOperationException(
                 $"The shader '{material.Path}' is not over the program the draw record began with. The "
                     + "record's instance template is laid out for its own program, so the material must "
-                    + "be over that program; call Begin with the material's program first.");
+                    + "be over that program; call Begin with the material's program first."
+            );
         }
 
         SetPerInstanceShaderState(material.InstanceData, textureBindingCount);
@@ -309,30 +334,40 @@ internal sealed class RenderDrawRecord {
     /// The template is too small to hold one index slot per binding, or the record already declared the
     /// shared form.
     /// </exception>
-    internal void SetPerInstanceShaderState(ReadOnlySpan<byte> instanceTemplate, int textureBindingCount) {
+    internal void SetPerInstanceShaderState(
+        ReadOnlySpan<byte> instanceTemplate,
+        int textureBindingCount
+    )
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(textureBindingCount);
-        if (textureBindingCount > MAX_TEXTURE_BINDING_COUNT) {
+        if (textureBindingCount > MAX_TEXTURE_BINDING_COUNT)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(textureBindingCount),
                 textureBindingCount,
                 $"A per-instance texture set supports at most {MAX_TEXTURE_BINDING_COUNT} bindings; above "
-                    + "that the index slots no longer fit in a 32-bit template byte count.");
+                    + "that the index slots no longer fit in a 32-bit template byte count."
+            );
         }
 
-        if (_sharedTextureStateDeclared) {
+        if (_sharedTextureStateDeclared)
+        {
             throw new InvalidOperationException(
                 "The draw record already declared the shared shader state and cannot also record a "
                     + "per-instance texture set. A record uses either SetShaderState or "
-                    + "SetPerInstanceShaderState for its texture bindings.");
+                    + "SetPerInstanceShaderState for its texture bindings."
+            );
         }
 
         int requiredTemplateBytes = textureBindingCount * ShaderAbiLayout.TEXTURE_INDEX_SIZE;
-        if (instanceTemplate.Length < requiredTemplateBytes) {
+        if (instanceTemplate.Length < requiredTemplateBytes)
+        {
             throw new InvalidOperationException(
                 $"The shader instance template is {instanceTemplate.Length} byte(s), which cannot hold "
                     + $"the {textureBindingCount} declared texture index slot(s) ({requiredTemplateBytes} "
                     + "bytes). The template must start with one 32-bit index slot per texture binding; "
-                    + "the draw's template and per-instance binding count disagree.");
+                    + "the draw's template and per-instance binding count disagree."
+            );
         }
 
         SetInstanceTemplate(instanceTemplate);
@@ -368,9 +403,11 @@ internal sealed class RenderDrawRecord {
     /// discards any bindings filled after the previous one.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-    internal Span<Matrix4x4> BeginInstances(int count) {
+    internal Span<Matrix4x4> BeginInstances(int count)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
-        if (_worldMatrices.Length < count) {
+        if (_worldMatrices.Length < count)
+        {
             _worldMatrices = new Matrix4x4[Math.Max(count, _worldMatrices.Length * 2)];
         }
 
@@ -402,17 +439,22 @@ internal sealed class RenderDrawRecord {
     /// <exception cref="InvalidOperationException">
     /// The record has no per-instance set, or no instances were recorded yet.
     /// </exception>
-    internal Span<Texture?> BeginInstanceTextureBindings() {
-        if (!HasPerInstanceTextureBindings) {
+    internal Span<Texture?> BeginInstanceTextureBindings()
+    {
+        if (!HasPerInstanceTextureBindings)
+        {
             throw new InvalidOperationException(
                 "The draw record has no per-instance texture set; call SetPerInstanceShaderState "
-                    + "before filling per-instance texture bindings.");
+                    + "before filling per-instance texture bindings."
+            );
         }
 
-        if (_instanceTextureBindingLength == 0) {
+        if (_instanceTextureBindingLength == 0)
+        {
             throw new InvalidOperationException(
                 "The draw record has no recorded instances; call BeginInstances before filling "
-                    + "per-instance texture bindings.");
+                    + "per-instance texture bindings."
+            );
         }
 
         return _instanceTextureBindings.AsSpan(0, _instanceTextureBindingLength);
@@ -422,7 +464,8 @@ internal sealed class RenderDrawRecord {
     /// Releases the asset references and clears both texture-binding buffers and the counts for reuse by
     /// a later frame.
     /// </summary>
-    internal void Reset() {
+    internal void Reset()
+    {
         _mesh = null;
         _program = null;
         Array.Clear(_textureBindings, 0, _textureCount);
@@ -441,9 +484,13 @@ internal sealed class RenderDrawRecord {
         UvRect = default;
     }
 
-    private void SetInstanceTemplate(ReadOnlySpan<byte> instanceTemplate) {
-        if (_instanceTemplate.Length < instanceTemplate.Length) {
-            _instanceTemplate = new byte[Math.Max(instanceTemplate.Length, _instanceTemplate.Length * 2)];
+    private void SetInstanceTemplate(ReadOnlySpan<byte> instanceTemplate)
+    {
+        if (_instanceTemplate.Length < instanceTemplate.Length)
+        {
+            _instanceTemplate = new byte[
+                Math.Max(instanceTemplate.Length, _instanceTemplate.Length * 2)
+            ];
         }
 
         instanceTemplate.CopyTo(_instanceTemplate);
@@ -458,24 +505,32 @@ internal sealed class RenderDrawRecord {
     /// length is recomputed so the writable span always matches the recorded instances. Both callers
     /// validate their own arguments first, so a rejected call cannot reach here.
     /// </remarks>
-    private void UpdateInstanceTextureBindings() {
-        int length = HasPerInstanceTextureBindings && _instanceCount != 0
-            ? checked(_instanceCount * _instanceTextureBindingCount)
-            : 0;
+    private void UpdateInstanceTextureBindings()
+    {
+        int length =
+            HasPerInstanceTextureBindings && _instanceCount != 0
+                ? checked(_instanceCount * _instanceTextureBindingCount)
+                : 0;
         ClearInstanceTextureBindings();
-        if (length == 0) {
+        if (length == 0)
+        {
             return;
         }
 
-        if (_instanceTextureBindings.Length < length) {
-            _instanceTextureBindings = new Texture?[Math.Max(length, _instanceTextureBindings.Length * 2)];
+        if (_instanceTextureBindings.Length < length)
+        {
+            _instanceTextureBindings = new Texture?[
+                Math.Max(length, _instanceTextureBindings.Length * 2)
+            ];
         }
 
         _instanceTextureBindingLength = length;
     }
 
-    private void ClearInstanceTextureBindings() {
-        if (_instanceTextureBindingLength != 0) {
+    private void ClearInstanceTextureBindings()
+    {
+        if (_instanceTextureBindingLength != 0)
+        {
             Array.Clear(_instanceTextureBindings, 0, _instanceTextureBindingLength);
             _instanceTextureBindingLength = 0;
         }

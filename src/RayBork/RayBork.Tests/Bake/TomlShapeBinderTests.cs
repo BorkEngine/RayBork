@@ -4,10 +4,12 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake;
 
-public sealed class TomlShapeBinderTests {
+public sealed class TomlShapeBinderTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScalarArrayEnumVectorAndColorBind() {
+    public void ScalarArrayEnumVectorAndColorBind()
+    {
         const string toml = """
             name = "castle"
             Count = 7
@@ -35,7 +37,8 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SnakeCaseAndTheJsonPropertyNameOverrideAreDefaultKeys() {
+    public void SnakeCaseAndTheJsonPropertyNameOverrideAreDefaultKeys()
+    {
         const string toml = """
             name = "The Castle"
             difficulty = 2
@@ -55,7 +58,8 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NestedTablesAndTableArraysBind() {
+    public void NestedTablesAndTableArraysBind()
+    {
         const string toml = """
             [inner]
             name = "root"
@@ -83,17 +87,26 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NullableMembersAcceptValuesAndMayBeAbsent() {
-        (object? present, BakeDiagnostics presentDiagnostics) = BakeBindTestHarness.Bind<NullableConfig>(
-            """
-            count = 5
-            label = "set"
-            """);
-        (object? absent, BakeDiagnostics absentDiagnostics) = BakeBindTestHarness.Bind<NullableConfig>(
-            string.Empty);
+    public void NullableMembersAcceptValuesAndMayBeAbsent()
+    {
+        (object? present, BakeDiagnostics presentDiagnostics) =
+            BakeBindTestHarness.Bind<NullableConfig>(
+                """
+                count = 5
+                label = "set"
+                """
+            );
+        (object? absent, BakeDiagnostics absentDiagnostics) =
+            BakeBindTestHarness.Bind<NullableConfig>(string.Empty);
 
-        Assert.False(presentDiagnostics.HasErrors, BakeBindTestHarness.FirstError(presentDiagnostics));
-        Assert.False(absentDiagnostics.HasErrors, BakeBindTestHarness.FirstError(absentDiagnostics));
+        Assert.False(
+            presentDiagnostics.HasErrors,
+            BakeBindTestHarness.FirstError(presentDiagnostics)
+        );
+        Assert.False(
+            absentDiagnostics.HasErrors,
+            BakeBindTestHarness.FirstError(absentDiagnostics)
+        );
         var presentConfig = Assert.IsType<NullableConfig>(present);
         Assert.Equal(5, presentConfig.Count);
         Assert.Equal("set", presentConfig.Label);
@@ -104,13 +117,15 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorParametersBindByNameIncludingADefault() {
+    public void ConstructorParametersBindByNameIncludingADefault()
+    {
         (object? value, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<ConstructorConfig>(
             """
             name = "constructor"
             count = 9
             direction = "greater_or_equal"
-            """);
+            """
+        );
 
         Assert.False(diagnostics.HasErrors, BakeBindTestHarness.FirstError(diagnostics));
         var config = Assert.IsType<ConstructorConfig>(value);
@@ -121,12 +136,14 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void JsonPropertyNameAndJsonIgnoreAreHonored() {
+    public void JsonPropertyNameAndJsonIgnoreAreHonored()
+    {
         (object? value, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<AttributeConfig>(
             """
             custom_name = "renamed"
             required = "present"
-            """);
+            """
+        );
 
         Assert.False(diagnostics.HasErrors, BakeBindTestHarness.FirstError(diagnostics));
         var config = Assert.IsType<AttributeConfig>(value);
@@ -137,12 +154,14 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownKeysAreErrorsWithALocation() {
+    public void UnknownKeysAreErrorsWithALocation()
+    {
         (_, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<GameSettings>(
             """
             name = "x"
             does_not_exist = 1
-            """);
+            """
+        );
 
         string error = BakeBindTestHarness.FirstError(diagnostics);
         Assert.True(diagnostics.HasErrors);
@@ -153,11 +172,13 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingRequiredMembersAreErrors() {
+    public void MissingRequiredMembersAreErrors()
+    {
         (_, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<GameSettings>(
             """
             difficulty = 1
-            """);
+            """
+        );
 
         string error = BakeBindTestHarness.FirstError(diagnostics);
         Assert.True(diagnostics.HasErrors);
@@ -167,9 +188,11 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingCSharpRequiredMemberIsAnError() {
+    public void MissingCSharpRequiredMemberIsAnError()
+    {
         (_, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<RequiredPropertyConfig>(
-            string.Empty);
+            string.Empty
+        );
 
         Assert.True(diagnostics.HasErrors);
         Assert.Contains("RB4002", BakeBindTestHarness.FirstError(diagnostics));
@@ -178,11 +201,13 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingJsonRequiredMemberIsAnError() {
+    public void MissingJsonRequiredMemberIsAnError()
+    {
         (_, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<AttributeConfig>(
             """
             custom_name = "renamed"
-            """);
+            """
+        );
 
         string error = BakeBindTestHarness.FirstError(diagnostics);
         Assert.True(diagnostics.HasErrors);
@@ -192,28 +217,33 @@ public sealed class TomlShapeBinderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TypeMismatchesAndNumericEnumsAreRejected() {
+    public void TypeMismatchesAndNumericEnumsAreRejected()
+    {
         (_, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<ScalarConfig>(
             """
             count = "many"
             direction = 1
-            """);
+            """
+        );
 
         Assert.True(diagnostics.HasErrors);
         string formatted = string.Join(
             "\n",
-            diagnostics.GetSorted().Select(diagnostic => diagnostic.Format()));
+            diagnostics.GetSorted().Select(diagnostic => diagnostic.Format())
+        );
         Assert.Contains("must be an integer", formatted);
         Assert.Contains("numeric enum value is not accepted", formatted);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void IntegerRangeIsChecked() {
+    public void IntegerRangeIsChecked()
+    {
         (_, BakeDiagnostics diagnostics) = BakeBindTestHarness.Bind<ScalarConfig>(
             """
             count = 999999999999
-            """);
+            """
+        );
 
         Assert.True(diagnostics.HasErrors);
         Assert.Contains("between", BakeBindTestHarness.FirstError(diagnostics));

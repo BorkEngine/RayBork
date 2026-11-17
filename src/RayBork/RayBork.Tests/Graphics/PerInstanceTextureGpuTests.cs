@@ -27,7 +27,8 @@ namespace RayBork.Tests;
 /// setup, and the tests report a skip with the reason when the host cannot open a GPU device.
 /// </para>
 /// </remarks>
-public sealed class PerInstanceTextureGpuTests {
+public sealed class PerInstanceTextureGpuTests
+{
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private static readonly Color _instanceAColor = new(0.9f, 0.1f, 0.1f, 1f);
     private static readonly Color _instanceBColor = new(0.1f, 0.2f, 0.9f, 1f);
@@ -46,12 +47,19 @@ public sealed class PerInstanceTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void EachInstanceSamplesItsOwnTexture() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void EachInstanceSamplesItsOwnTexture()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Texture textureA = harness.CreateTexture(1, 1, _instanceAColor);
         Texture textureB = harness.CreateTexture(1, 1, _instanceBColor);
         Shader material = harness.Primitives.MeshMaterial;
-        OrthographicView camera = CreateOrthographicView(harness.Width, harness.Height, CAMERA_HEIGHT);
+        OrthographicView camera = CreateOrthographicView(
+            harness.Width,
+            harness.Height,
+            CAMERA_HEIGHT
+        );
         RenderFramePacket packet = BeginFrame();
         CameraPass pass = packet.BeginPass();
         BeginCameraPass(pass, camera, harness.Width, harness.Height);
@@ -86,8 +94,11 @@ public sealed class PerInstanceTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TheBuiltInMsdfProgramSamplesAPerInstanceTexture() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void TheBuiltInMsdfProgramSamplesAPerInstanceTexture()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         // A 1x1 field of 1 is fully covered and a field of 0 is fully transparent. The probes therefore
         // prove that the program samples each instance's own texture and applies the reconstructed
         // coverage to the alpha; they say nothing about the width of the derivative band.
@@ -95,7 +106,11 @@ public sealed class PerInstanceTextureGpuTests {
         Texture empty = harness.CreateTexture(1, 1, Color.Black);
         Shader material = harness.Primitives.MsdfMaterial;
         Color tint = new(0.25f, 0.5f, 0.75f, 1f);
-        OrthographicView camera = CreateOrthographicView(harness.Width, harness.Height, CAMERA_HEIGHT);
+        OrthographicView camera = CreateOrthographicView(
+            harness.Width,
+            harness.Height,
+            CAMERA_HEIGHT
+        );
         RenderFramePacket packet = BeginFrame();
         CameraPass pass = packet.BeginPass();
         BeginCameraPass(pass, camera, harness.Width, harness.Height);
@@ -126,8 +141,11 @@ public sealed class PerInstanceTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void APartiallyCoveredGlyphPixelBlendsTheTintOverTheClearColor() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void APartiallyCoveredGlyphPixelBlendsTheTintOverTheClearColor()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Texture ramp = CreateDistanceRamp(harness);
         Shader material = harness.Primitives.MsdfMaterial;
         Color tint = new(0.25f, 0.5f, 0.75f, 1f);
@@ -137,7 +155,11 @@ public sealed class PerInstanceTextureGpuTests {
         // precision represents exactly, and the sampled distance is exactly 0.5.
         float quadWidth = QUAD_PIXEL_WIDTH * worldPerPixel;
         float center = 0.5f * worldPerPixel;
-        OrthographicView camera = CreateOrthographicView(harness.Width, harness.Height, CAMERA_HEIGHT);
+        OrthographicView camera = CreateOrthographicView(
+            harness.Width,
+            harness.Height,
+            CAMERA_HEIGHT
+        );
         RenderFramePacket packet = BeginFrame();
         CameraPass pass = packet.BeginPass();
         BeginCameraPass(pass, camera, harness.Width, harness.Height);
@@ -157,8 +179,14 @@ public sealed class PerInstanceTextureGpuTests {
             (0.5f * tint.R) + (0.5f * _clearColor.R),
             (0.5f * tint.G) + (0.5f * _clearColor.G),
             (0.5f * tint.B) + (0.5f * _clearColor.B),
-            1f);
-        (uint x, uint y) = PixelOf(new Vector3(center, 0f, 0f), camera.ViewProjection, harness.Width, harness.Height);
+            1f
+        );
+        (uint x, uint y) = PixelOf(
+            new Vector3(center, 0f, 0f),
+            camera.ViewProjection,
+            harness.Width,
+            harness.Height
+        );
         Assert.Equal(harness.Width / 2, x);
         // A driver may round the filtered texel to UNORM8 (1/255 above 0.5) or quantize the subtexel
         // weights, which moves the coverage by a few hundredths; the pre-fix rgb*coverage form is far
@@ -173,7 +201,8 @@ public sealed class PerInstanceTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ATwoBindingProgramResolvesBothTextureSlotsPerInstance() {
+    public void ATwoBindingProgramResolvesBothTextureSlotsPerInstance()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: 1);
         using VulkanDrawTestHarness harness = new(host);
         Shader material = harness.CreateShader(
@@ -182,15 +211,26 @@ public sealed class PerInstanceTextureGpuTests {
             TWO_TEXTURE_FRAGMENT_SOURCE,
             uniforms: [],
             textures: [FIRST_TEXTURE, SECOND_TEXTURE],
-            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
-        Mesh quad = harness.CreateQuad("meshes/two-texture-quad", halfWidth: 0.5f, halfHeight: 0.5f);
+            defaultRenderState: RenderState.Opaque with
+            {
+                Cull = CullMode.None,
+            }
+        );
+        Mesh quad = harness.CreateQuad(
+            "meshes/two-texture-quad",
+            halfWidth: 0.5f,
+            halfHeight: 0.5f
+        );
         Texture red = harness.CreateTexture("textures/red", new Color(1f, 0f, 0f, 1f));
         Texture green = harness.CreateTexture("textures/green", new Color(0f, 1f, 0f, 1f));
         Texture blue = harness.CreateTexture("textures/blue", new Color(0f, 0f, 1f, 1f));
         Texture black = harness.CreateTexture("textures/black", new Color(0f, 0f, 0f, 1f));
         Assert.Equal(2, material.Textures.Count);
 
-        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.OrthographicCamera(host, CAMERA_HEIGHT);
+        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.OrthographicCamera(
+            host,
+            CAMERA_HEIGHT
+        );
         RenderFramePacket packet = BeginFrame();
         CameraPass pass = packet.BeginPass();
         pass.Begin(
@@ -204,7 +244,8 @@ public sealed class PerInstanceTextureGpuTests {
             viewportWidth: camera.Width,
             viewportHeight: camera.Height,
             ClearMode.ColorAndDepth,
-            _clearColor);
+            _clearColor
+        );
         RenderDrawRecord record = RentRecord(packet, quad, material);
         record.SetPerInstanceShaderState(material);
         Span<Matrix4x4> worldMatrices = record.BeginInstances(2);
@@ -235,13 +276,20 @@ public sealed class PerInstanceTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void OneBatchCanMixPerInstanceAndSharedTextureRecords() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void OneBatchCanMixPerInstanceAndSharedTextureRecords()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Texture red = harness.CreateTexture(1, 1, new Color(0.9f, 0.1f, 0.1f, 1f));
         Texture blue = harness.CreateTexture(1, 1, new Color(0.1f, 0.2f, 0.9f, 1f));
         Texture green = harness.CreateTexture(1, 1, new Color(0.1f, 0.8f, 0.2f, 1f));
         Shader material = harness.Primitives.MeshMaterial;
-        OrthographicView camera = CreateOrthographicView(harness.Width, harness.Height, CAMERA_HEIGHT);
+        OrthographicView camera = CreateOrthographicView(
+            harness.Width,
+            harness.Height,
+            CAMERA_HEIGHT
+        );
         RenderFramePacket packet = BeginFrame();
         CameraPass pass = packet.BeginPass();
         BeginCameraPass(pass, camera, harness.Width, harness.Height);
@@ -283,12 +331,19 @@ public sealed class PerInstanceTextureGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ASortedTransparentBatchKeepsEachInstancesOwnTexture() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void ASortedTransparentBatchKeepsEachInstancesOwnTexture()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Texture near = harness.CreateTexture(1, 1, new Color(0.9f, 0.1f, 0.1f, 1f));
         Texture far = harness.CreateTexture(1, 1, new Color(0.1f, 0.2f, 0.9f, 1f));
         Shader material = harness.Primitives.MeshMaterial;
-        OrthographicView camera = CreateOrthographicView(harness.Width, harness.Height, CAMERA_HEIGHT);
+        OrthographicView camera = CreateOrthographicView(
+            harness.Width,
+            harness.Height,
+            CAMERA_HEIGHT
+        );
         RenderFramePacket packet = BeginFrame();
         CameraPass pass = packet.BeginPass();
         BeginCameraPass(pass, camera, harness.Width, harness.Height);
@@ -297,7 +352,8 @@ public sealed class PerInstanceTextureGpuTests {
             packet,
             harness.Primitives.Quad,
             material,
-            renderState: RenderState.AlphaBlend);
+            renderState: RenderState.AlphaBlend
+        );
         record.SetPerInstanceShaderState(material);
         Span<Matrix4x4> worldMatrices = record.BeginInstances(2);
         worldMatrices[0] = Matrix4x4.CreateTranslation(-INSTANCE_OFFSET, 0f, -1f);
@@ -318,8 +374,14 @@ public sealed class PerInstanceTextureGpuTests {
 
         Submit(harness.Host.Backend, packet);
 
-        AssertColorNear(new Color(0.9f, 0.1f, 0.1f, 1f), ReadColorAt(harness, -INSTANCE_OFFSET, camera));
-        AssertColorNear(new Color(0.1f, 0.2f, 0.9f, 1f), ReadColorAt(harness, INSTANCE_OFFSET, camera));
+        AssertColorNear(
+            new Color(0.9f, 0.1f, 0.1f, 1f),
+            ReadColorAt(harness, -INSTANCE_OFFSET, camera)
+        );
+        AssertColorNear(
+            new Color(0.1f, 0.2f, 0.9f, 1f),
+            ReadColorAt(harness, INSTANCE_OFFSET, camera)
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
@@ -359,7 +421,8 @@ public sealed class PerInstanceTextureGpuTests {
     /// texel to UNORM8 or quantizes subtexel weights to Vulkan's 4-bit minimum moves the sampled distance
     /// by far less than one band.
     /// </summary>
-    private static Texture CreateDistanceRamp(PrimitiveDrawGpuHarness harness) {
+    private static Texture CreateDistanceRamp(PrimitiveDrawGpuHarness harness)
+    {
         float low = 64f / 255f;
         float high = 191f / 255f;
         return harness.CreateTexture(
@@ -367,18 +430,30 @@ public sealed class PerInstanceTextureGpuTests {
             1,
             new SamplerState(TextureFilter.Linear, TextureWrap.Clamp, 1f),
             new Color(low, low, low, 1f),
-            new Color(high, high, high, 1f));
+            new Color(high, high, high, 1f)
+        );
     }
 
-    private static OrthographicView CreateOrthographicView(uint width, uint height, float visibleHeight) {
+    private static OrthographicView CreateOrthographicView(
+        uint width,
+        uint height,
+        float visibleHeight
+    )
+    {
         Transform transform = new(new Vector3(0f, 0f, 1f));
         Matrix4x4 view = CameraMath.CreateViewMatrix(transform);
         float aspect = width / (float)height;
-        Matrix4x4 projection = CameraMath.CreateOrthographicProjection(visibleHeight, aspect, 0.1f, 10f);
+        Matrix4x4 projection = CameraMath.CreateOrthographicProjection(
+            visibleHeight,
+            aspect,
+            0.1f,
+            10f
+        );
         return new OrthographicView(view, projection, view * projection, transform.Position);
     }
 
-    private static RenderFramePacket BeginFrame() {
+    private static RenderFramePacket BeginFrame()
+    {
         RenderFramePacket packet = new(1);
         packet.BeginRecording(0.0, 0.0);
         return packet;
@@ -388,7 +463,9 @@ public sealed class PerInstanceTextureGpuTests {
         CameraPass pass,
         OrthographicView camera,
         uint width,
-        uint height) => pass.Begin(
+        uint height
+    ) =>
+        pass.Begin(
             index: 0,
             camera.View,
             camera.Projection,
@@ -399,14 +476,17 @@ public sealed class PerInstanceTextureGpuTests {
             viewportWidth: checked((int)width),
             viewportHeight: checked((int)height),
             ClearMode.ColorAndDepth,
-            _clearColor);
+            _clearColor
+        );
 
     private static RenderDrawRecord RentRecord(
         RenderFramePacket packet,
         Mesh mesh,
         Shader material,
         Color? tint = null,
-        RenderState? renderState = null) {
+        RenderState? renderState = null
+    )
+    {
         RenderDrawRecord record = packet.RentDrawRecord();
         record.Begin(
             mesh.Lifetime,
@@ -415,17 +495,21 @@ public sealed class PerInstanceTextureGpuTests {
             mesh.IndexCount,
             material.Program.Lifetime,
             renderState ?? material.DefaultRenderState,
-            tint ?? Color.White);
+            tint ?? Color.White
+        );
         return record;
     }
 
-    private static void Retain(RenderFramePacket packet, params Texture[] textures) {
-        foreach (Texture texture in textures) {
+    private static void Retain(RenderFramePacket packet, params Texture[] textures)
+    {
+        foreach (Texture texture in textures)
+        {
             packet.Retention.Add(texture.Lifetime);
         }
     }
 
-    private static void Submit(Vulkan12Backend backend, RenderFramePacket packet) {
+    private static void Submit(Vulkan12Backend backend, RenderFramePacket packet)
+    {
         backend.Submit(packet);
         backend.Present();
         backend.WaitForFrameResourcesIdle();
@@ -440,7 +524,9 @@ public sealed class PerInstanceTextureGpuTests {
         Vector3 world,
         Matrix4x4 viewProjection,
         uint width,
-        uint height) {
+        uint height
+    )
+    {
         Vector4 clip = Vector4.Transform(new Vector4(world, 1f), viewProjection);
         float ndcX = clip.X / clip.W;
         float ndcY = clip.Y / clip.W;
@@ -452,36 +538,51 @@ public sealed class PerInstanceTextureGpuTests {
     private static (float R, float G, float B) ReadColorAt(
         PrimitiveDrawGpuHarness harness,
         float worldX,
-        OrthographicView camera) {
-        (uint x, uint y) = PixelOf(new Vector3(worldX, 0f, 0f), camera.ViewProjection, harness.Width, harness.Height);
+        OrthographicView camera
+    )
+    {
+        (uint x, uint y) = PixelOf(
+            new Vector3(worldX, 0f, 0f),
+            camera.ViewProjection,
+            harness.Width,
+            harness.Height
+        );
         return harness.ReadColor(x, y);
     }
 
     private static (float R, float G, float B) ReadColorAt(
         VulkanDrawTestHarness harness,
         float worldX,
-        VulkanDrawTestHarness.CameraView camera) {
+        VulkanDrawTestHarness.CameraView camera
+    )
+    {
         (uint x, uint y) = PixelOf(
             new Vector3(worldX, 0f, 0f),
             camera.ViewProjection,
             checked((uint)camera.Width),
-            checked((uint)camera.Height));
+            checked((uint)camera.Height)
+        );
         return harness.ReadColor(x, y);
     }
 
     private static void AssertColorNear(
         Color expected,
         (float R, float G, float B) actual,
-        float tolerance = COLOR_TOLERANCE) {
+        float tolerance = COLOR_TOLERANCE
+    )
+    {
         Assert.True(
             MathF.Abs(expected.R - actual.R) <= tolerance,
-            $"Red {actual.R} is not within {tolerance} of {expected.R}.");
+            $"Red {actual.R} is not within {tolerance} of {expected.R}."
+        );
         Assert.True(
             MathF.Abs(expected.G - actual.G) <= tolerance,
-            $"Green {actual.G} is not within {tolerance} of {expected.G}.");
+            $"Green {actual.G} is not within {tolerance} of {expected.G}."
+        );
         Assert.True(
             MathF.Abs(expected.B - actual.B) <= tolerance,
-            $"Blue {actual.B} is not within {tolerance} of {expected.B}.");
+            $"Blue {actual.B} is not within {tolerance} of {expected.B}."
+        );
     }
 
     /// <summary>
@@ -491,5 +592,6 @@ public sealed class PerInstanceTextureGpuTests {
         Matrix4x4 View,
         Matrix4x4 Projection,
         Matrix4x4 ViewProjection,
-        Vector3 Position);
+        Vector3 Position
+    );
 }

@@ -7,17 +7,16 @@ namespace RayBork.Tests;
 /// <see cref="EngineContext.Tonemapping"/>, and a write during <see cref="IGame.Tick"/> is carried by
 /// the frame that tick records.
 /// </summary>
-public sealed class TonemappingAppTests {
+public sealed class TonemappingAppTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuilderStartupValuesInitializeTheAppLifetimeSettings() {
+    public void BuilderStartupValuesInitializeTheAppLifetimeSettings()
+    {
         ScriptedGame game = new();
-        using AppTestHost host = new(
-            game,
-            configure: builder => builder
-                .WithExposure(1.5f)
-                .WithAgxWhite(4f)
-                .WithAgxContrast(2f));
+        using AppTestHost host = new(game, configure: builder =>
+            builder.WithExposure(1.5f).WithAgxWhite(4f).WithAgxContrast(2f)
+        );
         game.TickHandler = context => context.RequestExit();
 
         host.App.Run();
@@ -32,7 +31,8 @@ public sealed class TonemappingAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuilderDefaultsMatchTheDocumentedDefaults() {
+    public void BuilderDefaultsMatchTheDocumentedDefaults()
+    {
         ScriptedGame game = new();
         using AppTestHost host = new(game);
         game.TickHandler = context => context.RequestExit();
@@ -47,31 +47,38 @@ public sealed class TonemappingAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ChangingTheSettingsDuringTickAppliesToThatFramesSnapshot() {
+    public void ChangingTheSettingsDuringTickAppliesToThatFramesSnapshot()
+    {
         Dictionary<long, TonemappingSnapshot> submitted = [];
         Lock gate = new();
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        host.FakeRenderer.OnSubmit = packet => {
-            lock (gate) {
+        host.FakeRenderer.OnSubmit = packet =>
+        {
+            lock (gate)
+            {
                 submitted[packet.FrameIndex] = packet.Tonemapping;
             }
         };
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             // Every tick uses values that identify its own frame; the seal must see the final writes.
             context.Tonemapping.Exposure = context.FrameCount;
             context.Tonemapping.AgxWhite = context.FrameCount + 2f;
             context.Tonemapping.AgxContrast = context.FrameCount + 1f;
-            if (context.FrameCount >= 10) {
+            if (context.FrameCount >= 10)
+            {
                 context.RequestExit();
             }
         };
 
         host.App.Run();
 
-        lock (gate) {
+        lock (gate)
+        {
             Assert.NotEmpty(submitted);
-            Assert.All(submitted, entry => {
+            Assert.All(submitted, entry =>
+            {
                 float frame = entry.Key;
                 Assert.Equal(new TonemappingSnapshot(frame, frame + 2f, frame + 1f), entry.Value);
             });

@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Describes the current state of a window.
 /// </summary>
-public enum WindowState {
+public enum WindowState
+{
     /// <summary>
     /// The window is windowed and visible.
     /// </summary>

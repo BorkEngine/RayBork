@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// splitting; <see cref="Triangles"/> counts triangle-list and triangle-strip primitives and is <c>0</c>
 /// for line and point topologies.
 /// </remarks>
-internal sealed class FramePlan {
+internal sealed class FramePlan
+{
     private readonly List<PassPlan> _passes;
 
     /// <summary>
@@ -29,7 +30,9 @@ internal sealed class FramePlan {
         int drawCalls,
         int instances,
         int triangles,
-        int culledInstances) {
+        int culledInstances
+    )
+    {
         ArgumentNullException.ThrowIfNull(passes);
 
         FrameIndex = frameIndex;

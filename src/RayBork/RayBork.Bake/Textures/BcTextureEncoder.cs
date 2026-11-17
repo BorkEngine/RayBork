@@ -16,7 +16,8 @@ namespace RayBork.Bake.Textures;
 /// caller must generate the mip chain before encoding; the encoder is told not to generate its own.
 /// </para>
 /// </remarks>
-internal static class BcTextureEncoder {
+internal static class BcTextureEncoder
+{
     private static readonly PixelFormat _pixelFormat = PixelFormat.Rgba32;
 
     /// <summary>Encodes one level and validates the encoder's output shape.</summary>
@@ -28,22 +29,26 @@ internal static class BcTextureEncoder {
     /// <paramref name="format"/> is not a block-compressed format.
     /// </exception>
     /// <exception cref="InvalidOperationException">The encoder failed or returned an unexpected shape.</exception>
-    internal static byte[] Encode(TextureLevel level, TextureFormat format) {
+    internal static byte[] Encode(TextureLevel level, TextureFormat format)
+    {
         ArgumentNullException.ThrowIfNull(level);
 
-        CompressionFormat compressionFormat = format switch {
+        CompressionFormat compressionFormat = format switch
+        {
             TextureFormat.Bc7Unorm or TextureFormat.Bc7Srgb => CompressionFormat.Bc7,
             TextureFormat.Bc5Unorm => CompressionFormat.Bc5,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(format),
                 format,
-                "The format is not block compressed."),
+                "The format is not block compressed."
+            ),
         };
 
         byte[] encoded;
         int encodedWidth;
         int encodedHeight;
-        try {
+        try
+        {
             var encoder = new BcEncoder(compressionFormat);
             encoder.OutputOptions.GenerateMipMaps = false;
             encoder.OutputOptions.Quality = CompressionQuality.BestQuality;
@@ -57,24 +62,32 @@ internal static class BcTextureEncoder {
                 _pixelFormat,
                 mipLevel: 0,
                 out encodedWidth,
-                out encodedHeight);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+                out encodedHeight
+            );
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             throw new InvalidOperationException(
                 $"Block encoding failed for {level.Width}x{level.Height} {format}: "
                     + exception.Message,
-                exception);
+                exception
+            );
         }
 
         int expectedLength = TextureFormatInfo
             .For(format)
             .GetLevelByteLength(level.Width, level.Height);
-        if (encodedWidth != level.Width
+        if (
+            encodedWidth != level.Width
             || encodedHeight != level.Height
-            || encoded.Length != expectedLength) {
+            || encoded.Length != expectedLength
+        )
+        {
             throw new InvalidOperationException(
                 $"Block encoding returned {encodedWidth}x{encodedHeight} and {encoded.Length} bytes "
                     + $"for {level.Width}x{level.Height} {format}; expected {level.Width}x"
-                    + $"{level.Height} and {expectedLength} bytes.");
+                    + $"{level.Height} and {expectedLength} bytes."
+            );
         }
 
         return encoded;

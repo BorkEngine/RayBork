@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// The projection kind used by a <see cref="Camera"/>.
 /// </summary>
-public enum CameraProjection {
+public enum CameraProjection
+{
     /// <summary>
     /// A perspective projection with a vertical field of view. The far plane may be infinite.
     /// </summary>

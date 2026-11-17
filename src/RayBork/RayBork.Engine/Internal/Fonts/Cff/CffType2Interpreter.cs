@@ -51,7 +51,8 @@ namespace RayBork.Internal;
 /// returned when it completes, so per-token work is bounded by the fixed stack size.
 /// </para>
 /// </remarks>
-internal sealed class CffType2Interpreter {
+internal sealed class CffType2Interpreter
+{
     /// <summary>The maximum Type 2 operand stack depth.</summary>
     internal const int MAX_OPERAND_STACK = 48;
 
@@ -164,7 +165,9 @@ internal sealed class CffType2Interpreter {
         CffGlyphBudget budget,
         CffPrivateDict privateDict,
         int glyphId,
-        bool allowSeac) {
+        bool allowSeac
+    )
+    {
         _font = font;
         _budget = budget;
         _localSubrs = privateDict.LocalSubrs;
@@ -175,11 +178,13 @@ internal sealed class CffType2Interpreter {
     /// <summary>Gets the Type 2 subroutine bias for one subroutine count.</summary>
     /// <param name="subroutineCount">The number of subroutines in the INDEX.</param>
     /// <returns>The bias: 107, 1,131, or 32,768.</returns>
-    internal static int GetSubroutineBias(int subroutineCount) => subroutineCount switch {
-        < 1240 => 107,
-        < 33900 => 1131,
-        _ => 32768,
-    };
+    internal static int GetSubroutineBias(int subroutineCount) =>
+        subroutineCount switch
+        {
+            < 1240 => 107,
+            < 33900 => 1131,
+            _ => 32768,
+        };
 
     /// <summary>Runs one glyph's charstring and closes its last contour.</summary>
     /// <param name="charString">The charstring bytes from the CharStrings INDEX.</param>
@@ -187,8 +192,10 @@ internal sealed class CffType2Interpreter {
     /// <exception cref="FontFormatException">The charstring or a called subroutine is malformed.</exception>
     /// <exception cref="FontUnsupportedException">The glyph exceeds an interpreter limit or uses an unsupported feature.</exception>
     /// <exception cref="InvalidOperationException">The single-use interpreter has already run.</exception>
-    internal OutlineContour[] Run(ReadOnlyMemory<byte> charString) {
-        if (_run) {
+    internal OutlineContour[] Run(ReadOnlyMemory<byte> charString)
+    {
+        if (_run)
+        {
             throw new InvalidOperationException("A CFF charstring interpreter is single-use.");
         }
 
@@ -196,11 +203,14 @@ internal sealed class CffType2Interpreter {
         _stack = ArrayPool<double>.Shared.Rent(MAX_OPERAND_STACK);
         _transient = ArrayPool<double>.Shared.Rent(TRANSIENT_ARRAY_SIZE);
         Array.Clear(_transient, 0, TRANSIENT_ARRAY_SIZE);
-        try {
+        try
+        {
             Execute(charString.Span, isSubroutine: false);
             FinishContour();
             return _contours.Count == 0 ? [] : [.. _contours];
-        } finally {
+        }
+        finally
+        {
             ArrayPool<double>.Shared.Return(_stack);
             ArrayPool<double>.Shared.Return(_transient);
             _stack = [];
@@ -208,29 +218,36 @@ internal sealed class CffType2Interpreter {
         }
     }
 
-    private void Execute(ReadOnlySpan<byte> charString, bool isSubroutine) {
+    private void Execute(ReadOnlySpan<byte> charString, bool isSubroutine)
+    {
         int position = 0;
-        while (position < charString.Length && !_glyphEnded) {
+        while (position < charString.Length && !_glyphEnded)
+        {
             _budget.ExecutedTokens++;
-            if (_budget.ExecutedTokens > MAX_EXECUTED_TOKENS) {
+            if (_budget.ExecutedTokens > MAX_EXECUTED_TOKENS)
+            {
                 throw new FontUnsupportedException(
-                    $"{_context} exceeds the {MAX_EXECUTED_TOKENS} executed-token limit");
+                    $"{_context} exceeds the {MAX_EXECUTED_TOKENS} executed-token limit"
+                );
             }
 
             byte value = charString[position++];
-            if (value >= 32) {
+            if (value >= 32)
+            {
                 Push(ReadNumber(charString, ref position, value));
                 continue;
             }
 
-            if (value == SHORT_INT) {
+            if (value == SHORT_INT)
+            {
                 RequireCharStringBytes(charString, position, sizeof(short));
                 Push(BinaryPrimitives.ReadInt16BigEndian(charString[position..]));
                 position += sizeof(short);
                 continue;
             }
 
-            switch (value) {
+            switch (value)
+            {
                 case HSTEM:
                 case VSTEM:
                 case HSTEMHM:
@@ -287,9 +304,11 @@ internal sealed class CffType2Interpreter {
                     ExecuteCallSubroutine(_font.GlobalSubrs, "global");
                     break;
                 case RETURN:
-                    if (!isSubroutine) {
+                    if (!isSubroutine)
+                    {
                         throw new FontFormatException(
-                            $"{_context} contains return outside a subroutine");
+                            $"{_context} contains return outside a subroutine"
+                        );
                     }
 
                     return;
@@ -302,14 +321,17 @@ internal sealed class CffType2Interpreter {
                     break;
                 default:
                     throw new FontFormatException(
-                        $"{_context} contains the unknown operator {value}");
+                        $"{_context} contains the unknown operator {value}"
+                    );
             }
         }
     }
 
-    private void ExecuteRMoveTo() {
+    private void ExecuteRMoveTo()
+    {
         int count = TakeMoveOperands(2);
-        if (count != 2) {
+        if (count != 2)
+        {
             throw InvalidOperandCount("rmoveto", count, "2 operands plus an optional width");
         }
 
@@ -319,9 +341,11 @@ internal sealed class CffType2Interpreter {
         MoveTo(dx, dy);
     }
 
-    private void ExecuteHMoveTo() {
+    private void ExecuteHMoveTo()
+    {
         int count = TakeMoveOperands(1);
-        if (count != 1) {
+        if (count != 1)
+        {
             throw InvalidOperandCount("hmoveto", count, "1 operand plus an optional width");
         }
 
@@ -330,9 +354,11 @@ internal sealed class CffType2Interpreter {
         MoveTo(dx, 0);
     }
 
-    private void ExecuteVMoveTo() {
+    private void ExecuteVMoveTo()
+    {
         int count = TakeMoveOperands(1);
-        if (count != 1) {
+        if (count != 1)
+        {
             throw InvalidOperandCount("vmoveto", count, "1 operand plus an optional width");
         }
 
@@ -341,27 +367,36 @@ internal sealed class CffType2Interpreter {
         MoveTo(0, dy);
     }
 
-    private void ExecuteRLineTo() {
+    private void ExecuteRLineTo()
+    {
         int count = _stackCount;
-        if ((count & 1) != 0) {
+        if ((count & 1) != 0)
+        {
             throw new FontFormatException(
-                $"{_context} passes an odd number of operands to rlineto");
+                $"{_context} passes an odd number of operands to rlineto"
+            );
         }
 
-        for (int index = 0; index < count; index += 2) {
+        for (int index = 0; index < count; index += 2)
+        {
             AddLine(_stack[index], _stack[index + 1]);
         }
 
         ClearStack();
     }
 
-    private void ExecuteAlternatingLineTo(bool horizontalFirst) {
+    private void ExecuteAlternatingLineTo(bool horizontalFirst)
+    {
         int count = _stackCount;
         bool horizontal = horizontalFirst;
-        for (int index = 0; index < count; index++) {
-            if (horizontal) {
+        for (int index = 0; index < count; index++)
+        {
+            if (horizontal)
+            {
                 AddLine(_stack[index], 0);
-            } else {
+            }
+            else
+            {
                 AddLine(0, _stack[index]);
             }
 
@@ -371,35 +406,44 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ExecuteRRCurveTo() {
+    private void ExecuteRRCurveTo()
+    {
         int count = _stackCount;
-        if (count % 6 != 0) {
+        if (count % 6 != 0)
+        {
             throw new FontFormatException(
-                $"{_context} passes {count} operand(s) to rrcurveto; the count must be a multiple of 6");
+                $"{_context} passes {count} operand(s) to rrcurveto; the count must be a multiple of 6"
+            );
         }
 
-        for (int index = 0; index < count; index += 6) {
+        for (int index = 0; index < count; index += 6)
+        {
             AddCurve(
                 _stack[index],
                 _stack[index + 1],
                 _stack[index + 2],
                 _stack[index + 3],
                 _stack[index + 4],
-                _stack[index + 5]);
+                _stack[index + 5]
+            );
         }
 
         ClearStack();
     }
 
-    private void ExecuteRCurveLine() {
+    private void ExecuteRCurveLine()
+    {
         int count = _stackCount;
-        if (count < 8 || (count - 2) % 6 != 0) {
+        if (count < 8 || (count - 2) % 6 != 0)
+        {
             throw new FontFormatException(
-                $"{_context} passes {count} operand(s) to rcurveline; one or more curve sextets and one line pair are required");
+                $"{_context} passes {count} operand(s) to rcurveline; one or more curve sextets and one line pair are required"
+            );
         }
 
         int curveCount = (count - 2) / 6;
-        for (int index = 0; index < curveCount; index++) {
+        for (int index = 0; index < curveCount; index++)
+        {
             int offset = index * 6;
             AddCurve(
                 _stack[offset],
@@ -407,7 +451,8 @@ internal sealed class CffType2Interpreter {
                 _stack[offset + 2],
                 _stack[offset + 3],
                 _stack[offset + 4],
-                _stack[offset + 5]);
+                _stack[offset + 5]
+            );
         }
 
         int lineOffset = curveCount * 6;
@@ -415,15 +460,19 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ExecuteRLineCurve() {
+    private void ExecuteRLineCurve()
+    {
         int count = _stackCount;
-        if (count < 8 || (count - 6) % 2 != 0) {
+        if (count < 8 || (count - 6) % 2 != 0)
+        {
             throw new FontFormatException(
-                $"{_context} passes {count} operand(s) to rlinecurve; one or more line pairs and one curve sextet are required");
+                $"{_context} passes {count} operand(s) to rlinecurve; one or more line pairs and one curve sextet are required"
+            );
         }
 
         int lineCount = (count - 6) / 2;
-        for (int index = 0; index < lineCount; index++) {
+        for (int index = 0; index < lineCount; index++)
+        {
             int offset = index * 2;
             AddLine(_stack[offset], _stack[offset + 1]);
         }
@@ -435,26 +484,39 @@ internal sealed class CffType2Interpreter {
             _stack[curveOffset + 2],
             _stack[curveOffset + 3],
             _stack[curveOffset + 4],
-            _stack[curveOffset + 5]);
+            _stack[curveOffset + 5]
+        );
         ClearStack();
     }
 
-    private void ExecuteHHCurveTo() {
+    private void ExecuteHHCurveTo()
+    {
         int count = _stackCount;
         int index = 0;
         double dy1 = 0;
-        if ((count & 1) != 0) {
+        if ((count & 1) != 0)
+        {
             dy1 = _stack[index++];
         }
 
         int remaining = count - index;
-        if (remaining < 4 || remaining % 4 != 0) {
+        if (remaining < 4 || remaining % 4 != 0)
+        {
             throw new FontFormatException(
-                $"{_context} passes {count} operand(s) to hhcurveto; 4n or 4n+1 operands are required");
+                $"{_context} passes {count} operand(s) to hhcurveto; 4n or 4n+1 operands are required"
+            );
         }
 
-        while (index < count) {
-            AddCurve(_stack[index], dy1, _stack[index + 1], _stack[index + 2], _stack[index + 3], 0);
+        while (index < count)
+        {
+            AddCurve(
+                _stack[index],
+                dy1,
+                _stack[index + 1],
+                _stack[index + 2],
+                _stack[index + 3],
+                0
+            );
             index += 4;
             dy1 = 0;
         }
@@ -462,22 +524,34 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ExecuteVVCurveTo() {
+    private void ExecuteVVCurveTo()
+    {
         int count = _stackCount;
         int index = 0;
         double dx1 = 0;
-        if ((count & 1) != 0) {
+        if ((count & 1) != 0)
+        {
             dx1 = _stack[index++];
         }
 
         int remaining = count - index;
-        if (remaining < 4 || remaining % 4 != 0) {
+        if (remaining < 4 || remaining % 4 != 0)
+        {
             throw new FontFormatException(
-                $"{_context} passes {count} operand(s) to vvcurveto; 4n or 4n+1 operands are required");
+                $"{_context} passes {count} operand(s) to vvcurveto; 4n or 4n+1 operands are required"
+            );
         }
 
-        while (index < count) {
-            AddCurve(dx1, _stack[index], _stack[index + 1], _stack[index + 2], 0, _stack[index + 3]);
+        while (index < count)
+        {
+            AddCurve(
+                dx1,
+                _stack[index],
+                _stack[index + 1],
+                _stack[index + 2],
+                0,
+                _stack[index + 3]
+            );
             index += 4;
             dx1 = 0;
         }
@@ -485,33 +559,42 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ExecuteAlternatingCurveTo(bool horizontalFirst) {
+    private void ExecuteAlternatingCurveTo(bool horizontalFirst)
+    {
         int count = _stackCount;
-        if (count < 4 || (count % 4 is not 0 and not 1)) {
+        if (count < 4 || (count % 4 is not 0 and not 1))
+        {
             throw new FontFormatException(
-                $"{_context} passes {count} operand(s) to an alternating curveto; 4n or 4n+1 operands are required");
+                $"{_context} passes {count} operand(s) to an alternating curveto; 4n or 4n+1 operands are required"
+            );
         }
 
         int index = 0;
         bool horizontal = horizontalFirst;
-        while (index < count) {
+        while (index < count)
+        {
             bool hasExtra = (count - index) == 5;
-            if (horizontal) {
+            if (horizontal)
+            {
                 AddCurve(
                     _stack[index],
                     0,
                     _stack[index + 1],
                     _stack[index + 2],
                     hasExtra ? _stack[index + 4] : 0,
-                    _stack[index + 3]);
-            } else {
+                    _stack[index + 3]
+                );
+            }
+            else
+            {
                 AddCurve(
                     0,
                     _stack[index],
                     _stack[index + 1],
                     _stack[index + 2],
                     _stack[index + 3],
-                    hasExtra ? _stack[index + 4] : 0);
+                    hasExtra ? _stack[index + 4] : 0
+                );
             }
 
             index += hasExtra ? 5 : 4;
@@ -521,28 +604,37 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ExecuteCallSubroutine(CffIndex subrs, string kind) {
+    private void ExecuteCallSubroutine(CffIndex subrs, string kind)
+    {
         double rawIndex = Pop();
-        if (rawIndex != Math.Floor(rawIndex) || rawIndex < int.MinValue || rawIndex > int.MaxValue) {
+        if (rawIndex != Math.Floor(rawIndex) || rawIndex < int.MinValue || rawIndex > int.MaxValue)
+        {
             throw new FontFormatException(
-                $"{_context} calls a {kind} subroutine with the non-integer index {rawIndex}");
+                $"{_context} calls a {kind} subroutine with the non-integer index {rawIndex}"
+            );
         }
 
         int index = (int)rawIndex + GetSubroutineBias(subrs.Count);
-        if ((uint)index >= (uint)subrs.Count) {
+        if ((uint)index >= (uint)subrs.Count)
+        {
             throw new FontFormatException(
-                $"{_context} calls the {kind} subroutine index {index}; the INDEX has {subrs.Count} object(s)");
+                $"{_context} calls the {kind} subroutine index {index}; the INDEX has {subrs.Count} object(s)"
+            );
         }
 
         _budget.SubroutineCalls++;
-        if (_budget.SubroutineCalls > MAX_SUBROUTINE_CALLS) {
+        if (_budget.SubroutineCalls > MAX_SUBROUTINE_CALLS)
+        {
             throw new FontUnsupportedException(
-                $"{_context} exceeds the {MAX_SUBROUTINE_CALLS} total subroutine call limit");
+                $"{_context} exceeds the {MAX_SUBROUTINE_CALLS} total subroutine call limit"
+            );
         }
 
-        if (_subroutineNesting >= MAX_SUBROUTINE_NESTING) {
+        if (_subroutineNesting >= MAX_SUBROUTINE_NESTING)
+        {
             throw new FontUnsupportedException(
-                $"{_context} exceeds the {MAX_SUBROUTINE_NESTING}-level subroutine nesting limit");
+                $"{_context} exceeds the {MAX_SUBROUTINE_NESTING}-level subroutine nesting limit"
+            );
         }
 
         _subroutineNesting++;
@@ -550,15 +642,19 @@ internal sealed class CffType2Interpreter {
         _subroutineNesting--;
     }
 
-    private void ExecuteEndChar() {
+    private void ExecuteEndChar()
+    {
         int count = TakeEndCharOperands();
-        if (count == 0) {
+        if (count == 0)
+        {
             return;
         }
 
-        if (count != 4) {
+        if (count != 4)
+        {
             throw new FontFormatException(
-                $"{_context} passes {count} operand(s) to endchar; 0 or 4 plus an optional width are required");
+                $"{_context} passes {count} operand(s) to endchar; 0 or 4 plus an optional width are required"
+            );
         }
 
         double adx = _stack[0];
@@ -569,21 +665,25 @@ internal sealed class CffType2Interpreter {
         ComposeSeac(adx, ady, baseCode, accentCode);
     }
 
-    private void ExecuteEscape(ReadOnlySpan<byte> charString, ref int position) {
+    private void ExecuteEscape(ReadOnlySpan<byte> charString, ref int position)
+    {
         RequireCharStringBytes(charString, position, 1);
         int code = charString[position++];
-        switch (code) {
+        switch (code)
+        {
             case DOTSECTION:
                 ClearStack();
                 break;
-            case AND: {
+            case AND:
+            {
                 double second = Pop();
                 double first = Pop();
                 Push(first != 0 && second != 0 ? 1 : 0);
                 break;
             }
 
-            case OR: {
+            case OR:
+            {
                 double second = Pop();
                 double first = Pop();
                 Push(first != 0 || second != 0 ? 1 : 0);
@@ -596,21 +696,24 @@ internal sealed class CffType2Interpreter {
             case ABS:
                 Push(Math.Abs(Pop()));
                 break;
-            case ADD: {
+            case ADD:
+            {
                 double second = Pop();
                 double first = Pop();
                 Push(first + second);
                 break;
             }
 
-            case SUB: {
+            case SUB:
+            {
                 double second = Pop();
                 double first = Pop();
                 Push(first - second);
                 break;
             }
 
-            case DIV: {
+            case DIV:
+            {
                 double second = Pop();
                 double first = Pop();
                 Push(second == 0 ? 0 : first / second);
@@ -620,7 +723,8 @@ internal sealed class CffType2Interpreter {
             case NEG:
                 Push(-Pop());
                 break;
-            case EQ: {
+            case EQ:
+            {
                 double second = Pop();
                 double first = Pop();
                 Push(first == second ? 1 : 0);
@@ -630,19 +734,22 @@ internal sealed class CffType2Interpreter {
             case DROP:
                 Pop();
                 break;
-            case PUT: {
+            case PUT:
+            {
                 int index = ToTransientIndex(Pop());
                 _transient[index] = Pop();
                 break;
             }
 
-            case GET: {
+            case GET:
+            {
                 int index = ToTransientIndex(Pop());
                 Push(_transient[index]);
                 break;
             }
 
-            case IFELSE: {
+            case IFELSE:
+            {
                 double secondValue = Pop();
                 double firstValue = Pop();
                 double secondResult = Pop();
@@ -654,47 +761,58 @@ internal sealed class CffType2Interpreter {
             case RANDOM:
                 Push(DETERMINISTIC_RANDOM_VALUE);
                 break;
-            case MUL: {
+            case MUL:
+            {
                 double second = Pop();
                 double first = Pop();
                 Push(first * second);
                 break;
             }
 
-            case SQRT: {
+            case SQRT:
+            {
                 double value = Pop();
                 Push(value < 0 ? 0 : Math.Sqrt(value));
                 break;
             }
 
             case DUP:
-                if (_stackCount == 0) {
+                if (_stackCount == 0)
+                {
                     throw Underflow();
                 }
 
                 Push(_stack[_stackCount - 1]);
                 break;
             case EXCH:
-                if (_stackCount < 2) {
+                if (_stackCount < 2)
+                {
                     throw Underflow();
                 }
 
-                (_stack[_stackCount - 1], _stack[_stackCount - 2]) =
-                    (_stack[_stackCount - 2], _stack[_stackCount - 1]);
+                (_stack[_stackCount - 1], _stack[_stackCount - 2]) = (
+                    _stack[_stackCount - 2],
+                    _stack[_stackCount - 1]
+                );
                 break;
-            case INDEX: {
+            case INDEX:
+            {
                 int index = ToIntegerOperand(Pop(), "index");
-                if (_stackCount == 0) {
+                if (_stackCount == 0)
+                {
                     throw Underflow();
                 }
 
-                if (index < 0) {
+                if (index < 0)
+                {
                     index = 0;
                 }
 
-                if (index >= _stackCount) {
+                if (index >= _stackCount)
+                {
                     throw new FontFormatException(
-                        $"{_context} indexes {index} value(s) below the stack top but only {_stackCount} value(s) remain");
+                        $"{_context} indexes {index} value(s) below the stack top but only {_stackCount} value(s) remain"
+                    );
                 }
 
                 Push(_stack[_stackCount - 1 - index]);
@@ -718,28 +836,35 @@ internal sealed class CffType2Interpreter {
                 break;
             default:
                 throw new FontFormatException(
-                    $"{_context} contains the unknown escape operator 12 {code}");
+                    $"{_context} contains the unknown escape operator 12 {code}"
+                );
         }
     }
 
-    private void ExecuteRoll() {
+    private void ExecuteRoll()
+    {
         int shift = ToIntegerOperand(Pop(), "roll shift");
         int count = ToIntegerOperand(Pop(), "roll count");
-        if (count < 0) {
+        if (count < 0)
+        {
             throw new FontFormatException($"{_context} rolls the negative element count {count}");
         }
 
-        if (count > _stackCount) {
+        if (count > _stackCount)
+        {
             throw new FontFormatException(
-                $"{_context} rolls {count} element(s) with only {_stackCount} on the operand stack");
+                $"{_context} rolls {count} element(s) with only {_stackCount} on the operand stack"
+            );
         }
 
-        if (count <= 1) {
+        if (count <= 1)
+        {
             return;
         }
 
         shift %= count;
-        if (shift < 0) {
+        if (shift < 0)
+        {
             shift += count;
         }
 
@@ -751,17 +876,20 @@ internal sealed class CffType2Interpreter {
         ReverseStack(start + shift, _stackCount);
     }
 
-    private void ReverseStack(int begin, int end) {
+    private void ReverseStack(int begin, int end)
+    {
         int low = begin;
         int high = end - 1;
-        while (low < high) {
+        while (low < high)
+        {
             (_stack[low], _stack[high]) = (_stack[high], _stack[low]);
             low++;
             high--;
         }
     }
 
-    private void ExecuteHFlex() {
+    private void ExecuteHFlex()
+    {
         RequireExactOperands(7, "hflex");
         double dy2 = _stack[2];
         AddCurve(_stack[0], 0, _stack[1], dy2, _stack[3], 0);
@@ -769,14 +897,16 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ExecuteFlex() {
+    private void ExecuteFlex()
+    {
         RequireExactOperands(13, "flex");
         AddCurve(_stack[0], _stack[1], _stack[2], _stack[3], _stack[4], _stack[5]);
         AddCurve(_stack[6], _stack[7], _stack[8], _stack[9], _stack[10], _stack[11]);
         ClearStack();
     }
 
-    private void ExecuteHFlex1() {
+    private void ExecuteHFlex1()
+    {
         RequireExactOperands(9, "hflex1");
         double dy1 = _stack[1];
         double dy2 = _stack[3];
@@ -786,16 +916,20 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ExecuteFlex1() {
+    private void ExecuteFlex1()
+    {
         RequireExactOperands(11, "flex1");
         double dx = _stack[0] + _stack[2] + _stack[4] + _stack[6] + _stack[8];
         double dy = _stack[1] + _stack[3] + _stack[5] + _stack[7] + _stack[9];
         double dx6;
         double dy6;
-        if (Math.Abs(dx) > Math.Abs(dy)) {
+        if (Math.Abs(dx) > Math.Abs(dy))
+        {
             dx6 = _stack[10];
             dy6 = -dy;
-        } else {
+        }
+        else
+        {
             dx6 = -dx;
             dy6 = _stack[10];
         }
@@ -805,54 +939,79 @@ internal sealed class CffType2Interpreter {
         ClearStack();
     }
 
-    private void ComposeSeac(double adx, double ady, double baseCode, double accentCode) {
-        if (!_allowSeac) {
+    private void ComposeSeac(double adx, double ady, double baseCode, double accentCode)
+    {
+        if (!_allowSeac)
+        {
             throw new FontUnsupportedException(
-                $"{_context} composes a seac glyph while resolving a seac component; nested seac is not supported");
+                $"{_context} composes a seac glyph while resolving a seac component; nested seac is not supported"
+            );
         }
 
-        if (_font.IsCidKeyed) {
-            throw new FontUnsupportedException(
-                $"{_context} uses seac in a CID-keyed face");
+        if (_font.IsCidKeyed)
+        {
+            throw new FontUnsupportedException($"{_context} uses seac in a CID-keyed face");
         }
 
         int baseGlyphId = ResolveSeacComponent(baseCode, "base");
         int accentGlyphId = ResolveSeacComponent(accentCode, "accent");
         FinishContour();
-        OutlineContour[] baseContours = _font.ReadRawContours(baseGlyphId, _budget, allowSeac: false);
-        OutlineContour[] accentContours = _font.ReadRawContours(accentGlyphId, _budget, allowSeac: false);
+        OutlineContour[] baseContours = _font.ReadRawContours(
+            baseGlyphId,
+            _budget,
+            allowSeac: false
+        );
+        OutlineContour[] accentContours = _font.ReadRawContours(
+            accentGlyphId,
+            _budget,
+            allowSeac: false
+        );
         Vector2 accentOffset = new((float)adx, (float)ady);
-        foreach (OutlineContour contour in baseContours) {
+        foreach (OutlineContour contour in baseContours)
+        {
             _contours.Add(contour);
         }
 
-        foreach (OutlineContour contour in accentContours) {
+        foreach (OutlineContour contour in accentContours)
+        {
             _contours.Add(Translate(contour, accentOffset));
         }
     }
 
-    private int ResolveSeacComponent(double rawCode, string role) {
-        if (rawCode != Math.Floor(rawCode) || rawCode < 0 || rawCode >= CffStandardEncoding.CODE_COUNT) {
+    private int ResolveSeacComponent(double rawCode, string role)
+    {
+        if (
+            rawCode != Math.Floor(rawCode)
+            || rawCode < 0
+            || rawCode >= CffStandardEncoding.CODE_COUNT
+        )
+        {
             throw new FontUnsupportedException(
-                $"{_context} cannot resolve the seac {role} character code {rawCode}; Standard Encoding codes are integers in 0..255");
+                $"{_context} cannot resolve the seac {role} character code {rawCode}; Standard Encoding codes are integers in 0..255"
+            );
         }
 
         int code = (int)rawCode;
-        if (!_font.TryGetStandardEncodingGlyphId(code, out int glyphId)) {
+        if (!_font.TryGetStandardEncodingGlyphId(code, out int glyphId))
+        {
             throw new FontUnsupportedException(
-                $"{_context} cannot resolve the seac {role} character code {code} through the CFF Standard Encoding and charset");
+                $"{_context} cannot resolve the seac {role} character code {code} through the CFF Standard Encoding and charset"
+            );
         }
 
         return glyphId;
     }
 
-    private void MoveTo(double dx, double dy) {
+    private void MoveTo(double dx, double dy)
+    {
         Vector2 next = _current + new Vector2((float)dx, (float)dy);
         FinishContour();
         _budget.Contours++;
-        if (_budget.Contours > MAX_CONTOURS_PER_GLYPH) {
+        if (_budget.Contours > MAX_CONTOURS_PER_GLYPH)
+        {
             throw new FontUnsupportedException(
-                $"{_context} exceeds the {MAX_CONTOURS_PER_GLYPH} contour limit");
+                $"{_context} exceeds the {MAX_CONTOURS_PER_GLYPH} contour limit"
+            );
         }
 
         _segments = [];
@@ -862,14 +1021,16 @@ internal sealed class CffType2Interpreter {
         ReservePoints(1);
     }
 
-    private void AddLine(double dx, double dy) {
+    private void AddLine(double dx, double dy)
+    {
         RequireContour("line");
         ReservePoints(1);
         _current += new Vector2((float)dx, (float)dy);
         _segments!.Add(OutlineSegment.Line(_current));
     }
 
-    private void AddCurve(double dx1, double dy1, double dx2, double dy2, double dx3, double dy3) {
+    private void AddCurve(double dx1, double dy1, double dx2, double dy2, double dx3, double dy3)
+    {
         RequireContour("curve");
         ReservePoints(3);
         Vector2 control1 = _current + new Vector2((float)dx1, (float)dy1);
@@ -879,13 +1040,17 @@ internal sealed class CffType2Interpreter {
         _segments!.Add(OutlineSegment.Cubic(control1, control2, end));
     }
 
-    private void FinishContour() {
-        if (!_hasContour) {
+    private void FinishContour()
+    {
+        if (!_hasContour)
+        {
             return;
         }
 
-        if (_segments!.Count > 0) {
-            if (_current != _start) {
+        if (_segments!.Count > 0)
+        {
+            if (_current != _start)
+            {
                 _segments.Add(OutlineSegment.Line(_start));
             }
 
@@ -896,69 +1061,87 @@ internal sealed class CffType2Interpreter {
         _hasContour = false;
     }
 
-    private void RequireContour(string operatorName) {
-        if (_hasContour) {
+    private void RequireContour(string operatorName)
+    {
+        if (_hasContour)
+        {
             return;
         }
 
-        throw new FontFormatException(
-            $"{_context} draws a {operatorName} before its first moveto");
+        throw new FontFormatException($"{_context} draws a {operatorName} before its first moveto");
     }
 
-    private void ReservePoints(int count) {
+    private void ReservePoints(int count)
+    {
         _budget.Points += count;
-        if (_budget.Points > MAX_POINTS_PER_GLYPH) {
+        if (_budget.Points > MAX_POINTS_PER_GLYPH)
+        {
             throw new FontUnsupportedException(
-                $"{_context} exceeds the {MAX_POINTS_PER_GLYPH} point limit");
+                $"{_context} exceeds the {MAX_POINTS_PER_GLYPH} point limit"
+            );
         }
     }
 
-    private void ConsumeStemOperands() {
+    private void ConsumeStemOperands()
+    {
         AddHints(TakeStemOperands());
         ClearStack();
     }
 
-    private int ConsumeHintMask(ReadOnlySpan<byte> charString, int position) {
+    private int ConsumeHintMask(ReadOnlySpan<byte> charString, int position)
+    {
         AddHints(TakeStemOperands());
         ClearStack();
         long maskBytes = (_hintCount + 7) / 8;
-        if (maskBytes > charString.Length - position) {
-            throw new FontFormatException(
-                $"{_context} ends before its {maskBytes}-byte hint mask");
+        if (maskBytes > charString.Length - position)
+        {
+            throw new FontFormatException($"{_context} ends before its {maskBytes}-byte hint mask");
         }
 
         return (int)maskBytes;
     }
 
-    private void AddHints(int operandCount) {
+    private void AddHints(int operandCount)
+    {
         _hintCount += operandCount / 2;
-        if (_hintCount > MAX_HINT_COUNT) {
+        if (_hintCount > MAX_HINT_COUNT)
+        {
             throw new FontUnsupportedException(
-                $"{_context} exceeds the {MAX_HINT_COUNT} hint limit");
+                $"{_context} exceeds the {MAX_HINT_COUNT} hint limit"
+            );
         }
     }
 
-    private int TakeStemOperands() {
+    private int TakeStemOperands()
+    {
         int count = _stackCount;
-        if (!_widthParsed) {
+        if (!_widthParsed)
+        {
             _widthParsed = true;
-            if ((count & 1) != 0) {
+            if ((count & 1) != 0)
+            {
                 RemoveFirstOperand();
                 count--;
             }
-        } else if ((count & 1) != 0) {
+        }
+        else if ((count & 1) != 0)
+        {
             throw new FontFormatException(
-                $"{_context} passes an odd number of operands to a stem operator");
+                $"{_context} passes an odd number of operands to a stem operator"
+            );
         }
 
         return count;
     }
 
-    private int TakeMoveOperands(int expected) {
+    private int TakeMoveOperands(int expected)
+    {
         int count = _stackCount;
-        if (!_widthParsed) {
+        if (!_widthParsed)
+        {
             _widthParsed = true;
-            if (count == expected + 1) {
+            if (count == expected + 1)
+            {
                 RemoveFirstOperand();
                 count--;
             }
@@ -967,11 +1150,14 @@ internal sealed class CffType2Interpreter {
         return count;
     }
 
-    private int TakeEndCharOperands() {
+    private int TakeEndCharOperands()
+    {
         int count = _stackCount;
-        if (!_widthParsed) {
+        if (!_widthParsed)
+        {
             _widthParsed = true;
-            if (count is 1 or 5) {
+            if (count is 1 or 5)
+            {
                 RemoveFirstOperand();
                 count--;
             }
@@ -980,22 +1166,28 @@ internal sealed class CffType2Interpreter {
         return count;
     }
 
-    private void RemoveFirstOperand() {
+    private void RemoveFirstOperand()
+    {
         Array.Copy(_stack, 1, _stack, 0, _stackCount - 1);
         _stackCount--;
     }
 
-    private void Push(double value) {
-        if (_stackCount >= MAX_OPERAND_STACK) {
+    private void Push(double value)
+    {
+        if (_stackCount >= MAX_OPERAND_STACK)
+        {
             throw new FontUnsupportedException(
-                $"{_context} exceeds the {MAX_OPERAND_STACK}-value operand stack limit");
+                $"{_context} exceeds the {MAX_OPERAND_STACK}-value operand stack limit"
+            );
         }
 
         _stack[_stackCount++] = value;
     }
 
-    private double Pop() {
-        if (_stackCount == 0) {
+    private double Pop()
+    {
+        if (_stackCount == 0)
+        {
             throw Underflow();
         }
 
@@ -1004,49 +1196,63 @@ internal sealed class CffType2Interpreter {
 
     private void ClearStack() => _stackCount = 0;
 
-    private FontFormatException Underflow() =>
-        new($"{_context} underflows its operand stack");
+    private FontFormatException Underflow() => new($"{_context} underflows its operand stack");
 
-    private FontFormatException InvalidOperandCount(string operatorName, int count, string expected) =>
-        new($"{_context} passes {count} operand(s) to {operatorName}; {expected} required");
+    private FontFormatException InvalidOperandCount(
+        string operatorName,
+        int count,
+        string expected
+    ) => new($"{_context} passes {count} operand(s) to {operatorName}; {expected} required");
 
-    private void RequireExactOperands(int expected, string operatorName) {
-        if (_stackCount != expected) {
+    private void RequireExactOperands(int expected, string operatorName)
+    {
+        if (_stackCount != expected)
+        {
             throw InvalidOperandCount(operatorName, _stackCount, $"{expected} operands");
         }
     }
 
-    private int ToTransientIndex(double value) {
-        if (value != Math.Floor(value) || value < 0 || value >= TRANSIENT_ARRAY_SIZE) {
+    private int ToTransientIndex(double value)
+    {
+        if (value != Math.Floor(value) || value < 0 || value >= TRANSIENT_ARRAY_SIZE)
+        {
             throw new FontFormatException(
-                $"{_context} uses the transient array index {value}; the array has {TRANSIENT_ARRAY_SIZE} entries");
+                $"{_context} uses the transient array index {value}; the array has {TRANSIENT_ARRAY_SIZE} entries"
+            );
         }
 
         return (int)value;
     }
 
-    private int ToIntegerOperand(double value, string name) {
-        if (value != Math.Floor(value) || value < int.MinValue || value > int.MaxValue) {
+    private int ToIntegerOperand(double value, string name)
+    {
+        if (value != Math.Floor(value) || value < int.MinValue || value > int.MaxValue)
+        {
             throw new FontFormatException(
-                $"{_context} passes the non-integer {name} operand {value}");
+                $"{_context} passes the non-integer {name} operand {value}"
+            );
         }
 
         return (int)value;
     }
 
-    private double ReadNumber(ReadOnlySpan<byte> charString, ref int position, byte value) {
-        if (value <= 246) {
+    private double ReadNumber(ReadOnlySpan<byte> charString, ref int position, byte value)
+    {
+        if (value <= 246)
+        {
             return value - 139;
         }
 
-        if (value <= 250) {
+        if (value <= 250)
+        {
             RequireCharStringBytes(charString, position, 1);
             int number = ((value - 247) * 256) + charString[position] + 108;
             position++;
             return number;
         }
 
-        if (value <= 254) {
+        if (value <= 254)
+        {
             RequireCharStringBytes(charString, position, 1);
             int number = -((value - 251) * 256) - charString[position] - 108;
             position++;
@@ -1059,27 +1265,35 @@ internal sealed class CffType2Interpreter {
         return fixedValue / 65536.0;
     }
 
-    private void RequireCharStringBytes(ReadOnlySpan<byte> charString, int position, int count) {
-        if (count > charString.Length - position) {
+    private void RequireCharStringBytes(ReadOnlySpan<byte> charString, int position, int count)
+    {
+        if (count > charString.Length - position)
+        {
             throw new FontFormatException(
-                $"{_context} is truncated: the {count}-byte operand at offset {position} is outside the {charString.Length}-byte charstring");
+                $"{_context} is truncated: the {count}-byte operand at offset {position} is outside the {charString.Length}-byte charstring"
+            );
         }
     }
 
-    private static OutlineContour Translate(OutlineContour contour, Vector2 offset) {
+    private static OutlineContour Translate(OutlineContour contour, Vector2 offset)
+    {
         ReadOnlySpan<OutlineSegment> segments = contour.Segments.Span;
         OutlineSegment[] translated = new OutlineSegment[segments.Length];
-        for (int index = 0; index < segments.Length; index++) {
+        for (int index = 0; index < segments.Length; index++)
+        {
             OutlineSegment segment = segments[index];
-            translated[index] = segment.Kind switch {
+            translated[index] = segment.Kind switch
+            {
                 OutlineSegmentKind.Line => OutlineSegment.Line(segment.End + offset),
                 OutlineSegmentKind.Quadratic => OutlineSegment.Quadratic(
                     segment.Control1 + offset,
-                    segment.End + offset),
+                    segment.End + offset
+                ),
                 _ => OutlineSegment.Cubic(
                     segment.Control1 + offset,
                     segment.Control2 + offset,
-                    segment.End + offset),
+                    segment.End + offset
+                ),
             };
         }
 

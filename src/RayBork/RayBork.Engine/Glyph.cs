@@ -19,7 +19,8 @@ namespace RayBork;
 /// <see cref="Rune"/> (U+0000), zero vectors, and zero UVs.
 /// </para>
 /// </remarks>
-public readonly struct Glyph {
+public readonly struct Glyph
+{
     /// <summary>
     /// Initializes one glyph from its rune, pen advance, and padded quad.
     /// </summary>
@@ -27,7 +28,8 @@ public readonly struct Glyph {
     /// <param name="advance">The horizontal pen advance in em units.</param>
     /// <param name="bearing">The quad's bottom-left corner relative to the baseline in em units.</param>
     /// <param name="size">The padded quad size in em units.</param>
-    internal Glyph(Rune rune, Vector2 advance, Vector2 bearing, Vector2 size) {
+    internal Glyph(Rune rune, Vector2 advance, Vector2 bearing, Vector2 size)
+    {
         Rune = rune;
         Advance = advance;
         Bearing = bearing;

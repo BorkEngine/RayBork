@@ -34,7 +34,8 @@ namespace RayBork;
 /// member throws <see cref="ObjectDisposedException"/> once the material is disposed.
 /// </para>
 /// </remarks>
-public sealed class Shader : IDisposable {
+public sealed class Shader : IDisposable
+{
     private readonly ShaderProgram _program;
     private readonly string _path;
     private readonly IReadOnlyDictionary<string, ShaderAbiUniform> _uniformsByName;
@@ -50,7 +51,8 @@ public sealed class Shader : IDisposable {
     /// </summary>
     /// <param name="program">The shared program.</param>
     /// <exception cref="ArgumentNullException"><paramref name="program"/> is <c>null</c>.</exception>
-    internal Shader(ShaderProgram program) {
+    internal Shader(ShaderProgram program)
+    {
         ArgumentNullException.ThrowIfNull(program);
 
         _program = program;
@@ -71,8 +73,10 @@ public sealed class Shader : IDisposable {
     /// Gets the stages present in the program.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    public ShaderStageMask Stages {
-        get {
+    public ShaderStageMask Stages
+    {
+        get
+        {
             ThrowIfDisposed();
             return _program.Stages;
         }
@@ -83,8 +87,10 @@ public sealed class Shader : IDisposable {
     /// not override the state.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    public RenderState DefaultRenderState {
-        get {
+    public RenderState DefaultRenderState
+    {
+        get
+        {
             ThrowIfDisposed();
             return _program.DefaultRenderState;
         }
@@ -95,8 +101,10 @@ public sealed class Shader : IDisposable {
     /// uniform values.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    public IReadOnlyList<ShaderUniform> Uniforms {
-        get {
+    public IReadOnlyList<ShaderUniform> Uniforms
+    {
+        get
+        {
             ThrowIfDisposed();
             return _program.Uniforms;
         }
@@ -107,8 +115,10 @@ public sealed class Shader : IDisposable {
     /// current texture assignments.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
-    public IReadOnlyList<ShaderTextureBinding> Textures {
-        get {
+    public IReadOnlyList<ShaderTextureBinding> Textures
+    {
+        get
+        {
             ThrowIfDisposed();
             return _program.Textures;
         }
@@ -186,7 +196,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a float uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, float value) {
+    public void SetUniform(string name, float value)
+    {
         Span<byte> bytes = stackalloc byte[sizeof(float)];
         BinaryPrimitives.WriteSingleLittleEndian(bytes, value);
         AssignUniform(name, ShaderUniformType.Float, bytes);
@@ -200,7 +211,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not an int uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, int value) {
+    public void SetUniform(string name, int value)
+    {
         Span<byte> bytes = stackalloc byte[sizeof(int)];
         BinaryPrimitives.WriteInt32LittleEndian(bytes, value);
         AssignUniform(name, ShaderUniformType.Int, bytes);
@@ -214,7 +226,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a uint uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, uint value) {
+    public void SetUniform(string name, uint value)
+    {
         Span<byte> bytes = stackalloc byte[sizeof(uint)];
         BinaryPrimitives.WriteUInt32LittleEndian(bytes, value);
         AssignUniform(name, ShaderUniformType.UInt, bytes);
@@ -228,7 +241,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a bool uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, bool value) {
+    public void SetUniform(string name, bool value)
+    {
         Span<byte> bytes = stackalloc byte[sizeof(uint)];
         BinaryPrimitives.WriteUInt32LittleEndian(bytes, value ? 1u : 0u);
         AssignUniform(name, ShaderUniformType.Bool, bytes);
@@ -242,7 +256,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec2 uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, Vector2 value) {
+    public void SetUniform(string name, Vector2 value)
+    {
         Span<byte> bytes = stackalloc byte[8];
         BinaryPrimitives.WriteSingleLittleEndian(bytes[..4], value.X);
         BinaryPrimitives.WriteSingleLittleEndian(bytes.Slice(4, 4), value.Y);
@@ -257,7 +272,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec3 uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, Vector3 value) {
+    public void SetUniform(string name, Vector3 value)
+    {
         Span<byte> bytes = stackalloc byte[12];
         BinaryPrimitives.WriteSingleLittleEndian(bytes[..4], value.X);
         BinaryPrimitives.WriteSingleLittleEndian(bytes.Slice(4, 4), value.Y);
@@ -273,7 +289,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec4 uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, Vector4 value) {
+    public void SetUniform(string name, Vector4 value)
+    {
         Span<byte> bytes = stackalloc byte[16];
         WriteVector4(bytes, value.X, value.Y, value.Z, value.W);
         AssignUniform(name, ShaderUniformType.Vector4, bytes);
@@ -288,7 +305,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec4 uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, Quaternion value) {
+    public void SetUniform(string name, Quaternion value)
+    {
         Span<byte> bytes = stackalloc byte[16];
         WriteVector4(bytes, value.X, value.Y, value.Z, value.W);
         AssignUniform(name, ShaderUniformType.Vector4, bytes);
@@ -302,7 +320,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a mat4 uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, Matrix4x4 value) {
+    public void SetUniform(string name, Matrix4x4 value)
+    {
         Span<byte> bytes = stackalloc byte[64];
         WriteSingle(bytes, 0, value.M11);
         WriteSingle(bytes, 4, value.M12);
@@ -331,7 +350,8 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a vec4 uniform.</exception>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, Color value) {
+    public void SetUniform(string name, Color value)
+    {
         Span<byte> bytes = stackalloc byte[16];
         WriteVector4(bytes, value.R, value.G, value.B, value.A);
         AssignUniform(name, ShaderUniformType.Vector4, bytes);
@@ -351,42 +371,54 @@ public sealed class Shader : IDisposable {
     /// <exception cref="ArgumentException"><paramref name="name"/> is unknown or not a texture binding.</exception>
     /// <exception cref="ObjectDisposedException">The material or <paramref name="texture"/> is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void SetUniform(string name, Texture? texture) {
+    public void SetUniform(string name, Texture? texture)
+    {
         ThrowIfDisposed();
         TickThread.RequireCurrent(nameof(SetUniform));
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        if (!_texturesByName.TryGetValue(name, out ShaderAbiTexture binding)) {
-            if (_uniformsByName.ContainsKey(name)) {
+        if (!_texturesByName.TryGetValue(name, out ShaderAbiTexture binding))
+        {
+            if (_uniformsByName.ContainsKey(name))
+            {
                 throw new ArgumentException(
                     $"The uniform '{name}' of shader '{Path}' is not a texture binding.",
-                    nameof(name));
+                    nameof(name)
+                );
             }
 
             throw new ArgumentException(
                 $"The shader '{Path}' has no texture binding named '{name}'.",
-                nameof(name));
+                nameof(name)
+            );
         }
 
-        if (texture is not null) {
+        if (texture is not null)
+        {
             texture.AddOwnerReference();
         }
 
         Texture? previous;
-        try {
-            lock (_cursorGate) {
+        try
+        {
+            lock (_cursorGate)
+            {
                 ThrowIfCursorDisposedLocked();
                 previous = _textureValues[binding.Slot];
                 _textureValues[binding.Slot] = texture;
             }
-        } catch {
-            if (texture is not null) {
+        }
+        catch
+        {
+            if (texture is not null)
+            {
                 texture.ReleaseOwnerReference();
             }
 
             throw;
         }
 
-        if (previous is not null) {
+        if (previous is not null)
+        {
             previous.ReleaseOwnerReference();
         }
     }
@@ -400,20 +432,24 @@ public sealed class Shader : IDisposable {
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The material is disposed.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void ResetUniforms() {
+    public void ResetUniforms()
+    {
         ThrowIfDisposed();
         TickThread.RequireCurrent(nameof(ResetUniforms));
 
         Texture?[] previous;
-        lock (_cursorGate) {
+        lock (_cursorGate)
+        {
             ThrowIfCursorDisposedLocked();
             _program.DefaultInstanceData.CopyTo(_instanceData);
             previous = [.. _textureValues];
             Array.Clear(_textureValues);
         }
 
-        foreach (Texture? texture in previous) {
-            if (texture is not null) {
+        foreach (Texture? texture in previous)
+        {
+            if (texture is not null)
+            {
                 texture.ReleaseOwnerReference();
             }
         }
@@ -425,11 +461,13 @@ public sealed class Shader : IDisposable {
     /// Other materials over the same program stay usable until their own disposal.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The material or its program was already disposed.</exception>
-    public void Dispose() {
+    public void Dispose()
+    {
         ThrowIfDisposed();
 
         Texture?[] owned;
-        lock (_cursorGate) {
+        lock (_cursorGate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             _disposed = true;
@@ -437,68 +475,91 @@ public sealed class Shader : IDisposable {
             Array.Clear(_textureValues);
         }
 
-        foreach (Texture? texture in owned) {
-            if (texture is not null) {
+        foreach (Texture? texture in owned)
+        {
+            if (texture is not null)
+            {
                 texture.ReleaseOwnerReference();
             }
         }
 
-        try {
+        try
+        {
             _program.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // Shutdown force-disposed the program after this material's reference was accounted for.
         }
     }
 
-    private void AssignUniform(string name, ShaderUniformType expectedType, ReadOnlySpan<byte> value) {
+    private void AssignUniform(
+        string name,
+        ShaderUniformType expectedType,
+        ReadOnlySpan<byte> value
+    )
+    {
         ThrowIfDisposed();
         TickThread.RequireCurrent(nameof(SetUniform));
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
 
-        if (!_uniformsByName.TryGetValue(name, out ShaderAbiUniform uniform)) {
-            if (_texturesByName.ContainsKey(name)) {
+        if (!_uniformsByName.TryGetValue(name, out ShaderAbiUniform uniform))
+        {
+            if (_texturesByName.ContainsKey(name))
+            {
                 throw new ArgumentException(
                     $"The uniform '{name}' of shader '{Path}' is a texture binding; it cannot be set "
                         + $"from a {expectedType} value.",
-                    nameof(name));
+                    nameof(name)
+                );
             }
 
             throw new ArgumentException(
                 $"The shader '{Path}' has no uniform named '{name}'.",
-                nameof(name));
+                nameof(name)
+            );
         }
 
-        if (uniform.Type != expectedType) {
+        if (uniform.Type != expectedType)
+        {
             throw new ArgumentException(
                 $"The uniform '{name}' of shader '{Path}' is {uniform.Type}; it cannot be set from a "
                     + $"{expectedType} value.",
-                nameof(name));
+                nameof(name)
+            );
         }
 
-        if (value.Length != uniform.Size) {
+        if (value.Length != uniform.Size)
+        {
             throw new ArgumentException(
                 $"The uniform '{name}' of shader '{Path}' has the layout size {uniform.Size} bytes, "
                     + $"but the value is {value.Length} bytes.",
-                nameof(value));
+                nameof(value)
+            );
         }
 
-        lock (_cursorGate) {
+        lock (_cursorGate)
+        {
             ThrowIfCursorDisposedLocked();
-            value.CopyTo(_instanceData.AsSpan(uniform.Offset - ShaderAbiLayout.INSTANCE_HEADER_SIZE));
+            value.CopyTo(
+                _instanceData.AsSpan(uniform.Offset - ShaderAbiLayout.INSTANCE_HEADER_SIZE)
+            );
         }
     }
 
-    private static void WriteVector4(Span<byte> destination, float x, float y, float z, float w) {
+    private static void WriteVector4(Span<byte> destination, float x, float y, float z, float w)
+    {
         WriteSingle(destination, 0, x);
         WriteSingle(destination, 4, y);
         WriteSingle(destination, 8, z);
         WriteSingle(destination, 12, w);
     }
 
-    private static void WriteSingle(Span<byte> destination, int offset, float value)
-        => BinaryPrimitives.WriteSingleLittleEndian(destination.Slice(offset, sizeof(float)), value);
+    private static void WriteSingle(Span<byte> destination, int offset, float value) =>
+        BinaryPrimitives.WriteSingleLittleEndian(destination.Slice(offset, sizeof(float)), value);
 
-    private void ThrowIfCursorDisposedLocked() {
+    private void ThrowIfCursorDisposedLocked()
+    {
         ObjectDisposedException.ThrowIf(_disposed || _program.IsDisposed, this);
     }
 

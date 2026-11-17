@@ -8,10 +8,12 @@ namespace RayBork.Bake.Baking;
 /// The mutable builder-side configuration model that the bake application validates into a
 /// <see cref="BakeProject"/>.
 /// </summary>
-internal sealed class BakeProjectDefinition {
+internal sealed class BakeProjectDefinition
+{
     private readonly List<BakePackDefinition> _packs = [];
-    private readonly Dictionary<string, BakeAssetTypeRegistration> _assetTypes =
-        new(StringComparer.Ordinal);
+    private readonly Dictionary<string, BakeAssetTypeRegistration> _assetTypes = new(
+        StringComparer.Ordinal
+    );
     private readonly List<IAssetProcessor> _processors = [];
     private readonly List<BakeDiagnostic> _issues = [];
     private bool _defaultAssetsUsed;
@@ -30,7 +32,8 @@ internal sealed class BakeProjectDefinition {
     internal IReadOnlyList<IAssetProcessor> Processors => _processors;
 
     /// <summary>Gets the texture defaults.</summary>
-    internal RayBork.TextureFilter TextureFilter { get; private set; } = RayBork.TextureFilter.Linear;
+    internal RayBork.TextureFilter TextureFilter { get; private set; } =
+        RayBork.TextureFilter.Linear;
 
     /// <summary>Gets the texture wrap default.</summary>
     internal RayBork.TextureWrap TextureWrap { get; private set; } = RayBork.TextureWrap.Repeat;
@@ -48,36 +51,42 @@ internal sealed class BakeProjectDefinition {
     /// <summary>Adds one configured pack.</summary>
     /// <param name="packPath">The output-root-relative pack path.</param>
     /// <param name="root">The project-root-relative asset root.</param>
-    internal void AddPack(string packPath, string root)
-        => _packs.Add(new BakePackDefinition(packPath, root));
+    internal void AddPack(string packPath, string root) =>
+        _packs.Add(new BakePackDefinition(packPath, root));
 
     /// <summary>Registers one explicit data type.</summary>
     /// <typeparam name="T">The shapeable data type.</typeparam>
     internal void AddAsset<T>()
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         BakeAssetTypeRegistration candidate = BakeAssetTypeRegistration.Create<T>();
-        if (_assetTypes.TryAdd(candidate.TypeName, candidate)) {
+        if (_assetTypes.TryAdd(candidate.TypeName, candidate))
+        {
             return;
         }
 
         AddIssue(
             BakeDiagnosticCodes.CONFIGURATION_INVALID,
             $"The data type '{candidate.TypeName}' is registered more than once; call "
-                + "RegisterAsset<T>() exactly once per type.");
+                + "RegisterAsset<T>() exactly once per type."
+        );
     }
 
     /// <summary>Registers one explicit data type and appends a validator.</summary>
     /// <typeparam name="T">The shapeable data type.</typeparam>
     /// <param name="validator">The validator.</param>
     internal void AddAssetValidator<T>(IAssetValidator<T> validator)
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         ArgumentNullException.ThrowIfNull(validator);
         GetOrAddAsset<T>().AddValidator(validator);
     }
 
     /// <summary>Registers the engine authoring descriptor types; idempotent.</summary>
-    internal void UseDefaultAssets() {
-        if (_defaultAssetsUsed) {
+    internal void UseDefaultAssets()
+    {
+        if (_defaultAssetsUsed)
+        {
             return;
         }
 
@@ -92,8 +101,10 @@ internal sealed class BakeProjectDefinition {
     }
 
     /// <summary>Requests the built-in processors; idempotent.</summary>
-    internal void RequestDefaultProcessors() {
-        if (_defaultProcessorsUsed) {
+    internal void RequestDefaultProcessors()
+    {
+        if (_defaultProcessorsUsed)
+        {
             return;
         }
 
@@ -103,7 +114,8 @@ internal sealed class BakeProjectDefinition {
 
     /// <summary>Adds one processor.</summary>
     /// <param name="processor">The processor.</param>
-    internal void AddProcessor(IAssetProcessor processor) {
+    internal void AddProcessor(IAssetProcessor processor)
+    {
         ArgumentNullException.ThrowIfNull(processor);
         _processors.Add(processor);
     }
@@ -111,16 +123,29 @@ internal sealed class BakeProjectDefinition {
     /// <summary>Sets the texture defaults.</summary>
     /// <param name="filter">The default filter.</param>
     /// <param name="wrap">The default wrap mode.</param>
-    internal void SetTextureDefaults(RayBork.TextureFilter filter, RayBork.TextureWrap wrap) {
-        if (filter is not RayBork.TextureFilter.Nearest
-            and not RayBork.TextureFilter.Linear
-            and not RayBork.TextureFilter.Anisotropic) {
-            throw new ArgumentOutOfRangeException(nameof(filter), filter, "Unknown texture filter.");
+    internal void SetTextureDefaults(RayBork.TextureFilter filter, RayBork.TextureWrap wrap)
+    {
+        if (
+            filter
+            is not RayBork.TextureFilter.Nearest
+                and not RayBork.TextureFilter.Linear
+                and not RayBork.TextureFilter.Anisotropic
+        )
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(filter),
+                filter,
+                "Unknown texture filter."
+            );
         }
 
-        if (wrap is not RayBork.TextureWrap.Repeat
-            and not RayBork.TextureWrap.Clamp
-            and not RayBork.TextureWrap.Mirror) {
+        if (
+            wrap
+            is not RayBork.TextureWrap.Repeat
+                and not RayBork.TextureWrap.Clamp
+                and not RayBork.TextureWrap.Mirror
+        )
+        {
             throw new ArgumentOutOfRangeException(nameof(wrap), wrap, "Unknown texture wrap mode.");
         }
 
@@ -130,7 +155,8 @@ internal sealed class BakeProjectDefinition {
 
     /// <summary>Sets the test-only tool version override.</summary>
     /// <param name="version">The version to record and compare in the manifest.</param>
-    internal void SetToolVersionOverride(string version) {
+    internal void SetToolVersionOverride(string version)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(version);
         ToolVersionOverride = version;
     }
@@ -138,21 +164,26 @@ internal sealed class BakeProjectDefinition {
     /// <summary>Records one semantic configuration issue.</summary>
     /// <param name="code">The stable code.</param>
     /// <param name="message">The message.</param>
-    internal void AddIssue(string code, string message)
-        => _issues.Add(new BakeDiagnostic(
-            BakeSeverity.Error,
-            code,
-            message,
-            FilePath: null,
-            Line: null,
-            Column: null,
-            AssetPath: null,
-            MemberPath: null));
+    internal void AddIssue(string code, string message) =>
+        _issues.Add(
+            new BakeDiagnostic(
+                BakeSeverity.Error,
+                code,
+                message,
+                FilePath: null,
+                Line: null,
+                Column: null,
+                AssetPath: null,
+                MemberPath: null
+            )
+        );
 
     private BakeAssetTypeRegistration GetOrAddAsset<T>()
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         BakeAssetTypeRegistration candidate = BakeAssetTypeRegistration.Create<T>();
-        if (_assetTypes.TryGetValue(candidate.TypeName, out BakeAssetTypeRegistration? existing)) {
+        if (_assetTypes.TryGetValue(candidate.TypeName, out BakeAssetTypeRegistration? existing))
+        {
             return existing;
         }
 

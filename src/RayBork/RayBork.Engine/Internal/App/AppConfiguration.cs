@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// The configuration is immutable after construction. The app keeps this instance for its lifetime;
 /// the builder is single-use, so no later builder call can change it.
 /// </remarks>
-internal sealed class AppConfiguration {
+internal sealed class AppConfiguration
+{
     /// <summary>
     /// Gets the game whose callbacks run on the tick thread.
     /// </summary>

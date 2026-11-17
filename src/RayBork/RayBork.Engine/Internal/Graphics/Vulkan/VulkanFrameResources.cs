@@ -25,7 +25,8 @@ namespace RayBork.Internal;
 /// and the device. Every member is render-thread only and the call is not thread-safe.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanFrameResources : IDisposable {
+internal sealed unsafe class VulkanFrameResources : IDisposable
+{
     /// <summary>The number of frames the renderer may have in flight.</summary>
     internal const int FRAMES_IN_FLIGHT = 3;
 
@@ -59,7 +60,9 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
         PhysicalDevice physicalDevice,
         VulkanDescriptorState descriptors,
         ulong maxInstanceBytes,
-        ulong maxFrameBytes) {
+        ulong maxFrameBytes
+    )
+    {
         _vulkan = vulkan;
         _device = device;
         _physicalDevice = physicalDevice;
@@ -89,27 +92,37 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
     /// <exception cref="GraphicsException">
     /// A Vulkan object could not be created. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static VulkanFrameResources Create(VulkanDevice device, VulkanDescriptorState descriptors) {
+    internal static VulkanFrameResources Create(
+        VulkanDevice device,
+        VulkanDescriptorState descriptors
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(descriptors);
 
         ulong maxInstanceBytes = Math.Min(
             (ulong)device.Capabilities.MaxStorageBufferRange,
-            MAX_INSTANCE_BYTES);
+            MAX_INSTANCE_BYTES
+        );
         ulong maxFrameBytes = Math.Min(
             (ulong)device.Capabilities.MaxStorageBufferRange,
-            MAX_FRAME_BYTES);
+            MAX_FRAME_BYTES
+        );
         VulkanFrameResources resources = new(
             device.Vulkan,
             device.Device,
             device.PhysicalDevice,
             descriptors,
             maxInstanceBytes,
-            maxFrameBytes);
-        try {
+            maxFrameBytes
+        );
+        try
+        {
             resources.CreateSlots();
             return resources;
-        } catch {
+        }
+        catch
+        {
             resources.Dispose();
             throw;
         }
@@ -134,26 +147,34 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
     /// The frame needs more frame-block bytes than the storage-buffer bound. The diagnostic code is
     /// <c>RB3001</c>.
     /// </exception>
-    internal void EnsureFrameCapacity(int slotIndex, int passCount, long frameIndex) {
+    internal void EnsureFrameCapacity(int slotIndex, int passCount, long frameIndex)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(passCount);
         FrameSlot slot = _slots[slotIndex];
         ulong requiredFrameBytes = checked((ulong)passCount * FRAME_BLOCK_SIZE);
-        if (requiredFrameBytes > _maxFrameBytes) {
+        if (requiredFrameBytes > _maxFrameBytes)
+        {
             throw new GraphicsException(
                 $"Frame {frameIndex} records {passCount} camera pass(es), which needs "
                     + $"{requiredFrameBytes} frame-block bytes and exceeds the "
                     + $"{_maxFrameBytes}-byte frame storage-buffer bound (the device's "
                     + "maxStorageBufferRange capped at 16 MiB). Reduce the frame's camera pass count.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         ulong requiredCapacity = Math.Max(
             requiredFrameBytes,
-            Math.Min(INITIAL_FRAME_BYTES, _maxFrameBytes));
-        if (requiredCapacity > slot.FrameBufferBytes) {
-            ulong capacity = Math.Max(requiredCapacity, slot.FrameBufferBytes * FRAME_GROWTH_FACTOR);
+            Math.Min(INITIAL_FRAME_BYTES, _maxFrameBytes)
+        );
+        if (requiredCapacity > slot.FrameBufferBytes)
+        {
+            ulong capacity = Math.Max(
+                requiredCapacity,
+                slot.FrameBufferBytes * FRAME_GROWTH_FACTOR
+            );
             capacity = Math.Min(capacity, _maxFrameBytes);
             RecreateFrameBuffer(slot, capacity);
             _descriptors.WriteFrameStorageBuffer(slot.DescriptorSet, slot.FrameBuffer, capacity);
@@ -177,25 +198,39 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
     /// The frame needs more instance bytes than the storage-buffer bound. The diagnostic code is
     /// <c>RB3001</c>.
     /// </exception>
-    internal void EnsureSlot(int slotIndex, ulong instanceBytes, long frameIndex) {
+    internal void EnsureSlot(int slotIndex, ulong instanceBytes, long frameIndex)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         FrameSlot slot = _slots[slotIndex];
-        if (instanceBytes > _maxInstanceBytes) {
+        if (instanceBytes > _maxInstanceBytes)
+        {
             throw new GraphicsException(
                 $"Frame {frameIndex} needs {instanceBytes} instance-record bytes, which exceeds the "
                     + $"{_maxInstanceBytes}-byte instance storage-buffer bound (the device's "
                     + "maxStorageBufferRange capped at 64 MiB). Reduce the frame's instance count or "
                     + "texture and uniform payload.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
-        ulong requiredInstanceBytes = Math.Max(instanceBytes, Math.Min(INITIAL_INSTANCE_BYTES, _maxInstanceBytes));
-        if (requiredInstanceBytes > slot.InstanceBufferBytes) {
-            ulong capacity = Math.Max(requiredInstanceBytes, slot.InstanceBufferBytes * INSTANCE_GROWTH_FACTOR);
+        ulong requiredInstanceBytes = Math.Max(
+            instanceBytes,
+            Math.Min(INITIAL_INSTANCE_BYTES, _maxInstanceBytes)
+        );
+        if (requiredInstanceBytes > slot.InstanceBufferBytes)
+        {
+            ulong capacity = Math.Max(
+                requiredInstanceBytes,
+                slot.InstanceBufferBytes * INSTANCE_GROWTH_FACTOR
+            );
             capacity = Math.Min(capacity, _maxInstanceBytes);
             RecreateInstanceBuffer(slot, capacity);
-            _descriptors.WriteInstanceStorageBuffer(slot.DescriptorSet, slot.InstanceBuffer, capacity);
+            _descriptors.WriteInstanceStorageBuffer(
+                slot.DescriptorSet,
+                slot.InstanceBuffer,
+                capacity
+            );
         }
     }
 
@@ -208,16 +243,19 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="passIndex"/> lies outside the slot's frame buffer.
     /// </exception>
-    internal Span<byte> GetFrameBlockSpan(int slotIndex, int passIndex) {
+    internal Span<byte> GetFrameBlockSpan(int slotIndex, int passIndex)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentOutOfRangeException.ThrowIfNegative(passIndex);
         FrameSlot slot = _slots[slotIndex];
         long byteOffset = (long)passIndex * FRAME_BLOCK_SIZE;
-        if (byteOffset + FRAME_BLOCK_SIZE > (long)slot.FrameBufferBytes) {
+        if (byteOffset + FRAME_BLOCK_SIZE > (long)slot.FrameBufferBytes)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(passIndex),
                 passIndex,
-                $"The frame block ends outside the {slot.FrameBufferBytes}-byte frame buffer.");
+                $"The frame block ends outside the {slot.FrameBufferBytes}-byte frame buffer."
+            );
         }
 
         return new Span<byte>(slot.FrameMapped + byteOffset, FRAME_BLOCK_SIZE);
@@ -231,14 +269,17 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
     /// <param name="byteLength">The range length in bytes.</param>
     /// <returns>The writable range.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The range lies outside the slot's buffer.</exception>
-    internal Span<byte> GetInstanceSpan(int slotIndex, ulong byteOffset, ulong byteLength) {
+    internal Span<byte> GetInstanceSpan(int slotIndex, ulong byteOffset, ulong byteLength)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         FrameSlot slot = _slots[slotIndex];
-        if (byteOffset + byteLength > slot.InstanceBufferBytes) {
+        if (byteOffset + byteLength > slot.InstanceBufferBytes)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(byteOffset),
                 byteOffset,
-                $"The instance range ends outside the {slot.InstanceBufferBytes}-byte frame buffer.");
+                $"The instance range ends outside the {slot.InstanceBufferBytes}-byte frame buffer."
+            );
         }
 
         return new Span<byte>(slot.InstanceMapped + byteOffset, checked((int)byteLength));
@@ -249,7 +290,8 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
     /// </summary>
     /// <param name="slotIndex">The frame slot index.</param>
     /// <returns>The descriptor set.</returns>
-    internal DescriptorSet GetDescriptorSet(int slotIndex) {
+    internal DescriptorSet GetDescriptorSet(int slotIndex)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         return _slots[slotIndex].DescriptorSet;
     }
@@ -258,24 +300,34 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
     /// Unmaps and destroys every buffer, memory allocation, and descriptor set. The call is
     /// idempotent and must run before the descriptor state and the logical device are destroyed.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        foreach (FrameSlot slot in _slots) {
-            if (slot is null) {
+        foreach (FrameSlot slot in _slots)
+        {
+            if (slot is null)
+            {
                 continue;
             }
 
             DestroyBuffer(ref slot.FrameBuffer, ref slot.FrameMemory, ref slot.FrameMapped);
-            DestroyBuffer(ref slot.InstanceBuffer, ref slot.InstanceMemory, ref slot.InstanceMapped);
+            DestroyBuffer(
+                ref slot.InstanceBuffer,
+                ref slot.InstanceMemory,
+                ref slot.InstanceMapped
+            );
         }
     }
 
-    private void CreateSlots() {
-        for (int index = 0; index < _slots.Length; index++) {
+    private void CreateSlots()
+    {
+        for (int index = 0; index < _slots.Length; index++)
+        {
             FrameSlot slot = new();
             _slots[index] = slot;
             slot.DescriptorSet = _descriptors.AllocateSet();
@@ -284,34 +336,40 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
             _descriptors.WriteFrameStorageBuffer(
                 slot.DescriptorSet,
                 slot.FrameBuffer,
-                slot.FrameBufferBytes);
+                slot.FrameBufferBytes
+            );
             RecreateInstanceBuffer(slot, Math.Min(INITIAL_INSTANCE_BYTES, _maxInstanceBytes));
             _descriptors.WriteInstanceStorageBuffer(
                 slot.DescriptorSet,
                 slot.InstanceBuffer,
-                slot.InstanceBufferBytes);
+                slot.InstanceBufferBytes
+            );
         }
     }
 
-    private void RecreateFrameBuffer(FrameSlot slot, ulong capacity) {
+    private void RecreateFrameBuffer(FrameSlot slot, ulong capacity)
+    {
         DestroyBuffer(ref slot.FrameBuffer, ref slot.FrameMemory, ref slot.FrameMapped);
         CreateMappedBuffer(
             capacity,
             BufferUsageFlags.StorageBufferBit,
             out slot.FrameBuffer,
             out slot.FrameMemory,
-            out slot.FrameMapped);
+            out slot.FrameMapped
+        );
         slot.FrameBufferBytes = capacity;
     }
 
-    private void RecreateInstanceBuffer(FrameSlot slot, ulong capacity) {
+    private void RecreateInstanceBuffer(FrameSlot slot, ulong capacity)
+    {
         DestroyBuffer(ref slot.InstanceBuffer, ref slot.InstanceMemory, ref slot.InstanceMapped);
         CreateMappedBuffer(
             capacity,
             BufferUsageFlags.StorageBufferBit,
             out slot.InstanceBuffer,
             out slot.InstanceMemory,
-            out slot.InstanceMapped);
+            out slot.InstanceMapped
+        );
         slot.InstanceBufferBytes = capacity;
     }
 
@@ -320,77 +378,111 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
         BufferUsageFlags usage,
         out Buffer buffer,
         out DeviceMemory memory,
-        out byte* mapped) {
+        out byte* mapped
+    )
+    {
         buffer = default;
         memory = default;
         mapped = null;
-        try {
-            BufferCreateInfo createInfo = new() {
+        try
+        {
+            BufferCreateInfo createInfo = new()
+            {
                 SType = StructureType.BufferCreateInfo,
                 Size = size,
                 Usage = usage,
                 SharingMode = SharingMode.Exclusive,
             };
             Result createResult = _vulkan.CreateBuffer(_device, &createInfo, null, out buffer);
-            if (createResult != Result.Success || buffer.Handle == 0) {
+            if (createResult != Result.Success || buffer.Handle == 0)
+            {
                 throw new GraphicsException(
                     $"The Vulkan frame buffer of {size} byte(s) could not be created: {createResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             MemoryRequirements requirements = _vulkan.GetBufferMemoryRequirements(_device, buffer);
             PhysicalDeviceMemoryProperties memoryProperties =
                 _vulkan.GetPhysicalDeviceMemoryProperties(_physicalDevice);
-            MemoryAllocateInfo allocateInfo = new() {
+            MemoryAllocateInfo allocateInfo = new()
+            {
                 SType = StructureType.MemoryAllocateInfo,
                 AllocationSize = requirements.Size,
-                MemoryTypeIndex = FindHostVisibleMemoryType(requirements.MemoryTypeBits, memoryProperties),
+                MemoryTypeIndex = FindHostVisibleMemoryType(
+                    requirements.MemoryTypeBits,
+                    memoryProperties
+                ),
             };
-            Result allocateResult = _vulkan.AllocateMemory(_device, &allocateInfo, null, out memory);
-            if (allocateResult != Result.Success || memory.Handle == 0) {
+            Result allocateResult = _vulkan.AllocateMemory(
+                _device,
+                &allocateInfo,
+                null,
+                out memory
+            );
+            if (allocateResult != Result.Success || memory.Handle == 0)
+            {
                 throw new GraphicsException(
                     $"The Vulkan frame buffer memory of {size} byte(s) could not be allocated: {allocateResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             Result bindResult = _vulkan.BindBufferMemory(_device, buffer, memory, 0);
-            if (bindResult != Result.Success) {
+            if (bindResult != Result.Success)
+            {
                 throw new GraphicsException(
                     $"The Vulkan frame buffer memory could not be bound: {bindResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             void* pointer = null;
-            Result mapResult = _vulkan.MapMemory(_device, memory, 0, requirements.Size, MemoryMapFlags.None, &pointer);
-            if (mapResult != Result.Success || pointer is null) {
+            Result mapResult = _vulkan.MapMemory(
+                _device,
+                memory,
+                0,
+                requirements.Size,
+                MemoryMapFlags.None,
+                &pointer
+            );
+            if (mapResult != Result.Success || pointer is null)
+            {
                 throw new GraphicsException(
                     $"The Vulkan frame buffer memory could not be mapped: {mapResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             mapped = (byte*)pointer;
-        } catch {
+        }
+        catch
+        {
             DestroyBuffer(ref buffer, ref memory, ref mapped);
             throw;
         }
     }
 
-    private void DestroyBuffer(ref Buffer buffer, ref DeviceMemory memory, ref byte* mapped) {
-        if (mapped is not null) {
+    private void DestroyBuffer(ref Buffer buffer, ref DeviceMemory memory, ref byte* mapped)
+    {
+        if (mapped is not null)
+        {
             _vulkan.UnmapMemory(_device, memory);
             mapped = null;
         }
 
-        if (buffer.Handle != 0) {
+        if (buffer.Handle != 0)
+        {
             _vulkan.DestroyBuffer(_device, buffer, null);
             buffer = default;
         }
 
-        if (memory.Handle != 0) {
+        if (memory.Handle != 0)
+        {
             _vulkan.FreeMemory(_device, memory, null);
             memory = default;
         }
@@ -398,14 +490,18 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
 
     private static uint FindHostVisibleMemoryType(
         uint typeBits,
-        PhysicalDeviceMemoryProperties memoryProperties) {
+        PhysicalDeviceMemoryProperties memoryProperties
+    )
+    {
         const MemoryPropertyFlags required =
             MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit;
-        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++) {
+        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++)
+        {
             bool typeSupported = (typeBits & (1u << (int)index)) != 0;
             bool propertiesMatch =
                 (memoryProperties.MemoryTypes[(int)index].PropertyFlags & required) == required;
-            if (typeSupported && propertiesMatch) {
+            if (typeSupported && propertiesMatch)
+            {
                 return index;
             }
         }
@@ -414,10 +510,12 @@ internal sealed unsafe class VulkanFrameResources : IDisposable {
             $"No host-visible coherent Vulkan memory type is available for the frame buffers "
                 + $"(type bits 0x{typeBits:X8}).",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
-    private sealed class FrameSlot {
+    private sealed class FrameSlot
+    {
         internal Buffer FrameBuffer;
         internal DeviceMemory FrameMemory;
         internal byte* FrameMapped;

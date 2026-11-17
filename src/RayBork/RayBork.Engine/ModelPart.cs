@@ -25,7 +25,8 @@ namespace RayBork;
 /// passed in. It is model-space bounds after the part's local transform.
 /// </para>
 /// </remarks>
-public readonly struct ModelPart {
+public readonly struct ModelPart
+{
     /// <summary>
     /// Initializes a part from its name, mesh, and material.
     /// </summary>
@@ -49,7 +50,9 @@ public readonly struct ModelPart {
         Mesh mesh,
         Shader shader,
         RenderState? renderState = null,
-        Transform? localTransform = null) {
+        Transform? localTransform = null
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentNullException.ThrowIfNull(shader);
@@ -85,14 +88,17 @@ public readonly struct ModelPart {
     /// <summary>Gets the model-space bounds of the part, after its local transform.</summary>
     public BoundingBox Bounds { get; }
 
-    private static BoundingBox TransformBounds(BoundingBox bounds, Matrix4x4 matrix) {
+    private static BoundingBox TransformBounds(BoundingBox bounds, Matrix4x4 matrix)
+    {
         Vector3 minimum = new(float.PositiveInfinity);
         Vector3 maximum = new(float.NegativeInfinity);
-        for (int cornerIndex = 0; cornerIndex < 8; cornerIndex++) {
+        for (int cornerIndex = 0; cornerIndex < 8; cornerIndex++)
+        {
             Vector3 corner = new(
                 (cornerIndex & 1) == 0 ? bounds.Min.X : bounds.Max.X,
                 (cornerIndex & 2) == 0 ? bounds.Min.Y : bounds.Max.Y,
-                (cornerIndex & 4) == 0 ? bounds.Min.Z : bounds.Max.Z);
+                (cornerIndex & 4) == 0 ? bounds.Min.Z : bounds.Max.Z
+            );
             Vector3 transformed = Vector3.Transform(corner, matrix);
             minimum = Vector3.Min(minimum, transformed);
             maximum = Vector3.Max(maximum, transformed);

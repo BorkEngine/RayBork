@@ -13,7 +13,8 @@ namespace RayBork.Internal;
 /// the main thread on <see cref="TeardownQueue"/>; the main thread drains it after the render thread
 /// has stopped.
 /// </remarks>
-internal sealed class RendererBackendOptions {
+internal sealed class RendererBackendOptions
+{
     /// <summary>
     /// Gets the requested present mode, sample count, tone mapping, exposure, and validation.
     /// </summary>

@@ -37,11 +37,16 @@ namespace RayBork.Tests;
 /// disposes them exactly once.
 /// </para>
 /// </remarks>
-internal sealed class PrimitiveDrawGpuHarness : IDisposable {
+internal sealed class PrimitiveDrawGpuHarness : IDisposable
+{
     /// <summary>The texture binding name the built-in mesh program samples.</summary>
     internal const string MESH_TEXTURE_BINDING = "mainTexture";
 
-    private static readonly SamplerState _defaultSampler = new(TextureFilter.Nearest, TextureWrap.Clamp, 1f);
+    private static readonly SamplerState _defaultSampler = new(
+        TextureFilter.Nearest,
+        TextureWrap.Clamp,
+        1f
+    );
 
     private readonly BackendTestHost _host;
     private readonly AssetGpuUploadHarness _uploads;
@@ -62,7 +67,9 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         ProceduralAssetService proceduralAssets,
         PrimitiveAssets primitives,
         SsaoAssets ssaoAssets,
-        CameraTestHost frames) {
+        CameraTestHost frames
+    )
+    {
         _host = host;
         _uploads = uploads;
         _catalog = catalog;
@@ -88,8 +95,10 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// engine mesh and a material over an engine program.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The harness is disposed.</exception>
-    internal PrimitiveAssets Primitives {
-        get {
+    internal PrimitiveAssets Primitives
+    {
+        get
+        {
             AssertNotDisposed();
             return _primitives;
         }
@@ -101,50 +110,65 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// </summary>
     /// <param name="sampleCount">The requested MSAA sample count.</param>
     /// <returns>The initialized harness.</returns>
-    internal static PrimitiveDrawGpuHarness CreateOrSkip(int sampleCount = 4) {
-        BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: sampleCount, hdr: WindowHdrState.Sdr);
+    internal static PrimitiveDrawGpuHarness CreateOrSkip(int sampleCount = 4)
+    {
+        BackendTestHost host = BackendTestHost.CreateOrSkip(
+            sampleCount: sampleCount,
+            hdr: WindowHdrState.Sdr
+        );
         AssetGpuUploadHarness? uploads = null;
         AssetCatalog? catalog = null;
         PrimitiveAssets? primitives = null;
         SsaoAssets? ssaoAssets = null;
         CameraTestHost? frames = null;
-        try {
+        try
+        {
             uploads = new AssetGpuUploadHarness(host.Backend);
             catalog = new AssetCatalog(
                 NullLoggerFactory.Instance,
                 uploads.Bridge,
                 BuiltInAssetPack.Bytes,
                 [],
-                []);
+                []
+            );
             catalog.Start();
             Task<PrimitiveAssets> load = PrimitiveAssets.LoadAsync(catalog);
             bool completed = SpinWait.SpinUntil(
-                () => {
+                () =>
+                {
                     uploads.Pump();
                     return load.IsCompleted;
                 },
-                AssetGpuUploadHarness.Timeout);
+                AssetGpuUploadHarness.Timeout
+            );
             Assert.True(
                 completed,
-                "The engine primitive assets did not finish loading through the built-in pack and the GPU asset bridge.");
+                "The engine primitive assets did not finish loading through the built-in pack and the GPU asset bridge."
+            );
             primitives = load.GetAwaiter().GetResult();
 
             Task<SsaoAssets> ssaoLoad = SsaoAssets.LoadAsync(catalog);
             completed = SpinWait.SpinUntil(
-                () => {
+                () =>
+                {
                     uploads.Pump();
                     return ssaoLoad.IsCompleted;
                 },
-                AssetGpuUploadHarness.Timeout);
+                AssetGpuUploadHarness.Timeout
+            );
             Assert.True(
                 completed,
-                "The built-in SSAO assets did not finish loading through the built-in pack and the GPU asset bridge.");
+                "The built-in SSAO assets did not finish loading through the built-in pack and the GPU asset bridge."
+            );
             ssaoAssets = ssaoLoad.GetAwaiter().GetResult();
 
             frames = new CameraTestHost(
                 checked((int)host.SceneTarget.Extent.Width),
-                checked((int)host.SceneTarget.Extent.Height));
-            ProceduralAssetService proceduralAssets = ((IProceduralAssetProvider)catalog).ProceduralAssets;
+                checked((int)host.SceneTarget.Extent.Height)
+            );
+            ProceduralAssetService proceduralAssets = (
+                (IProceduralAssetProvider)catalog
+            ).ProceduralAssets;
             return new PrimitiveDrawGpuHarness(
                 host,
                 uploads,
@@ -152,8 +176,11 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
                 proceduralAssets,
                 primitives,
                 ssaoAssets,
-                frames);
-        } catch {
+                frames
+            );
+        }
+        catch
+        {
             primitives?.Dispose();
             ssaoAssets?.Dispose();
             frames?.Dispose();
@@ -172,8 +199,8 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <param name="height">The base-level height in pixels.</param>
     /// <param name="pixels">The linear RGBA colors in row-major order from top to bottom.</param>
     /// <returns>The uploaded texture; the harness owns and disposes it.</returns>
-    internal Texture CreateTexture(int width, int height, params Color[] pixels)
-        => CreateTexture(width, height, _defaultSampler, pixels);
+    internal Texture CreateTexture(int width, int height, params Color[] pixels) =>
+        CreateTexture(width, height, _defaultSampler, pixels);
 
     /// <summary>
     /// Builds a procedural texture with an explicit sampler and waits for its GPU upload on the test
@@ -184,16 +211,25 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <param name="sampler">The sampler state; use a linear filter for a sampled gradient.</param>
     /// <param name="pixels">The linear RGBA colors in row-major order from top to bottom.</param>
     /// <returns>The uploaded texture; the harness owns and disposes it.</returns>
-    internal Texture CreateTexture(int width, int height, SamplerState sampler, params Color[] pixels) {
+    internal Texture CreateTexture(
+        int width,
+        int height,
+        SamplerState sampler,
+        params Color[] pixels
+    )
+    {
         AssertNotDisposed();
         TextureBuilder builder = _proceduralAssets.CreateTextureBuilder(
             width,
             height,
             TextureFormat.Rgba8Unorm,
             generateMips: false,
-            sampler: sampler);
+            sampler: sampler
+        );
         builder.SetPixels(pixels);
-        Texture texture = _uploads.WaitFor(builder.BuildAsync(TestContext.Current.CancellationToken));
+        Texture texture = _uploads.WaitFor(
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
         _textures.Add(texture);
         return texture;
     }
@@ -207,16 +243,19 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// A font load is CPU-only, but the wait still pumps the GPU bridge so a queued font-thread upload
     /// from an earlier warm-up can complete. The load itself never blocks the loader thread on the GPU.
     /// </remarks>
-    internal Font LoadFont(string path = EngineDefaults.DEFAULT_FONT_PATH) {
+    internal Font LoadFont(string path = EngineDefaults.DEFAULT_FONT_PATH)
+    {
         AssertNotDisposed();
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         Task<Font> load = _catalog.Load<Font>(path);
         bool completed = SpinWait.SpinUntil(
-            () => {
+            () =>
+            {
                 _uploads.Pump();
                 return load.IsCompleted;
             },
-            AssetGpuUploadHarness.Timeout);
+            AssetGpuUploadHarness.Timeout
+        );
         Assert.True(completed, $"The font '{path}' did not finish loading from the built-in pack.");
         Font font = load.GetAwaiter().GetResult();
         _fonts.Add(font);
@@ -234,37 +273,46 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// the test thread pumps the bridge while it waits for the settlement task. Every wait is bounded by
     /// the harness timeout and there is no sleep or poll of the generated cache.
     /// </remarks>
-    internal void WarmGlyphs(Font font, string text, long frameIndex = 1) {
+    internal void WarmGlyphs(Font font, string text, long frameIndex = 1)
+    {
         AssertNotDisposed();
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(text);
 
         font.BeginFrame(frameIndex);
-        foreach (Rune rune in text.EnumerateRunes()) {
+        foreach (Rune rune in text.EnumerateRunes())
+        {
             font.TryGetGlyphId(rune, out int glyphId);
             FrameAssetRetention probe = new();
             Texture? texture;
-            try {
+            try
+            {
                 texture = font.AcquireGlyphTexture(glyphId, probe);
-            } finally {
+            }
+            finally
+            {
                 probe.Release();
             }
 
-            if (texture is null) {
+            if (texture is null)
+            {
                 Task settled = font.WhenGlyphSettledAsync(glyphId);
                 bool completed = SpinWait.SpinUntil(
-                    () => {
+                    () =>
+                    {
                         _uploads.Pump();
                         return settled.IsCompleted;
                     },
-                    AssetGpuUploadHarness.Timeout);
+                    AssetGpuUploadHarness.Timeout
+                );
                 Assert.True(completed, "The glyph texture generation did not settle.");
                 settled.GetAwaiter().GetResult();
             }
 
             Assert.True(
                 font.TryGetGlyph(rune, out _),
-                $"The glyph U+{rune.Value:X4} did not generate an MSDF texture.");
+                $"The glyph U+{rune.Value:X4} did not generate an MSDF texture."
+            );
         }
     }
 
@@ -290,9 +338,12 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         float near = 0.1f,
         float far = float.PositiveInfinity,
         PostProcessStack? postProcess = null,
-        RenderTexture? target = null) {
+        RenderTexture? target = null
+    )
+    {
         AssertNotDisposed();
-        return SubmitFrame(service => {
+        return SubmitFrame(service =>
+        {
             using Camera camera = service.CreateCamera(
                 transform ?? Transform.Identity,
                 CameraProjection.Perspective,
@@ -304,7 +355,8 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
                 far,
                 viewport: null,
                 target,
-                postProcess);
+                postProcess
+            );
             record(camera);
         });
     }
@@ -323,32 +375,43 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         Transform? firstTransform,
         Action<Camera> second,
         Transform? secondTransform,
-        Color? clearColor = null) {
+        Color? clearColor = null
+    )
+    {
         AssertNotDisposed();
-        return SubmitFrame(service => {
-            using (Camera camera = service.CreateCamera(
-                firstTransform ?? Transform.Identity,
-                CameraProjection.Perspective,
-                60f,
-                orthographicHeight: 0f,
-                ClearMode.ColorAndDepth,
-                clearColor,
-                0.1f,
-                float.PositiveInfinity,
-                viewport: null)) {
+        return SubmitFrame(service =>
+        {
+            using (
+                Camera camera = service.CreateCamera(
+                    firstTransform ?? Transform.Identity,
+                    CameraProjection.Perspective,
+                    60f,
+                    orthographicHeight: 0f,
+                    ClearMode.ColorAndDepth,
+                    clearColor,
+                    0.1f,
+                    float.PositiveInfinity,
+                    viewport: null
+                )
+            )
+            {
                 first(camera);
             }
 
-            using (Camera camera = service.CreateCamera(
-                secondTransform ?? Transform.Identity,
-                CameraProjection.Perspective,
-                60f,
-                orthographicHeight: 0f,
-                ClearMode.ColorAndDepth,
-                clearColor,
-                0.1f,
-                float.PositiveInfinity,
-                viewport: null)) {
+            using (
+                Camera camera = service.CreateCamera(
+                    secondTransform ?? Transform.Identity,
+                    CameraProjection.Perspective,
+                    60f,
+                    orthographicHeight: 0f,
+                    ClearMode.ColorAndDepth,
+                    clearColor,
+                    0.1f,
+                    float.PositiveInfinity,
+                    viewport: null
+                )
+            )
+            {
                 second(camera);
             }
         });
@@ -376,9 +439,12 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         float near = 0.1f,
         float far = 100f,
         PostProcessStack? postProcess = null,
-        RenderTexture? target = null) {
+        RenderTexture? target = null
+    )
+    {
         AssertNotDisposed();
-        return SubmitFrame(service => {
+        return SubmitFrame(service =>
+        {
             using Camera camera = service.CreateCamera(
                 transform ?? Transform.Identity,
                 CameraProjection.Orthographic,
@@ -390,7 +456,8 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
                 far,
                 viewport: null,
                 target,
-                postProcess);
+                postProcess
+            );
             record(camera);
         });
     }
@@ -401,9 +468,18 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>
     /// <returns>The linear RGB values.</returns>
-    internal (float R, float G, float B) ReadColor(uint x, uint y) {
+    internal (float R, float G, float B) ReadColor(uint x, uint y)
+    {
         AssertNotDisposed();
-        VulkanReadback.ReadSceneColorPixel(_host.Device, _host.SceneTarget, x, y, out float r, out float g, out float b);
+        VulkanReadback.ReadSceneColorPixel(
+            _host.Device,
+            _host.SceneTarget,
+            x,
+            y,
+            out float r,
+            out float g,
+            out float b
+        );
         return (r, g, b);
     }
 
@@ -414,12 +490,18 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>
     /// <returns>The linear RGB values.</returns>
-    internal (float R, float G, float B) ReadRenderTargetColor(RenderTexture target, uint x, uint y) {
+    internal (float R, float G, float B) ReadRenderTargetColor(RenderTexture target, uint x, uint y)
+    {
         AssertNotDisposed();
         ArgumentNullException.ThrowIfNull(target);
-        if (!_host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? renderTarget)
-            || renderTarget is null) {
-            throw new InvalidOperationException($"The render target {target.TargetId} is not live.");
+        if (
+            !_host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? renderTarget)
+            || renderTarget is null
+        )
+        {
+            throw new InvalidOperationException(
+                $"The render target {target.TargetId} is not live."
+            );
         }
 
         VulkanReadback.ReadRenderTargetColorPixel(
@@ -429,29 +511,36 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
             y,
             out float r,
             out float g,
-            out float b);
+            out float b
+        );
         return (r, g, b);
     }
 
     /// <inheritdoc />
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        try {
+        try
+        {
             _host.Backend.WaitForFrameResourcesIdle();
             _frames.Service.DetachPrimitives();
             _frames.Service.DetachSsaoAssets();
             _frames.Dispose();
-            foreach (Font font in _fonts) {
-                if (!font.IsDisposed) {
+            foreach (Font font in _fonts)
+            {
+                if (!font.IsDisposed)
+                {
                     font.Dispose();
                 }
             }
 
-            foreach (Texture texture in _textures) {
+            foreach (Texture texture in _textures)
+            {
                 texture.Dispose();
             }
 
@@ -459,12 +548,15 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
             _ssaoAssets.Dispose();
             _catalog.Stop();
             _uploads.Dispose();
-        } finally {
+        }
+        finally
+        {
             _host.Dispose();
         }
     }
 
-    private RenderFramePacket SubmitFrame(Action<CameraService> record) {
+    private RenderFramePacket SubmitFrame(Action<CameraService> record)
+    {
         RenderFramePacket packet = _frames.BeginFrame(_nextFrameIndex++);
         record(_frames.Service);
         _frames.EndFrame();

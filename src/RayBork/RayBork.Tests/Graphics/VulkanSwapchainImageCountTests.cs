@@ -2,7 +2,8 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class VulkanSwapchainImageCountTests {
+public sealed class VulkanSwapchainImageCountTests
+{
     [Theory]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     [InlineData(1u, 0u, 3u)]
@@ -14,13 +15,16 @@ public sealed class VulkanSwapchainImageCountTests {
     public void SelectRespectsThePreferredCountAndTheSurfaceLimits(
         uint minImageCount,
         uint maxImageCount,
-        uint expected) {
+        uint expected
+    )
+    {
         Assert.Equal(expected, VulkanSwapchainImageCount.Select(minImageCount, maxImageCount));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ZeroMaximumMeansNoUpperLimit() {
+    public void ZeroMaximumMeansNoUpperLimit()
+    {
         Assert.Equal(3u, VulkanSwapchainImageCount.Select(1, 0));
     }
 }

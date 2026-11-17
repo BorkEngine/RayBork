@@ -6,10 +6,12 @@ namespace RayBork.Tests.Assets.Catalog;
 /// <summary>
 /// Tests the built-in asset formats and loaders and their registration in the catalog registry.
 /// </summary>
-public sealed class BuiltInAssetLoaderTests {
+public sealed class BuiltInAssetLoaderTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateDefaultRegistersTheEngineFormatsAndLoaders() {
+    public void CreateDefaultRegistersTheEngineFormatsAndLoaders()
+    {
         AssetTypeRegistry registry = new(BuiltInAssetLoaders.CreateDefault());
 
         Assert.Equal(6, registry.Count);
@@ -21,33 +23,39 @@ public sealed class BuiltInAssetLoaderTests {
         Assert.True(registry.Contains(typeof(Model)));
 
         EngineAssetTypeRegistration<Mesh> mesh = Assert.IsType<EngineAssetTypeRegistration<Mesh>>(
-            registry.Get(typeof(Mesh)));
+            registry.Get(typeof(Mesh))
+        );
         Assert.Equal(AssetEntryType.Mesh, mesh.EntryType);
         Assert.Same(MeshAssetFormat.Instance, mesh.Format);
 
-        EngineAssetTypeRegistration<Texture> texture = Assert.IsType<EngineAssetTypeRegistration<Texture>>(
-            registry.Get(typeof(Texture)));
+        EngineAssetTypeRegistration<Texture> texture = Assert.IsType<
+            EngineAssetTypeRegistration<Texture>
+        >(registry.Get(typeof(Texture)));
         Assert.Equal(AssetEntryType.Texture, texture.EntryType);
         Assert.Same(TextureAssetFormat.Instance, texture.Format);
 
         EngineAssetTypeRegistration<Font> font = Assert.IsType<EngineAssetTypeRegistration<Font>>(
-            registry.Get(typeof(Font)));
+            registry.Get(typeof(Font))
+        );
         Assert.Equal(AssetEntryType.Font, font.EntryType);
         Assert.Same(FontAssetFormat.Instance, font.Format);
 
-        EngineAssetTypeRegistration<ShaderProgram> program =
-            Assert.IsType<EngineAssetTypeRegistration<ShaderProgram>>(registry.Get(typeof(ShaderProgram)));
+        EngineAssetTypeRegistration<ShaderProgram> program = Assert.IsType<
+            EngineAssetTypeRegistration<ShaderProgram>
+        >(registry.Get(typeof(ShaderProgram)));
         Assert.Equal(AssetEntryType.Shader, program.EntryType);
         Assert.Same(ShaderProgramAssetFormat.Instance, program.Format);
 
-        LoaderAssetTypeRegistration<Shader> shader = Assert.IsType<LoaderAssetTypeRegistration<Shader>>(
-            registry.Get(typeof(Shader)));
+        LoaderAssetTypeRegistration<Shader> shader = Assert.IsType<
+            LoaderAssetTypeRegistration<Shader>
+        >(registry.Get(typeof(Shader)));
         Assert.Equal(AssetEntryType.Shader, shader.EntryType);
         Assert.Same(ShaderMaterialLoader.Instance, shader.Loader);
         Assert.Equal("could not be loaded", shader.FailureDescription);
 
-        LoaderAssetTypeRegistration<Model> model = Assert.IsType<LoaderAssetTypeRegistration<Model>>(
-            registry.Get(typeof(Model)));
+        LoaderAssetTypeRegistration<Model> model = Assert.IsType<
+            LoaderAssetTypeRegistration<Model>
+        >(registry.Get(typeof(Model)));
         Assert.Equal(AssetEntryType.Model, model.EntryType);
         Assert.Same(ModelAssetLoader.Instance, model.Loader);
         Assert.Equal("could not be loaded", model.FailureDescription);
@@ -55,29 +63,37 @@ public sealed class BuiltInAssetLoaderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ACatalogRejectsAUserRegistrationForABuiltInEngineFormat() {
+    public void ACatalogRejectsAUserRegistrationForABuiltInEngineFormat()
+    {
         GpuAssetBridge bridge = new();
-        try {
-            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-                () => new AssetCatalog(
+        try
+        {
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+                new AssetCatalog(
                     NullLoggerFactory.Instance,
                     bridge,
                     ReadOnlyMemory<byte>.Empty,
                     [],
-                    [new LoaderAssetTypeRegistration<Mesh>(new MeshLoader())]));
+                    [new LoaderAssetTypeRegistration<Mesh>(new MeshLoader())]
+                )
+            );
 
             Assert.Equal(
                 $"The asset type '{typeof(Mesh).FullName}' is registered more than once.",
-                thrown.Message);
-        } finally {
+                thrown.Message
+            );
+        }
+        finally
+        {
             bridge.Close(null);
         }
     }
 
-    private sealed class MeshLoader : IAssetLoader<Mesh> {
+    private sealed class MeshLoader : IAssetLoader<Mesh>
+    {
         public AssetEntryType EntryType => AssetEntryType.Mesh;
 
-        public Task<Mesh> LoadAsync(AssetLoadContext context)
-            => throw new NotSupportedException("The test loader never loads a mesh.");
+        public Task<Mesh> LoadAsync(AssetLoadContext context) =>
+            throw new NotSupportedException("The test loader never loads a mesh.");
     }
 }

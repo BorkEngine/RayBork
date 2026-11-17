@@ -22,7 +22,8 @@ namespace RayBork.Internal;
 /// declaration order and performs no allocation beyond the metadata arrays.
 /// </para>
 /// </remarks>
-internal sealed class ShaderAbiLayout {
+internal sealed class ShaderAbiLayout
+{
     /// <summary>The byte size of the fixed instance header: transform, color, and UV rectangle.</summary>
     internal const int INSTANCE_HEADER_SIZE = 96;
 
@@ -61,18 +62,22 @@ internal sealed class ShaderAbiLayout {
     /// <exception cref="InvalidOperationException">
     /// The record would exceed <see cref="MAX_INSTANCE_RECORD_SIZE"/> bytes.
     /// </exception>
-    internal ShaderAbiLayout(ShaderUniformAsset[] uniforms, string[] textures) {
+    internal ShaderAbiLayout(ShaderUniformAsset[] uniforms, string[] textures)
+    {
         ArgumentNullException.ThrowIfNull(uniforms);
         ArgumentNullException.ThrowIfNull(textures);
 
         _textures = new ShaderAbiTexture[textures.Length];
         int offset = TEXTURE_INDEX_START;
-        for (int index = 0; index < textures.Length; index++) {
+        for (int index = 0; index < textures.Length; index++)
+        {
             string? name = textures[index];
-            if (string.IsNullOrWhiteSpace(name)) {
+            if (string.IsNullOrWhiteSpace(name))
+            {
                 throw new ArgumentException(
                     $"The texture binding at index {index} has no name.",
-                    nameof(textures));
+                    nameof(textures)
+                );
             }
 
             _textures[index] = new ShaderAbiTexture(name, index, offset);
@@ -81,15 +86,19 @@ internal sealed class ShaderAbiLayout {
         }
 
         _uniforms = new ShaderAbiUniform[uniforms.Length];
-        for (int index = 0; index < uniforms.Length; index++) {
+        for (int index = 0; index < uniforms.Length; index++)
+        {
             ShaderUniformAsset uniform = uniforms[index]
                 ?? throw new ArgumentException(
                     $"The uniform at index {index} is null.",
-                    nameof(uniforms));
-            if (string.IsNullOrWhiteSpace(uniform.Name)) {
+                    nameof(uniforms)
+                );
+            if (string.IsNullOrWhiteSpace(uniform.Name))
+            {
                 throw new ArgumentException(
                     $"The uniform at index {index} has no name.",
-                    nameof(uniforms));
+                    nameof(uniforms)
+                );
             }
 
             GetMemberLayout(uniform.Type, out int alignment, out int size, out int componentCount);
@@ -99,7 +108,8 @@ internal sealed class ShaderAbiLayout {
                 uniform.Type,
                 offset,
                 size,
-                componentCount);
+                componentCount
+            );
             offset += size;
             ThrowIfTooLarge(offset);
         }
@@ -127,7 +137,8 @@ internal sealed class ShaderAbiLayout {
     /// <param name="textureIndex">The zero-based texture declaration index.</param>
     /// <returns>The absolute byte offset from the start of the instance record.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The index is outside the texture list.</exception>
-    internal int TextureIndexOffset(int textureIndex) {
+    internal int TextureIndexOffset(int textureIndex)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(textureIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(textureIndex, _textures.Length);
         return _textures[textureIndex].IndexOffset;
@@ -137,7 +148,8 @@ internal sealed class ShaderAbiLayout {
     /// <param name="uniformIndex">The zero-based declaration index.</param>
     /// <returns>The absolute byte offset from the start of the instance record.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The index is outside the uniform list.</exception>
-    internal int UniformOffset(int uniformIndex) {
+    internal int UniformOffset(int uniformIndex)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(uniformIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(uniformIndex, _uniforms.Length);
         return _uniforms[uniformIndex].Offset;
@@ -147,7 +159,8 @@ internal sealed class ShaderAbiLayout {
     /// <param name="uniformIndex">The zero-based declaration index.</param>
     /// <returns>The byte size of the value, excluding any trailing alignment padding.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The index is outside the uniform list.</exception>
-    internal int UniformByteSize(int uniformIndex) {
+    internal int UniformByteSize(int uniformIndex)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(uniformIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(uniformIndex, _uniforms.Length);
         return _uniforms[uniformIndex].Size;
@@ -163,8 +176,11 @@ internal sealed class ShaderAbiLayout {
         ShaderUniformType type,
         out int alignment,
         out int size,
-        out int componentCount) {
-        switch (type) {
+        out int componentCount
+    )
+    {
+        switch (type)
+        {
             case ShaderUniformType.Float:
             case ShaderUniformType.Int:
             case ShaderUniformType.UInt:
@@ -201,18 +217,22 @@ internal sealed class ShaderAbiLayout {
             default:
                 throw new ArgumentException(
                     $"The uniform type '{type}' is not supported by the M4 shader ABI.",
-                    nameof(type));
+                    nameof(type)
+                );
         }
     }
 
-    private static int AlignUp(int offset, int alignment)
-        => checked((offset + alignment - 1) / alignment * alignment);
+    private static int AlignUp(int offset, int alignment) =>
+        checked((offset + alignment - 1) / alignment * alignment);
 
-    private static void ThrowIfTooLarge(int size) {
-        if (size > MAX_INSTANCE_RECORD_SIZE) {
+    private static void ThrowIfTooLarge(int size)
+    {
+        if (size > MAX_INSTANCE_RECORD_SIZE)
+        {
             throw new InvalidOperationException(
                 $"The shader instance record is {size} bytes; the M4 shader ABI supports at most "
-                    + $"{MAX_INSTANCE_RECORD_SIZE} bytes per instance.");
+                    + $"{MAX_INSTANCE_RECORD_SIZE} bytes per instance."
+            );
         }
     }
 }

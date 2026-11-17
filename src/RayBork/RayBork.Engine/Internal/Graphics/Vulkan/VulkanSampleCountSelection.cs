@@ -7,7 +7,8 @@ namespace RayBork.Internal;
 /// The rule matches the documented renderer behavior: use the highest supported count that does not
 /// exceed the request, and fall back to one sample when the request is below every supported count.
 /// </remarks>
-internal static class VulkanSampleCountSelection {
+internal static class VulkanSampleCountSelection
+{
     /// <summary>
     /// Selects the effective sample count.
     /// </summary>
@@ -17,19 +18,24 @@ internal static class VulkanSampleCountSelection {
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="requested"/> is not positive.
     /// </exception>
-    internal static int Select(int requested, IReadOnlyList<int> supported) {
-        if (requested <= 0) {
+    internal static int Select(int requested, IReadOnlyList<int> supported)
+    {
+        if (requested <= 0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(requested),
                 requested,
-                "The requested sample count must be positive.");
+                "The requested sample count must be positive."
+            );
         }
 
         ArgumentNullException.ThrowIfNull(supported);
 
         int selected = 1;
-        foreach (int sampleCount in supported) {
-            if (sampleCount > requested || sampleCount <= selected) {
+        foreach (int sampleCount in supported)
+        {
+            if (sampleCount > requested || sampleCount <= selected)
+            {
                 continue;
             }
 

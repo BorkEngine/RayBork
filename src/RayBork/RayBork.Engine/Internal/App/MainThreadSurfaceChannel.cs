@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// failure result and prevents further requests.
 /// </para>
 /// </remarks>
-internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
+internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider
+{
     private const int REQUEST_TIMEOUT_MILLISECONDS = 30_000;
 
     private readonly Lock _gate = new();
@@ -35,13 +36,16 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
     /// The channel is closed, the main thread did not service the request in time, or the platform
     /// failed to create the surface. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    public IntPtr CreateSurface(IntPtr instance) {
+    public IntPtr CreateSurface(IntPtr instance)
+    {
         IntPtr surface = Send(new SurfaceRequest(SurfaceOperation.Create, instance, IntPtr.Zero));
-        if (surface == IntPtr.Zero) {
+        if (surface == IntPtr.Zero)
+        {
             throw new GraphicsException(
                 "The main thread returned a zero Vulkan surface handle while creating the surface.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return surface;
@@ -52,9 +56,12 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
     /// The channel is closed, the main thread did not service the request in time, or the platform
     /// failed to destroy the surface. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    public void DestroySurface(IntPtr instance, IntPtr surface) {
-        if (surface == IntPtr.Zero) {
-            lock (_gate) {
+    public void DestroySurface(IntPtr instance, IntPtr surface)
+    {
+        if (surface == IntPtr.Zero)
+        {
+            lock (_gate)
+            {
                 ThrowIfClosedLocked(SurfaceOperation.Destroy);
             }
 
@@ -77,16 +84,21 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The main thread services a surface request queued by the render thread; any failure is recorded on the request so the render thread observes it instead of the main thread dying.")]
-    internal bool TryService(IEnginePlatform platform) {
+        Justification = "The main thread services a surface request queued by the render thread; any failure is recorded on the request so the render thread observes it instead of the main thread dying."
+    )]
+    internal bool TryService(IEnginePlatform platform)
+    {
         ArgumentNullException.ThrowIfNull(platform);
-        if (!_requestQueued.WaitOne(0)) {
+        if (!_requestQueued.WaitOne(0))
+        {
             return false;
         }
 
         SurfaceRequest? request;
-        lock (_gate) {
-            if (_closed) {
+        lock (_gate)
+        {
+            if (_closed)
+            {
                 return false;
             }
 
@@ -94,17 +106,24 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
             _pending = null;
         }
 
-        if (request is null) {
+        if (request is null)
+        {
             return false;
         }
 
-        try {
-            if (request.Operation == SurfaceOperation.Create) {
+        try
+        {
+            if (request.Operation == SurfaceOperation.Create)
+            {
                 request.Surface = platform.CreateVulkanSurface(request.Instance);
-            } else {
+            }
+            else
+            {
                 platform.DestroyVulkanSurface(request.Instance, request.Surface);
             }
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             request.Failure = exception;
         }
 
@@ -116,10 +135,13 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
     /// Closes the channel, wakes a waiting render thread with a failure result, and prevents further
     /// requests. Idempotent and safe from any thread.
     /// </summary>
-    public void Close() {
+    public void Close()
+    {
         SurfaceRequest? pending;
-        lock (_gate) {
-            if (_closed) {
+        lock (_gate)
+        {
+            if (_closed)
+            {
                 return;
             }
 
@@ -128,29 +150,38 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
             _pending = null;
         }
 
-        if (pending is not null) {
+        if (pending is not null)
+        {
             pending.Failure = new ObjectDisposedException(
                 nameof(MainThreadSurfaceChannel),
-                "The main-thread surface channel was closed.");
+                "The main-thread surface channel was closed."
+            );
             pending.Completion.Set();
         }
     }
 
-    private IntPtr Send(SurfaceRequest request) {
-        lock (_gate) {
+    private IntPtr Send(SurfaceRequest request)
+    {
+        lock (_gate)
+        {
             ThrowIfClosedLocked(request.Operation);
-            if (_pending is not null) {
+            if (_pending is not null)
+            {
                 throw new InvalidOperationException(
-                    "The main-thread surface channel already has a pending request; only the render thread may issue one at a time.");
+                    "The main-thread surface channel already has a pending request; only the render thread may issue one at a time."
+                );
             }
 
             _pending = request;
         }
 
         _requestQueued.Set();
-        if (!request.Completion.Wait(REQUEST_TIMEOUT_MILLISECONDS)) {
-            lock (_gate) {
-                if (ReferenceEquals(_pending, request)) {
+        if (!request.Completion.Wait(REQUEST_TIMEOUT_MILLISECONDS))
+        {
+            lock (_gate)
+            {
+                if (ReferenceEquals(_pending, request))
+                {
                     _pending = null;
                 }
             }
@@ -158,43 +189,56 @@ internal sealed class MainThreadSurfaceChannel : IRendererSurfaceProvider {
             throw CreateFailure(
                 request.Operation,
                 new TimeoutException(
-                    $"The main thread did not service the request within {REQUEST_TIMEOUT_MILLISECONDS} milliseconds."));
+                    $"The main thread did not service the request within {REQUEST_TIMEOUT_MILLISECONDS} milliseconds."
+                )
+            );
         }
 
-        if (request.Failure is not null) {
+        if (request.Failure is not null)
+        {
             throw CreateFailure(request.Operation, request.Failure);
         }
 
         return request.Surface;
     }
 
-    private void ThrowIfClosedLocked(SurfaceOperation operation) {
-        if (_closed) {
+    private void ThrowIfClosedLocked(SurfaceOperation operation)
+    {
+        if (_closed)
+        {
             throw CreateClosedFailure(Describe(operation));
         }
     }
 
-    private static GraphicsException CreateClosedFailure(string operation) => new(
-        $"The main-thread surface channel is closed; cannot {operation}.",
-        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-        new ObjectDisposedException(nameof(MainThreadSurfaceChannel)));
+    private static GraphicsException CreateClosedFailure(string operation) =>
+        new(
+            $"The main-thread surface channel is closed; cannot {operation}.",
+            DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+            new ObjectDisposedException(nameof(MainThreadSurfaceChannel))
+        );
 
-    private static GraphicsException CreateFailure(SurfaceOperation operation, Exception failure) => new(
-        $"The main thread failed to {Describe(operation)}: {failure.Message}",
-        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-        failure);
+    private static GraphicsException CreateFailure(SurfaceOperation operation, Exception failure) =>
+        new(
+            $"The main thread failed to {Describe(operation)}: {failure.Message}",
+            DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+            failure
+        );
 
-    private static string Describe(SurfaceOperation operation) => operation == SurfaceOperation.Create
-        ? "create the Vulkan surface"
-        : "destroy the Vulkan surface";
+    private static string Describe(SurfaceOperation operation) =>
+        operation == SurfaceOperation.Create
+            ? "create the Vulkan surface"
+            : "destroy the Vulkan surface";
 
-    private enum SurfaceOperation {
+    private enum SurfaceOperation
+    {
         Create,
         Destroy,
     }
 
-    private sealed class SurfaceRequest {
-        internal SurfaceRequest(SurfaceOperation operation, IntPtr instance, IntPtr surface) {
+    private sealed class SurfaceRequest
+    {
+        internal SurfaceRequest(SurfaceOperation operation, IntPtr instance, IntPtr surface)
+        {
             Operation = operation;
             Instance = instance;
             Surface = surface;

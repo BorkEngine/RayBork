@@ -26,13 +26,15 @@ namespace RayBork.Internal;
 /// the space glyph, resolves to <see cref="Empty"/>.
 /// </para>
 /// </remarks>
-internal sealed class OutlinePath {
+internal sealed class OutlinePath
+{
     /// <summary>The shared path of a glyph without an outline.</summary>
     internal static OutlinePath Empty { get; } = new(ReadOnlyMemory<OutlineContour>.Empty);
 
     /// <summary>Initializes a path over the already-resolved contours.</summary>
     /// <param name="contours">The closed contours in drawing order.</param>
-    internal OutlinePath(ReadOnlyMemory<OutlineContour> contours) {
+    internal OutlinePath(ReadOnlyMemory<OutlineContour> contours)
+    {
         Contours = contours;
     }
 
@@ -50,11 +52,13 @@ internal sealed class OutlinePath {
 /// Segments are in drawing order. The first one starts at <see cref="Start"/>, each later one starts
 /// where the previous one ended, and the last one ends at <see cref="Start"/>.
 /// </remarks>
-internal sealed class OutlineContour {
+internal sealed class OutlineContour
+{
     /// <summary>Initializes a contour.</summary>
     /// <param name="start">The first on-curve point, in font units.</param>
     /// <param name="segments">The segments that close the contour.</param>
-    internal OutlineContour(Vector2 start, ReadOnlyMemory<OutlineSegment> segments) {
+    internal OutlineContour(Vector2 start, ReadOnlyMemory<OutlineSegment> segments)
+    {
         Start = start;
         Segments = segments;
     }
@@ -74,8 +78,10 @@ internal sealed class OutlineContour {
 /// <see cref="Control1"/> and <see cref="End"/>. A cubic uses <see cref="Control1"/>,
 /// <see cref="Control2"/>, and <see cref="End"/>. Points are in font units.
 /// </remarks>
-internal readonly struct OutlineSegment {
-    private OutlineSegment(OutlineSegmentKind kind, Vector2 control1, Vector2 control2, Vector2 end) {
+internal readonly struct OutlineSegment
+{
+    private OutlineSegment(OutlineSegmentKind kind, Vector2 control1, Vector2 control2, Vector2 end)
+    {
         Kind = kind;
         Control1 = control1;
         Control2 = control2;
@@ -97,7 +103,8 @@ internal readonly struct OutlineSegment {
     /// <summary>Creates a straight line.</summary>
     /// <param name="end">The end point in font units.</param>
     /// <returns>The line segment.</returns>
-    internal static OutlineSegment Line(Vector2 end) => new(OutlineSegmentKind.Line, default, default, end);
+    internal static OutlineSegment Line(Vector2 end) =>
+        new(OutlineSegmentKind.Line, default, default, end);
 
     /// <summary>Creates a quadratic Bézier segment.</summary>
     /// <param name="control">The single control point in font units.</param>
@@ -116,7 +123,8 @@ internal readonly struct OutlineSegment {
 }
 
 /// <summary>The kind of one <see cref="OutlineSegment"/>.</summary>
-internal enum OutlineSegmentKind {
+internal enum OutlineSegmentKind
+{
     /// <summary>A straight line to <see cref="OutlineSegment.End"/>.</summary>
     Line,
 

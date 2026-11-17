@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// already kept its engine asset or target alive, so the slot is live. A <see langword="null"/> binding
 /// uses the reserved white slot. Render-thread only; the methods allocate nothing.
 /// </remarks>
-internal static class VulkanTextureBinding {
+internal static class VulkanTextureBinding
+{
     /// <summary>
     /// Resolves one texture binding to its bindless slot.
     /// </summary>
@@ -20,25 +21,31 @@ internal static class VulkanTextureBinding {
     /// The texture is not a Vulkan GPU texture or has no bindless slot yet. The diagnostic code is
     /// <c>RB3001</c>.
     /// </exception>
-    internal static uint ResolveSlot(Texture? texture) {
-        if (texture is null) {
+    internal static uint ResolveSlot(Texture? texture)
+    {
+        if (texture is null)
+        {
             return VulkanBindlessTextureTable.WHITE_SLOT;
         }
 
         ITextureBindingResource? binding = texture.BindingResource;
-        if (binding is null) {
+        if (binding is null)
+        {
             throw new GraphicsException(
                 $"{Describe(texture)} is not a Vulkan GPU texture and cannot be sampled by a shader.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
-        if (binding.BindlessSlot == 0) {
+        if (binding.BindlessSlot == 0)
+        {
             throw new GraphicsException(
                 $"{Describe(texture)} has no bindless slot. The texture must finish its GPU upload "
                     + "before a draw or post-process pass can reference it.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return binding.BindlessSlot;
@@ -48,5 +55,7 @@ internal static class VulkanTextureBinding {
     /// <param name="texture">The texture with the failing binding.</param>
     /// <returns>A path or render-target-view description.</returns>
     internal static string Describe(Texture texture) =>
-        texture.Path.Length == 0 ? "The render target texture view" : $"The texture '{texture.Path}'";
+        texture.Path.Length == 0
+            ? "The render target texture view"
+            : $"The texture '{texture.Path}'";
 }

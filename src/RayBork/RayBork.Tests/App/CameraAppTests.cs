@@ -4,23 +4,29 @@ using RayBork.Tests.Rendering;
 
 namespace RayBork.Tests;
 
-public sealed class CameraAppTests {
+public sealed class CameraAppTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TickThreadIsAttachedForSetupTickAndShutdown() {
+    public void TickThreadIsAttachedForSetupTickAndShutdown()
+    {
         bool setupAttached = false;
         bool tickAttached = false;
         bool shutdownAttached = false;
-        ScriptedGame game = new() {
-            SetupHandler = _ => {
+        ScriptedGame game = new()
+        {
+            SetupHandler = _ =>
+            {
                 setupAttached = TickThread.IsCurrent;
                 return Task.CompletedTask;
             },
-            TickHandler = context => {
+            TickHandler = context =>
+            {
                 tickAttached = TickThread.IsCurrent;
                 context.RequestExit();
             },
-            ShutdownHandler = () => {
+            ShutdownHandler = () =>
+            {
                 shutdownAttached = TickThread.IsCurrent;
                 return Task.CompletedTask;
             },
@@ -36,13 +42,19 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CameraCreationIsRejectedInSetup() {
+    public void CameraCreationIsRejectedInSetup()
+    {
         Exception? failure = null;
-        ScriptedGame game = new() {
-            SetupHandler = context => {
-                try {
+        ScriptedGame game = new()
+        {
+            SetupHandler = context =>
+            {
+                try
+                {
                     context.CreateCamera(Transform.Identity, CameraProjection.Perspective, 60f);
-                } catch (Exception exception) {
+                }
+                catch (Exception exception)
+                {
                     failure = exception;
                 }
 
@@ -60,17 +72,25 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CameraCreationFromAnotherThreadIsRejected() {
+    public void CameraCreationFromAnotherThreadIsRejected()
+    {
         Exception? failure = null;
-        ScriptedGame game = new() {
-            TickHandler = context => {
-                Thread thread = new(() => {
-                    try {
+        ScriptedGame game = new()
+        {
+            TickHandler = context =>
+            {
+                Thread thread = new(() =>
+                {
+                    try
+                    {
                         context.CreateCamera(Transform.Identity, CameraProjection.Perspective, 60f);
-                    } catch (Exception exception) {
+                    }
+                    catch (Exception exception)
+                    {
                         failure = exception;
                     }
-                }) {
+                })
+                {
                     IsBackground = true,
                     Name = "RayBork.Tests.CameraThread",
                 };
@@ -89,33 +109,42 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CamerasAreRecordedIntoThePublishedPacket() {
+    public void CamerasAreRecordedIntoThePublishedPacket()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader shader = RenderingTestAssets.CreateShader();
         Color clearColor = new(0.1f, 0.2f, 0.3f, 1f);
         List<SubmittedFrame> frames = [];
         Lock gate = new();
-        try {
+        try
+        {
             ScriptedGame game = new();
             using AppTestHost host = new(game);
-            host.FakeRenderer.OnSubmit = packet => {
-                if (packet.PassCount == 0) {
+            host.FakeRenderer.OnSubmit = packet =>
+            {
+                if (packet.PassCount == 0)
+                {
                     return;
                 }
 
                 CameraPass pass = packet.Passes[0];
-                lock (gate) {
-                    frames.Add(new SubmittedFrame(
-                        packet.FrameIndex,
-                        packet.PassCount,
-                        pass.DrawCount,
-                        pass.ClearMode,
-                        pass.ClearColor,
-                        pass.ViewportWidth,
-                        pass.ViewportHeight));
+                lock (gate)
+                {
+                    frames.Add(
+                        new SubmittedFrame(
+                            packet.FrameIndex,
+                            packet.PassCount,
+                            pass.DrawCount,
+                            pass.ClearMode,
+                            pass.ClearColor,
+                            pass.ViewportWidth,
+                            pass.ViewportHeight
+                        )
+                    );
                 }
             };
-            game.TickHandler = context => {
+            game.TickHandler = context =>
+            {
                 using Camera camera = context.CreateCamera(
                     Transform.Identity,
                     CameraProjection.Perspective,
@@ -123,9 +152,11 @@ public sealed class CameraAppTests {
                     clearMode: ClearMode.ColorAndDepth,
                     clearColor: clearColor,
                     near: 0.1f,
-                    far: 100f);
+                    far: 100f
+                );
                 camera.DrawMesh(mesh, Transform.Identity, shader);
-                if (context.FrameCount >= 3) {
+                if (context.FrameCount >= 3)
+                {
                     context.RequestExit();
                 }
             };
@@ -133,12 +164,14 @@ public sealed class CameraAppTests {
             host.App.Run();
 
             SubmittedFrame[] submitted;
-            lock (gate) {
+            lock (gate)
+            {
                 submitted = [.. frames];
             }
 
             Assert.NotEmpty(submitted);
-            Assert.All(submitted, frame => {
+            Assert.All(submitted, frame =>
+            {
                 Assert.Equal(1, frame.PassCount);
                 Assert.Equal(1, frame.DrawCount);
                 Assert.Equal(ClearMode.ColorAndDepth, frame.ClearMode);
@@ -146,7 +179,9 @@ public sealed class CameraAppTests {
                 Assert.Equal(1280, frame.ViewportWidth);
                 Assert.Equal(720, frame.ViewportHeight);
             });
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
             shader.Dispose();
         }
@@ -154,26 +189,32 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SequentialCamerasInOneTickKeepCreationOrder() {
+    public void SequentialCamerasInOneTickKeepCreationOrder()
+    {
         List<(ClearMode First, ClearMode Second)> frames = [];
         Lock gate = new();
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        host.FakeRenderer.OnSubmit = packet => {
-            if (packet.PassCount == 2) {
-                lock (gate) {
+        host.FakeRenderer.OnSubmit = packet =>
+        {
+            if (packet.PassCount == 2)
+            {
+                lock (gate)
+                {
                     frames.Add((packet.Passes[0].ClearMode, packet.Passes[1].ClearMode));
                 }
             }
         };
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             Camera first = context.CreateCamera(
                 Transform.Identity,
                 CameraProjection.Perspective,
                 60f,
                 clearMode: ClearMode.ColorAndDepth,
                 near: 0.1f,
-                far: 100f);
+                far: 100f
+            );
             first.Dispose();
             Camera second = context.CreateCamera(
                 Transform.Identity,
@@ -181,16 +222,19 @@ public sealed class CameraAppTests {
                 60f,
                 clearMode: ClearMode.None,
                 near: 0.1f,
-                far: 100f);
+                far: 100f
+            );
             second.Dispose();
             context.RequestExit();
         };
 
         host.App.Run();
 
-        lock (gate) {
+        lock (gate)
+        {
             Assert.NotEmpty(frames);
-            Assert.All(frames, frame => {
+            Assert.All(frames, frame =>
+            {
                 Assert.Equal(ClearMode.ColorAndDepth, frame.First);
                 Assert.Equal(ClearMode.None, frame.Second);
             });
@@ -199,15 +243,18 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ALeakedCameraStopsTheLoopWithoutPublishingTheFrame() {
+    public void ALeakedCameraStopsTheLoopWithoutPublishingTheFrame()
+    {
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.TickHandler = context => context.CreateCamera(
-            Transform.Identity,
-            CameraProjection.Perspective,
-            60f,
-            near: 0.1f,
-            far: 100f);
+        game.TickHandler = context =>
+            context.CreateCamera(
+                Transform.Identity,
+                CameraProjection.Perspective,
+                60f,
+                near: 0.1f,
+                far: 100f
+            );
 
         InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(host.App.Run);
 
@@ -220,15 +267,19 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateCameraUsesThePublicPerspectiveDefaults() {
+    public void CreateCameraUsesThePublicPerspectiveDefaults()
+    {
         float? near = null;
         float? far = null;
-        ScriptedGame game = new() {
-            TickHandler = context => {
+        ScriptedGame game = new()
+        {
+            TickHandler = context =>
+            {
                 using Camera camera = context.CreateCamera(
                     Transform.Identity,
                     CameraProjection.Perspective,
-                    60f);
+                    60f
+                );
                 near = camera.Near;
                 far = camera.Far;
                 context.RequestExit();
@@ -244,7 +295,8 @@ public sealed class CameraAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OrthographicCameraIsCreatedThroughThePublicWrapperAndRecordsAPass() {
+    public void OrthographicCameraIsCreatedThroughThePublicWrapperAndRecordsAPass()
+    {
         CameraProjection? projection = null;
         float? orthographicHeight = null;
         float? far = null;
@@ -252,18 +304,22 @@ public sealed class CameraAppTests {
         Lock gate = new();
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        host.FakeRenderer.OnSubmit = packet => {
-            lock (gate) {
+        host.FakeRenderer.OnSubmit = packet =>
+        {
+            lock (gate)
+            {
                 passCount = Math.Max(passCount, packet.PassCount);
             }
         };
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             using Camera camera = context.CreateCamera(
                 Transform.Identity,
                 CameraProjection.Orthographic,
                 orthographicHeight: 4.5f,
                 near: 0.5f,
-                far: 50f);
+                far: 50f
+            );
             projection = camera.Projection;
             orthographicHeight = camera.OrthographicHeight;
             far = camera.Far;
@@ -275,39 +331,51 @@ public sealed class CameraAppTests {
         Assert.Equal(CameraProjection.Orthographic, projection);
         Assert.Equal(4.5f, orthographicHeight);
         Assert.Equal(50f, far);
-        lock (gate) {
+        lock (gate)
+        {
             Assert.Equal(1, passCount);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateCameraRejectsTheSizeArgumentOfTheOtherProjection() {
+    public void CreateCameraRejectsTheSizeArgumentOfTheOtherProjection()
+    {
         Exception? orthographicFailure = null;
         Exception? perspectiveFailure = null;
-        ScriptedGame game = new() {
-            TickHandler = context => {
-                try {
+        ScriptedGame game = new()
+        {
+            TickHandler = context =>
+            {
+                try
+                {
                     context.CreateCamera(
                         Transform.Identity,
                         CameraProjection.Orthographic,
                         fieldOfView: 60f,
                         orthographicHeight: 4f,
                         near: 0.1f,
-                        far: 100f);
-                } catch (Exception exception) {
+                        far: 100f
+                    );
+                }
+                catch (Exception exception)
+                {
                     orthographicFailure = exception;
                 }
 
-                try {
+                try
+                {
                     context.CreateCamera(
                         Transform.Identity,
                         CameraProjection.Perspective,
                         fieldOfView: 60f,
                         orthographicHeight: 4f,
                         near: 0.1f,
-                        far: 100f);
-                } catch (Exception exception) {
+                        far: 100f
+                    );
+                }
+                catch (Exception exception)
+                {
                     perspectiveFailure = exception;
                 }
 
@@ -331,5 +399,6 @@ public sealed class CameraAppTests {
         ClearMode ClearMode,
         Color ClearColor,
         int ViewportWidth,
-        int ViewportHeight);
+        int ViewportHeight
+    );
 }

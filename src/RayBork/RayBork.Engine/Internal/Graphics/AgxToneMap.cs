@@ -27,7 +27,8 @@ namespace RayBork.Internal;
 /// calls it per frame.
 /// </para>
 /// </remarks>
-internal static class AgxToneMap {
+internal static class AgxToneMap
+{
     /// <summary>The default AgX white in scene-linear units, matching Godot's environment default.</summary>
     internal const float DEFAULT_AGX_WHITE = 16.29f;
 
@@ -44,16 +45,30 @@ internal static class AgxToneMap {
     // multiplies a column-major matrix by a column vector, so applying a matrix is the sum of each
     // column scaled by the matching input channel. The inset combines Rec.709 to Rec.2020 with the
     // Blender AgX inset; the outset combines the inverse AgX outset with Rec.2020 to Rec.709.
-    private static readonly double[] _inset = [
-        0.544814746488245, 0.140416948464053, 0.0888104196149096,
-        0.373787398372697, 0.754137554567394, 0.178871756420858,
-        0.0813978551390581, 0.105445496968552, 0.732317823964232,
+    private static readonly double[] _inset =
+    [
+        0.544814746488245,
+        0.140416948464053,
+        0.0888104196149096,
+        0.373787398372697,
+        0.754137554567394,
+        0.178871756420858,
+        0.0813978551390581,
+        0.105445496968552,
+        0.732317823964232,
     ];
 
-    private static readonly double[] _outset = [
-        1.96488741169489, -0.299313364904742, -0.164352742528393,
-        -0.855988495690215, 1.32639796461980, -0.238183969428088,
-        -0.108898916004672, -0.0270845997150571, 1.40253671195648,
+    private static readonly double[] _outset =
+    [
+        1.96488741169489,
+        -0.299313364904742,
+        -0.164352742528393,
+        -0.855988495690215,
+        1.32639796461980,
+        -0.238183969428088,
+        -0.108898916004672,
+        -0.0270845997150571,
+        1.40253671195648,
     ];
 
     /// <summary>
@@ -68,7 +83,8 @@ internal static class AgxToneMap {
     /// <param name="color">The linear scene color, with HDR values allowed.</param>
     /// <param name="parameters">The curve parameters for the output configuration.</param>
     /// <returns>The AgX display-linear response.</returns>
-    internal static Vector3 Agx(Vector3 color, in AgxCurveParameters parameters) {
+    internal static Vector3 Agx(Vector3 color, in AgxCurveParameters parameters)
+    {
         (double r, double g, double b) = Multiply(_inset, color.X, color.Y, color.Z);
         r = Math.Min(parameters.OutputMax, Curve(r, parameters));
         g = Math.Min(parameters.OutputMax, Curve(g, parameters));
@@ -83,7 +99,9 @@ internal static class AgxToneMap {
     /// <param name="color">The linear RGB color.</param>
     /// <returns>The Rec.709 luminance.</returns>
     internal static double Luminance(Vector3 color) =>
-        (REC709_RED_WEIGHT * color.X) + (REC709_GREEN_WEIGHT * color.Y) + (REC709_BLUE_WEIGHT * color.Z);
+        (REC709_RED_WEIGHT * color.X)
+        + (REC709_GREEN_WEIGHT * color.Y)
+        + (REC709_BLUE_WEIGHT * color.Z);
 
     /// <summary>
     /// Applies the complete present transform: exposure, tone mapping, and the output encoding.
@@ -118,24 +136,30 @@ internal static class AgxToneMap {
         PresentEncoding encoding,
         WindowHdrState hdr,
         float agxWhite = DEFAULT_AGX_WHITE,
-        float agxContrast = DEFAULT_AGX_CONTRAST) {
+        float agxContrast = DEFAULT_AGX_CONTRAST
+    )
+    {
         float paperWhite = hdr.HdrEnabled ? hdr.SdrWhiteLevel : 1f;
         Vector3 scene = Vector3.Max(sceneColor, Vector3.Zero) * exposureMultiplier;
 
-        if (encoding == PresentEncoding.ScRgbHdr) {
+        if (encoding == PresentEncoding.ScRgbHdr)
+        {
             // The headroom is the curve's output maximum: white maps to the display peak, and the
             // curve result is in paper-white units.
             float outputMax = hdr.HdrEnabled ? hdr.HdrHeadroom : 1f;
-            Vector3 display = tonemapping == TonemappingMode.AgX
-                ? Agx(scene, AgxCurveParameters.Create(agxWhite, agxContrast, outputMax))
-                : scene;
+            Vector3 display =
+                tonemapping == TonemappingMode.AgX
+                    ? Agx(scene, AgxCurveParameters.Create(agxWhite, agxContrast, outputMax))
+                    : scene;
             return Vector3.Max(display * paperWhite, Vector3.Zero);
         }
 
-        Vector3 color = tonemapping == TonemappingMode.AgX
-            ? Agx(scene, AgxCurveParameters.Create(agxWhite, agxContrast, 1f))
-            : scene;
-        if (encoding == PresentEncoding.ManualSrgb) {
+        Vector3 color =
+            tonemapping == TonemappingMode.AgX
+                ? Agx(scene, AgxCurveParameters.Create(agxWhite, agxContrast, 1f))
+                : scene;
+        if (encoding == PresentEncoding.ManualSrgb)
+        {
             color = SrgbEncode(color);
         }
 
@@ -157,10 +181,8 @@ internal static class AgxToneMap {
     /// </summary>
     /// <param name="color">The display-linear color.</param>
     /// <returns>The sRGB-encoded color.</returns>
-    internal static Vector3 SrgbEncode(Vector3 color) => new(
-        SrgbEncodeChannel(color.X),
-        SrgbEncodeChannel(color.Y),
-        SrgbEncodeChannel(color.Z));
+    internal static Vector3 SrgbEncode(Vector3 color) =>
+        new(SrgbEncodeChannel(color.X), SrgbEncodeChannel(color.Y), SrgbEncodeChannel(color.Z));
 
     /// <summary>
     /// Decodes one 8-bit sRGB-encoded channel to display-linear.
@@ -172,7 +194,8 @@ internal static class AgxToneMap {
     /// </remarks>
     /// <param name="encoded">The sRGB-encoded byte.</param>
     /// <returns>The display-linear channel.</returns>
-    internal static float SrgbDecodeChannel(byte encoded) {
+    internal static float SrgbDecodeChannel(byte encoded)
+    {
         float channel = encoded / 255f;
         return channel <= SRGB_ENCODED_CUTOFF
             ? channel / 12.92f
@@ -182,7 +205,8 @@ internal static class AgxToneMap {
     /// <summary>
     /// Evaluates the allenwp curve for one non-negative channel.
     /// </summary>
-    private static double Curve(double x, in AgxCurveParameters parameters) {
+    private static double Curve(double x, in AgxCurveParameters parameters)
+    {
         double shoulderMax = parameters.OutputMax - AgxCurveParameters.CROSSOVER_POINT;
         double s = x - AgxCurveParameters.CROSSOVER_POINT;
         double slopeS = parameters.Slope * s;
@@ -199,8 +223,11 @@ internal static class AgxToneMap {
         double[] matrix,
         double r,
         double g,
-        double b) => (
+        double b
+    ) =>
+        (
             (matrix[0] * r) + (matrix[3] * g) + (matrix[6] * b),
             (matrix[1] * r) + (matrix[4] * g) + (matrix[7] * b),
-            (matrix[2] * r) + (matrix[5] * g) + (matrix[8] * b));
+            (matrix[2] * r) + (matrix[5] * g) + (matrix[8] * b)
+        );
 }

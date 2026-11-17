@@ -16,7 +16,8 @@ namespace RayBork.Internal;
 /// the same window.
 /// </para>
 /// </remarks>
-internal interface ITextureOwner : IAssetRetentionTarget {
+internal interface ITextureOwner : IAssetRetentionTarget
+{
     /// <summary>
     /// Gets the public path, including its leading slash, or the empty string for a render target view.
     /// It stays readable after disposal.

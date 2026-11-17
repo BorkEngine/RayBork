@@ -11,7 +11,8 @@ namespace RayBork.Internal;
 /// thread after pumping stops; queued callbacks are discarded and later posts throw
 /// <see cref="ObjectDisposedException"/>.
 /// </remarks>
-internal sealed class TickSynchronizationContext : SynchronizationContext, IDisposable {
+internal sealed class TickSynchronizationContext : SynchronizationContext, IDisposable
+{
     private readonly Lock _gate = new();
     private readonly Queue<WorkItem> _queue = new();
     private readonly AutoResetEvent _workAvailable = new(false);
@@ -23,10 +24,12 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="d"/> is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">The context was disposed.</exception>
-    public override void Post(SendOrPostCallback d, object? state) {
+    public override void Post(SendOrPostCallback d, object? state)
+    {
         ArgumentNullException.ThrowIfNull(d);
 
-        lock (_gate) {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
             _queue.Enqueue(new WorkItem(d, state));
             _workAvailable.Set();
@@ -38,10 +41,13 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
     /// this method.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The context was disposed.</exception>
-    internal void PumpOne() {
-        while (true) {
+    internal void PumpOne()
+    {
+        while (true)
+        {
             ThrowIfDisposed();
-            if (TryPumpOne()) {
+            if (TryPumpOne())
+            {
                 return;
             }
             _workAvailable.WaitOne();
@@ -52,10 +58,13 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
     /// Runs one queued callback if a callback is pending, without blocking. Returns <c>false</c>
     /// when the queue is empty or the context is disposed. Callback exceptions propagate.
     /// </summary>
-    internal bool TryPumpOne() {
+    internal bool TryPumpOne()
+    {
         WorkItem item;
-        lock (_gate) {
-            if (_disposed || _queue.Count == 0) {
+        lock (_gate)
+        {
+            if (_disposed || _queue.Count == 0)
+            {
                 return false;
             }
             item = _queue.Dequeue();
@@ -71,7 +80,8 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
     /// </summary>
     /// <exception cref="ArgumentNullException"><paramref name="task"/> is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">The context was disposed while pumping.</exception>
-    internal void PumpUntilComplete(Task task) {
+    internal void PumpUntilComplete(Task task)
+    {
         ArgumentNullException.ThrowIfNull(task);
         ThrowIfDisposed();
 
@@ -81,12 +91,15 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
             wait,
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
+            TaskScheduler.Default
+        );
         WaitHandle[] waitHandles = [_workAvailable, wait.CompletedHandle];
 
-        while (!task.IsCompleted) {
+        while (!task.IsCompleted)
+        {
             ThrowIfDisposed();
-            if (TryPumpOne()) {
+            if (TryPumpOne())
+            {
                 continue;
             }
             WaitHandle.WaitAny(waitHandles);
@@ -98,9 +111,12 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
     /// <summary>
     /// Discards queued callbacks and rejects later posts. Dispose from the owning thread only.
     /// </summary>
-    public void Dispose() {
-        lock (_gate) {
-            if (_disposed) {
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return;
             }
             _disposed = true;
@@ -110,14 +126,18 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
         _workAvailable.Dispose();
     }
 
-    private void ThrowIfDisposed() {
-        lock (_gate) {
+    private void ThrowIfDisposed()
+    {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
         }
     }
 
-    private readonly struct WorkItem {
-        public WorkItem(SendOrPostCallback callback, object? state) {
+    private readonly struct WorkItem
+    {
+        public WorkItem(SendOrPostCallback callback, object? state)
+        {
             Callback = callback;
             State = state;
         }
@@ -131,33 +151,43 @@ internal sealed class TickSynchronizationContext : SynchronizationContext, IDisp
     /// A per-pump completion wake-up. The continuation may run after the pump has torn the wait
     /// down, so signaling is guarded by the same lock that disposes the event.
     /// </summary>
-    private sealed class PumpWait : IDisposable {
+    private sealed class PumpWait : IDisposable
+    {
         private readonly Lock _gate = new();
         private readonly AutoResetEvent _completed = new(false);
 
         private bool _disposed;
 
-        public WaitHandle CompletedHandle {
-            get {
-                lock (_gate) {
+        public WaitHandle CompletedHandle
+        {
+            get
+            {
+                lock (_gate)
+                {
                     ObjectDisposedException.ThrowIf(_disposed, this);
                     return _completed;
                 }
             }
         }
 
-        public void Signal() {
-            lock (_gate) {
-                if (_disposed) {
+        public void Signal()
+        {
+            lock (_gate)
+            {
+                if (_disposed)
+                {
                     return;
                 }
                 _completed.Set();
             }
         }
 
-        public void Dispose() {
-            lock (_gate) {
-                if (_disposed) {
+        public void Dispose()
+        {
+            lock (_gate)
+            {
+                if (_disposed)
+                {
                     return;
                 }
                 _disposed = true;

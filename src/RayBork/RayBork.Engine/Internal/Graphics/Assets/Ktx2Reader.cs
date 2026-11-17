@@ -23,7 +23,8 @@ namespace RayBork.Internal;
 /// diagnostic code; the reader never decompresses, transcodes, or partially accepts a payload.
 /// </para>
 /// </remarks>
-internal static class Ktx2Reader {
+internal static class Ktx2Reader
+{
     /// <summary>The fixed KTX2 2.0 header size in bytes.</summary>
     internal const int HEADER_SIZE = 80;
 
@@ -55,7 +56,8 @@ internal static class Ktx2Reader {
     private const uint SUPERCOMPRESSION_NONE = 0;
     private const int FACE_COUNT_SINGLE = 1;
 
-    private static readonly byte[] _identifier = [
+    private static readonly byte[] _identifier =
+    [
         0xAB,
         0x4B,
         0x54,
@@ -82,25 +84,35 @@ internal static class Ktx2Reader {
     /// descriptor, or the data format descriptor is malformed or uses the wrong transfer function.
     /// The diagnostic code is <c>RB1008</c>.
     /// </exception>
-    internal static Ktx2Texture Read(ReadOnlySpan<byte> payload, TextureAssetDescriptor descriptor) {
+    internal static Ktx2Texture Read(ReadOnlySpan<byte> payload, TextureAssetDescriptor descriptor)
+    {
         ArgumentNullException.ThrowIfNull(descriptor);
 
-        if (!VulkanTextureFormat.IsPacked(descriptor.Format)) {
+        if (!VulkanTextureFormat.IsPacked(descriptor.Format))
+        {
             throw CreateFailure(
                 descriptor,
-                $"the descriptor format '{descriptor.Format}' is a render-target format and cannot be uploaded as a packed texture");
+                $"the descriptor format '{descriptor.Format}' is a render-target format and cannot be uploaded as a packed texture"
+            );
         }
 
-        if (payload.Length < IDENTIFIER_SIZE || !payload[..IDENTIFIER_SIZE].SequenceEqual(_identifier)) {
+        if (
+            payload.Length < IDENTIFIER_SIZE
+            || !payload[..IDENTIFIER_SIZE].SequenceEqual(_identifier)
+        )
+        {
             throw CreateFailure(
                 descriptor,
-                "the KTX2 2.0 identifier is missing or invalid; the payload is not a KTX2 2.0 file");
+                "the KTX2 2.0 identifier is missing or invalid; the payload is not a KTX2 2.0 file"
+            );
         }
 
-        if (payload.Length < HEADER_SIZE) {
+        if (payload.Length < HEADER_SIZE)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the header is truncated ({payload.Length} byte(s), {HEADER_SIZE} required)");
+                $"the header is truncated ({payload.Length} byte(s), {HEADER_SIZE} required)"
+            );
         }
 
         uint vkFormat = ReadUInt32(payload, VK_FORMAT_OFFSET);
@@ -112,111 +124,152 @@ internal static class Ktx2Reader {
         uint levelCount = ReadUInt32(payload, LEVEL_COUNT_OFFSET);
         uint supercompression = ReadUInt32(payload, SUPERCOMPRESSION_OFFSET);
 
-        if (width == 0 || height == 0) {
-            throw CreateFailure(
-                descriptor,
-                $"the base extent {width}x{height} is empty");
+        if (width == 0 || height == 0)
+        {
+            throw CreateFailure(descriptor, $"the base extent {width}x{height} is empty");
         }
 
-        if (width > int.MaxValue || height > int.MaxValue) {
+        if (width > int.MaxValue || height > int.MaxValue)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the base extent {width}x{height} exceeds the maximum supported dimension {int.MaxValue}");
+                $"the base extent {width}x{height} exceeds the maximum supported dimension {int.MaxValue}"
+            );
         }
 
-        if (width != descriptor.Width || height != descriptor.Height) {
+        if (width != descriptor.Width || height != descriptor.Height)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the header base extent {width}x{height} does not match the descriptor extent {descriptor.Width}x{descriptor.Height}");
+                $"the header base extent {width}x{height} does not match the descriptor extent {descriptor.Width}x{descriptor.Height}"
+            );
         }
 
-        if (pixelDepth != 0) {
+        if (pixelDepth != 0)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the payload is not a 2D image (pixelDepth is {pixelDepth}, expected 0)");
+                $"the payload is not a 2D image (pixelDepth is {pixelDepth}, expected 0)"
+            );
         }
 
-        if (layerCount != 0) {
+        if (layerCount != 0)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the payload has {layerCount} array layer(s); the bake profile stores one layer (layerCount 0)");
+                $"the payload has {layerCount} array layer(s); the bake profile stores one layer (layerCount 0)"
+            );
         }
 
-        if (faceCount != FACE_COUNT_SINGLE) {
+        if (faceCount != FACE_COUNT_SINGLE)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the payload has {faceCount} face(s); the bake profile stores one face");
+                $"the payload has {faceCount} face(s); the bake profile stores one face"
+            );
         }
 
-        if (supercompression != SUPERCOMPRESSION_NONE) {
+        if (supercompression != SUPERCOMPRESSION_NONE)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the payload uses the {DescribeSupercompression(supercompression)} supercompression scheme; the bake profile stores uncompressed levels");
+                $"the payload uses the {DescribeSupercompression(supercompression)} supercompression scheme; the bake profile stores uncompressed levels"
+            );
         }
 
         uint expectedVkFormat = (uint)VulkanTextureFormat.ToVkFormat(descriptor.Format);
-        if (vkFormat != expectedVkFormat) {
+        if (vkFormat != expectedVkFormat)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the header vkFormat {vkFormat} does not match the descriptor format '{descriptor.Format}' ({expectedVkFormat})");
+                $"the header vkFormat {vkFormat} does not match the descriptor format '{descriptor.Format}' ({expectedVkFormat})"
+            );
         }
 
         uint fullMipCount = VulkanTextureFormat.FullMipCount(width, height);
-        if (levelCount != fullMipCount || descriptor.MipLevels != levelCount) {
+        if (levelCount != fullMipCount || descriptor.MipLevels != levelCount)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the header stores {levelCount} mip level(s), the descriptor declares {descriptor.MipLevels}, and {width}x{height} requires the full chain of {fullMipCount}");
+                $"the header stores {levelCount} mip level(s), the descriptor declares {descriptor.MipLevels}, and {width}x{height} requires the full chain of {fullMipCount}"
+            );
         }
 
-        if (ReadUInt32(payload, KVD_LENGTH_FIELD) != 0 || ReadUInt64(payload, SGD_LENGTH_FIELD) != 0) {
+        if (
+            ReadUInt32(payload, KVD_LENGTH_FIELD) != 0
+            || ReadUInt64(payload, SGD_LENGTH_FIELD) != 0
+        )
+        {
             throw CreateFailure(
                 descriptor,
-                "the payload carries key/value or supercompression-global data; the bake profile stores neither");
+                "the payload carries key/value or supercompression-global data; the bake profile stores neither"
+            );
         }
 
         long levelIndexEnd = HEADER_SIZE + ((long)levelCount * LEVEL_INDEX_ENTRY_SIZE);
-        if (levelIndexEnd > payload.Length) {
+        if (levelIndexEnd > payload.Length)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the {levelCount}-entry level index is truncated ({payload.Length} byte(s) in the payload)");
+                $"the {levelCount}-entry level index is truncated ({payload.Length} byte(s) in the payload)"
+            );
         }
 
         int dfdOffset = ReadDfd(payload, descriptor, levelIndexEnd);
         ValidateDfd(payload, descriptor, dfdOffset);
-        long levelDataStart = Math.Max(levelIndexEnd, (long)dfdOffset + ReadUInt32(payload, DFD_LENGTH_FIELD));
+        long levelDataStart = Math.Max(
+            levelIndexEnd,
+            (long)dfdOffset + ReadUInt32(payload, DFD_LENGTH_FIELD)
+        );
 
         Ktx2Level[] levels = new Ktx2Level[(int)levelCount];
         int alignment = VulkanTextureFormat.GetLevelAlignment(descriptor.Format);
-        for (int level = 0; level < levels.Length; level++) {
+        for (int level = 0; level < levels.Length; level++)
+        {
             int entry = HEADER_SIZE + (level * LEVEL_INDEX_ENTRY_SIZE);
             ulong byteOffset = ReadUInt64(payload, entry);
             ulong byteLength = ReadUInt64(payload, entry + 8);
             ulong uncompressedByteLength = ReadUInt64(payload, entry + 16);
-            if (byteLength != uncompressedByteLength) {
+            if (byteLength != uncompressedByteLength)
+            {
                 throw CreateFailure(
                     descriptor,
-                    $"level {level} declares a stored length of {byteLength} byte(s) and an uncompressed length of {uncompressedByteLength}; supercompressed levels are not supported");
+                    $"level {level} declares a stored length of {byteLength} byte(s) and an uncompressed length of {uncompressedByteLength}; supercompressed levels are not supported"
+                );
             }
 
             int levelWidth = VulkanTextureFormat.LevelExtent(width, level);
             int levelHeight = VulkanTextureFormat.LevelExtent(height, level);
-            int expectedByteLength = VulkanTextureFormat.GetLevelByteLength(descriptor.Format, levelWidth, levelHeight);
-            if (byteLength != (ulong)expectedByteLength) {
+            int expectedByteLength = VulkanTextureFormat.GetLevelByteLength(
+                descriptor.Format,
+                levelWidth,
+                levelHeight
+            );
+            if (byteLength != (ulong)expectedByteLength)
+            {
                 throw CreateFailure(
                     descriptor,
-                    $"level {level} ({levelWidth}x{levelHeight}) stores {byteLength} byte(s); {descriptor.Format} requires {expectedByteLength}");
+                    $"level {level} ({levelWidth}x{levelHeight}) stores {byteLength} byte(s); {descriptor.Format} requires {expectedByteLength}"
+                );
             }
 
-            if (byteOffset % (ulong)alignment != 0) {
+            if (byteOffset % (ulong)alignment != 0)
+            {
                 throw CreateFailure(
                     descriptor,
-                    $"level {level} starts at offset {byteOffset}, which is not aligned to the required {alignment} byte(s)");
+                    $"level {level} starts at offset {byteOffset}, which is not aligned to the required {alignment} byte(s)"
+                );
             }
 
-            if (byteOffset < (ulong)levelDataStart || !IsInside(payload.Length, byteOffset, byteLength)) {
+            if (
+                byteOffset < (ulong)levelDataStart
+                || !IsInside(payload.Length, byteOffset, byteLength)
+            )
+            {
                 throw CreateFailure(
                     descriptor,
-                    $"level {level} at offset {byteOffset} with {byteLength} byte(s) does not lie inside the level data region after offset {levelDataStart}");
+                    $"level {level} at offset {byteOffset} with {byteLength} byte(s) does not lie inside the level data region after offset {levelDataStart}"
+                );
             }
 
             levels[level] = new Ktx2Level(byteOffset, byteLength);
@@ -228,21 +281,32 @@ internal static class Ktx2Reader {
     /// <summary>
     /// Validates the data format descriptor location in the header and returns its absolute offset.
     /// </summary>
-    private static int ReadDfd(ReadOnlySpan<byte> payload, TextureAssetDescriptor descriptor, long levelIndexEnd) {
+    private static int ReadDfd(
+        ReadOnlySpan<byte> payload,
+        TextureAssetDescriptor descriptor,
+        long levelIndexEnd
+    )
+    {
         uint dfdByteOffset = ReadUInt32(payload, DFD_OFFSET_FIELD);
         uint dfdByteLength = ReadUInt32(payload, DFD_LENGTH_FIELD);
-        if (dfdByteOffset < (ulong)levelIndexEnd
+        if (
+            dfdByteOffset < (ulong)levelIndexEnd
             || dfdByteLength < DFD_HEADER_SIZE + DFD_BASIC_BLOCK_SIZE + DFD_SAMPLE_SIZE
-            || !IsInside(payload.Length, dfdByteOffset, dfdByteLength)) {
+            || !IsInside(payload.Length, dfdByteOffset, dfdByteLength)
+        )
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor at offset {dfdByteOffset} with {dfdByteLength} byte(s) is missing or outside the payload");
+                $"the data format descriptor at offset {dfdByteOffset} with {dfdByteLength} byte(s) is missing or outside the payload"
+            );
         }
 
-        if (ReadUInt32(payload, (int)dfdByteOffset) != dfdByteLength) {
+        if (ReadUInt32(payload, (int)dfdByteOffset) != dfdByteLength)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor declares a total size that does not match its {dfdByteLength} stored byte(s)");
+                $"the data format descriptor declares a total size that does not match its {dfdByteLength} stored byte(s)"
+            );
         }
 
         return (int)dfdByteOffset;
@@ -251,54 +315,73 @@ internal static class Ktx2Reader {
     /// <summary>
     /// Validates the single basic data format descriptor block of the payload.
     /// </summary>
-    private static void ValidateDfd(ReadOnlySpan<byte> payload, TextureAssetDescriptor descriptor, int dfdOffset) {
+    private static void ValidateDfd(
+        ReadOnlySpan<byte> payload,
+        TextureAssetDescriptor descriptor,
+        int dfdOffset
+    )
+    {
         uint descriptorBlockWord = ReadUInt32(payload, dfdOffset + 4);
         uint vendorId = descriptorBlockWord & 0x1FFFF;
         uint descriptorType = descriptorBlockWord >> 17;
-        if (vendorId != DFD_VENDOR_ID || descriptorType != DFD_DESCRIPTOR_TYPE) {
+        if (vendorId != DFD_VENDOR_ID || descriptorType != DFD_DESCRIPTOR_TYPE)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor uses vendor {vendorId} and type {descriptorType}; only the Khronos basic block is supported");
+                $"the data format descriptor uses vendor {vendorId} and type {descriptorType}; only the Khronos basic block is supported"
+            );
         }
 
         uint versionBlockSize = ReadUInt32(payload, dfdOffset + 8);
         uint version = versionBlockSize & 0xFFFF;
         uint blockSize = versionBlockSize >> 16;
-        if (version != DFD_VERSION) {
+        if (version != DFD_VERSION)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor version is {version}; version {DFD_VERSION} is required");
+                $"the data format descriptor version is {version}; version {DFD_VERSION} is required"
+            );
         }
 
-        if (blockSize < DFD_BASIC_BLOCK_SIZE + DFD_SAMPLE_SIZE
+        if (
+            blockSize < DFD_BASIC_BLOCK_SIZE + DFD_SAMPLE_SIZE
             || (blockSize - DFD_BASIC_BLOCK_SIZE) % DFD_SAMPLE_SIZE != 0
-            || DFD_HEADER_SIZE + blockSize != ReadUInt32(payload, dfdOffset)) {
+            || DFD_HEADER_SIZE + blockSize != ReadUInt32(payload, dfdOffset)
+        )
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor block size {blockSize} is malformed for its declared total size");
+                $"the data format descriptor block size {blockSize} is malformed for its declared total size"
+            );
         }
 
         uint colorModelWord = ReadUInt32(payload, dfdOffset + 12);
         byte colorModel = (byte)(colorModelWord & 0xFF);
         byte transferFunction = (byte)((colorModelWord >> 16) & 0xFF);
         byte expectedColorModel = VulkanTextureFormat.DfdColorModel(descriptor.Format);
-        if (colorModel != expectedColorModel) {
+        if (colorModel != expectedColorModel)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor color model {colorModel} does not match the {descriptor.Format} model {expectedColorModel}");
+                $"the data format descriptor color model {colorModel} does not match the {descriptor.Format} model {expectedColorModel}"
+            );
         }
 
-        if (descriptor.IsSrgb != VulkanTextureFormat.IsSrgb(descriptor.Format)) {
+        if (descriptor.IsSrgb != VulkanTextureFormat.IsSrgb(descriptor.Format))
+        {
             throw CreateFailure(
                 descriptor,
-                $"the descriptor sRGB flag {descriptor.IsSrgb} disagrees with the '{descriptor.Format}' transfer function");
+                $"the descriptor sRGB flag {descriptor.IsSrgb} disagrees with the '{descriptor.Format}' transfer function"
+            );
         }
 
         byte expectedTransfer = VulkanTextureFormat.DfdTransferFunction(descriptor.Format);
-        if (transferFunction != expectedTransfer) {
+        if (transferFunction != expectedTransfer)
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor transfer function {transferFunction} does not match the expected {expectedTransfer} for '{descriptor.Format}'");
+                $"the data format descriptor transfer function {transferFunction} does not match the expected {expectedTransfer} for '{descriptor.Format}'"
+            );
         }
 
         uint blockDimensions = ReadUInt32(payload, dfdOffset + 16);
@@ -306,38 +389,54 @@ internal static class Ktx2Reader {
         byte blockHeightMinusOne = (byte)(blockDimensions >> 8);
         byte blockDepthMinusOne = (byte)(blockDimensions >> 16);
         byte blockLayersMinusOne = (byte)(blockDimensions >> 24);
-        (byte expectedWidth, byte expectedHeight) = VulkanTextureFormat.IsBlockCompressed(descriptor.Format)
+        (byte expectedWidth, byte expectedHeight) = VulkanTextureFormat.IsBlockCompressed(
+            descriptor.Format
+        )
             ? ((byte)3, (byte)3)
             : ((byte)0, (byte)0);
-        if (blockWidthMinusOne != expectedWidth
+        if (
+            blockWidthMinusOne != expectedWidth
             || blockHeightMinusOne != expectedHeight
             || blockDepthMinusOne != 0
-            || blockLayersMinusOne != 0) {
+            || blockLayersMinusOne != 0
+        )
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor texel block {blockWidthMinusOne + 1}x{blockHeightMinusOne + 1}x{blockDepthMinusOne + 1} does not match the {descriptor.Format} block");
+                $"the data format descriptor texel block {blockWidthMinusOne + 1}x{blockHeightMinusOne + 1}x{blockDepthMinusOne + 1} does not match the {descriptor.Format} block"
+            );
         }
 
         uint bytesPlane = ReadUInt32(payload, dfdOffset + 20);
-        if (bytesPlane != (uint)VulkanTextureFormat.BytesPerBlock(descriptor.Format)) {
+        if (bytesPlane != (uint)VulkanTextureFormat.BytesPerBlock(descriptor.Format))
+        {
             throw CreateFailure(
                 descriptor,
-                $"the data format descriptor declares {bytesPlane} byte(s) per texel block; {descriptor.Format} requires {VulkanTextureFormat.BytesPerBlock(descriptor.Format)}");
+                $"the data format descriptor declares {bytesPlane} byte(s) per texel block; {descriptor.Format} requires {VulkanTextureFormat.BytesPerBlock(descriptor.Format)}"
+            );
         }
     }
 
-    private static AssetLoadException CreateFailure(TextureAssetDescriptor descriptor, string reason) => new(
-        $"The KTX2 payload '{descriptor.Payload}' is invalid: {reason}.",
-        DiagnosticCodes.ASSET_LOAD_FAILED,
-        null);
+    private static AssetLoadException CreateFailure(
+        TextureAssetDescriptor descriptor,
+        string reason
+    ) =>
+        new(
+            $"The KTX2 payload '{descriptor.Payload}' is invalid: {reason}.",
+            DiagnosticCodes.ASSET_LOAD_FAILED,
+            null
+        );
 
-    private static string DescribeSupercompression(uint scheme) => scheme switch {
-        1 => "BasisLZ",
-        2 => "Zstandard",
-        _ => $"unknown ({scheme})",
-    };
+    private static string DescribeSupercompression(uint scheme) =>
+        scheme switch
+        {
+            1 => "BasisLZ",
+            2 => "Zstandard",
+            _ => $"unknown ({scheme})",
+        };
 
-    private static bool IsInside(int payloadLength, ulong byteOffset, ulong byteLength) {
+    private static bool IsInside(int payloadLength, ulong byteOffset, ulong byteLength)
+    {
         ulong length = (ulong)payloadLength;
         return byteOffset <= length && byteLength <= length - byteOffset;
     }

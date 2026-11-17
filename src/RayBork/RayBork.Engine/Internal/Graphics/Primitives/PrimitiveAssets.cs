@@ -29,7 +29,8 @@ namespace RayBork.Internal;
 /// Every accessor throws <see cref="ObjectDisposedException"/> after disposal.
 /// </para>
 /// </remarks>
-internal sealed class PrimitiveAssets : IDisposable {
+internal sealed class PrimitiveAssets : IDisposable
+{
     /// <summary>The canonical path of the built-in vertex-color primitive shader program.</summary>
     internal const string PRIMITIVE_SHADER_PATH = "/shaders/primitive";
 
@@ -64,7 +65,9 @@ internal sealed class PrimitiveAssets : IDisposable {
         Shader primitiveMaterial,
         Shader meshMaterial,
         Shader msdfMaterial,
-        Meshes meshes) {
+        Meshes meshes
+    )
+    {
         ArgumentNullException.ThrowIfNull(primitiveProgram);
         ArgumentNullException.ThrowIfNull(meshProgram);
         ArgumentNullException.ThrowIfNull(msdfProgram);
@@ -89,8 +92,10 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// helpers share it and vary the tint through the per-instance color.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
-    internal Shader PrimitiveMaterial {
-        get {
+    internal Shader PrimitiveMaterial
+    {
+        get
+        {
             ThrowIfDisposed();
             return _primitiveMaterial;
         }
@@ -101,8 +106,10 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// textured-quad helpers. Its texture binding is set immediately before each recorded draw.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
-    internal Shader MeshMaterial {
-        get {
+    internal Shader MeshMaterial
+    {
+        get
+        {
             ThrowIfDisposed();
             return _meshMaterial;
         }
@@ -113,8 +120,10 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// path records one instance per glyph with its own per-instance texture binding on this material.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The app released the primitive assets.</exception>
-    internal Shader MsdfMaterial {
-        get {
+    internal Shader MsdfMaterial
+    {
+        get
+        {
             ThrowIfDisposed();
             return _msdfMaterial;
         }
@@ -174,12 +183,16 @@ internal sealed class PrimitiveAssets : IDisposable {
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The built-in programs, materials, and meshes created here transfer to the returned PrimitiveAssets, which disposes them; the failure path releases whatever was created before it threw.")]
-    internal static async Task<PrimitiveAssets> LoadAsync(IAssetCatalog assets) {
+        Justification = "The built-in programs, materials, and meshes created here transfer to the returned PrimitiveAssets, which disposes them; the failure path releases whatever was created before it threw."
+    )]
+    internal static async Task<PrimitiveAssets> LoadAsync(IAssetCatalog assets)
+    {
         ArgumentNullException.ThrowIfNull(assets);
-        if (assets is not IProceduralAssetProvider provider) {
+        if (assets is not IProceduralAssetProvider provider)
+        {
             throw new InvalidOperationException(
-                "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog.");
+                "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog."
+            );
         }
 
         ShaderProgram? primitiveProgram = null;
@@ -197,22 +210,63 @@ internal sealed class PrimitiveAssets : IDisposable {
         Mesh? line = null;
         Mesh? wireCube = null;
         Mesh? wireSphere = null;
-        try {
-            primitiveProgram = await assets.Load<ShaderProgram>(PRIMITIVE_SHADER_PATH).ConfigureAwait(false);
-            meshProgram = await assets.Load<ShaderProgram>(EngineDefaults.MESH_SHADER_PATH).ConfigureAwait(false);
+        try
+        {
+            primitiveProgram = await assets
+                .Load<ShaderProgram>(PRIMITIVE_SHADER_PATH)
+                .ConfigureAwait(false);
+            meshProgram = await assets
+                .Load<ShaderProgram>(EngineDefaults.MESH_SHADER_PATH)
+                .ConfigureAwait(false);
             msdfProgram = await assets.Load<ShaderProgram>(MSDF_SHADER_PATH).ConfigureAwait(false);
             primitiveMaterial = primitiveProgram.CreateMaterial();
             meshMaterial = meshProgram.CreateMaterial();
             msdfMaterial = msdfProgram.CreateMaterial();
-            cube = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateCube()).ConfigureAwait(false);
-            sphere = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateSphere()).ConfigureAwait(false);
-            plane = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreatePlane()).ConfigureAwait(false);
-            quad = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateQuad()).ConfigureAwait(false);
-            disc = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateDisc()).ConfigureAwait(false);
-            triangle = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateTriangle()).ConfigureAwait(false);
-            line = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateLine()).ConfigureAwait(false);
-            wireCube = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateWireCube()).ConfigureAwait(false);
-            wireSphere = await BuildMeshAsync(provider.ProceduralAssets, PrimitiveMeshFactory.CreateWireSphere()).ConfigureAwait(false);
+            cube = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateCube()
+                )
+                .ConfigureAwait(false);
+            sphere = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateSphere()
+                )
+                .ConfigureAwait(false);
+            plane = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreatePlane()
+                )
+                .ConfigureAwait(false);
+            quad = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateQuad()
+                )
+                .ConfigureAwait(false);
+            disc = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateDisc()
+                )
+                .ConfigureAwait(false);
+            triangle = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateTriangle()
+                )
+                .ConfigureAwait(false);
+            line = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateLine()
+                )
+                .ConfigureAwait(false);
+            wireCube = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateWireCube()
+                )
+                .ConfigureAwait(false);
+            wireSphere = await BuildMeshAsync(
+                    provider.ProceduralAssets,
+                    PrimitiveMeshFactory.CreateWireSphere()
+                )
+                .ConfigureAwait(false);
             return new PrimitiveAssets(
                 primitiveProgram,
                 meshProgram,
@@ -220,8 +274,11 @@ internal sealed class PrimitiveAssets : IDisposable {
                 primitiveMaterial,
                 meshMaterial,
                 msdfMaterial,
-                new Meshes(cube, sphere, plane, quad, disc, triangle, line, wireCube, wireSphere));
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+                new Meshes(cube, sphere, plane, quad, disc, triangle, line, wireCube, wireSphere)
+            );
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             DisposeQuietly(primitiveMaterial);
             DisposeQuietly(meshMaterial);
             DisposeQuietly(msdfMaterial);
@@ -243,7 +300,8 @@ internal sealed class PrimitiveAssets : IDisposable {
                     + $"the '{MSDF_SHADER_PATH}' program, and the engine primitive meshes must all load "
                     + "from the built-in pack.",
                 DiagnosticCodes.ASSET_LOAD_FAILED,
-                exception);
+                exception
+            );
         }
     }
 
@@ -251,8 +309,10 @@ internal sealed class PrimitiveAssets : IDisposable {
     /// Disposes all three materials, releases every mesh owner reference, and releases the program owner
     /// references. Idempotent; called by the app during shutdown after the game callbacks returned.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -276,7 +336,9 @@ internal sealed class PrimitiveAssets : IDisposable {
 
     private static async Task<Mesh> BuildMeshAsync(
         ProceduralAssetService service,
-        PrimitiveMeshData data) {
+        PrimitiveMeshData data
+    )
+    {
         MeshBuilder builder = service.CreateMeshBuilder(data.Topology);
         builder.SetVertices(data.Vertices);
         builder.SetIndices(data.Indices);
@@ -284,43 +346,59 @@ internal sealed class PrimitiveAssets : IDisposable {
         return await builder.BuildAsync().ConfigureAwait(false);
     }
 
-    private Mesh GetMesh(Mesh mesh) {
+    private Mesh GetMesh(Mesh mesh)
+    {
         ThrowIfDisposed();
         return mesh;
     }
 
-    private static void DisposeQuietly(Shader? material) {
-        if (material is null || material.IsDisposed) {
+    private static void DisposeQuietly(Shader? material)
+    {
+        if (material is null || material.IsDisposed)
+        {
             return;
         }
 
-        try {
+        try
+        {
             material.Dispose();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The catalog force-disposed the program during shutdown; the material reference is gone.
         }
     }
 
-    private static void ReleaseQuietly(Mesh? mesh) {
-        if (mesh is null) {
+    private static void ReleaseQuietly(Mesh? mesh)
+    {
+        if (mesh is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             mesh.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The catalog force-disposed the mesh during shutdown; its reference is already gone.
         }
     }
 
-    private static void ReleaseQuietly(ShaderProgram? program) {
-        if (program is null) {
+    private static void ReleaseQuietly(ShaderProgram? program)
+    {
+        if (program is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             program.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The catalog force-disposed the program during shutdown; its reference is already gone.
         }
     }
@@ -336,5 +414,6 @@ internal sealed class PrimitiveAssets : IDisposable {
         Mesh Triangle,
         Mesh Line,
         Mesh WireCube,
-        Mesh WireSphere);
+        Mesh WireSphere
+    );
 }

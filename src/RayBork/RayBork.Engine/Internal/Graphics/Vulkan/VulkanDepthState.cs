@@ -18,7 +18,8 @@ namespace RayBork.Internal;
 /// with stencil and depth-bounds testing disabled.
 /// </para>
 /// </remarks>
-internal static class VulkanDepthState {
+internal static class VulkanDepthState
+{
     /// <summary>
     /// The depth value the scene target is cleared to, which is the reverse-Z far plane.
     /// </summary>
@@ -56,16 +57,18 @@ internal static class VulkanDepthState {
     /// The state with reverse-Z testing and writes enabled, and with stencil and depth-bounds testing
     /// disabled.
     /// </returns>
-    internal static PipelineDepthStencilStateCreateInfo CreatePipelineState() => new() {
-        SType = StructureType.PipelineDepthStencilStateCreateInfo,
-        DepthTestEnable = DEPTH_TEST_ENABLE,
-        DepthWriteEnable = DEPTH_WRITE_ENABLE,
-        DepthCompareOp = COMPARE_OPERATION,
-        DepthBoundsTestEnable = false,
-        StencilTestEnable = false,
-        Front = default,
-        Back = default,
-        MinDepthBounds = MIN_DEPTH,
-        MaxDepthBounds = MAX_DEPTH,
-    };
+    internal static PipelineDepthStencilStateCreateInfo CreatePipelineState() =>
+        new()
+        {
+            SType = StructureType.PipelineDepthStencilStateCreateInfo,
+            DepthTestEnable = DEPTH_TEST_ENABLE,
+            DepthWriteEnable = DEPTH_WRITE_ENABLE,
+            DepthCompareOp = COMPARE_OPERATION,
+            DepthBoundsTestEnable = false,
+            StencilTestEnable = false,
+            Front = default,
+            Back = default,
+            MinDepthBounds = MIN_DEPTH,
+            MaxDepthBounds = MAX_DEPTH,
+        };
 }

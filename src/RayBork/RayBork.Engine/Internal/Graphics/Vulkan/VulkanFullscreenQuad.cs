@@ -22,7 +22,8 @@ namespace RayBork.Internal;
 /// They are created with the device and destroyed with it; render-thread only.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
+internal sealed unsafe class VulkanFullscreenQuad : IDisposable
+{
     private const uint INDEX_COUNT = 6;
 
     private readonly Vk _vulkan;
@@ -35,7 +36,8 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
     private byte* _indexMapped;
     private bool _disposed;
 
-    private VulkanFullscreenQuad(Vk vulkan, Device device) {
+    private VulkanFullscreenQuad(Vk vulkan, Device device)
+    {
         _vulkan = vulkan;
         _device = device;
     }
@@ -56,14 +58,18 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
     /// <returns>The created quad.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> is <c>null</c>.</exception>
     /// <exception cref="GraphicsException">A buffer or its memory could not be created.</exception>
-    internal static VulkanFullscreenQuad Create(VulkanDevice device) {
+    internal static VulkanFullscreenQuad Create(VulkanDevice device)
+    {
         ArgumentNullException.ThrowIfNull(device);
 
         VulkanFullscreenQuad quad = new(device.Vulkan, device.Device);
-        try {
+        try
+        {
             quad.CreateBuffers(device);
             return quad;
-        } catch {
+        }
+        catch
+        {
             quad.Dispose();
             throw;
         }
@@ -73,8 +79,10 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
     /// Unmaps and destroys the vertex and index buffers. The call is idempotent and must run before the
     /// device is destroyed.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -83,9 +91,11 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
         DestroyBuffer(ref _vertexBuffer, ref _vertexMemory, ref _vertexMapped);
     }
 
-    private void CreateBuffers(VulkanDevice device) {
+    private void CreateBuffers(VulkanDevice device)
+    {
         // Position (-0.5, -0.5) is clip-space (-1, -1), the framebuffer top-left, so its UV is (0, 0).
-        Vertex[] vertices = [
+        Vertex[] vertices =
+        [
             new(new Vector3(-0.5f, -0.5f, 0f), normal: Vector3.UnitZ, uv: new Vector2(0f, 0f)),
             new(new Vector3(0.5f, -0.5f, 0f), normal: Vector3.UnitZ, uv: new Vector2(1f, 0f)),
             new(new Vector3(0.5f, 0.5f, 0f), normal: Vector3.UnitZ, uv: new Vector2(1f, 1f)),
@@ -99,14 +109,16 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
             (ulong)vertexBytes.Length,
             BufferUsageFlags.VertexBufferBit,
             out _vertexMemory,
-            out _vertexMapped);
+            out _vertexMapped
+        );
         vertexBytes.CopyTo(new Span<byte>(_vertexMapped, vertexBytes.Length));
         _indexBuffer = CreateMappedBuffer(
             device,
             (ulong)indexBytes.Length,
             BufferUsageFlags.IndexBufferBit,
             out _indexMemory,
-            out _indexMapped);
+            out _indexMapped
+        );
         indexBytes.CopyTo(new Span<byte>(_indexMapped, indexBytes.Length));
     }
 
@@ -115,72 +127,108 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
         ulong size,
         BufferUsageFlags usage,
         out DeviceMemory memory,
-        out byte* mapped) {
+        out byte* mapped
+    )
+    {
         Vk vulkan = device.Vulkan;
         Buffer buffer = default;
         memory = default;
         mapped = null;
-        try {
-            BufferCreateInfo createInfo = new() {
+        try
+        {
+            BufferCreateInfo createInfo = new()
+            {
                 SType = StructureType.BufferCreateInfo,
                 Size = size,
                 Usage = usage,
                 SharingMode = SharingMode.Exclusive,
             };
             Result createResult = vulkan.CreateBuffer(device.Device, &createInfo, null, out buffer);
-            if (createResult != Result.Success || buffer.Handle == 0) {
+            if (createResult != Result.Success || buffer.Handle == 0)
+            {
                 throw new GraphicsException(
                     $"The post-process fullscreen quad buffer of {size} byte(s) could not be created: {createResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
-            MemoryRequirements requirements = vulkan.GetBufferMemoryRequirements(device.Device, buffer);
+            MemoryRequirements requirements = vulkan.GetBufferMemoryRequirements(
+                device.Device,
+                buffer
+            );
             PhysicalDeviceMemoryProperties memoryProperties =
                 vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
-            MemoryAllocateInfo allocateInfo = new() {
+            MemoryAllocateInfo allocateInfo = new()
+            {
                 SType = StructureType.MemoryAllocateInfo,
                 AllocationSize = requirements.Size,
-                MemoryTypeIndex = FindHostVisibleMemoryType(requirements.MemoryTypeBits, memoryProperties),
+                MemoryTypeIndex = FindHostVisibleMemoryType(
+                    requirements.MemoryTypeBits,
+                    memoryProperties
+                ),
             };
-            Result allocateResult = vulkan.AllocateMemory(device.Device, &allocateInfo, null, out memory);
-            if (allocateResult != Result.Success || memory.Handle == 0) {
+            Result allocateResult = vulkan.AllocateMemory(
+                device.Device,
+                &allocateInfo,
+                null,
+                out memory
+            );
+            if (allocateResult != Result.Success || memory.Handle == 0)
+            {
                 throw new GraphicsException(
                     $"The post-process fullscreen quad buffer memory of {size} byte(s) could not be allocated: {allocateResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             Result bindResult = vulkan.BindBufferMemory(device.Device, buffer, memory, 0);
-            if (bindResult != Result.Success) {
+            if (bindResult != Result.Success)
+            {
                 throw new GraphicsException(
                     $"The post-process fullscreen quad buffer memory could not be bound: {bindResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             void* pointer = null;
-            Result mapResult = vulkan.MapMemory(device.Device, memory, 0, requirements.Size, MemoryMapFlags.None, &pointer);
-            if (mapResult != Result.Success || pointer is null) {
+            Result mapResult = vulkan.MapMemory(
+                device.Device,
+                memory,
+                0,
+                requirements.Size,
+                MemoryMapFlags.None,
+                &pointer
+            );
+            if (mapResult != Result.Success || pointer is null)
+            {
                 throw new GraphicsException(
                     $"The post-process fullscreen quad buffer memory could not be mapped: {mapResult}.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             mapped = (byte*)pointer;
             return buffer;
-        } catch {
-            if (mapped is not null) {
+        }
+        catch
+        {
+            if (mapped is not null)
+            {
                 vulkan.UnmapMemory(device.Device, memory);
                 mapped = null;
             }
 
-            if (buffer.Handle != 0) {
+            if (buffer.Handle != 0)
+            {
                 vulkan.DestroyBuffer(device.Device, buffer, null);
             }
 
-            if (memory.Handle != 0) {
+            if (memory.Handle != 0)
+            {
                 vulkan.FreeMemory(device.Device, memory, null);
                 memory = default;
             }
@@ -189,18 +237,22 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
         }
     }
 
-    private void DestroyBuffer(ref Buffer buffer, ref DeviceMemory memory, ref byte* mapped) {
-        if (mapped is not null) {
+    private void DestroyBuffer(ref Buffer buffer, ref DeviceMemory memory, ref byte* mapped)
+    {
+        if (mapped is not null)
+        {
             _vulkan.UnmapMemory(_device, memory);
             mapped = null;
         }
 
-        if (buffer.Handle != 0) {
+        if (buffer.Handle != 0)
+        {
             _vulkan.DestroyBuffer(_device, buffer, null);
             buffer = default;
         }
 
-        if (memory.Handle != 0) {
+        if (memory.Handle != 0)
+        {
             _vulkan.FreeMemory(_device, memory, null);
             memory = default;
         }
@@ -208,14 +260,18 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
 
     private static uint FindHostVisibleMemoryType(
         uint typeBits,
-        PhysicalDeviceMemoryProperties memoryProperties) {
+        PhysicalDeviceMemoryProperties memoryProperties
+    )
+    {
         const MemoryPropertyFlags required =
             MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit;
-        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++) {
+        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++)
+        {
             bool typeSupported = (typeBits & (1u << (int)index)) != 0;
             bool propertiesMatch =
                 (memoryProperties.MemoryTypes[(int)index].PropertyFlags & required) == required;
-            if (typeSupported && propertiesMatch) {
+            if (typeSupported && propertiesMatch)
+            {
                 return index;
             }
         }
@@ -224,6 +280,7 @@ internal sealed unsafe class VulkanFullscreenQuad : IDisposable {
             $"No host-visible coherent Vulkan memory type is available for the post-process fullscreen "
                 + $"quad (type bits 0x{typeBits:X8}).",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 }

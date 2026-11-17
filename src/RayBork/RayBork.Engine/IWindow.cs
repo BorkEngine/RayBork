@@ -7,7 +7,8 @@ namespace RayBork;
 /// Getters return the last confirmed snapshot and are safe to call from any thread. Setters are queued
 /// to the main window thread and coalesced; a getter may lag a setter by one event-pump cycle.
 /// </remarks>
-public interface IWindow {
+public interface IWindow
+{
     /// <summary>
     /// Gets the last confirmed window title.
     /// </summary>

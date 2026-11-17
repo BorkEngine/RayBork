@@ -29,7 +29,8 @@ namespace RayBork.Internal;
 /// device is recreated.
 /// </para>
 /// </remarks>
-internal sealed class VulkanDeviceCapabilities {
+internal sealed class VulkanDeviceCapabilities
+{
     /// <summary>
     /// The renderer's bindless texture capacity: 2048 combined image samplers, matching the fixed
     /// <c>RayBorkTextures[2048]</c> shader array. A device whose update-after-bind sampled-image
@@ -65,7 +66,9 @@ internal sealed class VulkanDeviceCapabilities {
         bool textureCompressionBc,
         bool fillModeNonSolid,
         bool swapchainColorSpaceExtensionEnabled,
-        VulkanSwapchainSupport swapchain) {
+        VulkanSwapchainSupport swapchain
+    )
+    {
         DeviceName = deviceName;
         ApiVersion = apiVersion;
         VendorId = vendorId;
@@ -78,7 +81,8 @@ internal sealed class VulkanDeviceCapabilities {
         _supportedSampleCounts = supportedSampleCounts;
         DepthResolveMode = depthResolveMode;
         DescriptorIndexing = descriptorIndexing;
-        MaxPerStageDescriptorUpdateAfterBindSampledImages = maxPerStageDescriptorUpdateAfterBindSampledImages;
+        MaxPerStageDescriptorUpdateAfterBindSampledImages =
+            maxPerStageDescriptorUpdateAfterBindSampledImages;
         MaxDescriptorSetUpdateAfterBindSampledImages = maxDescriptorSetUpdateAfterBindSampledImages;
         MaxPerStageDescriptorUpdateAfterBindSamplers = maxPerStageDescriptorUpdateAfterBindSamplers;
         MaxStorageBufferRange = maxStorageBufferRange;
@@ -263,48 +267,62 @@ internal sealed class VulkanDeviceCapabilities {
         uint graphicsQueueFamily,
         uint presentQueueFamily,
         bool swapchainColorSpaceExtensionEnabled,
-        VulkanSwapchainSupport swapchain) {
+        VulkanSwapchainSupport swapchain
+    )
+    {
         ArgumentNullException.ThrowIfNull(vulkan);
         ArgumentNullException.ThrowIfNull(swapchain);
 
         PhysicalDeviceProperties properties = vulkan.GetPhysicalDeviceProperties(physicalDevice);
         PhysicalDeviceFeatures features = vulkan.GetPhysicalDeviceFeatures(physicalDevice);
-        PhysicalDeviceVulkan12Features vulkan12Features = VulkanBindlessFeatures.Query(vulkan, physicalDevice);
-        (PhysicalDeviceVulkan12Properties vulkan12Properties, PhysicalDeviceVulkan11Properties vulkan11Properties) =
-            QueryProperties2(vulkan, physicalDevice);
+        PhysicalDeviceVulkan12Features vulkan12Features = VulkanBindlessFeatures.Query(
+            vulkan,
+            physicalDevice
+        );
+        (
+            PhysicalDeviceVulkan12Properties vulkan12Properties,
+            PhysicalDeviceVulkan11Properties vulkan11Properties
+        ) = QueryProperties2(vulkan, physicalDevice);
 
         string deviceName = Marshal.PtrToStringUTF8((IntPtr)properties.DeviceName) ?? string.Empty;
-        bool descriptorIndexing = VulkanBindlessFeatures.GetMissingFeatures(vulkan12Features).Count == 0;
+        bool descriptorIndexing =
+            VulkanBindlessFeatures.GetMissingFeatures(vulkan12Features).Count == 0;
         int[] supportedSampleCounts = SelectSupportedSampleCounts(
             properties.Limits.FramebufferColorSampleCounts,
-            properties.Limits.FramebufferDepthSampleCounts);
-        PhysicalDeviceDepthStencilResolveProperties resolveProperties = VulkanDepthStencilResolve.Query(
-            vulkan,
-            physicalDevice);
+            properties.Limits.FramebufferDepthSampleCounts
+        );
+        PhysicalDeviceDepthStencilResolveProperties resolveProperties =
+            VulkanDepthStencilResolve.Query(vulkan, physicalDevice);
         ResolveModeFlags depthResolveMode = VulkanDepthStencilResolve.SelectDepthResolveMode(
-            resolveProperties.SupportedDepthResolveModes);
-        if (depthResolveMode == ResolveModeFlags.None) {
+            resolveProperties.SupportedDepthResolveModes
+        );
+        if (depthResolveMode == ResolveModeFlags.None)
+        {
             throw new GraphicsException(
                 VulkanDepthStencilResolve.CreateMissingModeMessage(
                     deviceName,
-                    resolveProperties.SupportedDepthResolveModes),
+                    resolveProperties.SupportedDepthResolveModes
+                ),
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         uint sampledImageCapacity = VulkanBindlessFeatures.GetTextureCapacity(vulkan12Properties);
-        if (sampledImageCapacity < TARGET_BINDLESS_TEXTURE_CAPACITY) {
+        if (sampledImageCapacity < TARGET_BINDLESS_TEXTURE_CAPACITY)
+        {
             throw new GraphicsException(
                 $"The Vulkan device '{deviceName}' supports "
-                + $"{sampledImageCapacity.ToString(CultureInfo.InvariantCulture)} update-after-bind "
-                + "sampled image(s), which is below the M4 bindless texture capacity of "
-                + $"{TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}. "
-                + "The shader ABI declares RayBorkTextures["
-                + $"{TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}] and the "
-                + "descriptor set layout must declare the same count; the renderer does not reduce "
-                + "the capacity.",
+                    + $"{sampledImageCapacity.ToString(CultureInfo.InvariantCulture)} update-after-bind "
+                    + "sampled image(s), which is below the M4 bindless texture capacity of "
+                    + $"{TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}. "
+                    + "The shader ABI declares RayBorkTextures["
+                    + $"{TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}] and the "
+                    + "descriptor set layout must declare the same count; the renderer does not reduce "
+                    + "the capacity.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         uint capacity = TARGET_BINDLESS_TEXTURE_CAPACITY;
@@ -333,19 +351,26 @@ internal sealed class VulkanDeviceCapabilities {
             features.TextureCompressionBC.Value != 0,
             features.FillModeNonSolid.Value != 0,
             swapchainColorSpaceExtensionEnabled,
-            swapchain);
+            swapchain
+        );
     }
 
-    private static unsafe (PhysicalDeviceVulkan12Properties Vulkan12, PhysicalDeviceVulkan11Properties Vulkan11)
-        QueryProperties2(Vk vulkan, PhysicalDevice physicalDevice) {
-        PhysicalDeviceVulkan12Properties vulkan12Properties = new() {
+    private static unsafe (
+        PhysicalDeviceVulkan12Properties Vulkan12,
+        PhysicalDeviceVulkan11Properties Vulkan11
+    ) QueryProperties2(Vk vulkan, PhysicalDevice physicalDevice)
+    {
+        PhysicalDeviceVulkan12Properties vulkan12Properties = new()
+        {
             SType = StructureType.PhysicalDeviceVulkan12Properties,
         };
-        PhysicalDeviceVulkan11Properties vulkan11Properties = new() {
+        PhysicalDeviceVulkan11Properties vulkan11Properties = new()
+        {
             SType = StructureType.PhysicalDeviceVulkan11Properties,
             PNext = &vulkan12Properties,
         };
-        PhysicalDeviceProperties2 properties2 = new() {
+        PhysicalDeviceProperties2 properties2 = new()
+        {
             SType = StructureType.PhysicalDeviceProperties2,
             PNext = &vulkan11Properties,
         };
@@ -355,30 +380,37 @@ internal sealed class VulkanDeviceCapabilities {
 
     private static int[] SelectSupportedSampleCounts(
         SampleCountFlags colorSampleCounts,
-        SampleCountFlags depthSampleCounts) {
+        SampleCountFlags depthSampleCounts
+    )
+    {
         SampleCountFlags intersection = colorSampleCounts & depthSampleCounts;
         List<int> supported = [];
-        foreach (int sampleCount in _sampleCounts) {
-            if ((intersection & ToSampleCountFlag(sampleCount)) != 0) {
+        foreach (int sampleCount in _sampleCounts)
+        {
+            if ((intersection & ToSampleCountFlag(sampleCount)) != 0)
+            {
                 supported.Add(sampleCount);
             }
         }
 
-        if (supported.Count == 0 || supported[0] != 1) {
+        if (supported.Count == 0 || supported[0] != 1)
+        {
             supported.Insert(0, 1);
         }
 
         return [.. supported];
     }
 
-    private static SampleCountFlags ToSampleCountFlag(int sampleCount) => sampleCount switch {
-        1 => SampleCountFlags.Count1Bit,
-        2 => SampleCountFlags.Count2Bit,
-        4 => SampleCountFlags.Count4Bit,
-        8 => SampleCountFlags.Count8Bit,
-        16 => SampleCountFlags.Count16Bit,
-        32 => SampleCountFlags.Count32Bit,
-        64 => SampleCountFlags.Count64Bit,
-        _ => SampleCountFlags.None,
-    };
+    private static SampleCountFlags ToSampleCountFlag(int sampleCount) =>
+        sampleCount switch
+        {
+            1 => SampleCountFlags.Count1Bit,
+            2 => SampleCountFlags.Count2Bit,
+            4 => SampleCountFlags.Count4Bit,
+            8 => SampleCountFlags.Count8Bit,
+            16 => SampleCountFlags.Count16Bit,
+            32 => SampleCountFlags.Count32Bit,
+            64 => SampleCountFlags.Count64Bit,
+            _ => SampleCountFlags.None,
+        };
 }

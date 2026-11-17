@@ -29,7 +29,8 @@ namespace RayBork.Internal;
 /// scale.
 /// </para>
 /// </remarks>
-internal static class MsdfGenerator {
+internal static class MsdfGenerator
+{
     /// <summary>The default full padded texture side, in pixels.</summary>
     internal const int DEFAULT_PIXEL_SIZE = 32;
 
@@ -108,51 +109,66 @@ internal static class MsdfGenerator {
         int unitsPerEm,
         int pixelSize = DEFAULT_PIXEL_SIZE,
         int range = DEFAULT_RANGE,
-        int padding = DEFAULT_PADDING) {
-        if (pixelSize <= 0) {
+        int padding = DEFAULT_PADDING
+    )
+    {
+        if (pixelSize <= 0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(pixelSize),
                 pixelSize,
-                "The pixel size must be positive.");
+                "The pixel size must be positive."
+            );
         }
 
-        if (range <= 0) {
+        if (range <= 0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(range),
                 range,
-                "The distance range must be positive.");
+                "The distance range must be positive."
+            );
         }
 
-        if (padding < 0) {
+        if (padding < 0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(padding),
                 padding,
-                "The padding must not be negative.");
+                "The padding must not be negative."
+            );
         }
 
-        if (unitsPerEm <= 0) {
+        if (unitsPerEm <= 0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(unitsPerEm),
                 unitsPerEm,
-                "The font units per em must be positive.");
+                "The font units per em must be positive."
+            );
         }
 
-        if (pixelSize <= (2L * padding)) {
+        if (pixelSize <= (2L * padding))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(pixelSize),
                 pixelSize,
-                "The pixel size must be greater than twice the padding so that a glyph box remains.");
+                "The pixel size must be greater than twice the padding so that a glyph box remains."
+            );
         }
 
         long boundsWidth = (long)bounds.XMax - bounds.XMin;
         long boundsHeight = (long)bounds.YMax - bounds.YMin;
-        if (boundsWidth < 0 || boundsHeight < 0) {
+        if (boundsWidth < 0 || boundsHeight < 0)
+        {
             throw new ArgumentException(
                 $"The bounds are inverted: ({bounds.XMin}, {bounds.YMin})-({bounds.XMax}, {bounds.YMax}).",
-                nameof(bounds));
+                nameof(bounds)
+            );
         }
 
-        if (boundsWidth == 0 && boundsHeight == 0 && bounds.XMin == 0 && bounds.YMin == 0) {
+        if (boundsWidth == 0 && boundsHeight == 0 && bounds.XMin == 0 && bounds.YMin == 0)
+        {
             return MsdfGlyphLayout.Empty;
         }
 
@@ -161,13 +177,16 @@ internal static class MsdfGenerator {
         double scale;
         long textureWidth;
         long textureHeight;
-        if (longest == 0) {
+        if (longest == 0)
+        {
             // Both extents are zero but the box is not the parser's empty-glyph marker. Treat the
             // point as a one-font-unit extent so the scale is defined and use the full texture square.
             scale = glyphBox;
             textureWidth = pixelSize;
             textureHeight = pixelSize;
-        } else {
+        }
+        else
+        {
             scale = (double)glyphBox / longest;
             long contentWidth = CeilDiv(boundsWidth * glyphBox, longest);
             long contentHeight = CeilDiv(boundsHeight * glyphBox, longest);
@@ -195,7 +214,8 @@ internal static class MsdfGenerator {
             bearingXEm,
             bearingYEm,
             textureWidth / pixelsPerEm,
-            textureHeight / pixelsPerEm);
+            textureHeight / pixelsPerEm
+        );
     }
 
     /// <summary>Generates the RGBA8 MSDF texture of one glyph outline.</summary>
@@ -222,74 +242,96 @@ internal static class MsdfGenerator {
     /// returned buffer; the working edge array is rented from the shared pool and returned before the
     /// method returns.
     /// </remarks>
-    internal static byte[] Generate(OutlinePath outline, in MsdfGlyphLayout layout) {
+    internal static byte[] Generate(OutlinePath outline, in MsdfGlyphLayout layout)
+    {
         ArgumentNullException.ThrowIfNull(outline);
-        if (layout.TextureWidth < 0 || layout.TextureHeight < 0) {
+        if (layout.TextureWidth < 0 || layout.TextureHeight < 0)
+        {
             throw new ArgumentException(
                 "The layout must not have a negative texture size.",
-                nameof(layout));
+                nameof(layout)
+            );
         }
 
-        if (layout.IsEmpty) {
-            if (outline.IsEmpty) {
+        if (layout.IsEmpty)
+        {
+            if (outline.IsEmpty)
+            {
                 return [];
             }
 
             throw new ArgumentException(
                 "The layout has no texture but the outline has contours.",
-                nameof(layout));
+                nameof(layout)
+            );
         }
 
-        if (!(layout.Scale > 0f)
+        if (
+            !(layout.Scale > 0f)
             || !float.IsFinite(layout.Scale)
             || !float.IsFinite(layout.OriginX)
             || !float.IsFinite(layout.OriginY)
-            || layout.Range <= 0) {
+            || layout.Range <= 0
+        )
+        {
             throw new ArgumentException(
                 "The layout must have a positive finite scale, finite origins, and a positive distance range.",
-                nameof(layout));
+                nameof(layout)
+            );
         }
 
         long texelCount = (long)layout.TextureWidth * layout.TextureHeight;
-        if (texelCount > MAX_TEXELS) {
+        if (texelCount > MAX_TEXELS)
+        {
             throw new MsdfLimitException(
-                $"the {layout.TextureWidth} by {layout.TextureHeight} texture has {texelCount} texels; the limit is {MAX_TEXELS}");
+                $"the {layout.TextureWidth} by {layout.TextureHeight} texture has {texelCount} texels; the limit is {MAX_TEXELS}"
+            );
         }
 
         int edgeCount = outline.IsEmpty ? 0 : MsdfOutlineFlattener.CountEdges(outline, layout);
-        if ((texelCount * edgeCount) > MAX_EDGE_TEXEL_PAIRS) {
+        if ((texelCount * edgeCount) > MAX_EDGE_TEXEL_PAIRS)
+        {
             throw new MsdfLimitException(
-                $"{edgeCount} edges over {texelCount} texels is {texelCount * edgeCount} edge-texel pairs; the limit is {MAX_EDGE_TEXEL_PAIRS}");
+                $"{edgeCount} edges over {texelCount} texels is {texelCount * edgeCount} edge-texel pairs; the limit is {MAX_EDGE_TEXEL_PAIRS}"
+            );
         }
 
         byte[] bitmap = new byte[(int)texelCount * 4];
-        if (edgeCount == 0) {
+        if (edgeCount == 0)
+        {
             FillOutside(bitmap);
             return bitmap;
         }
 
         MsdfEdge[] edges = ArrayPool<MsdfEdge>.Shared.Rent(edgeCount);
-        try {
+        try
+        {
             MsdfOutlineFlattener.Flatten(outline, layout, edges.AsSpan(0, edgeCount));
             MsdfRasterizer.Rasterize(
                 bitmap,
                 layout.TextureWidth,
                 layout.TextureHeight,
                 layout.Range,
-                edges.AsSpan(0, edgeCount));
+                edges.AsSpan(0, edgeCount)
+            );
             return bitmap;
-        } finally {
+        }
+        finally
+        {
             ArrayPool<MsdfEdge>.Shared.Return(edges);
         }
     }
 
-    private static long CeilDiv(long value, long divisor) {
+    private static long CeilDiv(long value, long divisor)
+    {
         long quotient = value / divisor;
         return (value % divisor) == 0 ? quotient : quotient + 1;
     }
 
-    private static void FillOutside(byte[] bitmap) {
-        for (int index = 3; index < bitmap.Length; index += 4) {
+    private static void FillOutside(byte[] bitmap)
+    {
+        for (int index = 3; index < bitmap.Length; index += 4)
+        {
             bitmap[index] = 255;
         }
     }

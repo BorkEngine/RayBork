@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// The blend preset of a render state.
 /// </summary>
-public enum BlendMode {
+public enum BlendMode
+{
     /// <summary>Opaque writes; the source alpha is ignored.</summary>
     Opaque = 0,
 

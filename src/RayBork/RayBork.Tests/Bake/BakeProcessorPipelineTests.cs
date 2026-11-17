@@ -5,16 +5,16 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake;
 
-public sealed class BakeProcessorPipelineTests {
+public sealed class BakeProcessorPipelineTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ShapedAndRawOutputsReachThePackWithTheirAlignment() {
+    public void ShapedAndRawOutputsReachThePackWithTheirAlignment()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("units/archer.count", "source");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
 
         BakeRunResult result = workspace.Run(application);
 
@@ -23,7 +23,9 @@ public sealed class BakeProcessorPipelineTests {
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
         Assert.True(archive.TryGetEntry("units/archer", out PackEntry? asset));
         Assert.Equal(AssetEntryType.Data, asset.Type);
-        TestPayload payload = AssetSerialization.Deserialize<TestPayload>(archive.ReadPayload(asset));
+        TestPayload payload = AssetSerialization.Deserialize<TestPayload>(
+            archive.ReadPayload(asset)
+        );
         Assert.Equal("archer.count", payload.Name);
 
         Assert.True(archive.TryGetEntry("units/archer-raw", out PackEntry? raw));
@@ -34,10 +36,12 @@ public sealed class BakeProcessorPipelineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DescriptorTypesMapToTheirEngineEntryType() {
+    public void DescriptorTypesMapToTheirEngineEntryType()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("textures/castle.descriptor", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new DescriptorProcessor())
             .Build();
 
@@ -54,10 +58,12 @@ public sealed class BakeProcessorPipelineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ProcessorErrorDiscardsEveryOutputForTheSource() {
+    public void ProcessorErrorDiscardsEveryOutputForTheSource()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.err", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new ErrorProcessor())
             .Build();
 
@@ -71,10 +77,12 @@ public sealed class BakeProcessorPipelineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ProcessorExceptionIsARB4006Diagnostic() {
+    public void ProcessorExceptionIsARB4006Diagnostic()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.boom", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new ThrowProcessor())
             .Build();
 
@@ -88,12 +96,14 @@ public sealed class BakeProcessorPipelineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidOutputPathsAlignmentsAndDuplicatesAreRejected() {
+    public void InvalidOutputPathsAlignmentsAndDuplicatesAreRejected()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.badpath", "source");
         workspace.WriteAsset("b.badalign", "source");
         workspace.WriteAsset("c.dupout", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new InvalidOutputProcessor())
             .AddProcessor(new BadAlignmentProcessor())
             .AddProcessor(new DuplicateOutputProcessor())
@@ -110,14 +120,19 @@ public sealed class BakeProcessorPipelineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AddInputIsRecordedInTheIncrementalManifest() {
+    public void AddInputIsRecordedInTheIncrementalManifest()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("data/a.toml", """
+        workspace.WriteAsset(
+            "data/a.toml",
+            """
             [input]
             file = "extra.txt"
-            """);
+            """
+        );
         workspace.WriteAsset("data/extra.txt", "dependency");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new InputProcessor())
             .Build();
 
@@ -133,13 +148,18 @@ public sealed class BakeProcessorPipelineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingAdditionalInputFailsTheSource() {
+    public void MissingAdditionalInputFailsTheSource()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [missing-input]
             file = "missing.txt"
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new MissingInputProcessor())
             .Build();
 
@@ -153,10 +173,12 @@ public sealed class BakeProcessorPipelineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WarningDoesNotFailUnlessWarningsAreErrors() {
+    public void WarningDoesNotFailUnlessWarningsAreErrors()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.warn", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new WarningProcessor())
             .Build();
 
@@ -166,7 +188,13 @@ public sealed class BakeProcessorPipelineTests {
         Assert.True(File.Exists(workspace.GetPackPath()));
 
         File.Delete(workspace.GetPackPath());
-        BakeRunResult strict = workspace.Run(application, "bake", "--output-root", workspace.OutputRoot, "--warnings-as-errors");
+        BakeRunResult strict = workspace.Run(
+            application,
+            "bake",
+            "--output-root",
+            workspace.OutputRoot,
+            "--warnings-as-errors"
+        );
         Assert.Equal(1, strict.ExitCode);
         Assert.False(File.Exists(workspace.GetPackPath()));
     }

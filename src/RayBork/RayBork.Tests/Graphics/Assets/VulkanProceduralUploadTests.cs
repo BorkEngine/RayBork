@@ -9,10 +9,12 @@ namespace RayBork.Tests.Graphics.Assets;
 /// worker. The texture cases use the raw procedural level upload; the mesh cases use the fixed
 /// 88-byte layout builder data.
 /// </summary>
-public sealed class VulkanProceduralUploadTests {
+public sealed class VulkanProceduralUploadTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ProceduralRgbaTextureUploadCreatesAMipMappedImage() {
+    public void ProceduralRgbaTextureUploadCreatesAMipMappedImage()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         ProceduralTextureGpuUpload upload = CreateTextureUpload(
@@ -20,7 +22,8 @@ public sealed class VulkanProceduralUploadTests {
             width: 4,
             height: 4,
             TextureFilter.Linear,
-            TextureWrap.Clamp);
+            TextureWrap.Clamp
+        );
 
         GpuAssetResource resource = harness.Upload(upload);
 
@@ -48,7 +51,8 @@ public sealed class VulkanProceduralUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ProceduralR8TextureUploadUsesTheLinearFormat() {
+    public void ProceduralR8TextureUploadUsesTheLinearFormat()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         ProceduralTextureGpuUpload upload = CreateTextureUpload(
@@ -56,7 +60,8 @@ public sealed class VulkanProceduralUploadTests {
             width: 2,
             height: 2,
             TextureFilter.Nearest,
-            TextureWrap.Repeat);
+            TextureWrap.Repeat
+        );
 
         GpuAssetResource resource = harness.Upload(upload);
 
@@ -73,7 +78,8 @@ public sealed class VulkanProceduralUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ProceduralMeshBuildUploadsBuilderDataThroughTheBridge() {
+    public void ProceduralMeshBuildUploadsBuilderDataThroughTheBridge()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         ProceduralAssetService service = new(harness.Bridge);
@@ -89,8 +95,11 @@ public sealed class VulkanProceduralUploadTests {
 
         Mesh mesh = harness.WaitFor(builder.BuildAsync(TestContext.Current.CancellationToken));
 
-        try {
-            VulkanMeshAssetResource resource = Assert.IsType<VulkanMeshAssetResource>(mesh.Lifetime.Resource);
+        try
+        {
+            VulkanMeshAssetResource resource = Assert.IsType<VulkanMeshAssetResource>(
+                mesh.Lifetime.Resource
+            );
             Assert.Equal(AssetGpuUploadKind.Mesh, resource.Kind);
             Assert.Equal(4ul * 88, resource.VertexBufferSize);
             Assert.Equal(6ul * sizeof(uint), resource.IndexBufferSize);
@@ -102,35 +111,46 @@ public sealed class VulkanProceduralUploadTests {
             Assert.Equal(0, harness.Worker.PendingStagingBufferCount);
             Assert.Equal(4, mesh.Vertices.Length);
             Assert.Equal(6, mesh.Indices.Length);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
 
         Assert.True(
             SpinWait.SpinUntil(
-                () => {
+                () =>
+                {
                     harness.Pump();
                     return harness.Bridge.LiveResourceCount == 0;
                 },
-                AssetGpuUploadHarness.Timeout),
-            "The procedural mesh resource was not destroyed.");
+                AssetGpuUploadHarness.Timeout
+            ),
+            "The procedural mesh resource was not destroyed."
+        );
         service.Stop();
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ProceduralTextureBuildGeneratesAndUploadsTheMipChain() {
+    public void ProceduralTextureBuildGeneratesAndUploadsTheMipChain()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         ProceduralAssetService service = new(harness.Bridge);
         TextureBuilder builder = service.CreateTextureBuilder(4, 4);
         builder.SetPixels(CreateOpaquePixels(4, 4));
 
-        Texture texture = harness.WaitFor(builder.BuildAsync(TestContext.Current.CancellationToken));
+        Texture texture = harness.WaitFor(
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
 
-        try {
-            VulkanTextureAssetResource resource = Assert.IsType<VulkanTextureAssetResource>(texture.Lifetime.Resource);
+        try
+        {
+            VulkanTextureAssetResource resource = Assert.IsType<VulkanTextureAssetResource>(
+                texture.Lifetime.Resource
+            );
             Assert.Equal(AssetGpuUploadKind.ProceduralTexture, resource.Kind);
             Assert.Equal(Format.R8G8B8A8Srgb, resource.Format);
             Assert.Equal(3, resource.MipLevels);
@@ -139,53 +159,69 @@ public sealed class VulkanProceduralUploadTests {
             Assert.NotEqual(0ul, resource.Sampler.Handle);
             Assert.Equal(1, harness.Bridge.LiveResourceCount);
             Assert.Equal(3, texture.MipLevels);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
         }
 
         Assert.True(
             SpinWait.SpinUntil(
-                () => {
+                () =>
+                {
                     harness.Pump();
                     return harness.Bridge.LiveResourceCount == 0;
                 },
-                AssetGpuUploadHarness.Timeout),
-            "The procedural texture resource was not destroyed.");
+                AssetGpuUploadHarness.Timeout
+            ),
+            "The procedural texture resource was not destroyed."
+        );
         service.Stop();
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ProceduralTextureBuildWithoutMipsUploadsOnlyTheBaseLevel() {
+    public void ProceduralTextureBuildWithoutMipsUploadsOnlyTheBaseLevel()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         ProceduralAssetService service = new(harness.Bridge);
         TextureBuilder builder = service.CreateTextureBuilder(4, 4, generateMips: false);
         builder.SetPixels(CreateOpaquePixels(4, 4));
 
-        Texture texture = harness.WaitFor(builder.BuildAsync(TestContext.Current.CancellationToken));
+        Texture texture = harness.WaitFor(
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
 
-        try {
-            VulkanTextureAssetResource resource = Assert.IsType<VulkanTextureAssetResource>(texture.Lifetime.Resource);
+        try
+        {
+            VulkanTextureAssetResource resource = Assert.IsType<VulkanTextureAssetResource>(
+                texture.Lifetime.Resource
+            );
             Assert.Equal(AssetGpuUploadKind.ProceduralTexture, resource.Kind);
             Assert.Equal(1, resource.MipLevels);
             Assert.NotEqual(0ul, resource.Image.Handle);
             Assert.NotEqual(0ul, resource.View.Handle);
             Assert.NotEqual(0ul, resource.Sampler.Handle);
             Assert.Equal(1, texture.MipLevels);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
         }
 
         Assert.True(
             SpinWait.SpinUntil(
-                () => {
+                () =>
+                {
                     harness.Pump();
                     return harness.Bridge.LiveResourceCount == 0;
                 },
-                AssetGpuUploadHarness.Timeout),
-            "The procedural texture resource was not destroyed.");
+                AssetGpuUploadHarness.Timeout
+            ),
+            "The procedural texture resource was not destroyed."
+        );
         service.Stop();
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
@@ -195,12 +231,15 @@ public sealed class VulkanProceduralUploadTests {
         int width,
         int height,
         TextureFilter filter,
-        TextureWrap wrap) {
+        TextureWrap wrap
+    )
+    {
         int bytesPerPixel = format == TextureFormat.R8Unorm ? 1 : 4;
         int levelCount = LevelCount(width, height);
         int[] levelLengths = new int[levelCount];
         int totalLength = 0;
-        for (int level = 0; level < levelCount; level++) {
+        for (int level = 0; level < levelCount; level++)
+        {
             int levelWidth = Math.Max(1, width >> level);
             int levelHeight = Math.Max(1, height >> level);
             levelLengths[level] = levelWidth * levelHeight * bytesPerPixel;
@@ -208,7 +247,8 @@ public sealed class VulkanProceduralUploadTests {
         }
 
         byte[] pixels = new byte[totalLength];
-        for (int index = 0; index < pixels.Length; index++) {
+        for (int index = 0; index < pixels.Length; index++)
+        {
             pixels[index] = (byte)(index * 13);
         }
 
@@ -221,12 +261,15 @@ public sealed class VulkanProceduralUploadTests {
             wrap,
             1f,
             pixels,
-            levelLengths);
+            levelLengths
+        );
     }
 
-    private static byte[] CreateOpaquePixels(int width, int height) {
+    private static byte[] CreateOpaquePixels(int width, int height)
+    {
         byte[] pixels = new byte[width * height * 4];
-        for (int index = 0; index < pixels.Length; index += 4) {
+        for (int index = 0; index < pixels.Length; index += 4)
+        {
             pixels[index] = (byte)(index & 0xFF);
             pixels[index + 1] = (byte)((index * 3) & 0xFF);
             pixels[index + 2] = (byte)((index * 7) & 0xFF);
@@ -236,11 +279,13 @@ public sealed class VulkanProceduralUploadTests {
         return pixels;
     }
 
-    private static int LevelCount(int width, int height) {
+    private static int LevelCount(int width, int height)
+    {
         int levels = 1;
         int levelWidth = width;
         int levelHeight = height;
-        while (levelWidth > 1 || levelHeight > 1) {
+        while (levelWidth > 1 || levelHeight > 1)
+        {
             levelWidth = Math.Max(1, levelWidth / 2);
             levelHeight = Math.Max(1, levelHeight / 2);
             levels++;

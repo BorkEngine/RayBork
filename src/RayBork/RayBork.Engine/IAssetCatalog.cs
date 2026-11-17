@@ -19,7 +19,8 @@ namespace RayBork;
 /// is disposed, every member throws <see cref="ObjectDisposedException"/>.
 /// </para>
 /// </remarks>
-public interface IAssetCatalog {
+public interface IAssetCatalog
+{
     /// <summary>
     /// Loads a built-in engine asset or a registered custom asset.
     /// </summary>

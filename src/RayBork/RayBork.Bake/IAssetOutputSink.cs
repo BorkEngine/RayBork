@@ -11,7 +11,8 @@ namespace RayBork.Bake;
 /// every other shaped type to a <c>Data</c> entry. <see cref="AddData"/> stores an opaque payload as
 /// a <c>Raw</c> entry.
 /// </remarks>
-public interface IAssetOutputSink {
+public interface IAssetOutputSink
+{
     /// <summary>Emits one shaped asset at a canonical pack path.</summary>
     /// <typeparam name="T">The shapeable asset type.</typeparam>
     /// <param name="path">The canonical output path, without a leading slash.</param>

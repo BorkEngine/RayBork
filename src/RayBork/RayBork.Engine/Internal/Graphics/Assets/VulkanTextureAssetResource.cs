@@ -17,7 +17,8 @@ namespace RayBork.Internal;
 /// is described by its <see cref="ProceduralTextureGpuUpload"/>. The public texture metadata is the
 /// descriptor's; the copies here are the validated values the upload used.
 /// </remarks>
-internal sealed class VulkanTextureAssetResource : VulkanAssetResource, ITextureBindingResource {
+internal sealed class VulkanTextureAssetResource : VulkanAssetResource, ITextureBindingResource
+{
     /// <summary>
     /// Initializes a texture resource.
     /// </summary>
@@ -41,8 +42,10 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource, ITexture
         uint width,
         uint height,
         int mipLevels,
-        int deviceGeneration)
-        : base(upload, unchecked((long)image.Handle), deviceGeneration) {
+        int deviceGeneration
+    )
+        : base(upload, unchecked((long)image.Handle), deviceGeneration)
+    {
         Image = image;
         View = view;
         Sampler = sampler;
@@ -82,7 +85,8 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource, ITexture
     /// Stores the bindless slot reserved for the completed upload.
     /// </summary>
     /// <param name="slot">The reserved slot; it must be non-zero.</param>
-    internal void AssignBindlessSlot(uint slot) {
+    internal void AssignBindlessSlot(uint slot)
+    {
         ArgumentOutOfRangeException.ThrowIfZero(slot);
         BindlessSlot = slot;
     }
@@ -96,9 +100,11 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource, ITexture
     /// </remarks>
     /// <param name="table">The current bindless texture table.</param>
     /// <exception cref="ArgumentNullException"><paramref name="table"/> is <c>null</c>.</exception>
-    internal void ReleaseBindlessSlot(VulkanBindlessTextureTable table) {
+    internal void ReleaseBindlessSlot(VulkanBindlessTextureTable table)
+    {
         ArgumentNullException.ThrowIfNull(table);
-        if (BindlessSlot == 0) {
+        if (BindlessSlot == 0)
+        {
             return;
         }
 
@@ -135,8 +141,10 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource, ITexture
     /// Adopts the handles of a texture recreated after a device recovery.
     /// </summary>
     /// <param name="restored">The recreated texture resource.</param>
-    internal override void AdoptRestored(GpuAssetResource restored) {
-        if (ReferenceEquals(this, restored)) {
+    internal override void AdoptRestored(GpuAssetResource restored)
+    {
+        if (ReferenceEquals(this, restored))
+        {
             return;
         }
 

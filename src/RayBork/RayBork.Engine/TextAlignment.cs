@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Selects how the lines of a text block are aligned horizontally inside the block's layout box.
 /// </summary>
-public enum TextAlignment {
+public enum TextAlignment
+{
     /// <summary>
     /// Each line starts at the left edge of the layout box.
     /// </summary>

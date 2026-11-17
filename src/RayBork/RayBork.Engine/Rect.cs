@@ -9,7 +9,8 @@ namespace RayBork;
 /// <param name="Y">The vertical coordinate of the top edge.</param>
 /// <param name="Width">The width of the rectangle.</param>
 /// <param name="Height">The height of the rectangle.</param>
-public readonly record struct Rect(float X, float Y, float Width, float Height) {
+public readonly record struct Rect(float X, float Y, float Width, float Height)
+{
     /// <summary>
     /// Gets the horizontal coordinate of the right edge.
     /// </summary>

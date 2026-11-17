@@ -9,7 +9,8 @@ namespace RayBork;
 /// are the lossless fallback and the format used by generated textures. <see cref="Rgba16Float"/> and
 /// <see cref="Depth32Float"/> are render-target formats, not ordinary packed texture formats.
 /// </remarks>
-public enum TextureFormat {
+public enum TextureFormat
+{
     /// <summary>Uncompressed linear RGBA8.</summary>
     Rgba8Unorm = 0,
 

@@ -16,38 +16,46 @@ namespace RayBork.Internal;
 /// the load was canceled first; an already-canceled caller never receives a material.
 /// </para>
 /// </remarks>
-internal sealed class ShaderMaterialLoader : IAssetLoader<Shader> {
+internal sealed class ShaderMaterialLoader : IAssetLoader<Shader>
+{
     /// <summary>
     /// The shared loader instance.
     /// </summary>
     internal static readonly ShaderMaterialLoader Instance = new();
 
-    private ShaderMaterialLoader() {
-    }
+    private ShaderMaterialLoader() { }
 
     /// <inheritdoc/>
     public AssetEntryType EntryType => AssetEntryType.Shader;
 
     /// <inheritdoc/>
-    public async Task<Shader> LoadAsync(AssetLoadContext context) {
+    public async Task<Shader> LoadAsync(AssetLoadContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
 
-        ShaderProgram program = await context.LoadAsync<ShaderProgram>(
-            context.CanonicalPath,
-            context.CancellationToken).ConfigureAwait(false);
-        try {
+        ShaderProgram program = await context
+            .LoadAsync<ShaderProgram>(context.CanonicalPath, context.CancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
             context.CancellationToken.ThrowIfCancellationRequested();
             Shader material = program.CreateMaterial();
-            if (context.CancellationToken.IsCancellationRequested) {
+            if (context.CancellationToken.IsCancellationRequested)
+            {
                 material.Dispose();
                 context.CancellationToken.ThrowIfCancellationRequested();
             }
 
             return material;
-        } finally {
-            try {
+        }
+        finally
+        {
+            try
+            {
                 program.Lifetime.ReleaseOwnerReference();
-            } catch (ObjectDisposedException) {
+            }
+            catch (ObjectDisposedException)
+            {
                 // Shutdown force-disposed the program after the material acquired its reference.
             }
         }

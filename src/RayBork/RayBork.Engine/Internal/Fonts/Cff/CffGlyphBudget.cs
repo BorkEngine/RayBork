@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// the per-glyph point or contour limits. The counters are checked before the outline grows, and the
 /// budget is mutable and single-resolution only; it is not shared across threads.
 /// </remarks>
-internal sealed class CffGlyphBudget {
+internal sealed class CffGlyphBudget
+{
     /// <summary>Gets or sets the number of outline points resolved so far.</summary>
     internal int Points { get; set; }
 

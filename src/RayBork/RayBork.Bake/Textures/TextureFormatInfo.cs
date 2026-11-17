@@ -9,7 +9,8 @@ namespace RayBork.Bake.Textures;
 /// transfer function, texel block extent, and sample list are the fields a KTX2 reader compares
 /// against the descriptor.
 /// </remarks>
-internal sealed class TextureFormatInfo {
+internal sealed class TextureFormatInfo
+{
     private const byte COLOR_MODEL_RGBSDA = 1;
     private const byte COLOR_MODEL_BC5 = 132;
     private const byte COLOR_MODEL_BC7 = 134;
@@ -28,7 +29,8 @@ internal sealed class TextureFormatInfo {
         bytesPerBlock: 4,
         COLOR_MODEL_RGBSDA,
         TRANSFER_LINEAR,
-        RgbaSamples());
+        RgbaSamples()
+    );
 
     private static readonly TextureFormatInfo _rgba8Srgb = new(
         TextureFormat.Rgba8Srgb,
@@ -38,7 +40,8 @@ internal sealed class TextureFormatInfo {
         bytesPerBlock: 4,
         COLOR_MODEL_RGBSDA,
         TRANSFER_SRGB,
-        RgbaSamples());
+        RgbaSamples()
+    );
 
     private static readonly TextureFormatInfo _bc7Unorm = new(
         TextureFormat.Bc7Unorm,
@@ -48,7 +51,8 @@ internal sealed class TextureFormatInfo {
         bytesPerBlock: 16,
         COLOR_MODEL_BC7,
         TRANSFER_LINEAR,
-        [BlockSample(0, 128, CHANNEL_RED)]);
+        [BlockSample(0, 128, CHANNEL_RED)]
+    );
 
     private static readonly TextureFormatInfo _bc7Srgb = new(
         TextureFormat.Bc7Srgb,
@@ -58,7 +62,8 @@ internal sealed class TextureFormatInfo {
         bytesPerBlock: 16,
         COLOR_MODEL_BC7,
         TRANSFER_SRGB,
-        [BlockSample(0, 128, CHANNEL_RED)]);
+        [BlockSample(0, 128, CHANNEL_RED)]
+    );
 
     private static readonly TextureFormatInfo _bc5Unorm = new(
         TextureFormat.Bc5Unorm,
@@ -68,7 +73,8 @@ internal sealed class TextureFormatInfo {
         bytesPerBlock: 16,
         COLOR_MODEL_BC5,
         TRANSFER_LINEAR,
-        [BlockSample(0, 64, CHANNEL_RED), BlockSample(64, 64, CHANNEL_GREEN)]);
+        [BlockSample(0, 64, CHANNEL_RED), BlockSample(64, 64, CHANNEL_GREEN)]
+    );
 
     private static readonly TextureFormatInfo _r8Unorm = new(
         TextureFormat.R8Unorm,
@@ -78,7 +84,8 @@ internal sealed class TextureFormatInfo {
         bytesPerBlock: 1,
         COLOR_MODEL_RGBSDA,
         TRANSFER_LINEAR,
-        [UnormSample(0, CHANNEL_RED)]);
+        [UnormSample(0, CHANNEL_RED)]
+    );
 
     private readonly DfdSample[] _samples;
 
@@ -90,7 +97,9 @@ internal sealed class TextureFormatInfo {
         int bytesPerBlock,
         byte colorModel,
         byte transferFunction,
-        DfdSample[] samples) {
+        DfdSample[] samples
+    )
+    {
         Format = format;
         VkFormat = vkFormat;
         BlockWidth = blockWidth;
@@ -141,8 +150,9 @@ internal sealed class TextureFormatInfo {
     /// <param name="format">The descriptor format.</param>
     /// <returns>The format metadata.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The value is not a supported format.</exception>
-    internal static TextureFormatInfo For(TextureFormat format)
-        => format switch {
+    internal static TextureFormatInfo For(TextureFormat format) =>
+        format switch
+        {
             TextureFormat.Rgba8Unorm => _rgba8Unorm,
             TextureFormat.Rgba8Srgb => _rgba8Srgb,
             TextureFormat.Bc7Unorm => _bc7Unorm,
@@ -152,7 +162,8 @@ internal sealed class TextureFormatInfo {
             _ => throw new ArgumentOutOfRangeException(
                 nameof(format),
                 format,
-                "The texture format has no KTX2 metadata mapping."),
+                "The texture format has no KTX2 metadata mapping."
+            ),
         };
 
     /// <summary>Gets the stored byte length of one mip level.</summary>
@@ -160,13 +171,24 @@ internal sealed class TextureFormatInfo {
     /// <param name="height">The level's pixel height.</param>
     /// <returns>The stored byte length, without padding.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
-    internal int GetLevelByteLength(int width, int height) {
-        if (width <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(width), width, "The width must be positive.");
+    internal int GetLevelByteLength(int width, int height)
+    {
+        if (width <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(width),
+                width,
+                "The width must be positive."
+            );
         }
 
-        if (height <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(height), height, "The height must be positive.");
+        if (height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(height),
+                height,
+                "The height must be positive."
+            );
         }
 
         long blocksWide = IsBlockCompressed ? (width + 3) / 4 : width;
@@ -175,23 +197,25 @@ internal sealed class TextureFormatInfo {
     }
 
     private static DfdSample[] RgbaSamples() =>
-    [
-        UnormSample(0, CHANNEL_RED),
-        UnormSample(8, CHANNEL_GREEN),
-        UnormSample(16, CHANNEL_BLUE),
-        UnormSample(24, CHANNEL_ALPHA),
-    ];
+        [
+            UnormSample(0, CHANNEL_RED),
+            UnormSample(8, CHANNEL_GREEN),
+            UnormSample(16, CHANNEL_BLUE),
+            UnormSample(24, CHANNEL_ALPHA),
+        ];
 
-    private static DfdSample UnormSample(ushort bitOffset, byte channel)
-        => new(bitOffset, 8, channel, 0, 255);
+    private static DfdSample UnormSample(ushort bitOffset, byte channel) =>
+        new(bitOffset, 8, channel, 0, 255);
 
-    private static DfdSample BlockSample(ushort bitOffset, byte bitLength, byte channel)
-        => new(bitOffset, bitLength, channel, 0, uint.MaxValue);
+    private static DfdSample BlockSample(ushort bitOffset, byte bitLength, byte channel) =>
+        new(bitOffset, bitLength, channel, 0, uint.MaxValue);
 
-    private static int LeastCommonMultiple(int left, int right) {
+    private static int LeastCommonMultiple(int left, int right)
+    {
         int a = left;
         int b = right;
-        while (b != 0) {
+        while (b != 0)
+        {
             (a, b) = (b, a % b);
         }
 

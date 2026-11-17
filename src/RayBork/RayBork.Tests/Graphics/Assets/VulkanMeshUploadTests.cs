@@ -5,10 +5,12 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <summary>
 /// GPU tests for mesh uploads through the GPU asset bridge and the Vulkan worker.
 /// </summary>
-public sealed class VulkanMeshUploadTests {
+public sealed class VulkanMeshUploadTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void UploadCreatesVertexAndIndexBuffers() {
+    public void UploadCreatesVertexAndIndexBuffers()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
 
@@ -35,13 +37,15 @@ public sealed class VulkanMeshUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void BeginUploadIsPendingUntilTheMeshCopyCompletes() {
+    public void BeginUploadIsPendingUntilTheMeshCopyCompletes()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         MeshGpuUpload upload = AssetUploadTestData.Mesh();
 
         VulkanAssetUploadOperation operation = Assert.IsType<VulkanAssetUploadOperation>(
-            harness.Worker.BeginUpload(upload));
+            harness.Worker.BeginUpload(upload)
+        );
 
         Assert.False(operation.IsFinished);
         Assert.Equal(1, harness.Worker.PendingOperationCount);
@@ -51,7 +55,8 @@ public sealed class VulkanMeshUploadTests {
         Exception? error = null;
         bool completed = SpinWait.SpinUntil(
             () => harness.Worker.TryComplete(operation, out resource, out error),
-            AssetGpuUploadHarness.Timeout);
+            AssetGpuUploadHarness.Timeout
+        );
 
         Assert.True(completed, "The mesh upload did not complete.");
         Assert.Null(error);
@@ -69,7 +74,8 @@ public sealed class VulkanMeshUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void PayloadLengthMismatchFailsTheUploadWithRB1008() {
+    public void PayloadLengthMismatchFailsTheUploadWithRB1008()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         MeshGpuUpload broken = AssetUploadTestData.Mesh(lengthDelta: -1);
@@ -77,7 +83,9 @@ public sealed class VulkanMeshUploadTests {
         Task<GpuAssetResource> task = harness.Bridge.UploadAsync(broken, CancellationToken.None);
         harness.Bridge.ProcessPending(harness.Worker);
 
-        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => task.GetAwaiter().GetResult());
+        AssetLoadException failure = Assert.Throws<AssetLoadException>(() =>
+            task.GetAwaiter().GetResult()
+        );
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, failure.DiagnosticCode);
         Assert.Contains("require", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);

@@ -7,32 +7,40 @@ namespace RayBork.Tests.Rendering;
 /// Tests the public <see cref="Model"/> and <see cref="ModelPart"/> composition contract without a
 /// pack or a GPU device: construction validation, computed bounds, and ownership.
 /// </summary>
-public sealed class ModelTests {
+public sealed class ModelTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructionComputesPartBoundsFromTheMeshAndLocalTransform() {
+    public void ConstructionComputesPartBoundsFromTheMeshAndLocalTransform()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
         Transform local = new(
             new Vector3(1f, 2f, 3f),
             Quaternion.Identity,
-            new Vector3(2f, 2f, 2f));
+            new Vector3(2f, 2f, 2f)
+        );
         using Model model = new(new ModelPart("part", mesh, material, localTransform: local));
 
         ModelPart part = Assert.Single(model.Parts);
-        Assert.Equal(new BoundingBox(new Vector3(-1f, 0f, 1f), new Vector3(3f, 4f, 5f)), part.Bounds);
+        Assert.Equal(
+            new BoundingBox(new Vector3(-1f, 0f, 1f), new Vector3(3f, 4f, 5f)),
+            part.Bounds
+        );
         Assert.Equal(part.Bounds, model.Bounds);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PartBoundsEncloseTheMeshAfterARotatedLocalTransform() {
+    public void PartBoundsEncloseTheMeshAfterARotatedLocalTransform()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
         Transform local = new(
             Vector3.Zero,
             Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 4f),
-            Vector3.One);
+            Vector3.One
+        );
         using Model model = new(new ModelPart("part", mesh, material, localTransform: local));
 
         BoundingBox bounds = model.Bounds;
@@ -47,27 +55,34 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelBoundsAreTheUnionOfEveryPartBounds() {
+    public void ModelBoundsAreTheUnionOfEveryPartBounds()
+    {
         Mesh firstMesh = RenderingTestAssets.CreateMesh(
             "meshes/first",
-            bounds: new BoundingBox(new Vector3(-1f), new Vector3(1f)));
+            bounds: new BoundingBox(new Vector3(-1f), new Vector3(1f))
+        );
         Mesh secondMesh = RenderingTestAssets.CreateMesh(
             "meshes/second",
-            bounds: new BoundingBox(new Vector3(2f), new Vector3(4f)));
+            bounds: new BoundingBox(new Vector3(2f), new Vector3(4f))
+        );
         Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/first");
         Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/second");
         using Model model = new(
             new ModelPart("first", firstMesh, firstMaterial),
-            new ModelPart("second", secondMesh, secondMaterial));
+            new ModelPart("second", secondMesh, secondMaterial)
+        );
 
         Assert.Equal(new BoundingBox(new Vector3(-1f), new Vector3(4f)), model.Bounds);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PartDefaultsToIdentityTransformAndTheMaterialRenderState() {
+    public void PartDefaultsToIdentityTransformAndTheMaterialRenderState()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
-        Shader material = RenderingTestAssets.CreateShader(defaultRenderState: RenderState.AlphaBlend);
+        Shader material = RenderingTestAssets.CreateShader(
+            defaultRenderState: RenderState.AlphaBlend
+        );
         using Model model = new(new ModelPart("part", mesh, material));
 
         ModelPart part = model.Parts[0];
@@ -80,17 +95,13 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PartKeepsAnExplicitRenderStateAndLocalTransform() {
+    public void PartKeepsAnExplicitRenderStateAndLocalTransform()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
         Transform local = new(new Vector3(4f, 5f, 6f));
 
-        ModelPart part = new(
-            "part",
-            mesh,
-            material,
-            RenderState.Additive,
-            local);
+        ModelPart part = new("part", mesh, material, RenderState.Additive, local);
 
         Assert.Equal(RenderState.Additive, part.RenderState);
         Assert.Equal(new Vector3(4f, 5f, 6f), part.LocalTransform.Position);
@@ -98,7 +109,8 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorsValidateTheirArguments() {
+    public void ConstructorsValidateTheirArguments()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
 
@@ -107,7 +119,9 @@ public sealed class ModelTests {
         Assert.Throws<ArgumentException>(() => new Model());
         Assert.Throws<ArgumentException>(() => new Model(default(ModelPart)));
         Assert.Throws<ArgumentException>(() => new Model(new ModelPart(" ", mesh, material)));
-        Assert.Throws<ArgumentNullException>(() => new Model(new ModelPart("part", null!, material)));
+        Assert.Throws<ArgumentNullException>(() =>
+            new Model(new ModelPart("part", null!, material))
+        );
         Assert.Throws<ArgumentNullException>(() => new Model(new ModelPart("part", mesh, null!)));
 
         Assert.Throws<ArgumentNullException>(() => new ModelPart(null!, mesh, material));
@@ -118,25 +132,29 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelPartRejectsDisposedAssets() {
+    public void ModelPartRejectsDisposedAssets()
+    {
         Mesh disposedMesh = RenderingTestAssets.CreateMesh("meshes/disposed");
         Shader liveMaterial = RenderingTestAssets.CreateShader("shaders/live");
         disposedMesh.Lifetime.ForceDispose();
 
-        Assert.Throws<ObjectDisposedException>(
-            () => new ModelPart("part", disposedMesh, liveMaterial));
+        Assert.Throws<ObjectDisposedException>(() =>
+            new ModelPart("part", disposedMesh, liveMaterial)
+        );
 
         Mesh liveMesh = RenderingTestAssets.CreateMesh("meshes/live");
         Shader disposedMaterial = RenderingTestAssets.CreateShader("shaders/disposed");
         disposedMaterial.Dispose();
 
-        Assert.Throws<ObjectDisposedException>(
-            () => new ModelPart("part", liveMesh, disposedMaterial));
+        Assert.Throws<ObjectDisposedException>(() =>
+            new ModelPart("part", liveMesh, disposedMaterial)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelRejectsPartsWhoseAssetsBecameDisposed() {
+    public void ModelRejectsPartsWhoseAssetsBecameDisposed()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
         ModelPart part = new("part", mesh, material);
@@ -156,12 +174,14 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelOwnsOneReferenceToEveryDistinctMesh() {
+    public void ModelOwnsOneReferenceToEveryDistinctMesh()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
         Model model = new(
             new ModelPart("first", mesh, material),
-            new ModelPart("second", mesh, material));
+            new ModelPart("second", mesh, material)
+        );
 
         model.Dispose();
 
@@ -174,15 +194,20 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelDisposesEveryDistinctMaterialAndReleasesEachProgramOnce() {
+    public void ModelDisposesEveryDistinctMaterialAndReleasesEachProgramOnce()
+    {
         List<GpuAssetResource> destroyed = [];
-        ShaderProgram program = RenderingTestAssets.CreateProgram("shaders/shared", destroyed: destroyed);
+        ShaderProgram program = RenderingTestAssets.CreateProgram(
+            "shaders/shared",
+            destroyed: destroyed
+        );
         Shader first = program.CreateMaterial();
         Shader second = program.CreateMaterial();
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Model model = new(
             new ModelPart("first", mesh, first),
-            new ModelPart("second", mesh, second));
+            new ModelPart("second", mesh, second)
+        );
 
         model.Dispose();
 
@@ -200,7 +225,8 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelDisposeIsIdempotentAndHidesPartsAndBounds() {
+    public void ModelDisposeIsIdempotentAndHidesPartsAndBounds()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
         Model model = new(new ModelPart("part", mesh, material));
@@ -216,14 +242,16 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PartsAreExposedInConstructionOrder() {
+    public void PartsAreExposedInConstructionOrder()
+    {
         Mesh firstMesh = RenderingTestAssets.CreateMesh("meshes/first");
         Mesh secondMesh = RenderingTestAssets.CreateMesh("meshes/second");
         Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/first");
         Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/second");
         using Model model = new(
             new ModelPart("first", firstMesh, firstMaterial),
-            new ModelPart("second", secondMesh, secondMaterial));
+            new ModelPart("second", secondMesh, secondMaterial)
+        );
 
         Assert.Equal(new[] { "first", "second" }, model.Parts.Select(part => part.Name));
         Assert.Same(firstMesh, model.Parts[0].Mesh);
@@ -232,7 +260,8 @@ public sealed class ModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EnumerableConstructorMaterializesTheParts() {
+    public void EnumerableConstructorMaterializesTheParts()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader();
         ModelPart[] parts = [new("part", mesh, material)];

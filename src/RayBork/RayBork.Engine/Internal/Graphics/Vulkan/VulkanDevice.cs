@@ -31,7 +31,8 @@ namespace RayBork.Internal;
 /// Every member is render-thread only. Dispose the device before the surface and the instance.
 /// </para>
 /// </remarks>
-internal sealed class VulkanDevice : IDisposable {
+internal sealed class VulkanDevice : IDisposable
+{
     /// <summary>
     /// The prefix of the message thrown when the loader reports no physical device at all.
     /// </summary>
@@ -57,7 +58,9 @@ internal sealed class VulkanDevice : IDisposable {
         Queue graphicsQueue,
         Queue presentQueue,
         VulkanDeviceCapabilities capabilities,
-        ILogger logger) {
+        ILogger logger
+    )
+    {
         _instance = instance;
         _vulkan = vulkan;
         PhysicalDevice = physicalDevice;
@@ -115,59 +118,87 @@ internal sealed class VulkanDevice : IDisposable {
     /// The surface is invalid, no physical device is available or suitable, the surface cannot
     /// support a swapchain, or logical-device creation failed. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static unsafe VulkanDevice Create(VulkanInstance instance, IntPtr surface, ILogger logger) {
-        lock (_processGate) {
+    internal static unsafe VulkanDevice Create(
+        VulkanInstance instance,
+        IntPtr surface,
+        ILogger logger
+    )
+    {
+        lock (_processGate)
+        {
             return CreateCore(instance, surface, logger);
         }
     }
 
-    private static unsafe VulkanDevice CreateCore(VulkanInstance instance, IntPtr surface, ILogger logger) {
+    private static unsafe VulkanDevice CreateCore(
+        VulkanInstance instance,
+        IntPtr surface,
+        ILogger logger
+    )
+    {
         ArgumentNullException.ThrowIfNull(instance);
         ArgumentNullException.ThrowIfNull(logger);
         ObjectDisposedException.ThrowIf(instance.Handle.Handle == 0, instance);
-        if (surface == IntPtr.Zero) {
+        if (surface == IntPtr.Zero)
+        {
             throw new GraphicsException(
                 "Cannot create the Vulkan device because the native surface handle is zero. The platform must create the surface first.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         Vk vulkan = instance.Vulkan;
         Instance instanceHandle = instance.Handle;
         SurfaceKHR surfaceHandle = new() { Handle = unchecked((ulong)surface.ToInt64()) };
         PhysicalDevice[] physicalDevices = EnumeratePhysicalDevices(vulkan, instanceHandle);
-        if (physicalDevices.Length == 0) {
+        if (physicalDevices.Length == 0)
+        {
             throw new GraphicsException(
                 $"{NO_PHYSICAL_DEVICE_MESSAGE_PREFIX}. Install or enable a Vulkan 1.2 driver on {RuntimeInformation.OSDescription}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         List<VulkanPhysicalDeviceCandidate> candidates = new(physicalDevices.Length);
         List<VulkanQueueFamilyInfo[]> queueFamiliesByDevice = new(physicalDevices.Length);
-        for (int index = 0; index < physicalDevices.Length; index++) {
+        for (int index = 0; index < physicalDevices.Length; index++)
+        {
             PhysicalDevice physicalDevice = physicalDevices[index];
-            PhysicalDeviceProperties properties = vulkan.GetPhysicalDeviceProperties(physicalDevice);
+            PhysicalDeviceProperties properties = vulkan.GetPhysicalDeviceProperties(
+                physicalDevice
+            );
             string name = Marshal.PtrToStringUTF8((IntPtr)properties.DeviceName) ?? string.Empty;
             VulkanQueueFamilyInfo[] queueFamilies = ProbeQueueFamilies(
                 vulkan,
                 instanceHandle,
                 physicalDevice,
-                surfaceHandle);
-            bool supportsGraphics = Array.Exists(
-                queueFamilies,
-                static family => family.SupportsGraphics);
-            bool supportsPresent = Array.Exists(
-                queueFamilies,
-                static family => family.SupportsPresent);
-            bool hasSwapchain = HasDeviceExtension(vulkan, physicalDevice, SWAPCHAIN_EXTENSION_NAME);
-            IReadOnlyList<string> missingBindlessFeatures = VulkanBindlessFeatures.GetMissingFeatures(
-                VulkanBindlessFeatures.Query(vulkan, physicalDevice));
-            uint bindlessTextureCapacity = VulkanBindlessFeatures.QueryTextureCapacity(vulkan, physicalDevice);
-            PhysicalDeviceDepthStencilResolveProperties resolveProperties = VulkanDepthStencilResolve.Query(
+                surfaceHandle
+            );
+            bool supportsGraphics = Array.Exists(queueFamilies, static family =>
+                family.SupportsGraphics
+            );
+            bool supportsPresent = Array.Exists(queueFamilies, static family =>
+                family.SupportsPresent
+            );
+            bool hasSwapchain = HasDeviceExtension(
                 vulkan,
-                physicalDevice);
-            ResolveModeFlags supportedDepthResolveModes = resolveProperties.SupportedDepthResolveModes;
+                physicalDevice,
+                SWAPCHAIN_EXTENSION_NAME
+            );
+            IReadOnlyList<string> missingBindlessFeatures =
+                VulkanBindlessFeatures.GetMissingFeatures(
+                    VulkanBindlessFeatures.Query(vulkan, physicalDevice)
+                );
+            uint bindlessTextureCapacity = VulkanBindlessFeatures.QueryTextureCapacity(
+                vulkan,
+                physicalDevice
+            );
+            PhysicalDeviceDepthStencilResolveProperties resolveProperties =
+                VulkanDepthStencilResolve.Query(vulkan, physicalDevice);
+            ResolveModeFlags supportedDepthResolveModes =
+                resolveProperties.SupportedDepthResolveModes;
             VulkanPhysicalDeviceCandidate candidate = new(
                 index,
                 name,
@@ -178,7 +209,8 @@ internal sealed class VulkanDevice : IDisposable {
                 hasSwapchain,
                 bindlessTextureCapacity,
                 string.Join(", ", missingBindlessFeatures),
-                supportedDepthResolveModes);
+                supportedDepthResolveModes
+            );
             candidates.Add(candidate);
             queueFamiliesByDevice.Add(queueFamilies);
             logger.LogDebug(
@@ -190,15 +222,20 @@ internal sealed class VulkanDevice : IDisposable {
                 supportsGraphics,
                 supportsPresent,
                 hasSwapchain,
-                missingBindlessFeatures.Count == 0 ? "supported" : "missing " + candidate.MissingBindlessFeatures,
+                missingBindlessFeatures.Count == 0
+                    ? "supported"
+                    : "missing " + candidate.MissingBindlessFeatures,
                 bindlessTextureCapacity,
-                VulkanDepthStencilResolve.Describe(supportedDepthResolveModes));
+                VulkanDepthStencilResolve.Describe(supportedDepthResolveModes)
+            );
         }
 
         int selectedIndex = VulkanPhysicalDeviceSelector.Select(candidates);
         VulkanPhysicalDeviceCandidate selected = candidates[selectedIndex];
         PhysicalDevice selectedDevice = physicalDevices[selectedIndex];
-        (uint graphicsFamily, uint presentFamily) = VulkanQueueFamilySelection.Select(queueFamiliesByDevice[selectedIndex]);
+        (uint graphicsFamily, uint presentFamily) = VulkanQueueFamilySelection.Select(
+            queueFamiliesByDevice[selectedIndex]
+        );
         logger.LogInformation(
             "Vulkan physical device selected: [{Index}] {Name} (API {ApiVersion}, {DeviceType}, graphics queue family {GraphicsQueue}, present queue family {PresentQueue}).",
             selected.Index,
@@ -206,40 +243,48 @@ internal sealed class VulkanDevice : IDisposable {
             VulkanVersion.Format(selected.ApiVersion),
             selected.DeviceType,
             graphicsFamily,
-            presentFamily);
+            presentFamily
+        );
 
-        VulkanSwapchainSupport swapchain = VulkanSwapchainSupport.Query(vulkan, selectedDevice, surfaceHandle);
-        foreach (VulkanSurfaceFormat surfaceFormat in swapchain.Formats) {
+        VulkanSwapchainSupport swapchain = VulkanSwapchainSupport.Query(
+            vulkan,
+            selectedDevice,
+            surfaceHandle
+        );
+        foreach (VulkanSurfaceFormat surfaceFormat in swapchain.Formats)
+        {
             logger.LogDebug(
                 "Vulkan surface format: {Format} / {ColorSpace}.",
                 VulkanFormatInfo.Describe(surfaceFormat.Format),
-                surfaceFormat.ColorSpace);
+                surfaceFormat.ColorSpace
+            );
         }
 
-        if (!swapchain.IsUsable) {
+        if (!swapchain.IsUsable)
+        {
             throw new GraphicsException(
                 $"The window surface cannot support a swapchain: it advertises {swapchain.Formats.Count} format(s) and {swapchain.PresentModes.Count} present mode(s). Ensure the window is mapped and the driver supports VK_KHR_surface.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
-        Device device = CreateLogicalDevice(
-            vulkan,
-            selectedDevice,
-            graphicsFamily,
-            presentFamily);
-        try {
+        Device device = CreateLogicalDevice(vulkan, selectedDevice, graphicsFamily, presentFamily);
+        try
+        {
             Queue graphicsQueue = vulkan.GetDeviceQueue(device, graphicsFamily, 0);
-            Queue presentQueue = presentFamily == graphicsFamily
-                ? graphicsQueue
-                : vulkan.GetDeviceQueue(device, presentFamily, 0);
+            Queue presentQueue =
+                presentFamily == graphicsFamily
+                    ? graphicsQueue
+                    : vulkan.GetDeviceQueue(device, presentFamily, 0);
             VulkanDeviceCapabilities capabilities = VulkanDeviceCapabilities.Query(
                 vulkan,
                 selectedDevice,
                 graphicsFamily,
                 presentFamily,
                 instance.SwapchainColorSpaceExtensionEnabled,
-                swapchain);
+                swapchain
+            );
             VulkanDevice result = new(
                 instance,
                 vulkan,
@@ -248,7 +293,8 @@ internal sealed class VulkanDevice : IDisposable {
                 graphicsQueue,
                 presentQueue,
                 capabilities,
-                logger);
+                logger
+            );
             instance.ThrowIfValidationError("creating the Vulkan device");
             logger.LogInformation(
                 "Vulkan device created: {Name} (API {ApiVersion}, {VendorId}:{DeviceId}, {SampleCount} sample counts, descriptor indexing {DescriptorIndexing}, bindless texture capacity {BindlessCapacity}).",
@@ -258,9 +304,12 @@ internal sealed class VulkanDevice : IDisposable {
                 capabilities.DeviceId,
                 capabilities.SupportedSampleCounts.Count,
                 capabilities.DescriptorIndexing,
-                capabilities.BindlessTextureCapacity);
+                capabilities.BindlessTextureCapacity
+            );
             return result;
-        } catch {
+        }
+        catch
+        {
             vulkan.DestroyDevice(device, null);
             throw;
         }
@@ -274,38 +323,49 @@ internal sealed class VulkanDevice : IDisposable {
     /// surface format, HDR mode, sample count, and present mode.
     /// </remarks>
     /// <returns>The engine information snapshot.</returns>
-    internal EngineInfo CreateEngineInfo() => new(
-        "RayBork",
-        EngineVersion.Current,
-        VulkanVersion.FormatRendererName(Capabilities.ApiVersion),
-        Capabilities.DeviceName,
-        Capabilities.ApiVersion,
-        string.Empty,
-        false,
-        0,
-        PresentMode.Mailbox,
-        _instance.ValidationLayersEnabled);
+    internal EngineInfo CreateEngineInfo() =>
+        new(
+            "RayBork",
+            EngineVersion.Current,
+            VulkanVersion.FormatRendererName(Capabilities.ApiVersion),
+            Capabilities.DeviceName,
+            Capabilities.ApiVersion,
+            string.Empty,
+            false,
+            0,
+            PresentMode.Mailbox,
+            _instance.ValidationLayersEnabled
+        );
 
     /// <summary>
     /// Waits for the device to become idle and destroys it. The call is idempotent.
     /// </summary>
-    public unsafe void Dispose() {
-        lock (_processGate) {
+    public unsafe void Dispose()
+    {
+        lock (_processGate)
+        {
             DisposeCore();
         }
     }
 
-    private unsafe void DisposeCore() {
-        if (_disposed) {
+    private unsafe void DisposeCore()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        if (_device.Handle != 0) {
+        if (_device.Handle != 0)
+        {
             Vk vulkan = Vulkan;
             Result waitResult = vulkan.DeviceWaitIdle(_device);
-            if (waitResult != Result.Success) {
-                _logger.LogWarning("Vulkan device wait-idle before disposal failed with {Result}.", waitResult);
+            if (waitResult != Result.Success)
+            {
+                _logger.LogWarning(
+                    "Vulkan device wait-idle before disposal failed with {Result}.",
+                    waitResult
+                );
             }
 
             vulkan.DestroyDevice(_device, null);
@@ -314,26 +374,31 @@ internal sealed class VulkanDevice : IDisposable {
 
         _vulkan = null;
         _logger.LogDebug("Vulkan device disposed.");
-        if (_instance.Handle.Handle != 0) {
+        if (_instance.Handle.Handle != 0)
+        {
             _instance.ThrowIfValidationError("destroying the Vulkan device");
         }
     }
 
-    private static unsafe PhysicalDevice[] EnumeratePhysicalDevices(Vk vulkan, Instance instance) {
+    private static unsafe PhysicalDevice[] EnumeratePhysicalDevices(Vk vulkan, Instance instance)
+    {
         uint count = 0;
         Result result = vulkan.EnumeratePhysicalDevices(instance, &count, null);
         ThrowIfFailed(result, "vkEnumeratePhysicalDevices");
-        if (count == 0) {
+        if (count == 0)
+        {
             return [];
         }
 
         PhysicalDevice[] devices = new PhysicalDevice[count];
-        fixed (PhysicalDevice* devicesPointer = devices) {
+        fixed (PhysicalDevice* devicesPointer = devices)
+        {
             result = vulkan.EnumeratePhysicalDevices(instance, &count, devicesPointer);
         }
 
         ThrowIfFailed(result, "vkEnumeratePhysicalDevices");
-        if (count != devices.Length) {
+        if (count != devices.Length)
+        {
             Array.Resize(ref devices, (int)count);
         }
 
@@ -344,39 +409,52 @@ internal sealed class VulkanDevice : IDisposable {
         Vk vulkan,
         Instance instance,
         PhysicalDevice physicalDevice,
-        SurfaceKHR surface) {
+        SurfaceKHR surface
+    )
+    {
         uint count = 0;
         vulkan.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, null);
-        if (count == 0) {
+        if (count == 0)
+        {
             return [];
         }
 
         QueueFamilyProperties[] properties = new QueueFamilyProperties[count];
-        fixed (QueueFamilyProperties* propertiesPointer = properties) {
-            vulkan.GetPhysicalDeviceQueueFamilyProperties(physicalDevice, &count, propertiesPointer);
+        fixed (QueueFamilyProperties* propertiesPointer = properties)
+        {
+            vulkan.GetPhysicalDeviceQueueFamilyProperties(
+                physicalDevice,
+                &count,
+                propertiesPointer
+            );
         }
 
-        if (count != properties.Length) {
+        if (count != properties.Length)
+        {
             Array.Resize(ref properties, (int)count);
         }
 
         VulkanQueueFamilyInfo[] families = new VulkanQueueFamilyInfo[properties.Length];
-        for (int index = 0; index < properties.Length; index++) {
+        for (int index = 0; index < properties.Length; index++)
+        {
             QueueFamilyProperties family = properties[index];
-            bool supportsGraphics = family.QueueCount > 0
-                && (family.QueueFlags & QueueFlags.GraphicsBit) != 0;
-            bool supportsPresent = family.QueueCount > 0
+            bool supportsGraphics =
+                family.QueueCount > 0 && (family.QueueFlags & QueueFlags.GraphicsBit) != 0;
+            bool supportsPresent =
+                family.QueueCount > 0
                 && VulkanNativeFunctions.GetSurfaceSupport(
                     vulkan,
                     instance,
                     physicalDevice,
                     (uint)index,
-                    surface);
+                    surface
+                );
             families[index] = new VulkanQueueFamilyInfo(
                 (uint)index,
                 supportsGraphics,
                 supportsPresent,
-                family.QueueCount);
+                family.QueueCount
+            );
         }
 
         return families;
@@ -385,35 +463,44 @@ internal sealed class VulkanDevice : IDisposable {
     private static unsafe bool HasDeviceExtension(
         Vk vulkan,
         PhysicalDevice physicalDevice,
-        string extensionName) {
+        string extensionName
+    )
+    {
         uint count = 0;
         Result result = vulkan.EnumerateDeviceExtensionProperties(
             physicalDevice,
             (string?)null,
             &count,
-            null);
+            null
+        );
         ThrowIfFailed(result, "vkEnumerateDeviceExtensionProperties");
-        if (count == 0) {
+        if (count == 0)
+        {
             return false;
         }
 
         ExtensionProperties[] properties = new ExtensionProperties[count];
-        fixed (ExtensionProperties* propertiesPointer = properties) {
+        fixed (ExtensionProperties* propertiesPointer = properties)
+        {
             result = vulkan.EnumerateDeviceExtensionProperties(
                 physicalDevice,
                 (string?)null,
                 &count,
-                propertiesPointer);
+                propertiesPointer
+            );
         }
 
         ThrowIfFailed(result, "vkEnumerateDeviceExtensionProperties");
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < count; index++)
+        {
             string? name;
-            fixed (byte* namePointer = properties[index].ExtensionName) {
+            fixed (byte* namePointer = properties[index].ExtensionName)
+            {
                 name = Marshal.PtrToStringUTF8((IntPtr)namePointer);
             }
 
-            if (string.Equals(name, extensionName, StringComparison.Ordinal)) {
+            if (string.Equals(name, extensionName, StringComparison.Ordinal))
+            {
                 return true;
             }
         }
@@ -425,9 +512,12 @@ internal sealed class VulkanDevice : IDisposable {
         Vk vulkan,
         PhysicalDevice physicalDevice,
         uint graphicsFamily,
-        uint presentFamily) {
+        uint presentFamily
+    )
+    {
         List<uint> families = [graphicsFamily];
-        if (presentFamily != graphicsFamily) {
+        if (presentFamily != graphicsFamily)
+        {
             families.Add(presentFamily);
         }
 
@@ -437,9 +527,12 @@ internal sealed class VulkanDevice : IDisposable {
         byte[] swapchainExtension = "VK_KHR_swapchain\0"u8.ToArray();
         fixed (DeviceQueueCreateInfo* queueCreateInfosPointer = queueCreateInfos)
         fixed (float* prioritiesPointer = priorities)
-        fixed (byte* swapchainExtensionPointer = swapchainExtension) {
-            for (int index = 0; index < families.Count; index++) {
-                queueCreateInfos[index] = new DeviceQueueCreateInfo {
+        fixed (byte* swapchainExtensionPointer = swapchainExtension)
+        {
+            for (int index = 0; index < families.Count; index++)
+            {
+                queueCreateInfos[index] = new DeviceQueueCreateInfo
+                {
                     SType = StructureType.DeviceQueueCreateInfo,
                     QueueFamilyIndex = families[index],
                     QueueCount = 1,
@@ -451,7 +544,8 @@ internal sealed class VulkanDevice : IDisposable {
             // The M4 bindless texture table needs the core Vulkan 1.2 descriptor-indexing subset;
             // device selection already rejected a device that lacks it. Update-after-bind stays off
             // for uniform and storage buffers, and variable descriptor counts are not enabled.
-            PhysicalDeviceVulkan12Features vulkan12Features = new() {
+            PhysicalDeviceVulkan12Features vulkan12Features = new()
+            {
                 SType = StructureType.PhysicalDeviceVulkan12Features,
             };
             VulkanBindlessFeatures.Enable(ref vulkan12Features);
@@ -459,13 +553,17 @@ internal sealed class VulkanDevice : IDisposable {
             // filtering. Wireframe model draws need fillModeNonSolid for their polygon-mode-line
             // pipelines. All three are optional Vulkan features, so enable each only when the
             // selected physical device advertises it. Every other feature stays disabled.
-            PhysicalDeviceFeatures supportedFeatures = vulkan.GetPhysicalDeviceFeatures(physicalDevice);
-            PhysicalDeviceFeatures enabledFeatures = new() {
+            PhysicalDeviceFeatures supportedFeatures = vulkan.GetPhysicalDeviceFeatures(
+                physicalDevice
+            );
+            PhysicalDeviceFeatures enabledFeatures = new()
+            {
                 SamplerAnisotropy = supportedFeatures.SamplerAnisotropy,
                 TextureCompressionBC = supportedFeatures.TextureCompressionBC,
                 FillModeNonSolid = supportedFeatures.FillModeNonSolid,
             };
-            DeviceCreateInfo createInfo = new() {
+            DeviceCreateInfo createInfo = new()
+            {
                 SType = StructureType.DeviceCreateInfo,
                 PNext = &vulkan12Features,
                 QueueCreateInfoCount = (uint)families.Count,
@@ -476,27 +574,37 @@ internal sealed class VulkanDevice : IDisposable {
                 PpEnabledExtensionNames = &extensionNamePointer,
                 PEnabledFeatures = &enabledFeatures,
             };
-            Result result = vulkan.CreateDevice(physicalDevice, &createInfo, null, out Device device);
+            Result result = vulkan.CreateDevice(
+                physicalDevice,
+                &createInfo,
+                null,
+                out Device device
+            );
             ThrowIfFailed(result, "vkCreateDevice");
-            if (device.Handle == 0) {
+            if (device.Handle == 0)
+            {
                 throw new GraphicsException(
                     "Vulkan logical-device creation returned a zero device handle.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             return device;
         }
     }
 
-    private static void ThrowIfFailed(Result result, string operation) {
-        if (result == Result.Success || result == Result.Incomplete) {
+    private static void ThrowIfFailed(Result result, string operation)
+    {
+        if (result == Result.Success || result == Result.Incomplete)
+        {
             return;
         }
 
         throw new GraphicsException(
             $"The Vulkan command {operation} failed with {result}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 }

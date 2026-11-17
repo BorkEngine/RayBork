@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// alive for the instance lifetime; the delegate field keeps the callback itself rooted.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanValidation : IDisposable {
+internal sealed unsafe class VulkanValidation : IDisposable
+{
     private const string VALIDATION_LAYER_NAME = "VK_LAYER_KHRONOS_validation";
 
     private const DebugUtilsMessageSeverityFlagsEXT MESSAGE_SEVERITY =
@@ -33,7 +34,8 @@ internal sealed unsafe class VulkanValidation : IDisposable {
         | DebugUtilsMessageTypeFlagsEXT.ValidationBitExt
         | DebugUtilsMessageTypeFlagsEXT.PerformanceBitExt;
 
-    private static readonly DebugUtilsMessengerCallbackFunctionEXT _callbackDelegate = OnDebugMessage;
+    private static readonly DebugUtilsMessengerCallbackFunctionEXT _callbackDelegate =
+        OnDebugMessage;
     private static readonly PfnDebugUtilsMessengerCallbackEXT _callback = new(_callbackDelegate);
 
     private readonly ILogger _logger;
@@ -47,7 +49,8 @@ internal sealed unsafe class VulkanValidation : IDisposable {
     /// Initializes a new instance of the <see cref="VulkanValidation"/> class.
     /// </summary>
     /// <param name="logger">The renderer logger that receives validation warnings and errors.</param>
-    internal VulkanValidation(ILogger logger) {
+    internal VulkanValidation(ILogger logger)
+    {
         ArgumentNullException.ThrowIfNull(logger);
         _logger = logger;
         _selfHandle = GCHandle.Alloc(this);
@@ -62,21 +65,26 @@ internal sealed unsafe class VulkanValidation : IDisposable {
     /// Creates the debug-utils messenger configuration for this validation holder.
     /// </summary>
     /// <returns>The messenger create info with the instance callback and user data set.</returns>
-    internal DebugUtilsMessengerCreateInfoEXT CreateMessengerCreateInfo() => new() {
-        SType = StructureType.DebugUtilsMessengerCreateInfoExt,
-        MessageSeverity = MESSAGE_SEVERITY,
-        MessageType = MESSAGE_TYPE,
-        PfnUserCallback = _callback,
-        PUserData = (void*)GCHandle.ToIntPtr(_selfHandle),
-    };
+    internal DebugUtilsMessengerCreateInfoEXT CreateMessengerCreateInfo() =>
+        new()
+        {
+            SType = StructureType.DebugUtilsMessengerCreateInfoExt,
+            MessageSeverity = MESSAGE_SEVERITY,
+            MessageType = MESSAGE_TYPE,
+            PfnUserCallback = _callback,
+            PUserData = (void*)GCHandle.ToIntPtr(_selfHandle),
+        };
 
     /// <summary>
     /// Returns and clears the validation errors recorded since the previous call.
     /// </summary>
     /// <returns>The recorded error messages in arrival order.</returns>
-    internal IReadOnlyList<string> ConsumeErrors() {
-        lock (_gate) {
-            if (_errors.Count == 0) {
+    internal IReadOnlyList<string> ConsumeErrors()
+    {
+        lock (_gate)
+        {
+            if (_errors.Count == 0)
+            {
                 return [];
             }
 
@@ -94,36 +102,44 @@ internal sealed unsafe class VulkanValidation : IDisposable {
     /// At least one validation error was recorded. The message lists every error and the diagnostic
     /// code is <c>RB3001</c>.
     /// </exception>
-    internal void ThrowIfErrors(string operation) {
+    internal void ThrowIfErrors(string operation)
+    {
         IReadOnlyList<string> errors = ConsumeErrors();
-        if (errors.Count == 0) {
+        if (errors.Count == 0)
+        {
             return;
         }
 
         StringBuilder message = new();
-        message.Append("Vulkan validation reported ")
+        message
+            .Append("Vulkan validation reported ")
             .Append(errors.Count)
             .Append(" error(s) while ")
             .Append(operation)
             .Append(':');
-        foreach (string error in errors) {
+        foreach (string error in errors)
+        {
             message.AppendLine().Append("- ").Append(error);
         }
 
         throw new GraphicsException(
             message.ToString(),
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
     /// <inheritdoc />
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        if (_selfHandle.IsAllocated) {
+        if (_selfHandle.IsAllocated)
+        {
             _selfHandle.Free();
         }
     }
@@ -132,32 +148,42 @@ internal sealed unsafe class VulkanValidation : IDisposable {
         DebugUtilsMessageSeverityFlagsEXT messageSeverity,
         DebugUtilsMessageTypeFlagsEXT messageTypes,
         DebugUtilsMessengerCallbackDataEXT* callbackData,
-        void* userData) {
-        if (userData is null
-            || (messageSeverity & MESSAGE_SEVERITY) == 0) {
+        void* userData
+    )
+    {
+        if (userData is null || (messageSeverity & MESSAGE_SEVERITY) == 0)
+        {
             return 0;
         }
 
-        VulkanValidation? validation = GCHandle.FromIntPtr((IntPtr)userData).Target as VulkanValidation;
-        if (validation is null) {
+        VulkanValidation? validation =
+            GCHandle.FromIntPtr((IntPtr)userData).Target as VulkanValidation;
+        if (validation is null)
+        {
             return 0;
         }
 
-        string message = callbackData is not null && callbackData->PMessage is not null
-            ? Marshal.PtrToStringUTF8((IntPtr)callbackData->PMessage) ?? string.Empty
-            : string.Empty;
+        string message =
+            callbackData is not null && callbackData->PMessage is not null
+                ? Marshal.PtrToStringUTF8((IntPtr)callbackData->PMessage) ?? string.Empty
+                : string.Empty;
         validation.Record(messageSeverity, message);
         return 0;
     }
 
-    private void Record(DebugUtilsMessageSeverityFlagsEXT severity, string message) {
-        if ((severity & DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt) != 0) {
-            lock (_gate) {
+    private void Record(DebugUtilsMessageSeverityFlagsEXT severity, string message)
+    {
+        if ((severity & DebugUtilsMessageSeverityFlagsEXT.ErrorBitExt) != 0)
+        {
+            lock (_gate)
+            {
                 _errors.Enqueue(message);
             }
 
             _logger.LogError("Vulkan validation: {Message}", message);
-        } else {
+        }
+        else
+        {
             _logger.LogWarning("Vulkan validation: {Message}", message);
         }
     }

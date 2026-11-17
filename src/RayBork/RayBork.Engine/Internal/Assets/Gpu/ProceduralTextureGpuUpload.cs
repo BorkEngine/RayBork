@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// gives each level's stored byte length so the worker records one copy per level without parsing a
 /// container format. The level data is retained with the upload for device recovery.
 /// </remarks>
-internal sealed class ProceduralTextureGpuUpload : AssetGpuUpload {
+internal sealed class ProceduralTextureGpuUpload : AssetGpuUpload
+{
     /// <summary>
     /// Initializes a procedural texture upload.
     /// </summary>
@@ -37,37 +38,57 @@ internal sealed class ProceduralTextureGpuUpload : AssetGpuUpload {
         TextureWrap wrap,
         float maxAnisotropy,
         ReadOnlyMemory<byte> pixelData,
-        ReadOnlyMemory<int> levelByteLengths)
-        : base(AssetGpuUploadKind.ProceduralTexture, path) {
+        ReadOnlyMemory<int> levelByteLengths
+    )
+        : base(AssetGpuUploadKind.ProceduralTexture, path)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        if (!Enum.IsDefined(format)
-            || format is not (TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb or TextureFormat.R8Unorm)) {
+        if (
+            !Enum.IsDefined(format)
+            || format
+                is not (
+                    TextureFormat.Rgba8Unorm
+                    or TextureFormat.Rgba8Srgb
+                    or TextureFormat.R8Unorm
+                )
+        )
+        {
             throw new ArgumentException(
                 $"The texture format '{format}' is not a procedural texture format.",
-                nameof(format));
+                nameof(format)
+            );
         }
 
-        if (levelByteLengths.Length == 0) {
-            throw new ArgumentException("The upload must carry at least one mip level.", nameof(levelByteLengths));
+        if (levelByteLengths.Length == 0)
+        {
+            throw new ArgumentException(
+                "The upload must carry at least one mip level.",
+                nameof(levelByteLengths)
+            );
         }
 
         long totalLength = 0;
-        for (int level = 0; level < levelByteLengths.Length; level++) {
+        for (int level = 0; level < levelByteLengths.Length; level++)
+        {
             int length = levelByteLengths.Span[level];
-            if (length <= 0) {
+            if (length <= 0)
+            {
                 throw new ArgumentException(
                     $"Mip level {level} is empty.",
-                    nameof(levelByteLengths));
+                    nameof(levelByteLengths)
+                );
             }
 
             totalLength += length;
         }
 
-        if (totalLength != pixelData.Length) {
+        if (totalLength != pixelData.Length)
+        {
             throw new ArgumentException(
                 $"The mip levels describe {totalLength} bytes, but the pixel buffer is {pixelData.Length}.",
-                nameof(levelByteLengths));
+                nameof(levelByteLengths)
+            );
         }
 
         Width = width;

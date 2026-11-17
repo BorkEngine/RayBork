@@ -43,7 +43,8 @@ namespace RayBork.Internal;
 /// became <see langword="true"/>.
 /// </para>
 /// </remarks>
-internal sealed class RenderLoop {
+internal sealed class RenderLoop
+{
     private const string THREAD_NAME = "RayBork.Render";
 
     /// <summary>
@@ -90,7 +91,9 @@ internal sealed class RenderLoop {
         RendererBackendOptions options,
         RenderStatus status,
         GpuAssetBridge gpuAssetBridge,
-        RenderTextureService renderTextures) {
+        RenderTextureService renderTextures
+    )
+    {
         ArgumentNullException.ThrowIfNull(frameRing);
         ArgumentNullException.ThrowIfNull(backendFactory);
         ArgumentNullException.ThrowIfNull(options);
@@ -105,10 +108,7 @@ internal sealed class RenderLoop {
         _gpuAssetBridge = gpuAssetBridge;
         _renderTextures = renderTextures;
         _waitHandles = [frameRing.ReadySignal, gpuAssetBridge.Signal, renderTextures.Signal];
-        _thread = new Thread(RunThread) {
-            IsBackground = true,
-            Name = THREAD_NAME,
-        };
+        _thread = new Thread(RunThread) { IsBackground = true, Name = THREAD_NAME };
     }
 
     /// <summary>
@@ -144,8 +144,10 @@ internal sealed class RenderLoop {
     /// Starts the render thread. The loop can be started once.
     /// </summary>
     /// <exception cref="InvalidOperationException">The loop was already started.</exception>
-    internal void Start() {
-        if (Interlocked.Exchange(ref _started, 1) != 0) {
+    internal void Start()
+    {
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+        {
             throw new InvalidOperationException("The render loop has already been started.");
         }
 
@@ -161,14 +163,19 @@ internal sealed class RenderLoop {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The render thread records the failure and stops; an exception may not escape the thread and kill the process.")]
-    private void RunThread() {
+        Justification = "The render thread records the failure and stops; an exception may not escape the thread and kill the process."
+    )]
+    private void RunThread()
+    {
         IRendererBackend? backend = null;
-        try {
-            backend = _backendFactory() ?? throw new GraphicsException(
-                "The renderer backend factory returned null.",
-                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+        try
+        {
+            backend = _backendFactory()
+                ?? throw new GraphicsException(
+                    "The renderer backend factory returned null.",
+                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                    null
+                );
             backend.Initialize(_options);
             AttachAssetGpuWorker(backend);
 
@@ -177,30 +184,38 @@ internal sealed class RenderLoop {
             _isReady = true;
 
             int appliedDeviceGeneration = backend.DeviceGeneration;
-            while (true) {
+            while (true)
+            {
                 ProcessPendingAssets();
                 backend.ProcessRenderTextureRequests(_renderTextures);
 
-                if (_frameRing.TryAcquireNewest(out FrameLease lease)) {
-                    try {
+                if (_frameRing.TryAcquireNewest(out FrameLease lease))
+                {
+                    try
+                    {
                         RenderFramePacket packet = lease.Packet
                             ?? throw new InvalidOperationException(
-                                "The frame ring returned a rendering lease without a frame packet.");
+                                "The frame ring returned a rendering lease without a frame packet."
+                            );
                         backend.Submit(packet);
                         backend.Present();
                         _status.SetStats(backend.Stats);
                         int deviceGeneration = backend.DeviceGeneration;
-                        if (deviceGeneration != appliedDeviceGeneration) {
+                        if (deviceGeneration != appliedDeviceGeneration)
+                        {
                             appliedDeviceGeneration = deviceGeneration;
                             RestoreAssets();
                         }
 
                         EngineInfo info = backend.Info;
-                        if (info != publishedInfo) {
+                        if (info != publishedInfo)
+                        {
                             _status.SetInfo(info);
                             publishedInfo = info;
                         }
-                    } finally {
+                    }
+                    finally
+                    {
                         // The presentation attempt is finished for this frame even when Submit or
                         // Present threw, so a FIFO-paced tick that is waiting for it is released
                         // before the render loop's failure stops the app.
@@ -211,7 +226,8 @@ internal sealed class RenderLoop {
                     continue;
                 }
 
-                if (_frameRing.IsCompleted) {
+                if (_frameRing.IsCompleted)
+                {
                     return;
                 }
 
@@ -220,44 +236,76 @@ internal sealed class RenderLoop {
                 // bridge signal covers queues, but neither a GPU copy finishing nor a fence retiring
                 // a frame signals. A minimized window therefore keeps polling instead of stranding
                 // the work.
-                int timeout = _gpuAssetBridge.HasPendingWork
+                int timeout =
+                    _gpuAssetBridge.HasPendingWork
                     || _gpuAssetBridge.HasPendingDestroys
                     || _renderTextures.HasPendingWork
-                    ? UPLOAD_POLL_TIMEOUT_MILLISECONDS
-                    : Timeout.Infinite;
+                        ? UPLOAD_POLL_TIMEOUT_MILLISECONDS
+                        : Timeout.Infinite;
                 WaitHandle.WaitAny(_waitHandles, timeout);
             }
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _failure = exception;
-        } finally {
+        }
+        finally
+        {
             WaitForFrameResourcesIdle();
-            try {
+            try
+            {
                 _renderTextures.Close(_failure);
-            } catch (Exception exception) {
-                if (_failure is null) {
+            }
+            catch (Exception exception)
+            {
+                if (_failure is null)
+                {
                     _failure = exception;
-                } else {
-                    _options.Logger.LogWarning(exception, "The render texture service failed to close after the render loop stopped.");
+                }
+                else
+                {
+                    _options.Logger.LogWarning(
+                        exception,
+                        "The render texture service failed to close after the render loop stopped."
+                    );
                 }
             }
 
-            try {
+            try
+            {
                 _gpuAssetBridge.Close(_failure);
-            } catch (Exception exception) {
-                if (_failure is null) {
+            }
+            catch (Exception exception)
+            {
+                if (_failure is null)
+                {
                     _failure = exception;
-                } else {
-                    _options.Logger.LogWarning(exception, "The GPU asset bridge failed to close after the render loop stopped.");
+                }
+                else
+                {
+                    _options.Logger.LogWarning(
+                        exception,
+                        "The GPU asset bridge failed to close after the render loop stopped."
+                    );
                 }
             }
 
-            try {
+            try
+            {
                 backend?.Dispose();
-            } catch (Exception exception) {
-                if (_failure is null) {
+            }
+            catch (Exception exception)
+            {
+                if (_failure is null)
+                {
                     _failure = exception;
-                } else {
-                    _options.Logger.LogWarning(exception, "The renderer backend failed to dispose after the render loop stopped.");
+                }
+                else
+                {
+                    _options.Logger.LogWarning(
+                        exception,
+                        "The renderer backend failed to dispose after the render loop stopped."
+                    );
                 }
             }
 
@@ -265,8 +313,10 @@ internal sealed class RenderLoop {
         }
     }
 
-    private void ProcessPendingAssets() {
-        if (_assetGpuWorker is not null) {
+    private void ProcessPendingAssets()
+    {
+        if (_assetGpuWorker is not null)
+        {
             _gpuAssetBridge.ProcessPending(_assetGpuWorker);
         }
     }
@@ -282,29 +332,40 @@ internal sealed class RenderLoop {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The drain runs during teardown, after the backend may already be gone; a failure must not prevent the loop from stopping.")]
-    private void WaitForFrameResourcesIdle() {
-        if (_assetGpuWorker is null) {
+        Justification = "The drain runs during teardown, after the backend may already be gone; a failure must not prevent the loop from stopping."
+    )]
+    private void WaitForFrameResourcesIdle()
+    {
+        if (_assetGpuWorker is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             _assetGpuWorker.WaitForFrameResourcesIdle();
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _options.Logger.LogWarning(
                 exception,
-                "The GPU asset worker could not wait for frame idleness before the bridge closed; resources are destroyed best effort.");
+                "The GPU asset worker could not wait for frame idleness before the bridge closed; resources are destroyed best effort."
+            );
         }
     }
 
-    private void RestoreAssets() {
-        if (_assetGpuWorker is not null) {
+    private void RestoreAssets()
+    {
+        if (_assetGpuWorker is not null)
+        {
             _gpuAssetBridge.Restore(_assetGpuWorker);
         }
     }
 
-    private void AttachAssetGpuWorker(IRendererBackend backend) {
-        if (backend is not IAssetGpuWorkerProvider provider) {
+    private void AttachAssetGpuWorker(IRendererBackend backend)
+    {
+        if (backend is not IAssetGpuWorkerProvider provider)
+        {
             return;
         }
 
@@ -312,7 +373,8 @@ internal sealed class RenderLoop {
             ?? throw new GraphicsException(
                 "The renderer backend returned no GPU asset worker.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         _gpuAssetBridge.AttachWorker(worker);
         _assetGpuWorker = worker;
     }

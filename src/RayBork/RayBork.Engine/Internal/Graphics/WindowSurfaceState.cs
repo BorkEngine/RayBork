@@ -19,4 +19,5 @@ internal readonly record struct WindowSurfaceState(
     int RenderHeight,
     bool IsMinimized,
     bool IsFocused,
-    WindowHdrState Hdr);
+    WindowHdrState Hdr
+);

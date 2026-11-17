@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// The render thread stages it into one vertex buffer and one index buffer; the M3 runtime never
 /// parses glTF or OBJ.
 /// </remarks>
-internal sealed class MeshGpuUpload : AssetGpuUpload {
+internal sealed class MeshGpuUpload : AssetGpuUpload
+{
     /// <summary>
     /// Initializes a mesh upload.
     /// </summary>
@@ -16,8 +17,13 @@ internal sealed class MeshGpuUpload : AssetGpuUpload {
     /// <param name="descriptor">The packed mesh descriptor.</param>
     /// <param name="vertexAndIndexData">The vertex stream followed by the 32-bit indices.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal MeshGpuUpload(string path, MeshAssetDescriptor descriptor, ReadOnlyMemory<byte> vertexAndIndexData)
-        : base(AssetGpuUploadKind.Mesh, path) {
+    internal MeshGpuUpload(
+        string path,
+        MeshAssetDescriptor descriptor,
+        ReadOnlyMemory<byte> vertexAndIndexData
+    )
+        : base(AssetGpuUploadKind.Mesh, path)
+    {
         ArgumentNullException.ThrowIfNull(descriptor);
 
         Mesh = descriptor;

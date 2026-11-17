@@ -9,10 +9,12 @@ namespace RayBork.Internal;
 /// Tags are stored without allocating a string. <see cref="ToName"/> materializes a printable name
 /// only for diagnostics, replacing bytes outside the printable ASCII range.
 /// </remarks>
-internal readonly struct FontTableTag : IEquatable<FontTableTag> {
+internal readonly struct FontTableTag : IEquatable<FontTableTag>
+{
     /// <summary>Initializes a tag from its big-endian value.</summary>
     /// <param name="value">The four tag bytes as one big-endian value.</param>
-    internal FontTableTag(uint value) {
+    internal FontTableTag(uint value)
+    {
         Value = value;
     }
 
@@ -62,8 +64,10 @@ internal readonly struct FontTableTag : IEquatable<FontTableTag> {
     /// <param name="bytes">Exactly the four tag bytes.</param>
     /// <returns>The tag.</returns>
     /// <exception cref="ArgumentException"><paramref name="bytes"/> is not four bytes long.</exception>
-    internal static FontTableTag FromAscii(ReadOnlySpan<byte> bytes) {
-        if (bytes.Length != 4) {
+    internal static FontTableTag FromAscii(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.Length != 4)
+        {
             throw new ArgumentException("A table tag is exactly four bytes.", nameof(bytes));
         }
 
@@ -72,11 +76,13 @@ internal readonly struct FontTableTag : IEquatable<FontTableTag> {
 
     /// <summary>Gets the four tag characters, with non-printable bytes replaced by <c>?</c>.</summary>
     /// <returns>The printable tag name.</returns>
-    internal string ToName() {
+    internal string ToName()
+    {
         Span<byte> bytes = stackalloc byte[4];
         BinaryPrimitives.WriteUInt32BigEndian(bytes, Value);
         Span<char> chars = stackalloc char[4];
-        for (int index = 0; index < chars.Length; index++) {
+        for (int index = 0; index < chars.Length; index++)
+        {
             byte value = bytes[index];
             chars[index] = value is >= 0x20 and <= 0x7E ? (char)value : '?';
         }

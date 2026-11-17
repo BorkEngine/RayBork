@@ -2,10 +2,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class WindowCommandQueueTests {
+public sealed class WindowCommandQueueTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RepeatedSettersCoalesceInPlaceAndKeepTheirQueuePosition() {
+    public void RepeatedSettersCoalesceInPlaceAndKeepTheirQueuePosition()
+    {
         WindowCommandQueue queue = new();
         queue.EnqueueSetSize(100, 100);
         queue.EnqueueMinimize();
@@ -26,7 +28,8 @@ public sealed class WindowCommandQueueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DifferentSetterKindsDoNotCoalesceWithEachOther() {
+    public void DifferentSetterKindsDoNotCoalesceWithEachOther()
+    {
         WindowCommandQueue queue = new();
         queue.EnqueueSetMinSize(10, 20);
         queue.EnqueueSetMaxSize(30, 40);
@@ -47,7 +50,8 @@ public sealed class WindowCommandQueueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ActionsKeepTheirQueueOrderAndDoNotCoalesce() {
+    public void ActionsKeepTheirQueueOrderAndDoNotCoalesce()
+    {
         WindowCommandQueue queue = new();
         queue.EnqueueMinimize();
         queue.EnqueueMaximize();
@@ -67,7 +71,8 @@ public sealed class WindowCommandQueueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ClipboardCommandsAreOrderedActions() {
+    public void ClipboardCommandsAreOrderedActions()
+    {
         WindowCommandQueue queue = new();
         queue.EnqueueClipboardWrite("one");
         queue.EnqueueClipboardRead();
@@ -83,7 +88,8 @@ public sealed class WindowCommandQueueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TryTakeDrainsInOrderAndReportsEmptiness() {
+    public void TryTakeDrainsInOrderAndReportsEmptiness()
+    {
         WindowCommandQueue queue = new();
         queue.EnqueueSetTitle("A");
         queue.EnqueueClose();
@@ -97,7 +103,8 @@ public sealed class WindowCommandQueueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SettersValidateArgumentsImmediately() {
+    public void SettersValidateArgumentsImmediately()
+    {
         WindowCommandQueue queue = new();
 
         Assert.Throws<ArgumentNullException>(() => queue.EnqueueSetTitle(null!));
@@ -117,11 +124,14 @@ public sealed class WindowCommandQueueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ZeroMaximumSizeMeansNoMaximum() {
+    public void ZeroMaximumSizeMeansNoMaximum()
+    {
         WindowCommandQueue queue = new();
         queue.EnqueueSetMaxSize(0, 0);
 
-        SetMaxSizeCommand maximum = Assert.IsType<SetMaxSizeCommand>(Assert.Single(queue.PendingCommands));
+        SetMaxSizeCommand maximum = Assert.IsType<SetMaxSizeCommand>(
+            Assert.Single(queue.PendingCommands)
+        );
         Assert.Equal(0, maximum.Width);
         Assert.Equal(0, maximum.Height);
     }

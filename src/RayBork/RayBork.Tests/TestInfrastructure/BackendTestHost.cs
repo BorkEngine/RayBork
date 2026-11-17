@@ -23,7 +23,8 @@ namespace RayBork.Tests;
 /// test owns its window, device, and backend.
 /// </para>
 /// </remarks>
-internal sealed class BackendTestHost : IDisposable {
+internal sealed class BackendTestHost : IDisposable
+{
     private const int SERVICE_TIMEOUT_MILLISECONDS = 30_000;
 
     private readonly SdlTestHost _sdlHost;
@@ -40,7 +41,9 @@ internal sealed class BackendTestHost : IDisposable {
         SdlTestHost sdlHost,
         RenderSettings settings,
         IReadOnlyList<string> instanceExtensions,
-        WindowSurfaceState initialState) {
+        WindowSurfaceState initialState
+    )
+    {
         _sdlHost = sdlHost;
         _settings = settings;
         _instanceExtensions = instanceExtensions;
@@ -89,8 +92,12 @@ internal sealed class BackendTestHost : IDisposable {
     /// </summary>
     /// <param name="description">The target description.</param>
     /// <returns>The created render texture.</returns>
-    internal RenderTexture CreateRenderTexture(RenderTextureDescription description) {
-        Task<RenderTexture> request = RenderTextures.CreateAsync(description, CancellationToken.None);
+    internal RenderTexture CreateRenderTexture(RenderTextureDescription description)
+    {
+        Task<RenderTexture> request = RenderTextures.CreateAsync(
+            description,
+            CancellationToken.None
+        );
         _backend.ProcessRenderTextureRequests(RenderTextures);
         return request.GetAwaiter().GetResult();
     }
@@ -105,7 +112,8 @@ internal sealed class BackendTestHost : IDisposable {
     /// </summary>
     /// <param name="target">The render texture to read.</param>
     /// <returns>The raw scene-linear colors.</returns>
-    internal Task<Color[,]> ReadColorsAsync(RenderTexture target) {
+    internal Task<Color[,]> ReadColorsAsync(RenderTexture target)
+    {
         ArgumentNullException.ThrowIfNull(target);
 
         Task<Color[,]> request = target.ReadColorsAsync();
@@ -119,7 +127,8 @@ internal sealed class BackendTestHost : IDisposable {
     /// </summary>
     /// <param name="target">The render texture to read.</param>
     /// <returns>The display-referred RGBA8 pixels.</returns>
-    internal Task<byte[]> ReadPixelsAsync(RenderTexture target) {
+    internal Task<byte[]> ReadPixelsAsync(RenderTexture target)
+    {
         ArgumentNullException.ThrowIfNull(target);
 
         Task<byte[]> request = target.ReadPixelsAsync();
@@ -136,30 +145,42 @@ internal sealed class BackendTestHost : IDisposable {
     /// <param name="width">The new width in pixels.</param>
     /// <param name="height">The new height in pixels.</param>
     /// <exception cref="TimeoutException">The resize neither queued nor completed in time.</exception>
-    internal void ResizeRenderTexture(RenderTexture target, int width, int height) {
+    internal void ResizeRenderTexture(RenderTexture target, int width, int height)
+    {
         ArgumentNullException.ThrowIfNull(target);
 
         // Drain earlier queued work and its wakeup so the signal below belongs to this resize.
         ProcessRenderTextures();
-        while (RenderTextures.Signal.WaitOne(0)) {
+        while (RenderTextures.Signal.WaitOne(0))
+        {
             // A create or destroy already woke the loop; the resize needs its own wakeup.
         }
 
         Exception? failure = null;
         using ManualResetEventSlim completed = new(false);
-        Thread tick = new(() => {
-            try {
+        Thread tick = new(() =>
+        {
+            try
+            {
                 target.Resize(width, height);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 failure = exception;
-            } finally {
-                try {
+            }
+            finally
+            {
+                try
+                {
                     completed.Set();
-                } catch (ObjectDisposedException) {
+                }
+                catch (ObjectDisposedException)
+                {
                     // A timeout on this thread disposes the event while a blocked resize is still unwinding.
                 }
             }
-        }) {
+        })
+        {
             IsBackground = true,
             Name = "RayBork.Test.RenderTextureResize",
         };
@@ -167,24 +188,31 @@ internal sealed class BackendTestHost : IDisposable {
 
         int signaled = WaitHandle.WaitAny(
             [RenderTextures.Signal, completed.WaitHandle],
-            SERVICE_TIMEOUT_MILLISECONDS);
-        if (signaled == WaitHandle.WaitTimeout) {
+            SERVICE_TIMEOUT_MILLISECONDS
+        );
+        if (signaled == WaitHandle.WaitTimeout)
+        {
             throw new TimeoutException(
                 $"The resize of render texture {target.TargetId} neither queued nor completed within "
-                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms.");
+                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms."
+            );
         }
 
-        if (signaled == 0) {
+        if (signaled == 0)
+        {
             ProcessRenderTextures();
         }
 
-        if (!tick.Join(SERVICE_TIMEOUT_MILLISECONDS)) {
+        if (!tick.Join(SERVICE_TIMEOUT_MILLISECONDS))
+        {
             throw new TimeoutException(
                 $"The blocking resize of render texture {target.TargetId} did not return within "
-                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms.");
+                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms."
+            );
         }
 
-        if (failure is not null) {
+        if (failure is not null)
+        {
             ExceptionDispatchInfo.Capture(failure).Throw();
         }
     }
@@ -210,7 +238,8 @@ internal sealed class BackendTestHost : IDisposable {
     /// state, unless the test supplied an HDR override. Tests that resize the window call
     /// <see cref="SyncWithWindow"/> after the platform applied the change.
     /// </remarks>
-    internal WindowSurfaceState State {
+    internal WindowSurfaceState State
+    {
         get => _state;
         set => _state = value;
     }
@@ -228,8 +257,20 @@ internal sealed class BackendTestHost : IDisposable {
         int sampleCount = 4,
         PresentMode presentMode = PresentMode.Mailbox,
         WindowHdrState? hdr = null,
-        TonemappingMode tonemapping = TonemappingMode.AgX) {
-        if (!TryCreate(out BackendTestHost? host, out string skipReason, sampleCount, presentMode, hdr, tonemapping)) {
+        TonemappingMode tonemapping = TonemappingMode.AgX
+    )
+    {
+        if (
+            !TryCreate(
+                out BackendTestHost? host,
+                out string skipReason,
+                sampleCount,
+                presentMode,
+                hdr,
+                tonemapping
+            )
+        )
+        {
             Assert.Skip(skipReason);
         }
 
@@ -252,21 +293,35 @@ internal sealed class BackendTestHost : IDisposable {
         int sampleCount = 4,
         PresentMode presentMode = PresentMode.Mailbox,
         WindowHdrState? hdr = null,
-        TonemappingMode tonemapping = TonemappingMode.AgX) {
+        TonemappingMode tonemapping = TonemappingMode.AgX
+    )
+    {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
+        if (
+            !SdlTestHost.TryCreateVulkan(
+                out SdlTestHost? sdlHost,
+                out skipReason,
+                minimalTestMode: true
+            )
+        )
+        {
             return false;
         }
 
         BackendTestHost? candidate = null;
         bool succeeded = false;
-        try {
+        try
+        {
             IReadOnlyList<string> extensions;
-            try {
+            try
+            {
                 extensions = sdlHost!.Platform.GetVulkanInstanceExtensions();
-            } catch (PlatformException exception) {
-                skipReason = $"SDL cannot provide the Vulkan instance extensions: {exception.Message}";
+            }
+            catch (PlatformException exception)
+            {
+                skipReason =
+                    $"SDL cannot provide the Vulkan instance extensions: {exception.Message}";
                 return false;
             }
 
@@ -275,12 +330,16 @@ internal sealed class BackendTestHost : IDisposable {
                 sdlHost.Platform.Window.RenderHeight,
                 sdlHost.Platform.Window.IsMinimized,
                 sdlHost.Platform.Window.IsFocused,
-                hdr ?? sdlHost.Platform.WindowHdrState);
+                hdr ?? sdlHost.Platform.WindowHdrState
+            );
             RenderSettings settings = CreateSettings(sampleCount, presentMode, tonemapping);
             candidate = new BackendTestHost(sdlHost, settings, extensions, initialState);
-            try {
+            try
+            {
                 candidate.Initialize();
-            } catch (GraphicsException exception) when (IsEnvironmentalFailure(exception)) {
+            }
+            catch (GraphicsException exception) when (IsEnvironmentalFailure(exception))
+            {
                 skipReason = exception.Message;
                 return false;
             }
@@ -289,11 +348,17 @@ internal sealed class BackendTestHost : IDisposable {
             candidate = null;
             succeeded = true;
             return true;
-        } finally {
-            if (!succeeded) {
-                if (candidate is not null) {
+        }
+        finally
+        {
+            if (!succeeded)
+            {
+                if (candidate is not null)
+                {
                     candidate.Dispose();
-                } else {
+                }
+                else
+                {
                     sdlHost?.Dispose();
                 }
             }
@@ -306,8 +371,10 @@ internal sealed class BackendTestHost : IDisposable {
     /// <remarks>
     /// The HDR state is left unchanged so a test can hold an HDR override while the window resizes.
     /// </remarks>
-    internal void SyncWithWindow() {
-        _state = _state with {
+    internal void SyncWithWindow()
+    {
+        _state = _state with
+        {
             RenderWidth = Platform.Window.RenderWidth,
             RenderHeight = Platform.Window.RenderHeight,
             IsMinimized = Platform.Window.IsMinimized,
@@ -316,8 +383,10 @@ internal sealed class BackendTestHost : IDisposable {
     }
 
     /// <inheritdoc />
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -329,8 +398,10 @@ internal sealed class BackendTestHost : IDisposable {
         _sdlHost.Dispose();
     }
 
-    private void Initialize() {
-        RendererBackendOptions options = new() {
+    private void Initialize()
+    {
+        RendererBackendOptions options = new()
+        {
             Settings = _settings,
             InstanceExtensions = _instanceExtensions,
             SurfaceProvider = _surfaceProvider,
@@ -346,8 +417,11 @@ internal sealed class BackendTestHost : IDisposable {
     private static RenderSettings CreateSettings(
         int sampleCount,
         PresentMode presentMode,
-        TonemappingMode tonemapping) {
-        return new RenderSettings {
+        TonemappingMode tonemapping
+    )
+    {
+        return new RenderSettings
+        {
             PresentMode = presentMode,
             SampleCount = sampleCount,
             Tonemapping = tonemapping,
@@ -357,8 +431,18 @@ internal sealed class BackendTestHost : IDisposable {
     }
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>
-        exception.InnerException is DllNotFoundException or SymbolLoadingException or TypeInitializationException or PlatformException
-        || exception.Message.StartsWith(VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX, StringComparison.Ordinal)
-        || exception.Message.StartsWith(VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX, StringComparison.Ordinal)
+        exception.InnerException
+            is DllNotFoundException
+                or SymbolLoadingException
+                or TypeInitializationException
+                or PlatformException
+        || exception.Message.StartsWith(
+            VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX,
+            StringComparison.Ordinal
+        )
+        || exception.Message.StartsWith(
+            VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX,
+            StringComparison.Ordinal
+        )
         || (exception.InnerException is GraphicsException inner && IsEnvironmentalFailure(inner));
 }

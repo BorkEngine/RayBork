@@ -2,10 +2,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class InputSnapshotTests {
+public sealed class InputSnapshotTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SnapshotIsNotChangedByLaterEvents() {
+    public void SnapshotIsNotChangedByLaterEvents()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleKeyDown(Key.Q, repeat: false);
         state.HandleMouseButton(MouseButton.Left, down: true);
@@ -25,7 +27,8 @@ public sealed class InputSnapshotTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptySnapshotReportsNeutralValues() {
+    public void EmptySnapshotReportsNeutralValues()
+    {
         InputState state = new(new TestGamepadVibrationSink());
 
         InputSnapshot snapshot = state.Capture();
@@ -43,7 +46,8 @@ public sealed class InputSnapshotTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GamepadListIsFixedForTheSnapshot() {
+    public void GamepadListIsFixedForTheSnapshot()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         bool[] buttons = new bool[InputMappings.GAMEPAD_BUTTON_COUNT];
         float[] axes = new float[InputMappings.GAMEPAD_AXIS_SLOT_COUNT];

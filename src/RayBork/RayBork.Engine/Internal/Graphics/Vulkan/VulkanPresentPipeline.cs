@@ -14,7 +14,8 @@ namespace RayBork.Internal;
 /// order; <c>Present.frag.glsl</c> declares the same block.
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
-internal struct PresentPushConstants {
+internal struct PresentPushConstants
+{
     /// <summary>The exposure multiplier, computed on the CPU as <c>exp2(exposureEv)</c>.</summary>
     public float ExposureMultiplier;
 
@@ -67,7 +68,8 @@ internal struct PresentPushConstants {
 /// disposing. Dispose is idempotent.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanPresentPipeline : IDisposable {
+internal sealed unsafe class VulkanPresentPipeline : IDisposable
+{
     private const uint SUBPASS_EXTERNAL = uint.MaxValue;
     private const uint PUSH_CONSTANT_OFFSET = 0;
 
@@ -86,7 +88,8 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
     private Extent2D _extent;
     private bool _disposed;
 
-    private VulkanPresentPipeline(Vk vulkan, Device device, Extent2D extent, Format format) {
+    private VulkanPresentPipeline(Vk vulkan, Device device, Extent2D extent, Format format)
+    {
         _vulkan = vulkan;
         _device = device;
         _extent = extent;
@@ -119,21 +122,35 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
         VulkanDevice device,
         Extent2D extent,
         Format swapchainFormat,
-        ImageView sceneColorView) {
+        ImageView sceneColorView
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
-        if (extent.Width == 0 || extent.Height == 0) {
-            throw new ArgumentOutOfRangeException(nameof(extent), extent, "The present extent must be positive.");
+        if (extent.Width == 0 || extent.Height == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(extent),
+                extent,
+                "The present extent must be positive."
+            );
         }
 
-        if (sceneColorView.Handle == 0) {
-            throw new ArgumentException("The scene color view must not be the default handle.", nameof(sceneColorView));
+        if (sceneColorView.Handle == 0)
+        {
+            throw new ArgumentException(
+                "The scene color view must not be the default handle.",
+                nameof(sceneColorView)
+            );
         }
 
         VulkanPresentPipeline pipeline = new(device.Vulkan, device.Device, extent, swapchainFormat);
-        try {
+        try
+        {
             pipeline.CreateResources(sceneColorView);
             return pipeline;
-        } catch {
+        }
+        catch
+        {
             pipeline.Dispose();
             throw;
         }
@@ -146,18 +163,25 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
     /// The caller must ensure the descriptor set is not in use, which a device wait-idle provides.
     /// </remarks>
     /// <param name="sceneColorView">The resolved scene color view the fragment shader samples.</param>
-    internal void WriteDescriptor(ImageView sceneColorView) {
+    internal void WriteDescriptor(ImageView sceneColorView)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (sceneColorView.Handle == 0) {
-            throw new ArgumentException("The scene color view must not be the default handle.", nameof(sceneColorView));
+        if (sceneColorView.Handle == 0)
+        {
+            throw new ArgumentException(
+                "The scene color view must not be the default handle.",
+                nameof(sceneColorView)
+            );
         }
 
-        DescriptorImageInfo imageInfo = new() {
+        DescriptorImageInfo imageInfo = new()
+        {
             Sampler = _sampler,
             ImageView = sceneColorView,
             ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
         };
-        WriteDescriptorSet write = new() {
+        WriteDescriptorSet write = new()
+        {
             SType = StructureType.WriteDescriptorSet,
             DstSet = _descriptorSet,
             DstBinding = 0,
@@ -178,21 +202,34 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
     /// </remarks>
     /// <param name="extent">The new swapchain extent.</param>
     /// <param name="swapchainImageViews">The swapchain image views, in image index order.</param>
-    internal void RecreateFramebuffers(Extent2D extent, IReadOnlyList<ImageView> swapchainImageViews) {
+    internal void RecreateFramebuffers(
+        Extent2D extent,
+        IReadOnlyList<ImageView> swapchainImageViews
+    )
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(swapchainImageViews);
-        if (extent.Width == 0 || extent.Height == 0) {
-            throw new ArgumentOutOfRangeException(nameof(extent), extent, "The present extent must be positive.");
+        if (extent.Width == 0 || extent.Height == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(extent),
+                extent,
+                "The present extent must be positive."
+            );
         }
 
         DestroyFramebuffers();
         _extent = extent;
         _framebuffers = new Framebuffer[swapchainImageViews.Count];
-        try {
-            for (int index = 0; index < swapchainImageViews.Count; index++) {
+        try
+        {
+            for (int index = 0; index < swapchainImageViews.Count; index++)
+            {
                 _framebuffers[index] = CreateFramebuffer(swapchainImageViews[index]);
             }
-        } catch {
+        }
+        catch
+        {
             DestroyFramebuffers();
             throw;
         }
@@ -216,16 +253,21 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
         Vk vulkan,
         CommandBuffer commandBuffer,
         uint imageIndex,
-        PresentPushConstants constants) {
+        PresentPushConstants constants
+    )
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (imageIndex >= (uint)_framebuffers.Length) {
+        if (imageIndex >= (uint)_framebuffers.Length)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(imageIndex),
                 imageIndex,
-                "The present pipeline has no framebuffer for the swapchain image.");
+                "The present pipeline has no framebuffer for the swapchain image."
+            );
         }
 
-        Viewport viewport = new() {
+        Viewport viewport = new()
+        {
             X = 0f,
             Y = 0f,
             Width = _extent.Width,
@@ -233,11 +275,13 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
             MinDepth = VulkanDepthState.MIN_DEPTH,
             MaxDepth = VulkanDepthState.MAX_DEPTH,
         };
-        Rect2D scissor = new() {
+        Rect2D scissor = new()
+        {
             Offset = new Offset2D { X = 0, Y = 0 },
             Extent = _extent,
         };
-        RenderPassBeginInfo beginInfo = new() {
+        RenderPassBeginInfo beginInfo = new()
+        {
             SType = StructureType.RenderPassBeginInfo,
             RenderPass = _renderPass,
             Framebuffer = _framebuffers[imageIndex],
@@ -258,14 +302,16 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
             1,
             &descriptorSet,
             0,
-            null);
+            null
+        );
         vulkan.CmdPushConstants(
             commandBuffer,
             _pipelineLayout,
             ShaderStageFlags.FragmentBit,
             PUSH_CONSTANT_OFFSET,
             (uint)sizeof(PresentPushConstants),
-            &constants);
+            &constants
+        );
         vulkan.CmdDraw(commandBuffer, 3, 1, 0, 0);
         vulkan.CmdEndRenderPass(commandBuffer);
     }
@@ -274,46 +320,55 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
     /// Destroys the framebuffers, pipeline, pipeline layout, descriptor pool and set layout, sampler,
     /// and render pass. The call is idempotent.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
         DestroyFramebuffers();
-        if (_pipeline.Handle != 0) {
+        if (_pipeline.Handle != 0)
+        {
             _vulkan.DestroyPipeline(_device, _pipeline, null);
             _pipeline = default;
         }
 
-        if (_pipelineLayout.Handle != 0) {
+        if (_pipelineLayout.Handle != 0)
+        {
             _vulkan.DestroyPipelineLayout(_device, _pipelineLayout, null);
             _pipelineLayout = default;
         }
 
-        if (_descriptorPool.Handle != 0) {
+        if (_descriptorPool.Handle != 0)
+        {
             _vulkan.DestroyDescriptorPool(_device, _descriptorPool, null);
             _descriptorPool = default;
             _descriptorSet = default;
         }
 
-        if (_descriptorSetLayout.Handle != 0) {
+        if (_descriptorSetLayout.Handle != 0)
+        {
             _vulkan.DestroyDescriptorSetLayout(_device, _descriptorSetLayout, null);
             _descriptorSetLayout = default;
         }
 
-        if (_sampler.Handle != 0) {
+        if (_sampler.Handle != 0)
+        {
             _vulkan.DestroySampler(_device, _sampler, null);
             _sampler = default;
         }
 
-        if (_renderPass.Handle != 0) {
+        if (_renderPass.Handle != 0)
+        {
             _vulkan.DestroyRenderPass(_device, _renderPass, null);
             _renderPass = default;
         }
     }
 
-    private void CreateResources(ImageView sceneColorView) {
+    private void CreateResources(ImageView sceneColorView)
+    {
         _descriptorSetLayout = CreateDescriptorSetLayout();
         _descriptorPool = CreateDescriptorPool();
         _descriptorSet = AllocateDescriptorSet();
@@ -324,55 +379,79 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
         _pipeline = CreatePipeline();
     }
 
-    private DescriptorSetLayout CreateDescriptorSetLayout() {
-        DescriptorSetLayoutBinding binding = new() {
+    private DescriptorSetLayout CreateDescriptorSetLayout()
+    {
+        DescriptorSetLayoutBinding binding = new()
+        {
             Binding = 0,
             DescriptorType = DescriptorType.CombinedImageSampler,
             DescriptorCount = 1,
             StageFlags = ShaderStageFlags.FragmentBit,
             PImmutableSamplers = null,
         };
-        DescriptorSetLayoutCreateInfo createInfo = new() {
+        DescriptorSetLayoutCreateInfo createInfo = new()
+        {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
             BindingCount = 1,
             PBindings = &binding,
         };
-        Result result = _vulkan.CreateDescriptorSetLayout(_device, &createInfo, null, out DescriptorSetLayout layout);
+        Result result = _vulkan.CreateDescriptorSetLayout(
+            _device,
+            &createInfo,
+            null,
+            out DescriptorSetLayout layout
+        );
         ThrowIfFailed(result, "vkCreateDescriptorSetLayout");
         return layout;
     }
 
-    private DescriptorPool CreateDescriptorPool() {
-        DescriptorPoolSize poolSize = new() {
+    private DescriptorPool CreateDescriptorPool()
+    {
+        DescriptorPoolSize poolSize = new()
+        {
             Type = DescriptorType.CombinedImageSampler,
             DescriptorCount = 1,
         };
-        DescriptorPoolCreateInfo createInfo = new() {
+        DescriptorPoolCreateInfo createInfo = new()
+        {
             SType = StructureType.DescriptorPoolCreateInfo,
             MaxSets = 1,
             PoolSizeCount = 1,
             PPoolSizes = &poolSize,
         };
-        Result result = _vulkan.CreateDescriptorPool(_device, &createInfo, null, out DescriptorPool pool);
+        Result result = _vulkan.CreateDescriptorPool(
+            _device,
+            &createInfo,
+            null,
+            out DescriptorPool pool
+        );
         ThrowIfFailed(result, "vkCreateDescriptorPool");
         return pool;
     }
 
-    private DescriptorSet AllocateDescriptorSet() {
+    private DescriptorSet AllocateDescriptorSet()
+    {
         DescriptorSetLayout layout = _descriptorSetLayout;
-        DescriptorSetAllocateInfo allocateInfo = new() {
+        DescriptorSetAllocateInfo allocateInfo = new()
+        {
             SType = StructureType.DescriptorSetAllocateInfo,
             DescriptorPool = _descriptorPool,
             DescriptorSetCount = 1,
             PSetLayouts = &layout,
         };
-        Result result = _vulkan.AllocateDescriptorSets(_device, &allocateInfo, out DescriptorSet descriptorSet);
+        Result result = _vulkan.AllocateDescriptorSets(
+            _device,
+            &allocateInfo,
+            out DescriptorSet descriptorSet
+        );
         ThrowIfFailed(result, "vkAllocateDescriptorSets");
         return descriptorSet;
     }
 
-    private Sampler CreateSampler() {
-        SamplerCreateInfo createInfo = new() {
+    private Sampler CreateSampler()
+    {
+        SamplerCreateInfo createInfo = new()
+        {
             SType = StructureType.SamplerCreateInfo,
             MagFilter = Filter.Linear,
             MinFilter = Filter.Linear,
@@ -395,27 +474,37 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
         return sampler;
     }
 
-    private PipelineLayout CreatePipelineLayout() {
+    private PipelineLayout CreatePipelineLayout()
+    {
         DescriptorSetLayout setLayout = _descriptorSetLayout;
-        PushConstantRange pushConstantRange = new() {
+        PushConstantRange pushConstantRange = new()
+        {
             StageFlags = ShaderStageFlags.FragmentBit,
             Offset = PUSH_CONSTANT_OFFSET,
             Size = (uint)sizeof(PresentPushConstants),
         };
-        PipelineLayoutCreateInfo createInfo = new() {
+        PipelineLayoutCreateInfo createInfo = new()
+        {
             SType = StructureType.PipelineLayoutCreateInfo,
             SetLayoutCount = 1,
             PSetLayouts = &setLayout,
             PushConstantRangeCount = 1,
             PPushConstantRanges = &pushConstantRange,
         };
-        Result result = _vulkan.CreatePipelineLayout(_device, &createInfo, null, out PipelineLayout layout);
+        Result result = _vulkan.CreatePipelineLayout(
+            _device,
+            &createInfo,
+            null,
+            out PipelineLayout layout
+        );
         ThrowIfFailed(result, "vkCreatePipelineLayout");
         return layout;
     }
 
-    private RenderPass CreateRenderPass() {
-        AttachmentDescription attachment = new() {
+    private RenderPass CreateRenderPass()
+    {
+        AttachmentDescription attachment = new()
+        {
             Format = _format,
             Samples = SampleCountFlags.Count1Bit,
             LoadOp = AttachmentLoadOp.DontCare,
@@ -425,15 +514,21 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
             InitialLayout = ImageLayout.Undefined,
             FinalLayout = ImageLayout.PresentSrcKhr,
         };
-        AttachmentReference colorReference = new() { Attachment = 0, Layout = ImageLayout.ColorAttachmentOptimal };
-        SubpassDescription subpass = new() {
+        AttachmentReference colorReference = new()
+        {
+            Attachment = 0,
+            Layout = ImageLayout.ColorAttachmentOptimal,
+        };
+        SubpassDescription subpass = new()
+        {
             PipelineBindPoint = PipelineBindPoint.Graphics,
             ColorAttachmentCount = 1,
             PColorAttachments = &colorReference,
             PResolveAttachments = null,
             PDepthStencilAttachment = null,
         };
-        SubpassDependency dependency = new() {
+        SubpassDependency dependency = new()
+        {
             SrcSubpass = SUBPASS_EXTERNAL,
             DstSubpass = 0,
             SrcStageMask = PipelineStageFlags.ColorAttachmentOutputBit,
@@ -442,7 +537,8 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
             DstAccessMask = AccessFlags.ColorAttachmentWriteBit,
             DependencyFlags = 0,
         };
-        RenderPassCreateInfo createInfo = new() {
+        RenderPassCreateInfo createInfo = new()
+        {
             SType = StructureType.RenderPassCreateInfo,
             AttachmentCount = 1,
             PAttachments = &attachment,
@@ -451,53 +547,73 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
             DependencyCount = 1,
             PDependencies = &dependency,
         };
-        Result result = _vulkan.CreateRenderPass(_device, &createInfo, null, out RenderPass renderPass);
+        Result result = _vulkan.CreateRenderPass(
+            _device,
+            &createInfo,
+            null,
+            out RenderPass renderPass
+        );
         ThrowIfFailed(result, "vkCreateRenderPass");
         return renderPass;
     }
 
-    private Pipeline CreatePipeline() {
-        byte[] vertexEntryPoint = Encoding.UTF8.GetBytes(ShaderAssets.PRESENT_VERTEX_ENTRY_POINT + "\0");
-        byte[] fragmentEntryPoint = Encoding.UTF8.GetBytes(ShaderAssets.PRESENT_FRAGMENT_ENTRY_POINT + "\0");
+    private Pipeline CreatePipeline()
+    {
+        byte[] vertexEntryPoint = Encoding.UTF8.GetBytes(
+            ShaderAssets.PRESENT_VERTEX_ENTRY_POINT + "\0"
+        );
+        byte[] fragmentEntryPoint = Encoding.UTF8.GetBytes(
+            ShaderAssets.PRESENT_FRAGMENT_ENTRY_POINT + "\0"
+        );
         ShaderModule vertexModule = CreateShaderModule(ShaderAssets.PresentVertex);
-        try {
+        try
+        {
             ShaderModule fragmentModule = CreateShaderModule(ShaderAssets.PresentFragment);
-            try {
+            try
+            {
                 fixed (byte* vertexName = vertexEntryPoint)
-                fixed (byte* fragmentName = fragmentEntryPoint) {
-                    PipelineShaderStageCreateInfo* stages = stackalloc PipelineShaderStageCreateInfo[2];
-                    stages[0] = new() {
+                fixed (byte* fragmentName = fragmentEntryPoint)
+                {
+                    PipelineShaderStageCreateInfo* stages =
+                        stackalloc PipelineShaderStageCreateInfo[2];
+                    stages[0] = new()
+                    {
                         SType = StructureType.PipelineShaderStageCreateInfo,
                         Stage = ShaderStageFlags.VertexBit,
                         Module = vertexModule,
                         PName = vertexName,
                     };
-                    stages[1] = new() {
+                    stages[1] = new()
+                    {
                         SType = StructureType.PipelineShaderStageCreateInfo,
                         Stage = ShaderStageFlags.FragmentBit,
                         Module = fragmentModule,
                         PName = fragmentName,
                     };
-                    PipelineVertexInputStateCreateInfo vertexInput = new() {
+                    PipelineVertexInputStateCreateInfo vertexInput = new()
+                    {
                         SType = StructureType.PipelineVertexInputStateCreateInfo,
                         VertexBindingDescriptionCount = 0,
                         PVertexBindingDescriptions = null,
                         VertexAttributeDescriptionCount = 0,
                         PVertexAttributeDescriptions = null,
                     };
-                    PipelineInputAssemblyStateCreateInfo inputAssembly = new() {
+                    PipelineInputAssemblyStateCreateInfo inputAssembly = new()
+                    {
                         SType = StructureType.PipelineInputAssemblyStateCreateInfo,
                         Topology = Silk.NET.Vulkan.PrimitiveTopology.TriangleList,
                         PrimitiveRestartEnable = false,
                     };
-                    PipelineViewportStateCreateInfo viewportState = new() {
+                    PipelineViewportStateCreateInfo viewportState = new()
+                    {
                         SType = StructureType.PipelineViewportStateCreateInfo,
                         ViewportCount = 1,
                         PViewports = null,
                         ScissorCount = 1,
                         PScissors = null,
                     };
-                    PipelineRasterizationStateCreateInfo rasterization = new() {
+                    PipelineRasterizationStateCreateInfo rasterization = new()
+                    {
                         SType = StructureType.PipelineRasterizationStateCreateInfo,
                         DepthClampEnable = false,
                         RasterizerDiscardEnable = false,
@@ -510,7 +626,8 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
                         DepthBiasSlopeFactor = 0f,
                         LineWidth = 1f,
                     };
-                    PipelineMultisampleStateCreateInfo multisample = new() {
+                    PipelineMultisampleStateCreateInfo multisample = new()
+                    {
                         SType = StructureType.PipelineMultisampleStateCreateInfo,
                         RasterizationSamples = SampleCountFlags.Count1Bit,
                         SampleShadingEnable = false,
@@ -519,7 +636,8 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
                         AlphaToCoverageEnable = false,
                         AlphaToOneEnable = false,
                     };
-                    PipelineColorBlendAttachmentState blendAttachment = new() {
+                    PipelineColorBlendAttachmentState blendAttachment = new()
+                    {
                         BlendEnable = false,
                         SrcColorBlendFactor = BlendFactor.One,
                         DstColorBlendFactor = BlendFactor.Zero,
@@ -527,12 +645,14 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
                         SrcAlphaBlendFactor = BlendFactor.One,
                         DstAlphaBlendFactor = BlendFactor.Zero,
                         AlphaBlendOp = BlendOp.Add,
-                        ColorWriteMask = ColorComponentFlags.RBit
+                        ColorWriteMask =
+                            ColorComponentFlags.RBit
                             | ColorComponentFlags.GBit
                             | ColorComponentFlags.BBit
                             | ColorComponentFlags.ABit,
                     };
-                    PipelineColorBlendStateCreateInfo colorBlend = new() {
+                    PipelineColorBlendStateCreateInfo colorBlend = new()
+                    {
                         SType = StructureType.PipelineColorBlendStateCreateInfo,
                         LogicOpEnable = false,
                         LogicOp = LogicOp.Copy,
@@ -542,12 +662,14 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
                     DynamicState* dynamicStates = stackalloc DynamicState[2];
                     dynamicStates[0] = DynamicState.Viewport;
                     dynamicStates[1] = DynamicState.Scissor;
-                    PipelineDynamicStateCreateInfo dynamicState = new() {
+                    PipelineDynamicStateCreateInfo dynamicState = new()
+                    {
                         SType = StructureType.PipelineDynamicStateCreateInfo,
                         DynamicStateCount = 2,
                         PDynamicStates = dynamicStates,
                     };
-                    GraphicsPipelineCreateInfo createInfo = new() {
+                    GraphicsPipelineCreateInfo createInfo = new()
+                    {
                         SType = StructureType.GraphicsPipelineCreateInfo,
                         StageCount = 2,
                         PStages = stages,
@@ -571,22 +693,30 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
                         1,
                         &createInfo,
                         null,
-                        out Pipeline pipeline);
+                        out Pipeline pipeline
+                    );
                     ThrowIfFailed(result, "vkCreateGraphicsPipelines");
                     return pipeline;
                 }
-            } finally {
+            }
+            finally
+            {
                 _vulkan.DestroyShaderModule(_device, fragmentModule, null);
             }
-        } finally {
+        }
+        finally
+        {
             _vulkan.DestroyShaderModule(_device, vertexModule, null);
         }
     }
 
-    private ShaderModule CreateShaderModule(ReadOnlySpan<byte> code) {
+    private ShaderModule CreateShaderModule(ReadOnlySpan<byte> code)
+    {
         ShaderModule module;
-        fixed (byte* codePointer = code) {
-            ShaderModuleCreateInfo createInfo = new() {
+        fixed (byte* codePointer = code)
+        {
+            ShaderModuleCreateInfo createInfo = new()
+            {
                 SType = StructureType.ShaderModuleCreateInfo,
                 CodeSize = (UIntPtr)(uint)code.Length,
                 PCode = (uint*)codePointer,
@@ -598,8 +728,10 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
         return module;
     }
 
-    private Framebuffer CreateFramebuffer(ImageView imageView) {
-        FramebufferCreateInfo createInfo = new() {
+    private Framebuffer CreateFramebuffer(ImageView imageView)
+    {
+        FramebufferCreateInfo createInfo = new()
+        {
             SType = StructureType.FramebufferCreateInfo,
             RenderPass = _renderPass,
             AttachmentCount = 1,
@@ -608,14 +740,22 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
             Height = _extent.Height,
             Layers = 1,
         };
-        Result result = _vulkan.CreateFramebuffer(_device, &createInfo, null, out Framebuffer framebuffer);
+        Result result = _vulkan.CreateFramebuffer(
+            _device,
+            &createInfo,
+            null,
+            out Framebuffer framebuffer
+        );
         ThrowIfFailed(result, "vkCreateFramebuffer");
         return framebuffer;
     }
 
-    private void DestroyFramebuffers() {
-        foreach (Framebuffer framebuffer in _framebuffers) {
-            if (framebuffer.Handle != 0) {
+    private void DestroyFramebuffers()
+    {
+        foreach (Framebuffer framebuffer in _framebuffers)
+        {
+            if (framebuffer.Handle != 0)
+            {
                 _vulkan.DestroyFramebuffer(_device, framebuffer, null);
             }
         }
@@ -623,14 +763,17 @@ internal sealed unsafe class VulkanPresentPipeline : IDisposable {
         _framebuffers = [];
     }
 
-    private static void ThrowIfFailed(Result result, string operation) {
-        if (result == Result.Success) {
+    private static void ThrowIfFailed(Result result, string operation)
+    {
+        if (result == Result.Success)
+        {
             return;
         }
 
         throw new GraphicsException(
             $"The Vulkan command {operation} failed with {result}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 }

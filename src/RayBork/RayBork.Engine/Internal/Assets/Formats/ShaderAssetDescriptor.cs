@@ -11,7 +11,8 @@ namespace RayBork.Internal;
 /// for. The frame and instance block layouts are documented in the API reference.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class ShaderAssetDescriptor {
+internal sealed partial class ShaderAssetDescriptor
+{
     /// <summary>Gets the shader ABI version the bake wrote the descriptor with.</summary>
     /// <remarks>
     /// The runtime accepts only <see cref="ShaderAbiNames.ABI_VERSION"/>. The member is optional so a

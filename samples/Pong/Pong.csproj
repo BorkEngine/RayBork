@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <PublishAot>true</PublishAot>
@@ -36,15 +35,22 @@
         solution build, where Pong.Assets bakes it beside this executable. A missing pack is an error
         with the build command instead of a published host that cannot start.
     -->
-    <Target Name="PongCopyPackToPublish"
-            AfterTargets="Publish"
-            Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'">
+    <Target
+        Name="PongCopyPackToPublish"
+        AfterTargets="Publish"
+        Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'"
+    >
         <PropertyGroup>
             <_PongSamplePackPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\$(PongPackFileName)</_PongSamplePackPath>
         </PropertyGroup>
-        <Error Condition="!Exists('$(_PongSamplePackPath)')"
-               Text="RayBork Pong sample: the baked pack '$(_PongSamplePackPath)' is missing. Build the Pong solution in Release first: dotnet build samples/Pong/Pong.slnx -c Release. Pong.Assets bakes $(PongPackFileName) beside the sample executable during that build." />
-        <Copy SourceFiles="$(_PongSamplePackPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+        <Error
+            Condition="!Exists('$(_PongSamplePackPath)')"
+            Text="RayBork Pong sample: the baked pack '$(_PongSamplePackPath)' is missing. Build the Pong solution in Release first: dotnet build samples/Pong/Pong.slnx -c Release. Pong.Assets bakes $(PongPackFileName) beside the sample executable during that build."
+        />
+        <Copy
+            SourceFiles="$(_PongSamplePackPath)"
+            DestinationFolder="$(PublishDir)"
+            SkipUnchangedFiles="true"
+        />
     </Target>
-
 </Project>

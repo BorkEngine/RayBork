@@ -10,7 +10,8 @@ namespace RayBork.Bake.Baking;
 /// Validates a builder-side <see cref="BakeProjectDefinition"/> into the immutable project the pipeline
 /// consumes.
 /// </summary>
-internal static class BakeProjectFactory {
+internal static class BakeProjectFactory
+{
     /// <summary>Validates a definition and creates the project.</summary>
     /// <param name="definition">The builder-side configuration.</param>
     /// <param name="projectRootOverride">The command-line project root, or <see langword="null"/>.</param>
@@ -21,30 +22,44 @@ internal static class BakeProjectFactory {
         BakeProjectDefinition definition,
         string? projectRootOverride,
         BakeDiagnostics diagnostics,
-        out BakeProject? project) {
+        out BakeProject? project
+    )
+    {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
         project = null;
-        foreach (BakeDiagnostic issue in definition.Issues) {
+        foreach (BakeDiagnostic issue in definition.Issues)
+        {
             diagnostics.Add(issue);
         }
 
-        if (!TryResolveProjectRoot(definition, projectRootOverride, diagnostics, out string projectRoot)
+        if (
+            !TryResolveProjectRoot(
+                definition,
+                projectRootOverride,
+                diagnostics,
+                out string projectRoot
+            )
             || !BakeProcessorRegistry.TryCreate(
                 definition.Processors,
                 diagnostics,
-                out BakeProcessorRegistry? processorRegistry)
-            || processorRegistry is null) {
+                out BakeProcessorRegistry? processorRegistry
+            )
+            || processorRegistry is null
+        )
+        {
             return false;
         }
 
-        if (definition.Packs.Count == 0) {
+        if (definition.Packs.Count == 0)
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.CONFIGURATION_INVALID,
                 "The bake configuration declares no asset pack; call WithPack(packPath, root) at "
-                    + "least once.");
+                    + "least once."
+            );
             return false;
         }
 
@@ -52,54 +67,77 @@ internal static class BakeProjectFactory {
         var packPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         bool valid = true;
 
-        for (int index = 0; index < definition.Packs.Count; index++) {
+        for (int index = 0; index < definition.Packs.Count; index++)
+        {
             BakePackDefinition configured = definition.Packs[index];
-            if (!BakePath.TryNormalizeRelative(configured.PackPath, out string packPath, out string? packReason)) {
+            if (
+                !BakePath.TryNormalizeRelative(
+                    configured.PackPath,
+                    out string packPath,
+                    out string? packReason
+                )
+            )
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.CONFIGURATION_INVALID,
                     $"The pack path '{configured.PackPath}' is invalid: {packReason}. A pack path "
                         + "must be relative to the output root and must not contain an empty, '.' or "
-                        + "'..' segment.");
+                        + "'..' segment."
+                );
                 valid = false;
                 continue;
             }
 
-            if (!packPaths.Add(packPath)) {
+            if (!packPaths.Add(packPath))
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.CONFIGURATION_INVALID,
-                    $"The pack path '{packPath}' is configured more than once.");
+                    $"The pack path '{packPath}' is configured more than once."
+                );
                 valid = false;
                 continue;
             }
 
-            if (!BakePath.TryNormalizeRelative(configured.Root, out string relativeRoot, out string? rootReason)) {
+            if (
+                !BakePath.TryNormalizeRelative(
+                    configured.Root,
+                    out string relativeRoot,
+                    out string? rootReason
+                )
+            )
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.CONFIGURATION_INVALID,
                     $"The asset root '{configured.Root}' of pack '{packPath}' is invalid: {rootReason}. "
                         + "A root must be relative to the project root and must not contain an empty, "
-                        + "'.' or '..' segment.");
+                        + "'.' or '..' segment."
+                );
                 valid = false;
                 continue;
             }
 
-            if (!BakePath.TryResolveUnderRoot(projectRoot, relativeRoot, out string root)) {
+            if (!BakePath.TryResolveUnderRoot(projectRoot, relativeRoot, out string root))
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.CONFIGURATION_INVALID,
-                    $"The asset root '{relativeRoot}' of pack '{packPath}' escapes the project root.");
+                    $"The asset root '{relativeRoot}' of pack '{packPath}' escapes the project root."
+                );
                 valid = false;
                 continue;
             }
 
-            if (!Directory.Exists(root)) {
+            if (!Directory.Exists(root))
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.CONFIGURATION_INVALID,
                     $"The asset root '{relativeRoot}' of pack '{packPath}' does not exist as a "
-                        + $"directory ('{root}').");
+                        + $"directory ('{root}')."
+                );
                 valid = false;
                 continue;
             }
@@ -107,7 +145,8 @@ internal static class BakeProjectFactory {
             packs.Add(new BakePack(index, root, relativeRoot, packPath));
         }
 
-        if (!valid || packs.Count != definition.Packs.Count) {
+        if (!valid || packs.Count != definition.Packs.Count)
+        {
             return false;
         }
 
@@ -120,7 +159,8 @@ internal static class BakeProjectFactory {
             definition.AssetTypes,
             processorRegistry.Processors,
             processorRegistry,
-            toolVersion);
+            toolVersion
+        );
         return !diagnostics.HasErrors;
     }
 
@@ -128,32 +168,39 @@ internal static class BakeProjectFactory {
         BakeProjectDefinition definition,
         string? projectRootOverride,
         BakeDiagnostics diagnostics,
-        out string projectRoot) {
+        out string projectRoot
+    )
+    {
         projectRoot = string.Empty;
-        string requested = !string.IsNullOrWhiteSpace(projectRootOverride)
-            ? projectRootOverride
-            : !string.IsNullOrWhiteSpace(definition.ProjectRoot)
-                ? definition.ProjectRoot
-                : Directory.GetCurrentDirectory();
+        string requested =
+            !string.IsNullOrWhiteSpace(projectRootOverride) ? projectRootOverride
+            : !string.IsNullOrWhiteSpace(definition.ProjectRoot) ? definition.ProjectRoot
+            : Directory.GetCurrentDirectory();
 
-        try {
+        try
+        {
             projectRoot = Path.GetFullPath(requested);
-        } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-            or PathTooLongException) {
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.CONFIGURATION_INVALID,
-                $"The project root '{requested}' is not a valid path: {exception.Message}");
+                $"The project root '{requested}' is not a valid path: {exception.Message}"
+            );
             return false;
         }
 
-        if (!Directory.Exists(projectRoot)) {
+        if (!Directory.Exists(projectRoot))
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.CONFIGURATION_INVALID,
                 $"The project root '{projectRoot}' does not exist as a directory. Pass "
                     + "--project-root or call WithProjectRoot().",
-                projectRoot);
+                projectRoot
+            );
             return false;
         }
 

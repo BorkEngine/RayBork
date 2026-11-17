@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <!-- The builder uses WithProjectRoot("."), so a direct `dotnet run` must start in this
@@ -24,5 +23,4 @@
          build invokes RayBorkCopyShadercNative explicitly after Build, because an AfterTargets hook
          is not reliable when Build is driven by another project's MSBuild task. -->
     <Import Project="..\..\..\build\RayBork.Shaderc.targets" />
-
 </Project>

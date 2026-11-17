@@ -11,10 +11,12 @@ namespace RayBork.Bake.Toml;
 /// component count and finiteness.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class TomlNumberOrArray {
+internal sealed partial class TomlNumberOrArray
+{
     /// <summary>Initializes a number list.</summary>
     /// <param name="values">The component values in source order.</param>
-    internal TomlNumberOrArray(IReadOnlyList<double> values) {
+    internal TomlNumberOrArray(IReadOnlyList<double> values)
+    {
         ArgumentNullException.ThrowIfNull(values);
         Values = values;
     }

@@ -21,7 +21,8 @@ namespace RayBork.Bake.Textures;
 /// bounds the Khronos Data Format specification uses. All integers are little-endian.
 /// </para>
 /// </remarks>
-internal static class Ktx2Writer {
+internal static class Ktx2Writer
+{
     private const int HEADER_SIZE = 80;
     private const int LEVEL_INDEX_ENTRY_SIZE = 24;
     private const int DFD_HEADER_SIZE = 4;
@@ -65,36 +66,45 @@ internal static class Ktx2Writer {
         TextureFormatInfo format,
         int width,
         int height,
-        IReadOnlyList<byte[]> levels) {
+        IReadOnlyList<byte[]> levels
+    )
+    {
         ArgumentNullException.ThrowIfNull(format);
         ArgumentNullException.ThrowIfNull(levels);
 
-        if (!TextureLimits.IsSupportedSize(width, height)) {
+        if (!TextureLimits.IsSupportedSize(width, height))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(width),
                 width,
                 $"The base dimensions must be positive and at most "
-                    + $"{TextureLimits.MAX_DIMENSION} pixels; got {width}x{height}.");
+                    + $"{TextureLimits.MAX_DIMENSION} pixels; got {width}x{height}."
+            );
         }
 
         int expectedLevelCount = TextureMipChain.LevelCount(width, height);
-        if (levels.Count != expectedLevelCount) {
+        if (levels.Count != expectedLevelCount)
+        {
             throw new InvalidOperationException(
                 $"The KTX2 payload requires {expectedLevelCount} mip levels for "
-                    + $"{width}x{height}; received {levels.Count}.");
+                    + $"{width}x{height}; received {levels.Count}."
+            );
         }
 
         var levelLengths = new int[expectedLevelCount];
-        for (int level = 0; level < expectedLevelCount; level++) {
+        for (int level = 0; level < expectedLevelCount; level++)
+        {
             byte[] data = levels[level]
                 ?? throw new ArgumentNullException(nameof(levels), "A mip level is null.");
             int levelWidth = TextureMipChain.LevelWidth(width, level);
             int levelHeight = TextureMipChain.LevelHeight(height, level);
             int expectedLength = format.GetLevelByteLength(levelWidth, levelHeight);
-            if (data.Length != expectedLength) {
+            if (data.Length != expectedLength)
+            {
                 throw new InvalidOperationException(
                     $"Mip level {level} of a {format.Format} texture is {data.Length} bytes; "
-                        + $"expected {expectedLength} for {levelWidth}x{levelHeight}.");
+                        + $"expected {expectedLength} for {levelWidth}x{levelHeight}."
+                );
             }
 
             levelLengths[level] = data.Length;
@@ -105,7 +115,8 @@ internal static class Ktx2Writer {
         int alignment = format.RequiredAlignment;
         var levelOffsets = new int[expectedLevelCount];
         int cursor = Align(dfdByteOffset + dfd.Length, alignment);
-        for (int level = expectedLevelCount - 1; level >= 0; level--) {
+        for (int level = expectedLevelCount - 1; level >= 0; level--)
+        {
             cursor = Align(cursor, alignment);
             levelOffsets[level] = cursor;
             cursor = checked(cursor + levelLengths[level]);
@@ -132,32 +143,39 @@ internal static class Ktx2Writer {
         writer.Write(0ul);
         writer.Write(0ul);
 
-        for (int level = 0; level < expectedLevelCount; level++) {
+        for (int level = 0; level < expectedLevelCount; level++)
+        {
             writer.Write((ulong)levelOffsets[level]);
             writer.Write((ulong)levelLengths[level]);
             writer.Write((ulong)levelLengths[level]);
         }
 
         writer.Write(dfd);
-        for (int level = expectedLevelCount - 1; level >= 0; level--) {
+        for (int level = expectedLevelCount - 1; level >= 0; level--)
+        {
             WritePadding(writer, alignment);
-            if (stream.Position != levelOffsets[level]) {
+            if (stream.Position != levelOffsets[level])
+            {
                 throw new InvalidOperationException(
-                    "The KTX2 level offset invariant was violated while writing the payload.");
+                    "The KTX2 level offset invariant was violated while writing the payload."
+                );
             }
 
             writer.Write(levels[level]);
         }
 
-        if (stream.Length != totalLength) {
+        if (stream.Length != totalLength)
+        {
             throw new InvalidOperationException(
-                "The KTX2 payload length invariant was violated while writing the payload.");
+                "The KTX2 payload length invariant was violated while writing the payload."
+            );
         }
 
         return stream.ToArray();
     }
 
-    private static byte[] BuildDfd(TextureFormatInfo format) {
+    private static byte[] BuildDfd(TextureFormatInfo format)
+    {
         int sampleCount = format.Samples.Count;
         int descriptorBlockSize = DFD_BASIC_BLOCK_SIZE + (DFD_SAMPLE_SIZE * sampleCount);
         int totalSize = DFD_HEADER_SIZE + descriptorBlockSize;
@@ -167,21 +185,27 @@ internal static class Ktx2Writer {
         BinaryPrimitives.WriteUInt32LittleEndian(dfd.AsSpan(4), 0u);
         BinaryPrimitives.WriteUInt32LittleEndian(
             dfd.AsSpan(8),
-            ((uint)descriptorBlockSize << 16) | DFD_VERSION_NUMBER);
+            ((uint)descriptorBlockSize << 16) | DFD_VERSION_NUMBER
+        );
         BinaryPrimitives.WriteUInt32LittleEndian(
             dfd.AsSpan(12),
-            (uint)((DFD_FLAGS_ALPHA_STRAIGHT << 24)
+            (uint)(
+                (DFD_FLAGS_ALPHA_STRAIGHT << 24)
                 | (format.TransferFunction << 16)
                 | (DFD_PRIMARIES_BT709 << 8)
-                | format.ColorModel));
+                | format.ColorModel
+            )
+        );
         BinaryPrimitives.WriteUInt32LittleEndian(
             dfd.AsSpan(16),
-            (uint)((format.BlockWidth - 1) | ((format.BlockHeight - 1) << 8)));
+            (uint)((format.BlockWidth - 1) | ((format.BlockHeight - 1) << 8))
+        );
         BinaryPrimitives.WriteUInt32LittleEndian(dfd.AsSpan(20), (uint)format.BytesPerBlock);
         BinaryPrimitives.WriteUInt32LittleEndian(dfd.AsSpan(24), 0u);
 
         int offset = DFD_HEADER_SIZE + DFD_BASIC_BLOCK_SIZE;
-        foreach (DfdSample sample in format.Samples) {
+        foreach (DfdSample sample in format.Samples)
+        {
             BinaryPrimitives.WriteUInt16LittleEndian(dfd.AsSpan(offset), sample.BitOffset);
             dfd[offset + 2] = (byte)(sample.BitLength - 1);
             dfd[offset + 3] = sample.ChannelType;
@@ -193,18 +217,21 @@ internal static class Ktx2Writer {
         return dfd;
     }
 
-    private static void WritePadding(BinaryWriter writer, int alignment) {
+    private static void WritePadding(BinaryWriter writer, int alignment)
+    {
         long position = writer.BaseStream.Position;
         long remainder = position % alignment;
-        if (remainder == 0) {
+        if (remainder == 0)
+        {
             return;
         }
 
-        for (long index = remainder; index < alignment; index++) {
+        for (long index = remainder; index < alignment; index++)
+        {
             writer.Write((byte)0);
         }
     }
 
-    private static int Align(int value, int alignment)
-        => checked(((value + alignment - 1) / alignment) * alignment);
+    private static int Align(int value, int alignment) =>
+        checked(((value + alignment - 1) / alignment) * alignment);
 }

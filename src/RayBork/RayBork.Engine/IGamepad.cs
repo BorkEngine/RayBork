@@ -7,7 +7,8 @@ namespace RayBork;
 /// Read gamepad state on the tick thread. RayBork applies no deadzone and no trigger curve; games
 /// choose their own.
 /// </remarks>
-public interface IGamepad {
+public interface IGamepad
+{
     /// <summary>
     /// Gets the position of this pad in <see cref="IInput.Gamepads"/> for the current tick. The value
     /// can change across a hotplug.

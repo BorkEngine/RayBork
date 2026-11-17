@@ -9,13 +9,16 @@ namespace RayBork.Tests.Fonts.Msdf;
 /// validation, the documented work limits, and a real glyph outline resolved from a synthetic TTF
 /// face.
 /// </summary>
-public sealed class MsdfGeneratorTests {
+public sealed class MsdfGeneratorTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheGenerationIsByteIdenticalAcrossCalls() {
+    public void TheGenerationIsByteIdenticalAcrossCalls()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(100, 100, 900, 900),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.Polygon(96, 500f, 500f, 400f);
 
         byte[] first = MsdfGenerator.Generate(outline, layout);
@@ -23,12 +26,14 @@ public sealed class MsdfGeneratorTests {
 
         Assert.True(
             first.AsSpan().SequenceEqual(second),
-            "Two generations of the same outline produced different bytes.");
+            "Two generations of the same outline produced different bytes."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnEmptyOutlineAndAnEmptyLayoutProduceAnEmptyArray() {
+    public void AnEmptyOutlineAndAnEmptyLayoutProduceAnEmptyArray()
+    {
         byte[] bitmap = MsdfGenerator.Generate(OutlinePath.Empty, MsdfGlyphLayout.Empty);
 
         Assert.Empty(bitmap);
@@ -36,10 +41,12 @@ public sealed class MsdfGeneratorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnEmptyOutlineWithANonEmptyLayoutProducesTheOutsideField() {
+    public void AnEmptyOutlineWithANonEmptyLayoutProducesTheOutsideField()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
 
         byte[] bitmap = MsdfGenerator.Generate(OutlinePath.Empty, layout);
 
@@ -49,10 +56,12 @@ public sealed class MsdfGeneratorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnOutlineWithoutEdgesProducesTheOutsideField() {
+    public void AnOutlineWithoutEdgesProducesTheOutsideField()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.ContourWithoutEdges(500f, 500f);
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
@@ -63,69 +72,109 @@ public sealed class MsdfGeneratorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidArgumentsAreRejected() {
+    public void InvalidArgumentsAreRejected()
+    {
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
 
-        Assert.Throws<ArgumentNullException>(
-            () => MsdfGenerator.Generate(null!, MsdfGlyphLayout.Empty));
+        Assert.Throws<ArgumentNullException>(() =>
+            MsdfGenerator.Generate(null!, MsdfGlyphLayout.Empty)
+        );
         Assert.Equal(
             "layout",
-            Assert.Throws<ArgumentException>(
-                () => MsdfGenerator.Generate(outline, MsdfGlyphLayout.Empty)).ParamName);
+            Assert
+                .Throws<ArgumentException>(() =>
+                    MsdfGenerator.Generate(outline, MsdfGlyphLayout.Empty)
+                )
+                .ParamName
+        );
         Assert.Equal(
             "layout",
-            Assert.Throws<ArgumentException>(
-                () => MsdfGenerator.Generate(
-                    outline,
-                    new MsdfGlyphLayout(4, 4, 0f, 4, 0f, 0f, 0f, 0f, 0f, 0f))).ParamName);
+            Assert
+                .Throws<ArgumentException>(() =>
+                    MsdfGenerator.Generate(
+                        outline,
+                        new MsdfGlyphLayout(4, 4, 0f, 4, 0f, 0f, 0f, 0f, 0f, 0f)
+                    )
+                )
+                .ParamName
+        );
         Assert.Equal(
             "layout",
-            Assert.Throws<ArgumentException>(
-                () => MsdfGenerator.Generate(
-                    outline,
-                    new MsdfGlyphLayout(4, 4, 1f, 0, 0f, 0f, 0f, 0f, 0f, 0f))).ParamName);
+            Assert
+                .Throws<ArgumentException>(() =>
+                    MsdfGenerator.Generate(
+                        outline,
+                        new MsdfGlyphLayout(4, 4, 1f, 0, 0f, 0f, 0f, 0f, 0f, 0f)
+                    )
+                )
+                .ParamName
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NegativeOrNonFiniteLayoutsAreRejected() {
+    public void NegativeOrNonFiniteLayoutsAreRejected()
+    {
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
 
-        AssertLayoutRejected(() => MsdfGenerator.Generate(
-            outline,
-            new MsdfGlyphLayout(-1, 4, 1f, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
-        AssertLayoutRejected(() => MsdfGenerator.Generate(
-            outline,
-            new MsdfGlyphLayout(4, -1, 1f, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
-        AssertLayoutRejected(() => MsdfGenerator.Generate(
-            outline,
-            new MsdfGlyphLayout(4, 4, float.PositiveInfinity, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
-        AssertLayoutRejected(() => MsdfGenerator.Generate(
-            outline,
-            new MsdfGlyphLayout(4, 4, float.NaN, 4, 0f, 0f, 0f, 0f, 0f, 0f)));
-        AssertLayoutRejected(() => MsdfGenerator.Generate(
-            outline,
-            new MsdfGlyphLayout(4, 4, 1f, 4, float.NaN, 0f, 0f, 0f, 0f, 0f)));
-        AssertLayoutRejected(() => MsdfGenerator.Generate(
-            outline,
-            new MsdfGlyphLayout(4, 4, 1f, 4, 0f, float.PositiveInfinity, 0f, 0f, 0f, 0f)));
+        AssertLayoutRejected(() =>
+            MsdfGenerator.Generate(
+                outline,
+                new MsdfGlyphLayout(-1, 4, 1f, 4, 0f, 0f, 0f, 0f, 0f, 0f)
+            )
+        );
+        AssertLayoutRejected(() =>
+            MsdfGenerator.Generate(
+                outline,
+                new MsdfGlyphLayout(4, -1, 1f, 4, 0f, 0f, 0f, 0f, 0f, 0f)
+            )
+        );
+        AssertLayoutRejected(() =>
+            MsdfGenerator.Generate(
+                outline,
+                new MsdfGlyphLayout(4, 4, float.PositiveInfinity, 4, 0f, 0f, 0f, 0f, 0f, 0f)
+            )
+        );
+        AssertLayoutRejected(() =>
+            MsdfGenerator.Generate(
+                outline,
+                new MsdfGlyphLayout(4, 4, float.NaN, 4, 0f, 0f, 0f, 0f, 0f, 0f)
+            )
+        );
+        AssertLayoutRejected(() =>
+            MsdfGenerator.Generate(
+                outline,
+                new MsdfGlyphLayout(4, 4, 1f, 4, float.NaN, 0f, 0f, 0f, 0f, 0f)
+            )
+        );
+        AssertLayoutRejected(() =>
+            MsdfGenerator.Generate(
+                outline,
+                new MsdfGlyphLayout(4, 4, 1f, 4, 0f, float.PositiveInfinity, 0f, 0f, 0f, 0f)
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ADegenerateSegmentContributesNoEdge() {
+    public void ADegenerateSegmentContributesNoEdge()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         var start = new Vector2(500f, 500f);
         OutlinePath outline = MsdfTestShapes.CreatePath(
             new OutlineContour(
                 start,
-                new OutlineSegment[] {
+                new OutlineSegment[]
+                {
                     OutlineSegment.Line(start),
                     OutlineSegment.Quadratic(start, start),
                     OutlineSegment.Cubic(start, start, start),
-                }));
+                }
+            )
+        );
 
         Assert.Equal(0, MsdfOutlineFlattener.CountEdges(outline, layout));
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
@@ -134,19 +183,24 @@ public sealed class MsdfGeneratorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AContourOfDegenerateSegmentsProducesTheOutsideField() {
+    public void AContourOfDegenerateSegmentsProducesTheOutsideField()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         var start = new Vector2(500f, 500f);
         OutlinePath outline = MsdfTestShapes.CreatePath(
             new OutlineContour(
                 start,
-                new OutlineSegment[] {
+                new OutlineSegment[]
+                {
                     OutlineSegment.Line(start),
                     OutlineSegment.Line(start),
                     OutlineSegment.Line(start),
-                }));
+                }
+            )
+        );
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
 
@@ -156,45 +210,57 @@ public sealed class MsdfGeneratorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ADegenerateContourDoesNotChangeAValidField() {
+    public void ADegenerateContourDoesNotChangeAValidField()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         var rectangle = new OutlineContour(
             new Vector2(100f, 100f),
-            new OutlineSegment[] {
+            new OutlineSegment[]
+            {
                 OutlineSegment.Line(new Vector2(900f, 100f)),
                 OutlineSegment.Line(new Vector2(900f, 900f)),
                 OutlineSegment.Line(new Vector2(100f, 900f)),
                 OutlineSegment.Line(new Vector2(100f, 100f)),
-            });
+            }
+        );
         var degenerate = new OutlineContour(
             new Vector2(500f, 500f),
-            new OutlineSegment[] { OutlineSegment.Line(new Vector2(500f, 500f)) });
+            new OutlineSegment[] { OutlineSegment.Line(new Vector2(500f, 500f)) }
+        );
 
         byte[] rectangleOnly = MsdfGenerator.Generate(MsdfTestShapes.CreatePath(rectangle), layout);
         byte[] withDegenerate = MsdfGenerator.Generate(
             MsdfTestShapes.CreatePath(rectangle, degenerate),
-            layout);
+            layout
+        );
 
         Assert.True(
             rectangleOnly.AsSpan().SequenceEqual(withDegenerate),
-            "A degenerate contour changed the generated field.");
+            "A degenerate contour changed the generated field."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ATwoEdgeContourProducesAField() {
+    public void ATwoEdgeContourProducesAField()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.CreatePath(
             new OutlineContour(
                 new Vector2(100f, 100f),
-                new OutlineSegment[] {
+                new OutlineSegment[]
+                {
                     OutlineSegment.Line(new Vector2(900f, 100f)),
                     OutlineSegment.Line(new Vector2(100f, 100f)),
-                }));
+                }
+            )
+        );
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
 
@@ -204,81 +270,96 @@ public sealed class MsdfGeneratorTests {
         MsdfTestField.AssertNotConstant(bitmap);
     }
 
-    private static void AssertLayoutRejected(Action generate) {
+    private static void AssertLayoutRejected(Action generate)
+    {
         ArgumentException exception = Assert.Throws<ArgumentException>(generate);
         Assert.Equal("layout", exception.ParamName);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnOversizedTextureIsRejectedBeforeItIsAllocated() {
+    public void AnOversizedTextureIsRejectedBeforeItIsAllocated()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
             unitsPerEm: 1000,
             pixelSize: 4096,
-            padding: 0);
+            padding: 0
+        );
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
 
-        MsdfLimitException exception = Assert.Throws<MsdfLimitException>(
-            () => MsdfGenerator.Generate(outline, layout));
+        MsdfLimitException exception = Assert.Throws<MsdfLimitException>(() =>
+            MsdfGenerator.Generate(outline, layout)
+        );
 
         Assert.Contains("texels", exception.Reason, StringComparison.Ordinal);
         Assert.Contains(
             MsdfGenerator.MAX_TEXELS.ToString(CultureInfo.InvariantCulture),
             exception.Reason,
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnOutlineAboveTheEdgeLimitIsRejected() {
+    public void AnOutlineAboveTheEdgeLimitIsRejected()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlineSegment[] segments = new OutlineSegment[300];
-        for (int index = 0; index < segments.Length; index++) {
+        for (int index = 0; index < segments.Length; index++)
+        {
             segments[index] = OutlineSegment.Cubic(
                 new Vector2(300_000f, 0f),
                 new Vector2(0f, 300_000f),
-                Vector2.Zero);
+                Vector2.Zero
+            );
         }
 
-        OutlinePath outline = MsdfTestShapes.CreatePath(
-            new OutlineContour(Vector2.Zero, segments));
+        OutlinePath outline = MsdfTestShapes.CreatePath(new OutlineContour(Vector2.Zero, segments));
 
-        MsdfLimitException exception = Assert.Throws<MsdfLimitException>(
-            () => MsdfGenerator.Generate(outline, layout));
+        MsdfLimitException exception = Assert.Throws<MsdfLimitException>(() =>
+            MsdfGenerator.Generate(outline, layout)
+        );
 
         Assert.Contains("edges", exception.Reason, StringComparison.Ordinal);
         Assert.Contains(
             MsdfGenerator.MAX_FLATTENED_EDGES.ToString(CultureInfo.InvariantCulture),
             exception.Reason,
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnOutlineAboveTheEdgeTexelPairLimitIsRejected() {
+    public void AnOutlineAboveTheEdgeTexelPairLimitIsRejected()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
             unitsPerEm: 1000,
             pixelSize: 64,
-            padding: 0);
+            padding: 0
+        );
         OutlinePath outline = MsdfTestShapes.Polygon(2100, 500f, 500f, 400f);
 
-        MsdfLimitException exception = Assert.Throws<MsdfLimitException>(
-            () => MsdfGenerator.Generate(outline, layout));
+        MsdfLimitException exception = Assert.Throws<MsdfLimitException>(() =>
+            MsdfGenerator.Generate(outline, layout)
+        );
 
         Assert.Contains("edge-texel pairs", exception.Reason, StringComparison.Ordinal);
         Assert.Contains(
             MsdfGenerator.MAX_EDGE_TEXEL_PAIRS.ToString(CultureInfo.InvariantCulture),
             exception.Reason,
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ARealGlyphOutlineFromASyntheticFaceGeneratesAValidField() {
+    public void ARealGlyphOutlineFromASyntheticFaceGeneratesAValidField()
+    {
         var builder = SyntheticFontBuilder.Create();
         int glyph = builder.AddSimple(
             600,
@@ -290,7 +371,8 @@ public sealed class MsdfGeneratorTests {
             new SyntheticPoint(350, 500),
             new SyntheticPoint(150, 500),
             new SyntheticPoint(0, 350),
-            new SyntheticPoint(0, 150));
+            new SyntheticPoint(0, 150)
+        );
         SfntFace face = SfntFace.Parse(builder.WithCmap(4, (0x41, glyph)).Build());
         FontGlyph resolved = face.GetGlyph(glyph);
 
@@ -313,7 +395,8 @@ public sealed class MsdfGeneratorTests {
         Assert.Equal(8, segments.Length);
         Vector2[] pixelVertices = new Vector2[8];
         pixelVertices[0] = layout.ToPixel(contour.Start);
-        for (int index = 1; index < pixelVertices.Length; index++) {
+        for (int index = 1; index < pixelVertices.Length; index++)
+        {
             Assert.Equal(OutlineSegmentKind.Line, segments[index - 1].Kind);
             pixelVertices[index] = layout.ToPixel(segments[index - 1].End);
         }

@@ -15,7 +15,8 @@ namespace RayBork.Internal;
 /// <see cref="DestroySurface"/> before it destroys the Vulkan instance that created the surface.
 /// </para>
 /// </remarks>
-internal interface IRendererSurfaceProvider {
+internal interface IRendererSurfaceProvider
+{
     /// <summary>
     /// Creates the native Vulkan surface for the platform window.
     /// </summary>

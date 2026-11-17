@@ -8,14 +8,16 @@ namespace RayBork.Tests.Fonts.Glyph;
 /// <see cref="Dispose"/> follows the required shutdown order: stop the service, then dispose every
 /// pipeline. A test may dispose a pipeline early; the second dispose is a no-op.
 /// </summary>
-internal sealed class GlyphPipelineTestHarness : IDisposable {
+internal sealed class GlyphPipelineTestHarness : IDisposable
+{
     /// <summary>The timeout that guards every wait on the font thread.</summary>
     internal static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(30);
 
     private readonly List<FontGlyphPipeline> _pipelines = [];
 
     /// <summary>Starts a service over a fresh logger factory and fake texture factory.</summary>
-    internal GlyphPipelineTestHarness() {
+    internal GlyphPipelineTestHarness()
+    {
         LoggerFactory = new TrackingLoggerFactory();
         Factory = new FakeGlyphTextureFactory();
         Service = new GlyphGenerationService(LoggerFactory);
@@ -39,7 +41,9 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
     internal FontGlyphPipeline CreatePipeline(
         SfntFace face,
         FontGlyphSettings? settings = null,
-        int? textureBudget = null) {
+        int? textureBudget = null
+    )
+    {
         ArgumentNullException.ThrowIfNull(face);
 
         FontGlyphSettings resolved = settings ?? FontGlyphSettings.CreateDefault(face.UnitsPerEm);
@@ -62,12 +66,15 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
     internal static async Task RequestAndWaitAsync(
         FontGlyphPipeline pipeline,
         int glyphId,
-        long frameIndex) {
+        long frameIndex
+    )
+    {
         pipeline.BeginFrame(frameIndex);
         FrameAssetRetention probe = new();
         Assert.Null(pipeline.Acquire(glyphId, probe));
         probe.Release();
-        await pipeline.WhenGlyphSettledAsync(glyphId)
+        await pipeline
+            .WhenGlyphSettledAsync(glyphId)
             .WaitAsync(TIMEOUT, TestContext.Current.CancellationToken);
     }
 
@@ -83,18 +90,25 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
     internal static async Task<Texture> GenerateAsync(
         FontGlyphPipeline pipeline,
         int glyphId,
-        long frameIndex) {
+        long frameIndex
+    )
+    {
         pipeline.BeginFrame(frameIndex);
         FrameAssetRetention probe = new();
         Texture? texture;
-        try {
+        try
+        {
             texture = pipeline.Acquire(glyphId, probe);
-        } finally {
+        }
+        finally
+        {
             probe.Release();
         }
 
-        if (texture is null) {
-            await pipeline.WhenGlyphSettledAsync(glyphId)
+        if (texture is null)
+        {
+            await pipeline
+                .WhenGlyphSettledAsync(glyphId)
                 .WaitAsync(TIMEOUT, TestContext.Current.CancellationToken);
             texture = AcquireOnce(pipeline, glyphId);
         }
@@ -107,11 +121,15 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
     /// <param name="pipeline">The pipeline.</param>
     /// <param name="glyphId">The glyph id.</param>
     /// <returns>The cached texture, or <see langword="null"/> on a miss.</returns>
-    internal static Texture? AcquireOnce(FontGlyphPipeline pipeline, int glyphId) {
+    internal static Texture? AcquireOnce(FontGlyphPipeline pipeline, int glyphId)
+    {
         FrameAssetRetention retention = new();
-        try {
+        try
+        {
             return pipeline.Acquire(glyphId, retention);
-        } finally {
+        }
+        finally
+        {
             retention.Release();
         }
     }
@@ -121,7 +139,8 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
     /// hanging it.
     /// </summary>
     /// <param name="service">The service to stop.</param>
-    internal static void StopService(GlyphGenerationService service) {
+    internal static void StopService(GlyphGenerationService service)
+    {
         ArgumentNullException.ThrowIfNull(service);
 
         Task.Run(service.Stop, TestContext.Current.CancellationToken)
@@ -131,9 +150,11 @@ internal sealed class GlyphPipelineTestHarness : IDisposable {
     }
 
     /// <inheritdoc/>
-    public void Dispose() {
+    public void Dispose()
+    {
         StopService(Service);
-        foreach (FontGlyphPipeline pipeline in _pipelines) {
+        foreach (FontGlyphPipeline pipeline in _pipelines)
+        {
             pipeline.Dispose();
         }
 

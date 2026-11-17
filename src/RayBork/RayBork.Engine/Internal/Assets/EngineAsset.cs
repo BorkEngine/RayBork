@@ -30,7 +30,8 @@ namespace RayBork.Internal;
 /// waiter or a public <c>Dispose</c> never blocks the render thread on asset bookkeeping.
 /// </para>
 /// </remarks>
-internal sealed class EngineAsset : ITextureOwner {
+internal sealed class EngineAsset : ITextureOwner
+{
     private readonly Lock _gate = new();
     private readonly GpuAssetResource? _resource;
     private readonly Action<GpuAssetResource> _queueDestruction;
@@ -69,7 +70,9 @@ internal sealed class EngineAsset : ITextureOwner {
         GpuAssetResource? resource,
         Action<GpuAssetResource> queueDestruction,
         Action onOwnersReleased,
-        Action? release = null) {
+        Action? release = null
+    )
+    {
         ArgumentNullException.ThrowIfNull(publicPath);
         ArgumentNullException.ThrowIfNull(queueDestruction);
         ArgumentNullException.ThrowIfNull(onOwnersReleased);
@@ -113,9 +116,12 @@ internal sealed class EngineAsset : ITextureOwner {
     /// <summary>
     /// Gets whether the asset was disposed. It stays readable after disposal.
     /// </summary>
-    internal bool IsDisposed {
-        get {
-            lock (_gate) {
+    internal bool IsDisposed
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _disposed;
             }
         }
@@ -125,8 +131,10 @@ internal sealed class EngineAsset : ITextureOwner {
     /// Adds one owner reference for a successful load.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The asset is already disposed.</exception>
-    internal void AddOwnerReference() {
-        lock (_gate) {
+    internal void AddOwnerReference()
+    {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             _ownerCount++;
@@ -139,26 +147,31 @@ internal sealed class EngineAsset : ITextureOwner {
     /// hold is gone.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The owner count is already zero.</exception>
-    internal void ReleaseOwnerReference() {
+    internal void ReleaseOwnerReference()
+    {
         bool notifyOwnersReleased;
         bool destroy;
-        lock (_gate) {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed || _ownerCount <= 0, this);
 
             _ownerCount--;
             notifyOwnersReleased = _ownerCount == 0;
-            if (notifyOwnersReleased) {
+            if (notifyOwnersReleased)
+            {
                 _disposed = true;
             }
 
             destroy = notifyOwnersReleased && TryClaimDestructionLocked();
         }
 
-        if (notifyOwnersReleased) {
+        if (notifyOwnersReleased)
+        {
             NotifyOwnersReleased();
         }
 
-        if (destroy) {
+        if (destroy)
+        {
             Destroy();
         }
     }
@@ -167,10 +180,13 @@ internal sealed class EngineAsset : ITextureOwner {
     /// Disposes the asset without requiring a matching owner release. The catalog uses it during
     /// shutdown so a game that leaked a reference cannot keep a GPU resource alive past the app.
     /// </summary>
-    internal void ForceDispose() {
+    internal void ForceDispose()
+    {
         bool destroy;
-        lock (_gate) {
-            if (_disposed) {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return;
             }
 
@@ -181,15 +197,18 @@ internal sealed class EngineAsset : ITextureOwner {
 
         NotifyOwnersReleased();
 
-        if (destroy) {
+        if (destroy)
+        {
             Destroy();
         }
     }
 
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">The asset is already disposed.</exception>
-    public void AddFrameHold() {
-        lock (_gate) {
+    public void AddFrameHold()
+    {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             _frameHoldCount++;
@@ -198,25 +217,32 @@ internal sealed class EngineAsset : ITextureOwner {
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">The frame-hold count is already zero.</exception>
-    public void ReleaseFrameHold() {
+    public void ReleaseFrameHold()
+    {
         bool destroy;
-        lock (_gate) {
-            if (_frameHoldCount <= 0) {
+        lock (_gate)
+        {
+            if (_frameHoldCount <= 0)
+            {
                 throw new InvalidOperationException(
-                    "The engine asset frame-hold count is already zero; every frame hold is released exactly once.");
+                    "The engine asset frame-hold count is already zero; every frame hold is released exactly once."
+                );
             }
 
             _frameHoldCount--;
             destroy = TryClaimDestructionLocked();
         }
 
-        if (destroy) {
+        if (destroy)
+        {
             Destroy();
         }
     }
 
-    private bool TryClaimDestructionLocked() {
-        if (!_disposed || _ownerCount != 0 || _frameHoldCount != 0 || _destructionQueued) {
+    private bool TryClaimDestructionLocked()
+    {
+        if (!_disposed || _ownerCount != 0 || _frameHoldCount != 0 || _destructionQueued)
+        {
             return false;
         }
 
@@ -224,11 +250,16 @@ internal sealed class EngineAsset : ITextureOwner {
         return true;
     }
 
-    private void Destroy() {
-        try {
+    private void Destroy()
+    {
+        try
+        {
             _release?.Invoke();
-        } finally {
-            if (_resource is not null) {
+        }
+        finally
+        {
+            if (_resource is not null)
+            {
                 _queueDestruction(_resource);
             }
         }
@@ -237,11 +268,16 @@ internal sealed class EngineAsset : ITextureOwner {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The catalog cache-removal callback runs during teardown, when the entry may already be gone; it must not mask the GPU destruction that follows.")]
-    private void NotifyOwnersReleased() {
-        try {
+        Justification = "The catalog cache-removal callback runs during teardown, when the entry may already be gone; it must not mask the GPU destruction that follows."
+    )]
+    private void NotifyOwnersReleased()
+    {
+        try
+        {
             _onOwnersReleased();
-        } catch (Exception) {
+        }
+        catch (Exception)
+        {
             // The callback only removes a catalog cache entry. Shutdown may already have cleared it,
             // and a failure here must not leak the GPU resource.
         }

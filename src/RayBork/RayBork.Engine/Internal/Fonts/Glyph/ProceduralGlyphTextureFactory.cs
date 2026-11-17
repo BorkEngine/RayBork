@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// returned texture is owned by the caller, which is the font's glyph cache.
 /// </para>
 /// </remarks>
-internal sealed class ProceduralGlyphTextureFactory : IGlyphTextureFactory {
+internal sealed class ProceduralGlyphTextureFactory : IGlyphTextureFactory
+{
     private readonly ProceduralAssetService _assets;
 
     /// <summary>
@@ -27,7 +28,8 @@ internal sealed class ProceduralGlyphTextureFactory : IGlyphTextureFactory {
     /// </summary>
     /// <param name="assets">The procedural asset service owned by the asset catalog.</param>
     /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
-    internal ProceduralGlyphTextureFactory(ProceduralAssetService assets) {
+    internal ProceduralGlyphTextureFactory(ProceduralAssetService assets)
+    {
         ArgumentNullException.ThrowIfNull(assets);
 
         _assets = assets;
@@ -40,13 +42,16 @@ internal sealed class ProceduralGlyphTextureFactory : IGlyphTextureFactory {
         int width,
         int height,
         ReadOnlyMemory<byte> rgba,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken
+    )
+    {
         TextureBuilder builder = _assets.CreateTextureBuilder(
             width,
             height,
             TextureFormat.Rgba8Unorm,
             generateMips: false,
-            sampler: new SamplerState(TextureFilter.Linear, TextureWrap.Clamp));
+            sampler: new SamplerState(TextureFilter.Linear, TextureWrap.Clamp)
+        );
         builder.SetPixels(rgba.Span);
         return await builder.BuildAsync(cancellationToken).ConfigureAwait(false);
     }

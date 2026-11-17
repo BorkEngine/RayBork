@@ -4,7 +4,8 @@ using RayBork.Bake.Shaders;
 namespace RayBork.Tests.Bake.Shaders;
 
 /// <summary>Minimal GLSL stages, a complete shader source, and SPIR-V assertions for tests.</summary>
-internal static class ShaderTestAssets {
+internal static class ShaderTestAssets
+{
     internal const string VERTEX_SOURCE = """
         #version 450
 
@@ -58,7 +59,9 @@ internal static class ShaderTestAssets {
         string basePath,
         string toml,
         string? vertexSource = null,
-        string? fragmentSource = null) {
+        string? fragmentSource = null
+    )
+    {
         workspace.WriteAsset(basePath + ".toml", toml);
         workspace.WriteAsset(basePath + ".vert", vertexSource ?? VERTEX_SOURCE);
         workspace.WriteAsset(basePath + ".frag", fragmentSource ?? FRAGMENT_SOURCE);
@@ -71,13 +74,21 @@ internal static class ShaderTestAssets {
     internal static void AssertSpirv(
         ReadOnlySpan<byte> payload,
         string entryPoint,
-        SpirvExecutionModel executionModel) {
+        SpirvExecutionModel executionModel
+    )
+    {
         Assert.True(payload.Length >= 20, "The module is shorter than a SPIR-V header.");
         Assert.Equal(0, payload.Length % 4);
         Assert.Equal(0x07230203u, BinaryPrimitives.ReadUInt32LittleEndian(payload));
         Assert.True(
-            SpirvEntryPointInspector.TryValidate(payload, entryPoint, executionModel, out string message),
-            message);
+            SpirvEntryPointInspector.TryValidate(
+                payload,
+                entryPoint,
+                executionModel,
+                out string message
+            ),
+            message
+        );
         uint version = BinaryPrimitives.ReadUInt32LittleEndian(payload[4..]);
         Assert.Equal(1u, version >> 16);
     }

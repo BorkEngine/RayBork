@@ -12,7 +12,8 @@ namespace RayBork.Internal;
 /// sidecar that still declares <c>ranges</c> fails the bake with an unknown-key error.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class FontAssetDescriptor {
+internal sealed partial class FontAssetDescriptor
+{
     /// <summary>Gets the canonical path of the face payload entry.</summary>
     public required string FacePayload { get; init; }
 

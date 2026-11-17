@@ -18,4 +18,5 @@ internal readonly record struct DfdSample(
     byte BitLength,
     byte ChannelType,
     uint Lower,
-    uint Upper);
+    uint Upper
+);

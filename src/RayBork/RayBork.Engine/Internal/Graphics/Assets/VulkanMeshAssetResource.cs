@@ -14,7 +14,8 @@ namespace RayBork.Internal;
 /// buffers share one allocation: the index buffer starts at the vertex requirement's alignment. The
 /// buffers and the memory are destroyed together by <see cref="VulkanAssetWorker.Destroy"/>.
 /// </remarks>
-internal sealed class VulkanMeshAssetResource : VulkanAssetResource {
+internal sealed class VulkanMeshAssetResource : VulkanAssetResource
+{
     /// <summary>
     /// Initializes a mesh resource.
     /// </summary>
@@ -32,8 +33,10 @@ internal sealed class VulkanMeshAssetResource : VulkanAssetResource {
         DeviceMemory memory,
         ulong vertexBufferSize,
         ulong indexBufferSize,
-        int deviceGeneration)
-        : base(upload, unchecked((long)vertexBuffer.Handle), deviceGeneration) {
+        int deviceGeneration
+    )
+        : base(upload, unchecked((long)vertexBuffer.Handle), deviceGeneration)
+    {
         VertexBuffer = vertexBuffer;
         IndexBuffer = indexBuffer;
         Memory = memory;
@@ -70,8 +73,10 @@ internal sealed class VulkanMeshAssetResource : VulkanAssetResource {
     /// Adopts the handles of a mesh recreated after a device recovery.
     /// </summary>
     /// <param name="restored">The recreated mesh resource.</param>
-    internal override void AdoptRestored(GpuAssetResource restored) {
-        if (ReferenceEquals(this, restored)) {
+    internal override void AdoptRestored(GpuAssetResource restored)
+    {
+        if (ReferenceEquals(this, restored))
+        {
             return;
         }
 

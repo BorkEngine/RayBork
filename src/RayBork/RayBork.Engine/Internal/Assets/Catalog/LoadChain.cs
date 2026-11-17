@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// endless chain, so the catalog rejects that request instead of queueing it forever. A chain is
 /// immutable and is read only on the loader thread.
 /// </remarks>
-internal sealed class LoadChain {
+internal sealed class LoadChain
+{
     private readonly LoadChain? _parent;
     private readonly Type _assetType;
     private readonly string _canonicalPath;
@@ -21,7 +22,8 @@ internal sealed class LoadChain {
     /// <param name="canonicalPath">The canonical path being loaded.</param>
     /// <param name="parent">The chain that requested this load, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal LoadChain(Type assetType, string canonicalPath, LoadChain? parent) {
+    internal LoadChain(Type assetType, string canonicalPath, LoadChain? parent)
+    {
         ArgumentNullException.ThrowIfNull(assetType);
         ArgumentNullException.ThrowIfNull(canonicalPath);
 
@@ -37,13 +39,18 @@ internal sealed class LoadChain {
     /// <param name="canonicalPath">The canonical path to test.</param>
     /// <returns><see langword="true"/> when the load is already in the chain.</returns>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal bool Contains(Type assetType, string canonicalPath) {
+    internal bool Contains(Type assetType, string canonicalPath)
+    {
         ArgumentNullException.ThrowIfNull(assetType);
         ArgumentNullException.ThrowIfNull(canonicalPath);
 
-        for (LoadChain? link = this; link is not null; link = link._parent) {
-            if (link._assetType == assetType
-                && string.Equals(link._canonicalPath, canonicalPath, StringComparison.Ordinal)) {
+        for (LoadChain? link = this; link is not null; link = link._parent)
+        {
+            if (
+                link._assetType == assetType
+                && string.Equals(link._canonicalPath, canonicalPath, StringComparison.Ordinal)
+            )
+            {
                 return true;
             }
         }

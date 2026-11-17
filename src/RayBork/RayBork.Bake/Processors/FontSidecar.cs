@@ -18,7 +18,8 @@ namespace RayBork.Bake.Processors;
 /// </para>
 /// </remarks>
 [GenerateShape]
-internal sealed partial class FontSidecar {
+internal sealed partial class FontSidecar
+{
     /// <summary>Gets or sets the MSDF pixel size. It must be positive; the default is <c>32</c>.</summary>
     public int? MsdfPixelSize { get; set; }
 

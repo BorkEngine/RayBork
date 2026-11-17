@@ -20,7 +20,8 @@ namespace RayBork.Bake.Fonts;
 /// It does not parse glyphs or tables beyond their bounds.
 /// </para>
 /// </remarks>
-internal static class SfntValidator {
+internal static class SfntValidator
+{
     private const uint TRUETYPE_MAGIC = 0x0001_0000;
     private const uint TRUE_MAGIC = 0x7472_7565;
     private const uint OTTO_MAGIC = 0x4F54_544F;
@@ -38,16 +39,20 @@ internal static class SfntValidator {
         ReadOnlySpan<byte> face,
         out string format,
         out bool cff2,
-        out string? reason) {
+        out string? reason
+    )
+    {
         format = string.Empty;
         cff2 = false;
-        if (face.Length < OFFSET_TABLE_LENGTH) {
+        if (face.Length < OFFSET_TABLE_LENGTH)
+        {
             reason = "the file is shorter than the 12-byte sfnt offset table";
             return false;
         }
 
         uint magic = BinaryPrimitives.ReadUInt32BigEndian(face);
-        switch (magic) {
+        switch (magic)
+        {
             case TRUETYPE_MAGIC:
             case TRUE_MAGIC:
                 format = "ttf";
@@ -62,14 +67,17 @@ internal static class SfntValidator {
                 return false;
 
             default:
-                reason = $"the file magic 0x{magic:X8} is not a supported TrueType or OpenType face";
+                reason =
+                    $"the file magic 0x{magic:X8} is not a supported TrueType or OpenType face";
                 return false;
         }
 
         ushort tableCount = BinaryPrimitives.ReadUInt16BigEndian(face[4..]);
         int directoryLength = OFFSET_TABLE_LENGTH + (tableCount * TABLE_RECORD_LENGTH);
-        if (directoryLength > face.Length) {
-            reason = $"the {tableCount}-entry table directory extends past the {face.Length}-byte file";
+        if (directoryLength > face.Length)
+        {
+            reason =
+                $"the {tableCount}-entry table directory extends past the {face.Length}-byte file";
             return false;
         }
 
@@ -82,19 +90,23 @@ internal static class SfntValidator {
         bool foundCff = false;
         bool foundCff2 = false;
 
-        for (int index = 0; index < tableCount; index++) {
+        for (int index = 0; index < tableCount; index++)
+        {
             int recordOffset = OFFSET_TABLE_LENGTH + (index * TABLE_RECORD_LENGTH);
             ReadOnlySpan<byte> record = face.Slice(recordOffset, TABLE_RECORD_LENGTH);
             string tag = Encoding.ASCII.GetString(record[..4]);
             uint offset = BinaryPrimitives.ReadUInt32BigEndian(record[8..]);
             uint length = BinaryPrimitives.ReadUInt32BigEndian(record[12..]);
-            if ((ulong)offset + length > (ulong)face.Length) {
-                reason = $"the '{tag}' table at offset {offset} with length {length} extends past "
+            if ((ulong)offset + length > (ulong)face.Length)
+            {
+                reason =
+                    $"the '{tag}' table at offset {offset} with length {length} extends past "
                     + $"the {face.Length}-byte file";
                 return false;
             }
 
-            switch (tag) {
+            switch (tag)
+            {
                 case "head":
                     foundHead = true;
                     break;
@@ -130,23 +142,37 @@ internal static class SfntValidator {
         }
 
         string? missing = null;
-        if (!foundHead) {
+        if (!foundHead)
+        {
             missing = "head";
-        } else if (!foundMaxp) {
+        }
+        else if (!foundMaxp)
+        {
             missing = "maxp";
-        } else if (!foundHhea) {
+        }
+        else if (!foundHhea)
+        {
             missing = "hhea";
-        } else if (!foundHmtx) {
+        }
+        else if (!foundHmtx)
+        {
             missing = "hmtx";
-        } else if (!foundCmap) {
+        }
+        else if (!foundCmap)
+        {
             missing = "cmap";
-        } else if (format == "ttf" && !foundGlyf) {
+        }
+        else if (format == "ttf" && !foundGlyf)
+        {
             missing = "glyf";
-        } else if (format == "otf" && !foundCff && !foundCff2) {
+        }
+        else if (format == "otf" && !foundCff && !foundCff2)
+        {
             missing = "CFF or CFF2";
         }
 
-        if (missing is not null) {
+        if (missing is not null)
+        {
             reason = $"the {format} face is missing the required '{missing}' table";
             return false;
         }

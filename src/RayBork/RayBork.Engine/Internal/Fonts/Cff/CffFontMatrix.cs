@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// reported by the outline reader as <see cref="FontFormatException"/>, not by this struct.
 /// </para>
 /// </remarks>
-internal readonly struct CffFontMatrix {
+internal readonly struct CffFontMatrix
+{
     private const double DEFAULT_SCALE = 0.001;
 
     private readonly double _a;
@@ -36,7 +37,8 @@ internal readonly struct CffFontMatrix {
     /// <param name="d">The y scale.</param>
     /// <param name="e">The x translation.</param>
     /// <param name="f">The y translation.</param>
-    internal CffFontMatrix(double a, double b, double c, double d, double e, double f) {
+    internal CffFontMatrix(double a, double b, double c, double d, double e, double f)
+    {
         _a = a;
         _b = b;
         _c = c;
@@ -46,30 +48,26 @@ internal readonly struct CffFontMatrix {
     }
 
     /// <summary>Gets the default <c>[0.001 0 0 0.001 0 0]</c> FontMatrix.</summary>
-    internal static CffFontMatrix Default { get; } = new(
-        DEFAULT_SCALE,
-        0,
-        0,
-        DEFAULT_SCALE,
-        0,
-        0);
+    internal static CffFontMatrix Default { get; } = new(DEFAULT_SCALE, 0, 0, DEFAULT_SCALE, 0, 0);
 
     /// <summary>Gets a value indicating whether the matrix maps charstring units to font units unchanged.</summary>
     /// <param name="unitsPerEm">The face's <c>head</c> units per em.</param>
     /// <returns><see langword="true"/> when the matrix is the identity at this scale.</returns>
     internal bool IsIdentity(int unitsPerEm) =>
         (_a * unitsPerEm) == 1
-            && (_d * unitsPerEm) == 1
-            && _b == 0
-            && _c == 0
-            && _e == 0
-            && _f == 0;
+        && (_d * unitsPerEm) == 1
+        && _b == 0
+        && _c == 0
+        && _e == 0
+        && _f == 0;
 
     /// <summary>Maps one charstring-space point to font units.</summary>
     /// <param name="point">The point in charstring coordinates.</param>
     /// <param name="unitsPerEm">The face's <c>head</c> units per em.</param>
     /// <returns>The point in font units.</returns>
-    internal Vector2 Transform(Vector2 point, int unitsPerEm) => new(
-        (float)((((_a * point.X) + (_c * point.Y)) + _e) * unitsPerEm),
-        (float)((((_b * point.X) + (_d * point.Y)) + _f) * unitsPerEm));
+    internal Vector2 Transform(Vector2 point, int unitsPerEm) =>
+        new(
+            (float)((((_a * point.X) + (_c * point.Y)) + _e) * unitsPerEm),
+            (float)((((_b * point.X) + (_d * point.Y)) + _f) * unitsPerEm)
+        );
 }

@@ -8,7 +8,8 @@ namespace RayBork.Tests;
 /// wall-and-cube scene through the real camera service, post-processor, built-in pack shaders, and
 /// backbuffer readback, then probe a flat wall area and a wall area beside the cube.
 /// </summary>
-public sealed class SsaoGpuTests {
+public sealed class SsaoGpuTests
+{
     private const int TARGET_WIDTH = 128;
     private const int TARGET_HEIGHT = 96;
     private const float SSAO_RADIUS = 1f;
@@ -49,7 +50,8 @@ public sealed class SsaoGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void FlatWallStaysNearWhiteAndTheCubeContactDarkensForEveryQuality() {
+    public void FlatWallStaysNearWhiteAndTheCubeContactDarkensForEveryQuality()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = CreateTarget(harness);
         SceneProbes probes = Submit(harness, target, postProcess: null, orthographic: true);
@@ -57,8 +59,10 @@ public sealed class SsaoGpuTests {
         AssertColorNear(_sceneColor, baseline.Flat, RESULT_TOLERANCE_BASELINE);
 
         using TickThreadScope tick = new();
-        foreach (SsaoQuality quality in Enum.GetValues<SsaoQuality>()) {
-            SsaoEffect effect = new() {
+        foreach (SsaoQuality quality in Enum.GetValues<SsaoQuality>())
+        {
+            SsaoEffect effect = new()
+            {
                 Quality = quality,
                 Radius = SSAO_RADIUS,
                 DistanceFalloff = SSAO_FALLOFF,
@@ -72,7 +76,8 @@ public sealed class SsaoGpuTests {
             Assert.True(
                 Luminance(result.Corner) < Luminance(baseline.Corner) - DARKENING_MINIMUM,
                 $"Quality {quality} did not darken the corner: baseline {Luminance(baseline.Corner)}, "
-                    + $"actual {Luminance(result.Corner)}.");
+                    + $"actual {Luminance(result.Corner)}."
+            );
             AssertColorNear(_sceneColor, result.Flat, RESULT_TOLERANCE_BASELINE);
         }
 
@@ -81,14 +86,16 @@ public sealed class SsaoGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void MediumAoLateralReachUsesTheConfiguredRadius() {
+    public void MediumAoLateralReachUsesTheConfiguredRadius()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = CreateTarget(harness);
         SceneProbes probes = Submit(harness, target, postProcess: null, orthographic: true);
         SceneColor baseline = Read(harness, target, probes);
 
         using TickThreadScope tick = new();
-        var effect = new SsaoEffect {
+        var effect = new SsaoEffect
+        {
             Quality = SsaoQuality.Medium,
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
@@ -105,20 +112,23 @@ public sealed class SsaoGpuTests {
         Assert.True(
             Luminance(result.Deep) < Luminance(baseline.Deep) - 0.01f,
             $"The AO lateral reach is too small: baseline {Luminance(baseline.Deep)}, actual "
-                + $"{Luminance(result.Deep)}.");
+                + $"{Luminance(result.Deep)}."
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DisabledSsaoMatchesTheUnprocessedBaseline() {
+    public void DisabledSsaoMatchesTheUnprocessedBaseline()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = CreateTarget(harness);
         SceneProbes probes = Submit(harness, target, postProcess: null, orthographic: true);
         SceneColor baseline = Read(harness, target, probes);
 
         using TickThreadScope tick = new();
-        var effect = new SsaoEffect {
+        var effect = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -136,11 +146,13 @@ public sealed class SsaoGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void PerspectiveAndOrthographicCamerasBothRunSsao() {
+    public void PerspectiveAndOrthographicCamerasBothRunSsao()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = CreateTarget(harness);
         using TickThreadScope tick = new();
-        var effect = new SsaoEffect {
+        var effect = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -153,27 +165,31 @@ public sealed class SsaoGpuTests {
         Assert.True(
             Luminance(perspective.Corner) < Luminance(perspective.Flat) - DARKENING_MINIMUM,
             $"The perspective corner is not darker than the flat wall: corner "
-                + $"{Luminance(perspective.Corner)}, flat {Luminance(perspective.Flat)}.");
+                + $"{Luminance(perspective.Corner)}, flat {Luminance(perspective.Flat)}."
+        );
 
         SceneProbes orthographicProbes = Submit(harness, target, stack, orthographic: true);
         SceneColor orthographic = Read(harness, target, orthographicProbes);
         Assert.True(
             Luminance(orthographic.Corner) < Luminance(orthographic.Flat) - DARKENING_MINIMUM,
             $"The orthographic corner is not darker than the flat wall: corner "
-                + $"{Luminance(orthographic.Corner)}, flat {Luminance(orthographic.Flat)}.");
+                + $"{Luminance(orthographic.Corner)}, flat {Luminance(orthographic.Flat)}."
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ScreenSpaceRadiusIsMeasuredInPixelsInsteadOfWorldUnits() {
+    public void ScreenSpaceRadiusIsMeasuredInPixelsInsteadOfWorldUnits()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = CreateTarget(harness);
         SceneProbes probes = Submit(harness, target, postProcess: null, orthographic: true);
         SceneColor baseline = Read(harness, target, probes);
         using TickThreadScope tick = new();
 
-        var world = new SsaoEffect {
+        var world = new SsaoEffect
+        {
             Radius = 0.04f,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -183,7 +199,8 @@ public sealed class SsaoGpuTests {
         Submit(harness, target, worldStack, orthographic: true);
         SceneColor worldResult = Read(harness, target, probes);
 
-        var screen = new SsaoEffect {
+        var screen = new SsaoEffect
+        {
             Radius = 24f,
             DistanceFalloff = 1f,
             DenoiseRadius = 0,
@@ -196,23 +213,27 @@ public sealed class SsaoGpuTests {
 
         Assert.True(
             Luminance(worldResult.Corner) > Luminance(baseline.Corner) - 0.02f,
-            "A 0.04-world-unit radius should not darken the corner meaningfully.");
+            "A 0.04-world-unit radius should not darken the corner meaningfully."
+        );
         Assert.True(
             Luminance(screenResult.Corner) < Luminance(worldResult.Corner) - DARKENING_MINIMUM,
-            "A 24-pixel screen-space radius should darken the corner more than a tiny world radius.");
+            "A 24-pixel screen-space radius should darken the corner more than a tiny world radius."
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void IntensityAndRadiusChangeTheCompositeOutput() {
+    public void IntensityAndRadiusChangeTheCompositeOutput()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = CreateTarget(harness);
         SceneProbes probes = Submit(harness, target, postProcess: null, orthographic: true);
         SceneColor baseline = Read(harness, target, probes);
         using TickThreadScope tick = new();
 
-        var intensityZero = new SsaoEffect {
+        var intensityZero = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -224,7 +245,8 @@ public sealed class SsaoGpuTests {
         SceneColor zero = Read(harness, target, probes);
         AssertColorNear(baseline.Corner, zero.Corner, 0.01f);
 
-        var smallRadius = new SsaoEffect {
+        var smallRadius = new SsaoEffect
+        {
             Radius = 0.05f,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -235,7 +257,8 @@ public sealed class SsaoGpuTests {
         Submit(harness, target, smallStack, orthographic: true);
         SceneColor small = Read(harness, target, probes);
 
-        var largeRadius = new SsaoEffect {
+        var largeRadius = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -248,20 +271,23 @@ public sealed class SsaoGpuTests {
 
         Assert.True(
             Luminance(large.Corner) < Luminance(small.Corner) - DARKENING_MINIMUM,
-            "The larger radius should darken the corner more than the tiny radius.");
+            "The larger radius should darken the corner more than the tiny radius."
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DenoiseRadiusChangesTheNeighborhoodAndReadbackContainsSsao() {
+    public void DenoiseRadiusChangesTheNeighborhoodAndReadbackContainsSsao()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = CreateTarget(harness);
         SceneProbes probes = Submit(harness, target, postProcess: null, orthographic: true);
         SceneColor baseline = Read(harness, target, probes);
         using TickThreadScope tick = new();
 
-        var sharpEffect = new SsaoEffect {
+        var sharpEffect = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -271,7 +297,8 @@ public sealed class SsaoGpuTests {
         Submit(harness, target, sharpStack, orthographic: true);
         SceneColor sharpResult = Read(harness, target, probes);
 
-        var blurredEffect = new SsaoEffect {
+        var blurredEffect = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 24,
@@ -283,11 +310,13 @@ public sealed class SsaoGpuTests {
 
         Assert.True(
             MathF.Abs(Luminance(blurredResult.Corner) - Luminance(sharpResult.Corner)) > 0.005f,
-            "The wide denoise radius should change the sharp corner's neighborhood.");
+            "The wide denoise radius should change the sharp corner's neighborhood."
+        );
         Assert.True(
             Luminance(blurredResult.Corner) < Luminance(baseline.Corner) - 0.02f,
             $"The blurred result must still contain the corner AO: blurred "
-                + $"{Luminance(blurredResult.Corner)}, baseline {Luminance(baseline.Corner)}.");
+                + $"{Luminance(blurredResult.Corner)}, baseline {Luminance(baseline.Corner)}."
+        );
 
         Color[,] colors = ReadColorGrid(harness, target);
         int x = (int)probes.Corner.X;
@@ -295,19 +324,22 @@ public sealed class SsaoGpuTests {
         AssertColorNear(
             (blurredResult.Corner.R, blurredResult.Corner.G, blurredResult.Corner.B),
             (colors[y, x].R, colors[y, x].G, colors[y, x].B),
-            0.01f);
+            0.01f
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TheSceneTargetRunsSsaoAndReadsItBack() {
+    public void TheSceneTargetRunsSsaoAndReadsItBack()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         SceneProbes probes = SubmitScene(harness, postProcess: null);
         SceneColor baseline = ReadScene(harness, probes);
 
         using TickThreadScope tick = new();
-        var effect = new SsaoEffect {
+        var effect = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -321,28 +353,33 @@ public sealed class SsaoGpuTests {
         Assert.True(
             Luminance(result.Corner) < Luminance(baseline.Corner) - DARKENING_MINIMUM,
             $"The app scene target's corner is not darkened: baseline "
-                + $"{Luminance(baseline.Corner)}, actual {Luminance(result.Corner)}.");
+                + $"{Luminance(baseline.Corner)}, actual {Luminance(result.Corner)}."
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ACustomEffectBeforeSsaoPreservesTheCustomOutputOnARenderTexture() {
+    public void ACustomEffectBeforeSsaoPreservesTheCustomOutputOnARenderTexture()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         using RenderTexture target = host.CreateRenderTexture(
-            new RenderTextureDescription(64, 64, SampleCount: 1));
+            new RenderTextureDescription(64, 64, SampleCount: 1)
+        );
         SsaoAssets assets = harness.LoadSsaoAssetsFromBuiltInPack();
         using ChainScene chain = CreateChainScene(harness);
         using Shader invert = harness.CreateShader(
             "shaders/ssao-chain-invert",
             FULLSCREEN_VERTEX_SOURCE,
             INVERT_FRAGMENT_SOURCE,
-            textures: ["sourceColor"]);
+            textures: ["sourceColor"]
+        );
         PostProcessEffectSnapshot invertSnapshot = PostProcessSnapshots.Capture(
             new ShaderPostProcessEffect(invert),
             targetHasDepth: true,
-            "the app scene target");
+            "the app scene target"
+        );
         PostProcessEffectSnapshot ssaoSnapshot = CaptureSsao(assets);
         var pass = new VulkanDrawTestHarness.PassSpec(
             CreateOrthoView(target.Width, target.Height, 2f),
@@ -354,7 +391,8 @@ public sealed class SsaoGpuTests {
             Color.Black,
             [chain.Draw],
             target.TargetId,
-            [invertSnapshot, ssaoSnapshot]);
+            [invertSnapshot, ssaoSnapshot]
+        );
 
         harness.Submit(harness.CreateFrameWithPasses(1, pass));
 
@@ -365,11 +403,13 @@ public sealed class SsaoGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SsaoTwiceKeepsTheChainSource() {
+    public void SsaoTwiceKeepsTheChainSource()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         using RenderTexture target = host.CreateRenderTexture(
-            new RenderTextureDescription(64, 64, SampleCount: 1));
+            new RenderTextureDescription(64, 64, SampleCount: 1)
+        );
         SsaoAssets assets = harness.LoadSsaoAssetsFromBuiltInPack();
         using ChainScene chain = CreateChainScene(harness);
         PostProcessEffectSnapshot first = CaptureSsao(assets);
@@ -384,7 +424,8 @@ public sealed class SsaoGpuTests {
             Color.Black,
             [chain.Draw],
             target.TargetId,
-            [first, second]);
+            [first, second]
+        );
 
         harness.Submit(harness.CreateFrameWithPasses(1, pass));
 
@@ -394,17 +435,20 @@ public sealed class SsaoGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DepthlessTargetIsRejectedWithAClearError() {
+    public void DepthlessTargetIsRejectedWithAClearError()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = harness.Host.CreateRenderTexture(
-            new RenderTextureDescription(64, 48, Depth: false, SampleCount: 1));
+            new RenderTextureDescription(64, 48, Depth: false, SampleCount: 1)
+        );
         using TickThreadScope tick = new();
         var effect = new SsaoEffect();
         PostProcessStack stack = new();
         stack.Add(effect);
 
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-            () => Submit(harness, target, stack, orthographic: true));
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            Submit(harness, target, stack, orthographic: true)
+        );
 
         Assert.Contains("depth", thrown.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("render texture", thrown.Message, StringComparison.Ordinal);
@@ -412,12 +456,15 @@ public sealed class SsaoGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ASmallTargetAndACompositeOfTheOriginalSceneColorWork() {
+    public void ASmallTargetAndACompositeOfTheOriginalSceneColorWork()
+    {
         using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip();
         using RenderTexture target = harness.Host.CreateRenderTexture(
-            new RenderTextureDescription(48, 32, SampleCount: 1));
+            new RenderTextureDescription(48, 32, SampleCount: 1)
+        );
         using TickThreadScope tick = new();
-        var effect = new SsaoEffect {
+        var effect = new SsaoEffect
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -431,16 +478,20 @@ public sealed class SsaoGpuTests {
         Assert.True(
             Luminance(result.Corner) < Luminance(result.Flat) - 0.04f,
             $"The small target's corner must still be darkened: corner "
-                + $"{Luminance(result.Corner)}, flat {Luminance(result.Flat)}.");
+                + $"{Luminance(result.Corner)}, flat {Luminance(result.Flat)}."
+        );
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
     private static RenderTexture CreateTarget(PrimitiveDrawGpuHarness harness) =>
         harness.Host.CreateRenderTexture(new RenderTextureDescription(TARGET_WIDTH, TARGET_HEIGHT));
 
-    private static ChainScene CreateChainScene(VulkanDrawTestHarness harness) {
-        ShaderUniformAsset[] uniforms = [
-            new() {
+    private static ChainScene CreateChainScene(VulkanDrawTestHarness harness)
+    {
+        ShaderUniformAsset[] uniforms =
+        [
+            new()
+            {
                 Name = "uTint",
                 Type = ShaderUniformType.Vector4,
                 Default = [1f, 1f, 1f, 1f],
@@ -451,7 +502,8 @@ public sealed class SsaoGpuTests {
             VulkanDrawTestHarness.DEFAULT_VERTEX_SOURCE,
             VulkanDrawTestHarness.DEFAULT_FRAGMENT_SOURCE,
             uniforms,
-            ["mainTexture"]);
+            ["mainTexture"]
+        );
         Texture texture = harness.CreateTexture("textures/ssao-chain-white", Color.White);
         Mesh quad = harness.CreateQuad("meshes/ssao-chain-quad");
         shader.SetUniform("mainTexture", texture);
@@ -460,11 +512,14 @@ public sealed class SsaoGpuTests {
             new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity]),
             shader,
             texture,
-            quad);
+            quad
+        );
     }
 
-    private static PostProcessEffectSnapshot CaptureSsao(SsaoAssets assets) {
-        var effect = new SsaoEffect(assets) {
+    private static PostProcessEffectSnapshot CaptureSsao(SsaoAssets assets)
+    {
+        var effect = new SsaoEffect(assets)
+        {
             Radius = SSAO_RADIUS,
             DistanceFalloff = SSAO_FALLOFF,
             DenoiseRadius = 0,
@@ -473,29 +528,40 @@ public sealed class SsaoGpuTests {
             effect,
             targetHasDepth: true,
             "the app scene target",
-            assets);
+            assets
+        );
     }
 
     private static VulkanDrawTestHarness.CameraView CreateOrthoView(
         int width,
         int height,
-        float worldHeight) {
+        float worldHeight
+    )
+    {
         Transform transform = new(new Vector3(0f, 0f, 1f));
         Matrix4x4 view = CameraMath.CreateViewMatrix(transform);
         float aspect = width / (float)height;
-        Matrix4x4 projection = CameraMath.CreateOrthographicProjection(worldHeight, aspect, 0.1f, 10f);
+        Matrix4x4 projection = CameraMath.CreateOrthographicProjection(
+            worldHeight,
+            aspect,
+            0.1f,
+            10f
+        );
         return new VulkanDrawTestHarness.CameraView(
             view,
             projection,
             view * projection,
             transform.Position,
             width,
-            height);
+            height
+        );
     }
 
     private static SceneProbes SubmitScene(
         PrimitiveDrawGpuHarness harness,
-        PostProcessStack? postProcess) {
+        PostProcessStack? postProcess
+    )
+    {
         SceneProbes probes = default;
         harness.SubmitOrthographic(
             camera => probes = DrawScene(camera),
@@ -504,25 +570,32 @@ public sealed class SsaoGpuTests {
             height: 3f,
             near: 0.1f,
             far: 10f,
-            postProcess);
+            postProcess
+        );
         return probes;
     }
 
-    private static SceneColor ReadScene(PrimitiveDrawGpuHarness harness, SceneProbes probes) => new(
-        harness.ReadColor((uint)probes.Flat.X, (uint)probes.Flat.Y),
-        harness.ReadColor((uint)probes.Corner.X, (uint)probes.Corner.Y),
-        harness.ReadColor((uint)probes.Deep.X, (uint)probes.Deep.Y));
+    private static SceneColor ReadScene(PrimitiveDrawGpuHarness harness, SceneProbes probes) =>
+        new(
+            harness.ReadColor((uint)probes.Flat.X, (uint)probes.Flat.Y),
+            harness.ReadColor((uint)probes.Corner.X, (uint)probes.Corner.Y),
+            harness.ReadColor((uint)probes.Deep.X, (uint)probes.Deep.Y)
+        );
 
-    private static Color Invert(Color color) => new(1f - color.R, 1f - color.G, 1f - color.B, color.A);
+    private static Color Invert(Color color) =>
+        new(1f - color.R, 1f - color.G, 1f - color.B, color.A);
 
     private static SceneProbes Submit(
         PrimitiveDrawGpuHarness harness,
         RenderTexture target,
         PostProcessStack? postProcess,
-        bool orthographic) {
+        bool orthographic
+    )
+    {
         SceneProbes probes = default;
         Action<Camera> draw = camera => probes = DrawScene(camera);
-        if (orthographic) {
+        if (orthographic)
+        {
             harness.SubmitOrthographic(
                 draw,
                 new Transform(_cameraPosition),
@@ -531,8 +604,11 @@ public sealed class SsaoGpuTests {
                 near: 0.1f,
                 far: 10f,
                 postProcess,
-                target);
-        } else {
+                target
+            );
+        }
+        else
+        {
             harness.SubmitPerspective(
                 draw,
                 new Transform(_cameraPosition),
@@ -541,25 +617,30 @@ public sealed class SsaoGpuTests {
                 near: 0.1f,
                 far: 10f,
                 postProcess,
-                target);
+                target
+            );
         }
 
         return probes;
     }
 
-    private static SceneProbes DrawScene(Camera camera) {
+    private static SceneProbes DrawScene(Camera camera)
+    {
         var quad = new Transform(Vector3.Zero);
         camera.DrawQuad(quad, new Vector2(6f, 4f), _sceneColor);
         camera.DrawCube(new Vector3(0.7f, 0.4f, 0.6f), 0.6f, 0.6f, 0.6f, _sceneColor);
         return new SceneProbes(
             RoundScreen(camera.WorldToScreen(_flatProbe)),
             RoundScreen(camera.WorldToScreen(_cornerProbe)),
-            RoundScreen(camera.WorldToScreen(_deepProbe)));
+            RoundScreen(camera.WorldToScreen(_deepProbe))
+        );
     }
 
-    private static Vector2 RoundScreen(Vector2 position) => new(
-        MathF.Round(position.X, MidpointRounding.AwayFromZero),
-        MathF.Round(position.Y, MidpointRounding.AwayFromZero));
+    private static Vector2 RoundScreen(Vector2 position) =>
+        new(
+            MathF.Round(position.X, MidpointRounding.AwayFromZero),
+            MathF.Round(position.Y, MidpointRounding.AwayFromZero)
+        );
 
     private static Color[,] ReadColorGrid(PrimitiveDrawGpuHarness harness, RenderTexture target) =>
         harness.Host.ReadColorsAsync(target).GetAwaiter().GetResult();
@@ -567,10 +648,13 @@ public sealed class SsaoGpuTests {
     private static SceneColor Read(
         PrimitiveDrawGpuHarness harness,
         RenderTexture target,
-        SceneProbes probes) => new(
-        harness.ReadRenderTargetColor(target, (uint)probes.Flat.X, (uint)probes.Flat.Y),
-        harness.ReadRenderTargetColor(target, (uint)probes.Corner.X, (uint)probes.Corner.Y),
-        harness.ReadRenderTargetColor(target, (uint)probes.Deep.X, (uint)probes.Deep.Y));
+        SceneProbes probes
+    ) =>
+        new(
+            harness.ReadRenderTargetColor(target, (uint)probes.Flat.X, (uint)probes.Flat.Y),
+            harness.ReadRenderTargetColor(target, (uint)probes.Corner.X, (uint)probes.Corner.Y),
+            harness.ReadRenderTargetColor(target, (uint)probes.Deep.X, (uint)probes.Deep.Y)
+        );
 
     private static float Luminance((float R, float G, float B) color) =>
         (0.2126f * color.R) + (0.7152f * color.G) + (0.0722f * color.B);
@@ -578,34 +662,40 @@ public sealed class SsaoGpuTests {
     private static void AssertColorNear(
         Color expected,
         (float R, float G, float B) actual,
-        float tolerance) => AssertColorNear(
-        (expected.R, expected.G, expected.B),
-        actual,
-        tolerance);
+        float tolerance
+    ) => AssertColorNear((expected.R, expected.G, expected.B), actual, tolerance);
 
     private static void AssertColorNear(
         (float R, float G, float B) expected,
         (float R, float G, float B) actual,
-        float tolerance) {
+        float tolerance
+    )
+    {
         Assert.True(
             MathF.Abs(expected.R - actual.R) <= tolerance,
-            $"Red {actual.R} is not within {tolerance} of {expected.R}.");
+            $"Red {actual.R} is not within {tolerance} of {expected.R}."
+        );
         Assert.True(
             MathF.Abs(expected.G - actual.G) <= tolerance,
-            $"Green {actual.G} is not within {tolerance} of {expected.G}.");
+            $"Green {actual.G} is not within {tolerance} of {expected.G}."
+        );
         Assert.True(
             MathF.Abs(expected.B - actual.B) <= tolerance,
-            $"Blue {actual.B} is not within {tolerance} of {expected.B}.");
+            $"Blue {actual.B} is not within {tolerance} of {expected.B}."
+        );
     }
 
     private sealed class ChainScene(
         VulkanDrawTestHarness.DrawSpec draw,
         Shader shader,
         Texture texture,
-        Mesh mesh) : IDisposable {
+        Mesh mesh
+    ) : IDisposable
+    {
         internal VulkanDrawTestHarness.DrawSpec Draw { get; } = draw;
 
-        public void Dispose() {
+        public void Dispose()
+        {
             shader.Dispose();
             texture.Dispose();
             mesh.Dispose();
@@ -617,20 +707,26 @@ public sealed class SsaoGpuTests {
     private readonly record struct SceneColor(
         (float R, float G, float B) Flat,
         (float R, float G, float B) Corner,
-        (float R, float G, float B) Deep);
+        (float R, float G, float B) Deep
+    );
 
-    private sealed class TickThreadScope : IDisposable {
+    private sealed class TickThreadScope : IDisposable
+    {
         private readonly bool _ownsAttachment;
 
-        internal TickThreadScope() {
+        internal TickThreadScope()
+        {
             _ownsAttachment = !TickThread.IsCurrent;
-            if (_ownsAttachment) {
+            if (_ownsAttachment)
+            {
                 TickThread.Attach();
             }
         }
 
-        public void Dispose() {
-            if (_ownsAttachment) {
+        public void Dispose()
+        {
+            if (_ownsAttachment)
+            {
                 TickThread.Detach();
             }
         }

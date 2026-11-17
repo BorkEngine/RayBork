@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// be created and built on any thread, and the bridge performs the render-thread handoff.
 /// </para>
 /// </remarks>
-internal sealed class ProceduralAssetService {
+internal sealed class ProceduralAssetService
+{
     private readonly GpuAssetBridge _bridge;
     private int _stopped;
 
@@ -28,7 +29,8 @@ internal sealed class ProceduralAssetService {
     /// </summary>
     /// <param name="bridge">The bridge serviced by the render loop.</param>
     /// <exception cref="ArgumentNullException"><paramref name="bridge"/> is <c>null</c>.</exception>
-    internal ProceduralAssetService(GpuAssetBridge bridge) {
+    internal ProceduralAssetService(GpuAssetBridge bridge)
+    {
         ArgumentNullException.ThrowIfNull(bridge);
 
         _bridge = bridge;
@@ -45,7 +47,10 @@ internal sealed class ProceduralAssetService {
     /// <param name="topology">The primitive topology of the mesh.</param>
     /// <returns>The builder.</returns>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    internal MeshBuilder CreateMeshBuilder(PrimitiveTopology topology = PrimitiveTopology.TriangleList) {
+    internal MeshBuilder CreateMeshBuilder(
+        PrimitiveTopology topology = PrimitiveTopology.TriangleList
+    )
+    {
         ThrowIfStopped();
         return new MeshBuilder(this, topology);
     }
@@ -65,7 +70,9 @@ internal sealed class ProceduralAssetService {
         int height,
         TextureFormat format = TextureFormat.Rgba8Srgb,
         bool generateMips = true,
-        SamplerState? sampler = null) {
+        SamplerState? sampler = null
+    )
+    {
         ThrowIfStopped();
         return new TextureBuilder(this, width, height, format, generateMips, sampler);
     }
@@ -77,7 +84,11 @@ internal sealed class ProceduralAssetService {
     /// <param name="cancellationToken">The caller's cancellation token.</param>
     /// <returns>The created GPU resource.</returns>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    internal Task<GpuAssetResource> UploadAsync(AssetGpuUpload upload, CancellationToken cancellationToken) {
+    internal Task<GpuAssetResource> UploadAsync(
+        AssetGpuUpload upload,
+        CancellationToken cancellationToken
+    )
+    {
         ThrowIfStopped();
         return _bridge.UploadAsync(upload, cancellationToken);
     }
@@ -91,11 +102,16 @@ internal sealed class ProceduralAssetService {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "A procedural resource release must not throw: the only throwing path is a full destroy queue while the render thread is not draining it, and Destroy re-adds the resource to the live set so Close still destroys it. No caller could handle the failure.")]
-    internal void QueueDestruction(GpuAssetResource resource) {
-        try {
+        Justification = "A procedural resource release must not throw: the only throwing path is a full destroy queue while the render thread is not draining it, and Destroy re-adds the resource to the live set so Close still destroys it. No caller could handle the failure."
+    )]
+    internal void QueueDestruction(GpuAssetResource resource)
+    {
+        try
+        {
             _bridge.Destroy(resource);
-        } catch (Exception) {
+        }
+        catch (Exception)
+        {
             // A full destroy queue with the render thread not draining it is the only throwing path;
             // Destroy puts the resource back in the live set, so Close still destroys it, and there is
             // no caller that could report the failure.
@@ -111,11 +127,14 @@ internal sealed class ProceduralAssetService {
     /// Throws when the app has stopped.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    internal void ThrowIfStopped() {
-        if (IsStopped) {
+    internal void ThrowIfStopped()
+    {
+        if (IsStopped)
+        {
             throw new ObjectDisposedException(
                 nameof(ProceduralAssetService),
-                "The app has stopped; procedural assets cannot be created or built after shutdown.");
+                "The app has stopped; procedural assets cannot be created or built after shutdown."
+            );
         }
     }
 }

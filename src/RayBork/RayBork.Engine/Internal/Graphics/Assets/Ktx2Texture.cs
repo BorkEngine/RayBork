@@ -15,7 +15,8 @@ internal readonly record struct Ktx2Level(ulong ByteOffset, ulong ByteLength);
 /// carries only the descriptor format, base dimensions, sRGB flag, and the per-level offsets and
 /// lengths the upload needs. It never holds a second copy of the level bytes or block-decoded pixels.
 /// </remarks>
-internal sealed class Ktx2Texture {
+internal sealed class Ktx2Texture
+{
     /// <summary>
     /// Initializes a parsed texture payload.
     /// </summary>
@@ -24,7 +25,14 @@ internal sealed class Ktx2Texture {
     /// <param name="width">The base-level pixel width.</param>
     /// <param name="height">The base-level pixel height.</param>
     /// <param name="levels">The level index entries, base level first.</param>
-    internal Ktx2Texture(TextureFormat format, bool isSrgb, uint width, uint height, Ktx2Level[] levels) {
+    internal Ktx2Texture(
+        TextureFormat format,
+        bool isSrgb,
+        uint width,
+        uint height,
+        Ktx2Level[] levels
+    )
+    {
         Format = format;
         IsSrgb = isSrgb;
         Width = width;

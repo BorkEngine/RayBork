@@ -14,7 +14,8 @@ namespace RayBork;
 /// is one mutable settings object, and each frame records a snapshot of it when the tick seals the
 /// frame.
 /// </remarks>
-public sealed class EngineContext {
+public sealed class EngineContext
+{
     private readonly IAppControl _appControl;
     private readonly Func<double> _elapsedTime;
     private readonly IEnginePlatform _platform;
@@ -37,7 +38,9 @@ public sealed class EngineContext {
         RenderStatus renderStatus,
         CameraService cameras,
         TonemappingSettings tonemapping,
-        RenderTextureService renderTextures) {
+        RenderTextureService renderTextures
+    )
+    {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(assets);
@@ -49,9 +52,11 @@ public sealed class EngineContext {
         ArgumentNullException.ThrowIfNull(cameras);
         ArgumentNullException.ThrowIfNull(tonemapping);
         ArgumentNullException.ThrowIfNull(renderTextures);
-        if (assets is not IProceduralAssetProvider proceduralProvider) {
+        if (assets is not IProceduralAssetProvider proceduralProvider)
+        {
             throw new InvalidOperationException(
-                "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog.");
+                "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog."
+            );
         }
 
         _platform = platform;
@@ -115,8 +120,9 @@ public sealed class EngineContext {
     /// <see cref="ObjectDisposedException"/>.
     /// </para>
     /// </remarks>
-    public MeshBuilder CreateMeshBuilder(PrimitiveTopology topology = PrimitiveTopology.TriangleList)
-        => _proceduralAssets.CreateMeshBuilder(topology);
+    public MeshBuilder CreateMeshBuilder(
+        PrimitiveTopology topology = PrimitiveTopology.TriangleList
+    ) => _proceduralAssets.CreateMeshBuilder(topology);
 
     /// <summary>
     /// Creates a builder for one procedural <see cref="Texture"/>.
@@ -151,8 +157,8 @@ public sealed class EngineContext {
         int height,
         TextureFormat format = TextureFormat.Rgba8Srgb,
         bool generateMips = true,
-        SamplerState? sampler = null)
-        => _proceduralAssets.CreateTextureBuilder(width, height, format, generateMips, sampler);
+        SamplerState? sampler = null
+    ) => _proceduralAssets.CreateTextureBuilder(width, height, format, generateMips, sampler);
 
     /// <summary>
     /// Creates a camera for the requested projection that records one pass into the current frame.
@@ -232,8 +238,9 @@ public sealed class EngineContext {
         float far = 1000f,
         Rect? viewport = null,
         RenderTexture? target = null,
-        PostProcessStack? postProcess = null)
-        => _cameras.CreateCamera(
+        PostProcessStack? postProcess = null
+    ) =>
+        _cameras.CreateCamera(
             transform,
             projection,
             fieldOfView,
@@ -244,7 +251,8 @@ public sealed class EngineContext {
             far,
             viewport,
             target,
-            postProcess);
+            postProcess
+        );
 
     /// <summary>
     /// Creates one runtime render texture and returns it after the render thread allocated its images.
@@ -291,8 +299,8 @@ public sealed class EngineContext {
     /// </remarks>
     public async Task<RenderTexture> CreateRenderTextureAsync(
         RenderTextureDescription description,
-        CancellationToken cancellationToken = default)
-        => await _renderTextures.CreateAsync(description, cancellationToken).ConfigureAwait(false);
+        CancellationToken cancellationToken = default
+    ) => await _renderTextures.CreateAsync(description, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Gets the input snapshot for the current tick. Read it on the tick thread.
@@ -407,12 +415,14 @@ public sealed class EngineContext {
     /// </summary>
     public void RequestExit() => _appControl.RequestExit();
 
-    internal void SetInput(IInput input) {
+    internal void SetInput(IInput input)
+    {
         ArgumentNullException.ThrowIfNull(input);
         Input = input;
     }
 
-    internal void SetFrame(in FrameTime frame) {
+    internal void SetFrame(in FrameTime frame)
+    {
         _time = frame.Time;
         DeltaTime = frame.DeltaTime;
         UnscaledDeltaTime = frame.UnscaledDeltaTime;

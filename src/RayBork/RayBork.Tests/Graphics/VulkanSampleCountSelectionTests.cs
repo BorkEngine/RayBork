@@ -2,7 +2,8 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class VulkanSampleCountSelectionTests {
+public sealed class VulkanSampleCountSelectionTests
+{
     [Theory]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     [InlineData(4, new[] { 1, 2, 4, 8 }, 4)]
@@ -14,13 +15,16 @@ public sealed class VulkanSampleCountSelectionTests {
     public void SelectReturnsTheHighestSupportedCountThatDoesNotExceedTheRequest(
         int requested,
         int[] supported,
-        int expected) {
+        int expected
+    )
+    {
         Assert.Equal(expected, VulkanSampleCountSelection.Select(requested, supported));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptySupportFallsBackToOne() {
+    public void EmptySupportFallsBackToOne()
+    {
         Assert.Equal(1, VulkanSampleCountSelection.Select(4, []));
     }
 
@@ -28,7 +32,10 @@ public sealed class VulkanSampleCountSelectionTests {
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     [InlineData(0)]
     [InlineData(-1)]
-    public void NonPositiveRequestThrows(int requested) {
-        Assert.Throws<ArgumentOutOfRangeException>(() => VulkanSampleCountSelection.Select(requested, [1, 2, 4]));
+    public void NonPositiveRequestThrows(int requested)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            VulkanSampleCountSelection.Select(requested, [1, 2, 4])
+        );
     }
 }

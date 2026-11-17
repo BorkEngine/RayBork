@@ -6,12 +6,17 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <summary>
 /// GPU tests for packed texture uploads through the GPU asset bridge and the Vulkan worker.
 /// </summary>
-public sealed class VulkanTextureUploadTests {
+public sealed class VulkanTextureUploadTests
+{
     [Theory]
     [InlineData(TextureFormat.Rgba8Unorm, Format.R8G8B8A8Unorm)]
     [InlineData(TextureFormat.Rgba8Srgb, Format.R8G8B8A8Srgb)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void UploadCreatesImageWithTheDescriptorFormat(TextureFormat format, Format expectedFormat) {
+    public void UploadCreatesImageWithTheDescriptorFormat(
+        TextureFormat format,
+        Format expectedFormat
+    )
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
 
@@ -42,13 +47,15 @@ public sealed class VulkanTextureUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void BeginUploadIsPendingUntilTheCopyCompletes() {
+    public void BeginUploadIsPendingUntilTheCopyCompletes()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         TextureGpuUpload upload = AssetUploadTestData.Texture();
 
         VulkanAssetUploadOperation operation = Assert.IsType<VulkanAssetUploadOperation>(
-            harness.Worker.BeginUpload(upload));
+            harness.Worker.BeginUpload(upload)
+        );
 
         Assert.False(operation.IsFinished);
         Assert.Equal(1, harness.Worker.PendingOperationCount);
@@ -58,7 +65,8 @@ public sealed class VulkanTextureUploadTests {
         Exception? error = null;
         bool completed = SpinWait.SpinUntil(
             () => harness.Worker.TryComplete(operation, out resource, out error),
-            AssetGpuUploadHarness.Timeout);
+            AssetGpuUploadHarness.Timeout
+        );
 
         Assert.True(completed, "The texture upload did not complete.");
         Assert.Null(error);
@@ -77,15 +85,19 @@ public sealed class VulkanTextureUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void Bc7UploadCreatesTheBlockCompressedImageWhenSupported() {
+    public void Bc7UploadCreatesTheBlockCompressedImageWhenSupported()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
-        if (!host.Device.Capabilities.TextureCompressionBc) {
+        if (!host.Device.Capabilities.TextureCompressionBc)
+        {
             Assert.Skip("The device does not support textureCompressionBC.");
         }
 
         using AssetGpuUploadHarness harness = new(host.Backend);
 
-        GpuAssetResource resource = harness.Upload(AssetUploadTestData.Texture(TextureFormat.Bc7Srgb));
+        GpuAssetResource resource = harness.Upload(
+            AssetUploadTestData.Texture(TextureFormat.Bc7Srgb)
+        );
 
         VulkanTextureAssetResource texture = Assert.IsType<VulkanTextureAssetResource>(resource);
         Assert.Equal(Format.BC7SrgbBlock, texture.Format);
@@ -97,13 +109,14 @@ public sealed class VulkanTextureUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void UploadWithAnisotropicSamplerFallsBackToLinearCleanly() {
+    public void UploadWithAnisotropicSamplerFallsBackToLinearCleanly()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
 
-        GpuAssetResource resource = harness.Upload(AssetUploadTestData.Texture(
-            filter: TextureFilter.Anisotropic,
-            maxAnisotropy: 16f));
+        GpuAssetResource resource = harness.Upload(
+            AssetUploadTestData.Texture(filter: TextureFilter.Anisotropic, maxAnisotropy: 16f)
+        );
 
         VulkanTextureAssetResource texture = Assert.IsType<VulkanTextureAssetResource>(resource);
         Assert.NotEqual(0ul, texture.Sampler.Handle);
@@ -113,7 +126,8 @@ public sealed class VulkanTextureUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void MalformedKtx2FailsTheUploadWithRB1008() {
+    public void MalformedKtx2FailsTheUploadWithRB1008()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         TextureGpuUpload valid = AssetUploadTestData.Texture();
@@ -123,7 +137,9 @@ public sealed class VulkanTextureUploadTests {
         Task<GpuAssetResource> task = harness.Bridge.UploadAsync(broken, CancellationToken.None);
         harness.Bridge.ProcessPending(harness.Worker);
 
-        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => task.GetAwaiter().GetResult());
+        AssetLoadException failure = Assert.Throws<AssetLoadException>(() =>
+            task.GetAwaiter().GetResult()
+        );
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, failure.DiagnosticCode);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
@@ -131,12 +147,14 @@ public sealed class VulkanTextureUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void RenderTargetTextureFormatFailsTheUploadWithRB1008() {
+    public void RenderTargetTextureFormatFailsTheUploadWithRB1008()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         TextureGpuUpload upload = new(
             "textures/render-target",
-            new TextureAssetDescriptor {
+            new TextureAssetDescriptor
+            {
                 Payload = "textures/render-target-ktx2",
                 Width = 4,
                 Height = 4,
@@ -147,9 +165,12 @@ public sealed class VulkanTextureUploadTests {
                 Wrap = TextureWrap.Repeat,
                 MaxAnisotropy = 1f,
             },
-            Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4));
+            Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4)
+        );
 
-        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => harness.Worker.BeginUpload(upload));
+        AssetLoadException failure = Assert.Throws<AssetLoadException>(() =>
+            harness.Worker.BeginUpload(upload)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, failure.DiagnosticCode);
         Assert.Contains("render-target", failure.Message, StringComparison.Ordinal);

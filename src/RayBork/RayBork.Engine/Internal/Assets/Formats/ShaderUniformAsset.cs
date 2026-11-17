@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// Comparison uniforms do not use this type.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class ShaderUniformAsset {
+internal sealed partial class ShaderUniformAsset
+{
     /// <summary>Gets the GLSL uniform name.</summary>
     public required string Name { get; init; }
 

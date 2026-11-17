@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// exceeded a <see cref="BatchPlanningOptions"/> limit is split into several batches that preserve
 /// instance order.
 /// </remarks>
-internal sealed class PlannedBatch {
+internal sealed class PlannedBatch
+{
     private readonly List<PlannedInstance> _instances;
 
     /// <summary>
@@ -31,7 +32,9 @@ internal sealed class PlannedBatch {
         PrimitiveTopology topology,
         bool wireframe,
         List<PlannedInstance> instances,
-        float nearestDepth) {
+        float nearestDepth
+    )
+    {
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentNullException.ThrowIfNull(program);
         ArgumentNullException.ThrowIfNull(instances);

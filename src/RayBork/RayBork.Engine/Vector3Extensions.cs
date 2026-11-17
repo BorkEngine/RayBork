@@ -9,11 +9,13 @@ namespace RayBork;
 /// Angle arguments and results are in degrees. Positions and directions use the right-handed,
 /// Y-up System.Numerics convention: forward is <c>-Z</c>.
 /// </remarks>
-public static class Vector3Extensions {
+public static class Vector3Extensions
+{
     private const float RADIANS_TO_DEGREES = 180f / MathF.PI;
     private const float MINIMUM_ANGLE_DENOMINATOR = 1e-15f;
 
-    extension(Vector3 value) {
+    extension(Vector3 value)
+    {
         /// <summary>
         /// Gets the length of the vector.
         /// </summary>
@@ -60,10 +62,12 @@ public static class Vector3Extensions {
         /// </summary>
         /// <param name="other">The other vector.</param>
         /// <returns>The angle in degrees, or zero when either vector has zero length.</returns>
-        public float Angle(Vector3 other) {
+        public float Angle(Vector3 other)
+        {
             float denominator = MathF.Sqrt(value.LengthSquared() * other.LengthSquared());
 
-            if (denominator < MINIMUM_ANGLE_DENOMINATOR) {
+            if (denominator < MINIMUM_ANGLE_DENOMINATOR)
+            {
                 return 0f;
             }
 
@@ -80,7 +84,8 @@ public static class Vector3Extensions {
         /// The angle in degrees. It is positive when the cross product of this vector and
         /// <paramref name="other"/> points along <paramref name="axis"/>, and negative otherwise.
         /// </returns>
-        public float SignedAngle(Vector3 other, Vector3 axis) {
+        public float SignedAngle(Vector3 other, Vector3 axis)
+        {
             float angle = Angle(value, other);
             float sign = Vector3.Dot(axis, Vector3.Cross(value, other)) < 0f ? -1f : 1f;
             return angle * sign;
@@ -92,10 +97,12 @@ public static class Vector3Extensions {
         /// <param name="normal">The normal to project onto. It must not be zero.</param>
         /// <returns>The projection.</returns>
         /// <exception cref="ArgumentException"><paramref name="normal"/> has zero length.</exception>
-        public Vector3 Project(Vector3 normal) {
+        public Vector3 Project(Vector3 normal)
+        {
             float sqrMagnitude = normal.LengthSquared();
 
-            if (sqrMagnitude == 0f) {
+            if (sqrMagnitude == 0f)
+            {
                 throw new ArgumentException("The normal vector must not be zero.", nameof(normal));
             }
 
@@ -116,8 +123,10 @@ public static class Vector3Extensions {
         /// <param name="normal">The plane normal. It must be normalized and must not be zero.</param>
         /// <returns>The reflected vector.</returns>
         /// <exception cref="ArgumentException"><paramref name="normal"/> has zero length.</exception>
-        public Vector3 Reflect(Vector3 normal) {
-            if (normal.LengthSquared() == 0f) {
+        public Vector3 Reflect(Vector3 normal)
+        {
+            if (normal.LengthSquared() == 0f)
+            {
                 throw new ArgumentException("The normal vector must not be zero.", nameof(normal));
             }
 
@@ -132,10 +141,12 @@ public static class Vector3Extensions {
         /// The vector unchanged when its length is at most <paramref name="maxLength"/>; otherwise a
         /// vector with the same direction and the given maximum length.
         /// </returns>
-        public Vector3 ClampMagnitude(float maxLength) {
+        public Vector3 ClampMagnitude(float maxLength)
+        {
             float sqrMagnitude = value.LengthSquared();
 
-            if (sqrMagnitude > maxLength * maxLength) {
+            if (sqrMagnitude > maxLength * maxLength)
+            {
                 float magnitude = MathF.Sqrt(sqrMagnitude);
                 return value * (maxLength / magnitude);
             }
@@ -151,7 +162,8 @@ public static class Vector3Extensions {
         public Vector3 Rotated(Quaternion rotation) => Vector3.Transform(value, rotation);
     }
 
-    extension(Vector3) {
+    extension(Vector3)
+    {
         /// <summary>
         /// Gets the up direction <c>(0, 1, 0)</c>.
         /// </summary>

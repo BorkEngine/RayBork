@@ -12,7 +12,8 @@ namespace RayBork.Internal;
 /// <see cref="GamepadHandle"/> objects whose state advances with each tick; use
 /// <see cref="IGamepad.InstanceId"/> for per-device state across hotplug.
 /// </remarks>
-internal sealed class InputSnapshot : IInput {
+internal sealed class InputSnapshot : IInput
+{
     private readonly bool[] _keyDown;
     private readonly bool[] _keyPressed;
     private readonly bool[] _keyRepeat;
@@ -38,7 +39,9 @@ internal sealed class InputSnapshot : IInput {
         bool[] mouseDown,
         bool[] mousePressed,
         bool[] mouseReleased,
-        IReadOnlyList<IGamepad> gamepads) {
+        IReadOnlyList<IGamepad> gamepads
+    )
+    {
         _keyDown = keyDown;
         _keyPressed = keyPressed;
         _keyRepeat = keyRepeat;
@@ -69,62 +72,73 @@ internal sealed class InputSnapshot : IInput {
     public IReadOnlyList<IGamepad> Gamepads => _gamepads;
 
     /// <inheritdoc />
-    public bool IsKeyDown(Key key) {
+    public bool IsKeyDown(Key key)
+    {
         InputMappings.ValidateKey(key);
         return _keyDown[(int)key];
     }
 
     /// <inheritdoc />
-    public bool IsKeyPressed(Key key) {
+    public bool IsKeyPressed(Key key)
+    {
         InputMappings.ValidateKey(key);
         return _keyPressed[(int)key];
     }
 
     /// <inheritdoc />
-    public bool IsKeyPressedRepeat(Key key) {
+    public bool IsKeyPressedRepeat(Key key)
+    {
         InputMappings.ValidateKey(key);
         return _keyRepeat[(int)key];
     }
 
     /// <inheritdoc />
-    public bool IsKeyReleased(Key key) {
+    public bool IsKeyReleased(Key key)
+    {
         InputMappings.ValidateKey(key);
         return _keyReleased[(int)key];
     }
 
     /// <inheritdoc />
-    public bool IsKeyUp(Key key) {
+    public bool IsKeyUp(Key key)
+    {
         InputMappings.ValidateKey(key);
         return !_keyDown[(int)key];
     }
 
     /// <inheritdoc />
-    public bool IsMouseButtonDown(MouseButton button) {
+    public bool IsMouseButtonDown(MouseButton button)
+    {
         InputMappings.ValidateMouseButton(button);
         return _mouseDown[(int)button];
     }
 
     /// <inheritdoc />
-    public bool IsMouseButtonPressed(MouseButton button) {
+    public bool IsMouseButtonPressed(MouseButton button)
+    {
         InputMappings.ValidateMouseButton(button);
         return _mousePressed[(int)button];
     }
 
     /// <inheritdoc />
-    public bool IsMouseButtonReleased(MouseButton button) {
+    public bool IsMouseButtonReleased(MouseButton button)
+    {
         InputMappings.ValidateMouseButton(button);
         return _mouseReleased[(int)button];
     }
 
     /// <inheritdoc />
-    public bool IsMouseButtonUp(MouseButton button) {
+    public bool IsMouseButtonUp(MouseButton button)
+    {
         InputMappings.ValidateMouseButton(button);
         return !_mouseDown[(int)button];
     }
 
     /// <inheritdoc />
-    public IGamepad? GetGamepad(int index) {
-        if ((uint)index >= (uint)_gamepads.Count) {
+    public IGamepad? GetGamepad(int index)
+    {
+        if ((uint)index >= (uint)_gamepads.Count)
+        {
             return null;
         }
 

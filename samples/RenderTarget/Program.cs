@@ -2,7 +2,8 @@ using RayBork;
 
 namespace RenderTarget;
 
-internal static class Program {
+internal static class Program
+{
     private const int EXIT_SUCCESS = 0;
     private const int EXIT_FAILURE = 1;
     private const int EXIT_INVALID_ARGUMENTS = 2;
@@ -35,33 +36,40 @@ internal static class Program {
           Escape            Exit.
         """;
 
-    internal static int Main(string[] args) {
-        if (!TryParseArguments(args, out int frames, out bool showHelp, out string? error)) {
+    internal static int Main(string[] args)
+    {
+        if (!TryParseArguments(args, out int frames, out bool showHelp, out string? error))
+        {
             Console.Error.WriteLine(error);
             Console.Error.WriteLine();
             Console.Error.WriteLine(USAGE_TEXT);
             return EXIT_INVALID_ARGUMENTS;
         }
 
-        if (showHelp) {
+        if (showHelp)
+        {
             Console.Out.WriteLine(USAGE_TEXT);
             return EXIT_SUCCESS;
         }
 
-        if (frames < 0) {
+        if (frames < 0)
+        {
             Console.Error.WriteLine("--frames must be zero or positive.");
             return EXIT_INVALID_ARGUMENTS;
         }
 
         string packPath = Path.Combine(AppContext.BaseDirectory, DEFAULT_PACK_FILE_NAME);
-        if (!File.Exists(packPath)) {
+        if (!File.Exists(packPath))
+        {
             Console.Error.WriteLine(
                 $"Render Target failed: the asset pack '{packPath}' does not exist. Build the sample "
-                    + "first; the sample build bakes rendertarget.pck beside the executable.");
+                    + "first; the sample build bakes rendertarget.pck beside the executable."
+            );
             return EXIT_FAILURE;
         }
 
-        try {
+        try
+        {
             using RayBorkApp app = new RayBorkAppBuilder()
                 .WithGame(new RenderTargetGame(frames))
                 .WithTitle(WINDOW_TITLE)
@@ -74,7 +82,9 @@ internal static class Program {
 
             app.Run();
             return EXIT_SUCCESS;
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             Console.Error.WriteLine($"Render Target failed: {exception}");
             return EXIT_FAILURE;
         }
@@ -84,18 +94,23 @@ internal static class Program {
         string[] args,
         out int frames,
         out bool showHelp,
-        out string? error) {
+        out string? error
+    )
+    {
         frames = 0;
         showHelp = false;
         error = null;
 
-        for (int index = 0; index < args.Length; index++) {
-            switch (args[index]) {
+        for (int index = 0; index < args.Length; index++)
+        {
+            switch (args[index])
+            {
                 case "--help":
                     showHelp = true;
                     break;
                 case "--frames":
-                    if (index + 1 >= args.Length || !int.TryParse(args[++index], out frames)) {
+                    if (index + 1 >= args.Length || !int.TryParse(args[++index], out frames))
+                    {
                         error = "--frames requires a non-negative integer.";
                         return false;
                     }

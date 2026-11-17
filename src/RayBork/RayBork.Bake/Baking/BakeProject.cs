@@ -5,7 +5,8 @@ namespace RayBork.Bake.Baking;
 /// <summary>
 /// The validated, immutable configuration of one bake.
 /// </summary>
-internal sealed class BakeProject {
+internal sealed class BakeProject
+{
     /// <summary>Initializes a validated project.</summary>
     /// <param name="projectRoot">The absolute project root.</param>
     /// <param name="packs">The ordered packs; the first is the main pack.</param>
@@ -23,15 +24,21 @@ internal sealed class BakeProject {
         IReadOnlyDictionary<string, BakeAssetTypeRegistration> assetTypes,
         IReadOnlyList<BakeProcessorRegistration> processors,
         BakeProcessorRegistry processorRegistry,
-        string toolVersion) {
+        string toolVersion
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectRoot);
         ArgumentNullException.ThrowIfNull(packs);
         ArgumentNullException.ThrowIfNull(assetTypes);
         ArgumentNullException.ThrowIfNull(processors);
         ArgumentNullException.ThrowIfNull(processorRegistry);
         ArgumentException.ThrowIfNullOrWhiteSpace(toolVersion);
-        if (packs.Count == 0) {
-            throw new ArgumentException("A project must configure at least one pack.", nameof(packs));
+        if (packs.Count == 0)
+        {
+            throw new ArgumentException(
+                "A project must configure at least one pack.",
+                nameof(packs)
+            );
         }
 
         ProjectRoot = projectRoot;
@@ -40,7 +47,8 @@ internal sealed class BakeProject {
         TextureWrap = textureWrap;
         AssetTypes = new Dictionary<string, BakeAssetTypeRegistration>(
             assetTypes,
-            StringComparer.Ordinal);
+            StringComparer.Ordinal
+        );
         Processors = [.. processors];
         ProcessorRegistry = processorRegistry;
         ToolVersion = toolVersion;

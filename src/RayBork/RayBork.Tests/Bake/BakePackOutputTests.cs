@@ -4,13 +4,16 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake;
 
-public sealed class BakePackOutputTests {
+public sealed class BakePackOutputTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BakeWritesAReadableRayBorkPackAndAManifest() {
+    public void BakeWritesAReadableRayBorkPackAndAManifest()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor())
             .Build();
 
@@ -23,21 +26,23 @@ public sealed class BakePackOutputTests {
         Assert.NotEmpty(archive.Entries);
         Assert.Contains("baked", result.Output);
         Assert.Empty(result.Error);
-        Assert.Empty(Directory.GetFiles(workspace.OutputRoot, "*.tmp", SearchOption.AllDirectories));
+        Assert.Empty(
+            Directory.GetFiles(workspace.OutputRoot, "*.tmp", SearchOption.AllDirectories)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DebugStoresUncompressedAndReleaseCompressesLargePayloads() {
+    public void DebugStoresUncompressedAndReleaseCompressesLargePayloads()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("blob.bin", new string('A', 8192));
-        BakeApplication application = workspace.Builder()
-            .UseDefaultProcessors()
-            .Build();
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult debug = workspace.Run(application);
         Assert.True(debug.ExitCode == 0, debug.Error + debug.Output);
-        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath()))
+        {
             Assert.True(archive.TryGetEntry("blob", out PackEntry? entry));
             Assert.False(entry.IsCompressed);
         }
@@ -49,31 +54,36 @@ public sealed class BakePackOutputTests {
             workspace.OutputRoot,
             "--mode",
             "release",
-            "--force");
+            "--force"
+        );
         Assert.True(release.ExitCode == 0, release.Error + release.Output);
-        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath()))
+        {
             Assert.True(archive.TryGetEntry("blob", out PackEntry? entry));
             Assert.True(entry.IsCompressed);
-            Assert.Equal(new string('A', 8192), System.Text.Encoding.UTF8.GetString(archive.ReadPayload(entry)));
+            Assert.Equal(
+                new string('A', 8192),
+                System.Text.Encoding.UTF8.GetString(archive.ReadPayload(entry))
+            );
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CheckProcessesEverySourceAndWritesNothing() {
+    public void CheckProcessesEverySourceAndWritesNothing()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
 
         BakeRunResult result = workspace.Run(
             application,
             "bake",
             "--output-root",
             workspace.OutputRoot,
-            "--check");
+            "--check"
+        );
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(1, processor.ProcessCount);
@@ -90,10 +100,12 @@ public sealed class BakePackOutputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FailedPackLeavesThePreviousTargetUntouched() {
+    public void FailedPackLeavesThePreviousTargetUntouched()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor())
             .Build();
         BakeRunResult first = workspace.Run(application);
@@ -106,17 +118,21 @@ public sealed class BakePackOutputTests {
             "bake",
             "--output-root",
             workspace.OutputRoot,
-            "--force");
+            "--force"
+        );
 
         Assert.Equal(1, failed.ExitCode);
         Assert.Contains("RB4002", failed.Error);
         Assert.Equal(previous, File.ReadAllBytes(workspace.GetPackPath()));
-        Assert.Empty(Directory.GetFiles(workspace.OutputRoot, "*.tmp", SearchOption.AllDirectories));
+        Assert.Empty(
+            Directory.GetFiles(workspace.OutputRoot, "*.tmp", SearchOption.AllDirectories)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MultiplePacksAreWrittenInConfigurationOrder() {
+    public void MultiplePacksAreWrittenInConfigurationOrder()
+    {
         using var workspace = new TempBakeWorkspace();
         string overlayRoot = Path.Combine(workspace.ProjectRoot, "Overlay");
         Directory.CreateDirectory(overlayRoot);
@@ -135,7 +151,9 @@ public sealed class BakePackOutputTests {
         Assert.True(File.Exists(Path.Combine(workspace.OutputRoot, "main.pck")));
         Assert.True(File.Exists(Path.Combine(workspace.OutputRoot, "overlay", "overlay.pck")));
         using PackArchive main = PackArchive.Open(Path.Combine(workspace.OutputRoot, "main.pck"));
-        using PackArchive overlay = PackArchive.Open(Path.Combine(workspace.OutputRoot, "overlay", "overlay.pck"));
+        using PackArchive overlay = PackArchive.Open(
+            Path.Combine(workspace.OutputRoot, "overlay", "overlay.pck")
+        );
         Assert.Contains("main", main.Entries.Select(entry => entry.Path));
         Assert.Contains("overlay", overlay.Entries.Select(entry => entry.Path));
     }

@@ -14,7 +14,8 @@ namespace RayBork.Tests;
 /// teardown queue, and is idempotent. Every recorded value except the configured properties is
 /// guarded by a lock, so a test may read it after <see cref="RayBorkApp.Run"/> returns.
 /// </remarks>
-internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerProvider {
+internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerProvider
+{
     private static readonly IntPtr _instanceHandle = new(0x5EED);
 
     private readonly Lock _gate = new();
@@ -32,17 +33,19 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     private WindowSurfaceState _lastWindowState;
 
     /// <inheritdoc />
-    public EngineInfo Info { get; set; } = new(
-        "RayBork",
-        EngineVersion.Current,
-        "Fake 1.0",
-        "Fake GPU",
-        4202496u,
-        "B8G8R8A8_SRGB",
-        false,
-        4,
-        PresentMode.Mailbox,
-        false);
+    public EngineInfo Info { get; set; } =
+        new(
+            "RayBork",
+            EngineVersion.Current,
+            "Fake 1.0",
+            "Fake GPU",
+            4202496u,
+            "B8G8R8A8_SRGB",
+            false,
+            4,
+            PresentMode.Mailbox,
+            false
+        );
 
     /// <inheritdoc />
     public RenderStats Stats { get; set; }
@@ -54,7 +57,8 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// Simulates a logical-device recreation for the render loop's asset-restoration tests. The fake
     /// backend has no device, so the test drives the generation the backend would publish.
     /// </summary>
-    internal void SimulateDeviceRecreationForTests() => Interlocked.Increment(ref _deviceGeneration);
+    internal void SimulateDeviceRecreationForTests() =>
+        Interlocked.Increment(ref _deviceGeneration);
 
     /// <summary>
     /// Gets or sets the exception that <see cref="Initialize"/> throws after it created the surface.
@@ -122,9 +126,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the options passed to <see cref="Initialize"/>, or <see langword="null"/> before it ran.
     /// </summary>
-    internal RendererBackendOptions? Options {
-        get {
-            lock (_gate) {
+    internal RendererBackendOptions? Options
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _options;
             }
         }
@@ -133,9 +140,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the number of <see cref="Initialize"/> calls.
     /// </summary>
-    internal int InitializeCallCount {
-        get {
-            lock (_gate) {
+    internal int InitializeCallCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _initializeCallCount;
             }
         }
@@ -145,9 +155,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// Gets the native surface handle created during <see cref="Initialize"/>, or
     /// <see cref="IntPtr.Zero"/> when no surface was created.
     /// </summary>
-    internal IntPtr SurfaceHandle {
-        get {
-            lock (_gate) {
+    internal IntPtr SurfaceHandle
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _surfaceHandle;
             }
         }
@@ -156,9 +169,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets whether <see cref="Dispose"/> destroyed the native surface.
     /// </summary>
-    internal bool SurfaceDestroyed {
-        get {
-            lock (_gate) {
+    internal bool SurfaceDestroyed
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _surfaceDestroyed;
             }
         }
@@ -167,9 +183,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the frame indices passed to <see cref="Submit"/>, in call order.
     /// </summary>
-    internal IReadOnlyList<long> SubmitFrames {
-        get {
-            lock (_gate) {
+    internal IReadOnlyList<long> SubmitFrames
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return [.. _submitFrames];
             }
         }
@@ -178,9 +197,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the number of <see cref="Present"/> calls.
     /// </summary>
-    internal int PresentCount {
-        get {
-            lock (_gate) {
+    internal int PresentCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _presentCount;
             }
         }
@@ -189,9 +211,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the number of <see cref="Recover"/> calls.
     /// </summary>
-    internal int RecoverCalls {
-        get {
-            lock (_gate) {
+    internal int RecoverCalls
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _recoverCalls;
             }
         }
@@ -200,9 +225,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the number of effective <see cref="Dispose"/> calls. Repeated calls are no-ops.
     /// </summary>
-    internal int DisposeCallCount {
-        get {
-            lock (_gate) {
+    internal int DisposeCallCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _disposeCallCount;
             }
         }
@@ -211,9 +239,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the window surface snapshot observed most recently on the render thread.
     /// </summary>
-    internal WindowSurfaceState LastWindowState {
-        get {
-            lock (_gate) {
+    internal WindowSurfaceState LastWindowState
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _lastWindowState;
             }
         }
@@ -221,10 +252,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
     /// <inheritdoc />
     /// <exception cref="GraphicsException">The surface handshake failed.</exception>
-    public void Initialize(RendererBackendOptions options) {
+    public void Initialize(RendererBackendOptions options)
+    {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.TeardownQueue);
-        lock (_gate) {
+        lock (_gate)
+        {
             _options = options;
             _initializeCallCount++;
         }
@@ -232,31 +265,38 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         Volatile.Write(ref _deviceGeneration, 1);
         UpdateWindowState();
         IntPtr surface = options.SurfaceProvider.CreateSurface(_instanceHandle);
-        lock (_gate) {
+        lock (_gate)
+        {
             _surfaceHandle = surface;
         }
 
-        if (InitializeException is not null) {
+        if (InitializeException is not null)
+        {
             throw InitializeException;
         }
     }
 
     /// <inheritdoc />
-    public void Submit(RenderFramePacket frame) {
-        lock (_gate) {
+    public void Submit(RenderFramePacket frame)
+    {
+        lock (_gate)
+        {
             _submitFrames.Add(frame.FrameIndex);
         }
 
         UpdateWindowState();
-        if (SkipSubmitForTests) {
+        if (SkipSubmitForTests)
+        {
             return;
         }
 
-        if (SubmitException is not null) {
+        if (SubmitException is not null)
+        {
             throw SubmitException;
         }
 
-        if (PublishFrameStats) {
+        if (PublishFrameStats)
+        {
             Stats = new RenderStats(
                 frame.FrameIndex,
                 0,
@@ -271,19 +311,23 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                 0.0,
                 0.0,
                 0,
-                0);
+                0
+            );
         }
 
         OnSubmit?.Invoke(frame);
     }
 
     /// <inheritdoc />
-    public void Present() {
-        lock (_gate) {
+    public void Present()
+    {
+        lock (_gate)
+        {
             _presentCount++;
         }
 
-        if (PresentException is not null) {
+        if (PresentException is not null)
+        {
             throw PresentException;
         }
 
@@ -295,8 +339,10 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     public void Resize(int renderWidth, int renderHeight) => UpdateWindowState();
 
     /// <inheritdoc />
-    public bool Recover(RenderRecoveryReason reason) {
-        lock (_gate) {
+    public bool Recover(RenderRecoveryReason reason)
+    {
+        lock (_gate)
+        {
             _recoverCalls++;
         }
 
@@ -309,9 +355,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <summary>
     /// Gets the number of live fake render textures. Diagnostic, for app and service tests.
     /// </summary>
-    internal int LiveRenderTextureCount {
-        get {
-            lock (_gate) {
+    internal int LiveRenderTextureCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _renderTargets.Count;
             }
         }
@@ -322,8 +371,10 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// </summary>
     /// <param name="targetId">The target id to check.</param>
     /// <returns><see langword="true"/> when a target with the id is registered.</returns>
-    internal bool IsRenderTargetLive(long targetId) {
-        lock (_gate) {
+    internal bool IsRenderTargetLive(long targetId)
+    {
+        lock (_gate)
+        {
             return _renderTargets.ContainsKey(targetId);
         }
     }
@@ -334,11 +385,14 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// fake lifetimes and destroys the target entry when the request's lifetime is released. The public
     /// API, the request handoff, and the shutdown behavior are exercised without a device.
     /// </remarks>
-    public void ProcessRenderTextureRequests(RenderTextureService service) {
+    public void ProcessRenderTextureRequests(RenderTextureService service)
+    {
         ArgumentNullException.ThrowIfNull(service);
 
-        foreach (RenderTextureService.CreateRequest request in service.DrainCreates()) {
-            if (request.Completion.Task.IsCompleted) {
+        foreach (RenderTextureService.CreateRequest request in service.DrainCreates())
+        {
+            if (request.Completion.Task.IsCompleted)
+            {
                 request.DisposeRegistration();
                 continue;
             }
@@ -347,17 +401,23 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             RenderTextureDescription description = request.Description;
             int sampleCount = RenderTextureValidation.SelectSampleCount(
                 description.SampleCount,
-                [1, 2, 4, 8]);
-            RenderTextureTargetLifetime lifetime = new(targetId, description, sampleCount, service.QueueDestruction);
-            RenderTextureViewResource viewResource = new(default, default) {
-                BindlessSlot = 1,
-            };
+                [1, 2, 4, 8]
+            );
+            RenderTextureTargetLifetime lifetime = new(
+                targetId,
+                description,
+                sampleCount,
+                service.QueueDestruction
+            );
+            RenderTextureViewResource viewResource = new(default, default) { BindlessSlot = 1 };
             RenderTextureViewLifetime viewLifetime = new(
                 lifetime,
                 viewResource,
                 description.Width,
-                description.Height);
-            TextureAssetDescriptor descriptor = new() {
+                description.Height
+            );
+            TextureAssetDescriptor descriptor = new()
+            {
                 Payload = string.Empty,
                 Width = checked((uint)description.Width),
                 Height = checked((uint)description.Height),
@@ -368,19 +428,28 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                 Wrap = TextureWrap.Clamp,
                 MaxAnisotropy = 1f,
             };
-            Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
+            Texture colorTexture = new(
+                viewLifetime,
+                descriptor,
+                isProcedural: false,
+                isRenderTargetView: true
+            );
             Texture? depthTexture = null;
             RenderTextureViewLifetime? depthLifetime = null;
-            if (description.Depth) {
-                RenderTextureViewResource depthResource = new(default, default) {
+            if (description.Depth)
+            {
+                RenderTextureViewResource depthResource = new(default, default)
+                {
                     BindlessSlot = 2,
                 };
                 depthLifetime = new RenderTextureViewLifetime(
                     lifetime,
                     depthResource,
                     description.Width,
-                    description.Height);
-                TextureAssetDescriptor depthDescriptor = new() {
+                    description.Height
+                );
+                TextureAssetDescriptor depthDescriptor = new()
+                {
                     Payload = string.Empty,
                     Width = checked((uint)description.Width),
                     Height = checked((uint)description.Height),
@@ -391,99 +460,143 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                     Wrap = TextureWrap.Clamp,
                     MaxAnisotropy = 1f,
                 };
-                depthTexture = new Texture(depthLifetime, depthDescriptor, isProcedural: false, isRenderTargetView: true);
+                depthTexture = new Texture(
+                    depthLifetime,
+                    depthDescriptor,
+                    isProcedural: false,
+                    isRenderTargetView: true
+                );
             }
 
             RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture, service);
-            lock (_gate) {
-                _renderTargets[targetId] = new FakeRenderTarget(lifetime, viewLifetime, depthLifetime);
+            lock (_gate)
+            {
+                _renderTargets[targetId] = new FakeRenderTarget(
+                    lifetime,
+                    viewLifetime,
+                    depthLifetime
+                );
             }
 
             request.DisposeRegistration();
-            if (!request.Completion.TrySetResult(renderTexture)) {
-                lock (_gate) {
+            if (!request.Completion.TrySetResult(renderTexture))
+            {
+                lock (_gate)
+                {
                     _renderTargets.Remove(targetId);
                 }
             }
         }
 
-        foreach (RenderTextureService.ResizeRequest request in service.DrainResizes()) {
+        foreach (RenderTextureService.ResizeRequest request in service.DrainResizes())
+        {
             FakeRenderTarget? target;
-            lock (_gate) {
+            lock (_gate)
+            {
                 _renderTargets.TryGetValue(request.TargetId, out target);
             }
 
-            if (target is null) {
-                request.Completion.TrySetException(new InvalidOperationException(
-                    $"The fake render target {request.TargetId} is no longer alive."));
+            if (target is null)
+            {
+                request.Completion.TrySetException(
+                    new InvalidOperationException(
+                        $"The fake render target {request.TargetId} is no longer alive."
+                    )
+                );
                 continue;
             }
 
-            if (target.Lifetime.IsDisposed) {
-                request.Completion.TrySetException(new ObjectDisposedException(nameof(RenderTexture)));
+            if (target.Lifetime.IsDisposed)
+            {
+                request.Completion.TrySetException(
+                    new ObjectDisposedException(nameof(RenderTexture))
+                );
                 continue;
             }
 
-            if (target.Lifetime.IsInUse) {
-                request.Completion.TrySetException(new InvalidOperationException(
-                    $"The fake render target {request.TargetId} is in use by a recorded or in-flight frame."));
+            if (target.Lifetime.IsInUse)
+            {
+                request.Completion.TrySetException(
+                    new InvalidOperationException(
+                        $"The fake render target {request.TargetId} is in use by a recorded or in-flight frame."
+                    )
+                );
                 continue;
             }
 
             RenderTextureDescription description = target.Lifetime.Description;
-            target.Lifetime.UpdateDescription(description with {
-                Width = request.Width,
-                Height = request.Height,
-            });
+            target.Lifetime.UpdateDescription(
+                description with
+                {
+                    Width = request.Width,
+                    Height = request.Height,
+                }
+            );
             target.ColorView.SetDimensions(request.Width, request.Height);
             target.DepthView?.SetDimensions(request.Width, request.Height);
             request.Completion.TrySetResult();
         }
 
-        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks()) {
-            try {
+        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks())
+        {
+            try
+            {
                 CompleteReadback(request);
-            } finally {
+            }
+            finally
+            {
                 request.DisposeRegistration();
             }
         }
 
-        foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {
-            lock (_gate) {
+        foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys())
+        {
+            lock (_gate)
+            {
                 _renderTargets.Remove(lifetime.TargetId);
             }
         }
     }
 
-    private void CompleteReadback(RenderTextureService.ReadbackRequest request) {
-        if (request.IsCompleted) {
+    private void CompleteReadback(RenderTextureService.ReadbackRequest request)
+    {
+        if (request.IsCompleted)
+        {
             return;
         }
 
         FakeRenderTarget? target;
-        lock (_gate) {
+        lock (_gate)
+        {
             _renderTargets.TryGetValue(request.TargetId, out target);
         }
 
-        if (target is null) {
-            request.TrySetException(new InvalidOperationException(
-                $"The fake readback addresses render target {request.TargetId}, which is no longer alive."));
+        if (target is null)
+        {
+            request.TrySetException(
+                new InvalidOperationException(
+                    $"The fake readback addresses render target {request.TargetId}, which is no longer alive."
+                )
+            );
             return;
         }
 
-        if (target.Lifetime.IsDisposed) {
+        if (target.Lifetime.IsDisposed)
+        {
             request.TrySetException(new ObjectDisposedException(nameof(RenderTexture)));
             return;
         }
 
-        if (ReadbackException is not null) {
+        if (ReadbackException is not null)
+        {
             request.TrySetException(ReadbackException);
             return;
         }
 
         int width = target.Lifetime.Description.Width;
         int height = target.Lifetime.Description.Height;
-        switch (request) {
+        switch (request)
+        {
             case RenderTextureService.ReadbackRequest<byte[]> pixels:
                 pixels.Completion.TrySetResult(FakeReadbackPixels(width, height));
                 break;
@@ -491,16 +604,22 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
                 colors.Completion.TrySetResult(FakeReadbackColors(width, height));
                 break;
             default:
-                request.TrySetException(new InvalidOperationException(
-                    "The fake readback request has an unsupported completion value."));
+                request.TrySetException(
+                    new InvalidOperationException(
+                        "The fake readback request has an unsupported completion value."
+                    )
+                );
                 break;
         }
     }
 
-    private static Color[,] FakeReadbackColors(int width, int height) {
+    private static Color[,] FakeReadbackColors(int width, int height)
+    {
         Color[,] colors = new Color[height, width];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
                 colors[y, x] = new Color(x / (float)width, y / (float)height, 0.5f, 1f);
             }
         }
@@ -508,10 +627,13 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
         return colors;
     }
 
-    private static byte[] FakeReadbackPixels(int width, int height) {
+    private static byte[] FakeReadbackPixels(int width, int height)
+    {
         byte[] pixels = new byte[checked(width * height * 4)];
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
                 int offset = ((y * width) + x) * 4;
                 pixels[offset] = (byte)(x & 0xFF);
                 pixels[offset + 1] = (byte)(y & 0xFF);
@@ -524,12 +646,15 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     }
 
     /// <inheritdoc />
-    public void Dispose() {
+    public void Dispose()
+    {
         RendererBackendOptions? options;
         IntPtr surface;
         Action? teardownAction = TeardownAction;
-        lock (_gate) {
-            if (_disposeCallCount > 0) {
+        lock (_gate)
+        {
+            if (_disposeCallCount > 0)
+            {
                 return;
             }
 
@@ -538,32 +663,40 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             surface = _surfaceHandle;
         }
 
-        if (options is not null) {
-            if (surface != IntPtr.Zero) {
+        if (options is not null)
+        {
+            if (surface != IntPtr.Zero)
+            {
                 options.SurfaceProvider.DestroySurface(_instanceHandle, surface);
-                lock (_gate) {
+                lock (_gate)
+                {
                     _surfaceDestroyed = true;
                 }
             }
 
-            if (teardownAction is not null) {
+            if (teardownAction is not null)
+            {
                 options.TeardownQueue.Enqueue(teardownAction);
             }
         }
     }
 
-    private void UpdateWindowState() {
+    private void UpdateWindowState()
+    {
         RendererBackendOptions? options;
-        lock (_gate) {
+        lock (_gate)
+        {
             options = _options;
         }
 
-        if (options is null) {
+        if (options is null)
+        {
             return;
         }
 
         WindowSurfaceState state = options.WindowStateProvider();
-        lock (_gate) {
+        lock (_gate)
+        {
             _lastWindowState = state;
         }
     }
@@ -577,5 +710,6 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     private sealed record FakeRenderTarget(
         RenderTextureTargetLifetime Lifetime,
         RenderTextureViewLifetime ColorView,
-        RenderTextureViewLifetime? DepthView);
+        RenderTextureViewLifetime? DepthView
+    );
 }

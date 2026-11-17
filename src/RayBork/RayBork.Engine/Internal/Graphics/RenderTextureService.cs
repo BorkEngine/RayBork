@@ -39,7 +39,8 @@ namespace RayBork.Internal;
 /// <see cref="ObjectDisposedException"/>, which is what a call after app shutdown observes.
 /// </para>
 /// </remarks>
-internal sealed class RenderTextureService : IDisposable {
+internal sealed class RenderTextureService : IDisposable
+{
     /// <summary>The maximum number of queued creation requests.</summary>
     internal const int MAX_PENDING_CREATES = 256;
 
@@ -63,9 +64,12 @@ internal sealed class RenderTextureService : IDisposable {
     /// <summary>
     /// Gets whether the service already stopped accepting requests.
     /// </summary>
-    internal bool IsStopped {
-        get {
-            lock (_gate) {
+    internal bool IsStopped
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _stopped;
             }
         }
@@ -75,10 +79,16 @@ internal sealed class RenderTextureService : IDisposable {
     /// Gets whether a creation, resize, readback, or destruction request is queued. The render loop uses
     /// it to keep polling the render thread while no frame is published.
     /// </summary>
-    internal bool HasPendingWork {
-        get {
-            lock (_gate) {
-                return _creates.Count > 0 || _resizes.Count > 0 || _readbacks.Count > 0 || _destroys.Count > 0;
+    internal bool HasPendingWork
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _creates.Count > 0
+                    || _resizes.Count > 0
+                    || _readbacks.Count > 0
+                    || _destroys.Count > 0;
             }
         }
     }
@@ -96,36 +106,48 @@ internal sealed class RenderTextureService : IDisposable {
     /// <exception cref="InvalidOperationException">The creation queue is full.</exception>
     internal Task<RenderTexture> CreateAsync(
         RenderTextureDescription description,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken
+    )
+    {
         // A stopped service answers with ObjectDisposedException before any argument or cancellation
         // check, so a call after shutdown reports the documented state instead of a validation error.
-        lock (_gate) {
-            if (_stopped || _closed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed)
+            {
                 return Task.FromException<RenderTexture>(CreateStoppedException());
             }
         }
 
         RenderTextureValidation.Validate(description);
-        if (cancellationToken.IsCancellationRequested) {
+        if (cancellationToken.IsCancellationRequested)
+        {
             return Task.FromCanceled<RenderTexture>(cancellationToken);
         }
 
         CreateRequest request = new(this, description, cancellationToken);
-        lock (_gate) {
-            if (_stopped || _closed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed)
+            {
                 return Task.FromException<RenderTexture>(CreateStoppedException());
             }
 
-            if (_creates.Count >= MAX_PENDING_CREATES) {
-                return Task.FromException<RenderTexture>(new InvalidOperationException(
-                    $"The render texture creation queue is full ({MAX_PENDING_CREATES} pending "
-                        + "requests); the render thread is not draining it."));
+            if (_creates.Count >= MAX_PENDING_CREATES)
+            {
+                return Task.FromException<RenderTexture>(
+                    new InvalidOperationException(
+                        $"The render texture creation queue is full ({MAX_PENDING_CREATES} pending "
+                            + "requests); the render thread is not draining it."
+                    )
+                );
             }
 
             _creates.Enqueue(request);
         }
 
-        if (cancellationToken.CanBeCanceled) {
+        if (cancellationToken.CanBeCanceled)
+        {
             request.RegisterCancellation();
         }
 
@@ -156,40 +178,50 @@ internal sealed class RenderTextureService : IDisposable {
     /// <exception cref="InvalidOperationException">
     /// A recorded or in-flight frame holds the target. The request is not queued.
     /// </exception>
-    internal Task ResizeAsync(RenderTextureTargetLifetime lifetime, int width, int height) {
+    internal Task ResizeAsync(RenderTextureTargetLifetime lifetime, int width, int height)
+    {
         ArgumentNullException.ThrowIfNull(lifetime);
 
         // A stopped service answers with ObjectDisposedException before any argument or target state
         // check, so a call after shutdown reports the documented state instead of a validation error.
-        lock (_gate) {
-            if (_stopped || _closed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed)
+            {
                 return Task.FromException(CreateStoppedException());
             }
         }
 
-        if (lifetime.IsDisposed) {
+        if (lifetime.IsDisposed)
+        {
             throw new ObjectDisposedException(
                 nameof(RenderTexture),
-                "The render texture is disposed; it cannot be resized.");
+                "The render texture is disposed; it cannot be resized."
+            );
         }
 
         RenderTextureValidation.ValidateDimensions(width, height);
         RenderTextureDescription description = lifetime.Description;
-        if (description.Width == width && description.Height == height) {
+        if (description.Width == width && description.Height == height)
+        {
             // An unchanged size is a no-op, even while a frame holds the target: nothing is recreated.
             return Task.CompletedTask;
         }
 
-        if (lifetime.IsInUse) {
+        if (lifetime.IsInUse)
+        {
             throw new InvalidOperationException(
                 "The render texture is in use by a recorded or in-flight frame; a camera targets it, a "
                     + "draw samples one of its views, or the recorded frame still references it. Resize it "
-                    + "only after the frame that uses it completed.");
+                    + "only after the frame that uses it completed."
+            );
         }
 
         ResizeRequest request = new(lifetime, width, height);
-        lock (_gate) {
-            if (_stopped || _closed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed)
+            {
                 return Task.FromException(CreateStoppedException());
             }
 
@@ -214,7 +246,8 @@ internal sealed class RenderTextureService : IDisposable {
     /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
     internal Task<byte[]> ReadPixelsAsync(
         RenderTextureTargetLifetime lifetime,
-        CancellationToken cancellationToken) => QueueReadback<byte[]>(lifetime, cancellationToken);
+        CancellationToken cancellationToken
+    ) => QueueReadback<byte[]>(lifetime, cancellationToken);
 
     /// <summary>
     /// Queues one scene-linear color readback of a target's resolved color image. The render thread waits
@@ -231,37 +264,49 @@ internal sealed class RenderTextureService : IDisposable {
     /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
     internal Task<Color[,]> ReadColorsAsync(
         RenderTextureTargetLifetime lifetime,
-        CancellationToken cancellationToken) => QueueReadback<Color[,]>(lifetime, cancellationToken);
+        CancellationToken cancellationToken
+    ) => QueueReadback<Color[,]>(lifetime, cancellationToken);
 
-    private Task<T> QueueReadback<T>(RenderTextureTargetLifetime lifetime, CancellationToken cancellationToken) {
+    private Task<T> QueueReadback<T>(
+        RenderTextureTargetLifetime lifetime,
+        CancellationToken cancellationToken
+    )
+    {
         ArgumentNullException.ThrowIfNull(lifetime);
 
         // A stopped service answers with ObjectDisposedException before any target or cancellation
         // check, matching creation and resize after shutdown.
-        lock (_gate) {
-            if (_stopped || _closed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed)
+            {
                 return Task.FromException<T>(CreateStoppedException());
             }
         }
 
-        if (lifetime.IsDisposed) {
+        if (lifetime.IsDisposed)
+        {
             return Task.FromException<T>(CreateDisposedTargetException());
         }
 
-        if (cancellationToken.IsCancellationRequested) {
+        if (cancellationToken.IsCancellationRequested)
+        {
             return Task.FromCanceled<T>(cancellationToken);
         }
 
         ReadbackRequest<T> request = new(this, lifetime, cancellationToken);
-        lock (_gate) {
-            if (_stopped || _closed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed)
+            {
                 return Task.FromException<T>(CreateStoppedException());
             }
 
             _readbacks.Enqueue(request);
         }
 
-        if (cancellationToken.CanBeCanceled) {
+        if (cancellationToken.CanBeCanceled)
+        {
             request.RegisterCancellation();
         }
 
@@ -275,7 +320,8 @@ internal sealed class RenderTextureService : IDisposable {
     /// </summary>
     /// <param name="target">The render texture to release.</param>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <c>null</c>.</exception>
-    internal static void ReleaseTarget(RenderTexture target) {
+    internal static void ReleaseTarget(RenderTexture target)
+    {
         ArgumentNullException.ThrowIfNull(target);
 
         target.Lifetime.ReleaseOwner();
@@ -291,10 +337,14 @@ internal sealed class RenderTextureService : IDisposable {
     /// Wakes the render loop. Best effort: a cancellation callback can race the service's disposal after
     /// the render loop joined, and a disposed wait handle must not throw into the caller's cancellation.
     /// </summary>
-    internal void SignalWork() {
-        try {
+    internal void SignalWork()
+    {
+        try
+        {
             _workAvailable.Set();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The app already shut down; no render thread remains to service the request.
         }
     }
@@ -305,11 +355,14 @@ internal sealed class RenderTextureService : IDisposable {
     /// </summary>
     /// <param name="lifetime">The released target lifetime.</param>
     /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
-    internal void QueueDestruction(RenderTextureTargetLifetime lifetime) {
+    internal void QueueDestruction(RenderTextureTargetLifetime lifetime)
+    {
         ArgumentNullException.ThrowIfNull(lifetime);
 
-        lock (_gate) {
-            if (_stopped || _closed || _disposed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed || _disposed)
+            {
                 return;
             }
 
@@ -324,9 +377,12 @@ internal sealed class RenderTextureService : IDisposable {
     /// the target. Render-thread only.
     /// </summary>
     /// <returns>The queued requests, in request order.</returns>
-    internal CreateRequest[] DrainCreates() {
-        lock (_gate) {
-            if (_creates.Count == 0) {
+    internal CreateRequest[] DrainCreates()
+    {
+        lock (_gate)
+        {
+            if (_creates.Count == 0)
+            {
                 return [];
             }
 
@@ -341,9 +397,12 @@ internal sealed class RenderTextureService : IDisposable {
     /// or rejected the resize. Render-thread only.
     /// </summary>
     /// <returns>The queued requests, in request order.</returns>
-    internal ResizeRequest[] DrainResizes() {
-        lock (_gate) {
-            if (_resizes.Count == 0) {
+    internal ResizeRequest[] DrainResizes()
+    {
+        lock (_gate)
+        {
+            if (_resizes.Count == 0)
+            {
                 return [];
             }
 
@@ -358,9 +417,12 @@ internal sealed class RenderTextureService : IDisposable {
     /// content, returned the defined default, or failed it. Render-thread only.
     /// </summary>
     /// <returns>The queued requests, in request order.</returns>
-    internal ReadbackRequest[] DrainReadbacks() {
-        lock (_gate) {
-            if (_readbacks.Count == 0) {
+    internal ReadbackRequest[] DrainReadbacks()
+    {
+        lock (_gate)
+        {
+            if (_readbacks.Count == 0)
+            {
                 return [];
             }
 
@@ -374,9 +436,12 @@ internal sealed class RenderTextureService : IDisposable {
     /// Removes every queued destruction request. Render-thread only.
     /// </summary>
     /// <returns>The queued target lifetimes, in destruction order.</returns>
-    internal RenderTextureTargetLifetime[] DrainDestroys() {
-        lock (_gate) {
-            if (_destroys.Count == 0) {
+    internal RenderTextureTargetLifetime[] DrainDestroys()
+    {
+        lock (_gate)
+        {
+            if (_destroys.Count == 0)
+            {
                 return [];
             }
 
@@ -392,11 +457,14 @@ internal sealed class RenderTextureService : IDisposable {
     /// </summary>
     /// <param name="lifetime">The target lifetime that is not idle yet.</param>
     /// <exception cref="ArgumentNullException"><paramref name="lifetime"/> is <c>null</c>.</exception>
-    internal void RequeueDestruction(RenderTextureTargetLifetime lifetime) {
+    internal void RequeueDestruction(RenderTextureTargetLifetime lifetime)
+    {
         ArgumentNullException.ThrowIfNull(lifetime);
 
-        lock (_gate) {
-            if (_stopped || _closed || _disposed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed || _disposed)
+            {
                 return;
             }
 
@@ -408,12 +476,15 @@ internal sealed class RenderTextureService : IDisposable {
     /// Stops the service: rejects later requests and fails every queued creation, resize, or readback
     /// request with <see cref="ObjectDisposedException"/>. Idempotent.
     /// </summary>
-    internal void Stop() {
+    internal void Stop()
+    {
         CreateRequest[] creates;
         ResizeRequest[] resizes;
         ReadbackRequest[] readbacks;
-        lock (_gate) {
-            if (_stopped || _closed || _disposed) {
+        lock (_gate)
+        {
+            if (_stopped || _closed || _disposed)
+            {
                 return;
             }
 
@@ -427,16 +498,19 @@ internal sealed class RenderTextureService : IDisposable {
         }
 
         Exception exception = CreateStoppedException();
-        foreach (CreateRequest request in creates) {
+        foreach (CreateRequest request in creates)
+        {
             request.DisposeRegistration();
             request.Completion.TrySetException(exception);
         }
 
-        foreach (ResizeRequest request in resizes) {
+        foreach (ResizeRequest request in resizes)
+        {
             request.Completion.TrySetException(exception);
         }
 
-        foreach (ReadbackRequest request in readbacks) {
+        foreach (ReadbackRequest request in readbacks)
+        {
             request.DisposeRegistration();
             request.TrySetException(exception);
         }
@@ -448,12 +522,15 @@ internal sealed class RenderTextureService : IDisposable {
     /// Idempotent.
     /// </summary>
     /// <param name="failure">The render loop failure, or <see langword="null"/> for a graceful stop.</param>
-    internal void Close(Exception? failure) {
+    internal void Close(Exception? failure)
+    {
         CreateRequest[] creates;
         ResizeRequest[] resizes;
         ReadbackRequest[] readbacks;
-        lock (_gate) {
-            if (_closed || _disposed) {
+        lock (_gate)
+        {
+            if (_closed || _disposed)
+            {
                 return;
             }
 
@@ -469,16 +546,19 @@ internal sealed class RenderTextureService : IDisposable {
         }
 
         Exception exception = failure ?? CreateStoppedException();
-        foreach (CreateRequest request in creates) {
+        foreach (CreateRequest request in creates)
+        {
             request.DisposeRegistration();
             request.Completion.TrySetException(exception);
         }
 
-        foreach (ResizeRequest request in resizes) {
+        foreach (ResizeRequest request in resizes)
+        {
             request.Completion.TrySetException(exception);
         }
 
-        foreach (ReadbackRequest request in readbacks) {
+        foreach (ReadbackRequest request in readbacks)
+        {
             request.DisposeRegistration();
             request.TrySetException(exception);
         }
@@ -487,9 +567,12 @@ internal sealed class RenderTextureService : IDisposable {
     /// <summary>
     /// Disposes the service's wait handle. The app calls it after the render loop joined. Idempotent.
     /// </summary>
-    public void Dispose() {
-        lock (_gate) {
-            if (_disposed) {
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return;
             }
 
@@ -500,13 +583,14 @@ internal sealed class RenderTextureService : IDisposable {
         _workAvailable.Dispose();
     }
 
-    private static ObjectDisposedException CreateStoppedException() => new(
-        nameof(RenderTextureService),
-        "The app has stopped; render textures cannot be created, resized, or used after shutdown.");
+    private static ObjectDisposedException CreateStoppedException() =>
+        new(
+            nameof(RenderTextureService),
+            "The app has stopped; render textures cannot be created, resized, or used after shutdown."
+        );
 
-    private static ObjectDisposedException CreateDisposedTargetException() => new(
-        nameof(RenderTexture),
-        "The render texture is disposed; it cannot be read back.");
+    private static ObjectDisposedException CreateDisposedTargetException() =>
+        new(nameof(RenderTexture), "The render texture is disposed; it cannot be read back.");
 
     /// <summary>
     /// One queued readback request and its typed completion task. The base class owns the cancellation
@@ -518,7 +602,8 @@ internal sealed class RenderTextureService : IDisposable {
     /// copy that already began and its layout restore still complete, and only the result is discarded;
     /// the never-written default completes without a copy.
     /// </remarks>
-    internal abstract class ReadbackRequest {
+    internal abstract class ReadbackRequest
+    {
         private readonly RenderTextureService _owner;
         private readonly Lock _registrationGate = new();
         private CancellationTokenRegistration _registration;
@@ -527,7 +612,9 @@ internal sealed class RenderTextureService : IDisposable {
         protected ReadbackRequest(
             RenderTextureService owner,
             RenderTextureTargetLifetime lifetime,
-            CancellationToken cancellationToken) {
+            CancellationToken cancellationToken
+        )
+        {
             ArgumentNullException.ThrowIfNull(owner);
             ArgumentNullException.ThrowIfNull(lifetime);
 
@@ -554,22 +641,28 @@ internal sealed class RenderTextureService : IDisposable {
         /// request was completed by <see cref="Stop"/> or <see cref="Close"/> and must not leave a live
         /// callback behind.
         /// </summary>
-        internal void RegisterCancellation() {
-            lock (_registrationGate) {
-                if (_registrationDisposed) {
+        internal void RegisterCancellation()
+        {
+            lock (_registrationGate)
+            {
+                if (_registrationDisposed)
+                {
                     return;
                 }
 
                 _registration = CancellationToken.Register(
                     static state => ((ReadbackRequest)state!).Cancel(),
-                    this);
+                    this
+                );
             }
         }
 
         /// <summary>Disposes the cancellation registration. Safe when cancellation was never registered.</summary>
-        internal void DisposeRegistration() {
+        internal void DisposeRegistration()
+        {
             CancellationTokenRegistration registration;
-            lock (_registrationGate) {
+            lock (_registrationGate)
+            {
                 _registrationDisposed = true;
                 registration = _registration;
                 _registration = default;
@@ -587,8 +680,10 @@ internal sealed class RenderTextureService : IDisposable {
         /// <returns><see langword="true"/> when this call completed the task.</returns>
         internal abstract bool TrySetException(Exception exception);
 
-        private void Cancel() {
-            if (TrySetCanceled()) {
+        private void Cancel()
+        {
+            if (TrySetCanceled())
+            {
                 // Wake the render thread so it can skip a queued request. The service may already be
                 // disposed while a token is still live, so the wake is best effort.
                 _owner.SignalWork();
@@ -601,13 +696,18 @@ internal sealed class RenderTextureService : IDisposable {
     /// <see cref="Color"/> array for the raw scene-linear colors.
     /// </summary>
     /// <typeparam name="T">The completed readback value.</typeparam>
-    internal sealed class ReadbackRequest<T> : ReadbackRequest {
+    internal sealed class ReadbackRequest<T> : ReadbackRequest
+    {
         internal ReadbackRequest(
             RenderTextureService owner,
             RenderTextureTargetLifetime lifetime,
-            CancellationToken cancellationToken)
-            : base(owner, lifetime, cancellationToken) {
-            Completion = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+            CancellationToken cancellationToken
+        )
+            : base(owner, lifetime, cancellationToken)
+        {
+            Completion = new TaskCompletionSource<T>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
         }
 
         /// <summary>Gets the completion task source.</summary>
@@ -620,20 +720,25 @@ internal sealed class RenderTextureService : IDisposable {
         internal override bool TrySetCanceled() => Completion.TrySetCanceled(CancellationToken);
 
         /// <inheritdoc/>
-        internal override bool TrySetException(Exception exception) => Completion.TrySetException(exception);
+        internal override bool TrySetException(Exception exception) =>
+            Completion.TrySetException(exception);
     }
 
     /// <summary>
     /// One queued resize request and its single completion task.
     /// </summary>
-    internal sealed class ResizeRequest {
-        internal ResizeRequest(RenderTextureTargetLifetime lifetime, int width, int height) {
+    internal sealed class ResizeRequest
+    {
+        internal ResizeRequest(RenderTextureTargetLifetime lifetime, int width, int height)
+        {
             ArgumentNullException.ThrowIfNull(lifetime);
 
             Lifetime = lifetime;
             Width = width;
             Height = height;
-            Completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            Completion = new TaskCompletionSource(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
         }
 
         /// <summary>Gets the target lifetime to recreate.</summary>
@@ -655,18 +760,23 @@ internal sealed class RenderTextureService : IDisposable {
     /// <summary>
     /// One queued creation request and its single completion task.
     /// </summary>
-    internal sealed class CreateRequest {
+    internal sealed class CreateRequest
+    {
         private readonly RenderTextureService _owner;
         private CancellationTokenRegistration _registration;
 
         internal CreateRequest(
             RenderTextureService owner,
             RenderTextureDescription description,
-            CancellationToken cancellationToken) {
+            CancellationToken cancellationToken
+        )
+        {
             _owner = owner;
             Description = description;
             CancellationToken = cancellationToken;
-            Completion = new TaskCompletionSource<RenderTexture>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Completion = new TaskCompletionSource<RenderTexture>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
         }
 
         /// <summary>Gets the validated description.</summary>
@@ -678,16 +788,20 @@ internal sealed class RenderTextureService : IDisposable {
         /// <summary>Gets the completion task source.</summary>
         internal TaskCompletionSource<RenderTexture> Completion { get; }
 
-        internal void RegisterCancellation() {
+        internal void RegisterCancellation()
+        {
             _registration = CancellationToken.Register(
                 static state => ((CreateRequest)state!).Cancel(),
-                this);
+                this
+            );
         }
 
         internal void DisposeRegistration() => _registration.Dispose();
 
-        private void Cancel() {
-            if (Completion.TrySetCanceled(CancellationToken)) {
+        private void Cancel()
+        {
+            if (Completion.TrySetCanceled(CancellationToken))
+            {
                 // Wake the render thread so it can skip the queued request or destroy a target it
                 // already created.
                 _owner._workAvailable.Set();

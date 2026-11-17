@@ -11,7 +11,8 @@ namespace RayBork.Internal;
 /// resolver: every packed type carries a source-generated shape, which is what keeps the loader
 /// Native AOT compatible.
 /// </remarks>
-internal static class AssetSerialization {
+internal static class AssetSerialization
+{
     private static readonly MessagePackSerializer _serializer = new();
 
     /// <summary>
@@ -21,8 +22,7 @@ internal static class AssetSerialization {
     /// <param name="value">The value to serialize.</param>
     /// <returns>The MessagePack bytes.</returns>
     internal static byte[] Serialize<T>(T value)
-        where T : IShapeable<T>
-        => _serializer.Serialize(value);
+        where T : IShapeable<T> => _serializer.Serialize(value);
 
     /// <summary>
     /// Deserializes a shaped value from a payload.
@@ -32,10 +32,13 @@ internal static class AssetSerialization {
     /// <returns>The deserialized value.</returns>
     /// <exception cref="InvalidOperationException">The payload deserialized to <see langword="null"/>.</exception>
     internal static T Deserialize<T>(ReadOnlyMemory<byte> payload)
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         using var stream = new MemoryStream(payload.ToArray(), writable: false);
         T? value = _serializer.Deserialize<T>(stream, T.GetTypeShape());
-        return value ?? throw new InvalidOperationException(
-            $"The payload did not contain a {typeof(T).FullName} value.");
+        return value
+            ?? throw new InvalidOperationException(
+                $"The payload did not contain a {typeof(T).FullName} value."
+            );
     }
 }

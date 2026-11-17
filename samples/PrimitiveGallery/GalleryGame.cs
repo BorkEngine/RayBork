@@ -18,7 +18,8 @@ namespace PrimitiveGallery;
 /// in <see cref="Setup"/>, and every asset is disposed in <see cref="Shutdown"/>, so the sample needs
 /// no assets executable or pack.
 /// </remarks>
-internal sealed class GalleryGame : IGame {
+internal sealed class GalleryGame : IGame
+{
     private const float FIELD_OF_VIEW_DEGREES = 45f;
     private const float NEAR_PLANE = 0.05f;
     private const float ORBIT_DEGREES_PER_PIXEL = 0.25f;
@@ -62,7 +63,8 @@ internal sealed class GalleryGame : IGame {
     /// Creates the gallery and starts the camera at the same framing it keeps before the first orbit.
     /// </summary>
     /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
-    internal GalleryGame(int frameLimit) {
+    internal GalleryGame(int frameLimit)
+    {
         _frameLimit = frameLimit;
 
         Vector3 offset = _initialCameraPosition - _orbitCenter;
@@ -84,17 +86,21 @@ internal sealed class GalleryGame : IGame {
     }
 
     /// <inheritdoc/>
-    public async Task Setup(EngineContext context) {
+    public async Task Setup(EngineContext context)
+    {
         // The sample has no pack, so the one texture it shows is built here. A warm left half, a cool
         // right half, and a checkerboard make the billboard visibly textured and let its orientation
         // read at a glance.
         TextureBuilder textureBuilder = context.CreateTextureBuilder(TEXTURE_SIZE, TEXTURE_SIZE);
         Color[] pixels = new Color[TEXTURE_SIZE * TEXTURE_SIZE];
-        for (int y = 0; y < TEXTURE_SIZE; y++) {
-            for (int x = 0; x < TEXTURE_SIZE; x++) {
+        for (int y = 0; y < TEXTURE_SIZE; y++)
+        {
+            for (int x = 0; x < TEXTURE_SIZE; x++)
+            {
                 bool light = (((x / CHECKER_SIZE) + (y / CHECKER_SIZE)) & 1) == 0;
                 bool warm = x < TEXTURE_SIZE / 2;
-                pixels[(y * TEXTURE_SIZE) + x] = (warm, light) switch {
+                pixels[(y * TEXTURE_SIZE) + x] = (warm, light) switch
+                {
                     (true, true) => Color.GoldenRod,
                     (true, false) => Color.SaddleBrown,
                     (false, true) => Color.CornflowerBlue,
@@ -132,13 +138,16 @@ internal sealed class GalleryGame : IGame {
     }
 
     /// <inheritdoc/>
-    public void Tick(EngineContext context) {
-        if (context.Input.IsKeyPressed(Key.Escape)) {
+    public void Tick(EngineContext context)
+    {
+        if (context.Input.IsKeyPressed(Key.Escape))
+        {
             context.RequestExit();
         }
 
         // A toggles the built-in SSAO effect. The change applies to cameras created after this tick.
-        if (context.Input.IsKeyPressed(Key.A)) {
+        if (context.Input.IsKeyPressed(Key.A))
+        {
             _ssao.Enabled = !_ssao.Enabled;
         }
 
@@ -151,19 +160,24 @@ internal sealed class GalleryGame : IGame {
         Transform orbit = new(
             _orbitCenter,
             Quaternion.Euler(-_pitchDegrees, _yawDegrees, 0f),
-            Vector3.One);
+            Vector3.One
+        );
         Transform cameraTransform = new Transform(new Vector3(0f, 0f, _distance)).WithParent(orbit);
 
         // The scene pass clears color and depth and draws the whole gallery.
-        using (Camera scene = context.CreateCamera(
-            cameraTransform,
-            projection: CameraProjection.Perspective,
-            fieldOfView: FIELD_OF_VIEW_DEGREES,
-            clearMode: ClearMode.ColorAndDepth,
-            clearColor: Color.Gray3,
-            near: NEAR_PLANE,
-            far: float.PositiveInfinity,
-            postProcess: _postProcess)) {
+        using (
+            Camera scene = context.CreateCamera(
+                cameraTransform,
+                projection: CameraProjection.Perspective,
+                fieldOfView: FIELD_OF_VIEW_DEGREES,
+                clearMode: ClearMode.ColorAndDepth,
+                clearColor: Color.Gray3,
+                near: NEAR_PLANE,
+                far: float.PositiveInfinity,
+                postProcess: _postProcess
+            )
+        )
+        {
             DrawGallery(scene);
         }
 
@@ -176,17 +190,20 @@ internal sealed class GalleryGame : IGame {
             fieldOfView: FIELD_OF_VIEW_DEGREES,
             clearMode: ClearMode.Depth,
             near: NEAR_PLANE,
-            far: float.PositiveInfinity);
+            far: float.PositiveInfinity
+        );
         DrawStatusOverlay(hud, context);
 
         _frameCount++;
-        if (_frameLimit > 0 && _frameCount >= _frameLimit) {
+        if (_frameLimit > 0 && _frameCount >= _frameLimit)
+        {
             context.RequestExit();
         }
     }
 
     /// <inheritdoc/>
-    public Task Shutdown() {
+    public Task Shutdown()
+    {
         // The texture, the generated meshes, and the mesh material are owned by this sample; the
         // camera pass owned only frame-scoped references.
         _generatedCube?.Dispose();
@@ -206,7 +223,8 @@ internal sealed class GalleryGame : IGame {
         return Task.CompletedTask;
     }
 
-    private void DrawGallery(Camera camera) {
+    private void DrawGallery(Camera camera)
+    {
         // The reference grid sits on the ground plane and gives the floating rows a frame of
         // reference. It is always centered on the world origin.
         camera.DrawGrid(slices: 20, spacing: 1f, Color.Gray5);
@@ -230,12 +248,14 @@ internal sealed class GalleryGame : IGame {
             new Transform(
                 Station(0f, 0f),
                 Quaternion.CreateFromAxisAngle(_galleryView, 0.3f),
-                Vector3.One),
+                Vector3.One
+            ),
             radiusTop: 0f,
             radiusBottom: 0.5f,
             height: 1.6f,
             sides: 16,
-            Color.MediumOrchid);
+            Color.MediumOrchid
+        );
 
         camera.DrawCapsule(
             Station(1.9f, 0.3f),
@@ -243,14 +263,16 @@ internal sealed class GalleryGame : IGame {
             0.3f,
             rings: 4,
             slices: 10,
-            Color.IndianRed);
+            Color.IndianRed
+        );
         camera.DrawWireCapsule(
             Station(3f, 0.3f),
             Station(3f, 1.5f),
             0.3f,
             rings: 4,
             slices: 10,
-            Color.LightCoral);
+            Color.LightCoral
+        );
 
         // The triangle and the strip are built in the row's vertical plane and face the initial
         // camera, so their front faces and counter-clockwise winding are visible from the start.
@@ -260,7 +282,8 @@ internal sealed class GalleryGame : IGame {
             triangleCenter - triangleHalfWidth - (Vector3.UnitY * 0.75f),
             triangleCenter + triangleHalfWidth - (Vector3.UnitY * 0.75f),
             triangleCenter + (Vector3.UnitY * 0.75f),
-            Color.LimeGreen);
+            Color.LimeGreen
+        );
 
         // The strip alternates its corners above and below the row axis, which is the sliding window
         // of a triangle strip with the same winding as the single triangle.
@@ -274,7 +297,8 @@ internal sealed class GalleryGame : IGame {
                 stripCenter + (_galleryRight * 0.55f) + (Vector3.UnitY * 0.75f),
                 stripCenter + (_galleryRight * 0.55f) - (Vector3.UnitY * 0.75f),
             ],
-            Color.YellowGreen);
+            Color.YellowGreen
+        );
 
         camera.DrawPoint(Station(8.5f, 1.25f), Color.Yellow, size: 0.55f);
         camera.DrawPlane(Station(8.5f, 0.05f), new Vector2(2.2f, 2.2f), Color.MediumVioletRed);
@@ -295,20 +319,17 @@ internal sealed class GalleryGame : IGame {
             radiusBottom: 0.45f,
             height: 1.5f,
             sides: 12,
-            Color.DarkCyan);
+            Color.DarkCyan
+        );
         // A circle lies in its local XZ plane; rotating it 90 degrees around the row axis stands it
         // up to face the initial camera.
         camera.DrawCircle(Station(-0.9f, 5.5f), 0.8f, _galleryRight, 90f, Color.MediumSlateBlue);
 
         camera.DrawLine(Station(0.25f, 4.6f), Station(1.15f, 6.2f), Color.SoftRed);
         camera.DrawLines(
-            [
-                Station(1.45f, 4.9f),
-                Station(1.9f, 6.1f),
-                Station(2.35f, 4.9f),
-                Station(2.8f, 6.1f),
-            ],
-            Color.DarkOrange);
+            [Station(1.45f, 4.9f), Station(1.9f, 6.1f), Station(2.35f, 4.9f), Station(2.8f, 6.1f)],
+            Color.DarkOrange
+        );
 
         // The ray starts just below and left of the box and points through its center. A ray is
         // infinite; DrawRay draws a long segment along its unit direction, so the box sits mid-ray
@@ -317,7 +338,8 @@ internal sealed class GalleryGame : IGame {
         Vector3 rayOrigin = boxCenter - (_galleryRight * 1f) - (Vector3.UnitY * 0.6f);
         camera.DrawBoundingBox(
             new BoundingBox(boxCenter - new Vector3(0.65f), boxCenter + new Vector3(0.65f)),
-            Color.Silver);
+            Color.Silver
+        );
         camera.DrawRay(new Ray(rayOrigin, boxCenter - rayOrigin), Color.Gold);
 
         // The right billboard samples only the warm left half of the texture, so the source
@@ -328,10 +350,12 @@ internal sealed class GalleryGame : IGame {
             new Rect(0f, 0f, 0.5f, 1f),
             Station(9f, 5.5f),
             new Vector2(1.2f),
-            Color.Beige);
+            Color.Beige
+        );
     }
 
-    private void DrawGeneratedRow(Camera camera) {
+    private void DrawGeneratedRow(Camera camera)
+    {
         // Every mesh in this row was generated and uploaded in Setup. DrawMesh takes the caller-owned
         // material and a per-shape tint; the torus generator lies in the local XZ plane, so a quarter
         // turn around the row axis faces its hole at the initial camera. The cone generator stands on
@@ -341,30 +365,36 @@ internal sealed class GalleryGame : IGame {
             _generatedCube!,
             new Transform(Station(-7.2f, 3f)),
             _meshShader!,
-            tint: Color.Coral);
+            tint: Color.Coral
+        );
         camera.DrawMesh(
             _generatedSphere!,
             new Transform(Station(-3.6f, 3f)),
             _meshShader!,
-            tint: Color.Aquamarine);
+            tint: Color.Aquamarine
+        );
         camera.DrawMesh(
             _generatedTorus!,
             new Transform(
                 Station(0f, 3f),
                 Quaternion.CreateFromAxisAngle(_galleryRight, MathF.PI * 0.5f),
-                Vector3.One),
+                Vector3.One
+            ),
             _meshShader!,
-            tint: Color.GoldenRod);
+            tint: Color.GoldenRod
+        );
         camera.DrawMesh(
             _generatedKnot!,
             new Transform(Station(3.6f, 3f)),
             _meshShader!,
-            tint: Color.Violet);
+            tint: Color.Violet
+        );
         camera.DrawMesh(
             _generatedCone!,
             new Transform(Station(7.2f, 2.55f)),
             _meshShader!,
-            tint: Color.SeaGreen);
+            tint: Color.SeaGreen
+        );
     }
 
     private Vector3 Station(float offset, float height) =>
@@ -379,13 +409,15 @@ internal sealed class GalleryGame : IGame {
     /// front of the HUD camera. That camera clears depth after the scene pass, so gallery geometry
     /// cannot occlude the line.
     /// </remarks>
-    private void DrawStatusOverlay(Camera camera, EngineContext context) {
+    private void DrawStatusOverlay(Camera camera, EngineContext context)
+    {
         // The returned transform's scale is world units per render pixel, so an em height of 18 local
         // units is 18 render pixels. The built-in mono face keeps the changing counters from shifting
         // the text around them.
         Transform overlay = camera.ScreenToWorldTransform(
             new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
-            OVERLAY_DISTANCE);
+            OVERLAY_DISTANCE
+        );
 
         string ssaoState = _ssao.Enabled ? "on" : "off";
         camera.DrawText(
@@ -393,13 +425,16 @@ internal sealed class GalleryGame : IGame {
             $"{_overlay.Build(context)}\nssao {ssaoState}",
             overlay,
             OVERLAY_PIXEL_HEIGHT,
-            Color.White);
+            Color.White
+        );
     }
 
-    private void UpdateOrbit(IInput input) {
+    private void UpdateOrbit(IInput input)
+    {
         // Drag to orbit; the wheel moves the camera closer or farther away. Screen Y grows
         // downward, so adding the vertical delta raises the camera when the pointer moves down.
-        if (input.IsMouseButtonDown(MouseButton.Left)) {
+        if (input.IsMouseButtonDown(MouseButton.Left))
+        {
             Vector2 delta = input.MouseDelta;
             _yawDegrees -= delta.X * ORBIT_DEGREES_PER_PIXEL;
 
@@ -407,15 +442,18 @@ internal sealed class GalleryGame : IGame {
             _pitchDegrees = Math.Clamp(
                 _pitchDegrees + (delta.Y * ORBIT_DEGREES_PER_PIXEL),
                 -pitchLimit,
-                pitchLimit);
+                pitchLimit
+            );
         }
 
         float wheel = input.MouseWheel;
-        if (wheel != 0f) {
+        if (wheel != 0f)
+        {
             _distance = Math.Clamp(
                 _distance * MathF.Pow(ZOOM_PER_WHEEL_STEP, -wheel),
                 MIN_DISTANCE,
-                MAX_DISTANCE);
+                MAX_DISTANCE
+            );
         }
     }
 }

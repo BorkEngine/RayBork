@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// after the copy finished or was abandoned. Render-thread only.
 /// </para>
 /// </remarks>
-internal static unsafe class VulkanAssetUploadCommands {
+internal static unsafe class VulkanAssetUploadCommands
+{
     private const ulong WAIT_TIMEOUT = ulong.MaxValue;
 
     /// <summary>
@@ -39,7 +40,9 @@ internal static unsafe class VulkanAssetUploadCommands {
         VulkanDevice device,
         ILogger logger,
         string canonicalPath,
-        Action<Vk, CommandBuffer> record) {
+        Action<Vk, CommandBuffer> record
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentNullException.ThrowIfNull(record);
@@ -49,8 +52,10 @@ internal static unsafe class VulkanAssetUploadCommands {
         CommandPool commandPool = default;
         Fence fence = default;
         bool submitted = false;
-        try {
-            CommandPoolCreateInfo poolInfo = new() {
+        try
+        {
+            CommandPoolCreateInfo poolInfo = new()
+            {
                 SType = StructureType.CommandPoolCreateInfo,
                 Flags = CommandPoolCreateFlags.TransientBit,
                 QueueFamilyIndex = device.Capabilities.GraphicsQueueFamily,
@@ -58,40 +63,52 @@ internal static unsafe class VulkanAssetUploadCommands {
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.CreateCommandPool(deviceHandle, &poolInfo, null, out commandPool),
                 canonicalPath,
-                "vkCreateCommandPool");
+                "vkCreateCommandPool"
+            );
 
-            CommandBufferAllocateInfo allocateInfo = new() {
+            CommandBufferAllocateInfo allocateInfo = new()
+            {
                 SType = StructureType.CommandBufferAllocateInfo,
                 CommandPool = commandPool,
                 Level = CommandBufferLevel.Primary,
                 CommandBufferCount = 1,
             };
             VulkanAssetErrors.ThrowIfFailed(
-                vulkan.AllocateCommandBuffers(deviceHandle, &allocateInfo, out CommandBuffer commandBuffer),
+                vulkan.AllocateCommandBuffers(
+                    deviceHandle,
+                    &allocateInfo,
+                    out CommandBuffer commandBuffer
+                ),
                 canonicalPath,
-                "vkAllocateCommandBuffers");
+                "vkAllocateCommandBuffers"
+            );
 
-            CommandBufferBeginInfo beginInfo = new() {
+            CommandBufferBeginInfo beginInfo = new()
+            {
                 SType = StructureType.CommandBufferBeginInfo,
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.BeginCommandBuffer(commandBuffer, &beginInfo),
                 canonicalPath,
-                "vkBeginCommandBuffer");
+                "vkBeginCommandBuffer"
+            );
             record(vulkan, commandBuffer);
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.EndCommandBuffer(commandBuffer),
                 canonicalPath,
-                "vkEndCommandBuffer");
+                "vkEndCommandBuffer"
+            );
 
             FenceCreateInfo fenceInfo = new() { SType = StructureType.FenceCreateInfo };
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.CreateFence(deviceHandle, &fenceInfo, null, out fence),
                 canonicalPath,
-                "vkCreateFence");
+                "vkCreateFence"
+            );
 
-            SubmitInfo submitInfo = new() {
+            SubmitInfo submitInfo = new()
+            {
                 SType = StructureType.SubmitInfo,
                 CommandBufferCount = 1,
                 PCommandBuffers = &commandBuffer,
@@ -99,11 +116,15 @@ internal static unsafe class VulkanAssetUploadCommands {
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.QueueSubmit(device.GraphicsQueue, 1, &submitInfo, fence),
                 canonicalPath,
-                "vkQueueSubmit");
+                "vkQueueSubmit"
+            );
             submitted = true;
             return new UploadSubmission(commandPool, fence);
-        } finally {
-            if (!submitted) {
+        }
+        finally
+        {
+            if (!submitted)
+            {
                 DestroyFence(vulkan, deviceHandle, fence, logger);
                 DestroyCommandPool(vulkan, deviceHandle, commandPool, logger);
             }
@@ -123,11 +144,14 @@ internal static unsafe class VulkanAssetUploadCommands {
     internal static bool TryComplete(
         VulkanDevice device,
         UploadSubmission submission,
-        string canonicalPath) {
+        string canonicalPath
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
 
         Result result = device.Vulkan.GetFenceStatus(device.Device, submission.Fence);
-        if (result == Result.NotReady) {
+        if (result == Result.NotReady)
+        {
             return false;
         }
 
@@ -147,14 +171,17 @@ internal static unsafe class VulkanAssetUploadCommands {
     internal static void Wait(
         VulkanDevice device,
         UploadSubmission submission,
-        string canonicalPath) {
+        string canonicalPath
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
 
         Fence fence = submission.Fence;
         VulkanAssetErrors.ThrowIfFailed(
             device.Vulkan.WaitForFences(device.Device, 1, &fence, true, WAIT_TIMEOUT),
             canonicalPath,
-            "vkWaitForFences");
+            "vkWaitForFences"
+        );
     }
 
     /// <summary>
@@ -164,7 +191,8 @@ internal static unsafe class VulkanAssetUploadCommands {
     /// <param name="logger">The logger for cleanup failures.</param>
     /// <param name="submission">The submission objects; default handles are ignored.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal static void Destroy(VulkanDevice device, ILogger logger, UploadSubmission submission) {
+    internal static void Destroy(VulkanDevice device, ILogger logger, UploadSubmission submission)
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -175,15 +203,21 @@ internal static unsafe class VulkanAssetUploadCommands {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Fence destruction runs on teardown paths where the device may already be lost; the failure is logged instead of thrown.")]
-    private static void DestroyFence(Vk vulkan, Device device, Fence fence, ILogger logger) {
-        if (fence.Handle == 0) {
+        Justification = "Fence destruction runs on teardown paths where the device may already be lost; the failure is logged instead of thrown."
+    )]
+    private static void DestroyFence(Vk vulkan, Device device, Fence fence, ILogger logger)
+    {
+        if (fence.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             vulkan.DestroyFence(device, fence, null);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             // Cleanup runs while an upload error may already be propagating; a failed destroy must
             // not mask it. The fence belongs to a stopped upload, so logging is the only action.
             logger.LogWarning(exception, "The Vulkan asset upload fence could not be destroyed.");
@@ -193,17 +227,31 @@ internal static unsafe class VulkanAssetUploadCommands {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Command-pool destruction runs on teardown paths where the device may already be lost; the failure is logged instead of thrown.")]
-    private static void DestroyCommandPool(Vk vulkan, Device device, CommandPool commandPool, ILogger logger) {
-        if (commandPool.Handle == 0) {
+        Justification = "Command-pool destruction runs on teardown paths where the device may already be lost; the failure is logged instead of thrown."
+    )]
+    private static void DestroyCommandPool(
+        Vk vulkan,
+        Device device,
+        CommandPool commandPool,
+        ILogger logger
+    )
+    {
+        if (commandPool.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             // Destroying the pool also frees the upload command buffer allocated from it.
             vulkan.DestroyCommandPool(device, commandPool, null);
-        } catch (Exception exception) {
-            logger.LogWarning(exception, "The Vulkan asset upload command pool could not be destroyed.");
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "The Vulkan asset upload command pool could not be destroyed."
+            );
         }
     }
 

@@ -25,7 +25,8 @@ namespace RayBork;
 /// from a real projection before using it for culling.
 /// </para>
 /// </remarks>
-public readonly struct BoundingFrustum {
+public readonly struct BoundingFrustum
+{
     /// <summary>
     /// The signed-distance slack <see cref="Intersects"/> allows for the positive box corner. Without
     /// it, a box exactly on a frustum plane, or a full-screen quad recorded at the view boundary, can
@@ -41,11 +42,32 @@ public readonly struct BoundingFrustum {
     /// The view-projection matrix in the engine's row-vector convention: a position transforms as
     /// <c>Vector4.Transform(new Vector4(position, 1), viewProjection)</c>.
     /// </param>
-    public BoundingFrustum(Matrix4x4 viewProjection) {
-        Vector4 column0 = new(viewProjection.M11, viewProjection.M21, viewProjection.M31, viewProjection.M41);
-        Vector4 column1 = new(viewProjection.M12, viewProjection.M22, viewProjection.M32, viewProjection.M42);
-        Vector4 column2 = new(viewProjection.M13, viewProjection.M23, viewProjection.M33, viewProjection.M43);
-        Vector4 column3 = new(viewProjection.M14, viewProjection.M24, viewProjection.M34, viewProjection.M44);
+    public BoundingFrustum(Matrix4x4 viewProjection)
+    {
+        Vector4 column0 = new(
+            viewProjection.M11,
+            viewProjection.M21,
+            viewProjection.M31,
+            viewProjection.M41
+        );
+        Vector4 column1 = new(
+            viewProjection.M12,
+            viewProjection.M22,
+            viewProjection.M32,
+            viewProjection.M42
+        );
+        Vector4 column2 = new(
+            viewProjection.M13,
+            viewProjection.M23,
+            viewProjection.M33,
+            viewProjection.M43
+        );
+        Vector4 column3 = new(
+            viewProjection.M14,
+            viewProjection.M24,
+            viewProjection.M34,
+            viewProjection.M44
+        );
 
         Left = CreatePlane(column0 + column3);
         Right = CreatePlane(column3 - column0);
@@ -78,13 +100,13 @@ public readonly struct BoundingFrustum {
     /// </summary>
     /// <param name="point">The world-space point.</param>
     /// <returns><see langword="true"/> when every signed plane distance is non-negative.</returns>
-    public bool Contains(Vector3 point)
-        => Plane.DotCoordinate(Left, point) >= 0f
-            && Plane.DotCoordinate(Right, point) >= 0f
-            && Plane.DotCoordinate(Bottom, point) >= 0f
-            && Plane.DotCoordinate(Top, point) >= 0f
-            && Plane.DotCoordinate(Near, point) >= 0f
-            && Plane.DotCoordinate(Far, point) >= 0f;
+    public bool Contains(Vector3 point) =>
+        Plane.DotCoordinate(Left, point) >= 0f
+        && Plane.DotCoordinate(Right, point) >= 0f
+        && Plane.DotCoordinate(Bottom, point) >= 0f
+        && Plane.DotCoordinate(Top, point) >= 0f
+        && Plane.DotCoordinate(Near, point) >= 0f
+        && Plane.DotCoordinate(Far, point) >= 0f;
 
     /// <summary>
     /// Determines whether an axis-aligned world-space box intersects or lies inside the frustum.
@@ -99,28 +121,32 @@ public readonly struct BoundingFrustum {
     /// boundary-aligned geometry is not culled by floating-point drift in the extracted planes.
     /// <see cref="Contains"/> keeps its exact non-negative test.
     /// </remarks>
-    public bool Intersects(BoundingBox bounds)
-        => IntersectsPlane(Left, bounds)
-            && IntersectsPlane(Right, bounds)
-            && IntersectsPlane(Bottom, bounds)
-            && IntersectsPlane(Top, bounds)
-            && IntersectsPlane(Near, bounds)
-            && IntersectsPlane(Far, bounds);
+    public bool Intersects(BoundingBox bounds) =>
+        IntersectsPlane(Left, bounds)
+        && IntersectsPlane(Right, bounds)
+        && IntersectsPlane(Bottom, bounds)
+        && IntersectsPlane(Top, bounds)
+        && IntersectsPlane(Near, bounds)
+        && IntersectsPlane(Far, bounds);
 
-    private static bool IntersectsPlane(Plane plane, BoundingBox bounds) {
+    private static bool IntersectsPlane(Plane plane, BoundingBox bounds)
+    {
         Vector3 positiveVertex = new(
             plane.Normal.X >= 0f ? bounds.Max.X : bounds.Min.X,
             plane.Normal.Y >= 0f ? bounds.Max.Y : bounds.Min.Y,
-            plane.Normal.Z >= 0f ? bounds.Max.Z : bounds.Min.Z);
+            plane.Normal.Z >= 0f ? bounds.Max.Z : bounds.Min.Z
+        );
         // Accept a positive corner that is only within tolerance behind the plane: boundary-aligned
         // geometry must not flicker out of the frame because of plane-extraction rounding.
         return Plane.DotCoordinate(plane, positiveVertex) >= -PLANE_TOLERANCE;
     }
 
-    private static Plane CreatePlane(Vector4 coefficients) {
+    private static Plane CreatePlane(Vector4 coefficients)
+    {
         Vector3 normal = new(coefficients.X, coefficients.Y, coefficients.Z);
         float length = normal.Length();
-        if (length > 0f && float.IsFinite(length)) {
+        if (length > 0f && float.IsFinite(length))
+        {
             return new Plane(normal / length, coefficients.W / length);
         }
 

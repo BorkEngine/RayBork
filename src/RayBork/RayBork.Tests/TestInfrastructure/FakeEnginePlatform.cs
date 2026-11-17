@@ -6,14 +6,16 @@ namespace RayBork.Tests;
 /// A fake <see cref="IEnginePlatform"/> that records lifecycle calls and exposes deterministic hooks
 /// for pumping, input capture, and startup failure.
 /// </summary>
-internal sealed class FakeEnginePlatform : IEnginePlatform {
+internal sealed class FakeEnginePlatform : IEnginePlatform
+{
     private static readonly IntPtr _defaultVulkanSurface = new(0x5EED);
 
     private readonly List<IntPtr> _createdSurfaceInstances = [];
     private readonly List<IntPtr> _destroyedSurfaces = [];
     private Action? _onExitRequested;
 
-    internal FakeEnginePlatform() {
+    internal FakeEnginePlatform()
+    {
         FakeWindow = new FakePlatformWindow(RaiseExitRequested);
     }
 
@@ -97,7 +99,8 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
     /// </summary>
     public Exception? SurfaceCreationException { get; set; }
 
-    public void Initialize(PlatformOptions options, Action onExitRequested) {
+    public void Initialize(PlatformOptions options, Action onExitRequested)
+    {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(onExitRequested);
 
@@ -108,7 +111,8 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
         FakeWindow.ApplyStartupOptions(options);
         InitializeHook?.Invoke();
 
-        if (InitializeException is not null) {
+        if (InitializeException is not null)
+        {
             throw InitializeException;
         }
     }
@@ -117,8 +121,10 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
     /// Returns <see cref="VulkanInstanceExtensions"/> when the platform is initialized.
     /// </summary>
     /// <exception cref="PlatformException">The platform is not initialized or has been disposed.</exception>
-    public IReadOnlyList<string> GetVulkanInstanceExtensions() {
-        if (IsDisposed || !InitializeCalled) {
+    public IReadOnlyList<string> GetVulkanInstanceExtensions()
+    {
+        if (IsDisposed || !InitializeCalled)
+        {
             throw new PlatformException("The platform has not been initialized.");
         }
 
@@ -131,15 +137,18 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
     /// </summary>
     /// <exception cref="ObjectDisposedException">The platform has been disposed.</exception>
     /// <exception cref="InvalidOperationException">The platform is not initialized.</exception>
-    public IntPtr CreateVulkanSurface(IntPtr instance) {
+    public IntPtr CreateVulkanSurface(IntPtr instance)
+    {
         ObjectDisposedException.ThrowIf(IsDisposed, this);
-        if (!InitializeCalled) {
+        if (!InitializeCalled)
+        {
             throw new InvalidOperationException("The platform has not been initialized.");
         }
 
         CreateSurfaceCallCount++;
         CreateSurfaceThreadId = Environment.CurrentManagedThreadId;
-        if (SurfaceCreationException is not null) {
+        if (SurfaceCreationException is not null)
+        {
             throw SurfaceCreationException;
         }
 
@@ -150,8 +159,10 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
     /// <summary>
     /// Records a non-zero surface handle as destroyed.
     /// </summary>
-    public void DestroyVulkanSurface(IntPtr instance, IntPtr surface) {
-        if (surface == IntPtr.Zero) {
+    public void DestroyVulkanSurface(IntPtr instance, IntPtr surface)
+    {
+        if (surface == IntPtr.Zero)
+        {
             return;
         }
 
@@ -159,26 +170,38 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
         _destroyedSurfaces.Add(surface);
     }
 
-    public void Pump(TimeSpan maxWait) {
+    public void Pump(TimeSpan maxWait)
+    {
         PumpCount++;
         PumpHook?.Invoke(this);
         FakeWindow.ApplyPendingCommands();
     }
 
-    public IInput CaptureInput() {
+    public IInput CaptureInput()
+    {
         CaptureInputCount++;
-        if (CaptureInputException is not null) {
+        if (CaptureInputException is not null)
+        {
             throw CaptureInputException;
         }
 
         return new FakeInput();
     }
 
-    public void SetGamepadVibration(int instanceId, float lowFrequency, float highFrequency, TimeSpan duration) {
-        VibrationCalls.Add(new VibrationCall(instanceId, lowFrequency, highFrequency, duration, Stop: false));
+    public void SetGamepadVibration(
+        int instanceId,
+        float lowFrequency,
+        float highFrequency,
+        TimeSpan duration
+    )
+    {
+        VibrationCalls.Add(
+            new VibrationCall(instanceId, lowFrequency, highFrequency, duration, Stop: false)
+        );
     }
 
-    public void StopGamepadVibration(int instanceId) {
+    public void StopGamepadVibration(int instanceId)
+    {
         VibrationCalls.Add(new VibrationCall(instanceId, 0f, 0f, TimeSpan.Zero, Stop: true));
     }
 
@@ -191,5 +214,6 @@ internal sealed class FakeEnginePlatform : IEnginePlatform {
         float LowFrequency,
         float HighFrequency,
         TimeSpan Duration,
-        bool Stop);
+        bool Stop
+    );
 }

@@ -28,15 +28,19 @@ namespace RayBork.Tests;
 /// loader setup.
 /// </para>
 /// </remarks>
-public sealed class ModelWireframeGpuTests {
+public sealed class ModelWireframeGpuTests
+{
     private const float COLOR_TOLERANCE = 2e-3f;
     private const uint LINE_PIXEL_TOLERANCE = 2;
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void WireframeCubeDrawsTheFrontTriangleEdgesAndNotTheFaceInterior() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void WireframeCubeDrawsTheFrontTriangleEdgesAndNotTheFaceInterior()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         RequireFillModeNonSolid(harness);
         Color color = new(0.9f, 0.3f, 0.1f, 1f);
         using Model model = CreateCubeModel(harness);
@@ -49,13 +53,16 @@ public sealed class ModelWireframeGpuTests {
         // split into two triangles, so its diagonal crosses the center of the face and therefore the
         // center row.
         harness.SubmitOrthographic(
-            camera => camera.DrawWireModel(
-                model,
-                new Transform(Vector3.Zero, Quaternion.Identity, new Vector3(2f)),
-                color),
+            camera =>
+                camera.DrawWireModel(
+                    model,
+                    new Transform(Vector3.Zero, Quaternion.Identity, new Vector3(2f)),
+                    color
+                ),
             transform: new Transform(new Vector3(0f, 0f, 5f)),
             clearColor: _clearColor,
-            height: 4f);
+            height: 4f
+        );
 
         AssertTintedNear(harness, color, centerX - edgeOffset, centerY);
         AssertTintedNear(harness, color, centerX + edgeOffset, centerY);
@@ -75,8 +82,11 @@ public sealed class ModelWireframeGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void WireframeQuadLineSamplesThePartMaterialTexture() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void WireframeQuadLineSamplesThePartMaterialTexture()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         RequireFillModeNonSolid(harness);
         Color textureColor = new(0.25f, 0.5f, 0.75f, 1f);
         Texture texture = harness.CreateTexture(1, 1, textureColor);
@@ -90,16 +100,19 @@ public sealed class ModelWireframeGpuTests {
         // in both axes. The material cursor is set on the tick thread, as IGame.Tick would, and the
         // line fragment still samples the part material's texture.
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 material.SetUniform(PrimitiveDrawGpuHarness.MESH_TEXTURE_BINDING, texture);
                 camera.DrawWireModel(
                     model,
                     new Transform(Vector3.Zero, Quaternion.Identity, new Vector3(2f)),
-                    tint: null);
+                    tint: null
+                );
             },
             transform: new Transform(new Vector3(0f, 0f, 5f)),
             clearColor: _clearColor,
-            height: 4f);
+            height: 4f
+        );
 
         AssertTintedNear(harness, Unorm(textureColor), centerX - edgeOffset, centerY);
         AssertTintedNear(harness, Unorm(textureColor), centerX + edgeOffset, centerY);
@@ -110,8 +123,11 @@ public sealed class ModelWireframeGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void FilledAndWireframeModelDrawsUseDistinctPipelines() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void FilledAndWireframeModelDrawsUseDistinctPipelines()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         RequireFillModeNonSolid(harness);
         Color color = new(0.2f, 0.8f, 0.4f, 1f);
         using Model model = CreateCubeModel(harness);
@@ -123,23 +139,30 @@ public sealed class ModelWireframeGpuTests {
         // Both draws use the same mesh, material, and render state, so only the polygon mode can
         // separate them into two batches and two pipelines.
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 camera.DrawModel(
                     model,
                     new Transform(new Vector3(-1.6f, 0f, 0f), Quaternion.Identity, new Vector3(2f)),
-                    color);
+                    color
+                );
                 camera.DrawWireModel(
                     model,
                     new Transform(new Vector3(1.6f, 0f, 0f), Quaternion.Identity, new Vector3(2f)),
-                    color);
+                    color
+                );
             },
             transform: new Transform(new Vector3(0f, 0f, 5f)),
             clearColor: _clearColor,
-            height: 4f);
+            height: 4f
+        );
 
         // The filled cube covers its face interior; the wireframe cube leaves it clear.
         AssertColorNear(color, harness.ReadColor(filledCenterX, centerY));
-        AssertColorNear(_clearColor, harness.ReadColor(wireframeCenterX - (edgeOffset / 2), centerY));
+        AssertColorNear(
+            _clearColor,
+            harness.ReadColor(wireframeCenterX - (edgeOffset / 2), centerY)
+        );
         AssertTintedNear(harness, color, wireframeCenterX, centerY);
 
         RenderStats stats = harness.Host.Backend.Stats;
@@ -151,18 +174,22 @@ public sealed class ModelWireframeGpuTests {
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
     }
 
-    private static Model CreateCubeModel(PrimitiveDrawGpuHarness harness) {
+    private static Model CreateCubeModel(PrimitiveDrawGpuHarness harness)
+    {
         Shader material = harness.Primitives.PrimitiveMaterial.Program.CreateMaterial();
         return new Model(new ModelPart("cube", harness.Primitives.Cube, material));
     }
 
-    private static void RequireFillModeNonSolid(PrimitiveDrawGpuHarness harness) {
+    private static void RequireFillModeNonSolid(PrimitiveDrawGpuHarness harness)
+    {
         VulkanDeviceCapabilities capabilities = harness.Host.Device.Capabilities;
-        if (!capabilities.FillModeNonSolid) {
+        if (!capabilities.FillModeNonSolid)
+        {
             Assert.Skip(
                 $"The Vulkan device '{capabilities.DeviceName}' does not support fillModeNonSolid; "
                     + "DrawWireModel needs the polygon-mode-line pipeline and M5 has no line-geometry "
-                    + "fallback.");
+                    + "fallback."
+            );
         }
     }
 
@@ -170,17 +197,24 @@ public sealed class ModelWireframeGpuTests {
         PrimitiveDrawGpuHarness harness,
         Color expected,
         uint x,
-        uint y) {
-        for (uint offset = 0; offset <= LINE_PIXEL_TOLERANCE; offset++) {
-            if (IsColorNear(expected, harness.ReadColor(x + offset, y))
-                || (offset > 0 && IsColorNear(expected, harness.ReadColor(x - offset, y)))) {
+        uint y
+    )
+    {
+        for (uint offset = 0; offset <= LINE_PIXEL_TOLERANCE; offset++)
+        {
+            if (
+                IsColorNear(expected, harness.ReadColor(x + offset, y))
+                || (offset > 0 && IsColorNear(expected, harness.ReadColor(x - offset, y)))
+            )
+            {
                 return;
             }
         }
 
         Assert.Fail(
             $"No pixel within {LINE_PIXEL_TOLERANCE} pixel(s) of ({x}, {y}) matched the expected "
-                + $"color ({expected.R}, {expected.G}, {expected.B}).");
+                + $"color ({expected.R}, {expected.G}, {expected.B})."
+        );
     }
 
     private static bool IsColorNear(Color expected, (float R, float G, float B) actual) =>
@@ -188,18 +222,22 @@ public sealed class ModelWireframeGpuTests {
         && MathF.Abs(expected.G - actual.G) <= COLOR_TOLERANCE
         && MathF.Abs(expected.B - actual.B) <= COLOR_TOLERANCE;
 
-    private static void AssertColorNear(Color expected, (float R, float G, float B) actual) {
+    private static void AssertColorNear(Color expected, (float R, float G, float B) actual)
+    {
         Assert.True(
             IsColorNear(expected, actual),
             $"Expected ({expected.R}, {expected.G}, {expected.B}) but read "
-                + $"({actual.R}, {actual.G}, {actual.B}) within {COLOR_TOLERANCE}.");
+                + $"({actual.R}, {actual.G}, {actual.B}) within {COLOR_TOLERANCE}."
+        );
     }
 
-    private static Color Unorm(Color color) => new(
-        UnormChannel(color.R),
-        UnormChannel(color.G),
-        UnormChannel(color.B),
-        UnormChannel(color.A));
+    private static Color Unorm(Color color) =>
+        new(
+            UnormChannel(color.R),
+            UnormChannel(color.G),
+            UnormChannel(color.B),
+            UnormChannel(color.A)
+        );
 
     private static float UnormChannel(float value) =>
         (byte)((int)((Math.Clamp(value, 0f, 1f) * 255f) + 0.5f)) / 255f;

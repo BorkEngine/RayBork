@@ -41,7 +41,8 @@ namespace RayBork.Internal;
 /// cancellation both release the wait.
 /// </para>
 /// </remarks>
-internal sealed class FrameRing {
+internal sealed class FrameRing
+{
     private const int SLOT_COUNT = 3;
 
     private readonly Lock _gate = new();
@@ -59,8 +60,10 @@ internal sealed class FrameRing {
     /// <summary>
     /// Initializes the ring and its three reusable frame packets.
     /// </summary>
-    internal FrameRing() {
-        for (int index = 0; index < _packets.Length; index++) {
+    internal FrameRing()
+    {
+        for (int index = 0; index < _packets.Length; index++)
+        {
             _packets[index] = new RenderFramePacket(frameIndex: 0);
         }
     }
@@ -81,9 +84,12 @@ internal sealed class FrameRing {
     /// Gets whether the producer completed the ring. A completed ring still has to be drained by the
     /// consumer.
     /// </summary>
-    internal bool IsCompleted {
-        get {
-            lock (_gate) {
+    internal bool IsCompleted
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _completed;
             }
         }
@@ -93,8 +99,10 @@ internal sealed class FrameRing {
     /// Tries to reserve a free slot for recording. Returns <c>false</c> when every slot is occupied
     /// or the ring is complete.
     /// </summary>
-    internal bool TryAcquireWritable(out FrameLease lease) {
-        lock (_gate) {
+    internal bool TryAcquireWritable(out FrameLease lease)
+    {
+        lock (_gate)
+        {
             return TryAcquireWritableLocked(out lease);
         }
     }
@@ -109,15 +117,23 @@ internal sealed class FrameRing {
     /// <exception cref="InvalidOperationException">
     /// <paramref name="lease"/> is not a recording lease, or the slot already owns a retention set.
     /// </exception>
-    internal void AttachRetention(FrameLease lease, FrameAssetRetention retention) {
+    internal void AttachRetention(FrameLease lease, FrameAssetRetention retention)
+    {
         ArgumentNullException.ThrowIfNull(retention);
 
-        lock (_gate) {
-            int slotIndex = ValidateLeaseLocked(lease, SlotState.Recording, nameof(AttachRetention));
-            if (_slots[slotIndex].Retention is not null) {
+        lock (_gate)
+        {
+            int slotIndex = ValidateLeaseLocked(
+                lease,
+                SlotState.Recording,
+                nameof(AttachRetention)
+            );
+            if (_slots[slotIndex].Retention is not null)
+            {
                 throw new InvalidOperationException(
-                    $"Frame ring {nameof(AttachRetention)} requires a recording slot without a " +
-                    $"retention set, but slot {slotIndex} already owns one.");
+                    $"Frame ring {nameof(AttachRetention)} requires a recording slot without a "
+                        + $"retention set, but slot {slotIndex} already owns one."
+                );
             }
 
             _slots[slotIndex] = new Slot(SlotState.Recording, lease.FrameIndex, retention);
@@ -131,15 +147,20 @@ internal sealed class FrameRing {
     /// <exception cref="InvalidOperationException">
     /// <paramref name="lease"/> is not a recording lease for this ring.
     /// </exception>
-    internal void Publish(FrameLease lease) {
+    internal void Publish(FrameLease lease)
+    {
         bool freedSlot = false;
         List<FrameAssetRetention>? superseded = null;
-        lock (_gate) {
+        lock (_gate)
+        {
             int slotIndex = ValidateLeaseLocked(lease, SlotState.Recording, nameof(Publish));
             lease.Packet?.Seal();
-            for (int i = 0; i < SLOT_COUNT; i++) {
-                if (i != slotIndex && _slots[i].State == SlotState.Ready) {
-                    if (_slots[i].Retention is { } retention) {
+            for (int i = 0; i < SLOT_COUNT; i++)
+            {
+                if (i != slotIndex && _slots[i].State == SlotState.Ready)
+                {
+                    if (_slots[i].Retention is { } retention)
+                    {
                         (superseded ??= []).Add(retention);
                     }
 
@@ -147,7 +168,11 @@ internal sealed class FrameRing {
                     freedSlot = true;
                 }
             }
-            _slots[slotIndex] = new Slot(SlotState.Ready, lease.FrameIndex, _slots[slotIndex].Retention);
+            _slots[slotIndex] = new Slot(
+                SlotState.Ready,
+                lease.FrameIndex,
+                _slots[slotIndex].Retention
+            );
         }
 
         // Release the superseded holds before the freed slot is advertised, so a new tick cannot
@@ -155,7 +180,8 @@ internal sealed class FrameRing {
         // released because a target's release may queue GPU destruction.
         ReleaseRetention(superseded);
         _readyAvailable.Set();
-        if (freedSlot) {
+        if (freedSlot)
+        {
             _writableAvailable.Set();
         }
     }
@@ -164,8 +190,10 @@ internal sealed class FrameRing {
     /// Tries to take the newest ready frame for rendering. Returns <c>false</c> when no ready frame
     /// is available, including after the ring is complete and drained.
     /// </summary>
-    internal bool TryAcquireNewest(out FrameLease lease) {
-        lock (_gate) {
+    internal bool TryAcquireNewest(out FrameLease lease)
+    {
+        lock (_gate)
+        {
             return TryAcquireNewestLocked(out lease);
         }
     }
@@ -177,9 +205,11 @@ internal sealed class FrameRing {
     /// <exception cref="InvalidOperationException">
     /// <paramref name="lease"/> is not a rendering lease for this ring.
     /// </exception>
-    internal void Release(FrameLease lease) {
+    internal void Release(FrameLease lease)
+    {
         FrameAssetRetention? retention;
-        lock (_gate) {
+        lock (_gate)
+        {
             int slotIndex = ValidateLeaseLocked(lease, SlotState.Rendering, nameof(Release));
             retention = _slots[slotIndex].Retention;
             _slots[slotIndex] = new Slot(SlotState.Free, _slots[slotIndex].FrameIndex);
@@ -197,9 +227,11 @@ internal sealed class FrameRing {
     /// <exception cref="InvalidOperationException">
     /// <paramref name="lease"/> is not a recording lease for this ring.
     /// </exception>
-    internal void Abandon(FrameLease lease) {
+    internal void Abandon(FrameLease lease)
+    {
         FrameAssetRetention? retention;
-        lock (_gate) {
+        lock (_gate)
+        {
             int slotIndex = ValidateLeaseLocked(lease, SlotState.Recording, nameof(Abandon));
             retention = _slots[slotIndex].Retention;
             _slots[slotIndex] = new Slot(SlotState.Free, _slots[slotIndex].FrameIndex);
@@ -215,14 +247,17 @@ internal sealed class FrameRing {
     /// frames keep their retention set until the consumer drains them, because the final frame may
     /// still be presented during teardown.
     /// </summary>
-    internal void Complete() {
+    internal void Complete()
+    {
         bool completedNow;
-        lock (_gate) {
+        lock (_gate)
+        {
             completedNow = !_completed;
             _completed = true;
         }
 
-        if (completedNow) {
+        if (completedNow)
+        {
             _writableAvailable.Set();
             _readyAvailable.Set();
             _presentedAvailable.Set();
@@ -236,14 +271,19 @@ internal sealed class FrameRing {
     /// </summary>
     /// <returns>A recording lease, or <c>null</c> when the ring is complete.</returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    internal FrameLease? AcquireWritable(CancellationToken cancellationToken) {
-        while (true) {
+    internal FrameLease? AcquireWritable(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
             cancellationToken.ThrowIfCancellationRequested();
-            lock (_gate) {
-                if (TryAcquireWritableLocked(out FrameLease lease)) {
+            lock (_gate)
+            {
+                if (TryAcquireWritableLocked(out FrameLease lease))
+                {
                     return lease;
                 }
-                if (_completed) {
+                if (_completed)
+                {
                     cancellationToken.ThrowIfCancellationRequested();
                     return null;
                 }
@@ -262,14 +302,19 @@ internal sealed class FrameRing {
     /// A rendering lease, or <c>null</c> when the ring is complete and no ready frame remains.
     /// </returns>
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was canceled.</exception>
-    internal FrameLease? AcquireNewest(CancellationToken cancellationToken) {
-        while (true) {
+    internal FrameLease? AcquireNewest(CancellationToken cancellationToken)
+    {
+        while (true)
+        {
             cancellationToken.ThrowIfCancellationRequested();
-            lock (_gate) {
-                if (TryAcquireNewestLocked(out FrameLease lease)) {
+            lock (_gate)
+            {
+                if (TryAcquireNewestLocked(out FrameLease lease))
+                {
                     return lease;
                 }
-                if (_completed) {
+                if (_completed)
+                {
                     cancellationToken.ThrowIfCancellationRequested();
                     return null;
                 }
@@ -293,16 +338,20 @@ internal sealed class FrameRing {
     /// only frames that reached the presentation engine.
     /// </remarks>
     /// <param name="frameIndex">The frame index that finished its presentation attempt.</param>
-    internal void MarkPresented(long frameIndex) {
+    internal void MarkPresented(long frameIndex)
+    {
         bool advanced = false;
-        lock (_gate) {
-            if (frameIndex > _highestPresentedFrameIndex) {
+        lock (_gate)
+        {
+            if (frameIndex > _highestPresentedFrameIndex)
+            {
                 _highestPresentedFrameIndex = frameIndex;
                 advanced = true;
             }
         }
 
-        if (advanced) {
+        if (advanced)
+        {
             _presentedAvailable.Set();
         }
     }
@@ -327,48 +376,64 @@ internal sealed class FrameRing {
     /// ring is complete; <see langword="false"/> when <paramref name="cancellationToken"/> was
     /// canceled first.
     /// </returns>
-    internal bool WaitForPresentation(long frameIndex, CancellationToken cancellationToken) {
-        while (true) {
-            lock (_gate) {
-                if (_highestPresentedFrameIndex >= frameIndex || _completed) {
+    internal bool WaitForPresentation(long frameIndex, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            lock (_gate)
+            {
+                if (_highestPresentedFrameIndex >= frameIndex || _completed)
+                {
                     return true;
                 }
             }
 
-            if (cancellationToken.IsCancellationRequested) {
+            if (cancellationToken.IsCancellationRequested)
+            {
                 return false;
             }
 
             Interlocked.Increment(ref _presentationWaiterCount);
-            try {
+            try
+            {
                 using CancellationTokenRegistration registration = cancellationToken.Register(
                     static state => ((AutoResetEvent)state!).Set(),
-                    _presentedAvailable);
+                    _presentedAvailable
+                );
                 _presentedAvailable.WaitOne();
-            } finally {
+            }
+            finally
+            {
                 Interlocked.Decrement(ref _presentationWaiterCount);
             }
         }
     }
 
-    private static void ReleaseRetention(List<FrameAssetRetention>? retentions) {
-        if (retentions is null) {
+    private static void ReleaseRetention(List<FrameAssetRetention>? retentions)
+    {
+        if (retentions is null)
+        {
             return;
         }
 
-        foreach (FrameAssetRetention retention in retentions) {
+        foreach (FrameAssetRetention retention in retentions)
+        {
             retention.Release();
         }
     }
 
-    private bool TryAcquireWritableLocked(out FrameLease lease) {
+    private bool TryAcquireWritableLocked(out FrameLease lease)
+    {
         lease = default;
-        if (_completed) {
+        if (_completed)
+        {
             return false;
         }
 
-        for (int i = 0; i < SLOT_COUNT; i++) {
-            if (_slots[i].State == SlotState.Free) {
+        for (int i = 0; i < SLOT_COUNT; i++)
+        {
+            if (_slots[i].State == SlotState.Free)
+            {
                 long frameIndex = _nextFrameIndex++;
                 RenderFramePacket packet = _packets[i];
                 packet.Reset(frameIndex);
@@ -381,61 +446,79 @@ internal sealed class FrameRing {
         return false;
     }
 
-    private bool TryAcquireNewestLocked(out FrameLease lease) {
+    private bool TryAcquireNewestLocked(out FrameLease lease)
+    {
         lease = default;
         int newestSlotIndex = -1;
         long newestFrameIndex = -1;
-        for (int i = 0; i < SLOT_COUNT; i++) {
-            if (_slots[i].State == SlotState.Ready && _slots[i].FrameIndex > newestFrameIndex) {
+        for (int i = 0; i < SLOT_COUNT; i++)
+        {
+            if (_slots[i].State == SlotState.Ready && _slots[i].FrameIndex > newestFrameIndex)
+            {
                 newestSlotIndex = i;
                 newestFrameIndex = _slots[i].FrameIndex;
             }
         }
 
-        if (newestSlotIndex < 0) {
+        if (newestSlotIndex < 0)
+        {
             return false;
         }
 
-        _slots[newestSlotIndex] = new Slot(SlotState.Rendering, newestFrameIndex, _slots[newestSlotIndex].Retention);
+        _slots[newestSlotIndex] = new Slot(
+            SlotState.Rendering,
+            newestFrameIndex,
+            _slots[newestSlotIndex].Retention
+        );
         lease = new FrameLease(newestSlotIndex, newestFrameIndex, _packets[newestSlotIndex]);
         return true;
     }
 
-    private int ValidateLeaseLocked(FrameLease lease, SlotState requiredState, string operation) {
+    private int ValidateLeaseLocked(FrameLease lease, SlotState requiredState, string operation)
+    {
         int slotIndex = lease.SlotIndex;
-        if (slotIndex < 0 || slotIndex >= SLOT_COUNT) {
+        if (slotIndex < 0 || slotIndex >= SLOT_COUNT)
+        {
             throw new InvalidOperationException(
-                $"Frame ring {operation} received a lease with invalid slot index {slotIndex}.");
+                $"Frame ring {operation} received a lease with invalid slot index {slotIndex}."
+            );
         }
 
         Slot slot = _slots[slotIndex];
-        if (slot.FrameIndex != lease.FrameIndex || slot.State != requiredState) {
+        if (slot.FrameIndex != lease.FrameIndex || slot.State != requiredState)
+        {
             throw new InvalidOperationException(
-                $"Frame ring {operation} requires a {requiredState} lease, but slot {slotIndex} holds " +
-                $"frame {slot.FrameIndex} in state {slot.State}; the lease refers to frame {lease.FrameIndex}.");
+                $"Frame ring {operation} requires a {requiredState} lease, but slot {slotIndex} holds "
+                    + $"frame {slot.FrameIndex} in state {slot.State}; the lease refers to frame {lease.FrameIndex}."
+            );
         }
 
         return slotIndex;
     }
 
-    private static void WaitForSignal(AutoResetEvent signal, CancellationToken cancellationToken) {
+    private static void WaitForSignal(AutoResetEvent signal, CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
         using CancellationTokenRegistration registration = cancellationToken.Register(
             static state => ((AutoResetEvent)state!).Set(),
-            signal);
+            signal
+        );
         signal.WaitOne();
         cancellationToken.ThrowIfCancellationRequested();
     }
 
-    private enum SlotState {
+    private enum SlotState
+    {
         Free,
         Recording,
         Ready,
         Rendering,
     }
 
-    private readonly struct Slot {
-        public Slot(SlotState state, long frameIndex, FrameAssetRetention? retention = null) {
+    private readonly struct Slot
+    {
+        public Slot(SlotState state, long frameIndex, FrameAssetRetention? retention = null)
+        {
             State = state;
             FrameIndex = frameIndex;
             Retention = retention;

@@ -16,7 +16,8 @@ namespace RayBork.Internal;
 /// buffer, so it must be consumed before that call.
 /// </para>
 /// </remarks>
-internal sealed class TextLayoutBuffer {
+internal sealed class TextLayoutBuffer
+{
     private const int DEFAULT_CAPACITY = 64;
 
     private TextGlyphInstance[] _glyphs = [];
@@ -24,17 +25,18 @@ internal sealed class TextLayoutBuffer {
     /// <summary>
     /// Initializes an empty buffer.
     /// </summary>
-    internal TextLayoutBuffer() {
-    }
+    internal TextLayoutBuffer() { }
 
     /// <summary>
     /// Initializes an empty buffer with room for <paramref name="initialCapacity"/> records.
     /// </summary>
     /// <param name="initialCapacity">The initial record capacity. It must be non-negative.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="initialCapacity"/> is negative.</exception>
-    internal TextLayoutBuffer(int initialCapacity) {
+    internal TextLayoutBuffer(int initialCapacity)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(initialCapacity);
-        if (initialCapacity > 0) {
+        if (initialCapacity > 0)
+        {
             _glyphs = new TextGlyphInstance[initialCapacity];
         }
     }
@@ -54,9 +56,11 @@ internal sealed class TextLayoutBuffer {
     /// <param name="count">The number of records the caller is about to write. It must be non-negative.</param>
     /// <returns>A writable span of exactly <paramref name="count"/> records.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
-    internal Span<TextGlyphInstance> Reserve(int count) {
+    internal Span<TextGlyphInstance> Reserve(int count)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
-        if (count > _glyphs.Length) {
+        if (count > _glyphs.Length)
+        {
             int capacity = Math.Max(count, Math.Max(_glyphs.Length * 2, DEFAULT_CAPACITY));
             Array.Resize(ref _glyphs, capacity);
         }

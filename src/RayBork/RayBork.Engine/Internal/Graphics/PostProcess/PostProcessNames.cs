@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// Both names are reserved: a custom effect must declare <see cref="SOURCE_COLOR"/> and may declare
 /// <see cref="SOURCE_DEPTH"/>, and the values the material cursor holds for them are always overridden.
 /// </remarks>
-internal static class PostProcessNames {
+internal static class PostProcessNames
+{
     /// <summary>The required texture binding that receives the current source color.</summary>
     internal const string SOURCE_COLOR = "sourceColor";
 

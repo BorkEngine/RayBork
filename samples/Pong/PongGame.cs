@@ -24,7 +24,8 @@ namespace Pong;
 /// overlay with <see cref="ClearMode.Depth"/>, so scene depth cannot occlude the HUD.
 /// </para>
 /// </remarks>
-internal sealed class PongGame : IGame {
+internal sealed class PongGame : IGame
+{
     private const string SETTINGS_PATH = "/data/game";
 
     private const float DESIGN_WIDTH = 1280f;
@@ -98,7 +99,10 @@ internal sealed class PongGame : IGame {
     private static readonly Color _paddleFlashColor = new(6f, 5f, 3f, 1f);
     private static readonly Color _ballFlashColor = new(3f, 2.2f, 0.8f, 1f);
     private static readonly Color _wallFlashColor = new(2.4f, 1.6f, 0.5f, 1f);
-    private static readonly Vector2 _playfieldCenter = new(DESIGN_WIDTH * 0.5f, DESIGN_HEIGHT * 0.5f);
+    private static readonly Vector2 _playfieldCenter = new(
+        DESIGN_WIDTH * 0.5f,
+        DESIGN_HEIGHT * 0.5f
+    );
 
     private readonly int _frameLimit;
     private readonly PostProcessStack _postProcess = new();
@@ -127,12 +131,14 @@ internal sealed class PongGame : IGame {
     /// Creates the match.
     /// </summary>
     /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
-    internal PongGame(int frameLimit) {
+    internal PongGame(int frameLimit)
+    {
         _frameLimit = frameLimit;
     }
 
     /// <inheritdoc/>
-    public async Task Setup(EngineContext context) {
+    public async Task Setup(EngineContext context)
+    {
         PongSettings settings = await context.Assets.Load<PongSettings>(SETTINGS_PATH);
         Validate(settings);
         _settings = settings;
@@ -151,14 +157,17 @@ internal sealed class PongGame : IGame {
     }
 
     /// <inheritdoc/>
-    public void Tick(EngineContext context) {
-        if (context.Input.IsKeyPressed(Key.B)) {
+    public void Tick(EngineContext context)
+    {
+        if (context.Input.IsKeyPressed(Key.B))
+        {
             _bloom.Enabled = !_bloom.Enabled;
         }
 
         float leftAxis = UpdateInput(context);
         DecayFlashes((float)context.DeltaTime);
-        if (!_paused && _winner == 0) {
+        if (!_paused && _winner == 0)
+        {
             AdvanceSimulation((float)context.DeltaTime, leftAxis);
         }
 
@@ -167,15 +176,19 @@ internal sealed class PongGame : IGame {
         Transform cameraTransform = new(new Vector3(0f, 0f, SCREEN_PLANE_DISTANCE));
 
         // The scene pass clears color and depth and runs the app-lifetime bloom stack.
-        using (Camera scene = context.CreateCamera(
-            cameraTransform,
-            projection: CameraProjection.Orthographic,
-            orthographicHeight: context.Window.RenderHeight,
-            clearMode: ClearMode.ColorAndDepth,
-            clearColor: _letterboxColor,
-            near: CAMERA_NEAR,
-            far: CAMERA_FAR,
-            postProcess: _postProcess)) {
+        using (
+            Camera scene = context.CreateCamera(
+                cameraTransform,
+                projection: CameraProjection.Orthographic,
+                orthographicHeight: context.Window.RenderHeight,
+                clearMode: ClearMode.ColorAndDepth,
+                clearColor: _letterboxColor,
+                near: CAMERA_NEAR,
+                far: CAMERA_FAR,
+                postProcess: _postProcess
+            )
+        )
+        {
             DrawScene(scene);
         }
 
@@ -189,17 +202,20 @@ internal sealed class PongGame : IGame {
             orthographicHeight: context.Window.RenderHeight,
             clearMode: ClearMode.Depth,
             near: CAMERA_NEAR,
-            far: CAMERA_FAR);
+            far: CAMERA_FAR
+        );
         DrawHud(hud);
 
         _frameCount++;
-        if (_frameLimit > 0 && _frameCount >= _frameLimit) {
+        if (_frameLimit > 0 && _frameCount >= _frameLimit)
+        {
             context.RequestExit();
         }
     }
 
     /// <inheritdoc/>
-    public Task Shutdown() {
+    public Task Shutdown()
+    {
         // The mono font is engine-owned; only the texture load is this sample's reference.
         _paddleTexture?.Dispose();
         _paddleTexture = null;
@@ -208,10 +224,13 @@ internal sealed class PongGame : IGame {
         return Task.CompletedTask;
     }
 
-    private static void Validate(PongSettings settings) {
-        if (string.IsNullOrWhiteSpace(settings.PaddleTexture)) {
+    private static void Validate(PongSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.PaddleTexture))
+        {
             throw new InvalidOperationException(
-                $"Pong settings '{SETTINGS_PATH}' must name a non-empty PaddleTexture.");
+                $"Pong settings '{SETTINGS_PATH}' must name a non-empty PaddleTexture."
+            );
         }
 
         RequirePositive(settings.BallRadius, "BallRadius");
@@ -225,9 +244,13 @@ internal sealed class PongGame : IGame {
 
         // A cap below the serve speed would make the first hit slow the ball down, which is not a
         // speed-up; reject the inconsistent pair instead of clamping it silently.
-        if (settings.MaxBallSpeed < settings.BallSpeed) {
-            throw new InvalidOperationException(FormattableString.Invariant(
-                $"Pong settings '{SETTINGS_PATH}' require MaxBallSpeed at least BallSpeed ({settings.BallSpeed}); got {settings.MaxBallSpeed}."));
+        if (settings.MaxBallSpeed < settings.BallSpeed)
+        {
+            throw new InvalidOperationException(
+                FormattableString.Invariant(
+                    $"Pong settings '{SETTINGS_PATH}' require MaxBallSpeed at least BallSpeed ({settings.BallSpeed}); got {settings.MaxBallSpeed}."
+                )
+            );
         }
 
         // The gameplay math needs the paddle height to leave a non-empty clamp range and the ball
@@ -236,35 +259,53 @@ internal sealed class PongGame : IGame {
         RequireAtMost(settings.PaddleHeight, DESIGN_HEIGHT, "PaddleHeight");
         RequireAtMost(settings.BallRadius, DESIGN_HEIGHT * 0.5f, "BallRadius");
 
-        if (settings.MaxScore <= 0) {
+        if (settings.MaxScore <= 0)
+        {
             throw new InvalidOperationException(
                 $"Pong settings '{SETTINGS_PATH}' require a positive MaxScore; got "
-                    + $"{settings.MaxScore.ToString(CultureInfo.InvariantCulture)}.");
+                    + $"{settings.MaxScore.ToString(CultureInfo.InvariantCulture)}."
+            );
         }
     }
 
-    private static void RequirePositive(float value, string name) {
-        if (!float.IsFinite(value) || value <= 0f) {
-            throw new InvalidOperationException(FormattableString.Invariant(
-                $"Pong settings '{SETTINGS_PATH}' require a positive finite {name}; got {value}."));
+    private static void RequirePositive(float value, string name)
+    {
+        if (!float.IsFinite(value) || value <= 0f)
+        {
+            throw new InvalidOperationException(
+                FormattableString.Invariant(
+                    $"Pong settings '{SETTINGS_PATH}' require a positive finite {name}; got {value}."
+                )
+            );
         }
     }
 
-    private static void RequireNonNegative(float value, string name) {
-        if (!float.IsFinite(value) || value < 0f) {
-            throw new InvalidOperationException(FormattableString.Invariant(
-                $"Pong settings '{SETTINGS_PATH}' require a non-negative finite {name}; got {value}."));
+    private static void RequireNonNegative(float value, string name)
+    {
+        if (!float.IsFinite(value) || value < 0f)
+        {
+            throw new InvalidOperationException(
+                FormattableString.Invariant(
+                    $"Pong settings '{SETTINGS_PATH}' require a non-negative finite {name}; got {value}."
+                )
+            );
         }
     }
 
-    private static void RequireAtMost(float value, float maximum, string name) {
-        if (value > maximum) {
-            throw new InvalidOperationException(FormattableString.Invariant(
-                $"Pong settings '{SETTINGS_PATH}' require {name} at most {maximum}; got {value}."));
+    private static void RequireAtMost(float value, float maximum, string name)
+    {
+        if (value > maximum)
+        {
+            throw new InvalidOperationException(
+                FormattableString.Invariant(
+                    $"Pong settings '{SETTINGS_PATH}' require {name} at most {maximum}; got {value}."
+                )
+            );
         }
     }
 
-    private void ResetMatch() {
+    private void ResetMatch()
+    {
         _leftScore = 0;
         _rightScore = 0;
         _winner = 0;
@@ -281,67 +322,82 @@ internal sealed class PongGame : IGame {
         Serve(towardRight: true);
     }
 
-    private void Serve(bool towardRight) {
+    private void Serve(bool towardRight)
+    {
         _ballPosition = _playfieldCenter;
         _ballSpeed = _settings!.BallSpeed;
         Vector2 direction = new(towardRight ? 1f : -1f, SERVE_SLOPE);
         _ballVelocity = Vector2.Normalize(direction) * _ballSpeed;
     }
 
-    private float UpdateInput(EngineContext context) {
+    private float UpdateInput(EngineContext context)
+    {
         IInput input = context.Input;
         IGamepad? gamepad = input.GetGamepad(0);
-        if (gamepad is not null && !gamepad.IsConnected) {
+        if (gamepad is not null && !gamepad.IsConnected)
+        {
             gamepad = null;
         }
 
-        if (input.IsKeyPressed(Key.Escape)) {
+        if (input.IsKeyPressed(Key.Escape))
+        {
             context.RequestExit();
         }
 
-        bool restartPressed = input.IsKeyPressed(Key.R)
-            || (gamepad?.IsButtonPressed(GamepadButton.Back) ?? false);
-        if (restartPressed) {
+        bool restartPressed =
+            input.IsKeyPressed(Key.R) || (gamepad?.IsButtonPressed(GamepadButton.Back) ?? false);
+        if (restartPressed)
+        {
             ResetMatch();
             return 0f;
         }
 
-        if (_winner != 0) {
+        if (_winner != 0)
+        {
             return 0f;
         }
 
-        bool pausePressed = input.IsKeyPressed(Key.Space)
+        bool pausePressed =
+            input.IsKeyPressed(Key.Space)
             || (gamepad?.IsButtonPressed(GamepadButton.Start) ?? false);
-        if (pausePressed) {
+        if (pausePressed)
+        {
             _paused = !_paused;
         }
 
-        if (_paused) {
+        if (_paused)
+        {
             return 0f;
         }
 
         return ReadPaddleAxis(input, gamepad);
     }
 
-    private static float ReadPaddleAxis(IInput input, IGamepad? gamepad) {
+    private static float ReadPaddleAxis(IInput input, IGamepad? gamepad)
+    {
         float value = 0f;
-        if (input.IsKeyDown(Key.W) || input.IsKeyDown(Key.Up)) {
+        if (input.IsKeyDown(Key.W) || input.IsKeyDown(Key.Up))
+        {
             value -= 1f;
         }
 
-        if (input.IsKeyDown(Key.S) || input.IsKeyDown(Key.Down)) {
+        if (input.IsKeyDown(Key.S) || input.IsKeyDown(Key.Down))
+        {
             value += 1f;
         }
 
-        if (gamepad is not null) {
+        if (gamepad is not null)
+        {
             // The engine applies no deadzone, so the sample picks a small one to stop stick drift.
             float stick = gamepad.GetAxis(GamepadAxis.LeftY);
             value += MathF.Abs(stick) >= GAMEPAD_DEADZONE ? stick : 0f;
-            if (gamepad.IsButtonDown(GamepadButton.DpadUp)) {
+            if (gamepad.IsButtonDown(GamepadButton.DpadUp))
+            {
                 value -= 1f;
             }
 
-            if (gamepad.IsButtonDown(GamepadButton.DpadDown)) {
+            if (gamepad.IsButtonDown(GamepadButton.DpadDown))
+            {
                 value += 1f;
             }
         }
@@ -349,17 +405,21 @@ internal sealed class PongGame : IGame {
         return Math.Clamp(value, -1f, 1f);
     }
 
-    private void AdvanceSimulation(float deltaSeconds, float leftAxis) {
+    private void AdvanceSimulation(float deltaSeconds, float leftAxis)
+    {
         _simulationAccumulator = MathF.Min(
             _simulationAccumulator + deltaSeconds,
-            MAX_SIMULATION_SECONDS);
-        while (_simulationAccumulator >= SIMULATION_STEP_SECONDS && _winner == 0) {
+            MAX_SIMULATION_SECONDS
+        );
+        while (_simulationAccumulator >= SIMULATION_STEP_SECONDS && _winner == 0)
+        {
             Step(SIMULATION_STEP_SECONDS, leftAxis);
             _simulationAccumulator -= SIMULATION_STEP_SECONDS;
         }
     }
 
-    private void Step(float deltaSeconds, float leftAxis) {
+    private void Step(float deltaSeconds, float leftAxis)
+    {
         PongSettings settings = _settings!;
         float halfPaddleHeight = settings.PaddleHeight * 0.5f;
         float minY = halfPaddleHeight;
@@ -369,16 +429,20 @@ internal sealed class PongGame : IGame {
         _leftPaddle.Y = Math.Clamp(
             _leftPaddle.Y + (leftAxis * settings.PaddleSpeed * deltaSeconds),
             minY,
-            maxY);
+            maxY
+        );
         _rightPaddle.Y = Math.Clamp(NextAiY(deltaSeconds), minY, maxY);
 
         _ballPosition += _ballVelocity * deltaSeconds;
 
-        if (_ballPosition.Y - settings.BallRadius < 0f) {
+        if (_ballPosition.Y - settings.BallRadius < 0f)
+        {
             _ballPosition.Y = settings.BallRadius;
             _ballVelocity.Y = MathF.Abs(_ballVelocity.Y);
             TriggerWallFlash();
-        } else if (_ballPosition.Y + settings.BallRadius > DESIGN_HEIGHT) {
+        }
+        else if (_ballPosition.Y + settings.BallRadius > DESIGN_HEIGHT)
+        {
             _ballPosition.Y = DESIGN_HEIGHT - settings.BallRadius;
             _ballVelocity.Y = -MathF.Abs(_ballVelocity.Y);
             TriggerWallFlash();
@@ -387,9 +451,12 @@ internal sealed class PongGame : IGame {
         BounceOffPaddle(_leftPaddle, isLeft: true);
         BounceOffPaddle(_rightPaddle, isLeft: false);
 
-        if (_ballPosition.X < 0f) {
+        if (_ballPosition.X < 0f)
+        {
             AwardPoint(leftScored: false);
-        } else if (_ballPosition.X > DESIGN_WIDTH) {
+        }
+        else if (_ballPosition.X > DESIGN_WIDTH)
+        {
             AwardPoint(leftScored: true);
         }
     }
@@ -398,35 +465,42 @@ internal sealed class PongGame : IGame {
     // to the center so it is in position for the next approach. It moves at most AiPaddleSpeed per
     // fixed substep and stops at the deadzone edge, so the motion is deterministic and beatable: the
     // ball outruns the paddle once the hit speed-up carries it past AiPaddleSpeed.
-    private float NextAiY(float deltaSeconds) {
+    private float NextAiY(float deltaSeconds)
+    {
         PongSettings settings = _settings!;
         float targetY = _ballVelocity.X > 0f ? _ballPosition.Y : _playfieldCenter.Y;
         float offset = targetY - _rightPaddle.Y;
-        if (MathF.Abs(offset) <= AI_DEADZONE) {
+        if (MathF.Abs(offset) <= AI_DEADZONE)
+        {
             return _rightPaddle.Y;
         }
 
         float travel = MathF.Min(
             settings.AiPaddleSpeed * deltaSeconds,
-            MathF.Abs(offset) - AI_DEADZONE);
+            MathF.Abs(offset) - AI_DEADZONE
+        );
         return _rightPaddle.Y + (MathF.Sign(offset) * travel);
     }
 
-    private void BounceOffPaddle(Vector2 paddle, bool isLeft) {
+    private void BounceOffPaddle(Vector2 paddle, bool isLeft)
+    {
         PongSettings settings = _settings!;
         float halfWidth = settings.PaddleWidth * 0.5f;
         float halfHeight = settings.PaddleHeight * 0.5f;
         BoundingBox box = new(
             new Vector3(paddle.X - halfWidth, paddle.Y - halfHeight, 0f),
-            new Vector3(paddle.X + halfWidth, paddle.Y + halfHeight, 0f));
+            new Vector3(paddle.X + halfWidth, paddle.Y + halfHeight, 0f)
+        );
         Vector3 ballCenter = new(_ballPosition.X, _ballPosition.Y, 0f);
-        if (!Collision.CheckBoxSphere(box, ballCenter, settings.BallRadius)) {
+        if (!Collision.CheckBoxSphere(box, ballCenter, settings.BallRadius))
+        {
             return;
         }
 
         // The box/sphere test is symmetric, so a ball already leaving the paddle must not bounce
         // again while its sphere still overlaps the box.
-        if (isLeft ? _ballVelocity.X >= 0f : _ballVelocity.X <= 0f) {
+        if (isLeft ? _ballVelocity.X >= 0f : _ballVelocity.X <= 0f)
+        {
             return;
         }
 
@@ -436,8 +510,8 @@ internal sealed class PongGame : IGame {
         float offset = Math.Clamp((_ballPosition.Y - paddle.Y) / halfHeight, -1f, 1f);
         float horizontal = isLeft ? 1f : -1f;
         _ballSpeed = MathF.Min(_ballSpeed + settings.BallSpeedupPerHit, settings.MaxBallSpeed);
-        _ballVelocity = Vector2.Normalize(new Vector2(horizontal, offset * MAX_BOUNCE_SLOPE))
-            * _ballSpeed;
+        _ballVelocity =
+            Vector2.Normalize(new Vector2(horizontal, offset * MAX_BOUNCE_SLOPE)) * _ballSpeed;
 
         // Separate the sphere from the box so the next step does not retest the same overlap.
         float separation = halfWidth + settings.BallRadius + 0.01f;
@@ -445,42 +519,56 @@ internal sealed class PongGame : IGame {
         TriggerPaddleFlash(isLeft);
     }
 
-    private void TriggerWallFlash() {
+    private void TriggerWallFlash()
+    {
         _ballFlash = FLASH_DURATION;
         _wallFlash = FLASH_DURATION;
     }
 
-    private void TriggerPaddleFlash(bool isLeft) {
+    private void TriggerPaddleFlash(bool isLeft)
+    {
         _ballFlash = FLASH_DURATION;
-        if (isLeft) {
+        if (isLeft)
+        {
             _leftPaddleFlash = FLASH_DURATION;
-        } else {
+        }
+        else
+        {
             _rightPaddleFlash = FLASH_DURATION;
         }
     }
 
-    private void DecayFlashes(float deltaSeconds) {
+    private void DecayFlashes(float deltaSeconds)
+    {
         _ballFlash = MathF.Max(0f, _ballFlash - deltaSeconds);
         _leftPaddleFlash = MathF.Max(0f, _leftPaddleFlash - deltaSeconds);
         _rightPaddleFlash = MathF.Max(0f, _rightPaddleFlash - deltaSeconds);
         _wallFlash = MathF.Max(0f, _wallFlash - deltaSeconds);
     }
 
-    private void AwardPoint(bool leftScored) {
-        if (leftScored) {
+    private void AwardPoint(bool leftScored)
+    {
+        if (leftScored)
+        {
             _leftScore++;
-        } else {
+        }
+        else
+        {
             _rightScore++;
         }
 
         int maxScore = _settings!.MaxScore;
-        if (_leftScore >= maxScore) {
+        if (_leftScore >= maxScore)
+        {
             _winner = PLAYER_ONE;
-        } else if (_rightScore >= maxScore) {
+        }
+        else if (_rightScore >= maxScore)
+        {
             _winner = AI_PLAYER;
         }
 
-        if (_winner != 0) {
+        if (_winner != 0)
+        {
             _ballPosition = _playfieldCenter;
             _ballVelocity = Vector2.Zero;
             _ballSpeed = 0f;
@@ -491,7 +579,8 @@ internal sealed class PongGame : IGame {
         Serve(towardRight: leftScored);
     }
 
-    private void DrawScene(Camera camera) {
+    private void DrawScene(Camera camera)
+    {
         Layout layout = new(camera.Viewport.Width, camera.Viewport.Height);
         PongSettings settings = _settings!;
 
@@ -500,7 +589,8 @@ internal sealed class PongGame : IGame {
             layout,
             _playfieldCenter,
             new Vector2(DESIGN_WIDTH, DESIGN_HEIGHT),
-            _playfieldColor);
+            _playfieldColor
+        );
         DrawBorder(camera, layout, FlashAmount(_wallFlash));
         DrawNet(camera, layout);
 
@@ -510,29 +600,35 @@ internal sealed class PongGame : IGame {
             settings,
             _paddleTexture!,
             _leftPaddle,
-            FlashAmount(_leftPaddleFlash));
+            FlashAmount(_leftPaddleFlash)
+        );
         DrawPaddle(
             camera,
             layout,
             settings,
             _paddleTexture!,
             _rightPaddle,
-            FlashAmount(_rightPaddleFlash));
+            FlashAmount(_rightPaddleFlash)
+        );
         camera.DrawDisc(
             ScreenTransform(camera, layout.ToPixel(_ballPosition)),
             settings.BallRadius * layout.Scale,
-            WithFlash(_ballColor, _ballFlashColor, FlashAmount(_ballFlash)));
+            WithFlash(_ballColor, _ballFlashColor, FlashAmount(_ballFlash))
+        );
     }
 
-    private void DrawHud(Camera camera) {
+    private void DrawHud(Camera camera)
+    {
         Layout layout = new(camera.Viewport.Width, camera.Viewport.Height);
         Font font = _monoFont!;
         Vector2 leftScoreCenter = new(
             _playfieldCenter.X - SCORE_BOX_GAP,
-            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f));
+            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f)
+        );
         Vector2 rightScoreCenter = new(
             _playfieldCenter.X + SCORE_BOX_GAP,
-            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f));
+            SCORE_BOX_TOP + (SCORE_BOX_HEIGHT * 0.5f)
+        );
 
         DrawScoreBox(camera, layout, leftScoreCenter);
         DrawScoreBox(camera, layout, rightScoreCenter);
@@ -541,7 +637,8 @@ internal sealed class PongGame : IGame {
         // first-record order at equal depth. Record it before the text so every label stays on top.
         // The HUD camera loaded the scene color, so the shade dims the scene rather than the clear.
         bool showOverlay = _paused || _winner != 0;
-        if (showOverlay) {
+        if (showOverlay)
+        {
             DrawOverlayShade(camera, layout);
         }
 
@@ -549,11 +646,16 @@ internal sealed class PongGame : IGame {
         DrawScoreText(camera, layout, font, _rightScore, rightScoreCenter);
 
         string status;
-        if (_winner != 0) {
+        if (_winner != 0)
+        {
             status = MATCH_OVER_STATUS;
-        } else if (_paused) {
+        }
+        else if (_paused)
+        {
             status = PAUSED_STATUS;
-        } else {
+        }
+        else
+        {
             status = CONTROLS_TEXT;
         }
 
@@ -565,10 +667,13 @@ internal sealed class PongGame : IGame {
             status,
             STATUS_CENTER_Y,
             STATUS_FONT_SIZE,
-            _statusColor);
+            _statusColor
+        );
 
-        if (showOverlay) {
-            string title = _winner switch {
+        if (showOverlay)
+        {
+            string title = _winner switch
+            {
                 PLAYER_ONE => PLAYER_ONE_WINS,
                 AI_PLAYER => AI_WINS,
                 _ => PAUSE_TITLE,
@@ -578,7 +683,8 @@ internal sealed class PongGame : IGame {
         }
     }
 
-    private static void DrawBorder(Camera camera, Layout layout, float flash) {
+    private static void DrawBorder(Camera camera, Layout layout, float flash)
+    {
         float outerInset = BORDER_MARGIN * 2f;
         float innerInset = (BORDER_MARGIN + BORDER_THICKNESS) * 2f;
 
@@ -587,36 +693,43 @@ internal sealed class PongGame : IGame {
             layout,
             _playfieldCenter,
             new Vector2(DESIGN_WIDTH - outerInset, DESIGN_HEIGHT - outerInset),
-            WithFlash(_borderColor, _wallFlashColor, flash));
+            WithFlash(_borderColor, _wallFlashColor, flash)
+        );
         DrawDesignQuad(
             camera,
             layout,
             _playfieldCenter,
             new Vector2(DESIGN_WIDTH - innerInset, DESIGN_HEIGHT - innerInset),
-            _playfieldColor);
+            _playfieldColor
+        );
     }
 
-    private static void DrawNet(Camera camera, Layout layout) {
+    private static void DrawNet(Camera camera, Layout layout)
+    {
         float top = BORDER_MARGIN + BORDER_THICKNESS + NET_MARGIN;
         float bottom = DESIGN_HEIGHT - top;
-        for (float y = top; y < bottom; y += NET_DASH + NET_GAP) {
+        for (float y = top; y < bottom; y += NET_DASH + NET_GAP)
+        {
             float height = MathF.Min(NET_DASH, bottom - y);
             DrawDesignQuad(
                 camera,
                 layout,
                 new Vector2(_playfieldCenter.X, y + (height * 0.5f)),
                 new Vector2(NET_WIDTH, height),
-                _netColor);
+                _netColor
+            );
         }
     }
 
-    private static void DrawScoreBox(Camera camera, Layout layout, Vector2 boxCenter) {
+    private static void DrawScoreBox(Camera camera, Layout layout, Vector2 boxCenter)
+    {
         DrawDesignQuad(
             camera,
             layout,
             boxCenter,
             new Vector2(SCORE_BOX_WIDTH, SCORE_BOX_HEIGHT),
-            _scoreBoxColor);
+            _scoreBoxColor
+        );
     }
 
     private static void DrawScoreText(
@@ -624,7 +737,9 @@ internal sealed class PongGame : IGame {
         Layout layout,
         Font font,
         int score,
-        Vector2 boxCenter) {
+        Vector2 boxCenter
+    )
+    {
         string text = score.ToString(CultureInfo.InvariantCulture);
         DrawCenteredTextInBox(camera, layout, font, text, boxCenter, SCORE_FONT_SIZE, _scoreColor);
     }
@@ -635,19 +750,24 @@ internal sealed class PongGame : IGame {
         PongSettings settings,
         Texture texture,
         Vector2 designCenter,
-        float flash) {
+        float flash
+    )
+    {
         camera.DrawQuad(
             ScreenTransform(camera, layout.ToPixel(designCenter)),
             new Vector2(settings.PaddleWidth, settings.PaddleHeight) * layout.Scale,
             texture,
-            tint: WithFlash(Color.White, _paddleFlashColor, flash));
+            tint: WithFlash(Color.White, _paddleFlashColor, flash)
+        );
     }
 
     private static float FlashAmount(float seconds) =>
         seconds <= 0f ? 0f : MathF.Min(seconds / FLASH_DURATION, 1f);
 
-    private static Color WithFlash(Color baseColor, Color flashColor, float flash) {
-        if (flash <= 0f) {
+    private static Color WithFlash(Color baseColor, Color flashColor, float flash)
+    {
+        if (flash <= 0f)
+        {
             return baseColor;
         }
 
@@ -655,17 +775,20 @@ internal sealed class PongGame : IGame {
             baseColor.R + (flashColor.R * flash),
             baseColor.G + (flashColor.G * flash),
             baseColor.B + (flashColor.B * flash),
-            baseColor.A);
+            baseColor.A
+        );
     }
 
-    private static void DrawOverlayShade(Camera camera, Layout layout) {
+    private static void DrawOverlayShade(Camera camera, Layout layout)
+    {
         DrawDesignQuad(
             camera,
             layout,
             _playfieldCenter,
             new Vector2(DESIGN_WIDTH, DESIGN_HEIGHT),
             _overlayColor,
-            RenderState.AlphaBlend);
+            RenderState.AlphaBlend
+        );
     }
 
     private static void DrawOverlayText(
@@ -673,7 +796,9 @@ internal sealed class PongGame : IGame {
         Layout layout,
         Font font,
         string title,
-        string hint) {
+        string hint
+    )
+    {
         DrawCenteredText(
             camera,
             layout,
@@ -681,7 +806,8 @@ internal sealed class PongGame : IGame {
             title,
             (DESIGN_HEIGHT * 0.5f) - OVERLAY_TITLE_OFFSET,
             OVERLAY_TITLE_FONT_SIZE,
-            _overlayTitleColor);
+            _overlayTitleColor
+        );
         DrawCenteredText(
             camera,
             layout,
@@ -689,7 +815,8 @@ internal sealed class PongGame : IGame {
             hint,
             (DESIGN_HEIGHT * 0.5f) + OVERLAY_HINT_OFFSET,
             OVERLAY_HINT_FONT_SIZE,
-            _overlayHintColor);
+            _overlayHintColor
+        );
     }
 
     private static void DrawDesignQuad(
@@ -698,12 +825,15 @@ internal sealed class PongGame : IGame {
         Vector2 designCenter,
         Vector2 designSize,
         Color color,
-        RenderState? renderState = null) {
+        RenderState? renderState = null
+    )
+    {
         camera.DrawQuad(
             ScreenTransform(camera, layout.ToPixel(designCenter)),
             designSize * layout.Scale,
             color,
-            renderState);
+            renderState
+        );
     }
 
     private static void DrawCenteredText(
@@ -713,7 +843,9 @@ internal sealed class PongGame : IGame {
         string text,
         float designCenterY,
         float designFontSize,
-        Color color) {
+        Color color
+    )
+    {
         Vector2 center = new(_playfieldCenter.X, designCenterY);
         DrawCenteredTextInBox(camera, layout, font, text, center, designFontSize, color);
     }
@@ -725,29 +857,27 @@ internal sealed class PongGame : IGame {
         string text,
         Vector2 designCenter,
         float designFontSize,
-        Color color) {
+        Color color
+    )
+    {
         float pixelSize = designFontSize * layout.Scale;
         Vector2 measured = font.Measure(text, pixelSize);
         Vector2 center = layout.ToPixel(designCenter);
-        Vector2 origin = new(
-            center.X - (measured.X * 0.5f),
-            center.Y - (measured.Y * 0.5f));
-        camera.DrawText(
-            font,
-            text,
-            ScreenTransform(camera, origin),
-            pixelSize,
-            color);
+        Vector2 origin = new(center.X - (measured.X * 0.5f), center.Y - (measured.Y * 0.5f));
+        camera.DrawText(font, text, ScreenTransform(camera, origin), pixelSize, color);
     }
 
     private static Transform ScreenTransform(Camera camera, Vector2 pixel) =>
         camera.ScreenToWorldTransform(pixel, SCREEN_PLANE_DISTANCE);
 
-    private readonly struct Layout {
-        internal Layout(float renderWidth, float renderHeight) {
+    private readonly struct Layout
+    {
+        internal Layout(float renderWidth, float renderHeight)
+        {
             float width = renderWidth;
             float height = width * (DESIGN_HEIGHT / DESIGN_WIDTH);
-            if (height > renderHeight) {
+            if (height > renderHeight)
+            {
                 height = renderHeight;
                 width = height * (DESIGN_WIDTH / DESIGN_HEIGHT);
             }

@@ -17,7 +17,8 @@ namespace RayBork.Internal;
 /// built-in pack is validated exactly like a user pack.
 /// </para>
 /// </remarks>
-internal static class BuiltInAssetPack {
+internal static class BuiltInAssetPack
+{
     /// <summary>Gets the generated built-in RAYBORKP v1 pack bytes.</summary>
     internal static ReadOnlyMemory<byte> Bytes => BuiltInPack.Bytes;
 }

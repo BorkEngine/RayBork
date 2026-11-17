@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Selects how the present pass maps linear HDR color to the output surface.
 /// </summary>
-public enum TonemappingMode {
+public enum TonemappingMode
+{
     /// <summary>
     /// Applies the AgX curve, which compresses the highlight range while preserving hue. The
     /// default.

@@ -24,7 +24,8 @@ namespace RayBork.Internal;
 /// back to linear filtering with a warning. Every member is render-thread only.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanSamplerCache : IDisposable {
+internal sealed unsafe class VulkanSamplerCache : IDisposable
+{
     private const float LOD_CLAMP_NONE = 1000f;
 
     private readonly Func<VulkanDevice> _deviceAccessor;
@@ -38,7 +39,8 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable {
     /// <param name="deviceAccessor">Returns the backend's current logical device.</param>
     /// <param name="logger">The renderer logger for anisotropy fallback diagnostics.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal VulkanSamplerCache(Func<VulkanDevice> deviceAccessor, ILogger logger) {
+    internal VulkanSamplerCache(Func<VulkanDevice> deviceAccessor, ILogger logger)
+    {
         ArgumentNullException.ThrowIfNull(deviceAccessor);
         ArgumentNullException.ThrowIfNull(logger);
 
@@ -70,24 +72,37 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable {
         TextureWrap wrap,
         float maxAnisotropy,
         string canonicalPath,
-        string payloadPath) {
+        string payloadPath
+    )
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!Enum.IsDefined(filter)) {
-            throw VulkanAssetErrors.DecodeFailed(payloadPath, $"the sampler filter '{filter}' is not defined");
-        }
-
-        if (!Enum.IsDefined(wrap)) {
-            throw VulkanAssetErrors.DecodeFailed(payloadPath, $"the sampler wrap mode '{wrap}' is not defined");
-        }
-
-        if (!float.IsFinite(maxAnisotropy) || maxAnisotropy < 1f) {
+        if (!Enum.IsDefined(filter))
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 payloadPath,
-                "the maximum anisotropy must be finite and at least 1");
+                $"the sampler filter '{filter}' is not defined"
+            );
+        }
+
+        if (!Enum.IsDefined(wrap))
+        {
+            throw VulkanAssetErrors.DecodeFailed(
+                payloadPath,
+                $"the sampler wrap mode '{wrap}' is not defined"
+            );
+        }
+
+        if (!float.IsFinite(maxAnisotropy) || maxAnisotropy < 1f)
+        {
+            throw VulkanAssetErrors.DecodeFailed(
+                payloadPath,
+                "the maximum anisotropy must be finite and at least 1"
+            );
         }
 
         SamplerState state = new(filter, wrap, maxAnisotropy);
-        if (_samplers.TryGetValue(state, out Sampler cached)) {
+        if (_samplers.TryGetValue(state, out Sampler cached))
+        {
             return cached;
         }
 
@@ -107,30 +122,45 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Shutdown destroys every cached sampler best-effort so one failure cannot leave the rest alive.")]
-    internal void DestroyAll() {
-        if (_samplers.Count == 0) {
+        Justification = "Shutdown destroys every cached sampler best-effort so one failure cannot leave the rest alive."
+    )]
+    internal void DestroyAll()
+    {
+        if (_samplers.Count == 0)
+        {
             return;
         }
 
         VulkanDevice? device = null;
-        try {
+        try
+        {
             device = _deviceAccessor();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The device is already gone; its samplers were destroyed with it.
         }
 
-        if (device is not null) {
+        if (device is not null)
+        {
             Vk vulkan = device.Vulkan;
-            foreach (Sampler sampler in _samplers.Values) {
-                if (sampler.Handle == 0) {
+            foreach (Sampler sampler in _samplers.Values)
+            {
+                if (sampler.Handle == 0)
+                {
                     continue;
                 }
 
-                try {
+                try
+                {
                     vulkan.DestroySampler(device.Device, sampler, null);
-                } catch (Exception exception) {
-                    _logger.LogWarning(exception, "The cached Vulkan asset sampler could not be destroyed.");
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "The cached Vulkan asset sampler could not be destroyed."
+                    );
                 }
             }
         }
@@ -141,8 +171,10 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable {
     /// <summary>
     /// Destroys every cached sampler. The call is idempotent.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -154,26 +186,36 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable {
         TextureFilter filter,
         TextureWrap wrap,
         float maxAnisotropy,
-        string canonicalPath) {
+        string canonicalPath
+    )
+    {
         VulkanDevice device = _deviceAccessor();
         bool nearest = filter == TextureFilter.Nearest;
-        bool anisotropic = filter == TextureFilter.Anisotropic && device.Capabilities.SamplerAnisotropy;
+        bool anisotropic =
+            filter == TextureFilter.Anisotropic && device.Capabilities.SamplerAnisotropy;
         float anisotropy = 1f;
-        if (filter == TextureFilter.Anisotropic) {
-            if (anisotropic) {
+        if (filter == TextureFilter.Anisotropic)
+        {
+            if (anisotropic)
+            {
                 anisotropy = Math.Clamp(
                     maxAnisotropy,
                     1f,
-                    Math.Max(1f, device.Capabilities.MaxSamplerAnisotropy));
-            } else {
+                    Math.Max(1f, device.Capabilities.MaxSamplerAnisotropy)
+                );
+            }
+            else
+            {
                 _logger.LogWarning(
                     "The texture '{Path}' requested anisotropic filtering (maximum anisotropy {MaxAnisotropy}), but the device does not enable the Vulkan samplerAnisotropy feature; the sampler falls back to linear filtering.",
                     AssetPath.ToPublic(canonicalPath),
-                    maxAnisotropy);
+                    maxAnisotropy
+                );
             }
         }
 
-        SamplerCreateInfo createInfo = new() {
+        SamplerCreateInfo createInfo = new()
+        {
             SType = StructureType.SamplerCreateInfo,
             MagFilter = nearest ? Filter.Nearest : Filter.Linear,
             MinFilter = nearest ? Filter.Nearest : Filter.Linear,
@@ -191,23 +233,33 @@ internal sealed unsafe class VulkanSamplerCache : IDisposable {
             BorderColor = BorderColor.FloatOpaqueBlack,
             UnnormalizedCoordinates = false,
         };
-        Result result = device.Vulkan.CreateSampler(device.Device, &createInfo, null, out Sampler sampler);
-        if (result != Result.Success || sampler.Handle == 0) {
+        Result result = device.Vulkan.CreateSampler(
+            device.Device,
+            &createInfo,
+            null,
+            out Sampler sampler
+        );
+        if (result != Result.Success || sampler.Handle == 0)
+        {
             throw VulkanAssetErrors.UploadFailed(
                 canonicalPath,
-                $"vkCreateSampler failed with {result}.");
+                $"vkCreateSampler failed with {result}."
+            );
         }
 
         return sampler;
     }
 
-    private static SamplerAddressMode ToAddressMode(TextureWrap wrap) => wrap switch {
-        TextureWrap.Repeat => SamplerAddressMode.Repeat,
-        TextureWrap.Clamp => SamplerAddressMode.ClampToEdge,
-        TextureWrap.Mirror => SamplerAddressMode.MirroredRepeat,
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(wrap),
-            wrap,
-            "The sampler wrap mode is not a defined texture wrap mode."),
-    };
+    private static SamplerAddressMode ToAddressMode(TextureWrap wrap) =>
+        wrap switch
+        {
+            TextureWrap.Repeat => SamplerAddressMode.Repeat,
+            TextureWrap.Clamp => SamplerAddressMode.ClampToEdge,
+            TextureWrap.Mirror => SamplerAddressMode.MirroredRepeat,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(wrap),
+                wrap,
+                "The sampler wrap mode is not a defined texture wrap mode."
+            ),
+        };
 }

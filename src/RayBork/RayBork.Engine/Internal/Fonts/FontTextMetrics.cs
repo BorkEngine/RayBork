@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// the MSDF layout and is safe to call from the thread that runs the layout.
 /// </para>
 /// </remarks>
-internal sealed class FontTextMetrics : ITextMetrics {
+internal sealed class FontTextMetrics : ITextMetrics
+{
     private readonly FontGlyphPipeline _pipeline;
     private readonly int _unitsPerEm;
 
@@ -28,12 +29,14 @@ internal sealed class FontTextMetrics : ITextMetrics {
     /// </summary>
     /// <param name="pipeline">The font's glyph pipeline; it owns the parsed face.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <c>null</c>.</exception>
-    internal FontTextMetrics(FontGlyphPipeline pipeline) {
+    internal FontTextMetrics(FontGlyphPipeline pipeline)
+    {
         ArgumentNullException.ThrowIfNull(pipeline);
 
         _pipeline = pipeline;
         _unitsPerEm = pipeline.Face.UnitsPerEm;
-        LineHeight = (pipeline.Face.Ascender - pipeline.Face.Descender + pipeline.Face.LineGap)
+        LineHeight =
+            (pipeline.Face.Ascender - pipeline.Face.Descender + pipeline.Face.LineGap)
             / (float)_unitsPerEm;
         Ascent = pipeline.Face.Ascender / (float)_unitsPerEm;
         Descent = -pipeline.Face.Descender / (float)_unitsPerEm;
@@ -55,7 +58,8 @@ internal sealed class FontTextMetrics : ITextMetrics {
     /// The face maps every Unicode rune through its cmap and substitutes <c>.notdef</c> for an unmapped
     /// rune, so this method always reports a glyph.
     /// </remarks>
-    public bool TryGetGlyphMetrics(Rune rune, out TextGlyphMetrics metrics) {
+    public bool TryGetGlyphMetrics(Rune rune, out TextGlyphMetrics metrics)
+    {
         int glyphId = SfntFace.NOTDEF_GLYPH_ID;
         _pipeline.Face.TryGetGlyphId(rune, out glyphId);
         metrics = _pipeline.GetMetrics(glyphId);
@@ -63,6 +67,6 @@ internal sealed class FontTextMetrics : ITextMetrics {
     }
 
     /// <inheritdoc/>
-    public float GetKerning(int leftGlyphId, int rightGlyphId)
-        => _pipeline.Face.GetKerning(leftGlyphId, rightGlyphId) / (float)_unitsPerEm;
+    public float GetKerning(int leftGlyphId, int rightGlyphId) =>
+        _pipeline.Face.GetKerning(leftGlyphId, rightGlyphId) / (float)_unitsPerEm;
 }

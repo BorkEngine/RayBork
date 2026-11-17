@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// camera is created. A disabled entry yields the shared <see cref="DisabledPostProcessEffectSnapshot"/>
 /// so the recorded order is stable even when the effect's enabled value changes later.
 /// </remarks>
-internal static class PostProcessSnapshots {
+internal static class PostProcessSnapshots
+{
     /// <summary>
     /// Captures one effect entry.
     /// </summary>
@@ -32,16 +33,25 @@ internal static class PostProcessSnapshots {
         bool targetHasDepth,
         string targetDescription,
         SsaoAssets? ssaoAssets = null,
-        BloomAssets? bloomAssets = null) {
+        BloomAssets? bloomAssets = null
+    )
+    {
         ArgumentNullException.ThrowIfNull(effect);
         ArgumentException.ThrowIfNullOrWhiteSpace(targetDescription);
 
-        if (!effect.Enabled) {
+        if (!effect.Enabled)
+        {
             return DisabledPostProcessEffectSnapshot.Instance;
         }
 
         PostProcessEffectSnapshot snapshot = effect.Capture(
-            new PostProcessCaptureContext(targetHasDepth, targetDescription, ssaoAssets, bloomAssets));
+            new PostProcessCaptureContext(
+                targetHasDepth,
+                targetDescription,
+                ssaoAssets,
+                bloomAssets
+            )
+        );
         snapshot.Attach(effect);
         return snapshot;
     }

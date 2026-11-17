@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// The address mode applied to texture coordinates outside <c>[0, 1]</c>.
 /// </summary>
-public enum TextureWrap {
+public enum TextureWrap
+{
     /// <summary>Repeat the texture.</summary>
     Repeat = 0,
 

@@ -22,7 +22,8 @@ namespace RayBork.Internal;
 /// device to be idle when it destroys a target.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanPostTarget : IDisposable {
+internal sealed unsafe class VulkanPostTarget : IDisposable
+{
     private readonly Vk _vulkan;
     private readonly Device _device;
     private readonly VulkanBindlessTextureTable _bindless;
@@ -36,7 +37,8 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
     private uint _bindlessSlot;
     private bool _disposed;
 
-    private VulkanPostTarget(Vk vulkan, Device device, VulkanBindlessTextureTable bindless) {
+    private VulkanPostTarget(Vk vulkan, Device device, VulkanBindlessTextureTable bindless)
+    {
         _vulkan = vulkan;
         _device = device;
         _bindless = bindless;
@@ -81,19 +83,29 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         Extent2D extent,
         RenderPass postRenderPass,
         VulkanBindlessTextureTable bindless,
-        VulkanPostStoreBackPipeline storeBack) {
+        VulkanPostStoreBackPipeline storeBack
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(bindless);
         ArgumentNullException.ThrowIfNull(storeBack);
-        if (extent.Width == 0 || extent.Height == 0) {
-            throw new ArgumentOutOfRangeException(nameof(extent), extent, "The post target extent must be positive.");
+        if (extent.Width == 0 || extent.Height == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(extent),
+                extent,
+                "The post target extent must be positive."
+            );
         }
 
         VulkanPostTarget target = new(device.Vulkan, device.Device, bindless);
-        try {
+        try
+        {
             target.CreateResources(device, extent, postRenderPass, storeBack);
             return target;
-        } catch {
+        }
+        catch
+        {
             target.Dispose();
             throw;
         }
@@ -104,8 +116,10 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
     /// </summary>
     /// <param name="vulkan">The Vulkan functions.</param>
     /// <param name="commandBuffer">The command buffer recording the frame.</param>
-    internal void TransitionToColorAttachment(Vk vulkan, CommandBuffer commandBuffer) {
-        if (Layout == ImageLayout.ColorAttachmentOptimal) {
+    internal void TransitionToColorAttachment(Vk vulkan, CommandBuffer commandBuffer)
+    {
+        if (Layout == ImageLayout.ColorAttachmentOptimal)
+        {
             return;
         }
 
@@ -113,12 +127,22 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         ImageMemoryBarrier barrier = CreateBarrier(
             previous,
             ImageLayout.ColorAttachmentOptimal,
-            previous == ImageLayout.ShaderReadOnlyOptimal ? AccessFlags.ShaderReadBit : AccessFlags.None,
-            AccessFlags.ColorAttachmentWriteBit);
-        PipelineStageFlags sourceStage = previous == ImageLayout.ShaderReadOnlyOptimal
-            ? PipelineStageFlags.FragmentShaderBit
-            : PipelineStageFlags.TopOfPipeBit;
-        RecordBarrier(vulkan, commandBuffer, sourceStage, PipelineStageFlags.ColorAttachmentOutputBit, barrier);
+            previous == ImageLayout.ShaderReadOnlyOptimal
+                ? AccessFlags.ShaderReadBit
+                : AccessFlags.None,
+            AccessFlags.ColorAttachmentWriteBit
+        );
+        PipelineStageFlags sourceStage =
+            previous == ImageLayout.ShaderReadOnlyOptimal
+                ? PipelineStageFlags.FragmentShaderBit
+                : PipelineStageFlags.TopOfPipeBit;
+        RecordBarrier(
+            vulkan,
+            commandBuffer,
+            sourceStage,
+            PipelineStageFlags.ColorAttachmentOutputBit,
+            barrier
+        );
         Layout = ImageLayout.ColorAttachmentOptimal;
     }
 
@@ -128,8 +152,10 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
     /// </summary>
     /// <param name="vulkan">The Vulkan functions.</param>
     /// <param name="commandBuffer">The command buffer recording the frame.</param>
-    internal void TransitionToShaderRead(Vk vulkan, CommandBuffer commandBuffer) {
-        if (Layout == ImageLayout.ShaderReadOnlyOptimal) {
+    internal void TransitionToShaderRead(Vk vulkan, CommandBuffer commandBuffer)
+    {
+        if (Layout == ImageLayout.ShaderReadOnlyOptimal)
+        {
             return;
         }
 
@@ -137,8 +163,15 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
             Layout,
             ImageLayout.ShaderReadOnlyOptimal,
             AccessFlags.ColorAttachmentWriteBit,
-            AccessFlags.ShaderReadBit);
-        RecordBarrier(vulkan, commandBuffer, PipelineStageFlags.ColorAttachmentOutputBit, PipelineStageFlags.FragmentShaderBit, barrier);
+            AccessFlags.ShaderReadBit
+        );
+        RecordBarrier(
+            vulkan,
+            commandBuffer,
+            PipelineStageFlags.ColorAttachmentOutputBit,
+            PipelineStageFlags.FragmentShaderBit,
+            barrier
+        );
         Layout = ImageLayout.ShaderReadOnlyOptimal;
     }
 
@@ -146,39 +179,47 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
     /// Destroys the store-back descriptor pool, framebuffer, view, image, memory, and bindless slot.
     /// The call is idempotent.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        if (_storeBackPool.Handle != 0) {
+        if (_storeBackPool.Handle != 0)
+        {
             _vulkan.DestroyDescriptorPool(_device, _storeBackPool, null);
             _storeBackPool = default;
             _storeBackSet = default;
         }
 
-        if (_framebuffer.Handle != 0) {
+        if (_framebuffer.Handle != 0)
+        {
             _vulkan.DestroyFramebuffer(_device, _framebuffer, null);
             _framebuffer = default;
         }
 
-        if (_bindlessSlot != 0) {
+        if (_bindlessSlot != 0)
+        {
             _bindless.Release(_bindlessSlot);
             _bindlessSlot = 0;
         }
 
-        if (_view.Handle != 0) {
+        if (_view.Handle != 0)
+        {
             _vulkan.DestroyImageView(_device, _view, null);
             _view = default;
         }
 
-        if (_image.Handle != 0) {
+        if (_image.Handle != 0)
+        {
             _vulkan.DestroyImage(_device, _image, null);
             _image = default;
         }
 
-        if (_memory.Handle != 0) {
+        if (_memory.Handle != 0)
+        {
             _vulkan.FreeMemory(_device, _memory, null);
             _memory = default;
         }
@@ -190,13 +231,21 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         VulkanDevice device,
         Extent2D extent,
         RenderPass postRenderPass,
-        VulkanPostStoreBackPipeline storeBack) {
+        VulkanPostStoreBackPipeline storeBack
+    )
+    {
         Extent = extent;
-        ImageCreateInfo imageInfo = new() {
+        ImageCreateInfo imageInfo = new()
+        {
             SType = StructureType.ImageCreateInfo,
             ImageType = ImageType.Type2D,
             Format = Format.R16G16B16A16Sfloat,
-            Extent = new Extent3D { Width = extent.Width, Height = extent.Height, Depth = 1 },
+            Extent = new Extent3D
+            {
+                Width = extent.Width,
+                Height = extent.Height,
+                Depth = 1,
+            },
             MipLevels = 1,
             ArrayLayers = 1,
             Samples = SampleCountFlags.Count1Bit,
@@ -207,35 +256,46 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         };
         ThrowIfFailed(
             _vulkan.CreateImage(_device, &imageInfo, null, out _image),
-            "vkCreateImage for the post-process target");
+            "vkCreateImage for the post-process target"
+        );
 
         MemoryRequirements requirements = _vulkan.GetImageMemoryRequirements(_device, _image);
-        PhysicalDeviceMemoryProperties memoryProperties =
-            _vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
-        MemoryAllocateInfo allocateInfo = new() {
+        PhysicalDeviceMemoryProperties memoryProperties = _vulkan.GetPhysicalDeviceMemoryProperties(
+            device.PhysicalDevice
+        );
+        MemoryAllocateInfo allocateInfo = new()
+        {
             SType = StructureType.MemoryAllocateInfo,
             AllocationSize = requirements.Size,
-            MemoryTypeIndex = FindDeviceLocalMemoryType(requirements.MemoryTypeBits, memoryProperties),
+            MemoryTypeIndex = FindDeviceLocalMemoryType(
+                requirements.MemoryTypeBits,
+                memoryProperties
+            ),
         };
         ThrowIfFailed(
             _vulkan.AllocateMemory(_device, &allocateInfo, null, out _memory),
-            "vkAllocateMemory for the post-process target");
+            "vkAllocateMemory for the post-process target"
+        );
         ThrowIfFailed(
             _vulkan.BindImageMemory(_device, _image, _memory, 0),
-            "vkBindImageMemory for the post-process target");
+            "vkBindImageMemory for the post-process target"
+        );
 
-        ImageViewCreateInfo viewInfo = new() {
+        ImageViewCreateInfo viewInfo = new()
+        {
             SType = StructureType.ImageViewCreateInfo,
             Image = _image,
             ViewType = ImageViewType.Type2D,
             Format = Format.R16G16B16A16Sfloat,
-            Components = new ComponentMapping {
+            Components = new ComponentMapping
+            {
                 R = ComponentSwizzle.Identity,
                 G = ComponentSwizzle.Identity,
                 B = ComponentSwizzle.Identity,
                 A = ComponentSwizzle.Identity,
             },
-            SubresourceRange = new ImageSubresourceRange {
+            SubresourceRange = new ImageSubresourceRange
+            {
                 AspectMask = ImageAspectFlags.ColorBit,
                 BaseMipLevel = 0,
                 LevelCount = 1,
@@ -245,10 +305,12 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         };
         ThrowIfFailed(
             _vulkan.CreateImageView(_device, &viewInfo, null, out _view),
-            "vkCreateImageView for the post-process target");
+            "vkCreateImageView for the post-process target"
+        );
 
         ImageView attachmentView = _view;
-        FramebufferCreateInfo framebufferInfo = new() {
+        FramebufferCreateInfo framebufferInfo = new()
+        {
             SType = StructureType.FramebufferCreateInfo,
             RenderPass = postRenderPass,
             AttachmentCount = 1,
@@ -259,15 +321,18 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         };
         ThrowIfFailed(
             _vulkan.CreateFramebuffer(_device, &framebufferInfo, null, out _framebuffer),
-            "vkCreateFramebuffer for the post-process target");
+            "vkCreateFramebuffer for the post-process target"
+        );
 
-        if (!_bindless.TryAllocate(out _bindlessSlot)) {
+        if (!_bindless.TryAllocate(out _bindlessSlot))
+        {
             _bindlessSlot = 0;
             throw new GraphicsException(
                 $"The bindless texture table is full ({_bindless.Capacity} slots, including the reserved "
                     + "white slot), so the post-process target has no slot.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         _bindless.WriteTexture(_bindlessSlot, _view, storeBack.Sampler);
@@ -278,7 +343,10 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         ImageLayout oldLayout,
         ImageLayout newLayout,
         AccessFlags sourceAccess,
-        AccessFlags destinationAccess) => new() {
+        AccessFlags destinationAccess
+    ) =>
+        new()
+        {
             SType = StructureType.ImageMemoryBarrier,
             SrcAccessMask = sourceAccess,
             DstAccessMask = destinationAccess,
@@ -287,7 +355,8 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
             SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
             DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
             Image = _image,
-            SubresourceRange = new ImageSubresourceRange {
+            SubresourceRange = new ImageSubresourceRange
+            {
                 AspectMask = ImageAspectFlags.ColorBit,
                 BaseMipLevel = 0,
                 LevelCount = 1,
@@ -301,7 +370,9 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
         CommandBuffer commandBuffer,
         PipelineStageFlags sourceStage,
         PipelineStageFlags destinationStage,
-        ImageMemoryBarrier barrier) {
+        ImageMemoryBarrier barrier
+    )
+    {
         ImageMemoryBarrier local = barrier;
         vulkan.CmdPipelineBarrier(
             commandBuffer,
@@ -313,18 +384,23 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
             0,
             null,
             1,
-            &local);
+            &local
+        );
     }
 
     private static uint FindDeviceLocalMemoryType(
         uint typeBits,
-        PhysicalDeviceMemoryProperties memoryProperties) {
+        PhysicalDeviceMemoryProperties memoryProperties
+    )
+    {
         const MemoryPropertyFlags required = MemoryPropertyFlags.DeviceLocalBit;
-        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++) {
+        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++)
+        {
             bool typeSupported = (typeBits & (1u << (int)index)) != 0;
             bool propertiesMatch =
                 (memoryProperties.MemoryTypes[(int)index].PropertyFlags & required) == required;
-            if (typeSupported && propertiesMatch) {
+            if (typeSupported && propertiesMatch)
+            {
                 return index;
             }
         }
@@ -333,17 +409,21 @@ internal sealed unsafe class VulkanPostTarget : IDisposable {
             $"No device-local Vulkan memory type is available for the post-process target "
                 + $"(type bits 0x{typeBits:X8}).",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
-    private static void ThrowIfFailed(Result result, string operation) {
-        if (result == Result.Success) {
+    private static void ThrowIfFailed(Result result, string operation)
+    {
+        if (result == Result.Success)
+        {
             return;
         }
 
         throw new GraphicsException(
             $"The Vulkan command {operation} failed with {result}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 }

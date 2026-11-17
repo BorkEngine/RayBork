@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// manifest into an immutable array, and the spans returned by this type reference that array, so
 /// they stay valid for the process lifetime and may be cached by the renderer.
 /// </remarks>
-internal static class ShaderAssets {
+internal static class ShaderAssets
+{
     /// <summary>The vertex entry point name compiled into <c>Present.vert.spv</c>.</summary>
     internal const string PRESENT_VERTEX_ENTRY_POINT = "main";
 
@@ -88,13 +89,18 @@ internal static class ShaderAssets {
     /// that regenerates the committed blobs. The failure surfaces from the type initializer as a
     /// <see cref="TypeInitializationException"/> on the first access.
     /// </exception>
-    private static byte[] Load(string resourceName) {
-        using Stream? resource = typeof(ShaderAssets).Assembly.GetManifestResourceStream(resourceName);
-        if (resource is null) {
+    private static byte[] Load(string resourceName)
+    {
+        using Stream? resource = typeof(ShaderAssets).Assembly.GetManifestResourceStream(
+            resourceName
+        );
+        if (resource is null)
+        {
             throw new InvalidOperationException(
-                $"Embedded shader resource '{resourceName}' was not found in assembly " +
-                $"'{typeof(ShaderAssets).Assembly.GetName().Name}'. The committed SPIR-V files are the " +
-                "build inputs; run 'scripts/compile-shaders.ps1' to regenerate them and rebuild.");
+                $"Embedded shader resource '{resourceName}' was not found in assembly "
+                    + $"'{typeof(ShaderAssets).Assembly.GetName().Name}'. The committed SPIR-V files are the "
+                    + "build inputs; run 'scripts/compile-shaders.ps1' to regenerate them and rebuild."
+            );
         }
 
         using MemoryStream buffer = new();

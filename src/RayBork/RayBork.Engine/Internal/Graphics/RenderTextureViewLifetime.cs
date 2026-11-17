@@ -22,7 +22,8 @@ namespace RayBork.Internal;
 /// report a split state.
 /// </para>
 /// </remarks>
-internal sealed class RenderTextureViewLifetime : ITextureOwner {
+internal sealed class RenderTextureViewLifetime : ITextureOwner
+{
     private readonly Lock _gate = new();
     private readonly RenderTextureTargetLifetime _target;
     private ITextureBindingResource? _resource;
@@ -44,7 +45,9 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
         RenderTextureTargetLifetime target,
         ITextureBindingResource? resource,
         int width,
-        int height) {
+        int height
+    )
+    {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
@@ -72,7 +75,8 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
     /// <param name="width">The new width in pixels.</param>
     /// <param name="height">The new height in pixels.</param>
     /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive.</exception>
-    internal void SetDimensions(int width, int height) {
+    internal void SetDimensions(int width, int height)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         Volatile.Write(ref _width, width);
@@ -83,9 +87,12 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
     public string Path => string.Empty;
 
     /// <inheritdoc/>
-    public bool IsDisposed {
-        get {
-            lock (_gate) {
+    public bool IsDisposed
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _retired || _ownerCount <= 0;
             }
         }
@@ -101,7 +108,8 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
     /// Replaces the bindless view resource after a device recreation. Render-thread only.
     /// </summary>
     /// <param name="resource">The recreated view resource.</param>
-    internal void SetBindingResource(ITextureBindingResource resource) {
+    internal void SetBindingResource(ITextureBindingResource resource)
+    {
         ArgumentNullException.ThrowIfNull(resource);
         Volatile.Write(ref _resource, resource);
     }
@@ -110,15 +118,19 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
     /// Retires the view when the owning <see cref="RenderTexture"/> is disposed. Every later access
     /// throws <see cref="ObjectDisposedException"/>. Idempotent.
     /// </summary>
-    internal void Retire() {
-        lock (_gate) {
+    internal void Retire()
+    {
+        lock (_gate)
+        {
             _retired = true;
         }
     }
 
     /// <inheritdoc/>
-    public void AddOwnerReference() {
-        lock (_gate) {
+    public void AddOwnerReference()
+    {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(IsDisposedLocked(), this);
 
             _ownerCount++;
@@ -126,12 +138,16 @@ internal sealed class RenderTextureViewLifetime : ITextureOwner {
     }
 
     /// <inheritdoc/>
-    public void ReleaseOwnerReference() {
-        lock (_gate) {
-            if (_ownerCount <= 0) {
+    public void ReleaseOwnerReference()
+    {
+        lock (_gate)
+        {
+            if (_ownerCount <= 0)
+            {
                 throw new ObjectDisposedException(
                     nameof(RenderTextureViewLifetime),
-                    "The render target view owner count is already zero.");
+                    "The render target view owner count is already zero."
+                );
             }
 
             // A material that still holds this view must be able to release its reference after the

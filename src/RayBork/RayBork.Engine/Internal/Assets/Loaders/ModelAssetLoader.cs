@@ -25,20 +25,21 @@ namespace RayBork.Internal;
 /// with a null or stale path fails to load.
 /// </para>
 /// </remarks>
-internal sealed class ModelAssetLoader : IAssetLoader<Model> {
+internal sealed class ModelAssetLoader : IAssetLoader<Model>
+{
     /// <summary>
     /// The shared loader instance.
     /// </summary>
     internal static readonly ModelAssetLoader Instance = new();
 
-    private ModelAssetLoader() {
-    }
+    private ModelAssetLoader() { }
 
     /// <inheritdoc/>
     public AssetEntryType EntryType => AssetEntryType.Model;
 
     /// <inheritdoc/>
-    public async Task<Model> LoadAsync(AssetLoadContext context) {
+    public async Task<Model> LoadAsync(AssetLoadContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
 
         string canonical = context.CanonicalPath;
@@ -46,27 +47,34 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
         cancellationToken.ThrowIfCancellationRequested();
 
         ModelAssetDescriptor descriptor;
-        try {
+        try
+        {
             byte[] descriptorPayload = await context.LoadPayloadAsync().ConfigureAwait(false);
             descriptor = AssetSerialization.Deserialize<ModelAssetDescriptor>(descriptorPayload);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
-                $"the model descriptor could not be decoded: {exception.Message}");
+                $"the model descriptor could not be decoded: {exception.Message}"
+            );
         }
 
         ValidateModelDescriptor(descriptor, canonical);
 
         List<Mesh> meshes = [];
         List<Shader> materials = [];
-        try {
+        try
+        {
             ModelPart[] parts = new ModelPart[descriptor.Parts.Length];
             Dictionary<string, Mesh> meshesByPath = new(StringComparer.Ordinal);
-            for (int index = 0; index < descriptor.Parts.Length; index++) {
+            for (int index = 0; index < descriptor.Parts.Length; index++)
+            {
                 cancellationToken.ThrowIfCancellationRequested();
                 ModelPartAsset part = descriptor.Parts[index];
                 string meshPath = AssetPath.Normalize(part.MeshPath);
-                if (!meshesByPath.TryGetValue(meshPath, out Mesh? mesh)) {
+                if (!meshesByPath.TryGetValue(meshPath, out Mesh? mesh))
+                {
                     mesh = await context
                         .LoadAsync<Mesh>(meshPath, cancellationToken)
                         .ConfigureAwait(false);
@@ -88,12 +96,14 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
                     mesh,
                     material,
                     renderState: null,
-                    localTransform: CreateLocalTransform(part.LocalTransform));
+                    localTransform: CreateLocalTransform(part.LocalTransform)
+                );
             }
 
             cancellationToken.ThrowIfCancellationRequested();
             Model model = new(parts);
-            if (cancellationToken.IsCancellationRequested) {
+            if (cancellationToken.IsCancellationRequested)
+            {
                 // The loader stopped while the model was being constructed. The model already owns
                 // its part references, so dispose it before reporting the cancellation instead of
                 // abandoning a fully constructed model.
@@ -106,23 +116,32 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
             ReleaseMeshReferences(meshes);
             materials.Clear();
             return model;
-        } catch {
+        }
+        catch
+        {
             ReleaseMeshReferences(meshes);
             DisposeMaterials(materials);
             throw;
         }
     }
 
-    private static Transform CreateLocalTransform(float[] local) => new(
-        new Vector3(local[0], local[1], local[2]),
-        new Quaternion(local[3], local[4], local[5], local[6]),
-        new Vector3(local[7], local[8], local[9]));
+    private static Transform CreateLocalTransform(float[] local) =>
+        new(
+            new Vector3(local[0], local[1], local[2]),
+            new Quaternion(local[3], local[4], local[5], local[6]),
+            new Vector3(local[7], local[8], local[9])
+        );
 
-    private static void ReleaseMeshReferences(List<Mesh> meshes) {
-        foreach (Mesh mesh in meshes) {
-            try {
+    private static void ReleaseMeshReferences(List<Mesh> meshes)
+    {
+        foreach (Mesh mesh in meshes)
+        {
+            try
+            {
                 mesh.Lifetime.ReleaseOwnerReference();
-            } catch (ObjectDisposedException) {
+            }
+            catch (ObjectDisposedException)
+            {
                 // Shutdown force-disposed the part after the load started.
             }
         }
@@ -130,11 +149,16 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
         meshes.Clear();
     }
 
-    private static void DisposeMaterials(List<Shader> materials) {
-        foreach (Shader material in materials) {
-            try {
+    private static void DisposeMaterials(List<Shader> materials)
+    {
+        foreach (Shader material in materials)
+        {
+            try
+            {
                 material.Dispose();
-            } catch (ObjectDisposedException) {
+            }
+            catch (ObjectDisposedException)
+            {
                 // Shutdown force-disposed the program or material after the load started.
             }
         }
@@ -142,51 +166,78 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
         materials.Clear();
     }
 
-    private static void ValidateModelDescriptor(ModelAssetDescriptor descriptor, string canonical) {
-        if (descriptor.Parts is null || descriptor.Parts.Length == 0) {
-            throw AssetLoadErrors.CreateLoadFailure(canonical, "the model descriptor must carry at least one part");
+    private static void ValidateModelDescriptor(ModelAssetDescriptor descriptor, string canonical)
+    {
+        if (descriptor.Parts is null || descriptor.Parts.Length == 0)
+        {
+            throw AssetLoadErrors.CreateLoadFailure(
+                canonical,
+                "the model descriptor must carry at least one part"
+            );
         }
 
         ValidateBounds(descriptor.Bounds, canonical, "the model");
-        foreach (ModelPartAsset? part in descriptor.Parts) {
-            if (part is null) {
-                throw AssetLoadErrors.CreateLoadFailure(canonical, "the model descriptor contains a null part");
+        foreach (ModelPartAsset? part in descriptor.Parts)
+        {
+            if (part is null)
+            {
+                throw AssetLoadErrors.CreateLoadFailure(
+                    canonical,
+                    "the model descriptor contains a null part"
+                );
             }
 
-            if (string.IsNullOrWhiteSpace(part.Name)) {
-                throw AssetLoadErrors.CreateLoadFailure(canonical, "a model part has an empty name");
+            if (string.IsNullOrWhiteSpace(part.Name))
+            {
+                throw AssetLoadErrors.CreateLoadFailure(
+                    canonical,
+                    "a model part has an empty name"
+                );
             }
 
-            if (!AssetPath.TryValidateCanonical(part.MeshPath, out string? meshReason)) {
+            if (!AssetPath.TryValidateCanonical(part.MeshPath, out string? meshReason))
+            {
                 throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the mesh path '{part.MeshPath}' of model part '{part.Name}' is not canonical: "
-                        + meshReason);
+                        + meshReason
+                );
             }
 
-            if (string.IsNullOrWhiteSpace(part.ShaderPath)) {
-                throw AssetLoadErrors.CreateLoadFailure(canonical, $"model part '{part.Name}' has no shader path");
+            if (string.IsNullOrWhiteSpace(part.ShaderPath))
+            {
+                throw AssetLoadErrors.CreateLoadFailure(
+                    canonical,
+                    $"model part '{part.Name}' has no shader path"
+                );
             }
 
-            if (!AssetPath.TryValidateCanonical(part.ShaderPath, out string? shaderReason)) {
+            if (!AssetPath.TryValidateCanonical(part.ShaderPath, out string? shaderReason))
+            {
                 throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"the shader path '{part.ShaderPath}' of model part '{part.Name}' is not canonical: "
-                        + shaderReason);
+                        + shaderReason
+                );
             }
 
-            if (part.LocalTransform is null || part.LocalTransform.Length != 10) {
+            if (part.LocalTransform is null || part.LocalTransform.Length != 10)
+            {
                 throw AssetLoadErrors.CreateLoadFailure(
                     canonical,
                     $"model part '{part.Name}' must carry exactly ten local-transform floats "
-                        + "(position XYZ, rotation XYZW, and scale XYZ)");
+                        + "(position XYZ, rotation XYZW, and scale XYZ)"
+                );
             }
 
-            foreach (float component in part.LocalTransform) {
-                if (!float.IsFinite(component)) {
+            foreach (float component in part.LocalTransform)
+            {
+                if (!float.IsFinite(component))
+                {
                     throw AssetLoadErrors.CreateLoadFailure(
                         canonical,
-                        $"model part '{part.Name}' has a non-finite local-transform component");
+                        $"model part '{part.Name}' has a non-finite local-transform component"
+                    );
                 }
             }
 
@@ -194,21 +245,33 @@ internal sealed class ModelAssetLoader : IAssetLoader<Model> {
         }
     }
 
-    private static void ValidateBounds(float[]? bounds, string canonical, string owner) {
-        if (bounds is null || bounds.Length != 6) {
+    private static void ValidateBounds(float[]? bounds, string canonical, string owner)
+    {
+        if (bounds is null || bounds.Length != 6)
+        {
             throw AssetLoadErrors.CreateLoadFailure(
                 canonical,
-                $"{owner} must carry exactly six bounds floats (minimum XYZ, maximum XYZ)");
+                $"{owner} must carry exactly six bounds floats (minimum XYZ, maximum XYZ)"
+            );
         }
 
-        for (int index = 0; index < bounds.Length; index++) {
-            if (!float.IsFinite(bounds[index])) {
-                throw AssetLoadErrors.CreateLoadFailure(canonical, $"{owner} has a non-finite bounds component");
+        for (int index = 0; index < bounds.Length; index++)
+        {
+            if (!float.IsFinite(bounds[index]))
+            {
+                throw AssetLoadErrors.CreateLoadFailure(
+                    canonical,
+                    $"{owner} has a non-finite bounds component"
+                );
             }
         }
 
-        if (bounds[0] > bounds[3] || bounds[1] > bounds[4] || bounds[2] > bounds[5]) {
-            throw AssetLoadErrors.CreateLoadFailure(canonical, $"{owner} bounds minimum must not exceed the maximum");
+        if (bounds[0] > bounds[3] || bounds[1] > bounds[4] || bounds[2] > bounds[5])
+        {
+            throw AssetLoadErrors.CreateLoadFailure(
+                canonical,
+                $"{owner} bounds minimum must not exceed the maximum"
+            );
         }
     }
 }

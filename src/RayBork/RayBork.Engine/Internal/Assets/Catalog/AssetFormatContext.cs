@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// generation on the app-lifetime font thread. Other formats ignore them.
 /// </para>
 /// </remarks>
-internal sealed class AssetFormatContext {
+internal sealed class AssetFormatContext
+{
     private readonly Dictionary<string, VisibleAsset> _visibleStack;
 
     /// <summary>
@@ -38,7 +39,9 @@ internal sealed class AssetFormatContext {
         Dictionary<string, VisibleAsset> visibleStack,
         GlyphGenerationService glyphService,
         IGlyphTextureFactory glyphTextureFactory,
-        ILogger fontLogger) {
+        ILogger fontLogger
+    )
+    {
         ArgumentNullException.ThrowIfNull(canonicalPath);
         ArgumentNullException.ThrowIfNull(descriptorPayload);
         ArgumentNullException.ThrowIfNull(visibleStack);
@@ -90,23 +93,30 @@ internal sealed class AssetFormatContext {
     /// <param name="payloadPath">The payload path named by the descriptor.</param>
     /// <param name="payloadKind">The payload kind used in diagnostics, such as <c>mesh</c>.</param>
     /// <returns>The decompressed payload bytes.</returns>
-    internal byte[] ReadRawPayload(string payloadPath, string payloadKind) {
-        if (!AssetPath.TryValidateCanonical(payloadPath, out string? reason)) {
+    internal byte[] ReadRawPayload(string payloadPath, string payloadKind)
+    {
+        if (!AssetPath.TryValidateCanonical(payloadPath, out string? reason))
+        {
             throw AssetLoadErrors.CreateLoadFailure(
                 CanonicalPath,
-                $"the {payloadKind} payload path '{payloadPath}' is not canonical: {reason}");
+                $"the {payloadKind} payload path '{payloadPath}' is not canonical: {reason}"
+            );
         }
 
-        if (!_visibleStack.TryGetValue(payloadPath, out VisibleAsset payload)) {
+        if (!_visibleStack.TryGetValue(payloadPath, out VisibleAsset payload))
+        {
             throw AssetLoadErrors.CreateLoadFailure(
                 CanonicalPath,
-                $"the {payloadKind} payload '{payloadPath}' is not in the visible pack stack");
+                $"the {payloadKind} payload '{payloadPath}' is not in the visible pack stack"
+            );
         }
 
-        if (payload.Entry.Type != AssetEntryType.Raw) {
+        if (payload.Entry.Type != AssetEntryType.Raw)
+        {
             throw AssetLoadErrors.CreateLoadFailure(
                 CanonicalPath,
-                $"the {payloadKind} payload '{payloadPath}' is a {payload.Entry.Type} entry, not raw");
+                $"the {payloadKind} payload '{payloadPath}' is a {payload.Entry.Type} entry, not raw"
+            );
         }
 
         return payload.Archive.ReadPayload(payload.Entry);

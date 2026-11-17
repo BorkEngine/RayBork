@@ -16,7 +16,8 @@ namespace RayBork.Bake;
 /// <see cref="TextureCompression"/> to a concrete <see cref="TextureFormat"/>.
 /// </para>
 /// </remarks>
-public enum TextureChannelType {
+public enum TextureChannelType
+{
     /// <summary>Red, green, blue, and alpha; stored as an sRGB color texture.</summary>
     Rgba = 0,
 

@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Identifies a mouse button. Values are zero-based and start with the primary button.
 /// </summary>
-public enum MouseButton {
+public enum MouseButton
+{
     /// <summary>
     /// The primary (left) button.
     /// </summary>

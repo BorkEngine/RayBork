@@ -3,7 +3,8 @@ namespace RayBork.Internal;
 /// <summary>
 /// The kind of GPU resource an <see cref="AssetGpuUpload"/> creates.
 /// </summary>
-internal enum AssetGpuUploadKind {
+internal enum AssetGpuUploadKind
+{
     /// <summary>
     /// A texture image, view, and sampler decoded from a packed KTX2 payload.
     /// </summary>

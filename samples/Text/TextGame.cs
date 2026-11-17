@@ -15,7 +15,8 @@ namespace Text;
 /// is the only label that follows the orbiting camera. All text shares the built-in MSDF program and
 /// render state, so the whole scene batches into one text draw regardless of face, size, or string.
 /// </remarks>
-internal sealed class TextGame : IGame {
+internal sealed class TextGame : IGame
+{
     private const string TITLE = "RayBork";
     private const string LORA_FONT_PATH = "/fonts/lora";
 
@@ -80,10 +81,14 @@ internal sealed class TextGame : IGame {
 
     private static readonly Vector3 _orbitCenter = new(0f, 0.9f, 0f);
     private static readonly Vector3 _initialCameraPosition = new(0f, 0.9f, 9.6f);
-    private static readonly Quaternion _mediumParagraphRotation =
-        Quaternion.CreateFromAxisAngle(Vector3.UnitZ, -5f * (MathF.PI / 180f));
-    private static readonly Quaternion _smallParagraphRotation =
-        Quaternion.CreateFromAxisAngle(Vector3.UnitY, 10f * (MathF.PI / 180f));
+    private static readonly Quaternion _mediumParagraphRotation = Quaternion.CreateFromAxisAngle(
+        Vector3.UnitZ,
+        -5f * (MathF.PI / 180f)
+    );
+    private static readonly Quaternion _smallParagraphRotation = Quaternion.CreateFromAxisAngle(
+        Vector3.UnitY,
+        10f * (MathF.PI / 180f)
+    );
 
     private readonly int _frameLimit;
     private readonly StatusOverlay _overlay = new();
@@ -99,7 +104,8 @@ internal sealed class TextGame : IGame {
     /// Creates the scene and starts the camera square to the text wall.
     /// </summary>
     /// <param name="frameLimit">The number of ticks to run, or zero to run until the window closes.</param>
-    internal TextGame(int frameLimit) {
+    internal TextGame(int frameLimit)
+    {
         _frameLimit = frameLimit;
 
         Vector3 offset = _initialCameraPosition - _orbitCenter;
@@ -113,7 +119,8 @@ internal sealed class TextGame : IGame {
     }
 
     /// <inheritdoc/>
-    public async Task Setup(EngineContext context) {
+    public async Task Setup(EngineContext context)
+    {
         // The built-in default faces are engine-owned defaults. The custom Lora face comes from this
         // sample's text.pck; the sample owns that reference and releases it in Shutdown. These loads
         // are CPU-only: no glyph texture is generated until a draw needs one.
@@ -121,8 +128,10 @@ internal sealed class TextGame : IGame {
     }
 
     /// <inheritdoc/>
-    public void Tick(EngineContext context) {
-        if (context.Input.IsKeyPressed(Key.Escape)) {
+    public void Tick(EngineContext context)
+    {
+        if (context.Input.IsKeyPressed(Key.Escape))
+        {
             context.RequestExit();
         }
 
@@ -131,7 +140,8 @@ internal sealed class TextGame : IGame {
         // Request one more Greek letter every 30 ticks. The first request happens on the first tick so
         // a short run still exercises the asynchronous glyph generation; each new letter is skipped by
         // the draw until its MSDF texture is ready, then appears without a stall.
-        if ((_frameCount % LAZY_GLYPH_INTERVAL_FRAMES) == 0) {
+        if ((_frameCount % LAZY_GLYPH_INTERVAL_FRAMES) == 0)
+        {
             _lazyGlyphCount = Math.Min(_lazyGlyphCount + 1, LAZY_GREEK.Length);
         }
 
@@ -141,7 +151,8 @@ internal sealed class TextGame : IGame {
         Transform orbit = new(
             _orbitCenter,
             Quaternion.Euler(-_pitchDegrees, _yawDegrees, 0f),
-            Vector3.One);
+            Vector3.One
+        );
         Transform cameraTransform = new Transform(new Vector3(0f, 0f, _distance)).WithParent(orbit);
 
         using Camera camera = context.CreateCamera(
@@ -151,18 +162,21 @@ internal sealed class TextGame : IGame {
             clearMode: ClearMode.ColorAndDepth,
             clearColor: Color.Gray2,
             near: NEAR_PLANE,
-            far: float.PositiveInfinity);
+            far: float.PositiveInfinity
+        );
 
         DrawTextScene(camera, context);
 
         _frameCount++;
-        if (_frameLimit > 0 && _frameCount >= _frameLimit) {
+        if (_frameLimit > 0 && _frameCount >= _frameLimit)
+        {
             context.RequestExit();
         }
     }
 
     /// <inheritdoc/>
-    public Task Shutdown() {
+    public Task Shutdown()
+    {
         // The built-in default fonts are engine-owned and must not be disposed; only the Lora load is
         // this sample's reference.
         _loraFont?.Dispose();
@@ -170,7 +184,8 @@ internal sealed class TextGame : IGame {
         return Task.CompletedTask;
     }
 
-    private void DrawTextScene(Camera camera, EngineContext context) {
+    private void DrawTextScene(Camera camera, EngineContext context)
+    {
         Font firaSans = context.Defaults.DefaultFont;
         Font mono = context.Defaults.DefaultMonoFont;
         Font lora = _loraFont!;
@@ -182,25 +197,29 @@ internal sealed class TextGame : IGame {
             TITLE,
             new Transform(new Vector3(LEFT_COLUMN_X, TITLE_TOP_Y, 0f)),
             TITLE_SIZE,
-            Color.White);
+            Color.White
+        );
         camera.DrawText(
             lora,
             TITLE,
             new Transform(new Vector3(LORA_TITLE_X, TITLE_TOP_Y, 0f)),
             TITLE_SIZE,
-            Color.White);
+            Color.White
+        );
         camera.DrawText(
             firaSans,
             "built-in Fira Sans",
             new Transform(new Vector3(LEFT_COLUMN_X, TITLE_LABEL_Y, 0f)),
             LABEL_SIZE,
-            Color.Gray7);
+            Color.Gray7
+        );
         camera.DrawText(
             firaSans,
             "baked Lora (OFL)",
             new Transform(new Vector3(LORA_TITLE_X, TITLE_LABEL_Y, 0f)),
             LABEL_SIZE,
-            Color.Gray7);
+            Color.Gray7
+        );
 
         // The status line is ordinary world-space text too; it reports the presented rate, the tick
         // rate, and the last completed frame's render statistics, so on the first frame the draw,
@@ -214,7 +233,8 @@ internal sealed class TextGame : IGame {
             Color.LightGreen,
             TextAlignment.Right,
             TextWrapping.None,
-            STATUS_MAX_WIDTH);
+            STATUS_MAX_WIDTH
+        );
 
         // One paragraph, three sizes, three alignments, two wrappings, and two rotations. The large
         // copy uses Word wrapping and contains a word wider than the 4.2-unit box, so that word
@@ -229,31 +249,36 @@ internal sealed class TextGame : IGame {
             Color.White,
             TextAlignment.Left,
             TextWrapping.Word,
-            PARAGRAPH_MAX_WIDTH);
+            PARAGRAPH_MAX_WIDTH
+        );
         camera.DrawText(
             firaSans,
             PARAGRAPH,
             new Transform(
                 new Vector3(LEFT_COLUMN_X, MEDIUM_DEMO_TOP_Y, 0f),
                 _mediumParagraphRotation,
-                Vector3.One),
+                Vector3.One
+            ),
             PARAGRAPH_MEDIUM_SIZE,
             Color.Khaki,
             TextAlignment.Center,
             TextWrapping.Word,
-            PARAGRAPH_MAX_WIDTH);
+            PARAGRAPH_MAX_WIDTH
+        );
         camera.DrawText(
             firaSans,
             PARAGRAPH,
             new Transform(
                 new Vector3(LEFT_COLUMN_X, SMALL_DEMO_TOP_Y, 0f),
                 _smallParagraphRotation,
-                Vector3.One),
+                Vector3.One
+            ),
             PARAGRAPH_SMALL_SIZE,
             Color.PaleTurquoise,
             TextAlignment.Right,
             TextWrapping.Character,
-            PARAGRAPH_MAX_WIDTH);
+            PARAGRAPH_MAX_WIDTH
+        );
 
         // Both faces cover Latin and Cyrillic. Each heading is drawn in the face it labels, and each
         // paragraph wraps inside a 3.9-unit box.
@@ -264,7 +289,8 @@ internal sealed class TextGame : IGame {
             LATIN_PARAGRAPH,
             RIGHT_COLUMN_X,
             ROW_ONE_HEADING_Y,
-            ROW_ONE_PARAGRAPH_Y);
+            ROW_ONE_PARAGRAPH_Y
+        );
         DrawParagraph(
             camera,
             lora,
@@ -272,7 +298,8 @@ internal sealed class TextGame : IGame {
             LATIN_PARAGRAPH,
             LORA_COLUMN_X,
             ROW_ONE_HEADING_Y,
-            ROW_ONE_PARAGRAPH_Y);
+            ROW_ONE_PARAGRAPH_Y
+        );
         DrawParagraph(
             camera,
             firaSans,
@@ -280,7 +307,8 @@ internal sealed class TextGame : IGame {
             CYRILLIC_PARAGRAPH,
             RIGHT_COLUMN_X,
             ROW_TWO_HEADING_Y,
-            ROW_TWO_PARAGRAPH_Y);
+            ROW_TWO_PARAGRAPH_Y
+        );
         DrawParagraph(
             camera,
             lora,
@@ -288,7 +316,8 @@ internal sealed class TextGame : IGame {
             CYRILLIC_PARAGRAPH,
             LORA_COLUMN_X,
             ROW_TWO_HEADING_Y,
-            ROW_TWO_PARAGRAPH_Y);
+            ROW_TWO_PARAGRAPH_Y
+        );
 
         // A billboard label floats off the wall and turns to face the orbiting camera. It uses Lora,
         // so the custom face is visible in the camera-facing path as well as on the wall.
@@ -297,19 +326,19 @@ internal sealed class TextGame : IGame {
             "Billboard: this label always faces the camera",
             new Vector3(BILLBOARD_X, BILLBOARD_Y, BILLBOARD_Z),
             BILLBOARD_SIZE,
-            Color.PaleGoldenRod);
+            Color.PaleGoldenRod
+        );
 
         // One more Greek letter is appended every 30 ticks. Greek is not drawn anywhere else in the
         // scene, so each new letter starts a fresh asynchronous MSDF generation.
-        string lazyLine = string.Concat(
-            LAZY_PREFIX,
-            LAZY_GREEK.AsSpan(0, _lazyGlyphCount));
+        string lazyLine = string.Concat(LAZY_PREFIX, LAZY_GREEK.AsSpan(0, _lazyGlyphCount));
         camera.DrawText(
             firaSans,
             lazyLine,
             new Transform(new Vector3(LEFT_COLUMN_X, LAZY_LINE_TOP_Y, 0f)),
             LAZY_LINE_SIZE,
-            Color.Turquoise);
+            Color.Turquoise
+        );
     }
 
     private static void DrawParagraph(
@@ -319,13 +348,16 @@ internal sealed class TextGame : IGame {
         string paragraph,
         float x,
         float headingY,
-        float paragraphY) {
+        float paragraphY
+    )
+    {
         camera.DrawText(
             font,
             heading,
             new Transform(new Vector3(x, headingY, 0f)),
             HEADING_SIZE,
-            Color.Gold);
+            Color.Gold
+        );
         camera.DrawText(
             font,
             paragraph,
@@ -334,13 +366,16 @@ internal sealed class TextGame : IGame {
             Color.Gainsboro,
             TextAlignment.Left,
             TextWrapping.Word,
-            BODY_MAX_WIDTH);
+            BODY_MAX_WIDTH
+        );
     }
 
-    private void UpdateOrbit(IInput input) {
+    private void UpdateOrbit(IInput input)
+    {
         // Drag to orbit; the wheel moves the camera closer or farther away. Screen Y grows
         // downward, so adding the vertical delta raises the camera when the pointer moves down.
-        if (input.IsMouseButtonDown(MouseButton.Left)) {
+        if (input.IsMouseButtonDown(MouseButton.Left))
+        {
             Vector2 delta = input.MouseDelta;
             _yawDegrees -= delta.X * ORBIT_DEGREES_PER_PIXEL;
 
@@ -348,15 +383,18 @@ internal sealed class TextGame : IGame {
             _pitchDegrees = Math.Clamp(
                 _pitchDegrees + (delta.Y * ORBIT_DEGREES_PER_PIXEL),
                 -pitchLimit,
-                pitchLimit);
+                pitchLimit
+            );
         }
 
         float wheel = input.MouseWheel;
-        if (wheel != 0f) {
+        if (wheel != 0f)
+        {
             _distance = Math.Clamp(
                 _distance * MathF.Pow(ZOOM_PER_WHEEL_STEP, -wheel),
                 MIN_DISTANCE,
-                MAX_DISTANCE);
+                MAX_DISTANCE
+            );
         }
     }
 }

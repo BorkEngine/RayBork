@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// The face-culling mode of a render state.
 /// </summary>
-public enum CullMode {
+public enum CullMode
+{
     /// <summary>Draw both faces.</summary>
     None = 0,
 

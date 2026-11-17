@@ -2,10 +2,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class FrameRetentionTests {
+public sealed class FrameRetentionTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AddIsIdempotentPerTargetAndReleaseRunsOnce() {
+    public void AddIsIdempotentPerTargetAndReleaseRunsOnce()
+    {
         FrameAssetRetention retention = new();
         RecordingRetentionTarget target = new();
 
@@ -26,7 +28,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AddAfterReleaseIsIgnored() {
+    public void AddAfterReleaseIsIgnored()
+    {
         FrameAssetRetention retention = new();
         retention.Release();
         RecordingRetentionTarget target = new();
@@ -39,7 +42,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReleaseCallsEveryTargetExactlyOnce() {
+    public void ReleaseCallsEveryTargetExactlyOnce()
+    {
         FrameAssetRetention retention = new();
         RecordingRetentionTarget first = new();
         RecordingRetentionTarget second = new();
@@ -56,7 +60,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TargetsAreHeldByReferenceNotByEquality() {
+    public void TargetsAreHeldByReferenceNotByEquality()
+    {
         FrameAssetRetention retention = new();
         EqualRetentionTarget first = new();
         EqualRetentionTarget second = new();
@@ -76,7 +81,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ATargetAddedToTwoFramesGetsOneHoldPerFrame() {
+    public void ATargetAddedToTwoFramesGetsOneHoldPerFrame()
+    {
         FrameRing ring = new();
         FrameAssetRetention retention = new();
         RecordingRetentionTarget target = new();
@@ -103,7 +109,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AReadyFrameKeepsItsHoldUntilItIsReleased() {
+    public void AReadyFrameKeepsItsHoldUntilItIsReleased()
+    {
         FrameRing ring = new();
         FrameAssetRetention retention = new();
         RecordingRetentionTarget target = new();
@@ -124,7 +131,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PublishingANewerFrameReleasesTheSupersededHold() {
+    public void PublishingANewerFrameReleasesTheSupersededHold()
+    {
         FrameRing ring = new();
         FrameAssetRetention firstRetention = new();
         RecordingRetentionTarget firstTarget = new();
@@ -152,7 +160,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AbandonReleasesTheHold() {
+    public void AbandonReleasesTheHold()
+    {
         FrameRing ring = new();
         FrameAssetRetention retention = new();
         RecordingRetentionTarget target = new();
@@ -171,7 +180,8 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CompleteKeepsTheReadyFrameHoldUntilTheRingIsDrained() {
+    public void CompleteKeepsTheReadyFrameHoldUntilTheRingIsDrained()
+    {
         FrameRing ring = new();
         FrameAssetRetention retention = new();
         RecordingRetentionTarget target = new();
@@ -192,22 +202,28 @@ public sealed class FrameRetentionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AttachRetentionRequiresARecordingLeaseAndAcceptsOneSet() {
+    public void AttachRetentionRequiresARecordingLeaseAndAcceptsOneSet()
+    {
         FrameRing ring = new();
         FrameAssetRetention retention = new();
 
         Assert.Throws<InvalidOperationException>(() => ring.AttachRetention(default, retention));
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.AttachRetention(lease, retention);
-        Assert.Throws<InvalidOperationException>(() => ring.AttachRetention(lease, new FrameAssetRetention()));
+        Assert.Throws<InvalidOperationException>(() =>
+            ring.AttachRetention(lease, new FrameAssetRetention())
+        );
 
         ring.Publish(lease);
-        Assert.Throws<InvalidOperationException>(() => ring.AttachRetention(lease, new FrameAssetRetention()));
+        Assert.Throws<InvalidOperationException>(() =>
+            ring.AttachRetention(lease, new FrameAssetRetention())
+        );
         Assert.True(ring.TryAcquireNewest(out FrameLease rendering));
         ring.Release(rendering);
     }
 
-    private class RecordingRetentionTarget : IAssetRetentionTarget {
+    private class RecordingRetentionTarget : IAssetRetentionTarget
+    {
         private int _holds;
         private int _releases;
 
@@ -220,7 +236,8 @@ public sealed class FrameRetentionTests {
         public void ReleaseFrameHold() => Interlocked.Increment(ref _releases);
     }
 
-    private sealed class EqualRetentionTarget : RecordingRetentionTarget {
+    private sealed class EqualRetentionTarget : RecordingRetentionTarget
+    {
         public override bool Equals(object? obj) => obj is EqualRetentionTarget;
 
         public override int GetHashCode() => 0;

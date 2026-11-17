@@ -10,7 +10,8 @@ namespace RayBork;
 /// <see cref="IGame.Shutdown"/>. The snapshot is captured at the start of <c>Tick</c>; events that
 /// arrive while a tick runs apply to the next tick.
 /// </remarks>
-public interface IInput {
+public interface IInput
+{
     /// <summary>
     /// Determines whether a key is held down.
     /// </summary>

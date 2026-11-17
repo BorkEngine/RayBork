@@ -3,7 +3,8 @@ namespace RayBork.Bake;
 /// <summary>
 /// Selects whether a processor source has an authoring sidecar.
 /// </summary>
-public enum SidecarPolicy {
+public enum SidecarPolicy
+{
     /// <summary>The processor has no sidecar.</summary>
     None,
 

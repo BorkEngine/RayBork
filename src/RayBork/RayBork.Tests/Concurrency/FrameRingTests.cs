@@ -2,13 +2,15 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class FrameRingTests {
+public sealed class FrameRingTests
+{
     private const int SLOT_COUNT = 3;
     private static readonly TimeSpan _blockingTimeout = TimeSpan.FromSeconds(2);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AcquireWritableFillsThreeSlotsThenFails() {
+    public void AcquireWritableFillsThreeSlotsThenFails()
+    {
         FrameRing ring = new();
 
         FrameLease[] leases = AcquireAllWritable(ring);
@@ -24,7 +26,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BackpressureAppliesOnlyWhenAllThreeSlotsAreOccupied() {
+    public void BackpressureAppliesOnlyWhenAllThreeSlotsAreOccupied()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease renderingLease));
         ring.Publish(renderingLease);
@@ -44,7 +47,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PublishSupersedesAnOlderReadyFrame() {
+    public void PublishSupersedesAnOlderReadyFrame()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease first));
         ring.Publish(first);
@@ -65,7 +69,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReleaseReturnsTheRenderingSlotToTheFreePool() {
+    public void ReleaseReturnsTheRenderingSlotToTheFreePool()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
@@ -81,7 +86,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AbandonReturnsARecordingSlotWithoutPublishing() {
+    public void AbandonReturnsARecordingSlotWithoutPublishing()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
 
@@ -96,7 +102,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CompleteDrainsReadyFramesBeforeBlockingAcquireNewestReturnsNull() {
+    public void CompleteDrainsReadyFramesBeforeBlockingAcquireNewestReturnsNull()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
@@ -117,7 +124,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CompleteWithoutAFrameReturnsNullFromBothBlockingAcquires() {
+    public void CompleteWithoutAFrameReturnsNullFromBothBlockingAcquires()
+    {
         FrameRing ring = new();
         ring.Complete();
 
@@ -129,19 +137,23 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CancellationWinsOverCompletionForBlockingAcquires() {
+    public void CancellationWinsOverCompletionForBlockingAcquires()
+    {
         FrameRing ring = new();
         ring.Complete();
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
 
-        Assert.ThrowsAny<OperationCanceledException>(() => ring.AcquireWritable(cancellation.Token));
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            ring.AcquireWritable(cancellation.Token)
+        );
         Assert.ThrowsAny<OperationCanceledException>(() => ring.AcquireNewest(cancellation.Token));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PublishRejectsADefaultLease() {
+    public void PublishRejectsADefaultLease()
+    {
         FrameRing ring = new();
 
         Assert.Throws<InvalidOperationException>(() => ring.Publish(default));
@@ -149,7 +161,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PublishRejectsAPublishedLease() {
+    public void PublishRejectsAPublishedLease()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
@@ -159,7 +172,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PublishRejectsARenderingLease() {
+    public void PublishRejectsARenderingLease()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
@@ -170,7 +184,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReleaseRejectsADefaultLease() {
+    public void ReleaseRejectsADefaultLease()
+    {
         FrameRing ring = new();
 
         Assert.Throws<InvalidOperationException>(() => ring.Release(default));
@@ -178,7 +193,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReleaseRejectsAReadyLease() {
+    public void ReleaseRejectsAReadyLease()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
@@ -188,7 +204,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReleaseRejectsAReleasedLease() {
+    public void ReleaseRejectsAReleasedLease()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
@@ -200,7 +217,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AbandonRejectsAPublishedLease() {
+    public void AbandonRejectsAPublishedLease()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
@@ -210,7 +228,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LeaseWithAnOutOfRangeSlotThrows() {
+    public void LeaseWithAnOutOfRangeSlotThrows()
+    {
         FrameRing ring = new();
 
         Assert.Throws<InvalidOperationException>(() => ring.Publish(new FrameLease(-1, 1)));
@@ -220,7 +239,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void StaleLeaseAfterSlotReuseThrows() {
+    public void StaleLeaseAfterSlotReuseThrows()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease first));
         ring.Publish(first);
@@ -238,7 +258,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BlockingAcquireWritableWakesWhenASlotIsReleased() {
+    public async Task BlockingAcquireWritableWakesWhenASlotIsReleased()
+    {
         FrameRing ring = new();
         FrameLease[] leases = AcquireAllWritable(ring);
         Task<FrameLease?> blocked = Task.Run(() => ring.AcquireWritable(CancellationToken.None));
@@ -247,7 +268,10 @@ public sealed class FrameRingTests {
         Assert.True(ring.TryAcquireNewest(out FrameLease rendering));
         ring.Release(rendering);
 
-        FrameLease? acquired = await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken);
+        FrameLease? acquired = await blocked.WaitAsync(
+            _blockingTimeout,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(acquired.HasValue);
         Assert.Equal(leases[0].SlotIndex, acquired.Value.SlotIndex);
@@ -257,14 +281,18 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BlockingAcquireNewestWakesWhenAFrameIsPublished() {
+    public async Task BlockingAcquireNewestWakesWhenAFrameIsPublished()
+    {
         FrameRing ring = new();
         Task<FrameLease?> blocked = Task.Run(() => ring.AcquireNewest(CancellationToken.None));
 
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
         ring.Publish(lease);
 
-        FrameLease? acquired = await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken);
+        FrameLease? acquired = await blocked.WaitAsync(
+            _blockingTimeout,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(acquired.HasValue);
         Assert.Equal(lease.SlotIndex, acquired.Value.SlotIndex);
@@ -274,34 +302,43 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CompleteWakesABlockedWritableAcquisitionWithNull() {
+    public async Task CompleteWakesABlockedWritableAcquisitionWithNull()
+    {
         FrameRing ring = new();
         AcquireAllWritable(ring);
         Task<FrameLease?> blocked = Task.Run(() => ring.AcquireWritable(CancellationToken.None));
 
         ring.Complete();
 
-        FrameLease? acquired = await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken);
+        FrameLease? acquired = await blocked.WaitAsync(
+            _blockingTimeout,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Null(acquired);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CompleteWakesABlockedNewestAcquisitionWithNull() {
+    public async Task CompleteWakesABlockedNewestAcquisitionWithNull()
+    {
         FrameRing ring = new();
         Task<FrameLease?> blocked = Task.Run(() => ring.AcquireNewest(CancellationToken.None));
 
         ring.Complete();
 
-        FrameLease? acquired = await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken);
+        FrameLease? acquired = await blocked.WaitAsync(
+            _blockingTimeout,
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Null(acquired);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BlockingAcquireWritableHonorsCancellation() {
+    public async Task BlockingAcquireWritableHonorsCancellation()
+    {
         using CancellationTokenSource cancellation = new();
         FrameRing ring = new();
         AcquireAllWritable(ring);
@@ -309,13 +346,15 @@ public sealed class FrameRingTests {
 
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WritableLeaseCarriesAResetPacketAndPublishSealsIt() {
+    public void WritableLeaseCarriesAResetPacketAndPublishSealsIt()
+    {
         FrameRing ring = new();
 
         Assert.True(ring.TryAcquireWritable(out FrameLease lease));
@@ -348,7 +387,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EachAcquisitionGetsAFreshRetentionSet() {
+    public void EachAcquisitionGetsAFreshRetentionSet()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease first));
         FrameAssetRetention firstRetention = first.Packet!.Retention;
@@ -371,7 +411,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PacketResetClearsRecordedPassesAndDrawsButReusesTheBuffers() {
+    public void PacketResetClearsRecordedPassesAndDrawsButReusesTheBuffers()
+    {
         FrameRing ring = new();
         Assert.True(ring.TryAcquireWritable(out FrameLease first));
         RenderFramePacket packet = Assert.IsType<RenderFramePacket>(first.Packet);
@@ -394,7 +435,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PresentationWaitReturnsForAnAlreadyPresentedOrNewerFrame() {
+    public void PresentationWaitReturnsForAnAlreadyPresentedOrNewerFrame()
+    {
         FrameRing ring = new();
         ring.MarkPresented(5);
 
@@ -405,32 +447,39 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task PresentationWaitWakesWhenTheFrameIsMarked() {
+    public async Task PresentationWaitWakesWhenTheFrameIsMarked()
+    {
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, CancellationToken.None));
         WaitForPresentationWaiter(ring);
 
         ring.MarkPresented(1);
 
-        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.True(
+            await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken)
+        );
         Assert.Equal(0, ring.PresentationWaiterCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task PresentationWaitWakesWhenANewerFrameIsMarked() {
+    public async Task PresentationWaitWakesWhenANewerFrameIsMarked()
+    {
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(2, CancellationToken.None));
         WaitForPresentationWaiter(ring);
 
         ring.MarkPresented(3);
 
-        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.True(
+            await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RepeatedAndOlderMarksAreIdempotent() {
+    public void RepeatedAndOlderMarksAreIdempotent()
+    {
         FrameRing ring = new();
 
         ring.MarkPresented(5);
@@ -443,19 +492,23 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CompleteWakesAPresentationWait() {
+    public async Task CompleteWakesAPresentationWait()
+    {
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, CancellationToken.None));
         WaitForPresentationWaiter(ring);
 
         ring.Complete();
 
-        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.True(
+            await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PresentationWaitAfterCompletionReturnsTrue() {
+    public void PresentationWaitAfterCompletionReturnsTrue()
+    {
         FrameRing ring = new();
         ring.Complete();
 
@@ -464,7 +517,8 @@ public sealed class FrameRingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CancellationWakesAPresentationWait() {
+    public async Task CancellationWakesAPresentationWait()
+    {
         using CancellationTokenSource cancellation = new();
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, cancellation.Token));
@@ -472,13 +526,16 @@ public sealed class FrameRingTests {
 
         cancellation.Cancel();
 
-        Assert.False(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.False(
+            await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken)
+        );
         Assert.Equal(0, ring.PresentationWaiterCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CancellationDoesNotHideAFramePresentedBeforeTheWaitObservesIt() {
+    public async Task CancellationDoesNotHideAFramePresentedBeforeTheWaitObservesIt()
+    {
         using CancellationTokenSource cancellation = new();
         FrameRing ring = new();
         Task<bool> blocked = Task.Run(() => ring.WaitForPresentation(1, cancellation.Token));
@@ -486,16 +543,22 @@ public sealed class FrameRingTests {
         ring.MarkPresented(1);
         cancellation.Cancel();
 
-        Assert.True(await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken));
+        Assert.True(
+            await blocked.WaitAsync(_blockingTimeout, TestContext.Current.CancellationToken)
+        );
     }
 
-    private static void WaitForPresentationWaiter(FrameRing ring) => Assert.True(
-        SpinWait.SpinUntil(() => ring.PresentationWaiterCount == 1, _blockingTimeout),
-        "The presentation waiter did not block.");
+    private static void WaitForPresentationWaiter(FrameRing ring) =>
+        Assert.True(
+            SpinWait.SpinUntil(() => ring.PresentationWaiterCount == 1, _blockingTimeout),
+            "The presentation waiter did not block."
+        );
 
-    private static FrameLease[] AcquireAllWritable(FrameRing ring) {
+    private static FrameLease[] AcquireAllWritable(FrameRing ring)
+    {
         FrameLease[] leases = new FrameLease[SLOT_COUNT];
-        for (int i = 0; i < leases.Length; i++) {
+        for (int i = 0; i < leases.Length; i++)
+        {
             Assert.True(ring.TryAcquireWritable(out leases[i]));
         }
         return leases;

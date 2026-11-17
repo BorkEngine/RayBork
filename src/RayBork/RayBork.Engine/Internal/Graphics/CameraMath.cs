@@ -20,7 +20,8 @@ namespace RayBork.Internal;
 /// documented in the API reference; the matrices built here are its row-vector transpose.
 /// </para>
 /// </remarks>
-internal static class CameraMath {
+internal static class CameraMath
+{
     private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
     private const float MAXIMUM_FIELD_OF_VIEW = 180f;
 
@@ -30,11 +31,14 @@ internal static class CameraMath {
     /// <param name="transform">The world-space camera transform.</param>
     /// <returns>The inverse of the transform matrix.</returns>
     /// <exception cref="InvalidOperationException">The transform matrix is singular.</exception>
-    internal static Matrix4x4 CreateViewMatrix(Transform transform) {
-        if (!Matrix4x4.Invert(transform.ToMatrix(), out Matrix4x4 view)) {
+    internal static Matrix4x4 CreateViewMatrix(Transform transform)
+    {
+        if (!Matrix4x4.Invert(transform.ToMatrix(), out Matrix4x4 view))
+        {
             throw new InvalidOperationException(
                 "The camera transform is singular and cannot be inverted. A zero scale component is "
-                    + "not a valid camera transform.");
+                    + "not a valid camera transform."
+            );
         }
 
         return view;
@@ -52,16 +56,31 @@ internal static class CameraMath {
         float fieldOfView,
         float aspectRatio,
         float near,
-        float far) {
+        float far
+    )
+    {
         float f = 1f / MathF.Tan(fieldOfView * DEGREES_TO_RADIANS * 0.5f);
         bool infiniteFar = float.IsPositiveInfinity(far);
         float a = infiniteFar ? 0f : near / (far - near);
         float b = infiniteFar ? near : near * far / (far - near);
         return new Matrix4x4(
-            f / aspectRatio, 0f, 0f, 0f,
-            0f, -f, 0f, 0f,
-            0f, 0f, a, -1f,
-            0f, 0f, b, 0f);
+            f / aspectRatio,
+            0f,
+            0f,
+            0f,
+            0f,
+            -f,
+            0f,
+            0f,
+            0f,
+            0f,
+            a,
+            -1f,
+            0f,
+            0f,
+            b,
+            0f
+        );
     }
 
     /// <summary>
@@ -76,15 +95,30 @@ internal static class CameraMath {
         float height,
         float aspectRatio,
         float near,
-        float far) {
+        float far
+    )
+    {
         float width = height * aspectRatio;
         float a = 1f / (far - near);
         float b = far / (far - near);
         return new Matrix4x4(
-            2f / width, 0f, 0f, 0f,
-            0f, -2f / height, 0f, 0f,
-            0f, 0f, a, 0f,
-            0f, 0f, b, 1f);
+            2f / width,
+            0f,
+            0f,
+            0f,
+            0f,
+            -2f / height,
+            0f,
+            0f,
+            0f,
+            0f,
+            a,
+            0f,
+            0f,
+            0f,
+            b,
+            1f
+        );
     }
 
     /// <summary>
@@ -108,22 +142,29 @@ internal static class CameraMath {
         float fieldOfView,
         float orthographicHeight,
         float near,
-        float far) {
-        switch (projection) {
+        float far
+    )
+    {
+        switch (projection)
+        {
             case CameraProjection.Perspective:
-                if (orthographicHeight != 0f) {
+                if (orthographicHeight != 0f)
+                {
                     throw new ArgumentException(
                         "A perspective camera uses fieldOfView and requires orthographicHeight to be 0.",
-                        nameof(orthographicHeight));
+                        nameof(orthographicHeight)
+                    );
                 }
 
                 ValidatePerspective(fieldOfView, near, far);
                 break;
             case CameraProjection.Orthographic:
-                if (fieldOfView != 0f) {
+                if (fieldOfView != 0f)
+                {
                     throw new ArgumentException(
                         "An orthographic camera uses orthographicHeight and requires fieldOfView to be 0.",
-                        nameof(fieldOfView));
+                        nameof(fieldOfView)
+                    );
                 }
 
                 ValidateOrthographic(orthographicHeight, near, far);
@@ -132,7 +173,8 @@ internal static class CameraMath {
                 throw new ArgumentOutOfRangeException(
                     nameof(projection),
                     projection,
-                    "The projection is not a defined value.");
+                    "The projection is not a defined value."
+                );
         }
     }
 
@@ -143,12 +185,19 @@ internal static class CameraMath {
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The far clip distance.</param>
     /// <exception cref="ArgumentOutOfRangeException">A parameter is outside its documented range.</exception>
-    internal static void ValidatePerspective(float fieldOfView, float near, float far) {
-        if (!float.IsFinite(fieldOfView) || fieldOfView <= 0f || fieldOfView >= MAXIMUM_FIELD_OF_VIEW) {
+    internal static void ValidatePerspective(float fieldOfView, float near, float far)
+    {
+        if (
+            !float.IsFinite(fieldOfView)
+            || fieldOfView <= 0f
+            || fieldOfView >= MAXIMUM_FIELD_OF_VIEW
+        )
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(fieldOfView),
                 fieldOfView,
-                $"The vertical field of view must be finite and inside (0, {MAXIMUM_FIELD_OF_VIEW}) degrees.");
+                $"The vertical field of view must be finite and inside (0, {MAXIMUM_FIELD_OF_VIEW}) degrees."
+            );
         }
 
         ValidateClipPlanes(near, far, allowInfiniteFar: true);
@@ -161,12 +210,15 @@ internal static class CameraMath {
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The far clip distance.</param>
     /// <exception cref="ArgumentOutOfRangeException">A parameter is outside its documented range.</exception>
-    internal static void ValidateOrthographic(float orthographicHeight, float near, float far) {
-        if (!float.IsFinite(orthographicHeight) || orthographicHeight <= 0f) {
+    internal static void ValidateOrthographic(float orthographicHeight, float near, float far)
+    {
+        if (!float.IsFinite(orthographicHeight) || orthographicHeight <= 0f)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(orthographicHeight),
                 orthographicHeight,
-                "The orthographic height must be finite and greater than zero.");
+                "The orthographic height must be finite and greater than zero."
+            );
         }
 
         ValidateClipPlanes(near, far, allowInfiniteFar: false);
@@ -189,42 +241,57 @@ internal static class CameraMath {
         Rect? viewport,
         int targetWidth,
         int targetHeight,
-        string parameterName) {
+        string parameterName
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(parameterName);
 
-        if (targetWidth <= 0 || targetHeight <= 0) {
+        if (targetWidth <= 0 || targetHeight <= 0)
+        {
             throw new ArgumentException(
                 $"The camera target is {targetWidth}x{targetHeight} pixels; a camera needs a non-empty "
                     + "render target.",
-                parameterName);
+                parameterName
+            );
         }
 
-        if (viewport is null) {
+        if (viewport is null)
+        {
             return new Rect(0f, 0f, targetWidth, targetHeight);
         }
 
         Rect requested = viewport.Value;
-        if (!float.IsFinite(requested.X)
+        if (
+            !float.IsFinite(requested.X)
             || !float.IsFinite(requested.Y)
             || !float.IsFinite(requested.Width)
-            || !float.IsFinite(requested.Height)) {
-            throw new ArgumentException("The viewport components must all be finite.", parameterName);
+            || !float.IsFinite(requested.Height)
+        )
+        {
+            throw new ArgumentException(
+                "The viewport components must all be finite.",
+                parameterName
+            );
         }
 
-        if (requested.Width <= 0f || requested.Height <= 0f) {
+        if (requested.Width <= 0f || requested.Height <= 0f)
+        {
             throw new ArgumentException(
                 "The viewport width and height must both be greater than zero.",
-                parameterName);
+                parameterName
+            );
         }
 
         float left = Math.Clamp(requested.X, 0f, targetWidth);
         float top = Math.Clamp(requested.Y, 0f, targetHeight);
         float right = Math.Clamp(requested.X + requested.Width, 0f, targetWidth);
         float bottom = Math.Clamp(requested.Y + requested.Height, 0f, targetHeight);
-        if (right <= left || bottom <= top) {
+        if (right <= left || bottom <= top)
+        {
             throw new ArgumentException(
                 "The viewport is outside the target and clamps to an empty rectangle.",
-                parameterName);
+                parameterName
+            );
         }
 
         return new Rect(left, top, right - left, bottom - top);
@@ -238,42 +305,56 @@ internal static class CameraMath {
     /// <param name="parameterName">The public parameter name used by the thrown exception.</param>
     /// <returns>The linear clear color.</returns>
     /// <exception cref="ArgumentException">A component is not finite.</exception>
-    internal static Color ResolveClearColor(Color? clearColor, string parameterName) {
+    internal static Color ResolveClearColor(Color? clearColor, string parameterName)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(parameterName);
 
-        if (clearColor is not { } color) {
+        if (clearColor is not { } color)
+        {
             return Color.Black;
         }
 
-        if (!float.IsFinite(color.R)
+        if (
+            !float.IsFinite(color.R)
             || !float.IsFinite(color.G)
             || !float.IsFinite(color.B)
-            || !float.IsFinite(color.A)) {
-            throw new ArgumentException("The clear color components must all be finite.", parameterName);
+            || !float.IsFinite(color.A)
+        )
+        {
+            throw new ArgumentException(
+                "The clear color components must all be finite.",
+                parameterName
+            );
         }
 
         return color;
     }
 
-    private static void ValidateClipPlanes(float near, float far, bool allowInfiniteFar) {
-        if (!float.IsFinite(near) || near <= 0f) {
+    private static void ValidateClipPlanes(float near, float far, bool allowInfiniteFar)
+    {
+        if (!float.IsFinite(near) || near <= 0f)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(near),
                 near,
-                "The near clip distance must be finite and greater than zero.");
+                "The near clip distance must be finite and greater than zero."
+            );
         }
 
-        if (float.IsPositiveInfinity(far) && allowInfiniteFar) {
+        if (float.IsPositiveInfinity(far) && allowInfiniteFar)
+        {
             return;
         }
 
-        if (!float.IsFinite(far) || far <= near) {
+        if (!float.IsFinite(far) || far <= near)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(far),
                 far,
                 allowInfiniteFar
                     ? "The far clip distance must be finite and greater than near, or positive infinity."
-                    : "The far clip distance must be finite and greater than near for an orthographic camera.");
+                    : "The far clip distance must be finite and greater than near for an orthographic camera."
+            );
         }
     }
 }

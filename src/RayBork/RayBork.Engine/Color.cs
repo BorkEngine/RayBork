@@ -21,7 +21,8 @@ namespace RayBork;
 /// float, float)"/> for other display-authored components; the type itself stays linear.
 /// </para>
 /// </remarks>
-public readonly struct Color : IEquatable<Color>, IFormattable {
+public readonly struct Color : IEquatable<Color>, IFormattable
+{
     private const float GRAYSCALE_RED_WEIGHT = 0.299f;
     private const float GRAYSCALE_GREEN_WEIGHT = 0.587f;
     private const float GRAYSCALE_BLUE_WEIGHT = 0.114f;
@@ -261,7 +262,11 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     public static readonly Color LightGoldenRod = FromSrgb(0.9333334f, 0.8666667f, 0.509804f);
 
     /// <summary>The Bork2d/Unity <c>LightGoldenRodYellow</c> preset; its sRGB source is <c>RGBA(0.9803922, 0.9803922, 0.8235295, 1)</c>, stored linear as <c>RGBA(0.9559735, 0.9559735, 0.6444799, 1)</c>.</summary>
-    public static readonly Color LightGoldenRodYellow = FromSrgb(0.9803922f, 0.9803922f, 0.8235295f);
+    public static readonly Color LightGoldenRodYellow = FromSrgb(
+        0.9803922f,
+        0.9803922f,
+        0.8235295f
+    );
 
     /// <summary>The Bork2d/Unity <c>LightGray</c> preset; its sRGB source is <c>RGBA(0.8274511, 0.8274511, 0.8274511, 1)</c>, stored linear as <c>RGBA(0.6514059, 0.6514059, 0.6514059, 1)</c>.</summary>
     public static readonly Color LightGray = FromSrgb(0.8274511f, 0.8274511f, 0.8274511f);
@@ -516,7 +521,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="g">The linear green component.</param>
     /// <param name="b">The linear blue component.</param>
     /// <param name="a">The alpha component.</param>
-    public Color(float r, float g, float b, float a) {
+    public Color(float r, float g, float b, float a)
+    {
         _rgba = new Vector4(r, g, b, a);
     }
 
@@ -526,11 +532,13 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="r">The linear red component.</param>
     /// <param name="g">The linear green component.</param>
     /// <param name="b">The linear blue component.</param>
-    public Color(float r, float g, float b) {
+    public Color(float r, float g, float b)
+    {
         _rgba = new Vector4(r, g, b, 1f);
     }
 
-    private Color(Vector4 rgba) {
+    private Color(Vector4 rgba)
+    {
         _rgba = rgba;
     }
 
@@ -562,9 +570,12 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="index"/> is less than zero or greater than three.
     /// </exception>
-    public float this[int index] {
-        get {
-            return index switch {
+    public float this[int index]
+    {
+        get
+        {
+            return index switch
+            {
                 0 => _rgba.X,
                 1 => _rgba.Y,
                 2 => _rgba.Z,
@@ -572,7 +583,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
                 _ => throw new ArgumentOutOfRangeException(
                     nameof(index),
                     index,
-                    "Color component index must be between 0 and 3."),
+                    "Color component index must be between 0 and 3."
+                ),
             };
         }
     }
@@ -582,7 +594,9 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <c>0.299 R + 0.587 G + 0.114 B</c> weights. Alpha is ignored.
     /// </summary>
     public float Grayscale =>
-        (GRAYSCALE_RED_WEIGHT * _rgba.X) + (GRAYSCALE_GREEN_WEIGHT * _rgba.Y) + (GRAYSCALE_BLUE_WEIGHT * _rgba.Z);
+        (GRAYSCALE_RED_WEIGHT * _rgba.X)
+        + (GRAYSCALE_GREEN_WEIGHT * _rgba.Y)
+        + (GRAYSCALE_BLUE_WEIGHT * _rgba.Z);
 
     /// <summary>
     /// Gets the largest of the red, green, blue, and alpha components.
@@ -607,7 +621,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="b">The color at <paramref name="t"/> equal to one.</param>
     /// <param name="t">The interpolation factor, which may lie outside <c>[0, 1]</c>.</param>
     /// <returns>The interpolated color, which may extrapolate beyond the endpoints.</returns>
-    public static Color LerpUnclamped(Color a, Color b, float t) => new(Vector4.Lerp(a._rgba, b._rgba, t));
+    public static Color LerpUnclamped(Color a, Color b, float t) =>
+        new(Vector4.Lerp(a._rgba, b._rgba, t));
 
     /// <summary>
     /// Converts the color to the OkLab perceptual color space.
@@ -615,7 +630,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="l">The OkLab lightness component.</param>
     /// <param name="a">The OkLab green-red component.</param>
     /// <param name="b">The OkLab blue-yellow component.</param>
-    public void ToOkLab(out float l, out float a, out float b) {
+    public void ToOkLab(out float l, out float a, out float b)
+    {
         float red = _rgba.X;
         float green = _rgba.Y;
         float blue = _rgba.Z;
@@ -641,7 +657,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="b">The OkLab blue-yellow component.</param>
     /// <param name="alpha">The alpha component.</param>
     /// <returns>The linear color.</returns>
-    public static Color FromOkLab(float l, float a, float b, float alpha = 1f) {
+    public static Color FromOkLab(float l, float a, float b, float alpha = 1f)
+    {
         float lRoot = l + (0.3963377774f * a) + (0.2158037573f * b);
         float mRoot = l - (0.1055613458f * a) - (0.0638541728f * b);
         float sRoot = l - (0.0894841775f * a) - (1.2914855480f * b);
@@ -669,12 +686,14 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// The result is not clamped. Components above <c>1</c> and below <c>0</c> extrapolate through
     /// the same piecewise formula; callers that write to a display or an 8-bit target must clamp.
     /// </remarks>
-    public Vector4 ToSrgb() {
+    public Vector4 ToSrgb()
+    {
         return new Vector4(
             EncodeSrgbComponent(_rgba.X),
             EncodeSrgbComponent(_rgba.Y),
             EncodeSrgbComponent(_rgba.Z),
-            _rgba.W);
+            _rgba.W
+        );
     }
 
     /// <summary>
@@ -688,17 +707,14 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <exception cref="ArgumentOutOfRangeException">
     /// A component is not finite or lies outside <c>[0, 1]</c>.
     /// </exception>
-    public static Color FromSrgb(float r, float g, float b, float a = 1f) {
+    public static Color FromSrgb(float r, float g, float b, float a = 1f)
+    {
         ValidateSrgbComponent(r, nameof(r));
         ValidateSrgbComponent(g, nameof(g));
         ValidateSrgbComponent(b, nameof(b));
         ValidateSrgbComponent(a, nameof(a));
 
-        return new Color(
-            DecodeSrgbComponent(r),
-            DecodeSrgbComponent(g),
-            DecodeSrgbComponent(b),
-            a);
+        return new Color(DecodeSrgbComponent(r), DecodeSrgbComponent(g), DecodeSrgbComponent(b), a);
     }
 
     /// <summary>
@@ -714,12 +730,14 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// piecewise sRGB transfer function. Alpha is converted the same way without the transfer
     /// function. The conversion is exact and deterministic for a given byte quadruple.
     /// </remarks>
-    public static Color FromSrgbBytes(byte r, byte g, byte b, byte a = 255) {
+    public static Color FromSrgbBytes(byte r, byte g, byte b, byte a = 255)
+    {
         return new Color(
             DecodeSrgbComponent(r / 255f),
             DecodeSrgbComponent(g / 255f),
             DecodeSrgbComponent(b / 255f),
-            a / 255f);
+            a / 255f
+        );
     }
 
     /// <summary>
@@ -729,7 +747,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="b">The color at <paramref name="t"/> equal to one.</param>
     /// <param name="t">The interpolation factor, clamped to <c>[0, 1]</c>.</param>
     /// <returns>The interpolated color.</returns>
-    public static Color LerpOkLab(Color a, Color b, float t) => LerpOkLabUnclamped(a, b, Math.Clamp(t, 0f, 1f));
+    public static Color LerpOkLab(Color a, Color b, float t) =>
+        LerpOkLabUnclamped(a, b, Math.Clamp(t, 0f, 1f));
 
     /// <summary>
     /// Interpolates two colors in OkLab space without clamping the interpolation factor.
@@ -738,7 +757,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="b">The color at <paramref name="t"/> equal to one.</param>
     /// <param name="t">The interpolation factor, which may lie outside <c>[0, 1]</c>.</param>
     /// <returns>The interpolated color, which may extrapolate beyond the endpoints.</returns>
-    public static Color LerpOkLabUnclamped(Color a, Color b, float t) {
+    public static Color LerpOkLabUnclamped(Color a, Color b, float t)
+    {
         a.ToOkLab(out float aL, out float aA, out float aB);
         b.ToOkLab(out float bL, out float bA, out float bB);
 
@@ -746,7 +766,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
             aL + ((bL - aL) * t),
             aA + ((bA - aA) * t),
             aB + ((bB - aB) * t),
-            a.A + ((b.A - a.A) * t));
+            a.A + ((b.A - a.A) * t)
+        );
     }
 
     /// <summary>
@@ -771,7 +792,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <see langword="true"/> to allow HDR values above <c>1</c>; <see langword="false"/> to clamp.
     /// </param>
     /// <returns>The opaque color.</returns>
-    public static Color HSVToRGB(float h, float s, float v, bool hdr) {
+    public static Color HSVToRGB(float h, float s, float v, bool hdr)
+    {
         h -= MathF.Floor(h);
         s = Math.Clamp(s, 0f, 1f);
         v = hdr ? MathF.Max(v, 0f) : Math.Clamp(v, 0f, 1f);
@@ -784,7 +806,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
         float q = v * (1f - (s * fraction));
         float t = v * (1f - (s * (1f - fraction)));
 
-        return index switch {
+        return index switch
+        {
             0 => new Color(v, t, p, 1f),
             1 => new Color(q, v, p, 1f),
             2 => new Color(p, v, t, 1f),
@@ -801,7 +824,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="h">The resulting hue in <c>[0, 1]</c>.</param>
     /// <param name="s">The resulting saturation.</param>
     /// <param name="v">The resulting value.</param>
-    public static void RGBToHSV(Color rgb, out float h, out float s, out float v) {
+    public static void RGBToHSV(Color rgb, out float h, out float s, out float v)
+    {
         float red = rgb._rgba.X;
         float green = rgb._rgba.Y;
         float blue = rgb._rgba.Z;
@@ -812,7 +836,8 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
 
         v = max;
 
-        if (delta <= 0f || max <= 0f) {
+        if (delta <= 0f || max <= 0f)
+        {
             h = 0f;
             s = 0f;
             return;
@@ -820,17 +845,23 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
 
         s = delta / max;
 
-        if (max == red) {
+        if (max == red)
+        {
             h = (green - blue) / delta;
-        } else if (max == green) {
+        }
+        else if (max == green)
+        {
             h = ((blue - red) / delta) + 2f;
-        } else {
+        }
+        else
+        {
             h = ((red - green) / delta) + 4f;
         }
 
         h /= 6f;
 
-        if (h < 0f) {
+        if (h < 0f)
+        {
             h += 1f;
         }
     }
@@ -929,16 +960,26 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
     /// <param name="format">The component format string. The default is used when this is null or empty.</param>
     /// <param name="formatProvider">The provider used to format the components.</param>
     /// <returns>The formatted color.</returns>
-    public string ToString(string? format, IFormatProvider? formatProvider) {
+    public string ToString(string? format, IFormatProvider? formatProvider)
+    {
         string componentFormat = string.IsNullOrEmpty(format) ? "G" : format;
 
         return string.Format(
             formatProvider,
-            "RGBA({0:" + componentFormat + "}, {1:" + componentFormat + "}, {2:" + componentFormat + "}, {3:" + componentFormat + "})",
+            "RGBA({0:"
+                + componentFormat
+                + "}, {1:"
+                + componentFormat
+                + "}, {2:"
+                + componentFormat
+                + "}, {3:"
+                + componentFormat
+                + "})",
             _rgba.X,
             _rgba.Y,
             _rgba.Z,
-            _rgba.W);
+            _rgba.W
+        );
     }
 
     private static float DecodeSrgbComponent(float value) =>
@@ -951,12 +992,15 @@ public readonly struct Color : IEquatable<Color>, IFormattable {
             ? SRGB_SLOPE * value
             : (SRGB_SCALE * MathF.Pow(value, SRGB_INVERSE_GAMMA)) - SRGB_OFFSET;
 
-    private static void ValidateSrgbComponent(float value, string paramName) {
-        if (!float.IsFinite(value) || value < 0f || value > 1f) {
+    private static void ValidateSrgbComponent(float value, string paramName)
+    {
+        if (!float.IsFinite(value) || value < 0f || value > 1f)
+        {
             throw new ArgumentOutOfRangeException(
                 paramName,
                 value,
-                "sRGB components must be finite and between 0 and 1.");
+                "sRGB components must be finite and between 0 and 1."
+            );
         }
     }
 }

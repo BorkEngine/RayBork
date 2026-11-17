@@ -21,7 +21,8 @@ namespace RayBork.Bake;
 /// </remarks>
 /// <typeparam name="TSidecar">The sidecar type, which must carry a compiled shape.</typeparam>
 public abstract class AssetProcessor<TSidecar> : IAssetProcessor, ITypedAssetProcessor
-    where TSidecar : IShapeable<TSidecar> {
+    where TSidecar : IShapeable<TSidecar>
+{
     /// <inheritdoc/>
     /// <remarks>The default is the processor CLR full name; override it for a stable short name.</remarks>
     public virtual string Name => GetType().FullName ?? GetType().Name;
@@ -36,10 +37,11 @@ public abstract class AssetProcessor<TSidecar> : IAssetProcessor, ITypedAssetPro
     public ITypeShape SidecarShape => TSidecar.GetTypeShape();
 
     /// <inheritdoc/>
-    void IAssetProcessor.Process(AssetProcessorContext context)
-        => throw new InvalidOperationException(
+    void IAssetProcessor.Process(AssetProcessorContext context) =>
+        throw new InvalidOperationException(
             $"'{GetType().FullName}' is a sidecar processor; the bake invokes it with its bound "
-                + $"'{typeof(TSidecar).FullName}' sidecar.");
+                + $"'{typeof(TSidecar).FullName}' sidecar."
+        );
 
     /// <summary>Creates the in-memory default sidecar for a missing optional sidecar.</summary>
     /// <param name="context">The per-source processing context.</param>
@@ -51,12 +53,14 @@ public abstract class AssetProcessor<TSidecar> : IAssetProcessor, ITypedAssetPro
     /// <param name="sidecar">The bound or defaulted sidecar.</param>
     protected abstract void Process(AssetProcessorContext context, TSidecar sidecar);
 
-    object ITypedAssetProcessor.CreateDefaultSidecar(AssetProcessorContext context) {
+    object ITypedAssetProcessor.CreateDefaultSidecar(AssetProcessorContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
         return CreateDefaultSidecar(context);
     }
 
-    void ITypedAssetProcessor.Process(AssetProcessorContext context, object sidecar) {
+    void ITypedAssetProcessor.Process(AssetProcessorContext context, object sidecar)
+    {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(sidecar);
         Process(context, (TSidecar)sidecar);
