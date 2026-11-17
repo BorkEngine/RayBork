@@ -52,13 +52,15 @@ internal sealed class SdlInput
         switch ((SDL.EventType)sdlEvent.Type)
         {
             case SDL.EventType.KeyDown:
-                _state.HandleKeyDown(
-                    InputMappings.ToKey(sdlEvent.Key.Scancode),
-                    sdlEvent.Key.Repeat
-                );
+                ApplyKeyDown(sdlEvent.Key);
                 break;
             case SDL.EventType.KeyUp:
-                _state.HandleKeyUp(InputMappings.ToKey(sdlEvent.Key.Scancode));
+                ApplyKeyUp(sdlEvent.Key);
+                break;
+            case SDL.EventType.TextEditing:
+            case SDL.EventType.TextEditingCandidates:
+                // The committed-only IME contract exposes no composition or candidate state; only
+                // a TextInput event appends to TextInput.
                 break;
             case SDL.EventType.TextInput:
                 AppendTextInput(sdlEvent.Text.Text);
@@ -118,6 +120,22 @@ internal sealed class SdlInput
 
         float scale = renderExtent / windowExtent;
         return float.IsFinite(scale) && scale > 0f ? scale : 1f;
+    }
+
+    private void ApplyKeyDown(in SDL.KeyboardEvent keyboard)
+    {
+        if (InputMappings.TryGetKey(keyboard.Scancode, out Key key))
+        {
+            _state.HandleKeyDown(key, keyboard.Repeat);
+        }
+    }
+
+    private void ApplyKeyUp(in SDL.KeyboardEvent keyboard)
+    {
+        if (InputMappings.TryGetKey(keyboard.Scancode, out Key key))
+        {
+            _state.HandleKeyUp(key);
+        }
     }
 
     private void ApplyMouseMotion(in SDL.MouseMotionEvent motion)
