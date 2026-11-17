@@ -231,9 +231,10 @@ The implementation:
   window is focused and neither minimized nor hidden; it stops on focus loss, minimize, hide, and
   dispose. Only `SDL_EVENT_TEXT_INPUT` appends to `Input.TextInput`; `SDL_EVENT_TEXT_EDITING` and
   `SDL_EVENT_TEXT_EDITING_CANDIDATES` are ignored, so composition state has no public surface.
-  `SetTextInputArea` is a queued window command: `WindowCommandQueue` rounds the logical window
-  rectangle and cursor offset on the caller, `SdlWindow` applies them on the main thread, and a zero
-  width or height clears the platform area.
+  `SetTextInputArea` is a queued window command: `WindowCommandQueue` validates the area and
+  non-negative cursor offset on the caller and rounds only the logical window rectangle components,
+  the offset already being an `int`; `SdlWindow` applies them on the main thread, and a zero width
+  or height clears the platform area.
 - Cursor-on-screen is an Any-thread snapshot written on the main thread. Mouse enter and leave set
   it, focus gain and loss and restore/show refresh it from the platform, minimize and hide clear
   it, and `CursorMode` changes do not touch it.

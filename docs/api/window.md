@@ -110,9 +110,12 @@ Semantics:
   or hidden, and a focus change refreshes it from the platform instead of assuming a value.
 - `SetTextInputArea` is an **Any**-thread queued, coalesced setter that places the native IME
   candidate window over `area`. The area is in logical window units, the same units as `Width` and
-  `Height`, not render pixels, and the non-negative `cursorOffset` is relative to `area.X` in the
-  same units. A zero width or height clears the platform area. It adds no composition text:
-  committed text still arrives through `IInput.TextInput`.
+  `Height`, not render pixels; each area component is rounded to a whole window unit, and
+  `cursorOffset` is relative to `area.X` in the same units. A component that is not finite or does
+  not fit in a 32-bit integer throws `ArgumentException`, and a finite negative width or height, or
+  a negative `cursorOffset`, throws `ArgumentOutOfRangeException`, both on the caller. Only a zero
+  width or height clears the platform area; a negative extent is rejected rather than treated as a
+  clear. It adds no composition text: committed text still arrives through `IInput.TextInput`.
 - Window setters are **Any**-thread safe. They are queued to the main thread and coalesced; a
   getter returns the last confirmed value, which may lag the setter by one event-pump cycle.
   `SetClipboardText` is queued on the same main-thread window-command path but is an ordered
