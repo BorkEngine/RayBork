@@ -106,6 +106,18 @@ Every tick also calls `IWindow.SetTextInputArea` with the field rectangle in log
 coordinates and the caret offset in window units, so native IME candidates follow the field. The
 sample draws no composition preview or candidate list of its own.
 
+### Faces and glyph coverage
+
+The field text uses `EngineDefaults.DefaultFont` (Fira Sans Regular), and the title, panels, status,
+and event log use `EngineDefaults.DefaultMonoFont` (JetBrains Mono, default instance Regular). Both
+built-in faces cover Latin, Cyrillic, and Greek, and the engine has no font fallback: a rune the
+face's cmap does not map draws as that face's `.notdef` box (see
+[Text rendering](../../docs/api/rendering/text.md)). The sample ships no font of its own and cannot
+substitute one, so a committed CJK string is stored, copied, and counted but draws as `.notdef`
+boxes, and an emoji pair is stored as two UTF-16 code units and draws as two boxes. The status
+line's `chars` value is the field length in UTF-16 code units, so a commit that draws as boxes is
+still verifiable through `chars` and the event log's `text "..."` line.
+
 ## Window and monitor panel
 
 The panel reports `Window.State`, `IsFullscreen`, `IsMinimized`, `IsFocused`, `IsCursorOnScreen`,
@@ -192,22 +204,31 @@ the WSL checks under WSLg with the lavapipe ICD and the environment above.
 
 ### Committed IME text and the text-input area
 
+The built-in faces cover Latin, Cyrillic, and Greek only, and there is no fallback (see "Faces and
+glyph coverage"). Check the visible-glyph path with a layout in that coverage; a CJK IME still
+exercises the commit path, but its glyphs draw as `.notdef` boxes in the field and the log.
+
 Windows:
 
-1. Enable a Japanese or Chinese IME in Windows, and run the sample.
+1. Enable a Latin, Cyrillic, or Greek keyboard layout or IME in Windows (for example Russian or
+   Greek), and run the sample.
 2. Type a word and start composition. The native candidate window should follow the field, not the
    top-left corner of the window.
-3. Commit the composition. The committed characters appear at the end of the field, the caret moves
-   past them, and the event log shows a `text "..."` event.
+3. Commit the composition. The committed characters appear at the end of the field and the caret
+   moves past them. For an IME whose output the built-in faces do not cover, the same commit draws
+   as `.notdef` boxes in the field and the log; verify it through the status line's `chars` count,
+   which grows by the committed UTF-16 length, and the event log's `text "..."` line.
 4. Resize the window or move it to another monitor and repeat. The candidate window should still
    follow the field rectangle after the resize.
 
 WSL/lavapipe:
 
 1. Start the sample under WSLg with lavapipe and a host IME that WSLg exposes to the session.
-2. Repeat the compose and commit steps. If the session has no IME bridge, typed ASCII still commits
-   through `TextInput`; that is a session limitation rather than a sample path, because the sample
-   draws no composition text of its own.
+2. Repeat the compose and commit steps with a Latin, Cyrillic, or Greek method when the host exposes
+   one, and confirm the commit through the field text, the status `chars` count, and the event log.
+   A CJK commit verifies the same path but draws as `.notdef` boxes. If the session has no IME
+   bridge, typed ASCII still commits through `TextInput`; that is a session limitation rather than
+   a sample path, because the sample draws no composition text of its own.
 
 ### Clipboard and caret
 
@@ -217,7 +238,10 @@ WSL/lavapipe:
 3. Press `Ctrl+X`; the field empties and the log records the cut.
 4. Press `Ctrl+V`; the text is appended on the next tick and logged. Paste a multi-line string; each
    line break becomes a space and the field stays one line.
-5. Hold Backspace; the field shrinks without splitting an emoji pair. Press Delete; the field clears.
+5. Paste an emoji, which is one surrogate pair. The status `chars` count grows by two and the field
+   draws two `.notdef` boxes, because the built-in face maps no emoji glyph. Hold Backspace once:
+   both boxes disappear and `chars` drops by two, so the pair was removed as one text element. Press
+   Delete; the field clears.
 6. Paste or type a 200-character field; the field stays the same size, shows a leading ellipsis once
    the tail no longer fits, and keeps the caret at the end.
 
@@ -270,6 +294,9 @@ WSL/lavapipe:
 
 - IME composition preview and candidate rendering. Only committed text is delivered through
   `TextInput`; candidate placement is the platform's native window.
+- Font fallback and non-Latin glyph coverage. The built-in faces cover Latin, Cyrillic, and Greek,
+  so CJK, emoji, and other unmapped runes commit, copy, and count normally but draw as `.notdef`
+  boxes; the sample ships no font of its own and cannot substitute one.
 - Text selection, mouse caret placement, arrow-key navigation, and a separate field focus state.
 - Touch, window icon, window opacity, and drag-and-drop: all are post-1.0 platform work.
 - Clipboard images, multiple windows, and accessibility.
