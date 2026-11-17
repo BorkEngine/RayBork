@@ -114,9 +114,10 @@ built-in faces cover Latin, Cyrillic, and Greek, and the engine has no font fall
 face's cmap does not map draws as that face's `.notdef` box (see
 [Text rendering](../../docs/api/rendering/text.md)). The sample ships no font of its own and cannot
 substitute one, so a committed CJK string is stored, copied, and counted but draws as `.notdef`
-boxes, and an emoji pair is stored as two UTF-16 code units and draws as two boxes. The status
-line's `chars` value is the field length in UTF-16 code units, so a commit that draws as boxes is
-still verifiable through `chars` and the event log's `text "..."` line.
+boxes, and an emoji is stored as two UTF-16 code units but decodes as one rune, so the field and the
+log each draw one `.notdef` box. The status line's `chars` value is the field length in UTF-16 code
+units, so an unmapped commit is still verifiable through `chars` and the event log's `text "..."`
+line.
 
 ## Window and monitor panel
 
@@ -239,9 +240,9 @@ WSL/lavapipe:
 4. Press `Ctrl+V`; the text is appended on the next tick and logged. Paste a multi-line string; each
    line break becomes a space and the field stays one line.
 5. Paste an emoji, which is one surrogate pair. The status `chars` count grows by two and the field
-   draws two `.notdef` boxes, because the built-in face maps no emoji glyph. Hold Backspace once:
-   both boxes disappear and `chars` drops by two, so the pair was removed as one text element. Press
-   Delete; the field clears.
+   draws one `.notdef` box, because the pair decodes as one rune and the built-in face maps no emoji
+   glyph. Press Backspace once: the box disappears and `chars` drops by two, so the pair was removed
+   as one text element. Press Delete; the field clears.
 6. Paste or type a 200-character field; the field stays the same size, shows a leading ellipsis once
    the tail no longer fits, and keeps the caret at the end.
 
