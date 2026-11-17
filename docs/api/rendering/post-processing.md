@@ -6,8 +6,7 @@
 
 Camera post-processing is an app-lifetime stack of effects that runs after a camera's geometry and
 resolve pass and before the next camera or the present pass. M8 ships the extensible core, the
-custom-shader effect, and the built-in SSAO effect; bloom remains a later M8 task built on the same
-core.
+custom-shader effect, and the built-in SSAO and bloom effects.
 
 ```csharp
 public sealed class PostProcessStack {
@@ -42,6 +41,15 @@ public sealed class SsaoEffect : PostProcessEffect {
     public bool ScreenSpaceRadius { get; set; }
     public float BiasOffset { get; set; }
     public float BiasMultiplier { get; set; } = 1f;
+}
+
+public sealed class BloomEffect : PostProcessEffect {
+    public BloomEffect();
+    public float Threshold { get; set; } = 1f;
+    public float SoftKnee { get; set; } = 0.5f;
+    public float Intensity { get; set; } = 0.7f;
+    public float Scatter { get; set; } = 0.7f;
+    public Color Tint { get; set; } = Color.White;
 }
 
 public sealed class ShaderPostProcessEffect : PostProcessEffect {
@@ -166,6 +174,49 @@ and PrimitiveGallery samples; `A` toggles `SsaoEffect.Enabled` and the status li
 The HUD camera in each sample has no post-process stack. Disabling the effect or the stack skips the
 whole chain and renders the geometry result unchanged.
 
+**Built-in bloom.** `BloomEffect` is the engine's fast dual-filter bloom. It thresholds and soft-knees
+the chain input into a half-resolution level, downsamples through the quarter, eighth, 1/16, and 1/32
+extents (each clamped to at least one pixel), tent-upsamples back to half resolution with `Scatter` as
+the coarse-level contribution, and adds the result to the chain input. The composite target is the
+camera target's size, so the output is scene-linear HDR and flows through the same store-back, later
+camera sample, and readback path as every other effect. A normal target runs up to ten fullscreen
+passes (one prefilter, four downsamples, four upsamples, and one composite); a small target whose
+clamped extent stops shrinking skips the repeated level and runs fewer passes.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `Threshold` | `1` | Scene-linear brightness the bloom starts from. Must be finite and non-negative; `0` keeps every lit pixel. |
+| `SoftKnee` | `0.5` | Knee width as a fraction of `Threshold`. Must be finite and non-negative; `0` is a hard threshold and a larger value blends the discarded range in smoothly. |
+| `Intensity` | `0.7` | How much bloom is added to the chain input. Must be finite and non-negative; `0` leaves the scene unchanged. |
+| `Scatter` | `0.7` | Weight of each coarser level in the tent upsample. Must be finite and non-negative; `0` keeps only the half-resolution prefilter level and therefore a tight halo. |
+| `Tint` | `Color.White` | Color multiplied into the bloom before it is added. All components must be finite. |
+
+The prefilter, downsample, upsample, and composite programs and their shared fullscreen vertex payload
+are engine-owned built-in assets preloaded from the built-in pack before `IGame.Setup`. The effect has
+no public `Shader` parameter and never compiles or loads an asset on the render thread. The downsample
+and upsample shaders use fixed unrolled taps, so no pass contains a dynamic loop. Every setting is
+frozen when the camera is created, so later changes apply to later cameras only. The effect has no
+depth requirement: it works on a depth-bearing target and on a `RenderTexture` created with `Depth:
+false`.
+
+The effect rents from the same three-target, single-sample `Rgba16Float` per-extent post set as SSAO
+and the custom path, and the rent skips the current chain source. The prefilter and every pyramid level
+are auxiliary targets released with `CompleteAuxiliaryTarget` after their pass; the camera-target-sized
+composite target is completed with `CompleteColorTarget` and becomes the chain source. A custom effect
+or SSAO before bloom therefore keeps its output as bloom's input, and running bloom twice chains two
+pyramids while the engine store-back runs once. The effect costs one prefilter, up to four downsamples,
+up to four upsamples, and one composite pass per camera with the effect; the passes at 1/4 to 1/32 of
+the target keep the coarse levels cheap, and the half-resolution prefilter and composite dominate the
+cost. The pyramid's per-extent target sets and the camera-target-sized set are pooled per frame ring
+slot and extent, so the steady state allocates no targets, images, or descriptors, but the pool holds
+three targets for every extent the effect uses (five pyramid levels plus the composite extent) on each
+frame ring slot. Disabling the effect or the stack skips the whole chain and its target rental.
+
+`Pong` enables bloom on its scene camera only and toggles it with `B`; its HUD camera has no stack, so
+the scores and text are never bloomed. The sample flashes scene-linear HDR ball, paddle, and wall
+colors on collision; the values are above the default threshold, so the flash blooms and the ordinary
+playfield colors stay below it.
+
 **Custom shader contract.** A `ShaderPostProcessEffect` takes an ordinary baked engine shader with
 both the vertex and fragment stages. It is drawn once as a fullscreen pass through the engine's
 fullscreen quad:
@@ -287,11 +338,11 @@ They never dispose the shader. The recorded frame retains the effect's internal 
 non-reserved texture the material had bound, exactly like a draw record, so disposing the material or a
 texture after camera creation leaves the recorded frame valid until the frame completes.
 
-**Built-in effects.** `SsaoEffect` is a built-in effect: engine code with an approved public effect
-type, backed by an internal snapshot rather than the custom-shader path. Its snapshot subclasses the
-internal effect snapshot and uses the internal per-pass context. Bloom remains a later M8 task on the
-same hooks. The shipped core gives SSAO everything a multi-pass effect needs without
-touching the public stack, the camera snapshot path, or the store-back:
+**Built-in effects.** `SsaoEffect` and `BloomEffect` are built-in effects: engine code with an approved
+public effect type, backed by an internal snapshot rather than the custom-shader path. Their snapshots
+subclass the internal effect snapshot and use the internal per-pass context. The shipped core gives a
+multi-pass effect everything it needs without touching the public stack, the camera snapshot path, or
+the store-back:
 
 - `RentColorTarget()` for a camera-target-sized target and `RentColorTarget(Extent2D)` for an
   intermediate from the same per-extent pool (three targets per extent, rotating and skipping the
@@ -319,4 +370,6 @@ The effect snapshot reports its ordered instance-record layout (per-pass stride 
 built-in can append passes with different shaders and uniform sizes and the frame's instance buffer is
 sized for all of them. A built-in supplies its own shaders, effect type, and pass scheduling. The
 fullscreen pipeline cache is keyed by the baked shader asset and the forced post render state, so the
-per-quality AO and denoise programs are cached without a second quality selector.
+per-quality AO and denoise programs and the four bloom programs are cached without a second selector.
+Bloom reports its maximum ten-entry layout (prefilter, four downsample, four upsample, and composite
+strides) so a small target that runs fewer passes still fits the same frame buffer.

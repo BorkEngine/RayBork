@@ -14,7 +14,8 @@ namespace RayBork.Tests;
 /// <c>/shaders/msdf</c> programs; the mesh program is already cached) and
 /// <see cref="PRIMITIVE_MESHES"/> procedural mesh uploads. The app then preloads the
 /// <see cref="SSAO_ASSETS"/> built-in SSAO resources: the seven shader programs and the blue-noise
-/// texture.
+/// texture. The app then preloads the <see cref="BLOOM_ASSETS"/> built-in bloom programs: the
+/// prefilter, downsample, upsample, and composite stages of the dual-filter pyramid.
 /// </para>
 /// <para>
 /// The three engine materials create no GPU resource of their own, so they add nothing to these counts.
@@ -34,7 +35,10 @@ internal static class EnginePreloadCounts {
     /// <summary>The built-in SSAO shader variants and blue-noise texture.</summary>
     internal const int SSAO_ASSETS = 8;
 
+    /// <summary>The built-in bloom prefilter, downsample, upsample, and composite programs.</summary>
+    internal const int BLOOM_ASSETS = 4;
+
     /// <summary>The total GPU uploads the startup preload performs.</summary>
     internal const int TOTAL_UPLOADS =
-        DEFAULTS + ADDITIONAL_PRIMITIVE_PROGRAMS + PRIMITIVE_MESHES + SSAO_ASSETS;
+        DEFAULTS + ADDITIONAL_PRIMITIVE_PROGRAMS + PRIMITIVE_MESHES + SSAO_ASSETS + BLOOM_ASSETS;
 }

@@ -202,7 +202,8 @@ pair), and stores the final result back into the
 target's color attachment for the camera viewport only. A multisampled target is written through its
 MSAA color attachment and resolved into the single-sample color image; a single-sample target is
 written directly. Pixels outside the camera viewport are untouched, and the target's depth is
-unchanged. After the store-back the resolved color is `ShaderReadOnlyOptimal` again, with the written
+unchanged. The built-in `BloomEffect` needs no depth attachment, so it also runs on a `Depth: false`
+target. After the store-back the resolved color is `ShaderReadOnlyOptimal` again, with the written
 flag and tone snapshot updated, so a later camera's `ColorTexture` sample and both
 `ReadColorsAsync`/`ReadPixelsAsync` calls include the post-processed output. A viewport camera is
 supported; because the source is the full target, its effect can sample content outside its viewport
@@ -263,14 +264,15 @@ multisampled scene targets. Resolving scene depth costs bandwidth on every camer
 for every frame with a depth-bearing post-process stack. That cost is a known property of the depth
 path, not a hidden regression; a built-in effect can decide whether a pass needs the resolve.
 
-**Remaining M8 work.** The extensible camera post-process core, the custom-shader effect, and the
-built-in SSAO effect ship: the stack API, the target-sized chain, viewport store-back, the reserved
-`sourceColor`/`sourceDepth` contract, the scene-target and render-target source slots, and SSAO, which
-Castle and PrimitiveGallery enable by default and toggle with `A`. Bloom, Pong, and the RenderTarget and
-split-screen sample tasks remain later M8 work. This section covers the color path, the depth view,
-resize, and color readback:
-creation, camera routing, MSAA color and depth resolve, same-tick sampling of both views, resize,
-lifetime, raw linear color readback, display-referred pixel readback, and camera post-processing.
+**Remaining M8 work.** The extensible camera post-process core, the custom-shader effect, the built-in
+SSAO effect, and the built-in bloom effect ship: the stack API, the target-sized chain, viewport
+store-back, the reserved `sourceColor`/`sourceDepth` contract, the scene-target and render-target
+source slots, SSAO, which Castle and PrimitiveGallery enable by default and toggle with `A`, and bloom,
+which `Pong` enables on its scene camera and toggles with `B`. The RenderTarget and split-screen
+sample tasks remain later M8 work. This section covers the color path, the depth view, resize, and
+color readback: creation, camera routing, MSAA color and depth resolve, same-tick sampling of both
+views, resize, lifetime, raw linear color readback, display-referred pixel readback, and camera
+post-processing.
 
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or
@@ -315,7 +317,7 @@ public readonly record struct RenderStats(
 | `Triangles` | Submitted triangle count after instancing: `indexCount / 3` per triangle-list instance, `indexCount - 2` per triangle-strip instance, and `0` for line and point topologies. |
 | `CulledInstances` | Instances rejected by frustum culling in this frame. |
 | `PipelineCount` | Distinct scene (geometry) pipelines used by the frame. The present pipeline is not counted. |
-| `TextureCount` | Bindless texture slots live after the frame, including the reserved white slot, the scene target's two internal resolved color and depth source slots, and the live post-process targets (two per target extent per frame ring slot while the extent is in use). A texture allocates its slot when its GPU upload completes and releases it only when its GPU resource is destroyed. |
+| `TextureCount` | Bindless texture slots live after the frame, including the reserved white slot, the scene target's two internal resolved color and depth source slots, and the live post-process targets (three per target extent per frame ring slot while the extent is in use). A texture allocates its slot when its GPU upload completes and releases it only when its GPU resource is destroyed. |
 | `SampleCount` | Effective MSAA sample count for the frame. |
 | `HdrOutput` | Whether the frame presented through the scRGB HDR path. |
 | `CpuFrameMilliseconds` | Render-thread CPU time for planning, recording, and submitting the frame. The measurement starts after the frame fence wait and the swapchain acquire, so it excludes both blocking waits and presentation. |

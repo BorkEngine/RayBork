@@ -15,7 +15,12 @@ namespace RayBork.Internal;
 /// The app's preloaded built-in SSAO assets, or <see langword="null"/> when the app did not attach
 /// them. A custom effect ignores them; <see cref="SsaoEffect"/> requires them.
 /// </param>
+/// <param name="BloomAssets">
+/// The app's preloaded built-in bloom assets, or <see langword="null"/> when the app did not attach
+/// them. A custom effect ignores them; <see cref="BloomEffect"/> requires them.
+/// </param>
 internal readonly record struct PostProcessCaptureContext(
     bool TargetHasDepth,
     string TargetDescription,
-    SsaoAssets? SsaoAssets = null);
+    SsaoAssets? SsaoAssets = null,
+    BloomAssets? BloomAssets = null);

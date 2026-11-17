@@ -94,9 +94,11 @@ tolerance (`1e-4`) so full-screen and boundary quads are not culled, while `Cont
 Castle gains an `O` toggle between perspective and orthographic and uses `ScreenToWorldTransform`
 for its status line; PrimitiveGallery uses the same screen transform for its HUD. `samples/Pong` is
 the M7 sample and Native AOT gate: a player-vs-AI match in a two-project solution with a build-time
-bake into `pong.pck`, one orthographic camera per tick, a `1280x720` 16:9 design space fitted into the
-render pixels, `ScreenToWorldTransform` for every draw, and `DrawQuad`/`DrawDisc`/`DrawText` for the
-whole match. The human moves the left paddle; a deterministic AI moves the right one at
+bake into `pong.pck`, a scene camera and a later stackless HUD camera per tick, a `1280x720` 16:9
+design space fitted into the render pixels, `ScreenToWorldTransform` for every draw, and
+`DrawQuad`/`DrawDisc`/`DrawText` for the whole match. The scene camera runs the built-in bloom stack;
+ball, paddle, and wall hits flash scene-linear HDR colors that bloom and decay over a few frames, and
+`B` toggles bloom. The human moves the left paddle; a deterministic AI moves the right one at
 `AiPaddleSpeed` (`400` design pixels per second) and chases the ball only while it approaches. Every
 paddle hit adds `BallSpeedupPerHit` (`24`) to the ball speed up to `MaxBallSpeed` (`900`), and a
 serve restores `BallSpeed`.
@@ -199,8 +201,8 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
   The engine's built-in pack is generated at engine build time by a JIT-only tool and compiled into
   the assembly. It contains the present shader pair, the mesh draw shader, the primitive shader, the
   MSDF text shader, the seven SSAO shader variants and their shared vertex payload, the white/error
-  and CC0 blue-noise textures, and the default Fira Sans and JetBrains Mono faces with their
-  payloads: 37 entries in all.
+  and CC0 blue-noise textures, the four bloom pyramid shaders with their shared fullscreen vertex
+  payload, and the default Fira Sans and JetBrains Mono faces with their payloads: 46 entries in all.
 - Shaders are GLSL compiled to SPIR-V ahead of runtime by the bake; the runtime never compiles
   shaders. The shader ABI generates the prologue and reflection for a per-pass frame block array
   selected by a push-constant pass index, a fixed 2048-element bindless texture array, and a
@@ -336,7 +338,11 @@ store-back on the scene target and render targets, with the post-processed outpu
 sample and both readback methods. Built-in SSAO also ships: `SsaoEffect`/`SsaoQuality` use the N8AO
 2.1.0 full-resolution SSAO path with baked 8/16/64 AO and 4/8/16 denoise variants and an engine-owned
 128x128 blue-noise texture; Castle and PrimitiveGallery enable it by default and toggle it with `A`.
-Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 work. Multiple cameras and
+Built-in bloom also ships: `BloomEffect` runs a fast dual-filter half-resolution prefilter, five-level
+HDR pyramid, tent upsample with `Scatter`, and camera-target-sized composite, and `Pong` enables it on
+its scene camera only (the HUD camera keeps no stack) with a gold/warm-white collision flash and a `B`
+toggle. The RenderTarget and split-screen sample tasks and the final milestone docs remain later M8
+work. Multiple cameras and
 split-screen viewports render to the HDR scene target, and a HUD is an ordinary later camera rather
 than a separate overlay pass. It builds on the M7
 screen-space surface and the M4 camera; the shipped surface is listed in

@@ -899,8 +899,8 @@ blocking glyph generation.
 - **Built-in fonts.** The built-in pack carries Fira Sans Regular version 4.203 at
   `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload and the JetBrains Mono variable face
   version 2.211 at `/fonts/jetbrains-mono` with its `/fonts/jetbrains-mono-face` payload, produced by
-  the ordinary font processor with the default 32/4/2 MSDF settings; the M8 SSAO shader variants and
-  blue-noise texture bring the pack to 37 entries. The
+  the ordinary font processor with the default 32/4/2 MSDF settings; the M8 SSAO and bloom shader
+  variants, the blue-noise texture, and their payloads bring the pack to 46 entries. The
   bundled JetBrains Mono face's default named instance is Regular (weight 400); that is the instance
   the runtime renders. Fira Sans and JetBrains Mono are licensed under the SIL Open Font License 1.1
   and cover Latin, Cyrillic, and Greek, which is the coverage the samples exercise.
@@ -1258,7 +1258,14 @@ on the same core: `SsaoEffect`/`SsaoQuality` use the N8AO 2.1.0 full-resolution 
 depth-reconstructed normals, a golden-angle kernel, blue-noise rotation, two bilateral denoise
 iterations, a tinted composite, baked 8/16/64 AO and 4/8/16 denoise variants, and an engine-owned
 128x128 blue-noise texture. Castle and PrimitiveGallery enable it by default and toggle it with `A`.
-Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 work; M8 is not complete.
+Built-in bloom ships on the same core: `BloomEffect` thresholds and soft-knees the chain input into a
+half-resolution level, runs up to four more downsample levels (quarter through 1/32, each extent clamped
+to at least one pixel), tent-upsamples with `Scatter`, and adds a camera-target-sized composite. Its four
+programs and shared fullscreen vertex payload are engine-owned built-ins, and the effect needs no depth.
+`Pong` runs one app-lifetime bloom stack on its scene camera only, keeps its HUD camera stackless, and
+adds gold and warm-white HDR collision flashes that pass the bloom threshold and decay over a few frames.
+The RenderTarget and split-screen sample tasks and the final milestone docs remain later M8 work; M8 is
+not complete.
 
 **Scope.**
 
@@ -1288,7 +1295,13 @@ Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 
   kernel, blue-noise rotation, two bilateral denoise iterations, `SsaoEffect`/`SsaoQuality`, baked
   quality variants, the engine-owned blue-noise texture, and on-by-default Castle/PrimitiveGallery
   toggles. Shipped.
-- Built-in bloom effect on the same core. Later M8 task.
+- Built-in bloom on the same core: `BloomEffect` with a threshold/soft-knee prefilter to half
+  resolution, up to four more downsample levels clamped to one pixel, tent upsample with `Scatter`, a
+  camera-target-sized additive composite, engine-owned prefilter/downsample/upsample/composite programs,
+  a depth-less target path, and pooled per-extent targets. Shipped.
+- Pong bloom integration: one app-lifetime scene-camera stack with the HUD camera stackless, gold and
+  warm-white HDR ball/paddle/wall collision flashes in scene-linear values above the bloom threshold, a
+  short decay, and a `B` toggle with HUD status. Shipped.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
   simple post-process shader, and present. Later M8 task.
 - Split-screen sample pass: two cameras, two viewports. Later M8 task.
@@ -1309,6 +1322,14 @@ Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 
   known cube contact while a flat wall stays near-white, honors world/screen-space radius,
   intensity, and denoise changes, rejects a depth-less target, preserves the original scene color in
   the composite, and reads back with SSAO included. Met by the SSAO unit and GPU tests.
+- Built-in bloom produces a measurable halo from an HDR source against a no-bloom baseline, honors
+  threshold, soft knee, intensity, and scatter changes, skips a disabled effect, collapses the pyramid
+  on small targets, preserves a custom effect's output in a custom-plus-bloom chain and with bloom
+  twice, runs on a `RenderTexture` and a depth-less target, includes its output in readback, and keeps
+  its per-extent targets in steady state. Met by the bloom unit and GPU tests.
+- Pong runs the scene-camera bloom stack with a stackless HUD camera, and the collision flash blooms
+  while the HUD colors are unchanged. Met by the Pong sample run and the engine's two-camera GPU
+  coverage.
 - Split-screen renders two independent camera views into the HDR scene target in one frame, and each
   camera's clear stays inside its clamped viewport. Met.
 - A later camera with `ClearMode.None` keeps the earlier pass' color and depth; `ClearMode.Depth`

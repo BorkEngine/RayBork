@@ -61,6 +61,10 @@ internal sealed class PongGame : IGame {
     private const float SERVE_SLOPE = 0.45f;
     private const float GAMEPAD_DEADZONE = 0.2f;
 
+    // Every collision starts a short scene-linear HDR flash. The bloom threshold is 1, so only the
+    // flash colors above 1 contribute a halo; the HUD camera has no stack and keeps its own colors.
+    private const float FLASH_DURATION = 0.15f;
+
     // The AI stops inside this design-pixel band around its target so a ball resting at the target Y
     // does not make the paddle oscillate between two adjacent substeps.
     private const float AI_DEADZONE = 5f;
@@ -69,7 +73,7 @@ internal sealed class PongGame : IGame {
     private const int AI_PLAYER = 2;
 
     private const string CONTROLS_TEXT =
-        "W/S, Up/Down, left stick or d-pad move the left paddle   Space pause   R restart   Esc exit";
+        "W/S, Up/Down, stick/d-pad: left paddle   Space pause   R restart   B bloom   Esc exit";
     private const string PAUSED_STATUS = "PAUSED   Space resumes   R restarts   Esc exits";
     private const string MATCH_OVER_STATUS = "MATCH OVER   R restarts   Esc exits";
     private const string PAUSE_TITLE = "PAUSED";
@@ -89,9 +93,14 @@ internal sealed class PongGame : IGame {
     private static readonly Color _overlayColor = Color.FromSrgbBytes(6, 8, 12, 205);
     private static readonly Color _overlayTitleColor = Color.FromSrgbBytes(255, 206, 112);
     private static readonly Color _overlayHintColor = Color.FromSrgbBytes(224, 216, 200);
+    private static readonly Color _paddleFlashColor = new(6f, 5f, 3f, 1f);
+    private static readonly Color _ballFlashColor = new(3f, 2.2f, 0.8f, 1f);
+    private static readonly Color _wallFlashColor = new(2.4f, 1.6f, 0.5f, 1f);
     private static readonly Vector2 _playfieldCenter = new(DESIGN_WIDTH * 0.5f, DESIGN_HEIGHT * 0.5f);
 
     private readonly int _frameLimit;
+    private readonly PostProcessStack _postProcess = new();
+    private readonly BloomEffect _bloom = new();
 
     private PongSettings? _settings;
     private Texture? _paddleTexture;
@@ -106,6 +115,10 @@ internal sealed class PongGame : IGame {
     private int _winner;
     private bool _paused;
     private float _simulationAccumulator;
+    private float _ballFlash;
+    private float _leftPaddleFlash;
+    private float _rightPaddleFlash;
+    private float _wallFlash;
     private int _frameCount;
 
     /// <summary>
@@ -126,12 +139,21 @@ internal sealed class PongGame : IGame {
         // The mono face is engine-owned and already preloaded; keep the reference for this sample
         // and never dispose it. The flat mono advance keeps the score and status lines steady.
         _monoFont = context.Defaults.DefaultMonoFont;
+
+        // Bloom is app-lifetime and enabled by default. The stack is snapshotted for the scene camera
+        // only; the later HUD camera keeps no stack, so its scores and text are never bloomed.
+        _postProcess.Add(_bloom);
         ResetMatch();
     }
 
     /// <inheritdoc/>
     public void Tick(EngineContext context) {
+        if (context.Input.IsKeyPressed(Key.B)) {
+            _bloom.Enabled = !_bloom.Enabled;
+        }
+
         float leftAxis = UpdateInput(context);
+        DecayFlashes((float)context.DeltaTime);
         if (!_paused && _winner == 0) {
             AdvanceSimulation((float)context.DeltaTime, leftAxis);
         }
@@ -140,7 +162,7 @@ internal sealed class PongGame : IGame {
         // screen plane at distance one has a scale of exactly one render pixel per plane unit.
         Transform cameraTransform = new(new Vector3(0f, 0f, SCREEN_PLANE_DISTANCE));
 
-        // The scene pass clears color and depth.
+        // The scene pass clears color and depth and runs the app-lifetime bloom stack.
         using (Camera scene = context.CreateCamera(
             cameraTransform,
             projection: CameraProjection.Orthographic,
@@ -148,7 +170,8 @@ internal sealed class PongGame : IGame {
             clearMode: ClearMode.ColorAndDepth,
             clearColor: _letterboxColor,
             near: CAMERA_NEAR,
-            far: CAMERA_FAR)) {
+            far: CAMERA_FAR,
+            postProcess: _postProcess)) {
             DrawScene(scene);
         }
 
@@ -243,6 +266,10 @@ internal sealed class PongGame : IGame {
         _winner = 0;
         _paused = false;
         _simulationAccumulator = 0f;
+        _ballFlash = 0f;
+        _leftPaddleFlash = 0f;
+        _rightPaddleFlash = 0f;
+        _wallFlash = 0f;
         _leftPaddle = new Vector2(PADDLE_X_INSET, _playfieldCenter.Y);
         _rightPaddle = new Vector2(DESIGN_WIDTH - PADDLE_X_INSET, _playfieldCenter.Y);
 
@@ -346,9 +373,11 @@ internal sealed class PongGame : IGame {
         if (_ballPosition.Y - settings.BallRadius < 0f) {
             _ballPosition.Y = settings.BallRadius;
             _ballVelocity.Y = MathF.Abs(_ballVelocity.Y);
+            TriggerWallFlash();
         } else if (_ballPosition.Y + settings.BallRadius > DESIGN_HEIGHT) {
             _ballPosition.Y = DESIGN_HEIGHT - settings.BallRadius;
             _ballVelocity.Y = -MathF.Abs(_ballVelocity.Y);
+            TriggerWallFlash();
         }
 
         BounceOffPaddle(_leftPaddle, isLeft: true);
@@ -409,6 +438,28 @@ internal sealed class PongGame : IGame {
         // Separate the sphere from the box so the next step does not retest the same overlap.
         float separation = halfWidth + settings.BallRadius + 0.01f;
         _ballPosition.X = isLeft ? paddle.X + separation : paddle.X - separation;
+        TriggerPaddleFlash(isLeft);
+    }
+
+    private void TriggerWallFlash() {
+        _ballFlash = FLASH_DURATION;
+        _wallFlash = FLASH_DURATION;
+    }
+
+    private void TriggerPaddleFlash(bool isLeft) {
+        _ballFlash = FLASH_DURATION;
+        if (isLeft) {
+            _leftPaddleFlash = FLASH_DURATION;
+        } else {
+            _rightPaddleFlash = FLASH_DURATION;
+        }
+    }
+
+    private void DecayFlashes(float deltaSeconds) {
+        _ballFlash = MathF.Max(0f, _ballFlash - deltaSeconds);
+        _leftPaddleFlash = MathF.Max(0f, _leftPaddleFlash - deltaSeconds);
+        _rightPaddleFlash = MathF.Max(0f, _rightPaddleFlash - deltaSeconds);
+        _wallFlash = MathF.Max(0f, _wallFlash - deltaSeconds);
     }
 
     private void AwardPoint(bool leftScored) {
@@ -446,15 +497,27 @@ internal sealed class PongGame : IGame {
             _playfieldCenter,
             new Vector2(DESIGN_WIDTH, DESIGN_HEIGHT),
             _playfieldColor);
-        DrawBorder(camera, layout);
+        DrawBorder(camera, layout, FlashAmount(_wallFlash));
         DrawNet(camera, layout);
 
-        DrawPaddle(camera, layout, settings, _paddleTexture!, _leftPaddle);
-        DrawPaddle(camera, layout, settings, _paddleTexture!, _rightPaddle);
+        DrawPaddle(
+            camera,
+            layout,
+            settings,
+            _paddleTexture!,
+            _leftPaddle,
+            FlashAmount(_leftPaddleFlash));
+        DrawPaddle(
+            camera,
+            layout,
+            settings,
+            _paddleTexture!,
+            _rightPaddle,
+            FlashAmount(_rightPaddleFlash));
         camera.DrawDisc(
             ScreenTransform(camera, layout.ToPixel(_ballPosition)),
             settings.BallRadius * layout.Scale,
-            _ballColor);
+            WithFlash(_ballColor, _ballFlashColor, FlashAmount(_ballFlash)));
     }
 
     private void DrawHud(Camera camera) {
@@ -490,6 +553,7 @@ internal sealed class PongGame : IGame {
             status = CONTROLS_TEXT;
         }
 
+        status = $"{status}   bloom {(_bloom.Enabled ? "on" : "off")}";
         DrawCenteredText(
             camera,
             layout,
@@ -510,7 +574,7 @@ internal sealed class PongGame : IGame {
         }
     }
 
-    private static void DrawBorder(Camera camera, Layout layout) {
+    private static void DrawBorder(Camera camera, Layout layout, float flash) {
         float outerInset = BORDER_MARGIN * 2f;
         float innerInset = (BORDER_MARGIN + BORDER_THICKNESS) * 2f;
 
@@ -519,7 +583,7 @@ internal sealed class PongGame : IGame {
             layout,
             _playfieldCenter,
             new Vector2(DESIGN_WIDTH - outerInset, DESIGN_HEIGHT - outerInset),
-            _borderColor);
+            WithFlash(_borderColor, _wallFlashColor, flash));
         DrawDesignQuad(
             camera,
             layout,
@@ -566,11 +630,28 @@ internal sealed class PongGame : IGame {
         Layout layout,
         PongSettings settings,
         Texture texture,
-        Vector2 designCenter) {
+        Vector2 designCenter,
+        float flash) {
         camera.DrawQuad(
             ScreenTransform(camera, layout.ToPixel(designCenter)),
             new Vector2(settings.PaddleWidth, settings.PaddleHeight) * layout.Scale,
-            texture);
+            texture,
+            tint: WithFlash(Color.White, _paddleFlashColor, flash));
+    }
+
+    private static float FlashAmount(float seconds) =>
+        seconds <= 0f ? 0f : MathF.Min(seconds / FLASH_DURATION, 1f);
+
+    private static Color WithFlash(Color baseColor, Color flashColor, float flash) {
+        if (flash <= 0f) {
+            return baseColor;
+        }
+
+        return new Color(
+            baseColor.R + (flashColor.R * flash),
+            baseColor.G + (flashColor.G * flash),
+            baseColor.B + (flashColor.B * flash),
+            baseColor.A);
     }
 
     private static void DrawOverlayShade(Camera camera, Layout layout) {

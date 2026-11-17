@@ -266,7 +266,8 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > surface: a camera's stack runs after its geometry pass and before the next camera or the present
 > pass, on the scene target or a render texture target, and its post-processed output is what a later
 > sample and both readback methods observe. The built-in `SsaoEffect` is available on the same stack
-> and requires a target with depth; built-in bloom remains a later M8 task.
+> and requires a target with depth; the built-in `BloomEffect` is available on the same stack and has
+> no depth requirement. `Pong` runs bloom on its scene camera only; its HUD camera has no stack.
 
 Properties:
 
@@ -327,7 +328,8 @@ depth-less target. A missing `sourceColor`, a shader without both stages, or `so
 depth-less target is `InvalidOperationException` from `CreateCamera`; a disposed effect shader or bound
 texture is `ObjectDisposedException`. The built-in `SsaoEffect` is snapshotted the same way: its
 `Quality` and every setting are frozen, it requires a target with depth, and a depth-less target is
-`InvalidOperationException` from `CreateCamera`. See [Post-processing](post-processing.md).
+`InvalidOperationException` from `CreateCamera`. The built-in `BloomEffect` is also snapshotted the
+same way and needs no depth. See [Post-processing](post-processing.md).
 
 A later camera in the same tick can sample the target's `ColorTexture` or
 `DepthTexture`; sampling either view in the camera pass that writes the target is rejected with

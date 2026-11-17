@@ -275,6 +275,7 @@ public sealed class RayBorkApp : IDisposable {
         EngineDefaults? engineDefaults = null;
         PrimitiveAssets? primitiveAssets = null;
         SsaoAssets? ssaoAssets = null;
+        BloomAssets? bloomAssets = null;
         CameraService? cameraService = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
@@ -355,6 +356,11 @@ public sealed class RayBorkApp : IDisposable {
             ssaoAssets = LoadSsaoAssets(assetCatalog);
             cameraService.AttachSsaoAssets(ssaoAssets);
 
+            // The built-in bloom pyramid shaders are engine-owned too; the app preloads them before
+            // Setup so a BloomEffect capture never loads an asset on the render thread.
+            bloomAssets = LoadBloomAssets(assetCatalog);
+            cameraService.AttachBloomAssets(bloomAssets);
+
             EngineContext context = new(
                 platform,
                 loggerFactory,
@@ -426,6 +432,7 @@ public sealed class RayBorkApp : IDisposable {
             engineDefaults,
             primitiveAssets,
             ssaoAssets,
+            bloomAssets,
             cameraService,
             tickRunner,
             renderLoop,
@@ -563,6 +570,21 @@ public sealed class RayBorkApp : IDisposable {
     private static SsaoAssets LoadSsaoAssets(IAssetCatalog assets)
         => SsaoAssets.LoadAsync(assets).GetAwaiter().GetResult();
 
+    /// <summary>
+    /// Loads the engine-owned bloom pyramid shader programs before <see cref="IGame.Setup"/> runs.
+    /// </summary>
+    /// <remarks>
+    /// The tick thread has not started yet, so blocking on the loads is safe: the loader and render
+    /// thread service the reads and uploads. A missing or corrupt built-in is reported as an
+    /// <see cref="AssetLoadException"/> by <see cref="BloomAssets.LoadAsync"/>.
+    /// </remarks>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The returned BloomAssets is stored by RunCore and disposed by the cleanup path that owns it.")]
+    private static BloomAssets LoadBloomAssets(IAssetCatalog assets)
+        => BloomAssets.LoadAsync(assets).GetAwaiter().GetResult();
+
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -576,6 +598,7 @@ public sealed class RayBorkApp : IDisposable {
         EngineDefaults? engineDefaults,
         PrimitiveAssets? primitiveAssets,
         SsaoAssets? ssaoAssets,
+        BloomAssets? bloomAssets,
         CameraService? cameraService,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
@@ -648,6 +671,19 @@ public sealed class RayBorkApp : IDisposable {
                 () => {
                     cameraService?.DetachSsaoAssets();
                     ssaoAssets.Dispose();
+                });
+        }
+
+        // The bloom assets are engine-owned built-ins too. Detach them before releasing their owner
+        // references so a later camera cannot capture a BloomEffect over disposed programs.
+        if (bloomAssets is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "releasing the engine bloom assets",
+                failure,
+                () => {
+                    cameraService?.DetachBloomAssets();
+                    bloomAssets.Dispose();
                 });
         }
 

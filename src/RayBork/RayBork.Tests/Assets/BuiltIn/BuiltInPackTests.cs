@@ -42,7 +42,16 @@ public sealed class BuiltInPackTests {
     private const string SSAO_DENOISE_16_FRAGMENT_PATH = "shaders/ssao/denoise-16-frag";
     private const string SSAO_COMPOSITE_PATH = "shaders/ssao/composite";
     private const string SSAO_COMPOSITE_FRAGMENT_PATH = "shaders/ssao/composite-frag";
-    private const int ENTRY_COUNT = 37;
+    private const string BLOOM_VERTEX_PAYLOAD_PATH = "shaders/bloom/fullscreen-vert";
+    private const string BLOOM_PREFILTER_PATH = "shaders/bloom/prefilter";
+    private const string BLOOM_PREFILTER_FRAGMENT_PATH = "shaders/bloom/prefilter-frag";
+    private const string BLOOM_DOWNSAMPLE_PATH = "shaders/bloom/downsample";
+    private const string BLOOM_DOWNSAMPLE_FRAGMENT_PATH = "shaders/bloom/downsample-frag";
+    private const string BLOOM_UPSAMPLE_PATH = "shaders/bloom/upsample";
+    private const string BLOOM_UPSAMPLE_FRAGMENT_PATH = "shaders/bloom/upsample-frag";
+    private const string BLOOM_COMPOSITE_PATH = "shaders/bloom/composite";
+    private const string BLOOM_COMPOSITE_FRAGMENT_PATH = "shaders/bloom/composite-frag";
+    private const int ENTRY_COUNT = 46;
     private const uint FONT_BYTE_LENGTH = 456996;
     private const uint MONO_FONT_BYTE_LENGTH = 187208;
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
@@ -117,6 +126,15 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, SSAO_DENOISE_16_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, SSAO_COMPOSITE_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, SSAO_COMPOSITE_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, BLOOM_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, BLOOM_PREFILTER_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, BLOOM_PREFILTER_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, BLOOM_DOWNSAMPLE_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, BLOOM_DOWNSAMPLE_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, BLOOM_UPSAMPLE_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, BLOOM_UPSAMPLE_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(archive, BLOOM_COMPOSITE_PATH, AssetEntryType.Shader, isGpuPayload: false);
+        AssertEntry(archive, BLOOM_COMPOSITE_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
     }
 
     [Fact]
@@ -219,6 +237,50 @@ public sealed class BuiltInPackTests {
         Assert.Equal(SSAO_COMPOSITE_FRAGMENT_PATH, composite.FragmentPayload);
         Assert.Equal(["uAoColor", "uIntensity"], composite.Uniforms.Select(static uniform => uniform.Name));
         Assert.Equal(["sourceColor", "aoTexture"], composite.Textures);
+        AssertSpirvPayload(archive, composite.VertexPayload);
+        AssertSpirvPayload(archive, composite.FragmentPayload);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void BloomShadersUseTheCommittedMainEntryPointAndTheBakedContracts() {
+        using PackArchive archive = OpenBuiltInPack();
+
+        ShaderAssetDescriptor prefilter = ReadShaderDescriptor(archive, BLOOM_PREFILTER_PATH);
+        Assert.Equal(BLOOM_VERTEX_PAYLOAD_PATH, prefilter.VertexPayload);
+        Assert.Equal(BLOOM_PREFILTER_FRAGMENT_PATH, prefilter.FragmentPayload);
+        Assert.Equal("main", prefilter.VertexEntry);
+        Assert.Equal("main", prefilter.FragmentEntry);
+        Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, prefilter.Stages);
+        Assert.Equal(RenderState.Opaque, prefilter.DefaultRenderState);
+        Assert.Equal(["uThreshold", "uSoftKnee"], prefilter.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(["bloomSource"], prefilter.Textures);
+        AssertSpirvPayload(archive, prefilter.VertexPayload);
+        AssertSpirvPayload(archive, prefilter.FragmentPayload);
+
+        ShaderAssetDescriptor downsample = ReadShaderDescriptor(archive, BLOOM_DOWNSAMPLE_PATH);
+        Assert.Equal(BLOOM_VERTEX_PAYLOAD_PATH, downsample.VertexPayload);
+        Assert.Equal(BLOOM_DOWNSAMPLE_FRAGMENT_PATH, downsample.FragmentPayload);
+        Assert.Empty(downsample.Uniforms);
+        Assert.Equal(["bloomSource"], downsample.Textures);
+        AssertSpirvPayload(archive, downsample.VertexPayload);
+        AssertSpirvPayload(archive, downsample.FragmentPayload);
+
+        ShaderAssetDescriptor upsample = ReadShaderDescriptor(archive, BLOOM_UPSAMPLE_PATH);
+        Assert.Equal(BLOOM_VERTEX_PAYLOAD_PATH, upsample.VertexPayload);
+        Assert.Equal(BLOOM_UPSAMPLE_FRAGMENT_PATH, upsample.FragmentPayload);
+        Assert.Equal(["uScatter"], upsample.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(["bloomCoarse", "bloomFine"], upsample.Textures);
+        AssertSpirvPayload(archive, upsample.VertexPayload);
+        AssertSpirvPayload(archive, upsample.FragmentPayload);
+
+        ShaderAssetDescriptor composite = ReadShaderDescriptor(archive, BLOOM_COMPOSITE_PATH);
+        Assert.Equal(BLOOM_VERTEX_PAYLOAD_PATH, composite.VertexPayload);
+        Assert.Equal(BLOOM_COMPOSITE_FRAGMENT_PATH, composite.FragmentPayload);
+        Assert.Equal(["uTint", "uIntensity"], composite.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(ShaderUniformType.Vector4, composite.Uniforms[0].Type);
+        Assert.Equal(ShaderUniformType.Float, composite.Uniforms[1].Type);
+        Assert.Equal(["sourceColor", "bloomTexture"], composite.Textures);
         AssertSpirvPayload(archive, composite.VertexPayload);
         AssertSpirvPayload(archive, composite.FragmentPayload);
     }

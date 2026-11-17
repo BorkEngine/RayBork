@@ -7,8 +7,8 @@ namespace RayBork.Internal;
 
 /// <summary>
 /// Executes the camera post-process chain on the render thread: the target-sized Rgba16Float ping-pong
-/// targets, the custom-effect and built-in SSAO fullscreen passes, the engine store-back pass, and the
-/// per-target store-back framebuffers.
+/// targets, the custom-effect and built-in SSAO and bloom fullscreen passes, the engine store-back pass,
+/// and the per-target store-back framebuffers.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -30,15 +30,15 @@ namespace RayBork.Internal;
 /// Render-thread only; the normal path allocates nothing after warm-up.
 /// </para>
 /// <para>
-/// SSAO hooks in through <see cref="PostProcessEffectSnapshot"/> and
-/// <see cref="PostProcessContext"/>; bloom will use the same path. A built-in rents a target-sized or
+/// SSAO and bloom hook in through <see cref="PostProcessEffectSnapshot"/> and
+/// <see cref="PostProcessContext"/>. A built-in rents a target-sized or
 /// smaller color target from the same pool, creates a fullscreen pipeline against the post render pass,
 /// writes one instance record per
 /// pass, and records the pass with the engine quad and frame descriptor set. It completes its final
 /// target-sized result with <see cref="PostProcessContext.CompleteColorTarget"/>, or releases an
 /// intermediate target with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>; this processor then
-/// runs the same store-back. <see cref="SsaoEffect"/> is the first built-in effect on these hooks; bloom
-/// uses the same path later.
+/// runs the same store-back. <see cref="SsaoEffect"/> and <see cref="BloomEffect"/> are the built-in
+/// effects on these hooks.
 /// </para>
 /// </remarks>
 internal sealed unsafe class VulkanPostProcessor : IDisposable {

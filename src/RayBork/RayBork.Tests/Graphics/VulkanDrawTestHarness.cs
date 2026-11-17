@@ -59,6 +59,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     private readonly AssetGpuUploadHarness _uploads;
     private AssetCatalog? _catalog;
     private SsaoAssets? _ssaoAssets;
+    private AssetCatalog? _bloomCatalog;
+    private BloomAssets? _bloomAssets;
     private bool _disposed;
 
     /// <summary>
@@ -440,6 +442,42 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     }
 
     /// <summary>
+    /// Loads the engine-owned bloom assets from the built-in pack through this harness's bridge, so a
+    /// test can build a custom-effect-plus-bloom chain without a camera service.
+    /// </summary>
+    /// <returns>The loaded assets, owned by the harness.</returns>
+    internal BloomAssets LoadBloomAssetsFromBuiltInPack() {
+        AssertNotDisposed();
+        if (_bloomAssets is not null) {
+            return _bloomAssets;
+        }
+
+        AssetCatalog catalog = new(
+            NullLoggerFactory.Instance,
+            _uploads.Bridge,
+            BuiltInAssetPack.Bytes,
+            [],
+            []);
+        catalog.Start();
+        try {
+            Task<BloomAssets> load = BloomAssets.LoadAsync(catalog);
+            bool completed = SpinWait.SpinUntil(
+                () => {
+                    _uploads.Pump();
+                    return load.IsCompleted;
+                },
+                AssetGpuUploadHarness.Timeout);
+            Assert.True(completed, "The built-in bloom assets did not finish loading.");
+            _bloomAssets = load.GetAwaiter().GetResult();
+            _bloomCatalog = catalog;
+            return _bloomAssets;
+        } catch {
+            catalog.Stop();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Recreates every live GPU asset from its retained upload, as the render loop does after a device
     /// recovery.
     /// </summary>
@@ -499,6 +537,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
             _host.Backend.WaitForFrameResourcesIdle();
             _ssaoAssets?.Dispose();
             _catalog?.Stop();
+            _bloomAssets?.Dispose();
+            _bloomCatalog?.Stop();
             _uploads.Dispose();
         } finally {
             TickThread.Detach();
