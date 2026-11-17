@@ -93,9 +93,10 @@ internal sealed class RenderTargetGame : IGame {
         _ringColors.Length,
         RING_RADIUS,
         RING_LOCAL_YAW_OFFSET_RADIANS);
-    private static readonly Transform[] _offscreenRingCubes = CreateUnrotatedRingLocals(
+    private static readonly Transform[] _offscreenRingCubes = CreateRingLocals(
         _offscreenColors.Length,
-        OFFSCREEN_RING_RADIUS);
+        OFFSCREEN_RING_RADIUS,
+        localYawOffsetRadians: null);
 
     private static readonly Vector3 _lookTarget = new(0f, 1.9f, 0f);
     private static readonly Vector3 _offscreenLookTarget = new(0f, 1.0f, 0f);
@@ -114,7 +115,8 @@ internal sealed class RenderTargetGame : IGame {
     private float _ringAngle;
     private float _offscreenRingAngle;
     private float _orbitAngle;
-    private float _monitorPhase;
+    // Quarter Tau is the triangle/smoothstep midpoint, so the monitor starts and resets facing ahead.
+    private float _monitorPhase = MathF.Tau * 0.25f;
     private float _spinDirection = 1f;
     private bool _splitScreen;
     private int _frameCount;
@@ -199,7 +201,7 @@ internal sealed class RenderTargetGame : IGame {
             _ringAngle = 0f;
             _offscreenRingAngle = 0f;
             _orbitAngle = 0f;
-            _monitorPhase = 0f;
+            _monitorPhase = MathF.Tau * 0.25f;
             _spinDirection = -_spinDirection;
         }
 
@@ -291,10 +293,11 @@ internal sealed class RenderTargetGame : IGame {
         camera.DrawSphere(new Vector3(0f, 2.2f, 0f), 0.4f, Color.SkyBlue);
 
         // The ring turns the other way, so the monitor is visibly a second live render. Its parent
-        // owns the rotation; the four cube transforms stay fixed in the parent's local space.
+        // owns the rotation; the four cube transforms stay fixed in the parent's local space. The
+        // parent and placement angles are negated to keep the original (cos, 0, sin) world placement.
         Transform ringParent = new(
             new Vector3(0f, OFFSCREEN_RING_CENTER_HEIGHT, 0f),
-            Quaternion.CreateFromAxisAngle(Vector3.UnitY, _offscreenRingAngle),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, -_offscreenRingAngle),
             Vector3.One);
         for (int index = 0; index < _offscreenColors.Length; index++) {
             camera.DrawCube(
@@ -309,10 +312,11 @@ internal sealed class RenderTargetGame : IGame {
 
         // The ring parent turns; each cube is a fixed local transform attached to it. A frame never
         // rebuilds a cube position from a shared scene angle, so wrapping one angle cannot teleport
-        // the ring.
+        // the ring. The negated parent and placement angles keep the original (cos, 0, sin) world
+        // placement while the hierarchy still carries the rotation.
         Transform ringParent = new(
             new Vector3(0f, RING_CENTER_HEIGHT, 0f),
-            Quaternion.CreateFromAxisAngle(Vector3.UnitY, _ringAngle),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, -_ringAngle),
             Vector3.One);
         for (int index = 0; index < _ringColors.Length; index++) {
             camera.DrawCube(
@@ -452,10 +456,10 @@ internal sealed class RenderTargetGame : IGame {
     }
 
     private static Quaternion MonitorSwayRotation(float phase) {
-        // A triangle wave moves left and right at a constant rate; smoothstep eases both ends so the
+        // _monitorPhase is wrapped to [0, Tau), so phase / Tau is already the unit fraction. A
+        // triangle wave moves left and right at a constant rate; smoothstep eases both ends so the
         // sway settles instead of reversing abruptly, and the 0/Tau boundary is seamless.
-        float fraction = (phase / MathF.Tau) - MathF.Floor(phase / MathF.Tau);
-        float triangle = 1f - MathF.Abs((2f * fraction) - 1f);
+        float triangle = 1f - MathF.Abs((2f * (phase / MathF.Tau)) - 1f);
         float eased = triangle * triangle * (3f - (2f * triangle));
         return Quaternion.Slerp(_monitorSwayLeft, _monitorSwayRight, eased);
     }
@@ -463,30 +467,30 @@ internal sealed class RenderTargetGame : IGame {
     /// <summary>
     /// Builds the fixed local transforms of a ring whose parent owns the rotation.
     /// </summary>
+    /// <param name="count">The number of cubes on the ring.</param>
+    /// <param name="radius">The ring radius.</param>
+    /// <param name="localYawOffsetRadians">
+    /// The local yaw added to each placement angle, or <see langword="null"/> for identity local
+    /// rotations.
+    /// </param>
     /// <remarks>
     /// Positions and local yaws come from axis-angle quaternions, so the ring is built without
-    /// trigonometry and a frame only composes a local transform with its parent.
+    /// trigonometry and a frame only composes a local transform with its parent. The placement angle
+    /// is negated so composing it with the negated ring parent restores the original
+    /// <c>(cos φ, 0, sin φ)</c> world placement.
     /// </remarks>
-    private static Transform[] CreateRingLocals(int count, float radius, float localYawOffsetRadians) {
+    private static Transform[] CreateRingLocals(int count, float radius, float? localYawOffsetRadians) {
         Transform[] locals = new Transform[count];
         for (int index = 0; index < count; index++) {
-            float angle = index * MathF.Tau / count;
+            float angle = -index * MathF.Tau / count;
             Quaternion placement = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angle);
-            Quaternion yaw = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angle + localYawOffsetRadians);
+            Quaternion yaw = localYawOffsetRadians is float offset
+                ? Quaternion.CreateFromAxisAngle(Vector3.UnitY, angle + offset)
+                : Quaternion.Identity;
             locals[index] = new Transform(
                 Vector3.Transform(new Vector3(radius, 0f, 0f), placement),
                 yaw,
                 Vector3.One);
-        }
-
-        return locals;
-    }
-
-    private static Transform[] CreateUnrotatedRingLocals(int count, float radius) {
-        Transform[] locals = new Transform[count];
-        for (int index = 0; index < count; index++) {
-            Quaternion placement = Quaternion.CreateFromAxisAngle(Vector3.UnitY, index * MathF.Tau / count);
-            locals[index] = new Transform(Vector3.Transform(new Vector3(radius, 0f, 0f), placement));
         }
 
         return locals;
