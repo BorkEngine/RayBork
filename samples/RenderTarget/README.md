@@ -1,6 +1,6 @@
 # RenderTarget
 
-`RenderTarget` is the M8 render-target and split-screen sample: a procedural scene that renders a
+`RenderTarget` is the M8 sample and Native AOT gate: a procedural scene that renders a
 second procedural scene into an offscreen `RenderTexture`, samples that target on a monitor in a later
 camera pass, switches between one scene camera and two side-by-side cameras, applies a custom
 vignette/tint post-process, and reads the offscreen target back to a screenshot. The scene needs no
@@ -104,7 +104,8 @@ The shader contract:
 - The shader has both stages. A custom effect without both stages or without `sourceColor` is an
   `InvalidOperationException` from `CreateCamera`.
 
-The stack is a target-sized chain: the engine ping-pongs through `Rgba16Float` post targets, stores the
+The stack is a target-sized chain: the engine rotates through three `Rgba16Float` post targets per
+target extent per frame slot, stores the
 result back into the camera target for the camera viewport, and includes it in both readback paths and
 in a later camera's target sample.
 
@@ -193,8 +194,9 @@ and fails with a clear error when it is missing.
 
 ## Native AOT
 
-Build the solution in Release first so `RenderTarget.Assets` bakes and copies `rendertarget.pck`, then
-publish and run the Windows host from the repository root:
+`RenderTarget` is the M8 sample and Native AOT gate. Build the solution in Release first so
+`RenderTarget.Assets` bakes and copies `rendertarget.pck`, then publish and run the Windows host from
+the repository root:
 
 ```powershell
 dotnet build samples/RenderTarget/RenderTarget.slnx -c Release

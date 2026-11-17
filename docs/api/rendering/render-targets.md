@@ -197,8 +197,7 @@ their documented camera-viewport behavior. A camera targeting a disposed target 
 **Post-process effects on a target.** A camera's `postProcess` stack runs after the camera's geometry
 and resolve pass and before the next camera or the present pass. The chain is target-sized: it samples
 the target's resolved color and depth, rents from three target-sized single-sample `Rgba16Float` post
-targets while skipping the current chain source (a custom chain uses two of the three as its ping-pong
-pair), and stores the final result back into the
+targets while rotating around the current chain source, and stores the final result back into the
 target's color attachment for the camera viewport only. A multisampled target is written through its
 MSAA color attachment and resolved into the single-sample color image; a single-sample target is
 written directly. Pixels outside the camera viewport are untouched, and the target's depth is
@@ -235,8 +234,8 @@ single-sample resolved color image, and `DepthTexture` is a `Texture` view over 
 resolved depth image when the target has depth. Both are owned by the `RenderTexture`. They report an
 empty `Path` because they are not pack assets, they sample and batch like any texture, and the recorded
 frame retains the target until the renderer released the frame slot. A resize keeps both view objects and
-updates their `Width` and `Height` in place; only the GPU image and bindless slot behind them are
-replaced. Disposing a view directly throws `InvalidOperationException`; dispose the `RenderTexture`
+updates their `Width` and `Height` in place; the GPU image behind them is replaced and the bindless
+descriptor is rewritten at the same retained slot. Disposing a view directly throws `InvalidOperationException`; dispose the `RenderTexture`
 instead. Disposing the render texture retires both views and releases the target; `Dispose` is idempotent,
 and a target that is the destination or a sample source of a recorded in-flight frame is not destroyed
 until that frame completes. A target destroyed by the renderer at shutdown also reports
@@ -264,15 +263,16 @@ multisampled scene targets. Resolving scene depth costs bandwidth on every camer
 for every frame with a depth-bearing post-process stack. That cost is a known property of the depth
 path, not a hidden regression; a built-in effect can decide whether a pass needs the resolve.
 
-**Remaining M8 work.** The extensible camera post-process core, the custom-shader effect, the built-in
-SSAO effect, and the built-in bloom effect ship: the stack API, the target-sized chain, viewport
-store-back, the reserved `sourceColor`/`sourceDepth` contract, the scene-target and render-target
-source slots, SSAO, which Castle and PrimitiveGallery enable by default and toggle with `A`, and bloom,
-which `Pong` enables on its scene camera and toggles with `B`. The RenderTarget and split-screen
-sample tasks remain later M8 work. This section covers the color path, the depth view, resize, and
-color readback: creation, camera routing, MSAA color and depth resolve, same-tick sampling of both
-views, resize, lifetime, raw linear color readback, display-referred pixel readback, and camera
-post-processing.
+**M8 shipping surface.** The color path, depth view, resize, both readback methods, and camera
+post-processing ship: `RenderTexture` creation, camera routing, MSAA color and depth resolve,
+same-tick sampling of both views, target lifetime, `Resize`, raw scene-linear color readback,
+display-referred pixel readback, the extensible `PostProcessStack`/`PostProcessEffect`/
+`ShaderPostProcessEffect` core, the reserved `sourceColor`/`sourceDepth` contract, and the built-in
+`SsaoEffect` and `BloomEffect`. `samples/RenderTarget` is the M8 sample and Native AOT gate: it
+renders a procedural scene into a `640x360` `Rgba16Float` target, samples its `ColorTexture` on a
+monitor in a later camera, toggles a two-camera split-screen view with `S`, runs a baked custom
+vignette/tint effect with `E` on the single scene camera, and reads the target back with `F2`.
+The split cameras have no stack because an M8 viewport effect's source is the full target.
 
 - Multiple cameras can target the HDR scene target for split-screen. Set `viewport` on each camera
   and clear only the first; later cameras use `ClearMode.None`, `ClearMode.Color`, or

@@ -121,9 +121,9 @@ array.
 reconstructs view-space positions and normals from the camera target's resolved reverse-Z depth (no
 normal buffer), rotates a golden-angle hemisphere kernel with the N8AO blue-noise texture, applies a
 range check and bias, runs two bilateral denoise iterations, and composites the AO over its chain
-input. That input is the original scene color when SSAO is first and the previous effect's output
-otherwise. Perspective and orthographic cameras use the same path; `near`/`far` and the projection
-kind come from the camera's projection matrix.
+input. That input is the camera target's resolved color when SSAO is first and the previous effect's
+output otherwise. Perspective and orthographic cameras use the same path; `near`/`far` and the
+projection kind come from the camera's projection matrix.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -162,8 +162,12 @@ cameras only.
 The effect **requires a camera target with a depth attachment**. A `RenderTexture` created with
 `Depth: false` is rejected from `CreateCamera` with `InvalidOperationException` before the pass is
 recorded. The app scene target always has depth. SSAO preserves the depth image, so a later camera
-can still sample it; the AO, denoise, and composite passes rent two camera-target-sized
-`Rgba16Float` post targets and release them through the engine post-target pool.
+can still sample it; the AO, denoise, and composite passes rent camera-target-sized `Rgba16Float`
+post targets from the three-target per-extent set and release them through the engine post-target
+pool. The rent rotates through the set and skips the current chain source: when SSAO is first the
+source is the camera target's image, so all three post targets are available; in a chain the
+previous effect's output occupies one of the three, so the passes alternate between the two
+non-source targets without overwriting that image.
 
 SSAO is several fullscreen passes over the full target, so its cost scales with target pixels:
 `Ultra` does 64 AO samples and two 16-tap denoise iterations per pixel. Prefer `Performance` or `Low`
@@ -246,6 +250,14 @@ fullscreen quad:
   `Rgba8Srgb` still applies the fixed-function sRGB encode when the store-back writes its attachment,
   exactly like any other write to that target; an `Rgba8Unorm` target stores the linear values.
 
+The post pipeline uses the engine's fixed 88-byte vertex layout, the same one the geometry pipelines
+declare, so a custom post vertex stage that reads only position and UV leaves the other attribute
+descriptions unconsumed and the validation layer reports that as a performance warning, not an error.
+The generated prologue also declares the location-15 instance-index interface, so a post fragment
+stage that never reads `rbInstance` leaves that vertex output unconsumed and gets the same kind of
+warning. Both are non-fatal; the engine does not weaken validation or hide the messages, and a Debug
+sample run can print them for the custom post pass.
+
 The engine fullscreen quad has positions in `[-0.5, 0.5]` in local XY and UVs in `[0, 1]` with
 `(0, 0)` at the image top-left. The vertex stage must map it with:
 
@@ -312,9 +324,10 @@ size of the camera target, not the size of the camera viewport:
 
 1. The camera target's resolved color and depth are the source.
 2. Each enabled effect rents a target from the three-target, single-sample `Rgba16Float` post set for
-   the target extent, skipping the current chain source. A custom chain therefore ping-pongs through
-   two of the three targets with one fullscreen pass per effect; a four-pass built-in can use the two
-   non-source targets while the prior output stays intact.
+   the target extent, skipping the current chain source. The rent rotates through the three targets,
+   so a chain of any length keeps the prior effect's completed image alive while it writes the next;
+   a custom chain's effects do not alternate between a fixed pair, and a four-pass built-in can use
+   all three targets with the prior output intact.
 3. The final result is stored back into the target's color attachment for the camera viewport only: the
    target's MSAA color image plus its resolve, or the single-sample color image. The store-back samples
    the matching sub-rectangle of the final post target, so a viewport camera's result is aligned with
@@ -329,6 +342,17 @@ including pixels outside its own viewport. A blur or similar neighborhood effect
 across the viewport boundary and bleed into its result near the edge. This is documented M8 behavior,
 not a bug: per-viewport source copies are a follow-up. A viewport camera with effects is supported and
 not rejected; only the store-back is viewport-scoped.
+
+The pool holds three target-sized `Rgba16Float` targets and one bindless slot per target per frame
+ring slot for every extent a frame uses (the camera-target extent and, for bloom, the half, quarter,
+eighth, 1/16, and 1/32 pyramid extents), so steady state allocates nothing per frame but memory grows
+with the number of distinct extents in flight. The validation layer in the tests and Debug builds
+checks core Vulkan usage, not synchronization; the post-process GPU tests assert validation
+cleanliness and numeric readback, but they do not prove the barriers against a synchronization
+validator. The samples that ship a stack are Castle and PrimitiveGallery (SSAO on by default, `A`
+toggles it), Pong (bloom on the scene camera only, `B` toggles it), and RenderTarget (a custom
+vignette/tint shader on the single scene camera, `E` toggles the stack, and the split-screen cameras
+stay stackless because of the cross-viewport source behavior).
 
 **Targets and readback.** Effects work identically on the app scene target and on a
 `RenderTexture` target. The chain is sized to the target the camera writes, and one frame can run
@@ -362,16 +386,18 @@ the store-back:
 - `CompleteAuxiliaryTarget` to release an intermediate and `CompleteColorTarget` to make a
   camera-target-sized result the chain source, after which the engine runs the same store-back.
 
-SSAO records four passes through the three-target per-extent set, skipping the current chain source:
-AO into a non-source target, denoise into the next, the second denoise back into the first target,
-and the composite into the last target. The two non-source targets alternate, so the prior effect's
+SSAO records four passes through the three-target per-extent set, rotating through it and skipping
+the current chain source. When SSAO is first, the source is the camera target's image, so all three
+post targets are available: AO into the first, denoise into the second, the second denoise back into
+the first, and the composite into the third. In a chain, the previous effect's output occupies one
+target, so the four passes alternate between the two non-source targets and the prior effect's
 completed image is never overwritten. The AO and denoise targets are auxiliary and become readable
 before the next pass samples them; the composite target is completed as the chain source and the
 engine's single store-back writes it to the camera viewport. The chain-input color slot is captured
-before the first completion, so the composite samples the previous effect's output (or the original
-scene color when SSAO is first). SSAO reports four ordered instance-record entries (AO, denoise,
-denoise, composite) so the frame's instance buffer is sized for every pass even though the denoise
-entry repeats.
+before the first completion, so the composite samples the previous effect's output (or the camera
+target's resolved color when SSAO is first). SSAO reports four ordered instance-record entries (AO,
+denoise, denoise, composite) so the frame's instance buffer is sized for every pass even though the
+denoise entry repeats.
 
 The effect snapshot reports its ordered instance-record layout (per-pass stride and count), so a
 built-in can append passes with different shaders and uniform sizes and the frame's instance buffer is

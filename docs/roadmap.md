@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M7 as-built**, 2026-11-16. M0-M7 are shipped. Milestones are ordered by
+Status: **v0.1 M8 as-built**, 2026-11-17. M0-M8 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -74,7 +74,7 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, wireframe models, mesh generators, collision queries, HDR AgX rework, restored linearized Bork2d color presets | M4 |
 | M6 | Text and MSDF | Managed TTF/OTF parsing, deterministic on-demand MSDF, layout, built-in font, world-space text | M4 |
 | M7 | 2D and orthographic rendering | Orthographic cameras, screen transform, quad/disc/grid primitives, Pong | M4 |
-| M8 | Render targets and multiple cameras | HDR/MSAA targets, readback, split-screen | M4 |
+| M8 | Render targets and multiple cameras | HDR/MSAA targets, depth, resize, readback, split-screen, camera post-process, SSAO, bloom, and the RenderTarget sample | M4 |
 | M9 | Input and window polish | IME, clipboard, fullscreen, gamepad hotplug/rumble | M1 |
 | M10 | Performance and hardening | Pacing, caches, stress, validation CI, recovery hardening | M4-M8 |
 | M11 | Samples, docs, packaging | Five samples, template, NuGet, docs, MIT license | M10 |
@@ -744,10 +744,11 @@ color helpers, and the restored Bork2d/Unity color preset set:
   hover overlay: it tests the pointer ray against the model bounds with `Collision.GetRayBox`, draws
   the bounds on a hit, and marks the nearest `Collision.GetRayMesh` hit. It still does not implement
   click selection. M6 adds the presented-FPS/render-statistics status overlay the sample deferred in
-  M4, and M7 draws it through `ScreenToWorldTransform` so it stays screen-aligned. Castle remains a
-  buildable and publishable sample; the M6 AOT gate was `samples/Text` and the M7 gate is
-  `samples/Pong`. The M4
-  limitation of one `rbFrame` block per frame slot is unchanged by M5-M7.
+  M4, and M7 draws it through `ScreenToWorldTransform` so it stays screen-aligned, with M8 adding the
+  `A` SSAO toggle and a later HUD camera. Castle remains a
+  buildable and publishable sample; the M6 AOT gate was `samples/Text`, the M7 gate was
+  `samples/Pong`, and the M8 gate is `samples/RenderTarget`. The M4
+  limitation of one `rbFrame` block per frame slot is resolved by the M8 shader ABI v2.
 
 **Risks.**
 
@@ -971,8 +972,9 @@ blocking glyph generation.
   1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets. The
   per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
   milestone.
-- **Tests.** At the M6 milestone the suite was 2,625 tests, 106 of them GPU integration tests; the
-  current suite, including the M7 screen-space suites, is 2,695 tests, 114 GPU integration tests.
+- **Tests.** At the M6 milestone the suite was 2,625 tests, 106 of them GPU integration tests; it
+  grew to 2,695 tests, 114 GPU integration tests by M7. The final M8 suite is 2,977 tests, 239 GPU
+  integration tests.
   M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
   colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
@@ -1133,7 +1135,8 @@ details:
   per-instance UV/color path, not a second renderer.
 - **Orthographic 3D.** The same orthographic camera renders 3D models and primitives with an
   orthographic projection; it is not a separate 2D renderer. `samples/Castle` has an `O` toggle
-  between perspective and orthographic, records one camera per tick, and derives the orthographic
+  between perspective and orthographic, records a scene pass and a later HUD pass per tick, and
+  derives the orthographic
   height from the orbit distance (`2 * orbitDistance * tan(fieldOfView / 2)`) so the framing matches
   the perspective view at that distance. Its orthographic far plane is derived from
   `MAX_DISTANCE * 2`, and the status line shows the current projection. The same `Camera` batching,
@@ -1155,7 +1158,8 @@ details:
   plane so a full-viewport quad or boundary-aligned geometry is not culled by floating-point drift
   in the extracted planes. `Contains` keeps its exact non-negative test, and the tolerance applies
   only to the `Intersects` positive-vertex test.
-- **Pong sample and AOT gate.** `samples/Pong` is the M7 sample and Native AOT gate. It is a
+- **Pong sample (M7 gate).** `samples/Pong` is the M7 sample; it was the M7 Native AOT gate and M8
+  moved the gate to `samples/RenderTarget`. It is a
   two-project solution, `samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, containing
   the sample and the JIT `Pong.Assets` executable. The solution builds `Pong` once and then
   `Pong.Assets`; the assets project runs the bake executable out of process over the checked-in
@@ -1168,10 +1172,12 @@ details:
   speed), and `/textures/paddle`, a 32x128 original opaque paddle PNG with its KTX2 raw payload.
   `PongSettings` lives only in the sample project; `Pong.Assets` references `Pong.csproj` directly
   instead of linking the settings file, and the assets project also references `RayBork.Bake`.
-  Every tick records one orthographic camera at `(0, 0, 1)` looking down `-Z` with
+  Every tick records a scene camera and a later HUD camera at `(0, 0, 1)` looking down `-Z`; at M7
+  the scene pass ran without a post stack, and M8 adds the scene-camera bloom stack while the HUD
+  camera stays stackless. Both cameras use
   `orthographicHeight = Window.RenderHeight`, so the plane at distance `1` has a
   world-units-per-pixel scale of exactly one. The `1280x720` 16:9 design playfield is fitted into
-  the current render pixels, letterboxed with the camera clear color, and every draw uses
+  the current render pixels, letterboxed with the scene camera clear color, and every draw uses
   `ScreenToWorldTransform`. `DrawQuad` draws the playfield, border, net, score panels, shaded
   overlay, and textured paddles; `DrawDisc` draws the ball; `DrawText` draws the scores, status
   line, and pause/winner overlay. The left paddle is the human and the right paddle is a
@@ -1198,10 +1204,10 @@ details:
   full-viewport frustum tolerance, and 3D orthographic cube rendering. `Rendering/PrimitiveDrawTests`
   gains the `DrawQuad`, `DrawDisc`, and `DrawGrid(Transform)` record, validation, zero-extent,
   disposed-asset, and batching coverage; `Rendering/CameraTests` covers `ScreenToWorldTransform`.
-  The Windows hardware run is 2,695
-  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed,
+  At M7 the Windows hardware run was 2,695
+  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run was 2,688 passed,
   0 failed, and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes
-  only SDR, and the GPU-filtered run is 107 passed with the same 7 skips. Every sample solution
+  only SDR, and the GPU-filtered run was 107 passed with the same 7 skips. Every sample solution
   builds. There is no golden-image suite.
 - **HelloInterop removed.** The M1-M3 `samples/HelloInterop` diagnostic host is gone; the Pong,
   Text, Castle, and PrimitiveGallery samples and the test suite cover the host, input, time,
@@ -1233,14 +1239,14 @@ details:
   scaling of the window; the screen transform is exact for the clamped viewport, while a game that
   wants a fixed design space must fit it itself, as Pong does.
 - **AOT gate moved to Pong.** `samples/Text`, `samples/Castle`, and `samples/PrimitiveGallery` remain
-  buildable and publishable but are no longer the gate. The M7 gate is Pong on both RIDs, and a
+  buildable and publishable but are no longer the gate. The M7 gate was Pong on both RIDs, and a
   failure there is a milestone failure.
 
 ### M8 — Render targets, multiple cameras, and readback
 
 **Goal.** Offscreen rendering, post-processing building blocks, split-screen, and screenshots.
 
-**Progress.** The per-pass frame data (shader ABI v2), one render pass per camera pass on the HDR
+**As built.** The per-pass frame data (shader ABI v2), one render pass per camera pass on the HDR
 scene target, and the color, depth, resize, and readback paths of public render targets ship:
 `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`,
 `RenderTexture.Resize`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ReadColorsAsync`,
@@ -1253,7 +1259,7 @@ effect. The extensible camera post-process core ships: `PostProcessStack`, `Post
 `ShaderPostProcessEffect`, the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float`
 chains over the engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader
 contract, and camera-viewport store-back on the scene target and on render targets, with the
-post-processed output included in a later target sample and both readback methods. Built-in SSAO ships
+post-processed output included in the RenderTarget sample and both readback methods. Built-in SSAO ships
 on the same core: `SsaoEffect`/`SsaoQuality` use the N8AO 2.1.0 full-resolution SSAO path with
 depth-reconstructed normals, a golden-angle kernel, blue-noise rotation, two bilateral denoise
 iterations, a tinted composite, baked 8/16/64 AO and 4/8/16 denoise variants, and an engine-owned
@@ -1266,8 +1272,16 @@ programs and shared fullscreen vertex payload are engine-owned built-ins, and th
 the bloom threshold to `2` so the ordinary `1`-brightness palette stays out of the knee, and adds gold
 and warm-white HDR collision flashes (ball `3`, paddle `6`, wall `2.4`) that bloom and decay over a few
 frames.
-The RenderTarget and split-screen sample tasks and the final milestone docs remain later M8 work; M8 is
-not complete.
+`RenderTarget` ships as the M8 sample and Native AOT gate: it draws a procedural scene into a
+`640x360` `Rgba16Float` render texture, samples the target on a monitor in a later camera pass,
+toggles a two-camera split-screen view with `S`, runs a baked custom vignette/tint post shader on the
+single scene camera with `E`, and reads the target back to a PPM screenshot with `F2`. The Windows
+`win-x64` and `linux-x64` publishes finished with zero AOT/trim warnings, contained
+`rendertarget.pck` beside the host and no bake tooling, and ran `--frames 30` to exit `0` on the
+Windows hardware driver and on the conformant lavapipe/llvmpipe software driver. The final suite is
+2,977 tests, 239 of them GPU integration tests, with no skips on the Windows hardware path; the
+lavapipe Linux run is 2,970 passed with the same 7 HDR/scRGB-present skips, and its GPU-filtered run
+is 232 passed with those 7 skips. M8 is complete.
 
 **Scope.**
 
@@ -1289,7 +1303,9 @@ not complete.
   fence, and leave the target state unchanged. Shipped.
 - Camera post-process core: an app-lifetime, caller-owned effect stack snapshotted at camera
   creation, a custom-shader effect over the engine fullscreen quad with the reserved
-  `sourceColor`/`sourceDepth` bindings, a target-sized single-sample `Rgba16Float` ping-pong chain, and
+  `sourceColor`/`sourceDepth` bindings, a target-sized single-sample `Rgba16Float` chain drawn from a
+  pool of three targets per target extent per frame ring slot that rotates around its current source,
+  and
   a camera-viewport store-back into the target's MSAA or single-sample color image. The chain runs
   after the camera's geometry and resolve pass, works on the scene target and on `RenderTexture`
   targets, includes the post-processed output in readback, and leaves depth unchanged. Shipped.
@@ -1305,12 +1321,16 @@ not complete.
   bloom threshold of `2` so the ordinary palette stays out of the knee, gold and warm-white HDR
   ball/paddle/wall collision flashes (ball `3`, paddle `6`, wall `2.4`), a short decay, and a `B` toggle
   with HUD status. Shipped.
-- RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
-  simple post-process shader, and present. Later M8 task.
-- Split-screen sample pass: two cameras, two viewports. Later M8 task.
+- RenderTarget sample: a procedural scene rendered into a `640x360` `Rgba16Float` target, sampled on
+  a monitor in a later camera pass, with a baked custom vignette/tint post shader, a two-camera
+  split-screen toggle, both readback methods, and a PPM screenshot. It is the M8 sample and Native
+  AOT gate, and it does not render the Castle model. Shipped.
+- Split-screen: two cameras with two viewport rectangles in one frame, each its own render pass with
+  its own frame block, clear, and resolve; the sample's `S` toggle exercises it. Shipped.
 - Target format/sRGB rules; depth texture sampling. The three color formats, the sRGB sampling decode,
   and the resolved `DepthTexture` over a Vulkan 1.2 depth resolve ship. The scene target's resolved
-  depth image is an internal post-process source; the built-in depth consumers are later tasks.
+  depth image is an internal post-process source for the built-in SSAO effect and the reserved
+  `sourceDepth` custom-shader binding.
 
 **Exit criteria.**
 
@@ -1320,10 +1340,11 @@ not complete.
   chain writes the post-processed result back into the target and into both readback paths. Met by the
   post-process unit and GPU tests for the scene target and render target, including effect order,
   user uniforms, the source depth binding, viewport store-back, disabled semantics, retained
-  materials, target resize, and device recovery; the standalone RenderTarget sample is later.
+  materials, target resize, and device recovery; the RenderTarget sample runs the same chain through
+  a real camera and the app host.
 - Built-in SSAO runs every baked quality variant over perspective and orthographic probes, darkens a
   known cube contact while a flat wall stays near-white, honors world/screen-space radius,
-  intensity, and denoise changes, rejects a depth-less target, preserves the original scene color in
+  intensity, and denoise changes, rejects a depth-less target, preserves its chain input in
   the composite, and reads back with SSAO included. Met by the SSAO unit and GPU tests.
 - Built-in bloom produces a measurable halo from an HDR source against a no-bloom baseline, honors
   threshold, soft knee, intensity, and scatter changes, skips a disabled effect, collapses the pyramid
@@ -1347,7 +1368,9 @@ not complete.
   Met by the render texture GPU, service, and app tests.
 - MSAA 4x offscreen color/depth resolves correctly; 1x and 8x are supported or fall back. Met for
   color and the sampled depth view.
-- Native AOT publish runs the RenderTarget sample on Windows and Linux. Later M8 task.
+- Native AOT publish runs the RenderTarget sample on Windows and Linux. Met: both publishes finished
+  with zero AOT/trim warnings, contained `rendertarget.pck` and no bake tooling, and both hosts ran
+  `--frames 30` to exit `0` (Windows hardware and Linux lavapipe).
 
 ### M9 — Input and window polish
 
@@ -1433,12 +1456,14 @@ with Native AOT without reading the engine source.
 
 **Scope.**
 
-- Samples: Castle (3D textured/custom shader/HDR plus the perspective/orthographic toggle; the
-  sample and its assets executable ship in M4, and M11 polishes them), Pong
-  (orthographic/screen-space match, input, and text; the sample and its AOT gate ship in M7, and M11
-  polishes them), Text (MSDF/layout; the sample and its AOT gate ship in
-  M6, and M11 polishes them), Instancing (batching/stats), RenderTarget
-  (offscreen/MSAA/post-process).
+- Samples: Castle (3D textured/custom shader/HDR plus the perspective/orthographic toggle and SSAO;
+  the sample and its assets executable ship in M4, and M11 polishes them), Pong
+  (orthographic/screen-space match, input, text, and bloom; the sample and its AOT gate shipped in
+  M7, and M11 polishes them), Text (MSDF/layout; the sample and its AOT gate shipped in
+  M6, and M11 polishes them), PrimitiveGallery (primitive helpers and SSAO; it shipped with M5),
+  Instancing (batching/stats; M11), and RenderTarget
+  (offscreen/MSAA/post-process/split-screen; it shipped as the M8 sample and AOT gate, and M11
+  polishes it).
 - `dotnet new raybork` template with a game project, assets executable, and AOT publish profile.
 - NuGet packages: `RayBork.Engine` and the bake tool; package validation and symbol packages.
 - XML docs for every public member; the API reference synchronized with the implementation.
@@ -1620,9 +1645,10 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   and split only by render state, the disc interior, text and sprites in one frame, full-viewport
   frustum tolerance, and 3D orthographic cube rendering. `PrimitiveDrawTests` covers the
   `DrawQuad`, `DrawDisc`, and `DrawGrid(Transform)` records, zero-extent behavior, validation,
-  disposed assets, retention, and batching, and `CameraTests` covers `ScreenToWorldTransform`. The
-  suite is 2,695 tests, 114 of
-  them GPU integration tests, and every sample solution builds.
+  disposed assets, retention, and batching, and `CameraTests` covers `ScreenToWorldTransform`. At M7
+  the suite was 2,695 tests, 114 of
+  them GPU integration tests, and every sample solution builds. The final M8 suite is 2,977 tests,
+  239 GPU integration tests.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
   the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,
