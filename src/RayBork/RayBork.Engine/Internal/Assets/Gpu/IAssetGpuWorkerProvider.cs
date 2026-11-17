@@ -11,7 +11,8 @@ namespace RayBork.Internal;
 /// device share a lifetime: the backend recreates the worker's device only through
 /// <see cref="IAssetGpuWorker.Restore"/>.
 /// </remarks>
-internal interface IAssetGpuWorkerProvider {
+internal interface IAssetGpuWorkerProvider
+{
     /// <summary>
     /// Creates the asset GPU worker for the backend's current device.
     /// </summary>

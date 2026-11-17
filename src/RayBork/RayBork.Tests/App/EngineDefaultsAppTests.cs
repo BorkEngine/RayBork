@@ -7,10 +7,12 @@ namespace RayBork.Tests;
 /// Tests the app wiring of <see cref="EngineDefaults"/>: the preloaded built-ins are available in
 /// <see cref="IGame.Setup"/>, usable during ticks, and released during shutdown.
 /// </summary>
-public sealed class EngineDefaultsAppTests {
+public sealed class EngineDefaultsAppTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultsArePreloadedBeforeSetupAndReleasedAfterShutdown() {
+    public void DefaultsArePreloadedBeforeSetupAndReleasedAfterShutdown()
+    {
         FakeAssetGpuWorker worker = new();
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
@@ -21,7 +23,8 @@ public sealed class EngineDefaultsAppTests {
         bool programShared = false;
         bool materialUsableInTick = false;
         ScriptedGame game = new();
-        game.SetupHandler = context => {
+        game.SetupHandler = context =>
+        {
             defaults = context.Defaults;
             whiteAndErrorPresent =
                 context.Defaults.White.Path == "/textures/white"
@@ -31,11 +34,14 @@ public sealed class EngineDefaultsAppTests {
             programShared = ReferenceEquals(setupMaterial.Program, tickMaterial.Program);
             return Task.CompletedTask;
         };
-        game.TickHandler = context => {
-            materialUsableInTick = setupMaterial!.Path == "/shaders/mesh" && !setupMaterial.IsDisposed;
+        game.TickHandler = context =>
+        {
+            materialUsableInTick =
+                setupMaterial!.Path == "/shaders/mesh" && !setupMaterial.IsDisposed;
             context.RequestExit();
         };
-        game.ShutdownHandler = () => {
+        game.ShutdownHandler = () =>
+        {
             setupMaterial!.Dispose();
             tickMaterial!.Dispose();
             return Task.CompletedTask;
@@ -46,9 +52,12 @@ public sealed class EngineDefaultsAppTests {
             .WithTargetFps(2)
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -72,7 +81,8 @@ public sealed class EngineDefaultsAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultMeshMaterialDrawsWithTheMeshShaderProgram() {
+    public void DefaultMeshMaterialDrawsWithTheMeshShaderProgram()
+    {
         FakeRendererBackend renderer = new();
         FakeEnginePlatform platform = new();
         EngineContext? tickContext = null;
@@ -81,7 +91,8 @@ public sealed class EngineDefaultsAppTests {
         int drawCalls = 0;
         bool sawProgramOnTheRecord = false;
         ScriptedGame game = new();
-        game.SetupHandler = async context => {
+        game.SetupHandler = async context =>
+        {
             material = context.Defaults.CreateMeshShader();
             MeshBuilder builder = context.CreateMeshBuilder();
             builder.SetVertices([
@@ -92,31 +103,37 @@ public sealed class EngineDefaultsAppTests {
             builder.SetIndices([0u, 1u, 2u]);
             mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
         };
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             tickContext = context;
             using Camera camera = context.CreateCamera(
                 Transform.Identity,
                 CameraProjection.Perspective,
                 60f,
                 near: 0.1f,
-                far: 100f);
+                far: 100f
+            );
             camera.DrawMesh(mesh!, Transform.Identity, material!);
             context.RequestExit();
         };
-        game.ShutdownHandler = () => {
+        game.ShutdownHandler = () =>
+        {
             mesh!.Dispose();
             material!.Dispose();
             return Task.CompletedTask;
         };
-        renderer.OnSubmit = packet => {
-            if (packet.PassCount == 0) {
+        renderer.OnSubmit = packet =>
+        {
+            if (packet.PassCount == 0)
+            {
                 return;
             }
 
             drawCalls = packet.Passes[0].DrawCount;
             sawProgramOnTheRecord = ReferenceEquals(
                 packet.Passes[0].Draws[0].Program,
-                material!.Program.Lifetime);
+                material!.Program.Lifetime
+            );
         };
 
         RayBorkApp app = new RayBorkAppBuilder()
@@ -124,9 +141,12 @@ public sealed class EngineDefaultsAppTests {
             .WithTargetFps(2)
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -139,7 +159,8 @@ public sealed class EngineDefaultsAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PrimitiveAssetsArePreloadedBeforeSetupAndReleasedAfterShutdown() {
+    public void PrimitiveAssetsArePreloadedBeforeSetupAndReleasedAfterShutdown()
+    {
         FakeAssetGpuWorker worker = new();
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
@@ -152,16 +173,19 @@ public sealed class EngineDefaultsAppTests {
         bool materialsUsableInTick = false;
         RayBorkApp? app = null;
         ScriptedGame game = new();
-        game.SetupHandler = context => {
+        game.SetupHandler = context =>
+        {
             setupPrimitives = app!.Cameras?.Primitives;
             uploadCountAtSetup = worker.UploadCallCount;
             destroyCountAtSetup = worker.DestroyCalls.Count;
             return Task.CompletedTask;
         };
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             tickPrimitives = app!.Cameras?.Primitives;
             destroyCountInTick = worker.DestroyCalls.Count;
-            meshesUsableInTick = tickPrimitives is not null
+            meshesUsableInTick =
+                tickPrimitives is not null
                 && !tickPrimitives.Cube.IsDisposed
                 && !tickPrimitives.Sphere.IsDisposed
                 && !tickPrimitives.Plane.IsDisposed
@@ -176,7 +200,8 @@ public sealed class EngineDefaultsAppTests {
                 && tickPrimitives.Disc.Topology == PrimitiveTopology.TriangleList
                 && tickPrimitives.Disc.IndexCount == 108
                 && tickPrimitives.Cube.Topology == PrimitiveTopology.TriangleList;
-            materialsUsableInTick = tickPrimitives is not null
+            materialsUsableInTick =
+                tickPrimitives is not null
                 && tickPrimitives.PrimitiveMaterial.Path == "/shaders/primitive"
                 && tickPrimitives.MeshMaterial.Path == "/shaders/mesh"
                 && tickPrimitives.MsdfMaterial.Path == "/shaders/msdf"
@@ -191,9 +216,12 @@ public sealed class EngineDefaultsAppTests {
             .WithTargetFps(2)
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -221,12 +249,17 @@ public sealed class EngineDefaultsAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AFailedPrimitiveMeshUploadFailsStartupAndReleasesThePartialLoad() {
+    public void AFailedPrimitiveMeshUploadFailsStartupAndReleasesThePartialLoad()
+    {
         FakeAssetGpuWorker worker = new();
         int meshUploads = 0;
-        worker.UploadHandler = upload => {
-            if (upload.Kind == AssetGpuUploadKind.Mesh
-                && Interlocked.Increment(ref meshUploads) == 3) {
+        worker.UploadHandler = upload =>
+        {
+            if (
+                upload.Kind == AssetGpuUploadKind.Mesh
+                && Interlocked.Increment(ref meshUploads) == 3
+            )
+            {
                 throw new InvalidOperationException("Injected primitive mesh upload failure.");
             }
 
@@ -234,9 +267,7 @@ public sealed class EngineDefaultsAppTests {
         };
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
-        ScriptedGame game = new() {
-            TickHandler = context => context.RequestExit(),
-        };
+        ScriptedGame game = new() { TickHandler = context => context.RequestExit() };
 
         RayBorkApp app = new RayBorkAppBuilder()
             .WithGame(game)
@@ -244,9 +275,12 @@ public sealed class EngineDefaultsAppTests {
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
         AssetLoadException thrown;
-        try {
+        try
+        {
             thrown = Assert.Throws<AssetLoadException>(app.Run);
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -265,11 +299,16 @@ public sealed class EngineDefaultsAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AMissingMsdfProgramFailsStartupAndNamesTheBuiltInAsset() {
+    public void AMissingMsdfProgramFailsStartupAndNamesTheBuiltInAsset()
+    {
         FakeAssetGpuWorker worker = new();
-        worker.UploadHandler = upload => {
-            if (upload.Kind == AssetGpuUploadKind.Shader
-                && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal)) {
+        worker.UploadHandler = upload =>
+        {
+            if (
+                upload.Kind == AssetGpuUploadKind.Shader
+                && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal)
+            )
+            {
                 throw new InvalidOperationException("Injected missing built-in msdf program.");
             }
 
@@ -277,9 +316,7 @@ public sealed class EngineDefaultsAppTests {
         };
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
-        ScriptedGame game = new() {
-            TickHandler = context => context.RequestExit(),
-        };
+        ScriptedGame game = new() { TickHandler = context => context.RequestExit() };
 
         RayBorkApp app = new RayBorkAppBuilder()
             .WithGame(game)
@@ -287,9 +324,12 @@ public sealed class EngineDefaultsAppTests {
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
         AssetLoadException thrown;
-        try {
+        try
+        {
             thrown = Assert.Throws<AssetLoadException>(app.Run);
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -300,10 +340,10 @@ public sealed class EngineDefaultsAppTests {
         Assert.Equal(0, game.ShutdownCount);
         // The msdf program upload was attempted after the defaults and the primitive program; the failed
         // upload created no resource, so every created resource is released by the failed startup.
-        Assert.Contains(
-            worker.UploadCalls,
-            upload => upload.Kind == AssetGpuUploadKind.Shader
-                && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal));
+        Assert.Contains(worker.UploadCalls, upload =>
+            upload.Kind == AssetGpuUploadKind.Shader
+            && string.Equals(upload.Path, "shaders/msdf", StringComparison.Ordinal)
+        );
         // The defaults, the primitive program, and the attempted msdf upload precede the failure.
         Assert.Equal(EnginePreloadCounts.DEFAULTS + 2, worker.UploadCallCount);
         Assert.Equal(worker.UploadCallCount - 1, worker.DestroyCalls.Count);
@@ -311,7 +351,8 @@ public sealed class EngineDefaultsAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheDefaultFontsArePreloadedBeforeSetupLiveInTickAndDisposedAfterShutdown() {
+    public void TheDefaultFontsArePreloadedBeforeSetupLiveInTickAndDisposedAfterShutdown()
+    {
         FakeAssetGpuWorker worker = new();
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
@@ -320,10 +361,12 @@ public sealed class EngineDefaultsAppTests {
         bool usableInSetup = false;
         bool usableInTick = false;
         ScriptedGame game = new();
-        game.SetupHandler = context => {
+        game.SetupHandler = context =>
+        {
             setupFont = context.Defaults.DefaultFont;
             setupMonoFont = context.Defaults.DefaultMonoFont;
-            usableInSetup = setupFont.Path == "/fonts/fira-sans"
+            usableInSetup =
+                setupFont.Path == "/fonts/fira-sans"
                 && !setupFont.IsDisposed
                 && setupFont.GlyphCount > 0
                 && setupFont.CachedGlyphCount == 0
@@ -340,8 +383,10 @@ public sealed class EngineDefaultsAppTests {
                 && !ReferenceEquals(setupFont, setupMonoFont);
             return Task.CompletedTask;
         };
-        game.TickHandler = context => {
-            usableInTick = ReferenceEquals(context.Defaults.DefaultFont, setupFont)
+        game.TickHandler = context =>
+        {
+            usableInTick =
+                ReferenceEquals(context.Defaults.DefaultFont, setupFont)
                 && ReferenceEquals(context.Defaults.DefaultMonoFont, setupMonoFont)
                 && !setupFont!.IsDisposed
                 && !setupMonoFont!.IsDisposed
@@ -355,9 +400,12 @@ public sealed class EngineDefaultsAppTests {
             .WithTargetFps(2)
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 

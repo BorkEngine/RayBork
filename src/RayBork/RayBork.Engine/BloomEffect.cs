@@ -27,7 +27,8 @@ namespace RayBork;
 /// created; later changes apply to later cameras only.
 /// </para>
 /// </remarks>
-public sealed class BloomEffect : PostProcessEffect {
+public sealed class BloomEffect : PostProcessEffect
+{
     private const float DEFAULT_THRESHOLD = 1f;
     private const float DEFAULT_SOFT_KNEE = 0.5f;
     private const float DEFAULT_INTENSITY = 0.7f;
@@ -41,8 +42,7 @@ public sealed class BloomEffect : PostProcessEffect {
     private Color _tint = Color.White;
 
     /// <summary>Initializes a bloom effect with the approved defaults.</summary>
-    public BloomEffect() {
-    }
+    public BloomEffect() { }
 
     /// <summary>
     /// Initializes an effect over an explicit asset set. Used by tests; the app path resolves the assets
@@ -50,7 +50,8 @@ public sealed class BloomEffect : PostProcessEffect {
     /// </summary>
     /// <param name="assets">The loaded engine-owned bloom assets.</param>
     /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <see langword="null"/>.</exception>
-    internal BloomEffect(BloomAssets assets) {
+    internal BloomEffect(BloomAssets assets)
+    {
         ArgumentNullException.ThrowIfNull(assets);
         _assets = assets;
     }
@@ -67,15 +68,19 @@ public sealed class BloomEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float Threshold {
+    public float Threshold
+    {
         get => _threshold;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Threshold));
-            if (!float.IsFinite(value) || value < 0f) {
+            if (!float.IsFinite(value) || value < 0f)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(Threshold),
                     value,
-                    "The bloom threshold must be finite and non-negative.");
+                    "The bloom threshold must be finite and non-negative."
+                );
             }
 
             _threshold = value;
@@ -94,15 +99,19 @@ public sealed class BloomEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float SoftKnee {
+    public float SoftKnee
+    {
         get => _softKnee;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(SoftKnee));
-            if (!float.IsFinite(value) || value < 0f) {
+            if (!float.IsFinite(value) || value < 0f)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(SoftKnee),
                     value,
-                    "The bloom soft knee must be finite and non-negative.");
+                    "The bloom soft knee must be finite and non-negative."
+                );
             }
 
             _softKnee = value;
@@ -117,15 +126,19 @@ public sealed class BloomEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float Intensity {
+    public float Intensity
+    {
         get => _intensity;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Intensity));
-            if (!float.IsFinite(value) || value < 0f) {
+            if (!float.IsFinite(value) || value < 0f)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(Intensity),
                     value,
-                    "The bloom intensity must be finite and non-negative.");
+                    "The bloom intensity must be finite and non-negative."
+                );
             }
 
             _intensity = value;
@@ -142,15 +155,19 @@ public sealed class BloomEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float Scatter {
+    public float Scatter
+    {
         get => _scatter;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Scatter));
-            if (!float.IsFinite(value) || value < 0f) {
+            if (!float.IsFinite(value) || value < 0f)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(Scatter),
                     value,
-                    "The bloom scatter must be finite and non-negative.");
+                    "The bloom scatter must be finite and non-negative."
+                );
             }
 
             _scatter = value;
@@ -166,17 +183,23 @@ public sealed class BloomEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentException">A component is not finite.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public Color Tint {
+    public Color Tint
+    {
         get => _tint;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Tint));
-            if (!float.IsFinite(value.R)
+            if (
+                !float.IsFinite(value.R)
                 || !float.IsFinite(value.G)
                 || !float.IsFinite(value.B)
-                || !float.IsFinite(value.A)) {
+                || !float.IsFinite(value.A)
+            )
+            {
                 throw new ArgumentException(
                     "The bloom tint must have finite components.",
-                    nameof(Tint));
+                    nameof(Tint)
+                );
             }
 
             _tint = value;
@@ -184,19 +207,18 @@ public sealed class BloomEffect : PostProcessEffect {
     }
 
     /// <inheritdoc/>
-    internal override PostProcessEffectSnapshot Capture(PostProcessCaptureContext context) {
-        BloomAssets assets = _assets ?? context.BloomAssets ?? throw new InvalidOperationException(
-            "The bloom effect requires the engine's built-in bloom assets, but they are not attached "
-                + "to the camera service. The app preloads them before IGame.Setup; a test harness must "
-                + "attach the loaded BloomAssets to CameraService.");
+    internal override PostProcessEffectSnapshot Capture(PostProcessCaptureContext context)
+    {
+        BloomAssets assets = _assets
+            ?? context.BloomAssets
+            ?? throw new InvalidOperationException(
+                "The bloom effect requires the engine's built-in bloom assets, but they are not attached "
+                    + "to the camera service. The app preloads them before IGame.Setup; a test harness must "
+                    + "attach the loaded BloomAssets to CameraService."
+            );
         ObjectDisposedException.ThrowIf(assets.IsDisposed, assets);
 
-        var settings = new BloomSettings(
-            _threshold,
-            _softKnee,
-            _intensity,
-            _scatter,
-            _tint);
+        var settings = new BloomSettings(_threshold, _softKnee, _intensity, _scatter, _tint);
         return BloomEffectSnapshot.Rent(this, settings, assets);
     }
 }
@@ -214,4 +236,5 @@ internal readonly record struct BloomSettings(
     float SoftKnee,
     float Intensity,
     float Scatter,
-    Color Tint);
+    Color Tint
+);

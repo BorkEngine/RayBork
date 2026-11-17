@@ -18,7 +18,8 @@ namespace RayBork.Bake.Processors;
 /// </para>
 /// </remarks>
 [GenerateShape]
-internal sealed partial class ModelSidecar {
+internal sealed partial class ModelSidecar
+{
     /// <summary>
     /// Gets or sets the positive uniform scale applied to the source geometry. The default is
     /// <c>1.0</c>.

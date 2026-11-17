@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// exception; custom data overrides it so a MessagePack failure keeps the custom-data wording.
 /// </remarks>
 /// <typeparam name="T">The registered custom asset type.</typeparam>
-internal sealed class LoaderAssetTypeRegistration<T> : AssetTypeRegistration {
+internal sealed class LoaderAssetTypeRegistration<T> : AssetTypeRegistration
+{
     /// <summary>
     /// Initializes a registration from a loader.
     /// </summary>
@@ -25,8 +26,10 @@ internal sealed class LoaderAssetTypeRegistration<T> : AssetTypeRegistration {
     /// <exception cref="ArgumentException"><paramref name="failureDescription"/> is empty or whitespace.</exception>
     internal LoaderAssetTypeRegistration(
         IAssetLoader<T> loader,
-        string failureDescription = "could not be loaded")
-        : base(typeof(T), GetEntryType(loader)) {
+        string failureDescription = "could not be loaded"
+    )
+        : base(typeof(T), GetEntryType(loader))
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(failureDescription);
 
         Loader = loader;
@@ -44,7 +47,8 @@ internal sealed class LoaderAssetTypeRegistration<T> : AssetTypeRegistration {
     /// </summary>
     internal string FailureDescription { get; }
 
-    private static AssetEntryType GetEntryType(IAssetLoader<T> loader) {
+    private static AssetEntryType GetEntryType(IAssetLoader<T> loader)
+    {
         ArgumentNullException.ThrowIfNull(loader);
         return loader.EntryType;
     }

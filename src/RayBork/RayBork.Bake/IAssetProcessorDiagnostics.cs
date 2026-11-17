@@ -10,14 +10,16 @@ namespace RayBork.Bake;
 /// the pack. Warnings and informational messages are reported without failing unless the invocation
 /// sets <c>--warnings-as-errors</c>.
 /// </remarks>
-public interface IAssetProcessorDiagnostics {
+public interface IAssetProcessorDiagnostics
+{
     /// <summary>Reports an error.</summary>
     /// <param name="code">The stable <c>RBxxxx</c> code.</param>
     /// <param name="message">The human-readable message.</param>
     [SuppressMessage(
         "Naming",
         "CA1716",
-        Justification = "Error is the deliberate member name of the public bake diagnostics contract and pairs with Warning and Info; renaming it would break every processor.")]
+        Justification = "Error is the deliberate member name of the public bake diagnostics contract and pairs with Warning and Info; renaming it would break every processor."
+    )]
     void Error(string code, string message);
 
     /// <summary>Reports a warning.</summary>

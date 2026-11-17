@@ -28,14 +28,17 @@ namespace RayBork;
 [SuppressMessage(
     "Naming",
     "CA1711",
-    Justification = "The approved public API names the post-process stack; the type is an ordered effect list, not a collection implementation.")]
-public sealed class PostProcessStack {
+    Justification = "The approved public API names the post-process stack; the type is an ordered effect list, not a collection implementation."
+)]
+public sealed class PostProcessStack
+{
     private readonly List<PostProcessEffect> _effects = [];
     private readonly IReadOnlyList<PostProcessEffect> _effectsView;
     private bool _enabled = true;
 
     /// <summary>Initializes an enabled, empty stack.</summary>
-    public PostProcessStack() {
+    public PostProcessStack()
+    {
         _effectsView = _effects.AsReadOnly();
     }
 
@@ -47,9 +50,11 @@ public sealed class PostProcessStack {
     /// afterwards does not remove the effects from an already recorded frame.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public bool Enabled {
+    public bool Enabled
+    {
         get => _enabled;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Enabled));
             _enabled = value;
         }
@@ -64,7 +69,8 @@ public sealed class PostProcessStack {
     /// <param name="effect">The effect to append.</param>
     /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void Add(PostProcessEffect effect) {
+    public void Add(PostProcessEffect effect)
+    {
         TickThread.RequireCurrent(nameof(Add));
         ArgumentNullException.ThrowIfNull(effect);
         _effects.Add(effect);
@@ -77,7 +83,8 @@ public sealed class PostProcessStack {
     /// <returns><see langword="true"/> when an entry was removed.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public bool Remove(PostProcessEffect effect) {
+    public bool Remove(PostProcessEffect effect)
+    {
         TickThread.RequireCurrent(nameof(Remove));
         ArgumentNullException.ThrowIfNull(effect);
         return _effects.Remove(effect);
@@ -87,7 +94,8 @@ public sealed class PostProcessStack {
     /// Removes every effect. The stack keeps its <see cref="Enabled"/> value and remains usable.
     /// </summary>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public void Clear() {
+    public void Clear()
+    {
         TickThread.RequireCurrent(nameof(Clear));
         _effects.Clear();
     }

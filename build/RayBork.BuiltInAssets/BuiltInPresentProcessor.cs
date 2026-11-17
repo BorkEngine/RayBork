@@ -28,7 +28,8 @@ namespace RayBork.BuiltInAssets;
 /// per-source state, and reports every failure as <c>RB4008</c>.
 /// </para>
 /// </remarks>
-internal sealed class BuiltInPresentProcessor : IAssetProcessor {
+internal sealed class BuiltInPresentProcessor : IAssetProcessor
+{
     private const string VERTEX_SOURCE = "Present.vert.glsl";
     private const string FRAGMENT_SOURCE = "Present.frag.glsl";
     private const string PRESENT_MARKER = "present";
@@ -41,7 +42,8 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
 
     private static readonly UTF8Encoding _strictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: true);
+        throwOnInvalidBytes: true
+    );
 
     private readonly string _engineShadersDirectory;
 
@@ -51,7 +53,8 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
     /// <c>Present.frag.glsl</c> sources.
     /// </param>
     /// <exception cref="ArgumentException"><paramref name="engineShadersDirectory"/> is empty.</exception>
-    internal BuiltInPresentProcessor(string engineShadersDirectory) {
+    internal BuiltInPresentProcessor(string engineShadersDirectory)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(engineShadersDirectory);
         _engineShadersDirectory = Path.GetFullPath(engineShadersDirectory);
     }
@@ -69,48 +72,60 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
     public ITypeShape? SidecarShape => null;
 
     /// <inheritdoc/>
-    public void Process(AssetProcessorContext context) {
+    public void Process(AssetProcessorContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!TryReadMarker(context, out string marker)) {
+        if (!TryReadMarker(context, out string marker))
+        {
             return;
         }
 
-        if (!string.Equals(marker, PRESENT_MARKER, StringComparison.Ordinal)) {
+        if (!string.Equals(marker, PRESENT_MARKER, StringComparison.Ordinal))
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in present marker '{context.RelativePath}' contains '{marker}'; the "
-                    + $"marker text must be '{PRESENT_MARKER}'.");
+                    + $"marker text must be '{PRESENT_MARKER}'."
+            );
             return;
         }
 
         string vertexPath = Path.Combine(_engineShadersDirectory, VERTEX_SOURCE);
         string fragmentPath = Path.Combine(_engineShadersDirectory, FRAGMENT_SOURCE);
-        if (!File.Exists(vertexPath) || !File.Exists(fragmentPath)) {
+        if (!File.Exists(vertexPath) || !File.Exists(fragmentPath))
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in present marker '{context.RelativePath}' needs '{VERTEX_SOURCE}' and "
-                    + $"'{FRAGMENT_SOURCE}' in '{_engineShadersDirectory}', but the pair is missing.");
+                    + $"'{FRAGMENT_SOURCE}' in '{_engineShadersDirectory}', but the pair is missing."
+            );
             return;
         }
 
-        if (!TryRegisterInput(context, vertexPath) || !TryRegisterInput(context, fragmentPath)) {
+        if (!TryRegisterInput(context, vertexPath) || !TryRegisterInput(context, fragmentPath))
+        {
             return;
         }
 
-        if (!TryReadStageSource(context, vertexPath, "vertex", out string vertexSource)
-            || !TryReadStageSource(context, fragmentPath, "fragment", out string fragmentSource)) {
+        if (
+            !TryReadStageSource(context, vertexPath, "vertex", out string vertexSource)
+            || !TryReadStageSource(context, fragmentPath, "fragment", out string fragmentSource)
+        )
+        {
             return;
         }
 
-        if (!TryCompileStage(
+        if (
+            !TryCompileStage(
                 context,
                 vertexSource,
                 vertexPath,
                 "vertex",
                 ShaderKind.GlslVertexShader,
                 SpirvExecutionModel.Vertex,
-                out byte[] vertexSpirV)
+                out byte[] vertexSpirV
+            )
             || !TryCompileStage(
                 context,
                 fragmentSource,
@@ -118,13 +133,17 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
                 "fragment",
                 ShaderKind.GlslFragmentShader,
                 SpirvExecutionModel.Fragment,
-                out byte[] fragmentSpirV)) {
+                out byte[] fragmentSpirV
+            )
+        )
+        {
             return;
         }
 
         string vertexPayload = context.BaseAssetPath + VERTEX_PAYLOAD_SUFFIX;
         string fragmentPayload = context.BaseAssetPath + FRAGMENT_PAYLOAD_SUFFIX;
-        var descriptor = new ShaderAssetDescriptor {
+        var descriptor = new ShaderAssetDescriptor
+        {
             AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = vertexPayload,
             FragmentPayload = fragmentPayload,
@@ -141,58 +160,85 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
         context.Outputs.AddData(fragmentPayload, fragmentSpirV, GPU_PAYLOAD_ALIGNMENT);
     }
 
-    private static bool TryReadMarker(AssetProcessorContext context, out string marker) {
+    private static bool TryReadMarker(AssetProcessorContext context, out string marker)
+    {
         marker = string.Empty;
 
         byte[] bytes;
-        try {
+        try
+        {
             bytes = File.ReadAllBytes(context.SourcePath);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Failed to read the built-in present marker '{context.RelativePath}': "
-                    + exception.Message);
+                    + exception.Message
+            );
             return false;
         }
 
         ReadOnlySpan<byte> content = bytes;
-        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF) {
+        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF)
+        {
             content = content[3..];
         }
 
         string text;
-        try {
+        try
+        {
             text = _strictUtf8.GetString(content);
-        } catch (DecoderFallbackException) {
+        }
+        catch (DecoderFallbackException)
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
-                $"The built-in present marker '{context.RelativePath}' is not valid UTF-8.");
+                $"The built-in present marker '{context.RelativePath}' is not valid UTF-8."
+            );
             return false;
         }
 
         marker = text.Trim();
-        if (marker.Length == 0) {
+        if (marker.Length == 0)
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in present marker '{context.RelativePath}' is empty; it must contain "
-                    + $"'{PRESENT_MARKER}'.");
+                    + $"'{PRESENT_MARKER}'."
+            );
             return false;
         }
 
         return true;
     }
 
-    private static bool TryRegisterInput(AssetProcessorContext context, string path) {
-        try {
+    private static bool TryRegisterInput(AssetProcessorContext context, string path)
+    {
+        try
+        {
             context.AddInput(path);
             return true;
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or ArgumentException or NotSupportedException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or ArgumentException
+                        or NotSupportedException
+            )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in present marker '{context.RelativePath}' could not register "
-                    + $"'{Path.GetFileName(path)}' as a tracked input: {exception.Message}");
+                    + $"'{Path.GetFileName(path)}' as a tracked input: {exception.Message}"
+            );
             return false;
         }
     }
@@ -201,35 +247,51 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
         AssetProcessorContext context,
         string path,
         string stage,
-        out string source) {
+        out string source
+    )
+    {
         source = string.Empty;
         string fileName = Path.GetFileName(path);
 
         byte[] bytes;
-        try {
+        try
+        {
             bytes = File.ReadAllBytes(path);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Failed to read the engine-owned present {stage} shader '{fileName}' of "
-                    + $"'{context.RelativePath}': {exception.Message}");
+                    + $"'{context.RelativePath}': {exception.Message}"
+            );
             return false;
         }
 
         ReadOnlySpan<byte> content = bytes;
-        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF) {
+        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF)
+        {
             content = content[3..];
         }
 
-        try {
+        try
+        {
             source = _strictUtf8.GetString(content);
             return true;
-        } catch (DecoderFallbackException) {
+        }
+        catch (DecoderFallbackException)
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The engine-owned present {stage} shader '{fileName}' of "
-                    + $"'{context.RelativePath}' is not valid UTF-8.");
+                    + $"'{context.RelativePath}' is not valid UTF-8."
+            );
             return false;
         }
     }
@@ -241,34 +303,46 @@ internal sealed class BuiltInPresentProcessor : IAssetProcessor {
         string stage,
         ShaderKind kind,
         SpirvExecutionModel executionModel,
-        out byte[] spirV) {
+        out byte[] spirV
+    )
+    {
         spirV = [];
         string fileName = Path.GetFileName(path);
 
-        if (!GlslCompiler.TryCompile(
+        if (
+            !GlslCompiler.TryCompile(
                 source,
                 fileName,
                 kind,
                 ENTRY_POINT,
                 out spirV,
-                out string message)) {
+                out string message
+            )
+        )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Failed to compile the engine-owned present {stage} shader '{fileName}' of "
-                    + $"'{context.RelativePath}': {message}");
+                    + $"'{context.RelativePath}': {message}"
+            );
             return false;
         }
 
-        if (!SpirvEntryPointInspector.TryValidate(
+        if (
+            !SpirvEntryPointInspector.TryValidate(
                 spirV,
                 ENTRY_POINT,
                 executionModel,
-                out string problem)) {
+                out string problem
+            )
+        )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The engine-owned present {stage} shader '{fileName}' of "
                     + $"'{context.RelativePath}' is not a valid SPIR-V module for entry point "
-                    + $"'{ENTRY_POINT}': {problem}");
+                    + $"'{ENTRY_POINT}': {problem}"
+            );
             return false;
         }
 

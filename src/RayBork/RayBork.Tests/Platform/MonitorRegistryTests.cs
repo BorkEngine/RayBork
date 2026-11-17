@@ -2,14 +2,37 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class MonitorRegistryTests {
-    private static readonly MonitorInfo _first = new(10, "First", new Rect(0f, 0f, 1920f, 1080f), new Rect(0f, 0f, 1920f, 1040f), 1f, 60);
-    private static readonly MonitorInfo _second = new(20, "Second", new Rect(1920f, 0f, 2560f, 1440f), new Rect(1920f, 0f, 2560f, 1400f), 1.5f, 144);
-    private static readonly MonitorInfo _third = new(30, "Third", new Rect(-1280f, 0f, 1280f, 720f), new Rect(-1280f, 0f, 1280f, 720f), 2f, 75);
+public sealed class MonitorRegistryTests
+{
+    private static readonly MonitorInfo _first = new(
+        10,
+        "First",
+        new Rect(0f, 0f, 1920f, 1080f),
+        new Rect(0f, 0f, 1920f, 1040f),
+        1f,
+        60
+    );
+    private static readonly MonitorInfo _second = new(
+        20,
+        "Second",
+        new Rect(1920f, 0f, 2560f, 1440f),
+        new Rect(1920f, 0f, 2560f, 1400f),
+        1.5f,
+        144
+    );
+    private static readonly MonitorInfo _third = new(
+        30,
+        "Third",
+        new Rect(-1280f, 0f, 1280f, 720f),
+        new Rect(-1280f, 0f, 1280f, 720f),
+        2f,
+        75
+    );
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FirstUpdateAssignsSequentialStableIndices() {
+    public void FirstUpdateAssignsSequentialStableIndices()
+    {
         MonitorRegistry registry = new();
 
         registry.Update([_first, _second], _first.DisplayId);
@@ -24,7 +47,8 @@ public sealed class MonitorRegistryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReorderingDisplaysKeepsTheirIndicesAndSortsByIndex() {
+    public void ReorderingDisplaysKeepsTheirIndicesAndSortsByIndex()
+    {
         MonitorRegistry registry = new();
         registry.Update([_first, _second], _first.DisplayId);
 
@@ -39,7 +63,8 @@ public sealed class MonitorRegistryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RemovingAndReaddingADisplayKeepsItsOriginalIndex() {
+    public void RemovingAndReaddingADisplayKeepsItsOriginalIndex()
+    {
         MonitorRegistry registry = new();
         registry.Update([_first, _second, _third], _first.DisplayId);
 
@@ -59,7 +84,8 @@ public sealed class MonitorRegistryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MonitorDataIsSnapshotted() {
+    public void MonitorDataIsSnapshotted()
+    {
         MonitorRegistry registry = new();
 
         registry.Update([_second], _second.DisplayId);
@@ -74,7 +100,8 @@ public sealed class MonitorRegistryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CurrentMonitorFallsBackToPrimaryThenFirst() {
+    public void CurrentMonitorFallsBackToPrimaryThenFirst()
+    {
         MonitorRegistry registry = new();
         registry.Update([_first, _second], _second.DisplayId);
 
@@ -88,7 +115,8 @@ public sealed class MonitorRegistryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptyRegistryReturnsDefaultMonitor() {
+    public void EmptyRegistryReturnsDefaultMonitor()
+    {
         MonitorRegistry registry = new();
 
         Monitor current = registry.GetCurrent(1);
@@ -100,13 +128,17 @@ public sealed class MonitorRegistryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateDisplayIdsAreRejected() {
+    public void DuplicateDisplayIdsAreRejected()
+    {
         MonitorRegistry registry = new();
 
-        Assert.Throws<InvalidOperationException>(() => registry.Update([_first, _first], _first.DisplayId));
+        Assert.Throws<InvalidOperationException>(() =>
+            registry.Update([_first, _first], _first.DisplayId)
+        );
     }
 
-    private static uint GetDisplayIdForIndex(MonitorRegistry registry, int index) {
+    private static uint GetDisplayIdForIndex(MonitorRegistry registry, int index)
+    {
         return registry.TryGetDisplayId(index, out uint displayId)
             ? displayId
             : throw new InvalidOperationException($"No display id for index {index}.");

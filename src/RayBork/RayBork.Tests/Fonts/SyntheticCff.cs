@@ -15,7 +15,8 @@ namespace RayBork.Tests.Fonts;
 /// through <see cref="Build"/> or the whole face through <see cref="SyntheticFontBuilder.FindTable"/>
 /// for corrupt-input cases; the offsets captured by <see cref="Build"/> locate the structures.
 /// </remarks>
-internal sealed class SyntheticCff {
+internal sealed class SyntheticCff
+{
     private const int CFF_MAJOR_VERSION = 1;
     private const int CFF_MINOR_VERSION = 0;
     private const int CFF_HEADER_SIZE = 4;
@@ -59,8 +60,7 @@ internal sealed class SyntheticCff {
     private int? _nominalWidthX;
     private bool _isCid;
 
-    private SyntheticCff() {
-    }
+    private SyntheticCff() { }
 
     /// <summary>Gets the number of charstrings added so far.</summary>
     internal int GlyphCount => _charStrings.Count;
@@ -101,7 +101,8 @@ internal sealed class SyntheticCff {
     /// <summary>Adds one glyph charstring.</summary>
     /// <param name="charString">The complete Type 2 charstring.</param>
     /// <returns>The glyph identifier.</returns>
-    internal int AddGlyph(byte[] charString) {
+    internal int AddGlyph(byte[] charString)
+    {
         _charStrings.Add(charString);
         return _charStrings.Count - 1;
     }
@@ -113,33 +114,38 @@ internal sealed class SyntheticCff {
         AddGlyph(SyntheticCffCharStrings.Concat(fragments));
 
     /// <summary>Sets the Global Subr INDEX entries.</summary>
-    internal SyntheticCff WithGlobalSubrs(params byte[][] subrs) {
+    internal SyntheticCff WithGlobalSubrs(params byte[][] subrs)
+    {
         _globalSubrs.Clear();
         _globalSubrs.AddRange(subrs);
         return this;
     }
 
     /// <summary>Sets the top-level Private DICT local subroutine entries.</summary>
-    internal SyntheticCff WithLocalSubrs(params byte[][] subrs) {
+    internal SyntheticCff WithLocalSubrs(params byte[][] subrs)
+    {
         _localSubrs.Clear();
         _localSubrs.AddRange(subrs);
         return this;
     }
 
     /// <summary>Sets a charset of format 0 with one SID per glyph after <c>.notdef</c>.</summary>
-    internal SyntheticCff WithCharset(params int[] sids) => WithCharsetFormat(CHARSET_FORMAT_0, sids);
+    internal SyntheticCff WithCharset(params int[] sids) =>
+        WithCharsetFormat(CHARSET_FORMAT_0, sids);
 
     /// <summary>Sets a charset with one SID per glyph after <c>.notdef</c>.</summary>
     /// <param name="format">The charset format: 0, 1, or 2.</param>
     /// <param name="sids">The SIDs for glyphs 1..n-1.</param>
-    internal SyntheticCff WithCharsetFormat(int format, params int[] sids) {
+    internal SyntheticCff WithCharsetFormat(int format, params int[] sids)
+    {
         _predefinedCharset = null;
         _charset = [.. EncodeCharset(format, sids)];
         return this;
     }
 
     /// <summary>Uses raw charset bytes, including the format byte.</summary>
-    internal SyntheticCff WithRawCharset(byte[] bytes) {
+    internal SyntheticCff WithRawCharset(byte[] bytes)
+    {
         _predefinedCharset = null;
         _charset = bytes;
         return this;
@@ -147,45 +153,52 @@ internal sealed class SyntheticCff {
 
     /// <summary>Uses a predefined charset offset instead of a charset table.</summary>
     /// <param name="offset">The predefined charset offset: 0, 1, or 2.</param>
-    internal SyntheticCff WithPredefinedCharset(int offset) {
+    internal SyntheticCff WithPredefinedCharset(int offset)
+    {
         _charset = null;
         _predefinedCharset = offset;
         return this;
     }
 
     /// <summary>Sets the Top DICT FontMatrix.</summary>
-    internal SyntheticCff WithFontMatrix(params double[] values) {
+    internal SyntheticCff WithFontMatrix(params double[] values)
+    {
         _fontMatrix = values;
         return this;
     }
 
     /// <summary>Sets the Top DICT Encoding operator value.</summary>
-    internal SyntheticCff WithEncoding(int value) {
+    internal SyntheticCff WithEncoding(int value)
+    {
         _encoding = value;
         return this;
     }
 
     /// <summary>Appends raw bytes to the Top DICT after the generated keys.</summary>
-    internal SyntheticCff WithTopDictExtra(byte[] bytes) {
+    internal SyntheticCff WithTopDictExtra(byte[] bytes)
+    {
         _topDictExtra = _topDictExtra is null ? bytes : [.. _topDictExtra, .. bytes];
         return this;
     }
 
     /// <summary>Appends raw bytes to the top-level Private DICT before the generated keys.</summary>
-    internal SyntheticCff WithPrivateDictExtra(byte[] bytes) {
+    internal SyntheticCff WithPrivateDictExtra(byte[] bytes)
+    {
         _privateDictExtra = _privateDictExtra is null ? bytes : [.. _privateDictExtra, .. bytes];
         return this;
     }
 
     /// <summary>Adds the default and nominal widths to the top-level Private DICT.</summary>
-    internal SyntheticCff WithPrivateWidths(int defaultWidthX, int nominalWidthX) {
+    internal SyntheticCff WithPrivateWidths(int defaultWidthX, int nominalWidthX)
+    {
         _defaultWidthX = defaultWidthX;
         _nominalWidthX = nominalWidthX;
         return this;
     }
 
     /// <summary>Makes the table CID-keyed and clears the predefined charset.</summary>
-    internal SyntheticCff AsCid() {
+    internal SyntheticCff AsCid()
+    {
         _isCid = true;
         _predefinedCharset = null;
         return this;
@@ -200,7 +213,8 @@ internal sealed class SyntheticCff {
     /// <param name="privateDictExtra">Raw bytes written before the generated Private DICT keys.</param>
     /// <param name="localSubrs">The Font DICT local subroutine entries.</param>
     /// <returns>The Font DICT index.</returns>
-    internal int AddFontDictWithPrivate(byte[] privateDictExtra, params byte[][] localSubrs) {
+    internal int AddFontDictWithPrivate(byte[] privateDictExtra, params byte[][] localSubrs)
+    {
         _fontDicts.Add(new SyntheticCffFontDict(privateDictExtra, [.. localSubrs]));
         return _fontDicts.Count - 1;
     }
@@ -208,12 +222,15 @@ internal sealed class SyntheticCff {
     /// <summary>Adds a Font DICT that reuses another Font DICT's Private DICT and local subroutines.</summary>
     /// <param name="fontDictIndex">The Font DICT to share.</param>
     /// <returns>The new Font DICT index.</returns>
-    internal int AddSharedFontDict(int fontDictIndex) {
-        if ((uint)fontDictIndex >= (uint)_fontDicts.Count) {
+    internal int AddSharedFontDict(int fontDictIndex)
+    {
+        if ((uint)fontDictIndex >= (uint)_fontDicts.Count)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(fontDictIndex),
                 fontDictIndex,
-                $"The table has {_fontDicts.Count} Font DICT(s).");
+                $"The table has {_fontDicts.Count} Font DICT(s)."
+            );
         }
 
         _fontDicts.Add(_fontDicts[fontDictIndex]);
@@ -221,17 +238,20 @@ internal sealed class SyntheticCff {
     }
 
     /// <summary>Builds an FDSelect format 0 table from one Font DICT index per glyph.</summary>
-    internal SyntheticCff WithFdSelectFormat0(params byte[] fontDictIndices) {
+    internal SyntheticCff WithFdSelectFormat0(params byte[] fontDictIndices)
+    {
         _fdSelect = [(byte)FD_SELECT_FORMAT_0, .. fontDictIndices];
         _fdRanges.Clear();
         return this;
     }
 
     /// <summary>Builds an FDSelect format 3 table from ranges; the sentinel is appended.</summary>
-    internal SyntheticCff WithFdSelectFormat3(params (int First, int FontDict)[] ranges) {
+    internal SyntheticCff WithFdSelectFormat3(params (int First, int FontDict)[] ranges)
+    {
         _fdSelect = null;
         _fdRanges.Clear();
-        foreach ((int first, int fontDict) in ranges) {
+        foreach ((int first, int fontDict) in ranges)
+        {
             _fdRanges.Add(new SyntheticFdRange(first, (byte)fontDict));
         }
 
@@ -239,7 +259,8 @@ internal sealed class SyntheticCff {
     }
 
     /// <summary>Uses raw FDSelect bytes.</summary>
-    internal SyntheticCff WithRawFdSelect(byte[] bytes) {
+    internal SyntheticCff WithRawFdSelect(byte[] bytes)
+    {
         _fdSelect = bytes;
         _fdRanges.Clear();
         return this;
@@ -247,38 +268,57 @@ internal sealed class SyntheticCff {
 
     /// <summary>Builds the complete <c>CFF </c> table bytes.</summary>
     /// <exception cref="InvalidOperationException">The configured structures are inconsistent.</exception>
-    internal byte[] Build() {
+    internal byte[] Build()
+    {
         int glyphCount = _charStrings.Count;
-        if (glyphCount == 0) {
-            throw new InvalidOperationException("A synthetic CFF table needs at least one charstring.");
+        if (glyphCount == 0)
+        {
+            throw new InvalidOperationException(
+                "A synthetic CFF table needs at least one charstring."
+            );
         }
 
-        if (glyphCount > MAX_INDEX_COUNT) {
-            throw new InvalidOperationException($"Synthetic glyph count {glyphCount} exceeds {MAX_INDEX_COUNT}.");
+        if (glyphCount > MAX_INDEX_COUNT)
+        {
+            throw new InvalidOperationException(
+                $"Synthetic glyph count {glyphCount} exceeds {MAX_INDEX_COUNT}."
+            );
         }
 
-        if (_isCid && _fontDicts.Count == 0) {
-            throw new InvalidOperationException("A CID-keyed synthetic CFF table needs at least one Font DICT.");
+        if (_isCid && _fontDicts.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "A CID-keyed synthetic CFF table needs at least one Font DICT."
+            );
         }
 
-        if (!_isCid && (_fontDicts.Count > 0 || _fdSelect is not null || _fdRanges.Count > 0)) {
-            throw new InvalidOperationException("Font DICTs and FDSelect are only valid for a CID-keyed table.");
+        if (!_isCid && (_fontDicts.Count > 0 || _fdSelect is not null || _fdRanges.Count > 0))
+        {
+            throw new InvalidOperationException(
+                "Font DICTs and FDSelect are only valid for a CID-keyed table."
+            );
         }
 
-        if (_fontMatrix is not null && _fontMatrix.Length != FONT_MATRIX_OPERAND_COUNT) {
+        if (_fontMatrix is not null && _fontMatrix.Length != FONT_MATRIX_OPERAND_COUNT)
+        {
             throw new InvalidOperationException("A synthetic FontMatrix needs six operands.");
         }
 
         byte[]? charsetData = null;
-        if (_charset is not null) {
+        if (_charset is not null)
+        {
             charsetData = _charset;
         }
 
         byte[]? fdSelectData = null;
-        if (_isCid) {
-            if (_fdRanges.Count > 0) {
+        if (_isCid)
+        {
+            if (_fdRanges.Count > 0)
+            {
                 fdSelectData = EncodeFdSelectFormat3(glyphCount);
-            } else {
+            }
+            else
+            {
                 fdSelectData = _fdSelect ?? [(byte)FD_SELECT_FORMAT_0, .. new byte[glyphCount]];
             }
         }
@@ -288,39 +328,53 @@ internal sealed class SyntheticCff {
         byte[] globalSubrIndex = EncodeIndex(_globalSubrs);
         byte[] charStringsIndex = EncodeIndex(_charStrings);
 
-        bool hasTopPrivate = !_isCid
-            && (_localSubrs.Count > 0
+        bool hasTopPrivate =
+            !_isCid
+            && (
+                _localSubrs.Count > 0
                 || _privateDictExtra is { Length: > 0 }
                 || _defaultWidthX is not null
-                || _nominalWidthX is not null);
+                || _nominalWidthX is not null
+            );
         int topPrivateLength = hasTopPrivate
-            ? PrivateDictLength(_privateDictExtra, _defaultWidthX, _nominalWidthX, _localSubrs.Count > 0)
+            ? PrivateDictLength(
+                _privateDictExtra,
+                _defaultWidthX,
+                _nominalWidthX,
+                _localSubrs.Count > 0
+            )
             : 0;
-        byte[] localSubrsIndex = hasTopPrivate && _localSubrs.Count > 0
-            ? EncodeIndex(_localSubrs)
-            : [];
+        byte[] localSubrsIndex =
+            hasTopPrivate && _localSubrs.Count > 0 ? EncodeIndex(_localSubrs) : [];
 
-        Dictionary<SyntheticCffFontDict, int> uniqueFontDictIndices = new(ReferenceEqualityComparer.Instance);
+        Dictionary<SyntheticCffFontDict, int> uniqueFontDictIndices = new(
+            ReferenceEqualityComparer.Instance
+        );
         List<SyntheticCffFontDict> uniqueFontDicts = [];
         List<int> uniquePrivateLengths = [];
         List<int> uniqueSubrLengths = [];
         int[] fontDictUnique = new int[_fontDicts.Count];
         int[] fontDictLengths = new int[_fontDicts.Count];
         int fontDictDataLength = 0;
-        for (int index = 0; index < _fontDicts.Count; index++) {
+        for (int index = 0; index < _fontDicts.Count; index++)
+        {
             SyntheticCffFontDict fontDict = _fontDicts[index];
-            if (!uniqueFontDictIndices.TryGetValue(fontDict, out int unique)) {
+            if (!uniqueFontDictIndices.TryGetValue(fontDict, out int unique))
+            {
                 unique = uniqueFontDicts.Count;
                 uniqueFontDictIndices.Add(fontDict, unique);
                 uniqueFontDicts.Add(fontDict);
-                uniquePrivateLengths.Add(PrivateDictLength(
-                    fontDict.PrivateDictExtra,
-                    null,
-                    null,
-                    fontDict.LocalSubrs.Count > 0));
-                uniqueSubrLengths.Add(fontDict.LocalSubrs.Count > 0
-                    ? EncodeIndex(fontDict.LocalSubrs).Length
-                    : 0);
+                uniquePrivateLengths.Add(
+                    PrivateDictLength(
+                        fontDict.PrivateDictExtra,
+                        null,
+                        null,
+                        fontDict.LocalSubrs.Count > 0
+                    )
+                );
+                uniqueSubrLengths.Add(
+                    fontDict.LocalSubrs.Count > 0 ? EncodeIndex(fontDict.LocalSubrs).Length : 0
+                );
             }
 
             fontDictUnique[index] = unique;
@@ -335,7 +389,8 @@ internal sealed class SyntheticCff {
             privateLength: topPrivateLength,
             privateOffset: 0,
             fdArrayOffset: 0,
-            fdSelectOffset: 0);
+            fdSelectOffset: 0
+        );
         int topDictIndexLength = IndexLength(1, probeTopDict.Length);
 
         int offset = CFF_HEADER_SIZE;
@@ -347,13 +402,15 @@ internal sealed class SyntheticCff {
         int charStringsOffset = offset;
         offset += charStringsIndex.Length;
         int charsetOffset = 0;
-        if (charsetData is not null) {
+        if (charsetData is not null)
+        {
             charsetOffset = offset;
             offset += charsetData.Length;
         }
 
         int privateOffset = 0;
-        if (hasTopPrivate) {
+        if (hasTopPrivate)
+        {
             privateOffset = offset;
             offset += topPrivateLength + localSubrsIndex.Length;
         }
@@ -361,11 +418,14 @@ internal sealed class SyntheticCff {
         int fdArrayOffset = 0;
         int fdSelectOffset = 0;
         int[] uniquePrivateOffsets = new int[uniqueFontDicts.Count];
-        if (_isCid) {
+        if (_isCid)
+        {
             fdArrayOffset = offset;
             offset += IndexLength(_fontDicts.Count, fontDictDataLength);
-            for (int unique = 0; unique < uniqueFontDicts.Count; unique++) {
-                if (uniquePrivateLengths[unique] == 0) {
+            for (int unique = 0; unique < uniqueFontDicts.Count; unique++)
+            {
+                if (uniquePrivateLengths[unique] == 0)
+                {
                     continue;
                 }
 
@@ -383,14 +443,21 @@ internal sealed class SyntheticCff {
             topPrivateLength,
             privateOffset,
             fdArrayOffset,
-            fdSelectOffset);
-        if (topDict.Length != probeTopDict.Length) {
-            throw new InvalidOperationException("The synthetic Top DICT length changed between passes.");
+            fdSelectOffset
+        );
+        if (topDict.Length != probeTopDict.Length)
+        {
+            throw new InvalidOperationException(
+                "The synthetic Top DICT length changed between passes."
+            );
         }
 
         byte[] topDictIndex = EncodeIndex([topDict]);
-        if (topDictIndex.Length != topDictIndexLength) {
-            throw new InvalidOperationException("The synthetic Top DICT INDEX length changed between passes.");
+        if (topDictIndex.Length != topDictIndexLength)
+        {
+            throw new InvalidOperationException(
+                "The synthetic Top DICT INDEX length changed between passes."
+            );
         }
 
         byte[] table = new byte[offset];
@@ -404,35 +471,47 @@ internal sealed class SyntheticCff {
         WriteBlock(
             table,
             topDictIndexOffset + topDictIndex.Length + stringIndex.Length,
-            globalSubrIndex);
+            globalSubrIndex
+        );
         WriteBlock(table, charStringsOffset, charStringsIndex);
-        if (charsetData is not null) {
+        if (charsetData is not null)
+        {
             WriteBlock(table, charsetOffset, charsetData);
         }
 
-        if (hasTopPrivate) {
+        if (hasTopPrivate)
+        {
             byte[] privateDict = EncodePrivateDict(
                 _privateDictExtra,
                 _defaultWidthX,
                 _nominalWidthX,
                 _localSubrs.Count > 0,
-                topPrivateLength);
+                topPrivateLength
+            );
             WriteBlock(table, privateOffset, privateDict);
             WriteBlock(table, privateOffset + topPrivateLength, localSubrsIndex);
         }
 
-        if (_isCid) {
+        if (_isCid)
+        {
             byte[][] fontDicts = new byte[_fontDicts.Count][];
-            for (int index = 0; index < _fontDicts.Count; index++) {
+            for (int index = 0; index < _fontDicts.Count; index++)
+            {
                 int unique = fontDictUnique[index];
-                fontDicts[index] = fontDictLengths[index] == 0
-                    ? []
-                    : EncodeFontDict(uniquePrivateLengths[unique], uniquePrivateOffsets[unique]);
+                fontDicts[index] =
+                    fontDictLengths[index] == 0
+                        ? []
+                        : EncodeFontDict(
+                            uniquePrivateLengths[unique],
+                            uniquePrivateOffsets[unique]
+                        );
             }
 
             WriteBlock(table, fdArrayOffset, EncodeIndex(fontDicts));
-            for (int unique = 0; unique < uniqueFontDicts.Count; unique++) {
-                if (uniquePrivateLengths[unique] == 0) {
+            for (int unique = 0; unique < uniqueFontDicts.Count; unique++)
+            {
+                if (uniquePrivateLengths[unique] == 0)
+                {
                     continue;
                 }
 
@@ -442,13 +521,16 @@ internal sealed class SyntheticCff {
                     null,
                     null,
                     fontDict.LocalSubrs.Count > 0,
-                    uniquePrivateLengths[unique]);
+                    uniquePrivateLengths[unique]
+                );
                 WriteBlock(table, uniquePrivateOffsets[unique], privateDict);
-                if (fontDict.LocalSubrs.Count > 0) {
+                if (fontDict.LocalSubrs.Count > 0)
+                {
                     WriteBlock(
                         table,
                         uniquePrivateOffsets[unique] + uniquePrivateLengths[unique],
-                        EncodeIndex(fontDict.LocalSubrs));
+                        EncodeIndex(fontDict.LocalSubrs)
+                    );
                 }
             }
 
@@ -473,30 +555,40 @@ internal sealed class SyntheticCff {
     /// <param name="unitsPerEm">The face <c>head</c> units per em.</param>
     /// <param name="mappings">The cmap format 4 mappings; a default maps <c>A</c> when omitted.</param>
     /// <returns>The face bytes.</returns>
-    internal byte[] BuildFace(int unitsPerEm, params (int Codepoint, int GlyphId)[] mappings) {
-        if (_charStrings.Count == 0) {
-            throw new InvalidOperationException("A synthetic CFF face needs at least one charstring.");
+    internal byte[] BuildFace(int unitsPerEm, params (int Codepoint, int GlyphId)[] mappings)
+    {
+        if (_charStrings.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "A synthetic CFF face needs at least one charstring."
+            );
         }
 
         SyntheticFontBuilder face = SyntheticFontBuilder.Create().WithUnitsPerEm(unitsPerEm);
-        while (face.GlyphCount < _charStrings.Count) {
+        while (face.GlyphCount < _charStrings.Count)
+        {
             face.AddEmpty(500);
         }
 
-        (int Codepoint, int GlyphId)[] cmap = mappings.Length == 0
-            ? [(0x41, _charStrings.Count > 1 ? 1 : 0)]
-            : mappings;
+        (int Codepoint, int GlyphId)[] cmap =
+            mappings.Length == 0 ? [(0x41, _charStrings.Count > 1 ? 1 : 0)] : mappings;
         return face.UseCff(Build()).WithCmap(4, cmap).Build();
     }
 
-    private static byte[] EncodeCharset(int format, int[] sids) {
-        if (format is not CHARSET_FORMAT_0 and not CHARSET_FORMAT_1 and not CHARSET_FORMAT_2) {
-            throw new InvalidOperationException($"Synthetic charset format {format} is not 0, 1, or 2.");
+    private static byte[] EncodeCharset(int format, int[] sids)
+    {
+        if (format is not CHARSET_FORMAT_0 and not CHARSET_FORMAT_1 and not CHARSET_FORMAT_2)
+        {
+            throw new InvalidOperationException(
+                $"Synthetic charset format {format} is not 0, 1, or 2."
+            );
         }
 
         List<byte> data = [(byte)format];
-        if (format == CHARSET_FORMAT_0) {
-            foreach (int sid in sids) {
+        if (format == CHARSET_FORMAT_0)
+        {
+            foreach (int sid in sids)
+            {
                 WriteUInt16(data, sid);
             }
 
@@ -504,21 +596,28 @@ internal sealed class SyntheticCff {
         }
 
         int position = 0;
-        while (position < sids.Length) {
+        while (position < sids.Length)
+        {
             int first = sids[position];
             int run = 1;
             int maximum = format == CHARSET_FORMAT_1 ? MAX_FORMAT_1_RUN : 0x10000;
-            while (position + run < sids.Length
+            while (
+                position + run < sids.Length
                 && run < maximum
                 && sids[position + run] == first + run
-                && first + run <= 0xFFFF) {
+                && first + run <= 0xFFFF
+            )
+            {
                 run++;
             }
 
             WriteUInt16(data, first);
-            if (format == CHARSET_FORMAT_1) {
+            if (format == CHARSET_FORMAT_1)
+            {
                 data.Add((byte)(run - 1));
-            } else {
+            }
+            else
+            {
                 WriteUInt16(data, run - 1);
             }
 
@@ -528,10 +627,12 @@ internal sealed class SyntheticCff {
         return [.. data];
     }
 
-    private byte[] EncodeFdSelectFormat3(int glyphCount) {
+    private byte[] EncodeFdSelectFormat3(int glyphCount)
+    {
         List<byte> data = [(byte)FD_SELECT_FORMAT_3];
         WriteUInt16(data, _fdRanges.Count);
-        foreach (SyntheticFdRange range in _fdRanges) {
+        foreach (SyntheticFdRange range in _fdRanges)
+        {
             WriteUInt16(data, range.First);
             data.Add(range.FontDict);
         }
@@ -546,25 +647,34 @@ internal sealed class SyntheticCff {
         int privateLength,
         int privateOffset,
         int fdArrayOffset,
-        int fdSelectOffset) {
+        int fdSelectOffset
+    )
+    {
         List<byte> dict = [];
         AppendKey(dict, CHARSTRINGS_OPERATOR, charStringsOffset);
-        if (_charset is not null) {
+        if (_charset is not null)
+        {
             AppendKey(dict, CHARSET_OPERATOR, charsetOffset);
-        } else if (_predefinedCharset is int predefined) {
+        }
+        else if (_predefinedCharset is int predefined)
+        {
             AppendKey(dict, CHARSET_OPERATOR, predefined);
         }
 
-        if (_encoding is int encoding) {
+        if (_encoding is int encoding)
+        {
             AppendKey(dict, ENCODING_OPERATOR, encoding);
         }
 
-        if (!_isCid && privateLength != 0) {
+        if (!_isCid && privateLength != 0)
+        {
             AppendKey(dict, PRIVATE_OPERATOR, privateLength, privateOffset);
         }
 
-        if (_fontMatrix is not null) {
-            foreach (double value in _fontMatrix) {
+        if (_fontMatrix is not null)
+        {
+            foreach (double value in _fontMatrix)
+            {
                 AppendReal(dict, value);
             }
 
@@ -572,7 +682,8 @@ internal sealed class SyntheticCff {
             dict.Add(FONT_MATRIX_ESCAPE);
         }
 
-        if (_isCid) {
+        if (_isCid)
+        {
             // ROS: registry SID, ordering SID, supplement; the parser only records that it is CID.
             dict.Add(139);
             dict.Add(139);
@@ -583,22 +694,26 @@ internal sealed class SyntheticCff {
             AppendEscapeKey(dict, FDSELECT_ESCAPE, fdSelectOffset);
         }
 
-        if (_topDictExtra is not null) {
+        if (_topDictExtra is not null)
+        {
             dict.AddRange(_topDictExtra);
         }
 
         return [.. dict];
     }
 
-    private static byte[] EncodeFontDict(int privateLength, int privateOffset) {
+    private static byte[] EncodeFontDict(int privateLength, int privateOffset)
+    {
         List<byte> dict = [];
         AppendKey(dict, PRIVATE_OPERATOR, privateLength, privateOffset);
         return [.. dict];
     }
 
-    private static List<byte> EncodeDictKey(int operatorCode, int? escapeCode, int[] operands) {
+    private static List<byte> EncodeDictKey(int operatorCode, int? escapeCode, int[] operands)
+    {
         List<byte> dict = [];
-        foreach (int operand in operands) {
+        foreach (int operand in operands)
+        {
             dict.Add(29);
             dict.Add((byte)(operand >> 24));
             dict.Add((byte)(operand >> 16));
@@ -607,7 +722,8 @@ internal sealed class SyntheticCff {
         }
 
         dict.Add((byte)operatorCode);
-        if (escapeCode is int code) {
+        if (escapeCode is int code)
+        {
             dict.Add((byte)code);
         }
 
@@ -619,21 +735,27 @@ internal sealed class SyntheticCff {
         int? defaultWidthX,
         int? nominalWidthX,
         bool hasSubrs,
-        int privateLength) {
+        int privateLength
+    )
+    {
         List<byte> dict = [];
-        if (extra is not null) {
+        if (extra is not null)
+        {
             dict.AddRange(extra);
         }
 
-        if (defaultWidthX is int defaultWidth) {
+        if (defaultWidthX is int defaultWidth)
+        {
             AppendKey(dict, DEFAULT_WIDTH_OPERATOR, defaultWidth);
         }
 
-        if (nominalWidthX is int nominalWidth) {
+        if (nominalWidthX is int nominalWidth)
+        {
             AppendKey(dict, NOMINAL_WIDTH_OPERATOR, nominalWidth);
         }
 
-        if (hasSubrs) {
+        if (hasSubrs)
+        {
             AppendKey(dict, SUBRS_OPERATOR, privateLength);
         }
 
@@ -644,39 +766,48 @@ internal sealed class SyntheticCff {
         byte[]? extra,
         int? defaultWidthX,
         int? nominalWidthX,
-        bool hasSubrs) {
+        bool hasSubrs
+    )
+    {
         int length = extra?.Length ?? 0;
-        if (defaultWidthX is not null) {
+        if (defaultWidthX is not null)
+        {
             length += LONG_INT_OPERAND_LENGTH + 1;
         }
 
-        if (nominalWidthX is not null) {
+        if (nominalWidthX is not null)
+        {
             length += LONG_INT_OPERAND_LENGTH + 1;
         }
 
-        if (hasSubrs) {
+        if (hasSubrs)
+        {
             length += LONG_INT_OPERAND_LENGTH + 1;
         }
 
         return length;
     }
 
-    private static int IndexLength(int count, int dataLength) => count == 0
-        ? 2
-        : 2 + 1 + (INDEX_OFFSET_SIZE * (count + 1)) + dataLength;
+    private static int IndexLength(int count, int dataLength) =>
+        count == 0 ? 2 : 2 + 1 + (INDEX_OFFSET_SIZE * (count + 1)) + dataLength;
 
-    private static byte[] EncodeIndex(IReadOnlyList<byte[]> objects) {
-        if (objects.Count == 0) {
+    private static byte[] EncodeIndex(IReadOnlyList<byte[]> objects)
+    {
+        if (objects.Count == 0)
+        {
             return [0, 0];
         }
 
-        if (objects.Count > MAX_INDEX_COUNT) {
+        if (objects.Count > MAX_INDEX_COUNT)
+        {
             throw new InvalidOperationException(
-                $"Synthetic INDEX count {objects.Count} exceeds {MAX_INDEX_COUNT}.");
+                $"Synthetic INDEX count {objects.Count} exceeds {MAX_INDEX_COUNT}."
+            );
         }
 
         List<byte> data = [];
-        foreach (byte[] item in objects) {
+        foreach (byte[] item in objects)
+        {
             data.AddRange(item);
         }
 
@@ -684,7 +815,8 @@ internal sealed class SyntheticCff {
         List<byte> index = [];
         WriteUInt16(index, objects.Count);
         index.Add(INDEX_OFFSET_SIZE);
-        foreach (byte[] item in objects) {
+        foreach (byte[] item in objects)
+        {
             WriteUInt32(index, offset);
             offset += item.Length;
         }
@@ -694,8 +826,10 @@ internal sealed class SyntheticCff {
         return [.. index];
     }
 
-    private static void AppendKey(List<byte> dict, int operatorCode, params int[] operands) {
-        foreach (int operand in operands) {
+    private static void AppendKey(List<byte> dict, int operatorCode, params int[] operands)
+    {
+        foreach (int operand in operands)
+        {
             dict.Add(29);
             dict.Add((byte)(operand >> 24));
             dict.Add((byte)(operand >> 16));
@@ -706,8 +840,10 @@ internal sealed class SyntheticCff {
         dict.Add((byte)operatorCode);
     }
 
-    private static void AppendEscapeKey(List<byte> dict, int escapeCode, params int[] operands) {
-        foreach (int operand in operands) {
+    private static void AppendEscapeKey(List<byte> dict, int escapeCode, params int[] operands)
+    {
+        foreach (int operand in operands)
+        {
             dict.Add(29);
             dict.Add((byte)(operand >> 24));
             dict.Add((byte)(operand >> 16));
@@ -719,38 +855,51 @@ internal sealed class SyntheticCff {
         dict.Add((byte)escapeCode);
     }
 
-    private static void AppendReal(List<byte> dict, double value) {
+    private static void AppendReal(List<byte> dict, double value)
+    {
         string text = value.ToString("0.################", CultureInfo.InvariantCulture);
         List<int> nibbles = [];
-        foreach (char character in text) {
-            if (character == '-') {
+        foreach (char character in text)
+        {
+            if (character == '-')
+            {
                 nibbles.Add(0x0E);
-            } else if (character == '.') {
+            }
+            else if (character == '.')
+            {
                 nibbles.Add(0x0A);
-            } else if (character is >= '0' and <= '9') {
+            }
+            else if (character is >= '0' and <= '9')
+            {
                 nibbles.Add(character - '0');
-            } else {
+            }
+            else
+            {
                 throw new InvalidOperationException($"Cannot encode the real value {text}.");
             }
         }
 
         nibbles.Add(0x0F);
-        if ((nibbles.Count & 1) != 0) {
+        if ((nibbles.Count & 1) != 0)
+        {
             nibbles.Add(0x0F);
         }
 
         dict.Add(30);
-        for (int index = 0; index < nibbles.Count; index += 2) {
+        for (int index = 0; index < nibbles.Count; index += 2)
+        {
             dict.Add((byte)((nibbles[index] << 4) | nibbles[index + 1]));
         }
     }
 
-    private static void WriteUInt16(List<byte> target, int value) {
+    private static void WriteUInt16(List<byte> target, int value)
+    {
         target.Add((byte)(value >> 8));
         target.Add((byte)value);
     }
 
-    private static void WriteUInt32(List<byte> target, int value) {
+    private static void WriteUInt32(List<byte> target, int value)
+    {
         target.Add((byte)(value >> 24));
         target.Add((byte)(value >> 16));
         target.Add((byte)(value >> 8));
@@ -760,8 +909,10 @@ internal sealed class SyntheticCff {
     private static void WriteBlock(byte[] table, int offset, ReadOnlySpan<byte> data) =>
         data.CopyTo(table.AsSpan(offset));
 
-    private readonly struct SyntheticFdRange {
-        internal SyntheticFdRange(int first, byte fontDict) {
+    private readonly struct SyntheticFdRange
+    {
+        internal SyntheticFdRange(int first, byte fontDict)
+        {
             First = first;
             FontDict = fontDict;
         }
@@ -771,8 +922,10 @@ internal sealed class SyntheticCff {
         internal byte FontDict { get; }
     }
 
-    private sealed class SyntheticCffFontDict {
-        internal SyntheticCffFontDict(byte[] privateDictExtra, List<byte[]> localSubrs) {
+    private sealed class SyntheticCffFontDict
+    {
+        internal SyntheticCffFontDict(byte[] privateDictExtra, List<byte[]> localSubrs)
+        {
             PrivateDictExtra = privateDictExtra;
             LocalSubrs = localSubrs;
         }

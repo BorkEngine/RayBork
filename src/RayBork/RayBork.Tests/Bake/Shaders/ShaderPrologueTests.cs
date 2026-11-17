@@ -5,7 +5,8 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake.Shaders;
 
-public sealed class ShaderPrologueTests {
+public sealed class ShaderPrologueTests
+{
     private const string ABI_TOML = """
         [shader]
         vertex = "abi.vert"
@@ -48,7 +49,8 @@ public sealed class ShaderPrologueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ACustomAbiPairCompilesAndRenamesBothEntryPoints() {
+    public void ACustomAbiPairCompilesAndRenamesBothEntryPoints()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeRunResult result = RunDefault(workspace, ABI_TOML, ABI_VERTEX, ABI_FRAGMENT);
 
@@ -56,7 +58,8 @@ public sealed class ShaderPrologueTests {
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
         Assert.True(archive.TryGetEntry("shaders/abi", out PackEntry? entry));
         ShaderAssetDescriptor descriptor = AssetSerialization.Deserialize<ShaderAssetDescriptor>(
-            archive.ReadPayload(entry));
+            archive.ReadPayload(entry)
+        );
         Assert.Equal(ShaderAbiNames.ABI_VERSION, descriptor.AbiVersion);
         Assert.Equal("main_vertex", descriptor.VertexEntry);
         Assert.Equal("main_fragment", descriptor.FragmentEntry);
@@ -68,16 +71,19 @@ public sealed class ShaderPrologueTests {
         ShaderTestAssets.AssertSpirv(
             archive.ReadPayload(vertexEntry),
             "main_vertex",
-            SpirvExecutionModel.Vertex);
+            SpirvExecutionModel.Vertex
+        );
         ShaderTestAssets.AssertSpirv(
             archive.ReadPayload(fragmentEntry),
             "main_fragment",
-            SpirvExecutionModel.Fragment);
+            SpirvExecutionModel.Fragment
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ThePrologueFollowsTheVersionDirective() {
+    public void ThePrologueFollowsTheVersionDirective()
+    {
         string source = """
             #version 450
 
@@ -92,17 +98,23 @@ public sealed class ShaderPrologueTests {
                 CreateLayout(),
                 ShaderStageMask.Vertex,
                 out string wrapped,
-                out string message),
-            message);
+                out string message
+            ),
+            message
+        );
 
         Assert.Equal(1, CountOccurrences(wrapped, "#version"));
         int version = wrapped.IndexOf("#version 450", StringComparison.Ordinal);
         int extension = wrapped.IndexOf(
             "#extension GL_EXT_nonuniform_qualifier : require",
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
         int frame = wrapped.IndexOf("struct RayBorkFrame {", StringComparison.Ordinal);
         int wrapper = wrapped.IndexOf("void main() {", StringComparison.Ordinal);
-        int macro = wrapped.IndexOf("#define main_vertex rbUserVertexMain", StringComparison.Ordinal);
+        int macro = wrapped.IndexOf(
+            "#define main_vertex rbUserVertexMain",
+            StringComparison.Ordinal
+        );
         int user = wrapped.IndexOf("void main_vertex()", StringComparison.Ordinal);
         Assert.Equal(0, version);
         Assert.True(version < extension, "The extension directive must follow #version.");
@@ -111,28 +123,42 @@ public sealed class ShaderPrologueTests {
         Assert.True(wrapper < macro, "The entry-point macro must follow the wrapper.");
         Assert.True(macro < user, "The entry-point macro must precede the user function.");
 
-        Assert.Contains("layout(std430, set = 0, binding = 0) readonly buffer RayBorkFrameBuffer", wrapped);
+        Assert.Contains(
+            "layout(std430, set = 0, binding = 0) readonly buffer RayBorkFrameBuffer",
+            wrapped
+        );
         Assert.Contains("RayBorkFrame frames[];", wrapped);
         Assert.Contains("} rbFrameBlock;", wrapped);
         Assert.Contains("layout(push_constant) uniform RayBorkPushConstants", wrapped);
         Assert.Contains("uint passIndex;", wrapped);
         Assert.Contains("} rbPushConstants;", wrapped);
-        Assert.Contains("layout(set = 0, binding = 1) uniform sampler2D RayBorkTextures[2048];", wrapped);
+        Assert.Contains(
+            "layout(set = 0, binding = 1) uniform sampler2D RayBorkTextures[2048];",
+            wrapped
+        );
         Assert.DoesNotContain("RayBorkTextures[]", wrapped);
-        Assert.Contains("layout(set = 0, binding = 2, std430) readonly buffer RayBorkInstanceBuffer", wrapped);
+        Assert.Contains(
+            "layout(set = 0, binding = 2, std430) readonly buffer RayBorkInstanceBuffer",
+            wrapped
+        );
         Assert.Contains("layout(location = 15) flat out uint rbInstanceIndexOut;", wrapped);
         Assert.Contains("rbInstanceIndexOut = uint(gl_InstanceIndex);", wrapped);
         Assert.Contains("#define rbFrame rbFrameBlock.frames[rbPushConstants.passIndex]", wrapped);
-        Assert.Contains("#define rbInstance RayBorkInstances.instances[rbInstanceIndexOut]", wrapped);
+        Assert.Contains(
+            "#define rbInstance RayBorkInstances.instances[rbInstanceIndexOut]",
+            wrapped
+        );
         Assert.Contains(
             "#define mainTexture RayBorkTextures[nonuniformEXT(rbInstance.mainTextureIndex)]",
-            wrapped);
+            wrapped
+        );
         Assert.Contains("#define uTint rbInstance.uTint", wrapped);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheFragmentPrologueUsesTheFlatInstanceIndexInput() {
+    public void TheFragmentPrologueUsesTheFlatInstanceIndexInput()
+    {
         string source = """
             #version 450
 
@@ -149,8 +175,10 @@ public sealed class ShaderPrologueTests {
                 CreateLayout(),
                 ShaderStageMask.Fragment,
                 out string wrapped,
-                out string message),
-            message);
+                out string message
+            ),
+            message
+        );
 
         Assert.Contains("layout(location = 15) flat in uint rbInstanceIndex;", wrapped);
         Assert.Contains("layout(push_constant) uniform RayBorkPushConstants", wrapped);
@@ -162,7 +190,8 @@ public sealed class ShaderPrologueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ASourceWithoutAVersionDirectiveGetsVersion450Prepended() {
+    public void ASourceWithoutAVersionDirectiveGetsVersion450Prepended()
+    {
         const string source = """
             void main_vertex() {
                 gl_Position = vec4(0.0);
@@ -175,8 +204,10 @@ public sealed class ShaderPrologueTests {
                 CreateLayout(),
                 ShaderStageMask.Vertex,
                 out string wrapped,
-                out string message),
-            message);
+                out string message
+            ),
+            message
+        );
 
         Assert.StartsWith("#version 450\n", wrapped, StringComparison.Ordinal);
         Assert.Equal(1, CountOccurrences(wrapped, "#version"));
@@ -185,7 +216,8 @@ public sealed class ShaderPrologueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheBakeCompilesAStageWithoutAVersionDirective() {
+    public void TheBakeCompilesAStageWithoutAVersionDirective()
+    {
         const string vertex = """
             layout(location = 0) in vec3 aPosition;
 
@@ -219,17 +251,18 @@ public sealed class ShaderPrologueTests {
     [InlineData("rbUserVertexMain", "void rbUserVertexMain() { }")]
     [InlineData("rbUserFragmentMain", "void rbUserFragmentMain() { }")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReservedIdentifiersAreRb4008(string identifier, string declaration) {
+    public void ReservedIdentifiersAreRb4008(string identifier, string declaration)
+    {
         using var workspace = new TempBakeWorkspace();
         ShaderTestAssets.Write(
             workspace,
             "shaders/abi",
             ABI_TOML,
             VertexWith(declaration),
-            ABI_FRAGMENT);
+            ABI_FRAGMENT
+        );
 
-        BakeRunResult result = workspace.Run(
-            workspace.Builder().UseDefaultProcessors().Build());
+        BakeRunResult result = workspace.Run(workspace.Builder().UseDefaultProcessors().Build());
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("RB4008", result.Error);
@@ -242,17 +275,18 @@ public sealed class ShaderPrologueTests {
     [InlineData("uTint", "vec4 uTint;")]
     [InlineData("mainTexture", "sampler2D mainTexture;")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SidecarNamesCannotBeRedeclaredInGlsl(string identifier, string declaration) {
+    public void SidecarNamesCannotBeRedeclaredInGlsl(string identifier, string declaration)
+    {
         using var workspace = new TempBakeWorkspace();
         ShaderTestAssets.Write(
             workspace,
             "shaders/abi",
             ABI_TOML,
             VertexWith(declaration),
-            ABI_FRAGMENT);
+            ABI_FRAGMENT
+        );
 
-        BakeRunResult result = workspace.Run(
-            workspace.Builder().UseDefaultProcessors().Build());
+        BakeRunResult result = workspace.Run(workspace.Builder().UseDefaultProcessors().Build());
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("RB4008", result.Error);
@@ -266,17 +300,18 @@ public sealed class ShaderPrologueTests {
     [InlineData("layout(set = 1, binding = 0) uniform sampler2D extra;")]
     [InlineData("layout(set=0, binding=2) uniform sampler2D extra;")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LayoutSetQualifiersAreRb4008(string declaration) {
+    public void LayoutSetQualifiersAreRb4008(string declaration)
+    {
         using var workspace = new TempBakeWorkspace();
         ShaderTestAssets.Write(
             workspace,
             "shaders/abi",
             ABI_TOML,
             VertexWith(declaration),
-            ABI_FRAGMENT);
+            ABI_FRAGMENT
+        );
 
-        BakeRunResult result = workspace.Run(
-            workspace.Builder().UseDefaultProcessors().Build());
+        BakeRunResult result = workspace.Run(workspace.Builder().UseDefaultProcessors().Build());
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("RB4008", result.Error);
@@ -288,17 +323,18 @@ public sealed class ShaderPrologueTests {
     [InlineData("layout(location = 15, component = 0) out vec4 vReserved;")]
     [InlineData("layout(location=15) out vec4 vReserved;")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReservedVaryingLocationFifteenIsRb4008(string declaration) {
+    public void ReservedVaryingLocationFifteenIsRb4008(string declaration)
+    {
         using var workspace = new TempBakeWorkspace();
         ShaderTestAssets.Write(
             workspace,
             "shaders/abi",
             ABI_TOML,
             VertexWith(declaration),
-            ABI_FRAGMENT);
+            ABI_FRAGMENT
+        );
 
-        BakeRunResult result = workspace.Run(
-            workspace.Builder().UseDefaultProcessors().Build());
+        BakeRunResult result = workspace.Run(workspace.Builder().UseDefaultProcessors().Build());
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("RB4008", result.Error);
@@ -308,7 +344,8 @@ public sealed class ShaderPrologueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CommentsDoNotTriggerReservedNameValidation() {
+    public void CommentsDoNotTriggerReservedNameValidation()
+    {
         const string vertex = """
             #version 450
 
@@ -333,7 +370,8 @@ public sealed class ShaderPrologueTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnreservedAttributeLocationsAreAccepted() {
+    public void UnreservedAttributeLocationsAreAccepted()
+    {
         const string vertex = """
             #version 450
 
@@ -351,41 +389,49 @@ public sealed class ShaderPrologueTests {
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
     }
 
-    private static string VertexWith(string declaration) => $$"""
-        #version 450
+    private static string VertexWith(string declaration) =>
+        $$"""
+            #version 450
 
-        {{declaration}}
+            {{declaration}}
 
-        layout(location = 0) in vec3 aPosition;
+            layout(location = 0) in vec3 aPosition;
 
-        void main_vertex() {
-            gl_Position = vec4(aPosition, 1.0);
-        }
-        """;
+            void main_vertex() {
+                gl_Position = vec4(aPosition, 1.0);
+            }
+            """;
 
     private static BakeRunResult RunDefault(
         TempBakeWorkspace workspace,
         string toml,
         string vertex,
-        string fragment) {
+        string fragment
+    )
+    {
         ShaderTestAssets.Write(workspace, "shaders/abi", toml, vertex, fragment);
         return workspace.Run(workspace.Builder().UseDefaultProcessors().Build());
     }
 
-    private static ShaderAbiLayout CreateLayout() => new(
-        [
-            new ShaderUniformAsset {
-                Name = "uTint",
-                Type = ShaderUniformType.Vector4,
-                Default = [1f, 1f, 1f, 1f],
-            },
-        ],
-        ["mainTexture"]);
+    private static ShaderAbiLayout CreateLayout() =>
+        new(
+            [
+                new ShaderUniformAsset
+                {
+                    Name = "uTint",
+                    Type = ShaderUniformType.Vector4,
+                    Default = [1f, 1f, 1f, 1f],
+                },
+            ],
+            ["mainTexture"]
+        );
 
-    private static int CountOccurrences(string text, string value) {
+    private static int CountOccurrences(string text, string value)
+    {
         int count = 0;
         int index = 0;
-        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0) {
+        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
+        {
             count++;
             index += value.Length;
         }

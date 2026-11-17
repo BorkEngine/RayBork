@@ -36,7 +36,8 @@ namespace RayBork;
 /// that image, so both readback methods observe it.
 /// </para>
 /// </remarks>
-public sealed class RenderTexture : IDisposable {
+public sealed class RenderTexture : IDisposable
+{
     private readonly RenderTextureTargetLifetime _lifetime;
     private readonly RenderTextureService _service;
 
@@ -59,7 +60,9 @@ public sealed class RenderTexture : IDisposable {
         RenderTextureTargetLifetime lifetime,
         Texture colorTexture,
         Texture? depthTexture,
-        RenderTextureService service) {
+        RenderTextureService service
+    )
+    {
         ArgumentNullException.ThrowIfNull(lifetime);
         ArgumentNullException.ThrowIfNull(colorTexture);
         ArgumentNullException.ThrowIfNull(service);
@@ -72,8 +75,10 @@ public sealed class RenderTexture : IDisposable {
 
     /// <summary>Gets the target width in pixels.</summary>
     /// <exception cref="ObjectDisposedException">The render texture is disposed.</exception>
-    public int Width {
-        get {
+    public int Width
+    {
+        get
+        {
             ThrowIfDisposed();
             return _lifetime.Description.Width;
         }
@@ -81,8 +86,10 @@ public sealed class RenderTexture : IDisposable {
 
     /// <summary>Gets the target height in pixels.</summary>
     /// <exception cref="ObjectDisposedException">The render texture is disposed.</exception>
-    public int Height {
-        get {
+    public int Height
+    {
+        get
+        {
             ThrowIfDisposed();
             return _lifetime.Description.Height;
         }
@@ -93,8 +100,10 @@ public sealed class RenderTexture : IDisposable {
     /// recovery re-selects the count from the recreated device and updates this value.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The render texture is disposed.</exception>
-    public int SampleCount {
-        get {
+    public int SampleCount
+    {
+        get
+        {
             ThrowIfDisposed();
             return _lifetime.SampleCount;
         }
@@ -138,8 +147,10 @@ public sealed class RenderTexture : IDisposable {
     /// <see cref="TextureFormat.Rgba16Float"/>.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The render texture is disposed.</exception>
-    public bool IsHdr {
-        get {
+    public bool IsHdr
+    {
+        get
+        {
             ThrowIfDisposed();
             return RenderTextureValidation.IsHdr(_lifetime.Description.ColorFormat);
         }
@@ -193,7 +204,8 @@ public sealed class RenderTexture : IDisposable {
     /// A later device recovery recreates the resized target from the updated description.
     /// </para>
     /// </remarks>
-    public void Resize(int width, int height) {
+    public void Resize(int width, int height)
+    {
         ThrowIfDisposed();
         _service.ResizeAsync(_lifetime, width, height).GetAwaiter().GetResult();
     }
@@ -239,7 +251,8 @@ public sealed class RenderTexture : IDisposable {
     /// task with <c>GetAwaiter().GetResult()</c> and stalls that tick until the readback completes.
     /// </para>
     /// </remarks>
-    public Task<Color[,]> ReadColorsAsync(CancellationToken cancellationToken = default) {
+    public Task<Color[,]> ReadColorsAsync(CancellationToken cancellationToken = default)
+    {
         ThrowIfDisposed();
         return _service.ReadColorsAsync(_lifetime, cancellationToken);
     }
@@ -282,7 +295,8 @@ public sealed class RenderTexture : IDisposable {
     /// <see cref="IGame.Tick"/> is <c>void</c>.
     /// </para>
     /// </remarks>
-    public Task<byte[]> ReadPixelsAsync(CancellationToken cancellationToken = default) {
+    public Task<byte[]> ReadPixelsAsync(CancellationToken cancellationToken = default)
+    {
         ThrowIfDisposed();
         return _service.ReadPixelsAsync(_lifetime, cancellationToken);
     }
@@ -294,8 +308,10 @@ public sealed class RenderTexture : IDisposable {
     /// A target that is the destination or a sample source of a recorded in-flight frame stays alive
     /// until that frame completes; the target is destroyed only after its frame fence signals.
     /// </remarks>
-    public void Dispose() {
-        if (_lifetime.IsDisposed) {
+    public void Dispose()
+    {
+        if (_lifetime.IsDisposed)
+        {
             return;
         }
 

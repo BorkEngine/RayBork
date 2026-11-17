@@ -3,10 +3,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class BuilderTests {
+public sealed class BuilderTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuildUsesDocumentedDefaults() {
+    public void BuildUsesDocumentedDefaults()
+    {
         ScriptedGame game = new();
         RayBorkAppBuilder builder = new RayBorkAppBuilder().WithGame(game);
 
@@ -28,7 +30,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuildUsesConfiguredOverrides() {
+    public void BuildUsesConfiguredOverrides()
+    {
         ScriptedGame game = new();
         TrackingLoggerFactory loggerFactory = new();
 
@@ -60,7 +63,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithGameRejectsNull() {
+    public void WithGameRejectsNull()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentNullException>(() => builder.WithGame(null!));
@@ -68,7 +72,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithTitleRejectsNull() {
+    public void WithTitleRejectsNull()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentNullException>(() => builder.WithTitle(null!));
@@ -80,7 +85,8 @@ public sealed class BuilderTests {
     [InlineData("\t")]
     [InlineData("\r\n")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithTitleRejectsEmptyOrWhitespace(string title) {
+    public void WithTitleRejectsEmptyOrWhitespace(string title)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentException>(() => builder.WithTitle(title));
@@ -90,7 +96,8 @@ public sealed class BuilderTests {
     [InlineData(0, 720)]
     [InlineData(-1, 720)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithSizeRejectsNonPositiveWidth(int width, int height) {
+    public void WithSizeRejectsNonPositiveWidth(int width, int height)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithSize(width, height));
@@ -100,7 +107,8 @@ public sealed class BuilderTests {
     [InlineData(1280, 0)]
     [InlineData(1280, -1)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithSizeRejectsNonPositiveHeight(int width, int height) {
+    public void WithSizeRejectsNonPositiveHeight(int width, int height)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithSize(width, height));
@@ -113,7 +121,8 @@ public sealed class BuilderTests {
     [InlineData(double.PositiveInfinity)]
     [InlineData(double.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithMaxDeltaTimeRejectsInvalidValues(double seconds) {
+    public void WithMaxDeltaTimeRejectsInvalidValues(double seconds)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithMaxDeltaTime(seconds));
@@ -123,7 +132,8 @@ public sealed class BuilderTests {
     [InlineData(-1)]
     [InlineData(int.MinValue)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithTargetFpsRejectsNegativeValues(int framesPerSecond) {
+    public void WithTargetFpsRejectsNegativeValues(int framesPerSecond)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithTargetFps(framesPerSecond));
@@ -131,7 +141,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithLoggerFactoryRejectsNull() {
+    public void WithLoggerFactoryRejectsNull()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentNullException>(() => builder.WithLoggerFactory(null!));
@@ -139,26 +150,35 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithWindowStateRejectsUndefinedValues() {
+    public void WithWindowStateRejectsUndefinedValues()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithWindowState((WindowState)int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.WithWindowState((WindowState)int.MaxValue)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithLogLevelRejectsUndefinedValues() {
+    public void WithLogLevelRejectsUndefinedValues()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithLogLevel((LogLevel)int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.WithLogLevel((LogLevel)int.MaxValue)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithPresentModeRejectsUndefinedValues() {
+    public void WithPresentModeRejectsUndefinedValues()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithPresentMode((PresentMode)int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.WithPresentMode((PresentMode)int.MaxValue)
+        );
     }
 
     [Theory]
@@ -166,7 +186,8 @@ public sealed class BuilderTests {
     [InlineData(-1)]
     [InlineData(int.MinValue)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithMSAARejectsNonPositiveValues(int sampleCount) {
+    public void WithMSAARejectsNonPositiveValues(int sampleCount)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithMSAA(sampleCount));
@@ -174,7 +195,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithMSAAAcceptsPositiveUnsupportedValues() {
+    public void WithMSAAAcceptsPositiveUnsupportedValues()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Same(builder, builder.WithMSAA(3));
@@ -182,10 +204,13 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithTonemappingRejectsUndefinedValues() {
+    public void WithTonemappingRejectsUndefinedValues()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithTonemapping((TonemappingMode)int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.WithTonemapping((TonemappingMode)int.MaxValue)
+        );
     }
 
     [Theory]
@@ -193,7 +218,8 @@ public sealed class BuilderTests {
     [InlineData(float.PositiveInfinity)]
     [InlineData(float.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithExposureRejectsNonFiniteValues(float ev) {
+    public void WithExposureRejectsNonFiniteValues(float ev)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithExposure(ev));
@@ -207,7 +233,8 @@ public sealed class BuilderTests {
     [InlineData(0f)]
     [InlineData(-16.29f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithAgxWhiteRejectsNonFiniteValuesBelowTwo(float white) {
+    public void WithAgxWhiteRejectsNonFiniteValuesBelowTwo(float white)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithAgxWhite(white));
@@ -215,7 +242,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithAgxWhiteAcceptsTheBoundary() {
+    public void WithAgxWhiteAcceptsTheBoundary()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Same(builder, builder.WithAgxWhite(2f));
@@ -229,7 +257,8 @@ public sealed class BuilderTests {
     [InlineData(0f)]
     [InlineData(-1.25f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithAgxContrastRejectsNonFiniteValuesBelowOne(float contrast) {
+    public void WithAgxContrastRejectsNonFiniteValuesBelowOne(float contrast)
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => builder.WithAgxContrast(contrast));
@@ -237,7 +266,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithAgxContrastAcceptsTheBoundary() {
+    public void WithAgxContrastAcceptsTheBoundary()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Same(builder, builder.WithAgxContrast(1f));
@@ -245,7 +275,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuildWithoutGameThrows() {
+    public void BuildWithoutGameThrows()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder();
 
         Assert.Throws<InvalidOperationException>(() => builder.Build());
@@ -253,7 +284,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuildIsSingleUse() {
+    public void BuildIsSingleUse()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder().WithGame(new ScriptedGame());
         using RayBorkApp app = BuildWithFakePlatform(builder, out _);
 
@@ -263,7 +295,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuildUsesDocumentedRenderDefaults() {
+    public void BuildUsesDocumentedRenderDefaults()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder().WithGame(new ScriptedGame());
 
         using RayBorkApp app = BuildWithFakePlatform(builder, out _);
@@ -286,7 +319,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuildUsesConfiguredRenderOverrides() {
+    public void BuildUsesConfiguredRenderOverrides()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder()
             .WithGame(new ScriptedGame())
             .WithPresentMode(PresentMode.Immediate)
@@ -311,7 +345,8 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WithMethodsAfterBuildThrow() {
+    public void WithMethodsAfterBuildThrow()
+    {
         ScriptedGame game = new();
         TrackingLoggerFactory loggerFactory = new();
         RayBorkAppBuilder builder = new RayBorkAppBuilder().WithGame(game);
@@ -324,30 +359,46 @@ public sealed class BuilderTests {
         Assert.Throws<InvalidOperationException>(() => builder.WithMaxDeltaTime(0.5));
         Assert.Throws<InvalidOperationException>(() => builder.WithPresentMode(PresentMode.Fifo));
         Assert.Throws<InvalidOperationException>(() => builder.WithMSAA(8));
-        Assert.Throws<InvalidOperationException>(() => builder.WithTonemapping(TonemappingMode.None));
+        Assert.Throws<InvalidOperationException>(() =>
+            builder.WithTonemapping(TonemappingMode.None)
+        );
         Assert.Throws<InvalidOperationException>(() => builder.WithExposure(1f));
         Assert.Throws<InvalidOperationException>(() => builder.WithAgxWhite(4f));
         Assert.Throws<InvalidOperationException>(() => builder.WithAgxContrast(2f));
         Assert.Throws<InvalidOperationException>(() => builder.WithValidation(false));
         Assert.Throws<InvalidOperationException>(() => builder.WithTargetFps(60));
-        Assert.Throws<InvalidOperationException>(() => builder.WithWindowState(WindowState.Maximized));
+        Assert.Throws<InvalidOperationException>(() =>
+            builder.WithWindowState(WindowState.Maximized)
+        );
         Assert.Throws<InvalidOperationException>(() => builder.WithLoggerFactory(loggerFactory));
         Assert.Throws<InvalidOperationException>(() => builder.WithLogLevel(LogLevel.Debug));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InternalBuildRejectsNullDependencies() {
+    public void InternalBuildRejectsNullDependencies()
+    {
         RayBorkAppBuilder builder = new RayBorkAppBuilder().WithGame(new ScriptedGame());
 
-        Assert.Throws<ArgumentNullException>(() => builder.Build(null!, static () => new FakeRendererBackend(), TimeProvider.System));
-        Assert.Throws<ArgumentNullException>(() => builder.Build(_ => new FakeEnginePlatform(), null!, TimeProvider.System));
-        Assert.Throws<ArgumentNullException>(() => builder.Build(_ => new FakeEnginePlatform(), static () => new FakeRendererBackend(), null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            builder.Build(null!, static () => new FakeRendererBackend(), TimeProvider.System)
+        );
+        Assert.Throws<ArgumentNullException>(() =>
+            builder.Build(_ => new FakeEnginePlatform(), null!, TimeProvider.System)
+        );
+        Assert.Throws<ArgumentNullException>(() =>
+            builder.Build(
+                _ => new FakeEnginePlatform(),
+                static () => new FakeRendererBackend(),
+                null!
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BuildDoesNotCreateAPlatformOrALogger() {
+    public void BuildDoesNotCreateAPlatformOrALogger()
+    {
         bool platformRequested = false;
         TrackingLoggerFactory loggerFactory = new();
         RayBorkAppBuilder builder = new RayBorkAppBuilder()
@@ -355,12 +406,14 @@ public sealed class BuilderTests {
             .WithLoggerFactory(loggerFactory);
 
         using RayBorkApp app = builder.Build(
-            _ => {
+            _ =>
+            {
                 platformRequested = true;
                 return new FakeEnginePlatform();
             },
             static () => new FakeRendererBackend(),
-            TimeProvider.System);
+            TimeProvider.System
+        );
 
         Assert.False(platformRequested);
         Assert.Empty(loggerFactory.Categories);
@@ -369,10 +422,9 @@ public sealed class BuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PublicBuildReturnsAnAppThatCanBeDisposedWithoutRunning() {
-        RayBorkApp app = new RayBorkAppBuilder()
-            .WithGame(new ScriptedGame())
-            .Build();
+    public void PublicBuildReturnsAnAppThatCanBeDisposedWithoutRunning()
+    {
+        RayBorkApp app = new RayBorkAppBuilder().WithGame(new ScriptedGame()).Build();
 
         Assert.False(app.IsRunning);
         Assert.False(app.IsDisposed);
@@ -384,9 +436,17 @@ public sealed class BuilderTests {
         Assert.True(app.IsDisposed);
     }
 
-    private static RayBorkApp BuildWithFakePlatform(RayBorkAppBuilder builder, out FakeEnginePlatform platform) {
+    private static RayBorkApp BuildWithFakePlatform(
+        RayBorkAppBuilder builder,
+        out FakeEnginePlatform platform
+    )
+    {
         platform = new FakeEnginePlatform();
         FakeEnginePlatform captured = platform;
-        return builder.Build(_ => captured, static () => new FakeRendererBackend(), TimeProvider.System);
+        return builder.Build(
+            _ => captured,
+            static () => new FakeRendererBackend(),
+            TimeProvider.System
+        );
     }
 }

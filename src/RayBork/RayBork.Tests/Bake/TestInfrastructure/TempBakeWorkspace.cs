@@ -3,12 +3,11 @@ using RayBork.Bake;
 namespace RayBork.Tests.Bake.TestInfrastructure;
 
 /// <summary>A temporary project, asset root, and output root for one bake test.</summary>
-internal sealed class TempBakeWorkspace : IDisposable {
-    internal TempBakeWorkspace() {
-        Root = Path.Combine(
-            Path.GetTempPath(),
-            "raybork-bake-tests",
-            Guid.NewGuid().ToString("N"));
+internal sealed class TempBakeWorkspace : IDisposable
+{
+    internal TempBakeWorkspace()
+    {
+        Root = Path.Combine(Path.GetTempPath(), "raybork-bake-tests", Guid.NewGuid().ToString("N"));
         ProjectRoot = Path.Combine(Root, "project");
         AssetRoot = Path.Combine(ProjectRoot, "Assets");
         OutputRoot = Path.Combine(Root, "output");
@@ -24,35 +23,40 @@ internal sealed class TempBakeWorkspace : IDisposable {
 
     internal string OutputRoot { get; }
 
-    internal string ManifestPath => Path.Combine(
-        ProjectRoot,
-        "obj",
-        "raybork",
-        "bake",
-        "manifest.json");
+    internal string ManifestPath =>
+        Path.Combine(ProjectRoot, "obj", "raybork", "bake", "manifest.json");
 
-    internal string GetPackPath(string fileName = "assets.pck")
-        => Path.Combine(OutputRoot, fileName);
+    internal string GetPackPath(string fileName = "assets.pck") =>
+        Path.Combine(OutputRoot, fileName);
 
-    internal string WriteAsset(string relativePath, string content)
-        => WriteFile(Path.Combine(AssetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)), content);
-
-    internal string WriteAssetBytes(string relativePath, byte[] content)
-        => WriteFileBytes(
+    internal string WriteAsset(string relativePath, string content) =>
+        WriteFile(
             Path.Combine(AssetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)),
-            content);
+            content
+        );
 
-    internal string ReadAsset(string relativePath)
-        => File.ReadAllText(
-            Path.Combine(AssetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+    internal string WriteAssetBytes(string relativePath, byte[] content) =>
+        WriteFileBytes(
+            Path.Combine(AssetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)),
+            content
+        );
 
-    internal static string WriteFile(string fullPath, string content) => WriteFileBytes(
-        fullPath,
-        new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(content));
+    internal string ReadAsset(string relativePath) =>
+        File.ReadAllText(
+            Path.Combine(AssetRoot, relativePath.Replace('/', Path.DirectorySeparatorChar))
+        );
 
-    internal static string WriteFileBytes(string fullPath, byte[] content) {
+    internal static string WriteFile(string fullPath, string content) =>
+        WriteFileBytes(
+            fullPath,
+            new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(content)
+        );
+
+    internal static string WriteFileBytes(string fullPath, byte[] content)
+    {
         string? directory = Path.GetDirectoryName(fullPath);
-        if (!string.IsNullOrEmpty(directory)) {
+        if (!string.IsNullOrEmpty(directory))
+        {
             Directory.CreateDirectory(directory);
         }
 
@@ -60,18 +64,17 @@ internal sealed class TempBakeWorkspace : IDisposable {
         return fullPath;
     }
 
-    internal BakeApplicationBuilder Builder() => new BakeApplicationBuilder()
-        .WithProjectRoot(ProjectRoot)
-        .WithPack("assets.pck", "Assets");
+    internal BakeApplicationBuilder Builder() =>
+        new BakeApplicationBuilder().WithProjectRoot(ProjectRoot).WithPack("assets.pck", "Assets");
 
-    internal BakeRunResult Run(BakeApplication application, params string[] args) {
-        string[] effectiveArgs = args.Length == 0
-            ? ["bake", "--output-root", OutputRoot]
-            : args;
+    internal BakeRunResult Run(BakeApplication application, params string[] args)
+    {
+        string[] effectiveArgs = args.Length == 0 ? ["bake", "--output-root", OutputRoot] : args;
         return RunRaw(application, effectiveArgs);
     }
 
-    internal static BakeRunResult RunRaw(BakeApplication application, params string[] args) {
+    internal static BakeRunResult RunRaw(BakeApplication application, params string[] args)
+    {
         var output = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
         var error = new StringWriter(System.Globalization.CultureInfo.InvariantCulture);
         int exitCode = application
@@ -81,14 +84,17 @@ internal sealed class TempBakeWorkspace : IDisposable {
         return new BakeRunResult(exitCode, output.ToString(), error.ToString());
     }
 
-    public void Dispose() {
-        try {
-            if (Directory.Exists(Root)) {
+    public void Dispose()
+    {
+        try
+        {
+            if (Directory.Exists(Root))
+            {
                 Directory.Delete(Root, recursive: true);
             }
-        } catch (IOException) {
-        } catch (UnauthorizedAccessException) {
         }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 }
 

@@ -19,12 +19,14 @@ namespace RayBork.Internal;
 /// channel.
 /// </para>
 /// </remarks>
-internal readonly struct MsdfEdge {
+internal readonly struct MsdfEdge
+{
     /// <summary>Initializes a flattened edge.</summary>
     /// <param name="start">The start point in texture pixels.</param>
     /// <param name="end">The end point in texture pixels.</param>
     /// <param name="colorMask">The two-channel colour mask.</param>
-    internal MsdfEdge(Vector2 start, Vector2 end, int colorMask) {
+    internal MsdfEdge(Vector2 start, Vector2 end, int colorMask)
+    {
         Start = start;
         End = end;
         ColorMask = colorMask;

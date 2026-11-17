@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// material may read them from the tick thread without locking.
 /// </para>
 /// </remarks>
-internal sealed class ShaderProgram {
+internal sealed class ShaderProgram
+{
     private readonly EngineAsset _asset;
     private readonly ShaderStageMask _stages;
     private readonly RenderState _defaultRenderState;
@@ -43,7 +44,8 @@ internal sealed class ShaderProgram {
     /// <exception cref="InvalidOperationException">
     /// The per-instance record exceeds the shader ABI size limit.
     /// </exception>
-    internal ShaderProgram(EngineAsset asset, ShaderAssetDescriptor descriptor) {
+    internal ShaderProgram(EngineAsset asset, ShaderAssetDescriptor descriptor)
+    {
         ArgumentNullException.ThrowIfNull(asset);
         ArgumentNullException.ThrowIfNull(descriptor);
 
@@ -52,12 +54,17 @@ internal sealed class ShaderProgram {
         _defaultRenderState = descriptor.DefaultRenderState;
 
         ShaderUniform[] uniforms = new ShaderUniform[descriptor.Uniforms.Length];
-        for (int index = 0; index < uniforms.Length; index++) {
-            uniforms[index] = new ShaderUniform(descriptor.Uniforms[index].Name, descriptor.Uniforms[index].Type);
+        for (int index = 0; index < uniforms.Length; index++)
+        {
+            uniforms[index] = new ShaderUniform(
+                descriptor.Uniforms[index].Name,
+                descriptor.Uniforms[index].Type
+            );
         }
 
         ShaderTextureBinding[] textures = new ShaderTextureBinding[descriptor.Textures.Length];
-        for (int index = 0; index < textures.Length; index++) {
+        for (int index = 0; index < textures.Length; index++)
+        {
             textures[index] = new ShaderTextureBinding(descriptor.Textures[index], index);
         }
 
@@ -69,26 +76,33 @@ internal sealed class ShaderProgram {
 
         _uniformsByName = new Dictionary<string, ShaderAbiUniform>(
             _layout.Uniforms.Count,
-            StringComparer.Ordinal);
-        foreach (ShaderAbiUniform uniform in _layout.Uniforms) {
+            StringComparer.Ordinal
+        );
+        foreach (ShaderAbiUniform uniform in _layout.Uniforms)
+        {
             _uniformsByName[uniform.Name] = uniform;
         }
 
         _texturesByName = new Dictionary<string, ShaderAbiTexture>(
             _layout.Textures.Count,
-            StringComparer.Ordinal);
-        foreach (ShaderAbiTexture texture in _layout.Textures) {
+            StringComparer.Ordinal
+        );
+        foreach (ShaderAbiTexture texture in _layout.Textures)
+        {
             _texturesByName[texture.Name] = texture;
         }
 
-        for (int index = 0; index < descriptor.Uniforms.Length; index++) {
+        for (int index = 0; index < descriptor.Uniforms.Length; index++)
+        {
             ShaderUniformAsset uniform = descriptor.Uniforms[index];
             ShaderAbiUniform member = _layout.Uniforms[index];
-            if (uniform.Default.Length != 0 && uniform.Default.Length != member.ComponentCount) {
+            if (uniform.Default.Length != 0 && uniform.Default.Length != member.ComponentCount)
+            {
                 throw new ArgumentException(
                     $"The uniform '{uniform.Name}' has {uniform.Default.Length} default component(s); "
                         + $"type '{uniform.Type}' requires {member.ComponentCount}.",
-                    nameof(descriptor));
+                    nameof(descriptor)
+                );
             }
 
             WriteDefault(_defaultInstanceData, member, uniform.Default);
@@ -157,28 +171,36 @@ internal sealed class ShaderProgram {
     /// </summary>
     /// <returns>The material. The caller owns it and must dispose it exactly once.</returns>
     /// <exception cref="ObjectDisposedException">The program is disposed.</exception>
-    internal Shader CreateMaterial() {
+    internal Shader CreateMaterial()
+    {
         _asset.AddOwnerReference();
-        try {
+        try
+        {
             return new Shader(this);
-        } catch {
+        }
+        catch
+        {
             _asset.ReleaseOwnerReference();
             throw;
         }
     }
 
-    private static void WriteDefault(byte[] destination, ShaderAbiUniform uniform, float[] defaults) {
+    private static void WriteDefault(byte[] destination, ShaderAbiUniform uniform, float[] defaults)
+    {
         int start = uniform.Offset - ShaderAbiLayout.INSTANCE_HEADER_SIZE;
         Span<byte> target = destination.AsSpan(start, uniform.Size);
-        if (defaults.Length == 0) {
+        if (defaults.Length == 0)
+        {
             target.Clear();
             return;
         }
 
-        for (int index = 0; index < uniform.ComponentCount; index++) {
+        for (int index = 0; index < uniform.ComponentCount; index++)
+        {
             float value = defaults[index];
             Span<byte> component = target.Slice(index * sizeof(float), sizeof(float));
-            switch (uniform.Type) {
+            switch (uniform.Type)
+            {
                 case ShaderUniformType.Float:
                     BinaryPrimitives.WriteSingleLittleEndian(component, value);
                     break;

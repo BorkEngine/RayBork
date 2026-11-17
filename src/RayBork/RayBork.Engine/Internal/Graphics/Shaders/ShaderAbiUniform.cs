@@ -13,4 +13,5 @@ internal readonly record struct ShaderAbiUniform(
     ShaderUniformType Type,
     int Offset,
     int Size,
-    int ComponentCount);
+    int ComponentCount
+);

@@ -14,7 +14,12 @@ namespace RayBork.Internal;
 /// The upper-right corner of the union of the layout box and every glyph quad; <see cref="Vector2.Zero"/>
 /// for empty text.
 /// </param>
-internal readonly record struct TextLayoutResult(int LineCount, Vector2 BoundsMin, Vector2 BoundsMax) {
+internal readonly record struct TextLayoutResult(
+    int LineCount,
+    Vector2 BoundsMin,
+    Vector2 BoundsMax
+)
+{
     /// <summary>Gets the block size, <see cref="BoundsMax"/> minus <see cref="BoundsMin"/>.</summary>
     internal Vector2 BoundsSize => BoundsMax - BoundsMin;
 }

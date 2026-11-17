@@ -11,7 +11,8 @@ namespace RayBork.Internal;
 /// offers no matching type is an upload failure (<c>RB1010</c>), never a fallback to a different
 /// resource. Uploads run on the render thread, so no member is thread-safe.
 /// </remarks>
-internal static unsafe class VulkanAssetMemory {
+internal static unsafe class VulkanAssetMemory
+{
     /// <summary>
     /// Allocates device memory for one image or buffer.
     /// </summary>
@@ -31,14 +32,17 @@ internal static unsafe class VulkanAssetMemory {
         MemoryRequirements requirements,
         MemoryPropertyFlags requiredProperties,
         string canonicalPath,
-        string description) => Allocate(
+        string description
+    ) =>
+        Allocate(
             device,
             memoryProperties,
             requirements.Size,
             requirements.MemoryTypeBits,
             requiredProperties,
             canonicalPath,
-            description);
+            description
+        );
 
     /// <summary>
     /// Allocates device memory for a combined resource such as a mesh's vertex and index buffers.
@@ -61,20 +65,33 @@ internal static unsafe class VulkanAssetMemory {
         uint memoryTypeBits,
         MemoryPropertyFlags requiredProperties,
         string canonicalPath,
-        string description) {
+        string description
+    )
+    {
         uint memoryTypeIndex = FindMemoryType(
             memoryTypeBits,
             requiredProperties,
             memoryProperties,
             canonicalPath,
-            description);
-        MemoryAllocateInfo allocateInfo = new() {
+            description
+        );
+        MemoryAllocateInfo allocateInfo = new()
+        {
             SType = StructureType.MemoryAllocateInfo,
             AllocationSize = size,
             MemoryTypeIndex = memoryTypeIndex,
         };
-        Result result = device.Vulkan.AllocateMemory(device.Device, &allocateInfo, null, out DeviceMemory memory);
-        VulkanAssetErrors.ThrowIfFailed(result, canonicalPath, $"vkAllocateMemory for the {description}");
+        Result result = device.Vulkan.AllocateMemory(
+            device.Device,
+            &allocateInfo,
+            null,
+            out DeviceMemory memory
+        );
+        VulkanAssetErrors.ThrowIfFailed(
+            result,
+            canonicalPath,
+            $"vkAllocateMemory for the {description}"
+        );
         return memory;
     }
 
@@ -95,17 +112,24 @@ internal static unsafe class VulkanAssetMemory {
         MemoryPropertyFlags requiredProperties,
         PhysicalDeviceMemoryProperties memoryProperties,
         string canonicalPath,
-        string description) {
-        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++) {
+        string description
+    )
+    {
+        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++)
+        {
             bool typeSupported = (memoryTypeBits & (1u << (int)index)) != 0;
-            bool propertiesMatch = (memoryProperties.MemoryTypes[(int)index].PropertyFlags & requiredProperties) == requiredProperties;
-            if (typeSupported && propertiesMatch) {
+            bool propertiesMatch =
+                (memoryProperties.MemoryTypes[(int)index].PropertyFlags & requiredProperties)
+                == requiredProperties;
+            if (typeSupported && propertiesMatch)
+            {
                 return index;
             }
         }
 
         throw VulkanAssetErrors.UploadFailed(
             canonicalPath,
-            $"no Vulkan memory type satisfies {requiredProperties} for the {description} (type bits 0x{memoryTypeBits:X8}).");
+            $"no Vulkan memory type satisfies {requiredProperties} for the {description} (type bits 0x{memoryTypeBits:X8})."
+        );
     }
 }

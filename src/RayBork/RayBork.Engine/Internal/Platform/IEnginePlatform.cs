@@ -11,7 +11,8 @@ namespace RayBork.Internal;
 /// thread: the app marshals a render-thread Vulkan request to the main thread before calling the
 /// surface operations.
 /// </remarks>
-internal interface IEnginePlatform : IDisposable {
+internal interface IEnginePlatform : IDisposable
+{
     /// <summary>
     /// Gets the platform window.
     /// </summary>
@@ -107,7 +108,12 @@ internal interface IEnginePlatform : IDisposable {
     /// <param name="lowFrequency">The low-frequency motor intensity in the range <c>[0, 1]</c>.</param>
     /// <param name="highFrequency">The high-frequency motor intensity in the range <c>[0, 1]</c>.</param>
     /// <param name="duration">The vibration duration.</param>
-    void SetGamepadVibration(int instanceId, float lowFrequency, float highFrequency, TimeSpan duration);
+    void SetGamepadVibration(
+        int instanceId,
+        float lowFrequency,
+        float highFrequency,
+        TimeSpan duration
+    );
 
     /// <summary>
     /// Queues a stop of gamepad vibration. Runs on the tick thread and is applied on the main thread.

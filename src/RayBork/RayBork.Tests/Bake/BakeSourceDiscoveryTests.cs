@@ -4,18 +4,24 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake;
 
-public sealed class BakeSourceDiscoveryTests {
+public sealed class BakeSourceDiscoveryTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OptionalSidecarBindsItsProcessorTable() {
+    public void OptionalSidecarBindsItsProcessorTable()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("textures/castle.opt", "source");
-        workspace.WriteAsset("textures/castle.toml", """
+        workspace.WriteAsset(
+            "textures/castle.toml",
+            """
             [optional]
             value = 7
             label = "sidecar"
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new OptionalSidecarProcessor())
             .Build();
 
@@ -30,15 +36,20 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CompoundExtensionUsesTheBasePathSidecarName() {
+    public void CompoundExtensionUsesTheBasePathSidecarName()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("textures/castle.bundle.opt", "source");
-        workspace.WriteAsset("textures/castle.toml", """
+        workspace.WriteAsset(
+            "textures/castle.toml",
+            """
             [compound-optional]
             value = 5
             label = "compound"
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CompoundOptionalProcessor())
             .Build();
 
@@ -53,10 +64,12 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingOptionalSidecarUsesTheInMemoryDefault() {
+    public void MissingOptionalSidecarUsesTheInMemoryDefault()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("textures/castle.opt", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new OptionalSidecarProcessor())
             .Build();
 
@@ -72,10 +85,12 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingRequiredSidecarIsAnError() {
+    public void MissingRequiredSidecarIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("textures/castle.req", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new RequiredSidecarProcessor())
             .Build();
 
@@ -89,15 +104,20 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownSidecarKeyIsAnError() {
+    public void UnknownSidecarKeyIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.opt", "source");
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [optional]
             value = 1
             bogus = true
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new OptionalSidecarProcessor())
             .Build();
 
@@ -112,17 +132,22 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ExtraRootTableInSidecarIsAnError() {
+    public void ExtraRootTableInSidecarIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.opt", "source");
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [optional]
             value = 1
 
             [other]
             value = 2
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new OptionalSidecarProcessor())
             .Build();
 
@@ -135,12 +160,16 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OrphanTomlIsAnError() {
+    public void OrphanTomlIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("settings.toml", """
+        workspace.WriteAsset(
+            "settings.toml",
+            """
             [unknown]
             value = 1
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -152,14 +181,19 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TableNamedTomlIsAProcessorSourceWithoutASibling() {
+    public void TableNamedTomlIsAProcessorSourceWithoutASibling()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("shaders/castle.toml", """
+        workspace.WriteAsset(
+            "shaders/castle.toml",
+            """
             [shader]
             value = 3
             label = "table-source"
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new TableSourceProcessor())
             .Build();
 
@@ -174,14 +208,19 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TableNamedTomlWithASiblingIsTheSiblingSidecar() {
+    public void TableNamedTomlWithASiblingIsTheSiblingSidecar()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.opt", "source");
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [shader]
             value = 3
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new OptionalSidecarProcessor())
             .AddProcessor(new TableSourceProcessor())
             .Build();
@@ -196,14 +235,19 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SidecarNextToASidecarFreeProcessorIsAnError() {
+    public void SidecarNextToASidecarFreeProcessorIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.count", "source");
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [counter]
             value = 1
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor())
             .Build();
 
@@ -216,16 +260,21 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ExtraRootTableInATableNamedSourceIsAnError() {
+    public void ExtraRootTableInATableNamedSourceIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("castle.toml", """
+        workspace.WriteAsset(
+            "castle.toml",
+            """
             [shader]
             value = 1
 
             [extra]
             value = 2
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new TableSourceProcessor())
             .Build();
 
@@ -238,11 +287,13 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateCanonicalPathsInOnePackAreErrors() {
+    public void DuplicateCanonicalPathsInOnePackAreErrors()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("hero.one", "first");
         workspace.WriteAsset("hero.two", "second");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor("one", "one"))
             .AddProcessor(new CountingProcessor("two", "two"))
             .Build();
@@ -257,11 +308,13 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CaseNormalizedCanonicalCollisionsAreErrors() {
+    public void CaseNormalizedCanonicalCollisionsAreErrors()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("Textures/Hero.one", "first");
         workspace.WriteAsset("Textures/hero.two", "second");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor("one", "one"))
             .AddProcessor(new CountingProcessor("two", "two"))
             .Build();
@@ -275,13 +328,12 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnclaimedFileUsesTheRawFallback() {
+    public void UnclaimedFileUsesTheRawFallback()
+    {
         using var workspace = new TempBakeWorkspace();
         byte[] bytes = [1, 2, 3, 4, 5];
         workspace.WriteAssetBytes("data/readme.bin", bytes);
-        BakeApplication application = workspace.Builder()
-            .UseDefaultProcessors()
-            .Build();
+        BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
 
@@ -294,7 +346,8 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnclaimedFileWithoutRawFallbackIsAnError() {
+    public void UnclaimedFileWithoutRawFallbackIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("data/readme.bin", "data");
         BakeApplication application = workspace.Builder().Build();
@@ -308,13 +361,12 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CompoundTomlExtensionIsAProcessorSource() {
+    public void CompoundTomlExtensionIsAProcessorSource()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("shaders/castle.shader.toml", "[shader]\nvertex = \"v.glsl\"");
         var processor = new CountingProcessor("shader-file", "shader.toml");
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
 
         BakeRunResult result = workspace.Run(application);
 
@@ -326,12 +378,14 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LaterRegistrationOverridesAnEarlierExtension() {
+    public void LaterRegistrationOverridesAnEarlierExtension()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.count", "source");
         var first = new CountingProcessor("first", "count");
         var second = new CountingProcessor("second", "count");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(first)
             .AddProcessor(second)
             .Build();
@@ -346,12 +400,14 @@ public sealed class BakeSourceDiscoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LongestCompoundExtensionWins() {
+    public void LongestCompoundExtensionWins()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("thing.bundle.zip", "compound");
         var compound = new CountingProcessor("compound", "bundle.zip");
         var zip = new CountingProcessor("zip", "zip");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(zip)
             .AddProcessor(compound)
             .Build();
@@ -365,7 +421,8 @@ public sealed class BakeSourceDiscoveryTests {
         Assert.True(archive.TryGetEntry("thing", out _));
     }
 
-    private static TestPayload ReadPayload(PackArchive archive, string path) {
+    private static TestPayload ReadPayload(PackArchive archive, string path)
+    {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry));
         Assert.Equal(AssetEntryType.Data, entry.Type);
         return AssetSerialization.Deserialize<TestPayload>(archive.ReadPayload(entry));

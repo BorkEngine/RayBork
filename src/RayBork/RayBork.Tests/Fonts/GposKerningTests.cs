@@ -7,29 +7,24 @@ namespace RayBork.Tests.Fonts;
 /// Tests the GPOS pair-positioning parser's script selection, lookup order, extension lookups,
 /// validation failures, and the caps that bound hostile lookup and subtable counts.
 /// </summary>
-public sealed class GposKerningTests {
+public sealed class GposKerningTests
+{
     private const long ALLOCATION_BOUND = 16 * 1024 * 1024;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScriptSelectionPrefersLatnThenDfltThenTheFirstScript() {
-        Assert.Equal(
-            -10,
-            ScriptKerning(("cyrl", -30), ("DFLT", -20), ("latn", -10)));
-        Assert.Equal(
-            -20,
-            ScriptKerning(("cyrl", -30), ("DFLT", -20)));
-        Assert.Equal(
-            -30,
-            ScriptKerning(("cyrl", -30), ("grek", -40)));
-        Assert.Equal(
-            -10,
-            ScriptKerning(("cyrl", -30), ("latn", -10)));
+    public void ScriptSelectionPrefersLatnThenDfltThenTheFirstScript()
+    {
+        Assert.Equal(-10, ScriptKerning(("cyrl", -30), ("DFLT", -20), ("latn", -10)));
+        Assert.Equal(-20, ScriptKerning(("cyrl", -30), ("DFLT", -20)));
+        Assert.Equal(-30, ScriptKerning(("cyrl", -30), ("grek", -40)));
+        Assert.Equal(-10, ScriptKerning(("cyrl", -30), ("latn", -10)));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MultipleMatchingLookupsUseTheFirstLookup() {
+    public void MultipleMatchingLookupsUseTheFirstLookup()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos();
         gpos.AddLookup((a, v, -10));
@@ -43,9 +38,11 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ExtensionLookupWithNonPairPositioningTypeIsIgnored() {
+    public void ExtensionLookupWithNonPairPositioningTypeIsIgnored()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
-        var gpos = new SyntheticGpos {
+        var gpos = new SyntheticGpos
+        {
             ExtensionLookup = true,
             ExtensionInnerLookupType = 4,
         }.AddPair(a, v, -55);
@@ -59,12 +56,14 @@ public sealed class GposKerningTests {
     [InlineData(0x8000)]
     [InlineData(0xFFFF)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MalformedValueRecordFormatsAreRejected(int valueFormat) {
+    public void MalformedValueRecordFormatsAreRejected(int valueFormat)
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos { ValueFormat1 = valueFormat }.AddPair(a, v, -55);
 
-        FontFormatException exception = Assert.Throws<FontFormatException>(
-            () => SfntFace.Parse(builder.WithGpos(gpos).Build()));
+        FontFormatException exception = Assert.Throws<FontFormatException>(() =>
+            SfntFace.Parse(builder.WithGpos(gpos).Build())
+        );
 
         Assert.Contains("value format", exception.Reason, StringComparison.Ordinal);
     }
@@ -73,9 +72,11 @@ public sealed class GposKerningTests {
     [InlineData(1)]
     [InlineData(2)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnsortedCoverageIsRejected(int coverageFormat) {
+    public void UnsortedCoverageIsRejected(int coverageFormat)
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateGlyphBuilder();
-        var gpos = new SyntheticGpos {
+        var gpos = new SyntheticGpos
+        {
             PairPosFormat = 1,
             CoverageFormat = coverageFormat,
             ReverseCoverage = true,
@@ -83,34 +84,36 @@ public sealed class GposKerningTests {
             .AddPair(a, v, -10)
             .AddPair(t, o, -20);
 
-        FontFormatException exception = Assert.Throws<FontFormatException>(
-            () => SfntFace.Parse(builder.WithGpos(gpos).Build()));
+        FontFormatException exception = Assert.Throws<FontFormatException>(() =>
+            SfntFace.Parse(builder.WithGpos(gpos).Build())
+        );
 
         Assert.Contains("coverage", exception.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnsortedPairSetsAreRejected() {
+    public void UnsortedPairSetsAreRejected()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int _) = CreateGlyphBuilder();
-        var gpos = new SyntheticGpos {
-            PairPosFormat = 1,
-            ReversePairSets = true,
-        }
+        var gpos = new SyntheticGpos { PairPosFormat = 1, ReversePairSets = true }
             .AddPair(a, v, -10)
             .AddPair(a, t, -20);
 
-        FontFormatException exception = Assert.Throws<FontFormatException>(
-            () => SfntFace.Parse(builder.WithGpos(gpos).Build()));
+        FontFormatException exception = Assert.Throws<FontFormatException>(() =>
+            SfntFace.Parse(builder.WithGpos(gpos).Build())
+        );
 
         Assert.Contains("not sorted by second glyph", exception.Reason, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnsortedClassDefinitionRangesAreRejected() {
+    public void UnsortedClassDefinitionRangesAreRejected()
+    {
         (SyntheticFontBuilder builder, int a, int v, int t, int o) = CreateGlyphBuilder();
-        var gpos = new SyntheticGpos {
+        var gpos = new SyntheticGpos
+        {
             PairPosFormat = 2,
             ClassDefFormat = 2,
             ReverseClassDefRanges = true,
@@ -118,8 +121,9 @@ public sealed class GposKerningTests {
             .AddPair(a, v, -10)
             .AddPair(t, o, -20);
 
-        FontFormatException exception = Assert.Throws<FontFormatException>(
-            () => SfntFace.Parse(builder.WithGpos(gpos).Build()));
+        FontFormatException exception = Assert.Throws<FontFormatException>(() =>
+            SfntFace.Parse(builder.WithGpos(gpos).Build())
+        );
 
         Assert.Contains("class definition", exception.Reason, StringComparison.Ordinal);
         Assert.Contains("overlapping or unsorted", exception.Reason, StringComparison.Ordinal);
@@ -127,10 +131,12 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TooManyDistinctLookupsAreRejected() {
+    public void TooManyDistinctLookupsAreRejected()
+    {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos();
-        for (int index = 0; index < 65; index++) {
+        for (int index = 0; index < 65; index++)
+        {
             gpos.AddLookup();
         }
 
@@ -142,7 +148,8 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TooManyLookupReferencesAreRejected() {
+    public void TooManyLookupReferencesAreRejected()
+    {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos();
         gpos.AddLookup();
@@ -155,7 +162,8 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AliasedLookupReferencesAreDeduplicated() {
+    public void AliasedLookupReferencesAreDeduplicated()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos();
         gpos.AddLookup();
@@ -169,18 +177,17 @@ public sealed class GposKerningTests {
 
         Assert.True(
             allocated < ALLOCATION_BOUND,
-            $"The aliased GPOS parse allocated {allocated} bytes.");
+            $"The aliased GPOS parse allocated {allocated} bytes."
+        );
         Assert.Equal(0, face.GetKerning(a, v));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AliasedPairPositioningSubtablesAreDeduplicated() {
+    public void AliasedPairPositioningSubtablesAreDeduplicated()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
-        var gpos = new SyntheticGpos {
-            SubtablesPerLookup = 1000,
-            AliasLookupSubtables = true,
-        };
+        var gpos = new SyntheticGpos { SubtablesPerLookup = 1000, AliasLookupSubtables = true };
         gpos.AddLookup((a, v, -10));
         gpos.AddFeature("kern", 0);
         gpos.AddScript("latn", 0);
@@ -192,13 +199,15 @@ public sealed class GposKerningTests {
 
         Assert.True(
             allocated < ALLOCATION_BOUND,
-            $"The aliased subtable parse allocated {allocated} bytes.");
+            $"The aliased subtable parse allocated {allocated} bytes."
+        );
         Assert.Equal(-10, face.GetKerning(a, v));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AliasedLookupListAndSubtableRecordsAreDeduplicated() {
+    public void AliasedLookupListAndSubtableRecordsAreDeduplicated()
+    {
         byte[] faceBytes = HostileFontFaces.CreateAliasedLookupListFace();
 
         long before = GC.GetAllocatedBytesForCurrentThread();
@@ -207,13 +216,15 @@ public sealed class GposKerningTests {
 
         Assert.True(
             allocated < ALLOCATION_BOUND,
-            $"The aliased lookup-list parse allocated {allocated} bytes.");
+            $"The aliased lookup-list parse allocated {allocated} bytes."
+        );
         Assert.Equal(-10, face.GetKerning(1, 2));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TooManyLookupSubtableRecordsAreRejected() {
+    public void TooManyLookupSubtableRecordsAreRejected()
+    {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos { AliasLookupSubtables = true };
         gpos.AddLookup(17);
@@ -226,7 +237,8 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LookupSubtableRecordBudgetAllowsTheExactLimit() {
+    public void LookupSubtableRecordBudgetAllowsTheExactLimit()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos { AliasLookupSubtables = true };
         gpos.AddLookup(17);
@@ -240,7 +252,8 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LookupSubtableRecordBudgetRejectsOnePastTheLimit() {
+    public void LookupSubtableRecordBudgetRejectsOnePastTheLimit()
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int __) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos { AliasLookupSubtables = true };
         gpos.AddLookup(18);
@@ -253,11 +266,9 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CoverageEntryBudgetIsEnforced() {
-        byte[] gpos = BuildBudgetGpos(
-            5,
-            CreateHugeCoverage(),
-            CreateEmptyClassDef());
+    public void CoverageEntryBudgetIsEnforced()
+    {
+        byte[] gpos = BuildBudgetGpos(5, CreateHugeCoverage(), CreateEmptyClassDef());
         byte[] faceBytes = CreateManyGlyphFace(gpos);
 
         AssertUnsupported(faceBytes, "262144");
@@ -265,11 +276,9 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ClassDefinitionEntryBudgetIsEnforced() {
-        byte[] gpos = BuildBudgetGpos(
-            3,
-            CreateTinyCoverage(),
-            CreateHugeClassDef());
+    public void ClassDefinitionEntryBudgetIsEnforced()
+    {
+        byte[] gpos = BuildBudgetGpos(3, CreateTinyCoverage(), CreateHugeClassDef());
         byte[] faceBytes = CreateManyGlyphFace(gpos);
 
         AssertUnsupported(faceBytes, "262144");
@@ -277,7 +286,8 @@ public sealed class GposKerningTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TooManyPairPositioningsAreRejected() {
+    public void TooManyPairPositioningsAreRejected()
+    {
         (SyntheticFontBuilder builder, int _, int __, int ___, int ____) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos { SubtablesPerLookup = 200 };
         gpos.AddLookup();
@@ -288,18 +298,22 @@ public sealed class GposKerningTests {
         AssertUnsupported(builder.WithGpos(gpos).Build(), "distinct subtable offsets");
     }
 
-    private static int ScriptKerning(params (string Tag, int XAdvance)[] variants) {
+    private static int ScriptKerning(params (string Tag, int XAdvance)[] variants)
+    {
         (SyntheticFontBuilder builder, int a, int v, int _, int _) = CreateGlyphBuilder();
         var gpos = new SyntheticGpos();
-        foreach (var variant in variants) {
+        foreach (var variant in variants)
+        {
             gpos.AddLookup((a, v, variant.XAdvance));
         }
 
-        for (int index = 0; index < variants.Length; index++) {
+        for (int index = 0; index < variants.Length; index++)
+        {
             gpos.AddFeature("kern", index);
         }
 
-        for (int index = 0; index < variants.Length; index++) {
+        for (int index = 0; index < variants.Length; index++)
+        {
             gpos.AddScript(variants[index].Tag, index);
         }
 
@@ -307,9 +321,11 @@ public sealed class GposKerningTests {
         return face.GetKerning(a, v);
     }
 
-    private static byte[] CreateManyGlyphFace(byte[] gpos) {
+    private static byte[] CreateManyGlyphFace(byte[] gpos)
+    {
         var builder = SyntheticFontBuilder.Create();
-        for (int index = 0; index < 65_534; index++) {
+        for (int index = 0; index < 65_534; index++)
+        {
             builder.AddEmpty(500);
         }
 
@@ -318,7 +334,8 @@ public sealed class GposKerningTests {
         return builder.Build();
     }
 
-    private static byte[] BuildBudgetGpos(int subtableCount, byte[] coverage, byte[] classDef) {
+    private static byte[] BuildBudgetGpos(int subtableCount, byte[] coverage, byte[] classDef)
+    {
         const int scriptLength = 20;
         const int featureLength = 14;
         int lookupListOffset = 10 + scriptLength + featureLength;
@@ -359,7 +376,8 @@ public sealed class GposKerningTests {
         WriteUInt16(gpos, lookup + 4, (ushort)subtableCount);
         int offsets = lookup + 6;
         int subtables = offsets + (2 * subtableCount);
-        for (int index = 0; index < subtableCount; index++) {
+        for (int index = 0; index < subtableCount; index++)
+        {
             int subtable = subtables + (16 * index);
             WriteUInt16(gpos, offsets + (2 * index), (ushort)(subtable - lookup));
             WriteUInt16(gpos, subtable, 2);
@@ -377,7 +395,8 @@ public sealed class GposKerningTests {
         return gpos;
     }
 
-    private static byte[] CreateHugeCoverage() {
+    private static byte[] CreateHugeCoverage()
+    {
         byte[] coverage = new byte[10];
         WriteUInt16(coverage, 0, 2);
         WriteUInt16(coverage, 2, 1);
@@ -387,7 +406,8 @@ public sealed class GposKerningTests {
         return coverage;
     }
 
-    private static byte[] CreateTinyCoverage() {
+    private static byte[] CreateTinyCoverage()
+    {
         byte[] coverage = new byte[6];
         WriteUInt16(coverage, 0, 1);
         WriteUInt16(coverage, 2, 1);
@@ -395,14 +415,16 @@ public sealed class GposKerningTests {
         return coverage;
     }
 
-    private static byte[] CreateEmptyClassDef() {
+    private static byte[] CreateEmptyClassDef()
+    {
         byte[] classDef = new byte[4];
         WriteUInt16(classDef, 0, 2);
         WriteUInt16(classDef, 2, 0);
         return classDef;
     }
 
-    private static byte[] CreateHugeClassDef() {
+    private static byte[] CreateHugeClassDef()
+    {
         byte[] classDef = new byte[10];
         WriteUInt16(classDef, 0, 2);
         WriteUInt16(classDef, 2, 1);
@@ -415,26 +437,31 @@ public sealed class GposKerningTests {
     private static void WriteUInt16(byte[] target, int offset, int value) =>
         BinaryPrimitives.WriteUInt16BigEndian(target.AsSpan(offset), (ushort)value);
 
-    private static void WriteTag(byte[] target, int offset, string tag) {
+    private static void WriteTag(byte[] target, int offset, string tag)
+    {
         target[offset] = (byte)tag[0];
         target[offset + 1] = (byte)tag[1];
         target[offset + 2] = (byte)tag[2];
         target[offset + 3] = (byte)tag[3];
     }
 
-    private static void AssertUnsupported(byte[] faceBytes, string reason) {
+    private static void AssertUnsupported(byte[] faceBytes, string reason)
+    {
         long before = GC.GetAllocatedBytesForCurrentThread();
-        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(
-            () => SfntFace.Parse(faceBytes));
+        FontUnsupportedException exception = Assert.Throws<FontUnsupportedException>(() =>
+            SfntFace.Parse(faceBytes)
+        );
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.Contains(reason, exception.Reason, StringComparison.Ordinal);
         Assert.True(
             allocated < ALLOCATION_BOUND,
-            $"The rejected GPOS parse allocated {allocated} bytes.");
+            $"The rejected GPOS parse allocated {allocated} bytes."
+        );
     }
 
-    private static (SyntheticFontBuilder Builder, int A, int V, int T, int O) CreateGlyphBuilder() {
+    private static (SyntheticFontBuilder Builder, int A, int V, int T, int O) CreateGlyphBuilder()
+    {
         var builder = SyntheticFontBuilder.Create();
         int a = AddGlyph(builder);
         int v = AddGlyph(builder);
@@ -444,10 +471,12 @@ public sealed class GposKerningTests {
         return (builder, a, v, t, o);
     }
 
-    private static int AddGlyph(SyntheticFontBuilder builder) => builder.AddSimple(
-        600,
-        10,
-        new SyntheticPoint(0, 0),
-        new SyntheticPoint(500, 0),
-        new SyntheticPoint(250, 700));
+    private static int AddGlyph(SyntheticFontBuilder builder) =>
+        builder.AddSimple(
+            600,
+            10,
+            new SyntheticPoint(0, 0),
+            new SyntheticPoint(500, 0),
+            new SyntheticPoint(250, 700)
+        );
 }

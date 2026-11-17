@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// the committed SPIR-V payloads and keeps the bake sidecar metadata for pipeline creation. The
 /// catalog caches the uploaded program; public <see cref="Shader"/> values are materials over it.
 /// </remarks>
-internal sealed class ShaderGpuUpload : AssetGpuUpload {
+internal sealed class ShaderGpuUpload : AssetGpuUpload
+{
     /// <summary>
     /// Initializes a shader upload.
     /// </summary>
@@ -22,8 +23,10 @@ internal sealed class ShaderGpuUpload : AssetGpuUpload {
         string path,
         ShaderAssetDescriptor descriptor,
         ReadOnlyMemory<byte> vertexSpirv,
-        ReadOnlyMemory<byte> fragmentSpirv)
-        : base(AssetGpuUploadKind.Shader, path) {
+        ReadOnlyMemory<byte> fragmentSpirv
+    )
+        : base(AssetGpuUploadKind.Shader, path)
+    {
         ArgumentNullException.ThrowIfNull(descriptor);
 
         Shader = descriptor;

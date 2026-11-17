@@ -13,7 +13,8 @@ namespace RayBork.Internal;
 /// running apply to the next snapshot. Levels are retained between ticks; the per-tick edge sets,
 /// text buffer, mouse delta, and wheel accumulation are cleared by the capture.
 /// </remarks>
-internal sealed class InputState {
+internal sealed class InputState
+{
     private readonly Lock _gate = new();
     private readonly bool[] _keyDown = new bool[InputMappings.KEY_COUNT];
     private readonly bool[] _keyPressed = new bool[InputMappings.KEY_COUNT];
@@ -32,7 +33,8 @@ internal sealed class InputState {
     private Vector2 _mouseDelta;
     private float _mouseWheel;
 
-    internal InputState(IGamepadVibrationSink vibrationSink) {
+    internal InputState(IGamepadVibrationSink vibrationSink)
+    {
         ArgumentNullException.ThrowIfNull(vibrationSink);
         _vibrationSink = vibrationSink;
     }
@@ -41,13 +43,18 @@ internal sealed class InputState {
     /// Applies a key-down event. A non-repeat event on a key that was up produces a press edge; a
     /// repeat event only produces a repeat edge.
     /// </summary>
-    internal void HandleKeyDown(Key key, bool repeat) {
+    internal void HandleKeyDown(Key key, bool repeat)
+    {
         InputMappings.ValidateKey(key);
-        lock (_gate) {
+        lock (_gate)
+        {
             int index = (int)key;
-            if (repeat) {
+            if (repeat)
+            {
                 _keyRepeat[index] = true;
-            } else if (!_keyDown[index]) {
+            }
+            else if (!_keyDown[index])
+            {
                 _keyPressed[index] = true;
             }
 
@@ -58,11 +65,14 @@ internal sealed class InputState {
     /// <summary>
     /// Applies a key-up event. The release edge is reported only when the key was down.
     /// </summary>
-    internal void HandleKeyUp(Key key) {
+    internal void HandleKeyUp(Key key)
+    {
         InputMappings.ValidateKey(key);
-        lock (_gate) {
+        lock (_gate)
+        {
             int index = (int)key;
-            if (_keyDown[index]) {
+            if (_keyDown[index])
+            {
                 _keyReleased[index] = true;
                 _keyDown[index] = false;
             }
@@ -72,13 +82,16 @@ internal sealed class InputState {
     /// <summary>
     /// Appends event-order UTF-16 text to the current tick buffer.
     /// </summary>
-    internal void AppendText(string text) {
+    internal void AppendText(string text)
+    {
         ArgumentNullException.ThrowIfNull(text);
-        if (text.Length == 0) {
+        if (text.Length == 0)
+        {
             return;
         }
 
-        lock (_gate) {
+        lock (_gate)
+        {
             _text.Append(text);
         }
     }
@@ -88,8 +101,10 @@ internal sealed class InputState {
     /// position replaces the absolute mouse position and the delta accumulates relative motion for the
     /// tick.
     /// </summary>
-    internal void HandleMouseMotion(float x, float y, float deltaX, float deltaY) {
-        lock (_gate) {
+    internal void HandleMouseMotion(float x, float y, float deltaX, float deltaY)
+    {
+        lock (_gate)
+        {
             _mousePosition = new Vector2(x, y);
             _mouseDelta += new Vector2(deltaX, deltaY);
         }
@@ -98,17 +113,23 @@ internal sealed class InputState {
     /// <summary>
     /// Applies a mouse-button transition.
     /// </summary>
-    internal void HandleMouseButton(MouseButton button, bool down) {
+    internal void HandleMouseButton(MouseButton button, bool down)
+    {
         InputMappings.ValidateMouseButton(button);
-        lock (_gate) {
+        lock (_gate)
+        {
             int index = (int)button;
             bool wasDown = _mouseDown[index];
             _mouseDown[index] = down;
-            if (down) {
-                if (!wasDown) {
+            if (down)
+            {
+                if (!wasDown)
+                {
                     _mousePressed[index] = true;
                 }
-            } else if (wasDown) {
+            }
+            else if (wasDown)
+            {
                 _mouseReleased[index] = true;
             }
         }
@@ -117,8 +138,10 @@ internal sealed class InputState {
     /// <summary>
     /// Adds the vertical wheel delta for the tick.
     /// </summary>
-    internal void HandleMouseWheel(float delta) {
-        lock (_gate) {
+    internal void HandleMouseWheel(float delta)
+    {
+        lock (_gate)
+        {
             _mouseWheel += delta;
         }
     }
@@ -127,8 +150,10 @@ internal sealed class InputState {
     /// Clears keyboard and mouse levels and every pending edge, as required when the window loses
     /// focus. Text, delta, and wheel values that already belong to the current tick are kept.
     /// </summary>
-    internal void ResetLevels() {
-        lock (_gate) {
+    internal void ResetLevels()
+    {
+        lock (_gate)
+        {
             Array.Clear(_keyDown);
             Array.Clear(_keyPressed);
             Array.Clear(_keyRepeat);
@@ -143,29 +168,48 @@ internal sealed class InputState {
     /// Registers a connected gamepad and seeds its levels from the initial poll. The initial poll
     /// produces no pressed edges.
     /// </summary>
-    internal void ConnectGamepad(uint instanceId, string name, ReadOnlySpan<bool> buttonStates, ReadOnlySpan<float> axes) {
+    internal void ConnectGamepad(
+        uint instanceId,
+        string name,
+        ReadOnlySpan<bool> buttonStates,
+        ReadOnlySpan<float> axes
+    )
+    {
         ArgumentNullException.ThrowIfNull(name);
-        if (buttonStates.Length != InputMappings.GAMEPAD_BUTTON_COUNT) {
-            throw new ArgumentException("The initial gamepad button state has the wrong length.", nameof(buttonStates));
+        if (buttonStates.Length != InputMappings.GAMEPAD_BUTTON_COUNT)
+        {
+            throw new ArgumentException(
+                "The initial gamepad button state has the wrong length.",
+                nameof(buttonStates)
+            );
         }
 
-        if (axes.Length != InputMappings.GAMEPAD_AXIS_SLOT_COUNT) {
-            throw new ArgumentException("The initial gamepad axis state has the wrong length.", nameof(axes));
+        if (axes.Length != InputMappings.GAMEPAD_AXIS_SLOT_COUNT)
+        {
+            throw new ArgumentException(
+                "The initial gamepad axis state has the wrong length.",
+                nameof(axes)
+            );
         }
 
-        lock (_gate) {
-            if (_gamepadsById.ContainsKey(instanceId)) {
+        lock (_gate)
+        {
+            if (_gamepadsById.ContainsKey(instanceId))
+            {
                 return;
             }
 
             GamepadState state = new(instanceId, name);
-            for (int i = 0; i < buttonStates.Length; i++) {
-                if (buttonStates[i]) {
+            for (int i = 0; i < buttonStates.Length; i++)
+            {
+                if (buttonStates[i])
+                {
                     state.SetButton((GamepadButton)i, true);
                 }
             }
 
-            for (int i = 0; i < axes.Length; i++) {
+            for (int i = 0; i < axes.Length; i++)
+            {
                 state.SetAxis(i, axes[i]);
             }
 
@@ -179,9 +223,12 @@ internal sealed class InputState {
     /// Removes a disconnected gamepad from the connected order. Handles for the instance id stay
     /// alive and report <see cref="IGamepad.IsConnected"/> as false after the next capture.
     /// </summary>
-    internal void DisconnectGamepad(uint instanceId) {
-        lock (_gate) {
-            if (_gamepadsById.Remove(instanceId, out GamepadState? state)) {
+    internal void DisconnectGamepad(uint instanceId)
+    {
+        lock (_gate)
+        {
+            if (_gamepadsById.Remove(instanceId, out GamepadState? state))
+            {
                 _gamepadOrder.Remove(state);
             }
         }
@@ -191,10 +238,13 @@ internal sealed class InputState {
     /// Applies a gamepad button transition for a connected device. Events for unknown devices are
     /// ignored; the platform reconciles hotplug at tick boundaries.
     /// </summary>
-    internal void HandleGamepadButton(uint instanceId, GamepadButton button, bool down) {
+    internal void HandleGamepadButton(uint instanceId, GamepadButton button, bool down)
+    {
         InputMappings.ValidateGamepadButton(button);
-        lock (_gate) {
-            if (_gamepadsById.TryGetValue(instanceId, out GamepadState? state)) {
+        lock (_gate)
+        {
+            if (_gamepadsById.TryGetValue(instanceId, out GamepadState? state))
+            {
                 state.SetButton(button, down);
             }
         }
@@ -203,11 +253,14 @@ internal sealed class InputState {
     /// <summary>
     /// Applies a normalized stick axis value in the range <c>[-1, 1]</c>.
     /// </summary>
-    internal void HandleGamepadStickAxis(uint instanceId, GamepadAxis axis, float value) {
+    internal void HandleGamepadStickAxis(uint instanceId, GamepadAxis axis, float value)
+    {
         InputMappings.ValidateGamepadAxis(axis);
         float clamped = Math.Clamp(value, -1f, 1f);
-        lock (_gate) {
-            if (_gamepadsById.TryGetValue(instanceId, out GamepadState? state)) {
+        lock (_gate)
+        {
+            if (_gamepadsById.TryGetValue(instanceId, out GamepadState? state))
+            {
                 state.SetAxis(InputMappings.AxisSlot(axis), float.IsNaN(clamped) ? 0f : clamped);
             }
         }
@@ -216,12 +269,18 @@ internal sealed class InputState {
     /// <summary>
     /// Applies a normalized trigger value in the range <c>[0, 1]</c>.
     /// </summary>
-    internal void HandleGamepadTrigger(uint instanceId, GamepadTrigger trigger, float value) {
+    internal void HandleGamepadTrigger(uint instanceId, GamepadTrigger trigger, float value)
+    {
         InputMappings.ValidateGamepadTrigger(trigger);
         float clamped = Math.Clamp(value, 0f, 1f);
-        lock (_gate) {
-            if (_gamepadsById.TryGetValue(instanceId, out GamepadState? state)) {
-                state.SetAxis(InputMappings.TriggerSlot(trigger), float.IsNaN(clamped) ? 0f : clamped);
+        lock (_gate)
+        {
+            if (_gamepadsById.TryGetValue(instanceId, out GamepadState? state))
+            {
+                state.SetAxis(
+                    InputMappings.TriggerSlot(trigger),
+                    float.IsNaN(clamped) ? 0f : clamped
+                );
             }
         }
     }
@@ -230,7 +289,8 @@ internal sealed class InputState {
     /// Captures the next tick snapshot on the tick thread. The copy and the clears happen under one
     /// lock, so an event either belongs to this snapshot or to the next one.
     /// </summary>
-    internal InputSnapshot Capture() {
+    internal InputSnapshot Capture()
+    {
         bool[] keyDown;
         bool[] keyPressed;
         bool[] keyRepeat;
@@ -244,7 +304,8 @@ internal sealed class InputState {
         bool[] mouseReleased;
         List<GamepadSnapshot> gamepads = [];
 
-        lock (_gate) {
+        lock (_gate)
+        {
             keyDown = (bool[])_keyDown.Clone();
             keyPressed = (bool[])_keyPressed.Clone();
             keyRepeat = (bool[])_keyRepeat.Clone();
@@ -266,20 +327,24 @@ internal sealed class InputState {
             Array.Clear(_mousePressed);
             Array.Clear(_mouseReleased);
 
-            for (int i = 0; i < _gamepadOrder.Count; i++) {
+            for (int i = 0; i < _gamepadOrder.Count; i++)
+            {
                 gamepads.Add(_gamepadOrder[i].CreateSnapshot());
             }
         }
 
         // The handle table is tick-thread only: Capture is the sole writer.
-        foreach (GamepadHandle handle in _gamepadHandles.Values) {
+        foreach (GamepadHandle handle in _gamepadHandles.Values)
+        {
             handle.MarkDisconnected();
         }
 
         IGamepad[] handles = new IGamepad[gamepads.Count];
-        for (int i = 0; i < gamepads.Count; i++) {
+        for (int i = 0; i < gamepads.Count; i++)
+        {
             GamepadSnapshot snapshot = gamepads[i];
-            if (!_gamepadHandles.TryGetValue(snapshot.InstanceId, out GamepadHandle? handle)) {
+            if (!_gamepadHandles.TryGetValue(snapshot.InstanceId, out GamepadHandle? handle))
+            {
                 handle = new GamepadHandle(snapshot.InstanceId, _vibrationSink);
                 _gamepadHandles.Add(snapshot.InstanceId, handle);
             }
@@ -300,6 +365,7 @@ internal sealed class InputState {
             mouseDown,
             mousePressed,
             mouseReleased,
-            handles);
+            handles
+        );
     }
 }

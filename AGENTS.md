@@ -21,23 +21,36 @@ the same change. A direct user instruction wins over this file. If documents con
 
 ## 2. Code style
 
-The build enforces [.editorconfig](.editorconfig); do not weaken it. Run `dotnet format`.
+[CSharpier](https://csharpier.com/) 1.4.0 formats C# and project XML. The pinned local tool is
+[.config/dotnet-tools.json](.config/dotnet-tools.json): run `dotnet tool restore`, then
+`dotnet csharpier format .` from the repository root. CI and the §5 gates run
+`dotnet csharpier check .`.
 
-- K&R braces: the opening brace stays on the declaration line; `else`/`catch`/`finally` stay on the
-  closing-brace line.
+- Allman braces: the opening brace goes on its own line, and `else`/`catch`/`finally` start a new
+  line after the closing brace.
 
 ```csharp
-if (amount <= 0) {
+if (amount <= 0)
+{
     return;
-} else if (Value + amount > MAX_COUNT) {
+}
+else if (Value + amount > MAX_COUNT)
+{
     Value = MAX_COUNT;
 }
 ```
 
+- CSharpier owns whitespace layout for C# and project XML (`csproj`, `props`, `targets`, `slnx`, and
+  `NuGet.config`) at a 100-column print width, four-space indentation, and LF.
+  [.editorconfig](.editorconfig) still owns naming, accessibility, qualification, and analyzer
+  policy and must not be weakened; IDE0055 is disabled because its formatting options conflict with
+  CSharpier. Do not hand-format CSharpier output, and do not add `csharpier-ignore` without a
+  reviewed reason.
 - `SCREAMING_SNAKE_CASE` constants; PascalCase types, members, and enum values; `_camelCase`
   private fields; camelCase parameters and locals; `I`-prefixed interfaces.
-- File-scoped namespaces; usings outside the namespace, `System` first; explicit accessibility;
-  four spaces; LF; final newline. One primary type per file.
+- File-scoped namespaces; usings outside the namespace, `System` first; explicit accessibility.
+  CSharpier owns the layout: a 100-column print width, four spaces, LF, and a final newline. One
+  primary type per file.
 - `internal` by default; `public` only for the documented contract. `sealed` by default; composition
   over inheritance in hot paths. Public API changes need user approval. XML docs on public API and
   non-obvious internals; comments explain why. No dead code, `TODO`, or placeholders.
@@ -116,13 +129,16 @@ dotnet build src/RayBork/RayBork.slnx -c Debug
 dotnet build src/RayBork/RayBork.slnx -c Release
 dotnet test src/RayBork/RayBork.slnx -c Debug --no-build
 dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"
-dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
+dotnet tool restore
+dotnet csharpier check .
 pwsh scripts/check-docs.ps1
 git diff --check
 ```
 
-- Build and format every sample solution. Each sample is a separate solution outside
-  `src/RayBork/RayBork.slnx` and bakes its pack beside the executable; no manual bake or `--assets`.
+- The root CSharpier check covers the engine, bake, tests, build tooling, and every sample solution,
+  so there is no per-solution format command. Build every sample solution: each is a separate
+  solution outside `src/RayBork/RayBork.slnx` and bakes its pack beside the executable; no manual
+  bake or `--assets`.
 - Publish the milestone's AOT gate for `win-x64` and `linux-x64` and run both hosts; exact commands
   are in the README and the gate sample's README. Windows uses the hardware driver; Linux uses
   lavapipe with `VK_ICD_FILENAMES`; WSLg dzn is not a target. Both publishes have zero AOT/trim
@@ -165,8 +181,8 @@ by one PR from its milestone branch.
 - Fill the PR body from [.github/pull_request_template.md](.github/pull_request_template.md): goal,
   scope, decisions, verification, docs, risks, follow-ups. The PR body is the work report.
 - The user merges and handles remote cleanup. Before merge: `build-test` on Windows and Ubuntu,
-  `docs`, `pr-title`, one approval, and no unresolved comments. Squash and merge with `api: ...`,
-  `build: ...`, `docs: ...`, `fix: ...`, or `test: ...`.
+  `format`, `docs`, `pr-title`, one approval, and no unresolved comments. Squash and merge with
+  `api: ...`, `build: ...`, `docs: ...`, `fix: ...`, or `test: ...`.
 - Do not force-push or rewrite published history. Do not merge to a protected branch.
 - Commits are scoped and imperative. Never commit `bin/`, `obj/`, publish output, IDE state, logs,
   secrets, packs, or generated assets.
@@ -178,5 +194,6 @@ by one PR from its milestone branch.
 - [ ] Every merged task returned `clean`; blocked or failed tasks were resolved and reviewed.
 - [ ] Tests cover behavior and failure modes; no golden images.
 - [ ] Docs updated; links resolve; no work-in-progress wording.
+- [ ] `dotnet csharpier check .` passes; CSharpier-owned layout with no manual re-formatting.
 - [ ] Full gates pass; skipped gates reported; AOT clean.
 - [ ] PR body complete; local branches and worktrees cleaned.

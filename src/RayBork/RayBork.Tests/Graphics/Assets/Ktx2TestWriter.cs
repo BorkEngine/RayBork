@@ -12,7 +12,8 @@ namespace RayBork.Tests.Graphics.Assets;
 /// descriptor block, and a complete mip chain. Tests corrupt the returned bytes at the documented
 /// field offsets to cover the failure modes.
 /// </remarks>
-internal static class Ktx2TestWriter {
+internal static class Ktx2TestWriter
+{
     internal const int HEADER_SIZE = 80;
     internal const int LEVEL_INDEX_ENTRY_SIZE = 24;
 
@@ -38,7 +39,8 @@ internal static class Ktx2TestWriter {
     private const byte PRIMARIES_BT709 = 1;
     private const byte CHANNEL_TYPE_UNORM = 0;
 
-    private static readonly byte[] _identifier = [
+    private static readonly byte[] _identifier =
+    [
         0xAB,
         0x4B,
         0x54,
@@ -73,18 +75,26 @@ internal static class Ktx2TestWriter {
         int width,
         int height,
         bool? srgb = null,
-        int? mipLevels = null) {
+        int? mipLevels = null
+    )
+    {
         FormatInfo info = GetFormatInfo(format);
         bool isSrgb = srgb ?? format is TextureFormat.Rgba8Srgb or TextureFormat.Bc7Srgb;
         int fullMipCount = FullMipCount(width, height);
         int levelCount = mipLevels ?? fullMipCount;
-        if (levelCount <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(mipLevels), levelCount, "The level count must be positive.");
+        if (levelCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mipLevels),
+                levelCount,
+                "The level count must be positive."
+            );
         }
 
         int alignment = LeastCommonMultiple(info.BytesPerBlock, 4);
         int sampleCount = info.BlockWidth == 4 ? (format == TextureFormat.Bc5Unorm ? 2 : 1) : 4;
-        if (format == TextureFormat.R8Unorm) {
+        if (format == TextureFormat.R8Unorm)
+        {
             sampleCount = 1;
         }
 
@@ -93,7 +103,8 @@ internal static class Ktx2TestWriter {
         int dfdOffset = HEADER_SIZE + (LEVEL_INDEX_ENTRY_SIZE * levelCount);
 
         int[] levelLengths = new int[levelCount];
-        for (int level = 0; level < levelCount; level++) {
+        for (int level = 0; level < levelCount; level++)
+        {
             int levelWidth = LevelExtent(width, level);
             int levelHeight = LevelExtent(height, level);
             levelLengths[level] = GetLevelByteLength(info, levelWidth, levelHeight);
@@ -101,7 +112,8 @@ internal static class Ktx2TestWriter {
 
         int[] levelOffsets = new int[levelCount];
         int cursor = Align(dfdOffset + dfdLength, alignment);
-        for (int level = levelCount - 1; level >= 0; level--) {
+        for (int level = levelCount - 1; level >= 0; level--)
+        {
             cursor = Align(cursor, alignment);
             levelOffsets[level] = cursor;
             cursor = checked(cursor + levelLengths[level]);
@@ -123,7 +135,8 @@ internal static class Ktx2TestWriter {
         WriteUInt32(payload, KVD_LENGTH_FIELD, 0u);
         WriteUInt64(payload, SGD_LENGTH_FIELD, 0ul);
 
-        for (int level = 0; level < levelCount; level++) {
+        for (int level = 0; level < levelCount; level++)
+        {
             int entry = HEADER_SIZE + (level * LEVEL_INDEX_ENTRY_SIZE);
             WriteUInt64(payload, entry, (ulong)levelOffsets[level]);
             WriteUInt64(payload, entry + 8, (ulong)levelLengths[level]);
@@ -131,9 +144,11 @@ internal static class Ktx2TestWriter {
         }
 
         WriteDfd(payload, dfdOffset, info, isSrgb, sampleCount, blockSize);
-        for (int level = levelCount - 1; level >= 0; level--) {
+        for (int level = levelCount - 1; level >= 0; level--)
+        {
             Span<byte> data = payload.AsSpan(levelOffsets[level], levelLengths[level]);
-            for (int index = 0; index < data.Length; index++) {
+            for (int index = 0; index < data.Length; index++)
+            {
                 data[index] = (byte)((level * 53) + index);
             }
         }
@@ -153,21 +168,25 @@ internal static class Ktx2TestWriter {
     /// <param name="height">The base-level height in pixels.</param>
     /// <param name="mipLevels">An optional level count; the default is the complete mip chain.</param>
     /// <returns>The complete KTX2 2.0 file bytes.</returns>
-    internal static byte[] WriteRgba8Solid(Color color, int width = 1, int height = 1, int? mipLevels = null) {
+    internal static byte[] WriteRgba8Solid(
+        Color color,
+        int width = 1,
+        int height = 1,
+        int? mipLevels = null
+    )
+    {
         byte[] payload = Write(TextureFormat.Rgba8Unorm, width, height, mipLevels: mipLevels);
-        byte[] rgba = [
-            ToByte(color.R),
-            ToByte(color.G),
-            ToByte(color.B),
-            ToByte(color.A),
-        ];
-        int levelCount = (int)BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(LEVEL_COUNT_OFFSET));
-        for (int level = 0; level < levelCount; level++) {
+        byte[] rgba = [ToByte(color.R), ToByte(color.G), ToByte(color.B), ToByte(color.A)];
+        int levelCount = (int)
+            BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(LEVEL_COUNT_OFFSET));
+        for (int level = 0; level < levelCount; level++)
+        {
             int entry = LevelEntryOffset(level);
             int offset = (int)BinaryPrimitives.ReadUInt64LittleEndian(payload.AsSpan(entry));
             int length = (int)BinaryPrimitives.ReadUInt64LittleEndian(payload.AsSpan(entry + 8));
             Span<byte> data = payload.AsSpan(offset, length);
-            for (int index = 0; index < data.Length; index++) {
+            for (int index = 0; index < data.Length; index++)
+            {
                 data[index] = rgba[index & 3];
             }
         }
@@ -184,15 +203,18 @@ internal static class Ktx2TestWriter {
     /// <summary>
     /// Gets the absolute level index entry offset of one level.
     /// </summary>
-    internal static int LevelEntryOffset(int level) => HEADER_SIZE + (level * LEVEL_INDEX_ENTRY_SIZE);
+    internal static int LevelEntryOffset(int level) =>
+        HEADER_SIZE + (level * LEVEL_INDEX_ENTRY_SIZE);
 
     /// <summary>
     /// Gets the complete mip chain length of a base extent.
     /// </summary>
-    internal static int FullMipCount(int width, int height) {
+    internal static int FullMipCount(int width, int height)
+    {
         int largest = Math.Max(width, height);
         int count = 1;
-        while (largest > 1) {
+        while (largest > 1)
+        {
             largest >>= 1;
             count++;
         }
@@ -211,25 +233,33 @@ internal static class Ktx2TestWriter {
         FormatInfo info,
         bool isSrgb,
         int sampleCount,
-        int blockSize) {
+        int blockSize
+    )
+    {
         WriteUInt32(payload, dfdOffset, (uint)(DFD_HEADER_SIZE + blockSize));
         WriteUInt32(payload, dfdOffset + 4, 0u);
         WriteUInt32(payload, dfdOffset + 8, ((uint)blockSize << 16) | DFD_VERSION);
         WriteUInt32(
             payload,
             dfdOffset + 12,
-            (uint)((isSrgb ? 2 : 1) << 16 | PRIMARIES_BT709 << 8 | info.ColorModel));
+            (uint)((isSrgb ? 2 : 1) << 16 | PRIMARIES_BT709 << 8 | info.ColorModel)
+        );
         WriteUInt32(
             payload,
             dfdOffset + 16,
-            (uint)((info.BlockWidth - 1) | ((info.BlockHeight - 1) << 8)));
+            (uint)((info.BlockWidth - 1) | ((info.BlockHeight - 1) << 8))
+        );
         WriteUInt32(payload, dfdOffset + 20, (uint)info.BytesPerBlock);
 
         int sampleOffset = dfdOffset + DFD_HEADER_SIZE + DFD_BASIC_BLOCK_SIZE;
-        if (info.BlockWidth == 4) {
-            if (sampleCount == 1) {
+        if (info.BlockWidth == 4)
+        {
+            if (sampleCount == 1)
+            {
                 WriteSample(payload, sampleOffset, 0, 128, 0, uint.MaxValue);
-            } else {
+            }
+            else
+            {
                 WriteSample(payload, sampleOffset, 0, 64, 0, uint.MaxValue);
                 WriteSample(payload, sampleOffset + DFD_SAMPLE_SIZE, 64, 64, 1, uint.MaxValue);
             }
@@ -238,8 +268,10 @@ internal static class Ktx2TestWriter {
         }
 
         int channelCount = sampleCount;
-        for (int channel = 0; channel < channelCount; channel++) {
-            byte channelId = channel switch {
+        for (int channel = 0; channel < channelCount; channel++)
+        {
+            byte channelId = channel switch
+            {
                 0 => 0,
                 1 => 1,
                 2 => 2,
@@ -251,7 +283,8 @@ internal static class Ktx2TestWriter {
                 (ushort)(channel * 8),
                 8,
                 channelId,
-                255);
+                255
+            );
         }
     }
 
@@ -261,7 +294,9 @@ internal static class Ktx2TestWriter {
         ushort bitOffset,
         byte bitLength,
         byte channel,
-        uint upper) {
+        uint upper
+    )
+    {
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(offset), bitOffset);
         payload[offset + 2] = (byte)(bitLength - 1);
         payload[offset + 3] = CHANNEL_TYPE_UNORM;
@@ -270,39 +305,46 @@ internal static class Ktx2TestWriter {
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(offset + 12), upper);
     }
 
-    private static int GetLevelByteLength(FormatInfo info, int width, int height) {
+    private static int GetLevelByteLength(FormatInfo info, int width, int height)
+    {
         int blocksWide = info.BlockWidth == 4 ? (width + 3) / 4 : width;
         int blocksHigh = info.BlockHeight == 4 ? (height + 3) / 4 : height;
         return blocksWide * blocksHigh * info.BytesPerBlock;
     }
 
-    private static FormatInfo GetFormatInfo(TextureFormat format) => format switch {
-        TextureFormat.Rgba8Unorm => new FormatInfo(37u, 1, 1, 4, 1),
-        TextureFormat.Rgba8Srgb => new FormatInfo(43u, 1, 1, 4, 1),
-        TextureFormat.Bc7Unorm => new FormatInfo(145u, 4, 4, 16, 134),
-        TextureFormat.Bc7Srgb => new FormatInfo(146u, 4, 4, 16, 134),
-        TextureFormat.Bc5Unorm => new FormatInfo(141u, 4, 4, 16, 132),
-        TextureFormat.R8Unorm => new FormatInfo(9u, 1, 1, 1, 1),
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(format),
-            format,
-            "The test writer supports packed texture formats only."),
-    };
+    private static FormatInfo GetFormatInfo(TextureFormat format) =>
+        format switch
+        {
+            TextureFormat.Rgba8Unorm => new FormatInfo(37u, 1, 1, 4, 1),
+            TextureFormat.Rgba8Srgb => new FormatInfo(43u, 1, 1, 4, 1),
+            TextureFormat.Bc7Unorm => new FormatInfo(145u, 4, 4, 16, 134),
+            TextureFormat.Bc7Srgb => new FormatInfo(146u, 4, 4, 16, 134),
+            TextureFormat.Bc5Unorm => new FormatInfo(141u, 4, 4, 16, 132),
+            TextureFormat.R8Unorm => new FormatInfo(9u, 1, 1, 1, 1),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(format),
+                format,
+                "The test writer supports packed texture formats only."
+            ),
+        };
 
-    private static int LeastCommonMultiple(int left, int right) {
+    private static int LeastCommonMultiple(int left, int right)
+    {
         int a = left;
         int b = right;
-        while (b != 0) {
+        while (b != 0)
+        {
             (a, b) = (b, a % b);
         }
 
         return (left / a) * right;
     }
 
-    private static int Align(int value, int alignment) => checked(((value + alignment - 1) / alignment) * alignment);
+    private static int Align(int value, int alignment) =>
+        checked(((value + alignment - 1) / alignment) * alignment);
 
-    private static byte ToByte(float linear)
-        => (byte)Math.Clamp((int)MathF.Round(linear * 255f), 0, 255);
+    private static byte ToByte(float linear) =>
+        (byte)Math.Clamp((int)MathF.Round(linear * 255f), 0, 255);
 
     private static void WriteUInt32(byte[] payload, int offset, uint value) =>
         BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(offset), value);
@@ -315,5 +357,6 @@ internal static class Ktx2TestWriter {
         int BlockWidth,
         int BlockHeight,
         int BytesPerBlock,
-        byte ColorModel);
+        byte ColorModel
+    );
 }

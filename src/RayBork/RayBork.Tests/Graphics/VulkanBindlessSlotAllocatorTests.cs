@@ -5,10 +5,12 @@ namespace RayBork.Tests;
 /// <summary>
 /// Unit tests for the pure bindless slot allocator behind the M4 bindless texture table.
 /// </summary>
-public sealed class VulkanBindlessSlotAllocatorTests {
+public sealed class VulkanBindlessSlotAllocatorTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WhiteSlotIsReservedAndLiveCountIncludesIt() {
+    public void WhiteSlotIsReservedAndLiveCountIncludesIt()
+    {
         VulkanBindlessSlotAllocator allocator = new(4);
 
         allocator.ReserveWhiteSlot();
@@ -22,7 +24,8 @@ public sealed class VulkanBindlessSlotAllocatorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AllocationTakesTheLowestFreeSlotAndReleaseReusesIt() {
+    public void AllocationTakesTheLowestFreeSlotAndReleaseReusesIt()
+    {
         VulkanBindlessSlotAllocator allocator = new(4);
         allocator.ReserveWhiteSlot();
 
@@ -41,7 +44,8 @@ public sealed class VulkanBindlessSlotAllocatorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FullTableRejectsAllocationAndKeepsTheCapacity() {
+    public void FullTableRejectsAllocationAndKeepsTheCapacity()
+    {
         VulkanBindlessSlotAllocator allocator = new(2);
         allocator.ReserveWhiteSlot();
         Assert.True(allocator.TryAllocate(out uint slot));
@@ -58,7 +62,8 @@ public sealed class VulkanBindlessSlotAllocatorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReleasingTheWhiteOrAnUnusedSlotIsANoOp() {
+    public void ReleasingTheWhiteOrAnUnusedSlotIsANoOp()
+    {
         VulkanBindlessSlotAllocator allocator = new(3);
         allocator.ReserveWhiteSlot();
 
@@ -71,7 +76,8 @@ public sealed class VulkanBindlessSlotAllocatorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ResetReleasesEverySlotIncludingWhite() {
+    public void ResetReleasesEverySlotIncludingWhite()
+    {
         VulkanBindlessSlotAllocator allocator = new(3);
         allocator.ReserveWhiteSlot();
         Assert.True(allocator.TryAllocate(out _));
@@ -87,7 +93,8 @@ public sealed class VulkanBindlessSlotAllocatorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ZeroCapacityIsRejected() {
+    public void ZeroCapacityIsRejected()
+    {
         Assert.Throws<ArgumentOutOfRangeException>(() => new VulkanBindlessSlotAllocator(0));
     }
 }

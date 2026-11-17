@@ -2,10 +2,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class RenderStatusTests {
+public sealed class RenderStatusTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultStatusIsTheIdleSnapshot() {
+    public void DefaultStatusIsTheIdleSnapshot()
+    {
         RenderStatus status = new();
 
         EngineInfo info = status.Info;
@@ -25,7 +27,8 @@ public sealed class RenderStatusTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetInfoAndSetStatsRoundTrip() {
+    public void SetInfoAndSetStatsRoundTrip()
+    {
         RenderStatus status = new();
         EngineInfo info = CreateEngineInfo();
         RenderStats stats = CreateRenderStats();
@@ -39,12 +42,14 @@ public sealed class RenderStatusTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WorkerThreadWriteIsVisibleAfterJoin() {
+    public void WorkerThreadWriteIsVisibleAfterJoin()
+    {
         RenderStatus status = new();
         EngineInfo expectedInfo = CreateEngineInfo();
         RenderStats expectedStats = CreateRenderStats();
 
-        Thread writer = new(() => {
+        Thread writer = new(() =>
+        {
             status.SetInfo(expectedInfo);
             status.SetStats(expectedStats);
         });
@@ -58,7 +63,8 @@ public sealed class RenderStatusTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EngineContextReadsTheAppStatusHolderOnTheNextTick() {
+    public void EngineContextReadsTheAppStatusHolderOnTheNextTick()
+    {
         EngineInfo expectedInfo = CreateEngineInfo();
         RenderStats expectedStats = CreateRenderStats();
         using ManualResetEventSlim firstTickStarted = new(false);
@@ -73,9 +79,11 @@ public sealed class RenderStatusTests {
         // tick thread observes the same snapshot the test wrote to the app status holder.
         host.FakeRenderer.Stats = expectedStats;
         host.FakeRenderer.PublishFrameStats = false;
-        host.Game.TickHandler = context => {
+        host.Game.TickHandler = context =>
+        {
             tickCount++;
-            if (tickCount == 1) {
+            if (tickCount == 1)
+            {
                 firstTickStarted.Set();
                 releaseFirstTick.Wait(AppTestHost.TIMEOUT);
                 return;
@@ -87,17 +95,24 @@ public sealed class RenderStatusTests {
         };
 
         Exception? runFailure = null;
-        Thread runThread = new(() => {
-            try {
+        Thread runThread = new(() =>
+        {
+            try
+            {
                 host.App.Run();
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 runFailure = exception;
             }
         });
 
         runThread.Start();
-        try {
-            Assert.True(firstTickStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+        try
+        {
+            Assert.True(
+                firstTickStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken)
+            );
 
             host.App.RenderStatus.SetInfo(expectedInfo);
             host.App.RenderStatus.SetStats(expectedStats);
@@ -105,7 +120,9 @@ public sealed class RenderStatusTests {
             releaseFirstTick.Set();
             Assert.True(runThread.Join(AppTestHost.TIMEOUT));
             Assert.Null(runFailure);
-        } finally {
+        }
+        finally
+        {
             releaseFirstTick.Set();
             runThread.Join(AppTestHost.TIMEOUT);
         }
@@ -114,31 +131,20 @@ public sealed class RenderStatusTests {
         Assert.Equal(expectedStats, capturedStats);
     }
 
-    private static EngineInfo CreateEngineInfo() => new(
-        "RayBork",
-        new Version(0, 1, 0, 0),
-        "Vulkan 1.2",
-        "Test GPU",
-        4202496u,
-        "B8G8R8A8_SRGB",
-        false,
-        4,
-        PresentMode.Mailbox,
-        true);
+    private static EngineInfo CreateEngineInfo() =>
+        new(
+            "RayBork",
+            new Version(0, 1, 0, 0),
+            "Vulkan 1.2",
+            "Test GPU",
+            4202496u,
+            "B8G8R8A8_SRGB",
+            false,
+            4,
+            PresentMode.Mailbox,
+            true
+        );
 
-    private static RenderStats CreateRenderStats() => new(
-        42L,
-        84L,
-        7,
-        9,
-        1200,
-        3,
-        2,
-        5,
-        4,
-        false,
-        1.5,
-        2.5,
-        2,
-        1);
+    private static RenderStats CreateRenderStats() =>
+        new(42L, 84L, 7, 9, 1200, 3, 2, 5, 4, false, 1.5, 2.5, 2, 1);
 }

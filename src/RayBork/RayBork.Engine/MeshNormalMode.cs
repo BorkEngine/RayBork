@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Selects how <see cref="MeshBuilder.ComputeNormals"/> derives the vertex normals of a triangle mesh.
 /// </summary>
-public enum MeshNormalMode {
+public enum MeshNormalMode
+{
     /// <summary>
     /// Area-weighted face normals accumulated per shared position and normalized per vertex. Vertices
     /// that share a position receive the same smoothed normal.

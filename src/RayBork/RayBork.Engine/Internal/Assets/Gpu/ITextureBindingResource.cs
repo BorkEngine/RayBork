@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// public <see cref="Texture"/> to this interface, so both kinds of texture reach the bindless slot the
 /// same way. Every member is render-thread affine.
 /// </remarks>
-internal interface ITextureBindingResource {
+internal interface ITextureBindingResource
+{
     /// <summary>
     /// Gets the bindless table slot, or <c>0</c> when the resource has not completed its slot
     /// reservation yet.

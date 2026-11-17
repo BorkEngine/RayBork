@@ -31,22 +31,23 @@ namespace RayBork.Internal;
 /// the packet's pooled records, so it is valid only while the render thread holds the frame slot.
 /// </para>
 /// </remarks>
-internal sealed class BatchPlanner {
+internal sealed class BatchPlanner
+{
     private readonly BatchPlanningOptions _options;
 
     /// <summary>
     /// Initializes a planner with the default split limits.
     /// </summary>
     internal BatchPlanner()
-        : this(BatchPlanningOptions.Default) {
-    }
+        : this(BatchPlanningOptions.Default) { }
 
     /// <summary>
     /// Initializes a planner with custom split limits.
     /// </summary>
     /// <param name="options">The split limits. The planner keeps the instance.</param>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is <c>null</c>.</exception>
-    internal BatchPlanner(BatchPlanningOptions options) {
+    internal BatchPlanner(BatchPlanningOptions options)
+    {
         ArgumentNullException.ThrowIfNull(options);
         _options = options;
     }
@@ -60,7 +61,8 @@ internal sealed class BatchPlanner {
     /// <param name="frame">The sealed frame packet.</param>
     /// <returns>The per-pass plans and submission statistics.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <c>null</c>.</exception>
-    internal FramePlan Plan(RenderFramePacket frame) {
+    internal FramePlan Plan(RenderFramePacket frame)
+    {
         ArgumentNullException.ThrowIfNull(frame);
 
         List<PassPlan> passes = new(frame.PassCount);
@@ -68,13 +70,15 @@ internal sealed class BatchPlanner {
         int instances = 0;
         int triangles = 0;
         int culledInstances = 0;
-        foreach (CameraPass pass in frame.Passes) {
+        foreach (CameraPass pass in frame.Passes)
+        {
             PassPlan passPlan = PlanPass(
                 pass,
                 out int passDrawCalls,
                 out int passInstances,
                 out int passTriangles,
-                out int passCulledInstances);
+                out int passCulledInstances
+            );
             passes.Add(passPlan);
             drawCalls += passDrawCalls;
             instances += passInstances;
@@ -82,7 +86,14 @@ internal sealed class BatchPlanner {
             culledInstances += passCulledInstances;
         }
 
-        return new FramePlan(frame.FrameIndex, passes, drawCalls, instances, triangles, culledInstances);
+        return new FramePlan(
+            frame.FrameIndex,
+            passes,
+            drawCalls,
+            instances,
+            triangles,
+            culledInstances
+        );
     }
 
     private PassPlan PlanPass(
@@ -90,19 +101,25 @@ internal sealed class BatchPlanner {
         out int drawCalls,
         out int instances,
         out int triangles,
-        out int culledInstances) {
+        out int culledInstances
+    )
+    {
         BoundingFrustum frustum = new(pass.ViewProjection);
         List<PendingBatch> pending = [];
         Dictionary<BatchKey, PendingBatch> batchesByKey = [];
         culledInstances = 0;
 
-        foreach (RenderDrawRecord record in pass.Draws) {
-            int bytesPerInstance = ShaderAbiLayout.INSTANCE_HEADER_SIZE + record.InstanceTemplate.Length;
+        foreach (RenderDrawRecord record in pass.Draws)
+        {
+            int bytesPerInstance =
+                ShaderAbiLayout.INSTANCE_HEADER_SIZE + record.InstanceTemplate.Length;
             int trianglesPerInstance = CountTriangles(record.Topology, record.IndexCount);
             ReadOnlySpan<Matrix4x4> worldMatrices = record.GetWorldMatrices();
-            for (int instanceIndex = 0; instanceIndex < worldMatrices.Length; instanceIndex++) {
+            for (int instanceIndex = 0; instanceIndex < worldMatrices.Length; instanceIndex++)
+            {
                 Matrix4x4 worldMatrix = worldMatrices[instanceIndex];
-                if (!frustum.Intersects(TransformBounds(record.MeshBounds, worldMatrix))) {
+                if (!frustum.Intersects(TransformBounds(record.MeshBounds, worldMatrix)))
+                {
                     culledInstances++;
                     continue;
                 }
@@ -112,17 +129,18 @@ internal sealed class BatchPlanner {
                     record.Program,
                     record.RenderState,
                     record.Topology,
-                    record.Wireframe);
-                if (!batchesByKey.TryGetValue(key, out PendingBatch? batch)) {
+                    record.Wireframe
+                );
+                if (!batchesByKey.TryGetValue(key, out PendingBatch? batch))
+                {
                     batch = new PendingBatch(key, bytesPerInstance, trianglesPerInstance);
                     batchesByKey.Add(key, batch);
                     pending.Add(batch);
                 }
 
-                batch.Instances.Add(new PlannedInstance(
-                    record,
-                    instanceIndex,
-                    ComputeDepth(pass.View, worldMatrix)));
+                batch.Instances.Add(
+                    new PlannedInstance(record, instanceIndex, ComputeDepth(pass.View, worldMatrix))
+                );
             }
         }
 
@@ -131,16 +149,19 @@ internal sealed class BatchPlanner {
         drawCalls = 0;
         instances = 0;
         triangles = 0;
-        foreach (PendingBatch batch in pending) {
+        foreach (PendingBatch batch in pending)
+        {
             List<PlannedInstance> ordered = batch.IsOpaque
                 ? batch.Instances
                 : [.. batch.Instances.OrderByDescending(static instance => instance.Depth)];
             int start = 0;
-            while (start < ordered.Count) {
+            while (start < ordered.Count)
+            {
                 int count = DetermineChunkSize(ordered.Count - start, batch.BytesPerInstance);
                 List<PlannedInstance> chunk = ordered.GetRange(start, count);
                 float nearestDepth = float.PositiveInfinity;
-                foreach (PlannedInstance instance in chunk) {
+                foreach (PlannedInstance instance in chunk)
+                {
                     nearestDepth = MathF.Min(nearestDepth, instance.Depth);
                 }
 
@@ -151,10 +172,14 @@ internal sealed class BatchPlanner {
                     batch.Key.Topology,
                     batch.Key.Wireframe,
                     chunk,
-                    nearestDepth);
-                if (batch.IsOpaque) {
+                    nearestDepth
+                );
+                if (batch.IsOpaque)
+                {
                     opaque.Add(planned);
-                } else {
+                }
+                else
+                {
                     transparent.Add(planned);
                 }
 
@@ -167,18 +192,25 @@ internal sealed class BatchPlanner {
 
         List<PlannedBatch> submissionOrder = new(opaque.Count + transparent.Count);
         submissionOrder.AddRange(opaque);
-        if (transparent.Count > 1) {
+        if (transparent.Count > 1)
+        {
             // LINQ's ordering is stable, so equal nearest depths keep first-record order.
-            submissionOrder.AddRange(transparent.OrderByDescending(static batch => batch.NearestDepth));
-        } else {
+            submissionOrder.AddRange(
+                transparent.OrderByDescending(static batch => batch.NearestDepth)
+            );
+        }
+        else
+        {
             submissionOrder.AddRange(transparent);
         }
 
         return new PassPlan(pass, submissionOrder);
     }
 
-    private int DetermineChunkSize(int remaining, int bytesPerInstance) {
-        if (bytesPerInstance >= _options.MaxInstanceBytesPerBatch) {
+    private int DetermineChunkSize(int remaining, int bytesPerInstance)
+    {
+        if (bytesPerInstance >= _options.MaxInstanceBytesPerBatch)
+        {
             // A single instance that exceeds the byte limit cannot be split further.
             return 1;
         }
@@ -187,20 +219,25 @@ internal sealed class BatchPlanner {
         return Math.Min(remaining, Math.Min(_options.MaxInstancesPerBatch, maxByBytes));
     }
 
-    private static int CountTriangles(PrimitiveTopology topology, int indexCount) => topology switch {
-        PrimitiveTopology.TriangleList => indexCount / 3,
-        PrimitiveTopology.TriangleStrip => Math.Max(indexCount - 2, 0),
-        _ => 0,
-    };
+    private static int CountTriangles(PrimitiveTopology topology, int indexCount) =>
+        topology switch
+        {
+            PrimitiveTopology.TriangleList => indexCount / 3,
+            PrimitiveTopology.TriangleStrip => Math.Max(indexCount - 2, 0),
+            _ => 0,
+        };
 
-    private static BoundingBox TransformBounds(BoundingBox bounds, Matrix4x4 worldMatrix) {
+    private static BoundingBox TransformBounds(BoundingBox bounds, Matrix4x4 worldMatrix)
+    {
         Vector3 minimum = new(float.PositiveInfinity);
         Vector3 maximum = new(float.NegativeInfinity);
-        for (int cornerIndex = 0; cornerIndex < 8; cornerIndex++) {
+        for (int cornerIndex = 0; cornerIndex < 8; cornerIndex++)
+        {
             Vector3 corner = new(
                 (cornerIndex & 1) == 0 ? bounds.Min.X : bounds.Max.X,
                 (cornerIndex & 2) == 0 ? bounds.Min.Y : bounds.Max.Y,
-                (cornerIndex & 4) == 0 ? bounds.Min.Z : bounds.Max.Z);
+                (cornerIndex & 4) == 0 ? bounds.Min.Z : bounds.Max.Z
+            );
             Vector3 transformed = Vector3.Transform(corner, worldMatrix);
             minimum = Vector3.Min(minimum, transformed);
             maximum = Vector3.Max(maximum, transformed);
@@ -209,7 +246,8 @@ internal sealed class BatchPlanner {
         return new BoundingBox(minimum, maximum);
     }
 
-    private static float ComputeDepth(Matrix4x4 view, Matrix4x4 worldMatrix) {
+    private static float ComputeDepth(Matrix4x4 view, Matrix4x4 worldMatrix)
+    {
         Vector3 worldPosition = new(worldMatrix.M41, worldMatrix.M42, worldMatrix.M43);
         return -Vector3.Transform(worldPosition, view).Z;
     }
@@ -219,10 +257,13 @@ internal sealed class BatchPlanner {
         EngineAsset Program,
         RenderState RenderState,
         PrimitiveTopology Topology,
-        bool Wireframe);
+        bool Wireframe
+    );
 
-    private sealed class PendingBatch {
-        internal PendingBatch(BatchKey key, int bytesPerInstance, int trianglesPerInstance) {
+    private sealed class PendingBatch
+    {
+        internal PendingBatch(BatchKey key, int bytesPerInstance, int trianglesPerInstance)
+        {
             Key = key;
             BytesPerInstance = bytesPerInstance;
             TrianglesPerInstance = trianglesPerInstance;

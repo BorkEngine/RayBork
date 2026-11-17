@@ -23,4 +23,5 @@ internal readonly record struct PostProcessCaptureContext(
     bool TargetHasDepth,
     string TargetDescription,
     SsaoAssets? SsaoAssets = null,
-    BloomAssets? BloomAssets = null);
+    BloomAssets? BloomAssets = null
+);

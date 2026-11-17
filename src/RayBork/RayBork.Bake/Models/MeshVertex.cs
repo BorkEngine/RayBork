@@ -9,7 +9,8 @@ namespace RayBork.Bake.Models;
 /// The field order is the payload order: position, normal, uv, uv1, uv2, uv3, color, and tangent.
 /// <see cref="MeshVertex.Create"/> supplies the documented defaults for absent source attributes.
 /// </remarks>
-internal struct MeshVertex {
+internal struct MeshVertex
+{
     /// <summary>The position, in mesh space.</summary>
     internal Vector3 Position;
 
@@ -37,8 +38,9 @@ internal struct MeshVertex {
     /// <summary>Creates a vertex with the documented attribute defaults.</summary>
     /// <param name="position">The mesh-space position.</param>
     /// <returns>The defaulted vertex.</returns>
-    internal static MeshVertex Create(Vector3 position)
-        => new() {
+    internal static MeshVertex Create(Vector3 position) =>
+        new()
+        {
             Position = position,
             Normal = Vector3.UnitY,
             Color = Vector4.One,

@@ -10,9 +10,8 @@ namespace RayBork.Internal;
 /// the part references at runtime when model loading lands in M4. M3 bakes and validates the entry.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class ModelAssetDescriptor {
-
-
+internal sealed partial class ModelAssetDescriptor
+{
     /// <summary>Gets the flat part list.</summary>
     public required ModelPartAsset[] Parts { get; init; }
 

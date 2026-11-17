@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// Out-of-date, surface-lost, and suboptimal results are normal presentation statuses, not failures.
 /// The caller recreates the presentation path, the surface, or both instead of unwinding.
 /// </remarks>
-internal enum SwapchainResult {
+internal enum SwapchainResult
+{
     /// <summary>The operation completed and the image is usable.</summary>
     Success,
 
@@ -40,7 +41,8 @@ internal enum SwapchainResult {
 /// <see cref="GraphicsException"/>.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanSwapchain : IDisposable {
+internal sealed unsafe class VulkanSwapchain : IDisposable
+{
     private const uint IMAGE_ARRAY_LAYERS = 1;
     private const uint IMAGE_MIP_LEVELS = 1;
     private const ulong ACQUIRE_TIMEOUT = ulong.MaxValue;
@@ -55,7 +57,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
     private Extent2D _extent;
     private bool _disposed;
 
-    private VulkanSwapchain(Vk vulkan, Device device) {
+    private VulkanSwapchain(Vk vulkan, Device device)
+    {
         _vulkan = vulkan;
         _device = device;
     }
@@ -115,10 +118,13 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         VulkanSwapchainFormat format,
         PresentModeKHR presentMode,
         int imageCount,
-        Extent2D extent) {
+        Extent2D extent
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         VulkanSwapchain swapchain = new(device.Vulkan, device.Device);
-        try {
+        try
+        {
             SwapchainResources resources = swapchain.Build(
                 device,
                 surface,
@@ -126,10 +132,13 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
                 presentMode,
                 imageCount,
                 extent,
-                default);
+                default
+            );
             swapchain.Apply(resources);
             return swapchain;
-        } catch {
+        }
+        catch
+        {
             swapchain.Dispose();
             throw;
         }
@@ -157,7 +166,9 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         VulkanSwapchainFormat format,
         PresentModeKHR presentMode,
         int imageCount,
-        Extent2D extent) {
+        Extent2D extent
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -168,12 +179,14 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             presentMode,
             imageCount,
             extent,
-            _swapchain);
+            _swapchain
+        );
         SwapchainKHR previousSwapchain = _swapchain;
         ImageView[] previousViews = _imageViews;
         Apply(resources);
         DestroyImageViews(previousViews);
-        if (previousSwapchain.Handle != 0) {
+        if (previousSwapchain.Handle != 0)
+        {
             VulkanNativeFunctions.DestroySwapchain(_vulkan, _device, previousSwapchain);
         }
     }
@@ -189,7 +202,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
     /// The acquire failed with a result that is not a presentation status. The diagnostic code is
     /// <c>RB3003</c>.
     /// </exception>
-    internal SwapchainResult Acquire(uint frameSlot, Semaphore imageAvailable, out uint imageIndex) {
+    internal SwapchainResult Acquire(uint frameSlot, Semaphore imageAvailable, out uint imageIndex)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         Result result = VulkanNativeFunctions.AcquireNextImage(
             _vulkan,
@@ -197,8 +211,10 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             _swapchain,
             ACQUIRE_TIMEOUT,
             imageAvailable,
-            out imageIndex);
-        return result switch {
+            out imageIndex
+        );
+        return result switch
+        {
             Result.Success => SwapchainResult.Success,
             Result.SuboptimalKhr => SwapchainResult.Suboptimal,
             Result.ErrorOutOfDateKhr => SwapchainResult.OutOfDate,
@@ -206,7 +222,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             _ => throw new GraphicsException(
                 $"The Vulkan command vkAcquireNextImageKHR failed with {result} while acquiring a swapchain image for frame slot {frameSlot}.",
                 DiagnosticCodes.GRAPHICS_UNRECOVERABLE,
-                null),
+                null
+            ),
         };
     }
 
@@ -221,10 +238,12 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
     /// The present failed with a result that is not a presentation status. The diagnostic code is
     /// <c>RB3003</c>.
     /// </exception>
-    internal SwapchainResult Present(Queue queue, Semaphore renderFinished, uint imageIndex) {
+    internal SwapchainResult Present(Queue queue, Semaphore renderFinished, uint imageIndex)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         SwapchainKHR swapchain = _swapchain;
-        PresentInfoKHR presentInfo = new() {
+        PresentInfoKHR presentInfo = new()
+        {
             SType = StructureType.PresentInfoKhr,
             WaitSemaphoreCount = 1,
             PWaitSemaphores = &renderFinished,
@@ -233,7 +252,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             PImageIndices = &imageIndex,
         };
         Result result = VulkanNativeFunctions.Present(_vulkan, _device, queue, presentInfo);
-        return result switch {
+        return result switch
+        {
             Result.Success => SwapchainResult.Success,
             Result.SuboptimalKhr => SwapchainResult.Suboptimal,
             Result.ErrorOutOfDateKhr => SwapchainResult.OutOfDate,
@@ -241,15 +261,18 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             _ => throw new GraphicsException(
                 $"The Vulkan command vkQueuePresentKHR failed with {result} while presenting an image.",
                 DiagnosticCodes.GRAPHICS_UNRECOVERABLE,
-                null),
+                null
+            ),
         };
     }
 
     /// <summary>
     /// Destroys the image views and the swapchain. The call is idempotent.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -257,7 +280,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         DestroyImageViews(_imageViews);
         _imageViews = [];
         _images = [];
-        if (_swapchain.Handle != 0) {
+        if (_swapchain.Handle != 0)
+        {
             VulkanNativeFunctions.DestroySwapchain(_vulkan, _device, _swapchain);
             _swapchain = default;
         }
@@ -270,30 +294,45 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         PresentModeKHR presentMode,
         int imageCount,
         Extent2D extent,
-        SwapchainKHR oldSwapchain) {
-        if (imageCount <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(imageCount), imageCount, "The swapchain image count must be positive.");
+        SwapchainKHR oldSwapchain
+    )
+    {
+        if (imageCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(imageCount),
+                imageCount,
+                "The swapchain image count must be positive."
+            );
         }
 
-        if (extent.Width == 0 || extent.Height == 0) {
-            throw new ArgumentOutOfRangeException(nameof(extent), extent, "The swapchain extent must be positive.");
+        if (extent.Width == 0 || extent.Height == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(extent),
+                extent,
+                "The swapchain extent must be positive."
+            );
         }
 
         SurfaceCapabilitiesKHR capabilities = VulkanNativeFunctions.GetSurfaceCapabilities(
             _vulkan,
             device.PhysicalDevice,
-            surface);
+            surface
+        );
         Extent2D imageExtent = VulkanSwapchainExtentSelection.Select(
             capabilities,
             checked((int)extent.Width),
-            checked((int)extent.Height));
+            checked((int)extent.Height)
+        );
         uint graphicsFamily = device.Capabilities.GraphicsQueueFamily;
         uint presentFamily = device.Capabilities.PresentQueueFamily;
         bool concurrent = graphicsFamily != presentFamily;
         uint[] familyIndices = [graphicsFamily, presentFamily];
         (ImageUsageFlags imageUsage, bool supportsPresentReadback) =
             VulkanSwapchainImageUsage.Select(capabilities.SupportedUsageFlags);
-        SwapchainCreateInfoKHR createInfo = new() {
+        SwapchainCreateInfoKHR createInfo = new()
+        {
             SType = StructureType.SwapchainCreateInfoKhr,
             Surface = surface,
             MinImageCount = (uint)imageCount,
@@ -310,8 +349,10 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             OldSwapchain = oldSwapchain,
         };
         SwapchainKHR swapchain;
-        fixed (uint* familyIndicesPointer = familyIndices) {
-            if (concurrent) {
+        fixed (uint* familyIndicesPointer = familyIndices)
+        {
+            if (concurrent)
+            {
                 createInfo.QueueFamilyIndexCount = (uint)familyIndices.Length;
                 createInfo.PQueueFamilyIndices = familyIndicesPointer;
             }
@@ -321,13 +362,19 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
 
         Image[] images = VulkanNativeFunctions.GetSwapchainImages(_vulkan, _device, swapchain);
         ImageView[] views = new ImageView[images.Length];
-        try {
-            for (int index = 0; index < images.Length; index++) {
+        try
+        {
+            for (int index = 0; index < images.Length; index++)
+            {
                 views[index] = CreateImageView(images[index], format.Format);
             }
-        } catch {
-            foreach (ImageView view in views) {
-                if (view.Handle != 0) {
+        }
+        catch
+        {
+            foreach (ImageView view in views)
+            {
+                if (view.Handle != 0)
+                {
                     _vulkan.DestroyImageView(_device, view, null);
                 }
             }
@@ -336,22 +383,33 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
             throw;
         }
 
-        return new SwapchainResources(swapchain, images, views, format.Format, imageExtent, supportsPresentReadback);
+        return new SwapchainResources(
+            swapchain,
+            images,
+            views,
+            format.Format,
+            imageExtent,
+            supportsPresentReadback
+        );
     }
 
-    private ImageView CreateImageView(Image image, Format format) {
-        ImageViewCreateInfo createInfo = new() {
+    private ImageView CreateImageView(Image image, Format format)
+    {
+        ImageViewCreateInfo createInfo = new()
+        {
             SType = StructureType.ImageViewCreateInfo,
             Image = image,
             ViewType = ImageViewType.Type2D,
             Format = format,
-            Components = new ComponentMapping {
+            Components = new ComponentMapping
+            {
                 R = ComponentSwizzle.Identity,
                 G = ComponentSwizzle.Identity,
                 B = ComponentSwizzle.Identity,
                 A = ComponentSwizzle.Identity,
             },
-            SubresourceRange = new ImageSubresourceRange {
+            SubresourceRange = new ImageSubresourceRange
+            {
                 AspectMask = ImageAspectFlags.ColorBit,
                 BaseMipLevel = 0,
                 LevelCount = IMAGE_MIP_LEVELS,
@@ -364,7 +422,8 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         return view;
     }
 
-    private void Apply(SwapchainResources resources) {
+    private void Apply(SwapchainResources resources)
+    {
         _swapchain = resources.Swapchain;
         _images = resources.Images;
         _imageViews = resources.ImageViews;
@@ -373,47 +432,59 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         SupportsPresentReadback = resources.SupportsPresentReadback;
     }
 
-    private void DestroyImageViews(ImageView[] views) {
-        foreach (ImageView view in views) {
-            if (view.Handle != 0) {
+    private void DestroyImageViews(ImageView[] views)
+    {
+        foreach (ImageView view in views)
+        {
+            if (view.Handle != 0)
+            {
                 _vulkan.DestroyImageView(_device, view, null);
             }
         }
     }
 
-    private static CompositeAlphaFlagsKHR SelectCompositeAlpha(SurfaceCapabilitiesKHR capabilities) {
+    private static CompositeAlphaFlagsKHR SelectCompositeAlpha(SurfaceCapabilitiesKHR capabilities)
+    {
         CompositeAlphaFlagsKHR supported = capabilities.SupportedCompositeAlpha;
-        if ((supported & CompositeAlphaFlagsKHR.OpaqueBitKhr) != 0) {
+        if ((supported & CompositeAlphaFlagsKHR.OpaqueBitKhr) != 0)
+        {
             return CompositeAlphaFlagsKHR.OpaqueBitKhr;
         }
 
-        if ((supported & CompositeAlphaFlagsKHR.PreMultipliedBitKhr) != 0) {
+        if ((supported & CompositeAlphaFlagsKHR.PreMultipliedBitKhr) != 0)
+        {
             return CompositeAlphaFlagsKHR.PreMultipliedBitKhr;
         }
 
-        if ((supported & CompositeAlphaFlagsKHR.PostMultipliedBitKhr) != 0) {
+        if ((supported & CompositeAlphaFlagsKHR.PostMultipliedBitKhr) != 0)
+        {
             return CompositeAlphaFlagsKHR.PostMultipliedBitKhr;
         }
 
-        if ((supported & CompositeAlphaFlagsKHR.InheritBitKhr) != 0) {
+        if ((supported & CompositeAlphaFlagsKHR.InheritBitKhr) != 0)
+        {
             return CompositeAlphaFlagsKHR.InheritBitKhr;
         }
 
         throw new GraphicsException(
             "The window surface advertises no supported composite-alpha mode.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
-    private static void ThrowIfFailed(Result result, string operation) {
-        if (result == Result.Success) {
+    private static void ThrowIfFailed(Result result, string operation)
+    {
+        if (result == Result.Success)
+        {
             return;
         }
 
         throw new GraphicsException(
             $"The Vulkan command {operation} failed with {result}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
     private readonly record struct SwapchainResources(
@@ -422,5 +493,6 @@ internal sealed unsafe class VulkanSwapchain : IDisposable {
         ImageView[] ImageViews,
         Format Format,
         Extent2D Extent,
-        bool SupportsPresentReadback);
+        bool SupportsPresentReadback
+    );
 }

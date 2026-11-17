@@ -5,16 +5,16 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake;
 
-public sealed class BakeIncrementalTests {
+public sealed class BakeIncrementalTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnchangedSourceIsReportedUpToDateAndNotReprocessed() {
+    public void UnchangedSourceIsReportedUpToDateAndNotReprocessed()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
 
         BakeRunResult first = workspace.Run(application);
         BakeRunResult second = workspace.Run(application);
@@ -29,14 +29,13 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DeletingOneSourceReusesTheUnchangedSource() {
+    public void DeletingOneSourceReusesTheUnchangedSource()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.count", "first");
         workspace.WriteAsset("b.count", "second");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
         Assert.Equal(2, processor.ProcessCount);
 
@@ -52,13 +51,12 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ChangedSourceIsReprocessedAndDeletedSourceDisappears() {
+    public void ChangedSourceIsReprocessedAndDeletedSourceDisappears()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "first");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
 
         workspace.WriteAsset("unit.count", "second");
@@ -82,16 +80,15 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OnlyChangedSourcesAreReprocessed() {
+    public void OnlyChangedSourcesAreReprocessed()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a/one.count", "first");
         workspace.WriteAsset("a/two.count", "second");
         workspace.WriteAsset("b/one.count", "first");
         workspace.WriteAsset("b/two.count", "second");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
         Assert.Equal(4, processor.ProcessCount);
 
@@ -107,15 +104,18 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ToolVersionChangeReprocessesEverySource() {
+    public void ToolVersionChangeReprocessesEverySource()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
         var processor = new CountingProcessor();
-        BakeApplication first = workspace.Builder()
+        BakeApplication first = workspace
+            .Builder()
             .AddProcessor(processor)
             .WithToolVersionOverride("test-version-1")
             .Build();
-        BakeApplication second = workspace.Builder()
+        BakeApplication second = workspace
+            .Builder()
             .AddProcessor(processor)
             .WithToolVersionOverride("test-version-2")
             .Build();
@@ -130,13 +130,12 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ForceBypassesTheCache() {
+    public void ForceBypassesTheCache()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
 
         BakeRunResult forced = workspace.Run(
@@ -144,7 +143,8 @@ public sealed class BakeIncrementalTests {
             "bake",
             "--output-root",
             workspace.OutputRoot,
-            "--force");
+            "--force"
+        );
 
         Assert.Equal(0, forced.ExitCode);
         Assert.Equal(2, processor.ProcessCount);
@@ -153,49 +153,58 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SidecarChangeIsReprocessed() {
+    public void SidecarChangeIsReprocessed()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.opt", "source");
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [optional]
             value = 1
             label = "one"
-            """);
+            """
+        );
         var processor = new OptionalSidecarProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
 
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [optional]
             value = 2
             label = "two"
-            """);
+            """
+        );
         BakeRunResult changed = workspace.Run(application);
 
         Assert.Equal(0, changed.ExitCode);
         Assert.Equal(2, processor.ProcessCount);
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
         Assert.True(archive.TryGetEntry("a", out PackEntry? entry));
-        TestPayload payload = AssetSerialization.Deserialize<TestPayload>(archive.ReadPayload(entry));
+        TestPayload payload = AssetSerialization.Deserialize<TestPayload>(
+            archive.ReadPayload(entry)
+        );
         Assert.Equal(2, payload.Value);
         Assert.Equal("two", payload.Name);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AdditionalInputChangeIsReprocessed() {
+    public void AdditionalInputChangeIsReprocessed()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [input]
             file = "extra.txt"
-            """);
+            """
+        );
         workspace.WriteAsset("extra.txt", "one");
         var processor = new InputProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
 
         workspace.WriteAsset("extra.txt", "two");
@@ -207,13 +216,12 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingPackOrCorruptManifestForcesAFullBake() {
+    public void MissingPackOrCorruptManifestForcesAFullBake()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
         var processor = new CountingProcessor();
-        BakeApplication application = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
+        BakeApplication application = workspace.Builder().AddProcessor(processor).Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
 
         File.Delete(workspace.GetPackPath());
@@ -229,14 +237,14 @@ public sealed class BakeIncrementalTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConfigurationChangeInvalidatesTheCache() {
+    public void ConfigurationChangeInvalidatesTheCache()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
         var processor = new CountingProcessor();
-        BakeApplication first = workspace.Builder()
-            .AddProcessor(processor)
-            .Build();
-        BakeApplication second = workspace.Builder()
+        BakeApplication first = workspace.Builder().AddProcessor(processor).Build();
+        BakeApplication second = workspace
+            .Builder()
             .AddProcessor(processor)
             .AddProcessor(new TableSourceProcessor())
             .Build();
@@ -248,10 +256,13 @@ public sealed class BakeIncrementalTests {
         Assert.Equal(2, processor.ProcessCount);
     }
 
-    private static int ReadPayloadValue(TempBakeWorkspace workspace, string path) {
+    private static int ReadPayloadValue(TempBakeWorkspace workspace, string path)
+    {
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry));
-        TestPayload payload = AssetSerialization.Deserialize<TestPayload>(archive.ReadPayload(entry));
+        TestPayload payload = AssetSerialization.Deserialize<TestPayload>(
+            archive.ReadPayload(entry)
+        );
         return payload.Value;
     }
 }

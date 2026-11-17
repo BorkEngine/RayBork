@@ -7,7 +7,8 @@ namespace RayBork.Internal;
 /// Recoverable failures are handled on the render thread without calling game code. A failure that
 /// cannot be recovered, an out-of-memory condition, or a recovery loop is fatal.
 /// </remarks>
-internal enum RenderRecoveryReason {
+internal enum RenderRecoveryReason
+{
     /// <summary>
     /// The swapchain no longer matches the surface, for example after a resize or a display change.
     /// The swapchain and dependent images are recreated at a frame boundary.

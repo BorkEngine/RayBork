@@ -7,7 +7,8 @@ namespace RayBork.Internal;
 /// The constructor copies the payload bytes, so a caller may reuse its buffer after the entry is
 /// created. The builder validates the path, type, and alignment when the entry is added.
 /// </remarks>
-internal sealed class PackSourceEntry {
+internal sealed class PackSourceEntry
+{
     /// <summary>
     /// Initializes a source entry.
     /// </summary>
@@ -19,7 +20,9 @@ internal sealed class PackSourceEntry {
         string path,
         AssetEntryType type,
         ReadOnlySpan<byte> payload,
-        uint alignment = 1) {
+        uint alignment = 1
+    )
+    {
         ArgumentNullException.ThrowIfNull(path);
 
         Path = path;

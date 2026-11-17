@@ -16,13 +16,15 @@ namespace RayBork.Tests;
 /// and no sleeps. GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the
 /// process-global SDL and Vulkan loader setup.
 /// </remarks>
-public sealed class VulkanDrawTests {
+public sealed class VulkanDrawTests
+{
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private const float COLOR_TOLERANCE = 2e-3f;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TexturedDrawRendersExpectedLinearColor() {
+    public void TexturedDrawRendersExpectedLinearColor()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
@@ -38,7 +40,9 @@ public sealed class VulkanDrawTests {
                 quad,
                 shader,
                 [Matrix4x4.Identity],
-                TextureBindings: [texture]));
+                TextureBindings: [texture]
+            )
+        );
 
         RenderStats stats = host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
@@ -54,7 +58,8 @@ public sealed class VulkanDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TwoTexturesInOneInstancedDrawKeepTheirOwnColor() {
+    public void TwoTexturesInOneInstancedDrawKeepTheirOwnColor()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
@@ -64,30 +69,50 @@ public sealed class VulkanDrawTests {
         Texture leftTexture = harness.CreateTexture("textures/left", leftColor);
         Texture rightTexture = harness.CreateTexture("textures/right", rightColor);
         float aspect = host.SceneTarget.Extent.Width / (float)host.SceneTarget.Extent.Height;
-        Matrix4x4 left = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+        Matrix4x4 left =
+            Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
             * Matrix4x4.CreateTranslation(-aspect * 0.5f, 0f, 0f);
-        Matrix4x4 right = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+        Matrix4x4 right =
+            Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
             * Matrix4x4.CreateTranslation(aspect * 0.5f, 0f, 0f);
 
         harness.SubmitFrame(
             1,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [left], TextureBindings: [leftTexture]),
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [right], TextureBindings: [rightTexture]));
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                shader,
+                [left],
+                TextureBindings: [leftTexture]
+            ),
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                shader,
+                [right],
+                TextureBindings: [rightTexture]
+            )
+        );
 
         RenderStats stats = host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
         Assert.Equal(2, stats.Instances);
         Assert.Equal(4, stats.Triangles);
-        AssertColorNear(leftColor, harness.ReadColor(host.SceneTarget.Extent.Width / 4, CenterY(host)));
-        AssertColorNear(rightColor, harness.ReadColor(host.SceneTarget.Extent.Width * 3 / 4, CenterY(host)));
+        AssertColorNear(
+            leftColor,
+            harness.ReadColor(host.SceneTarget.Extent.Width / 4, CenterY(host))
+        );
+        AssertColorNear(
+            rightColor,
+            harness.ReadColor(host.SceneTarget.Extent.Width * 3 / 4, CenterY(host))
+        );
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TwoMaterialsOverOneProgramAreOneInstancedDraw() {
+    public void TwoMaterialsOverOneProgramAreOneInstancedDraw()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader firstMaterial = CreateTexturedShader(harness);
@@ -98,31 +123,51 @@ public sealed class VulkanDrawTests {
         Texture leftTexture = harness.CreateTexture("textures/material-left", leftColor);
         Texture rightTexture = harness.CreateTexture("textures/material-right", rightColor);
         float aspect = host.SceneTarget.Extent.Width / (float)host.SceneTarget.Extent.Height;
-        Matrix4x4 left = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+        Matrix4x4 left =
+            Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
             * Matrix4x4.CreateTranslation(-aspect * 0.5f, 0f, 0f);
-        Matrix4x4 right = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+        Matrix4x4 right =
+            Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
             * Matrix4x4.CreateTranslation(aspect * 0.5f, 0f, 0f);
 
         harness.SubmitFrame(
             1,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            new VulkanDrawTestHarness.DrawSpec(quad, firstMaterial, [left], TextureBindings: [leftTexture]),
-            new VulkanDrawTestHarness.DrawSpec(quad, secondMaterial, [right], TextureBindings: [rightTexture]));
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                firstMaterial,
+                [left],
+                TextureBindings: [leftTexture]
+            ),
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                secondMaterial,
+                [right],
+                TextureBindings: [rightTexture]
+            )
+        );
 
         RenderStats stats = host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
         Assert.Equal(2, stats.Instances);
         Assert.Equal(4, stats.Triangles);
         Assert.Equal(1, harness.PipelineCount);
-        AssertColorNear(leftColor, harness.ReadColor(host.SceneTarget.Extent.Width / 4, CenterY(host)));
-        AssertColorNear(rightColor, harness.ReadColor(host.SceneTarget.Extent.Width * 3 / 4, CenterY(host)));
+        AssertColorNear(
+            leftColor,
+            harness.ReadColor(host.SceneTarget.Extent.Width / 4, CenterY(host))
+        );
+        AssertColorNear(
+            rightColor,
+            harness.ReadColor(host.SceneTarget.Extent.Width * 3 / 4, CenterY(host))
+        );
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ThousandCubeInstancesAreOneDraw() {
+    public void ThousandCubeInstancesAreOneDraw()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
@@ -134,7 +179,8 @@ public sealed class VulkanDrawTests {
             1,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            new VulkanDrawTestHarness.DrawSpec(cube, shader, worlds));
+            new VulkanDrawTestHarness.DrawSpec(cube, shader, worlds)
+        );
 
         RenderStats stats = host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
@@ -146,7 +192,8 @@ public sealed class VulkanDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void UniformSnapshotPerDrawIsIndependent() {
+    public void UniformSnapshotPerDrawIsIndependent()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
@@ -158,9 +205,11 @@ public sealed class VulkanDrawTests {
         shader.SetUniform("uTint", new Vector4(0f, 1f, 0f, 1f));
         (byte[] greenTemplate, _) = VulkanDrawTestHarness.SnapshotCursor(shader);
         float aspect = host.SceneTarget.Extent.Width / (float)host.SceneTarget.Extent.Height;
-        Matrix4x4 left = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+        Matrix4x4 left =
+            Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
             * Matrix4x4.CreateTranslation(-aspect * 0.5f, 0f, 0f);
-        Matrix4x4 right = Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
+        Matrix4x4 right =
+            Matrix4x4.CreateScale(aspect * 0.5f, 1f, 1f)
             * Matrix4x4.CreateTranslation(aspect * 0.5f, 0f, 0f);
 
         harness.SubmitFrame(
@@ -172,40 +221,56 @@ public sealed class VulkanDrawTests {
                 shader,
                 [left],
                 InstanceTemplate: redTemplate,
-                TextureBindings: [white]),
+                TextureBindings: [white]
+            ),
             new VulkanDrawTestHarness.DrawSpec(
                 quad,
                 shader,
                 [right],
                 InstanceTemplate: greenTemplate,
-                TextureBindings: [white]));
+                TextureBindings: [white]
+            )
+        );
 
         RenderStats stats = host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
         Assert.Equal(2, stats.Instances);
-        AssertColorNear(new Color(1f, 0f, 0f, 1f), harness.ReadColor(host.SceneTarget.Extent.Width / 4, CenterY(host)));
-        AssertColorNear(new Color(0f, 1f, 0f, 1f), harness.ReadColor(host.SceneTarget.Extent.Width * 3 / 4, CenterY(host)));
+        AssertColorNear(
+            new Color(1f, 0f, 0f, 1f),
+            harness.ReadColor(host.SceneTarget.Extent.Width / 4, CenterY(host))
+        );
+        AssertColorNear(
+            new Color(0f, 1f, 0f, 1f),
+            harness.ReadColor(host.SceneTarget.Extent.Width * 3 / 4, CenterY(host))
+        );
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void CustomAbiShaderRoundTripsThroughBakeAndDraw() {
+    public void CustomAbiShaderRoundTripsThroughBakeAndDraw()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = harness.CreateShader(
             "shaders/custom-abi",
             VulkanDrawTestHarness.DEFAULT_VERTEX_SOURCE,
             VulkanDrawTestHarness.DEFAULT_FRAGMENT_SOURCE,
-            uniforms: [
-                new ShaderUniformAsset {
+            uniforms:
+            [
+                new ShaderUniformAsset
+                {
                     Name = "uTint",
                     Type = ShaderUniformType.Vector4,
                     Default = [1f, 1f, 1f, 1f],
                 },
             ],
             textures: ["mainTexture"],
-            defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+            defaultRenderState: RenderState.Opaque with
+            {
+                Cull = CullMode.None,
+            }
+        );
         Color textureColor = new(128f / 255f, 64f / 255f, 192f / 255f, 1f);
         Texture texture = harness.CreateTexture("textures/custom-abi", textureColor);
         Mesh quad = harness.CreateQuad();
@@ -216,13 +281,10 @@ public sealed class VulkanDrawTests {
             1,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            VulkanDrawTestHarness.DrawSpec.Single(quad, shader));
+            VulkanDrawTestHarness.DrawSpec.Single(quad, shader)
+        );
 
-        Color expected = new(
-            textureColor.R * 0.5f,
-            textureColor.G,
-            textureColor.B * 0.25f,
-            1f);
+        Color expected = new(textureColor.R * 0.5f, textureColor.G, textureColor.B * 0.25f, 1f);
         AssertColorNear(expected, harness.ReadColor(CenterX(host), CenterY(host)));
         Assert.Equal(1, host.Backend.Stats.DrawCalls);
         Assert.Equal(1, host.Backend.Stats.Instances);
@@ -231,8 +293,12 @@ public sealed class VulkanDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ReverseZNearerQuadWinsAtNearZeroPointZeroOne() {
-        using BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: 1, hdr: WindowHdrState.Sdr);
+    public void ReverseZNearerQuadWinsAtNearZeroPointZeroOne()
+    {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(
+            sampleCount: 1,
+            hdr: WindowHdrState.Sdr
+        );
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
         Mesh quad = harness.CreateQuad(halfWidth: 2f, halfHeight: 2f);
@@ -240,7 +306,10 @@ public sealed class VulkanDrawTests {
         Color farColor = new(0f, 1f, 0f, 1f);
         Texture nearTexture = harness.CreateTexture("textures/near", nearColor);
         Texture farTexture = harness.CreateTexture("textures/far", farColor);
-        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.PerspectiveCamera(host, near: 0.01f);
+        VulkanDrawTestHarness.CameraView camera = VulkanDrawTestHarness.PerspectiveCamera(
+            host,
+            near: 0.01f
+        );
         RenderState depthState = RenderState.Opaque with { Cull = CullMode.None };
 
         harness.SubmitFrame(
@@ -253,25 +322,30 @@ public sealed class VulkanDrawTests {
                 shader,
                 [Matrix4x4.CreateTranslation(0f, 0f, -2f)],
                 RenderState: depthState,
-                TextureBindings: [farTexture]),
+                TextureBindings: [farTexture]
+            ),
             new VulkanDrawTestHarness.DrawSpec(
                 quad,
                 shader,
                 [Matrix4x4.CreateTranslation(0f, 0f, -1f)],
                 RenderState: depthState,
-                TextureBindings: [nearTexture]));
+                TextureBindings: [nearTexture]
+            )
+        );
 
         AssertColorNear(nearColor, harness.ReadColor(CenterX(host), CenterY(host)));
         float depth = harness.ReadDepth(CenterX(host), CenterY(host));
         Assert.True(
             MathF.Abs(depth - 0.01f) <= 2e-3f,
-            $"The stored reverse-Z depth {depth} is not within 2e-3 of the expected 0.01.");
+            $"The stored reverse-Z depth {depth} is not within 2e-3 of the expected 0.01."
+        );
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TexturesWithTheSameSamplerStateShareOneSampler() {
+    public void TexturesWithTheSameSamplerStateShareOneSampler()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
 
@@ -286,7 +360,8 @@ public sealed class VulkanDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DeviceRecoveryRestoresBindlessSlotsBeforeTheNextDraw() {
+    public void DeviceRecoveryRestoresBindlessSlotsBeforeTheNextDraw()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
@@ -298,17 +373,31 @@ public sealed class VulkanDrawTests {
             1,
             _clearColor,
             camera,
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity], TextureBindings: [texture]));
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                shader,
+                [Matrix4x4.Identity],
+                TextureBindings: [texture]
+            )
+        );
         AssertColorNear(textureColor, harness.ReadColor(CenterX(host), CenterY(host)));
 
         host.Backend.SimulateDeviceLossForTests();
         // The backend recovers the device while consuming this frame and drops it: the asset bridge has
         // not restored the live textures yet, so drawing would reference stale bindless slots.
-        harness.Submit(harness.CreateFrame(
-            2,
-            _clearColor,
-            camera,
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity], TextureBindings: [texture])));
+        harness.Submit(
+            harness.CreateFrame(
+                2,
+                _clearColor,
+                camera,
+                new VulkanDrawTestHarness.DrawSpec(
+                    quad,
+                    shader,
+                    [Matrix4x4.Identity],
+                    TextureBindings: [texture]
+                )
+            )
+        );
         Assert.Equal(0, host.Backend.Stats.DrawCalls);
         Assert.Equal(3, host.Backend.BindlessTextures.LiveCount);
 
@@ -319,7 +408,13 @@ public sealed class VulkanDrawTests {
             3,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity], TextureBindings: [texture]));
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                shader,
+                [Matrix4x4.Identity],
+                TextureBindings: [texture]
+            )
+        );
         Assert.Equal(1, host.Backend.Stats.DrawCalls);
         AssertColorNear(textureColor, harness.ReadColor(CenterX(host), CenterY(host)));
         Assert.Empty(host.Instance.ConsumeValidationErrors());
@@ -327,7 +422,8 @@ public sealed class VulkanDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ResizeRecreatesPipelinesAndStillDraws() {
+    public void ResizeRecreatesPipelinesAndStillDraws()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
@@ -338,10 +434,17 @@ public sealed class VulkanDrawTests {
             1,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity], TextureBindings: [texture]));
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                shader,
+                [Matrix4x4.Identity],
+                TextureBindings: [texture]
+            )
+        );
         Assert.Equal(1, harness.PipelineCount);
 
-        if (!TryResizeWindow(host, 320, 240)) {
+        if (!TryResizeWindow(host, 320, 240))
+        {
             Assert.Skip("The host did not apply the SDL window resize synchronously.");
         }
 
@@ -355,7 +458,13 @@ public sealed class VulkanDrawTests {
             2,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity], TextureBindings: [texture]));
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                shader,
+                [Matrix4x4.Identity],
+                TextureBindings: [texture]
+            )
+        );
 
         Assert.Equal(1, host.Backend.Stats.DrawCalls);
         Assert.Equal(1, harness.PipelineCount);
@@ -365,12 +474,16 @@ public sealed class VulkanDrawTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TextureDestructionWaitsForFrameIdleAndReusesTheBindlessSlot() {
+    public void TextureDestructionWaitsForFrameIdleAndReusesTheBindlessSlot()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
         Shader shader = CreateTexturedShader(harness);
         Mesh quad = harness.CreateQuad();
-        Texture texture = harness.CreateTexture("textures/deferred-destroy", new Color(1f, 0.5f, 0.25f, 1f));
+        Texture texture = harness.CreateTexture(
+            "textures/deferred-destroy",
+            new Color(1f, 0.5f, 0.25f, 1f)
+        );
         GpuAssetResource resource = texture.Lifetime.Resource
             ?? throw new InvalidOperationException("The texture has no GPU resource.");
         uint releasedSlot = ((VulkanTextureAssetResource)resource).BindlessSlot;
@@ -382,13 +495,20 @@ public sealed class VulkanDrawTests {
             1,
             _clearColor,
             VulkanDrawTestHarness.OrthographicCamera(host),
-            new VulkanDrawTestHarness.DrawSpec(quad, shader, [Matrix4x4.Identity], TextureBindings: [texture]));
+            new VulkanDrawTestHarness.DrawSpec(
+                quad,
+                shader,
+                [Matrix4x4.Identity],
+                TextureBindings: [texture]
+            )
+        );
 
         // The public Dispose releases the last owner reference, which queues the GPU destruction on
         // the bridge. The bridge must defer it while the frame that sampled the texture is in flight.
         texture.Dispose();
         harness.Bridge.ProcessPending(harness.Worker);
-        if (harness.Bridge.PendingDestroyCount > 0) {
+        if (harness.Bridge.PendingDestroyCount > 0)
+        {
             // The frame is still in flight: the worker must keep the slot and the GPU image alive.
             Assert.False(harness.Worker.AreFrameResourcesIdle);
             Assert.Equal(liveBefore, harness.TextureCount);
@@ -409,29 +529,42 @@ public sealed class VulkanDrawTests {
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
-    private static Shader CreateTexturedShader(VulkanDrawTestHarness harness) => harness.CreateShader(
-        "shaders/textured",
-        VulkanDrawTestHarness.DEFAULT_VERTEX_SOURCE,
-        VulkanDrawTestHarness.DEFAULT_FRAGMENT_SOURCE,
-        uniforms: [
-            new ShaderUniformAsset {
-                Name = "uTint",
-                Type = ShaderUniformType.Vector4,
-                Default = [1f, 1f, 1f, 1f],
-            },
-        ],
-        textures: ["mainTexture"],
-        defaultRenderState: RenderState.Opaque with { Cull = CullMode.None });
+    private static Shader CreateTexturedShader(VulkanDrawTestHarness harness) =>
+        harness.CreateShader(
+            "shaders/textured",
+            VulkanDrawTestHarness.DEFAULT_VERTEX_SOURCE,
+            VulkanDrawTestHarness.DEFAULT_FRAGMENT_SOURCE,
+            uniforms:
+            [
+                new ShaderUniformAsset
+                {
+                    Name = "uTint",
+                    Type = ShaderUniformType.Vector4,
+                    Default = [1f, 1f, 1f, 1f],
+                },
+            ],
+            textures: ["mainTexture"],
+            defaultRenderState: RenderState.Opaque with
+            {
+                Cull = CullMode.None,
+            }
+        );
 
     private static uint CenterX(BackendTestHost host) => host.SceneTarget.Extent.Width / 2;
 
     private static uint CenterY(BackendTestHost host) => host.SceneTarget.Extent.Height / 2;
 
-    private static bool TryResizeWindow(BackendTestHost host, int width, int height) {
+    private static bool TryResizeWindow(BackendTestHost host, int width, int height)
+    {
         host.Platform.Window.SetSize(width, height);
-        for (int attempt = 0; attempt < 200; attempt++) {
+        for (int attempt = 0; attempt < 200; attempt++)
+        {
             host.Platform.Pump(TimeSpan.Zero);
-            if (host.Platform.Window.RenderWidth == width && host.Platform.Window.RenderHeight == height) {
+            if (
+                host.Platform.Window.RenderWidth == width
+                && host.Platform.Window.RenderHeight == height
+            )
+            {
                 return true;
             }
         }
@@ -439,15 +572,19 @@ public sealed class VulkanDrawTests {
         return false;
     }
 
-    private static void AssertColorNear(Color expected, (float R, float G, float B) actual) {
+    private static void AssertColorNear(Color expected, (float R, float G, float B) actual)
+    {
         Assert.True(
             MathF.Abs(expected.R - actual.R) <= COLOR_TOLERANCE,
-            $"Red {actual.R} is not within {COLOR_TOLERANCE} of {expected.R}.");
+            $"Red {actual.R} is not within {COLOR_TOLERANCE} of {expected.R}."
+        );
         Assert.True(
             MathF.Abs(expected.G - actual.G) <= COLOR_TOLERANCE,
-            $"Green {actual.G} is not within {COLOR_TOLERANCE} of {expected.G}.");
+            $"Green {actual.G} is not within {COLOR_TOLERANCE} of {expected.G}."
+        );
         Assert.True(
             MathF.Abs(expected.B - actual.B) <= COLOR_TOLERANCE,
-            $"Blue {actual.B} is not within {COLOR_TOLERANCE} of {expected.B}.");
+            $"Blue {actual.B} is not within {COLOR_TOLERANCE} of {expected.B}."
+        );
     }
 }

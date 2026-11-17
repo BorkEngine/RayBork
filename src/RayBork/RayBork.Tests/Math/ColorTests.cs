@@ -4,7 +4,8 @@ using System.Reflection;
 
 namespace RayBork.Tests;
 
-public sealed class ColorTests {
+public sealed class ColorTests
+{
     private const float TOLERANCE = 1e-5f;
     private const float OKLAB_TOLERANCE = 1e-4f;
     private const float PALETTE_TOLERANCE = 1e-6f;
@@ -33,7 +34,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorStoresLinearComponents() {
+    public void ConstructorStoresLinearComponents()
+    {
         Color color = new(0.1f, 0.2f, 0.3f, 0.4f);
 
         Assert.Equal(0.1f, color.R);
@@ -44,7 +46,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ThreeComponentConstructorDefaultsAlphaToOne() {
+    public void ThreeComponentConstructorDefaultsAlphaToOne()
+    {
         Color color = new(0.1f, 0.2f, 0.3f);
 
         Assert.Equal(0.1f, color.R);
@@ -55,20 +58,28 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void IndexerReturnsComponentsAndThrowsOutOfRange() {
+    public void IndexerReturnsComponentsAndThrowsOutOfRange()
+    {
         Color color = new(1f, 2f, 3f, 4f);
 
         Assert.Equal(1f, color[0]);
         Assert.Equal(2f, color[1]);
         Assert.Equal(3f, color[2]);
         Assert.Equal(4f, color[3]);
-        Assert.Throws<ArgumentOutOfRangeException>(() => { _ = color[-1]; });
-        Assert.Throws<ArgumentOutOfRangeException>(() => { _ = color[4]; });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            _ = color[-1];
+        });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+        {
+            _ = color[4];
+        });
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OperatorsWorkComponentWise() {
+    public void OperatorsWorkComponentWise()
+    {
         Color left = new(1f, 2f, 3f, 4f);
         Color right = new(5f, 6f, 7f, 8f);
 
@@ -82,7 +93,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ImplicitVector4ConversionsRoundTrip() {
+    public void ImplicitVector4ConversionsRoundTrip()
+    {
         Color color = new(0.1f, 0.2f, 0.3f, 0.4f);
 
         Vector4 vector = color;
@@ -94,7 +106,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EqualityIsExactPerComponent() {
+    public void EqualityIsExactPerComponent()
+    {
         Color color = new(0.1f, 0.2f, 0.3f, 0.4f);
         Color same = new(0.1f, 0.2f, 0.3f, 0.4f);
         Color different = new(0.1f, 0.2f, 0.3f, 0.400001f);
@@ -268,7 +281,8 @@ public sealed class ColorTests {
     [InlineData("Transparent", 0f, 0f, 0f, 0f)]
     [InlineData("YellowNice", 1f, 235f / 255f, 4f / 255f, 1f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PresetStoresTheLinearizedSrgbSource(string name, float r, float g, float b, float a) {
+    public void PresetStoresTheLinearizedSrgbSource(string name, float r, float g, float b, float a)
+    {
         FieldInfo? field = typeof(Color).GetField(name, BindingFlags.Public | BindingFlags.Static);
         Assert.NotNull(field);
         Color preset = (Color)field!.GetValue(null)!;
@@ -278,9 +292,14 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PaletteExposesExactlyTheBork2dPresetNames() {
-        string[] expected = PRESET_NAMES.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        string[] actual = typeof(Color).GetFields(BindingFlags.Public | BindingFlags.Static)
+    public void PaletteExposesExactlyTheBork2dPresetNames()
+    {
+        string[] expected = PRESET_NAMES.Split(
+            (char[]?)null,
+            StringSplitOptions.RemoveEmptyEntries
+        );
+        string[] actual = typeof(Color)
+            .GetFields(BindingFlags.Public | BindingFlags.Static)
             .Where(field => field.FieldType == typeof(Color))
             .Select(field => field.Name)
             .ToArray();
@@ -293,7 +312,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PalettePinsTheLinearizedDisplayValues() {
+    public void PalettePinsTheLinearizedDisplayValues()
+    {
         AssertComponents(Color.Gray, 0.21404114f, 0.21404114f, 0.21404114f);
         AssertComponents(Color.Grey, 0.21404114f, 0.21404114f, 0.21404114f);
         AssertComponents(Color.WhiteSmoke, 0.913099f, 0.913099f, 0.913099f);
@@ -321,7 +341,8 @@ public sealed class ColorTests {
         Assert.Equal(Color.Gray.ToSrgb(), Color.Gray5.ToSrgb());
     }
 
-    private static void AssertComponents(Color color, float r, float g, float b, float a = 1f) {
+    private static void AssertComponents(Color color, float r, float g, float b, float a = 1f)
+    {
         Assert.Equal(r, color.R, PALETTE_TOLERANCE);
         Assert.Equal(g, color.G, PALETTE_TOLERANCE);
         Assert.Equal(b, color.B, PALETTE_TOLERANCE);
@@ -330,7 +351,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GrayscaleUsesPerceivedLuminanceWeights() {
+    public void GrayscaleUsesPerceivedLuminanceWeights()
+    {
         Assert.Equal(0f, Color.Black.Grayscale);
         Assert.Equal(1f, Color.White.Grayscale);
         Assert.Equal(0.299f, new Color(1f, 0f, 0f).Grayscale);
@@ -341,7 +363,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MaxColorComponentIncludesAlpha() {
+    public void MaxColorComponentIncludesAlpha()
+    {
         Assert.Equal(0.9f, new Color(0.1f, 0.2f, 0.3f, 0.9f).MaxColorComponent);
         Assert.Equal(1f, Color.White.MaxColorComponent);
         Assert.Equal(0f, Color.Clear.MaxColorComponent);
@@ -349,7 +372,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LerpClampsWhileLerpUnclampedExtrapolates() {
+    public void LerpClampsWhileLerpUnclampedExtrapolates()
+    {
         Color black = new(0f, 0f, 0f, 1f);
         Color white = new(1f, 1f, 1f, 1f);
 
@@ -362,7 +386,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OkLabMatchesKnownValues() {
+    public void OkLabMatchesKnownValues()
+    {
         Color.White.ToOkLab(out float whiteL, out float whiteA, out float whiteB);
         Assert.Equal(1f, whiteL, OKLAB_TOLERANCE);
         Assert.Equal(0f, whiteA, OKLAB_TOLERANCE);
@@ -381,7 +406,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OkLabRoundTripsLinearColors() {
+    public void OkLabRoundTripsLinearColors()
+    {
         Color color = new(0.2f, 0.6f, 0.3f, 0.4f);
 
         color.ToOkLab(out float l, out float a, out float b);
@@ -395,7 +421,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LerpOkLabInterpolatesPerceptuallyAndClamps() {
+    public void LerpOkLabInterpolatesPerceptuallyAndClamps()
+    {
         Color middle = Color.LerpOkLab(Color.Black, Color.White, 0.5f);
         Assert.Equal(0.125f, middle.R, TOLERANCE);
         Assert.Equal(0.125f, middle.G, TOLERANCE);
@@ -423,7 +450,9 @@ public sealed class ColorTests {
         float hue,
         float expectedRed,
         float expectedGreen,
-        float expectedBlue) {
+        float expectedBlue
+    )
+    {
         Color color = Color.HSVToRGB(hue, 1f, 1f);
 
         Assert.Equal(expectedRed, color.R, TOLERANCE);
@@ -434,7 +463,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void HSVToRGBWrapsHueAndHandlesZeroSaturation() {
+    public void HSVToRGBWrapsHueAndHandlesZeroSaturation()
+    {
         Assert.Equal(Color.Red, Color.HSVToRGB(1f, 1f, 1f));
         Assert.Equal(Color.Magenta, Color.HSVToRGB(-1f / 6f, 1f, 1f));
         Assert.Equal(Color.Cyan, Color.HSVToRGB(1.5f, 1f, 1f));
@@ -444,7 +474,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void HSVToRGBSupportsHdrValues() {
+    public void HSVToRGBSupportsHdrValues()
+    {
         Color hdr = Color.HSVToRGB(0f, 1f, 2f);
         Color clamped = Color.HSVToRGB(0f, 1f, 2f, false);
 
@@ -474,8 +505,15 @@ public sealed class ColorTests {
         float blue,
         float expectedHue,
         float expectedSaturation,
-        float expectedValue) {
-        Color.RGBToHSV(new Color(red, green, blue), out float hue, out float saturation, out float value);
+        float expectedValue
+    )
+    {
+        Color.RGBToHSV(
+            new Color(red, green, blue),
+            out float hue,
+            out float saturation,
+            out float value
+        );
 
         Assert.Equal(expectedHue, hue, TOLERANCE);
         Assert.Equal(expectedSaturation, saturation, TOLERANCE);
@@ -484,7 +522,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void HSVToRGBRoundTripsArbitraryColors() {
+    public void HSVToRGBRoundTripsArbitraryColors()
+    {
         Color original = new(0.2f, 0.5f, 0.8f);
 
         Color.RGBToHSV(original, out float hue, out float saturation, out float value);
@@ -498,7 +537,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RGBToHSVPreservesHdrValue() {
+    public void RGBToHSVPreservesHdrValue()
+    {
         Color.RGBToHSV(new Color(2f, 0f, 0f), out float hue, out float saturation, out float value);
 
         Assert.Equal(0f, hue);
@@ -508,20 +548,29 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ToStringUsesStableRgbaForm() {
+    public void ToStringUsesStableRgbaForm()
+    {
         Color color = new(1f, 0.5f, 0.25f, 0.75f);
 
-        Assert.Equal("RGBA(1, 0.5, 0.25, 0.75)", color.ToString(null, CultureInfo.InvariantCulture));
-        Assert.Equal("RGBA(1.00, 0.50, 0.25, 0.75)", color.ToString("F2", CultureInfo.InvariantCulture));
+        Assert.Equal(
+            "RGBA(1, 0.5, 0.25, 0.75)",
+            color.ToString(null, CultureInfo.InvariantCulture)
+        );
+        Assert.Equal(
+            "RGBA(1.00, 0.50, 0.25, 0.75)",
+            color.ToString("F2", CultureInfo.InvariantCulture)
+        );
         Assert.Equal("RGBA(1, 0, 0, 1)", Color.Red.ToString());
         Assert.Equal(
             color.ToString(null, CultureInfo.InvariantCulture),
-            ((IFormattable)color).ToString(null, CultureInfo.InvariantCulture));
+            ((IFormattable)color).ToString(null, CultureInfo.InvariantCulture)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FromSrgbDecodesKnownValues() {
+    public void FromSrgbDecodesKnownValues()
+    {
         Color middleGray = Color.FromSrgb(0.5f, 0.5f, 0.5f);
 
         Assert.Equal(0.21404114f, middleGray.R, TOLERANCE);
@@ -536,7 +585,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FromSrgbUsesThePiecewiseEotfAtTheBoundary() {
+    public void FromSrgbUsesThePiecewiseEotfAtTheBoundary()
+    {
         float atThreshold = Color.FromSrgb(0.04045f, 0.04045f, 0.04045f).R;
         float aboveThreshold = Color.FromSrgb(0.04045001f, 0.04045001f, 0.04045001f).R;
 
@@ -548,7 +598,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ToSrgbUsesThePiecewiseOetfAtTheBoundary() {
+    public void ToSrgbUsesThePiecewiseOetfAtTheBoundary()
+    {
         float atThreshold = new Color(0.0031308f, 0.0031308f, 0.0031308f).ToSrgb().X;
         float aboveThreshold = new Color(0.0031309f, 0.0031309f, 0.0031309f).ToSrgb().X;
 
@@ -560,7 +611,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FromSrgbBytesDecodesDeterministicallyAndPassesAlpha() {
+    public void FromSrgbBytesDecodesDeterministicallyAndPassesAlpha()
+    {
         Color middleGray = Color.FromSrgbBytes((byte)128, (byte)128, (byte)128, (byte)51);
 
         Assert.Equal(0.2158605f, middleGray.R, TOLERANCE);
@@ -577,7 +629,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SrgbRoundTripsInRangeColors() {
+    public void SrgbRoundTripsInRangeColors()
+    {
         Color original = new(0.2f, 0.6f, 0.3f, 0.4f);
 
         Vector4 encoded = original.ToSrgb();
@@ -598,7 +651,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SrgbConversionPassesAlphaThrough() {
+    public void SrgbConversionPassesAlphaThrough()
+    {
         Vector4 encoded = new Color(0.1f, 0.2f, 0.3f, 0.25f).ToSrgb();
 
         Assert.Equal(0.25f, encoded.W);
@@ -607,7 +661,8 @@ public sealed class ColorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ToSrgbExtrapolatesOutOfRangeComponentsWithoutClamping() {
+    public void ToSrgbExtrapolatesOutOfRangeComponentsWithoutClamping()
+    {
         Vector4 encoded = new Color(2f, -0.5f, 0.5f, 1f).ToSrgb();
 
         Assert.Equal(1.353256f, encoded.X, 1e-4f);
@@ -626,23 +681,29 @@ public sealed class ColorTests {
     [InlineData(0.5f, 0.5f, 0.5f, -0.25f)]
     [InlineData(0.5f, 0.5f, 0.5f, float.PositiveInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FromSrgbRejectsNonFiniteOrOutOfRangeComponents(float r, float g, float b, float a) {
+    public void FromSrgbRejectsNonFiniteOrOutOfRangeComponents(float r, float g, float b, float a)
+    {
         Assert.Throws<ArgumentOutOfRangeException>(() => Color.FromSrgb(r, g, b, a));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FromSrgbReportsTheOutOfRangeParameter() {
-        ArgumentOutOfRangeException rgbException = Assert.Throws<ArgumentOutOfRangeException>(
-            () => Color.FromSrgb(-0.1f, 0.5f, 0.5f));
+    public void FromSrgbReportsTheOutOfRangeParameter()
+    {
+        ArgumentOutOfRangeException rgbException = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Color.FromSrgb(-0.1f, 0.5f, 0.5f)
+        );
         ArgumentOutOfRangeException alphaException = Assert.Throws<ArgumentOutOfRangeException>(
-            () => Color.FromSrgb(0.5f, 0.5f, 0.5f, 1.5f));
+            () =>
+                Color.FromSrgb(0.5f, 0.5f, 0.5f, 1.5f)
+        );
 
         Assert.Equal("r", rgbException.ParamName);
         Assert.Equal("a", alphaException.ParamName);
     }
 
-    private static void AssertColorEqual(Color expected, Color actual, float tolerance = TOLERANCE) {
+    private static void AssertColorEqual(Color expected, Color actual, float tolerance = TOLERANCE)
+    {
         Assert.Equal(expected.R, actual.R, tolerance);
         Assert.Equal(expected.G, actual.G, tolerance);
         Assert.Equal(expected.B, actual.B, tolerance);

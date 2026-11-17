@@ -5,7 +5,8 @@ using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests;
 
-public sealed class ShaderUniformCursorTests {
+public sealed class ShaderUniformCursorTests
+{
     private const string FLOAT_UNIFORM = "uFloat";
     private const string INT_UNIFORM = "uInt";
     private const string UINT_UNIFORM = "uUint";
@@ -23,13 +24,15 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MetadataAndRecordSizesMatchTheBakedDescriptor() {
+    public void MetadataAndRecordSizesMatchTheBakedDescriptor()
+    {
         using Shader shader = CreateShader();
 
         Assert.Equal(10, shader.Uniforms.Count);
         Assert.Equal(
             [MAIN_TEXTURE, DETAIL_TEXTURE],
-            shader.Textures.Select(texture => texture.Name).ToArray());
+            shader.Textures.Select(texture => texture.Name).ToArray()
+        );
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, shader.Stages);
         Assert.Equal(RenderState.Opaque, shader.DefaultRenderState);
         Assert.Equal(256, shader.InstanceDataSize);
@@ -41,7 +44,8 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheCursorStartsFromTheBakedDefaults() {
+    public void TheCursorStartsFromTheBakedDefaults()
+    {
         using Shader shader = CreateShader();
 
         Assert.Equal([1.5f], ReadFloats(ValueOf(shader, FLOAT_UNIFORM)));
@@ -53,7 +57,8 @@ public sealed class ShaderUniformCursorTests {
         Assert.Equal([6f, 7f, 8f, 9f], ReadFloats(ValueOf(shader, VEC4_UNIFORM)));
         Assert.Equal(
             [1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f],
-            ReadFloats(ValueOf(shader, MAT4_UNIFORM)));
+            ReadFloats(ValueOf(shader, MAT4_UNIFORM))
+        );
         Assert.Equal([0.25f, 0.5f, 0.75f, 1f], ReadFloats(ValueOf(shader, COLOR_UNIFORM)));
         Assert.Equal([0f], ReadFloats(ValueOf(shader, EMPTY_UNIFORM)));
         Assert.All(shader.TextureValues.ToArray(), Assert.Null);
@@ -61,9 +66,11 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EverySetUniformOverloadWritesLittleEndianComponents() {
+    public void EverySetUniformOverloadWritesLittleEndianComponents()
+    {
         using Shader shader = CreateShader();
-        OnTickThread(() => {
+        OnTickThread(() =>
+        {
             shader.SetUniform(FLOAT_UNIFORM, 9.25f);
             shader.SetUniform(INT_UNIFORM, -7);
             shader.SetUniform(UINT_UNIFORM, 42u);
@@ -74,10 +81,24 @@ public sealed class ShaderUniformCursorTests {
             shader.SetUniform(
                 MAT4_UNIFORM,
                 new Matrix4x4(
-                    17f, 18f, 19f, 20f,
-                    21f, 22f, 23f, 24f,
-                    25f, 26f, 27f, 28f,
-                    29f, 30f, 31f, 32f));
+                    17f,
+                    18f,
+                    19f,
+                    20f,
+                    21f,
+                    22f,
+                    23f,
+                    24f,
+                    25f,
+                    26f,
+                    27f,
+                    28f,
+                    29f,
+                    30f,
+                    31f,
+                    32f
+                )
+            );
             shader.SetUniform(COLOR_UNIFORM, new Color(0.1f, 0.2f, 0.3f, 0.4f));
         });
 
@@ -90,10 +111,9 @@ public sealed class ShaderUniformCursorTests {
         Assert.Equal([6.5f, 7.5f, 8.5f, 9.5f], ReadFloats(ValueOf(shader, VEC4_UNIFORM)));
         Assert.Equal(
             [17f, 18f, 19f, 20f, 21f, 22f, 23f, 24f, 25f, 26f, 27f, 28f, 29f, 30f, 31f, 32f],
-            ReadFloats(ValueOf(shader, MAT4_UNIFORM)));
-        Assert.Equal(
-            [0.1f, 0.2f, 0.3f, 0.4f],
-            ReadFloats(ValueOf(shader, COLOR_UNIFORM)));
+            ReadFloats(ValueOf(shader, MAT4_UNIFORM))
+        );
+        Assert.Equal([0.1f, 0.2f, 0.3f, 0.4f], ReadFloats(ValueOf(shader, COLOR_UNIFORM)));
 
         Assert.Equal(0f, BinaryPrimitives.ReadSingleLittleEndian(shader.InstanceData));
         Assert.Equal(0f, BinaryPrimitives.ReadSingleLittleEndian(shader.InstanceData.Slice(4, 4)));
@@ -101,18 +121,23 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void QuaternionMapsToVec4() {
+    public void QuaternionMapsToVec4()
+    {
         using Shader shader = CreateShader();
-        OnTickThread(() => shader.SetUniform(COLOR_UNIFORM, new Quaternion(0.1f, 0.2f, 0.3f, 0.4f)));
+        OnTickThread(() =>
+            shader.SetUniform(COLOR_UNIFORM, new Quaternion(0.1f, 0.2f, 0.3f, 0.4f))
+        );
 
         Assert.Equal([0.1f, 0.2f, 0.3f, 0.4f], ReadFloats(ValueOf(shader, COLOR_UNIFORM)));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BooleanMapsToUintZeroOrOne() {
+    public void BooleanMapsToUintZeroOrOne()
+    {
         using Shader shader = CreateShader();
-        OnTickThread(() => {
+        OnTickThread(() =>
+        {
             shader.SetUniform(BOOL_UNIFORM, true);
             Assert.Equal(1u, ReadUInt32(ValueOf(shader, BOOL_UNIFORM)));
 
@@ -123,9 +148,11 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void IntegerComponentsRoundTripExactly() {
+    public void IntegerComponentsRoundTripExactly()
+    {
         using Shader shader = CreateShader();
-        OnTickThread(() => {
+        OnTickThread(() =>
+        {
             shader.SetUniform(INT_UNIFORM, int.MinValue);
             shader.SetUniform(UINT_UNIFORM, uint.MaxValue);
         });
@@ -136,9 +163,11 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownNameThrowsArgumentException() {
+    public void UnknownNameThrowsArgumentException()
+    {
         using Shader shader = CreateShader();
-        OnTickThread(() => {
+        OnTickThread(() =>
+        {
             Assert.Throws<ArgumentException>(() => shader.SetUniform("uMissing", 1f));
             Assert.Throws<ArgumentException>(() => shader.SetUniform("uMissing", null));
         });
@@ -146,25 +175,34 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MismatchedValueTypeThrowsArgumentException() {
+    public void MismatchedValueTypeThrowsArgumentException()
+    {
         using Shader shader = CreateShader();
-        OnTickThread(() => {
+        OnTickThread(() =>
+        {
             Assert.Throws<ArgumentException>(() => shader.SetUniform(FLOAT_UNIFORM, 1));
-            Assert.Throws<ArgumentException>(() => shader.SetUniform(VEC2_UNIFORM, new Vector3(1f, 2f, 3f)));
+            Assert.Throws<ArgumentException>(() =>
+                shader.SetUniform(VEC2_UNIFORM, new Vector3(1f, 2f, 3f))
+            );
             Assert.Throws<ArgumentException>(() => shader.SetUniform(MAT4_UNIFORM, new Vector4()));
             Assert.Throws<ArgumentException>(() => shader.SetUniform(MAIN_TEXTURE, 1f));
-            Assert.Throws<ArgumentException>(() => shader.SetUniform(FLOAT_UNIFORM, (Texture?)null));
+            Assert.Throws<ArgumentException>(() =>
+                shader.SetUniform(FLOAT_UNIFORM, (Texture?)null)
+            );
         });
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ResetRestoresDefaultsAndClearsTextures() {
+    public void ResetRestoresDefaultsAndClearsTextures()
+    {
         var destroyed = new List<GpuAssetResource>();
         Shader shader = CreateShader();
         Texture texture = CreateTexture("textures/reset", destroyed);
-        try {
-            OnTickThread(() => {
+        try
+        {
+            OnTickThread(() =>
+            {
                 shader.SetUniform(FLOAT_UNIFORM, 9f);
                 shader.SetUniform(MAIN_TEXTURE, texture);
                 Assert.Same(texture, shader.TextureValues[0]);
@@ -180,7 +218,9 @@ public sealed class ShaderUniformCursorTests {
 
             Assert.True(texture.IsDisposed);
             Assert.Single(destroyed);
-        } finally {
+        }
+        finally
+        {
             DisposeShader(shader);
             DisposeTexture(texture);
         }
@@ -188,13 +228,16 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OverwritingATextureReleasesThePreviousOwnerReferenceExactlyOnce() {
+    public void OverwritingATextureReleasesThePreviousOwnerReferenceExactlyOnce()
+    {
         var destroyed = new List<GpuAssetResource>();
         Shader shader = CreateShader();
         Texture first = CreateTexture("textures/first", destroyed);
         Texture second = CreateTexture("textures/second", destroyed);
-        try {
-            OnTickThread(() => {
+        try
+        {
+            OnTickThread(() =>
+            {
                 shader.SetUniform(MAIN_TEXTURE, first);
                 first.Dispose();
                 Assert.False(first.IsDisposed);
@@ -212,7 +255,9 @@ public sealed class ShaderUniformCursorTests {
             second.Dispose();
             Assert.True(second.IsDisposed);
             Assert.Equal(2, destroyed.Count);
-        } finally {
+        }
+        finally
+        {
             DisposeShader(shader);
             DisposeTexture(first);
             DisposeTexture(second);
@@ -221,11 +266,13 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposingTheShaderReleasesTheCursorTextureOwnerReference() {
+    public void DisposingTheShaderReleasesTheCursorTextureOwnerReference()
+    {
         var destroyed = new List<GpuAssetResource>();
         Shader shader = CreateShader();
         Texture texture = CreateTexture("textures/dispose", destroyed);
-        try {
+        try
+        {
             OnTickThread(() => shader.SetUniform(MAIN_TEXTURE, texture));
             texture.Dispose();
             Assert.False(texture.IsDisposed);
@@ -236,7 +283,9 @@ public sealed class ShaderUniformCursorTests {
             Assert.True(shader.IsDisposed);
             Assert.True(texture.IsDisposed);
             Assert.Single(destroyed);
-        } finally {
+        }
+        finally
+        {
             DisposeShader(shader);
             DisposeTexture(texture);
         }
@@ -244,17 +293,23 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ATextureDisposedBeforeTheCallThrowsObjectDisposedException() {
+    public void ATextureDisposedBeforeTheCallThrowsObjectDisposedException()
+    {
         var destroyed = new List<GpuAssetResource>();
         Shader shader = CreateShader();
         Texture texture = CreateTexture("textures/stale", destroyed);
         texture.Dispose();
-        try {
-            OnTickThread(() => {
-                Assert.Throws<ObjectDisposedException>(
-                    () => shader.SetUniform(MAIN_TEXTURE, texture));
+        try
+        {
+            OnTickThread(() =>
+            {
+                Assert.Throws<ObjectDisposedException>(() =>
+                    shader.SetUniform(MAIN_TEXTURE, texture)
+                );
             });
-        } finally {
+        }
+        finally
+        {
             DisposeShader(shader);
             DisposeTexture(texture);
         }
@@ -262,9 +317,11 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NullTextureRecordsTheWhiteFallbackWithoutAReference() {
+    public void NullTextureRecordsTheWhiteFallbackWithoutAReference()
+    {
         using Shader shader = CreateShader();
-        OnTickThread(() => {
+        OnTickThread(() =>
+        {
             shader.SetUniform(MAIN_TEXTURE, null);
             Assert.Null(shader.TextureValues[0]);
         });
@@ -272,11 +329,13 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultCaptureIsStableAndOwnsNoTextureReference() {
+    public void DefaultCaptureIsStableAndOwnsNoTextureReference()
+    {
         var destroyed = new List<GpuAssetResource>();
         Shader shader = CreateShader();
         Texture texture = CreateTexture("textures/default", destroyed);
-        try {
+        try
+        {
             byte[] defaults = shader.DefaultInstanceData.ToArray();
             Assert.All(shader.DefaultTextureValues.ToArray(), Assert.Null);
 
@@ -284,14 +343,17 @@ public sealed class ShaderUniformCursorTests {
             Assert.True(texture.IsDisposed);
             Assert.Single(destroyed);
 
-            OnTickThread(() => {
+            OnTickThread(() =>
+            {
                 shader.SetUniform(FLOAT_UNIFORM, 99f);
                 shader.SetUniform(VEC4_UNIFORM, new Vector4(4f, 3f, 2f, 1f));
 
                 Assert.Equal(defaults, shader.DefaultInstanceData.ToArray());
                 Assert.All(shader.DefaultTextureValues.ToArray(), Assert.Null);
             });
-        } finally {
+        }
+        finally
+        {
             DisposeShader(shader);
             DisposeTexture(texture);
         }
@@ -299,7 +361,8 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetUniformRequiresTheTickThread() {
+    public void SetUniformRequiresTheTickThread()
+    {
         using Shader shader = CreateShader();
 
         Assert.False(TickThread.IsCurrent);
@@ -309,13 +372,18 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetUniformFromAnotherThreadThrowsInvalidOperationException() {
+    public void SetUniformFromAnotherThreadThrowsInvalidOperationException()
+    {
         using Shader shader = CreateShader();
         Exception? failure = null;
-        var thread = new Thread(() => {
-            try {
+        var thread = new Thread(() =>
+        {
+            try
+            {
                 shader.SetUniform(FLOAT_UNIFORM, 1f);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 failure = exception;
             }
         });
@@ -328,11 +396,13 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposedShaderThrowsObjectDisposedException() {
+    public void DisposedShaderThrowsObjectDisposedException()
+    {
         Shader shader = CreateShader();
         shader.Dispose();
 
-        OnTickThread(() => {
+        OnTickThread(() =>
+        {
             Assert.Throws<ObjectDisposedException>(() => shader.SetUniform(FLOAT_UNIFORM, 1f));
             Assert.Throws<ObjectDisposedException>(() => shader.ResetUniforms());
             Assert.Throws<ObjectDisposedException>(() => shader.SetUniform(MAIN_TEXTURE, null));
@@ -342,11 +412,13 @@ public sealed class ShaderUniformCursorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeFromAnotherThreadReleasesTheCursorExactlyOnce() {
+    public void DisposeFromAnotherThreadReleasesTheCursorExactlyOnce()
+    {
         var destroyed = new List<GpuAssetResource>();
         Shader shader = CreateShader();
         Texture texture = CreateTexture("textures/threaded", destroyed);
-        try {
+        try
+        {
             OnTickThread(() => shader.SetUniform(MAIN_TEXTURE, texture));
             texture.Dispose();
 
@@ -357,20 +429,26 @@ public sealed class ShaderUniformCursorTests {
             Assert.True(shader.IsDisposed);
             Assert.True(texture.IsDisposed);
             Assert.Single(destroyed);
-        } finally {
+        }
+        finally
+        {
             DisposeTexture(texture);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TickThreadAttachAndDetachAreBalanced() {
+    public void TickThreadAttachAndDetachAreBalanced()
+    {
         Assert.False(TickThread.IsCurrent);
         TickThread.Attach();
-        try {
+        try
+        {
             Assert.True(TickThread.IsCurrent);
             Assert.Throws<InvalidOperationException>(TickThread.Attach);
-        } finally {
+        }
+        finally
+        {
             TickThread.Detach();
         }
 
@@ -378,38 +456,51 @@ public sealed class ShaderUniformCursorTests {
         Assert.Throws<InvalidOperationException>(TickThread.Detach);
     }
 
-    private static void OnTickThread(Action action) {
+    private static void OnTickThread(Action action)
+    {
         TickThread.Attach();
-        try {
+        try
+        {
             action();
-        } finally {
+        }
+        finally
+        {
             TickThread.Detach();
         }
     }
 
-    private static ReadOnlySpan<byte> ValueOf(Shader shader, string name) {
+    private static ReadOnlySpan<byte> ValueOf(Shader shader, string name)
+    {
         ShaderAbiUniform uniform = shader.Abi.Uniforms.First(candidate => candidate.Name == name);
         return shader.InstanceData.Slice(
             uniform.Offset - ShaderAbiLayout.INSTANCE_HEADER_SIZE,
-            uniform.Size);
+            uniform.Size
+        );
     }
 
-    private static float[] ReadFloats(ReadOnlySpan<byte> bytes) {
+    private static float[] ReadFloats(ReadOnlySpan<byte> bytes)
+    {
         var values = new float[bytes.Length / sizeof(float)];
-        for (int index = 0; index < values.Length; index++) {
+        for (int index = 0; index < values.Length; index++)
+        {
             values[index] = BinaryPrimitives.ReadSingleLittleEndian(
-                bytes.Slice(index * sizeof(float), sizeof(float)));
+                bytes.Slice(index * sizeof(float), sizeof(float))
+            );
         }
 
         return values;
     }
 
-    private static uint ReadUInt32(ReadOnlySpan<byte> bytes) => BinaryPrimitives.ReadUInt32LittleEndian(bytes);
+    private static uint ReadUInt32(ReadOnlySpan<byte> bytes) =>
+        BinaryPrimitives.ReadUInt32LittleEndian(bytes);
 
-    private static int ReadInt32(ReadOnlySpan<byte> bytes) => BinaryPrimitives.ReadInt32LittleEndian(bytes);
+    private static int ReadInt32(ReadOnlySpan<byte> bytes) =>
+        BinaryPrimitives.ReadInt32LittleEndian(bytes);
 
-    private static Shader CreateShader() {
-        ShaderAssetDescriptor descriptor = new() {
+    private static Shader CreateShader()
+    {
+        ShaderAssetDescriptor descriptor = new()
+        {
             AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = "shaders/test-vert",
             FragmentPayload = "shaders/test-frag",
@@ -417,7 +508,8 @@ public sealed class ShaderUniformCursorTests {
             FragmentEntry = "main_fragment",
             Stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
             DefaultRenderState = RenderState.Opaque,
-            Uniforms = [
+            Uniforms =
+            [
                 Uniform(FLOAT_UNIFORM, ShaderUniformType.Float, 1.5f),
                 Uniform(INT_UNIFORM, ShaderUniformType.Int, -2f),
                 Uniform(UINT_UNIFORM, ShaderUniformType.UInt, 3f),
@@ -428,10 +520,23 @@ public sealed class ShaderUniformCursorTests {
                 Uniform(
                     MAT4_UNIFORM,
                     ShaderUniformType.Matrix4x4,
-                    1f, 2f, 3f, 4f,
-                    5f, 6f, 7f, 8f,
-                    9f, 10f, 11f, 12f,
-                    13f, 14f, 15f, 16f),
+                    1f,
+                    2f,
+                    3f,
+                    4f,
+                    5f,
+                    6f,
+                    7f,
+                    8f,
+                    9f,
+                    10f,
+                    11f,
+                    12f,
+                    13f,
+                    14f,
+                    15f,
+                    16f
+                ),
                 Uniform(COLOR_UNIFORM, ShaderUniformType.Vector4, 0.25f, 0.5f, 0.75f, 1f),
                 Uniform(EMPTY_UNIFORM, ShaderUniformType.Float),
             ],
@@ -441,12 +546,14 @@ public sealed class ShaderUniformCursorTests {
             "shaders/test",
             descriptor,
             ReadOnlyMemory<byte>.Empty,
-            ReadOnlyMemory<byte>.Empty);
+            ReadOnlyMemory<byte>.Empty
+        );
         var asset = new EngineAsset(
             "shaders/test",
             new FakeGpuAssetResource(upload, 1),
             static _ => { },
-            static () => { });
+            static () => { }
+        );
         asset.AddOwnerReference();
         ShaderProgram program = new(asset, descriptor);
         Shader material = program.CreateMaterial();
@@ -458,14 +565,19 @@ public sealed class ShaderUniformCursorTests {
     private static ShaderUniformAsset Uniform(
         string name,
         ShaderUniformType type,
-        params float[] defaultValue) => new() {
+        params float[] defaultValue
+    ) =>
+        new()
+        {
             Name = name,
             Type = type,
             Default = defaultValue,
         };
 
-    private static Texture CreateTexture(string path, List<GpuAssetResource> destroyed) {
-        var descriptor = new TextureAssetDescriptor {
+    private static Texture CreateTexture(string path, List<GpuAssetResource> destroyed)
+    {
+        var descriptor = new TextureAssetDescriptor
+        {
             Payload = path + "-ktx2",
             Width = 1,
             Height = 1,
@@ -481,19 +593,24 @@ public sealed class ShaderUniformCursorTests {
             path,
             new FakeGpuAssetResource(upload, 1),
             destroyed.Add,
-            static () => { });
+            static () => { }
+        );
         asset.AddOwnerReference();
         return new Texture(asset, descriptor);
     }
 
-    private static void DisposeShader(Shader shader) {
-        if (!shader.IsDisposed) {
+    private static void DisposeShader(Shader shader)
+    {
+        if (!shader.IsDisposed)
+        {
             shader.Dispose();
         }
     }
 
-    private static void DisposeTexture(Texture texture) {
-        if (!texture.IsDisposed) {
+    private static void DisposeTexture(Texture texture)
+    {
+        if (!texture.IsDisposed)
+        {
             texture.Dispose();
         }
     }

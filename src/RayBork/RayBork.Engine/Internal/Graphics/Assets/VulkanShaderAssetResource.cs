@@ -13,7 +13,8 @@ namespace RayBork.Internal;
 /// the descriptor's entry points. No pipeline is created here. The modules are destroyed together by
 /// <see cref="VulkanAssetWorker.Destroy"/>.
 /// </remarks>
-internal sealed class VulkanShaderAssetResource : VulkanAssetResource {
+internal sealed class VulkanShaderAssetResource : VulkanAssetResource
+{
     /// <summary>
     /// Initializes a shader resource.
     /// </summary>
@@ -25,8 +26,10 @@ internal sealed class VulkanShaderAssetResource : VulkanAssetResource {
         ShaderGpuUpload upload,
         ShaderModule vertexModule,
         ShaderModule fragmentModule,
-        int deviceGeneration)
-        : base(upload, unchecked((long)vertexModule.Handle), deviceGeneration) {
+        int deviceGeneration
+    )
+        : base(upload, unchecked((long)vertexModule.Handle), deviceGeneration)
+    {
         VertexModule = vertexModule;
         FragmentModule = fragmentModule;
     }
@@ -45,8 +48,10 @@ internal sealed class VulkanShaderAssetResource : VulkanAssetResource {
     /// Adopts the handles of a shader recreated after a device recovery.
     /// </summary>
     /// <param name="restored">The recreated shader resource.</param>
-    internal override void AdoptRestored(GpuAssetResource restored) {
-        if (ReferenceEquals(this, restored)) {
+    internal override void AdoptRestored(GpuAssetResource restored)
+    {
+        if (ReferenceEquals(this, restored))
+        {
             return;
         }
 

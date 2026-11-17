@@ -9,12 +9,14 @@ namespace RayBork.Internal;
 /// producer records into it and publishes it; the consumer reads it while it holds the rendering lease.
 /// A default or hand-constructed lease has no packet.
 /// </remarks>
-internal readonly struct FrameLease {
+internal readonly struct FrameLease
+{
     /// <summary>
     /// Initializes a lease for <paramref name="slotIndex"/> and <paramref name="frameIndex"/> without a
     /// packet. Leases are normally produced by the ring, which attaches the slot packet.
     /// </summary>
-    internal FrameLease(int slotIndex, long frameIndex) {
+    internal FrameLease(int slotIndex, long frameIndex)
+    {
         SlotIndex = slotIndex;
         FrameIndex = frameIndex;
         Packet = null;
@@ -23,7 +25,8 @@ internal readonly struct FrameLease {
     /// <summary>
     /// Initializes a lease with the slot's reusable frame packet.
     /// </summary>
-    internal FrameLease(int slotIndex, long frameIndex, RenderFramePacket packet) {
+    internal FrameLease(int slotIndex, long frameIndex, RenderFramePacket packet)
+    {
         ArgumentNullException.ThrowIfNull(packet);
         SlotIndex = slotIndex;
         FrameIndex = frameIndex;

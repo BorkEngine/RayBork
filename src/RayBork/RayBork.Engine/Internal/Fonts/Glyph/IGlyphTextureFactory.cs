@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// when it evicts the glyph or disposes. A factory must not cache or dispose the texture it returns.
 /// </para>
 /// </remarks>
-internal interface IGlyphTextureFactory {
+internal interface IGlyphTextureFactory
+{
     /// <summary>
     /// Creates one RGBA8 glyph texture from a generated MSDF bitmap.
     /// </summary>
@@ -34,5 +35,6 @@ internal interface IGlyphTextureFactory {
         int width,
         int height,
         ReadOnlyMemory<byte> rgba,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

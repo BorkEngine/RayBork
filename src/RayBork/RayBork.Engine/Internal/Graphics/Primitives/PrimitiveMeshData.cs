@@ -19,4 +19,5 @@ internal readonly record struct PrimitiveMeshData(
     Vertex[] Vertices,
     uint[] Indices,
     PrimitiveTopology Topology,
-    BoundingBox Bounds);
+    BoundingBox Bounds
+);

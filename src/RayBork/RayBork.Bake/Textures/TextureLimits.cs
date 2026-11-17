@@ -8,7 +8,8 @@ namespace RayBork.Bake.Textures;
 /// mip-chain, and encode memory of one source and rejects implausible authoring mistakes before a
 /// decoder allocates pixels.
 /// </remarks>
-internal static class TextureLimits {
+internal static class TextureLimits
+{
     /// <summary>The largest accepted base-level width or height in pixels.</summary>
     internal const int MAX_DIMENSION = 16384;
 
@@ -16,6 +17,6 @@ internal static class TextureLimits {
     /// <param name="width">The pixel width.</param>
     /// <param name="height">The pixel height.</param>
     /// <returns><see langword="true"/> when both dimensions are positive and within the limit.</returns>
-    internal static bool IsSupportedSize(long width, long height)
-        => width is > 0 and <= MAX_DIMENSION && height is > 0 and <= MAX_DIMENSION;
+    internal static bool IsSupportedSize(long width, long height) =>
+        width is > 0 and <= MAX_DIMENSION && height is > 0 and <= MAX_DIMENSION;
 }

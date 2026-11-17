@@ -38,7 +38,8 @@ namespace RayBork;
 /// <c>Load&lt;Font&gt;</c> exactly once.
 /// </para>
 /// </remarks>
-public sealed class Font : IAsset {
+public sealed class Font : IAsset
+{
     private readonly EngineAsset _asset;
     private readonly SfntFace _face;
     private readonly FontGlyphPipeline _pipeline;
@@ -52,7 +53,8 @@ public sealed class Font : IAsset {
     /// <param name="face">The parsed face. The pipeline retains it for the font's lifetime.</param>
     /// <param name="pipeline">The font's glyph pipeline; the lifetime release disposes it.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal Font(EngineAsset asset, SfntFace face, FontGlyphPipeline pipeline) {
+    internal Font(EngineAsset asset, SfntFace face, FontGlyphPipeline pipeline)
+    {
         ArgumentNullException.ThrowIfNull(asset);
         ArgumentNullException.ThrowIfNull(face);
         ArgumentNullException.ThrowIfNull(pipeline);
@@ -75,8 +77,10 @@ public sealed class Font : IAsset {
     /// <c>head</c> tables. Multiply it by the requested text size for world units.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    public float LineHeight {
-        get {
+    public float LineHeight
+    {
+        get
+        {
             ThrowIfDisposed();
             return _metrics.LineHeight;
         }
@@ -87,8 +91,10 @@ public sealed class Font : IAsset {
     /// </summary>
     /// <remarks>The value is <c>ascender / unitsPerEm</c>.</remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    public float Ascent {
-        get {
+    public float Ascent
+    {
+        get
+        {
             ThrowIfDisposed();
             return _metrics.Ascent;
         }
@@ -99,8 +105,10 @@ public sealed class Font : IAsset {
     /// </summary>
     /// <remarks>The value is <c>-descender / unitsPerEm</c>, so it is positive for a normal face.</remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    public float Descent {
-        get {
+    public float Descent
+    {
+        get
+        {
             ThrowIfDisposed();
             return _metrics.Descent;
         }
@@ -116,8 +124,10 @@ public sealed class Font : IAsset {
     /// increasing it.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    public int GlyphCount {
-        get {
+    public int GlyphCount
+    {
+        get
+        {
             ThrowIfDisposed();
             return _glyphCount;
         }
@@ -133,8 +143,10 @@ public sealed class Font : IAsset {
     /// also fall when the cache evicts the least recently used glyph textures.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    public int CachedGlyphCount {
-        get {
+    public int CachedGlyphCount
+    {
+        get
+        {
             ThrowIfDisposed();
             return _pipeline.CachedGlyphCount;
         }
@@ -158,8 +170,10 @@ public sealed class Font : IAsset {
     /// type whose implemented interfaces live in <c>RayBork.Internal</c>. This adapter is the bridge.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    internal ITextMetrics Metrics {
-        get {
+    internal ITextMetrics Metrics
+    {
+        get
+        {
             ThrowIfDisposed();
             return _metrics;
         }
@@ -179,11 +193,13 @@ public sealed class Font : IAsset {
     /// texture and never waits: call the draw-side glyph acquisition, which enqueues generation on a
     /// miss, and check again on a later frame. <see cref="Glyph.Rune"/> echoes the requested rune.
     /// </remarks>
-    public bool TryGetGlyph(Rune rune, out Glyph glyph) {
+    public bool TryGetGlyph(Rune rune, out Glyph glyph)
+    {
         ThrowIfDisposed();
         int glyphId = SfntFace.NOTDEF_GLYPH_ID;
         _face.TryGetGlyphId(rune, out glyphId);
-        if (!_pipeline.TryGetTexture(glyphId, out _)) {
+        if (!_pipeline.TryGetTexture(glyphId, out _))
+        {
             glyph = default;
             return false;
         }
@@ -193,7 +209,8 @@ public sealed class Font : IAsset {
             rune,
             new Vector2(metrics.AdvanceX, 0f),
             new Vector2(metrics.BearingX, metrics.BearingY),
-            new Vector2(metrics.Width, metrics.Height));
+            new Vector2(metrics.Width, metrics.Height)
+        );
         return true;
     }
 
@@ -214,7 +231,8 @@ public sealed class Font : IAsset {
     /// <paramref name="size"/> is not finite and positive.
     /// </exception>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    public Vector2 Measure(ReadOnlySpan<char> text, float size) {
+    public Vector2 Measure(ReadOnlySpan<char> text, float size)
+    {
         ThrowIfDisposed();
         return TextLayoutEngine.Measure(_metrics, text, size);
     }
@@ -230,7 +248,8 @@ public sealed class Font : IAsset {
     /// cache clock follows the frame index. The pipeline keeps the highest value, so a repeated index
     /// never moves the clock backwards.
     /// </remarks>
-    internal void BeginFrame(long frameIndex) {
+    internal void BeginFrame(long frameIndex)
+    {
         ThrowIfDisposed();
         _pipeline.BeginFrame(frameIndex);
     }
@@ -246,7 +265,8 @@ public sealed class Font : IAsset {
     /// </returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    internal Texture? AcquireGlyphTexture(int glyphId, FrameAssetRetention retention) {
+    internal Texture? AcquireGlyphTexture(int glyphId, FrameAssetRetention retention)
+    {
         ThrowIfDisposed();
         return _pipeline.Acquire(glyphId, retention);
     }
@@ -260,10 +280,12 @@ public sealed class Font : IAsset {
     /// </param>
     /// <returns><see langword="true"/> when the face maps the rune to a real glyph.</returns>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    internal bool TryGetGlyphId(Rune rune, out int glyphId) {
+    internal bool TryGetGlyphId(Rune rune, out int glyphId)
+    {
         ThrowIfDisposed();
         bool mapped = _face.TryGetGlyphId(rune, out glyphId);
-        if (!mapped) {
+        if (!mapped)
+        {
             glyphId = SfntFace.NOTDEF_GLYPH_ID;
         }
 
@@ -278,7 +300,8 @@ public sealed class Font : IAsset {
     /// <returns>The adjustment, or <c>0</c> when the pair is not kerned.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A glyph identifier is outside the face.</exception>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    internal float GetKerning(int leftGlyphId, int rightGlyphId) {
+    internal float GetKerning(int leftGlyphId, int rightGlyphId)
+    {
         ThrowIfDisposed();
         return _metrics.GetKerning(leftGlyphId, rightGlyphId);
     }
@@ -295,14 +318,16 @@ public sealed class Font : IAsset {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     /// <exception cref="ObjectDisposedException">The font is disposed.</exception>
-    internal Task WhenGlyphSettledAsync(int glyphId) {
+    internal Task WhenGlyphSettledAsync(int glyphId)
+    {
         ThrowIfDisposed();
         return _pipeline.WhenGlyphSettledAsync(glyphId);
     }
 
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">The font is already disposed.</exception>
-    public void Dispose() {
+    public void Dispose()
+    {
         ObjectDisposedException.ThrowIf(_asset.IsDisposed, this);
 
         _asset.ReleaseOwnerReference();

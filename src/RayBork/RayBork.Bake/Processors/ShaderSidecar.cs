@@ -24,7 +24,8 @@ namespace RayBork.Bake.Processors;
 /// </para>
 /// </remarks>
 [GenerateShape]
-internal sealed partial class ShaderSidecar {
+internal sealed partial class ShaderSidecar
+{
     /// <summary>Gets or sets the vertex GLSL path relative to the TOML file.</summary>
     public required string Vertex { get; set; }
 
@@ -60,7 +61,8 @@ internal sealed partial class ShaderSidecar {
 /// vector or matrix component count; an absent default means a zero value.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class ShaderUniformSidecar {
+internal sealed partial class ShaderUniformSidecar
+{
     /// <summary>Gets or sets the GLSL uniform name.</summary>
     public required string Name { get; set; }
 
@@ -73,7 +75,8 @@ internal sealed partial class ShaderUniformSidecar {
 
 /// <summary>One texture binding declaration in a shader source.</summary>
 [GenerateShape]
-internal sealed partial class ShaderTextureSidecar {
+internal sealed partial class ShaderTextureSidecar
+{
     /// <summary>Gets or sets the GLSL texture binding name.</summary>
     public required string Name { get; set; }
 }
@@ -83,7 +86,8 @@ internal sealed partial class ShaderTextureSidecar {
 /// the <see cref="RenderState.Opaque"/> value.
 /// </summary>
 [GenerateShape]
-internal sealed partial class ShaderRenderStateSidecar {
+internal sealed partial class ShaderRenderStateSidecar
+{
     /// <summary>Gets or sets the blend token: <c>opaque</c>, <c>alpha</c>, <c>additive</c>, or <c>multiply</c>.</summary>
     public string? Blend { get; set; }
 

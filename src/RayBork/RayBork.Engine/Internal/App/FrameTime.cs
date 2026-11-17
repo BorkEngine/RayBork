@@ -19,4 +19,5 @@ internal readonly record struct FrameTime(
     double UnscaledDeltaTime,
     long FrameCount,
     double Fps,
-    bool IsFirstTick);
+    bool IsFirstTick
+);

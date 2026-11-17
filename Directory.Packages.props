@@ -1,5 +1,4 @@
 <Project>
-
     <PropertyGroup>
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     </PropertyGroup>
@@ -25,5 +24,4 @@
         <PackageVersion Include="xunit.v3" Version="3.2.2" />
         <PackageVersion Include="ZLogger" Version="2.6.1" />
     </ItemGroup>
-
 </Project>

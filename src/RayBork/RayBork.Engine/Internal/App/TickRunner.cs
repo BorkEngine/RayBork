@@ -27,7 +27,8 @@ namespace RayBork.Internal;
 /// cancels the token and releases the wait; the render loop does not signal the ring on exit.
 /// </para>
 /// </remarks>
-internal sealed class TickRunner {
+internal sealed class TickRunner
+{
     private const string THREAD_NAME = "RayBork.Tick";
     private const int UNCAPPED_WAIT_MILLISECONDS = 1;
 
@@ -68,7 +69,9 @@ internal sealed class TickRunner {
         TimeProvider timeProvider,
         TickPacer pacer,
         FrameRing frameRing,
-        CameraService cameras) {
+        CameraService cameras
+    )
+    {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(game);
@@ -86,10 +89,7 @@ internal sealed class TickRunner {
         _pacer = pacer;
         _frameRing = frameRing;
         _cameras = cameras;
-        _thread = new Thread(RunThread) {
-            IsBackground = true,
-            Name = THREAD_NAME,
-        };
+        _thread = new Thread(RunThread) { IsBackground = true, Name = THREAD_NAME };
     }
 
     /// <summary>
@@ -113,14 +113,17 @@ internal sealed class TickRunner {
     /// <summary>
     /// Gets whether the calling thread is the tick thread.
     /// </summary>
-    internal bool IsOnTickThread => _threadId != 0 && _threadId == Environment.CurrentManagedThreadId;
+    internal bool IsOnTickThread =>
+        _threadId != 0 && _threadId == Environment.CurrentManagedThreadId;
 
     /// <summary>
     /// Starts the tick thread. The runner can be started once.
     /// </summary>
     /// <exception cref="InvalidOperationException">The runner was already started.</exception>
-    internal void Start() {
-        if (Interlocked.Exchange(ref _started, 1) != 0) {
+    internal void Start()
+    {
+        if (Interlocked.Exchange(ref _started, 1) != 0)
+        {
             throw new InvalidOperationException("The tick runner has already been started.");
         }
 
@@ -130,7 +133,8 @@ internal sealed class TickRunner {
     /// <summary>
     /// Asks the tick thread to stop after the current tick. Idempotent and safe from any thread.
     /// </summary>
-    internal void Stop() {
+    internal void Stop()
+    {
         _stopSignal.Set();
         _stopSource.Cancel();
     }
@@ -143,41 +147,59 @@ internal sealed class TickRunner {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The tick thread records every failure in Failure and completes; an exception may never escape and kill the process.")]
+        Justification = "The tick thread records every failure in Failure and completes; an exception may never escape and kill the process."
+    )]
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The synchronization context is disposed by the finally on every path; the analyzer cannot model the try/catch that records a dispose failure in Failure instead of letting it escape the tick thread.")]
-    private void RunThread() {
+        Justification = "The synchronization context is disposed by the finally on every path; the analyzer cannot model the try/catch that records a dispose failure in Failure instead of letting it escape the tick thread."
+    )]
+    private void RunThread()
+    {
         _threadId = Environment.CurrentManagedThreadId;
         SynchronizationContext? previousContext = SynchronizationContext.Current;
         TickSynchronizationContext synchronizationContext = new();
         bool tickThreadAttached = false;
-        try {
+        try
+        {
             SynchronizationContext.SetSynchronizationContext(synchronizationContext);
             TickThread.Attach();
             tickThreadAttached = true;
             RunCallbacks(synchronizationContext);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _failure ??= WrapUnexpectedFailure(exception);
-        } finally {
-            if (tickThreadAttached) {
-                try {
+        }
+        finally
+        {
+            if (tickThreadAttached)
+            {
+                try
+                {
                     TickThread.Detach();
-                } catch (Exception exception) {
+                }
+                catch (Exception exception)
+                {
                     _failure ??= WrapUnexpectedFailure(exception);
                 }
             }
 
-            try {
+            try
+            {
                 SynchronizationContext.SetSynchronizationContext(previousContext);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 _failure ??= WrapUnexpectedFailure(exception);
             }
 
-            try {
+            try
+            {
                 synchronizationContext.Dispose();
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 _failure ??= WrapUnexpectedFailure(exception);
             }
 
@@ -188,40 +210,59 @@ internal sealed class TickRunner {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "IGame callbacks are user code; every exception is captured and reported as a game failure.")]
-    private void RunCallbacks(TickSynchronizationContext synchronizationContext) {
-        try {
+        Justification = "IGame callbacks are user code; every exception is captured and reported as a game failure."
+    )]
+    private void RunCallbacks(TickSynchronizationContext synchronizationContext)
+    {
+        try
+        {
             _context.SetInput(CaptureInput());
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _failure = WrapPlatformFailure(exception);
             return;
         }
 
         bool setupCompleted = false;
-        try {
+        try
+        {
             synchronizationContext.PumpUntilComplete(_game.Setup(_context));
             setupCompleted = true;
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _failure = CreateGameException("Setup", exception);
         }
 
-        if (!setupCompleted) {
+        if (!setupCompleted)
+        {
             return;
         }
 
         TickFailure? tickFailure = null;
-        if (!_stopSignal.IsSet && !_context.IsExiting) {
-            try {
+        if (!_stopSignal.IsSet && !_context.IsExiting)
+        {
+            try
+            {
                 tickFailure = RunTickLoop();
-            } catch (Exception exception) {
-                tickFailure = new TickFailure(WrapUnexpectedFailure(exception), IsGameCallback: false);
+            }
+            catch (Exception exception)
+            {
+                tickFailure = new TickFailure(
+                    WrapUnexpectedFailure(exception),
+                    IsGameCallback: false
+                );
             }
         }
 
         Exception? shutdownFailure = null;
-        try {
+        try
+        {
             synchronizationContext.PumpUntilComplete(_game.Shutdown());
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             shutdownFailure = exception;
         }
 
@@ -231,44 +272,59 @@ internal sealed class TickRunner {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "One failed frame step abandons the lease and reports the failure; no exception may escape the tick thread.")]
-    private TickFailure? RunTickLoop() {
+        Justification = "One failed frame step abandons the lease and reports the failure; no exception may escape the tick thread."
+    )]
+    private TickFailure? RunTickLoop()
+    {
         CancellationToken stopToken = _stopSource.Token;
-        while (true) {
-            if (_stopSignal.IsSet || _context.IsExiting) {
+        while (true)
+        {
+            if (_stopSignal.IsSet || _context.IsExiting)
+            {
                 return null;
             }
 
             FrameLease? lease;
-            try {
+            try
+            {
                 lease = _frameRing.AcquireWritable(stopToken);
-            } catch (OperationCanceledException) when (stopToken.IsCancellationRequested) {
+            }
+            catch (OperationCanceledException) when (stopToken.IsCancellationRequested)
+            {
                 // A cancellation while waiting for a slot is a normal stop, not a failure.
                 return null;
             }
 
-            if (lease is null) {
+            if (lease is null)
+            {
                 return null;
             }
 
             RenderFramePacket? packet = lease.Value.Packet;
-            if (packet is null) {
+            if (packet is null)
+            {
                 TryAbandon(lease.Value);
                 return new TickFailure(
                     new InvalidOperationException(
-                        "The frame ring returned a recording lease without a frame packet."),
-                    IsGameCallback: false);
+                        "The frame ring returned a recording lease without a frame packet."
+                    ),
+                    IsGameCallback: false
+                );
             }
 
-            try {
+            try
+            {
                 // Attach the recorder's retention set before Tick runs so a camera draw retains its
                 // assets and a Tick failure still releases every hold through Abandon.
                 _frameRing.AttachRetention(lease.Value, packet.Retention);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 TryAbandon(lease.Value);
                 return new TickFailure(
                     WrapRingFailure("attaching the frame retention set", exception),
-                    IsGameCallback: false);
+                    IsGameCallback: false
+                );
             }
 
             // UnscaledDeltaTime is the interval since the previous tick, not how long this tick has
@@ -276,53 +332,74 @@ internal sealed class TickRunner {
             long tickStartedAt = _timeProvider.GetTimestamp();
             TickTime tick = _clock.BeginTick();
 
-            try {
+            try
+            {
                 IPlatformWindow window = _platform.Window;
                 window.BeginTick();
                 _context.SetInput(CaptureInput());
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 TryAbandon(lease.Value);
                 return new TickFailure(WrapPlatformFailure(exception), IsGameCallback: false);
             }
 
-            _context.SetFrame(new FrameTime(
-                tick.Time,
-                tick.DeltaTime,
-                tick.UnscaledDeltaTime,
-                tick.FrameCount,
-                tick.Fps,
-                tick.IsFirstTick));
+            _context.SetFrame(
+                new FrameTime(
+                    tick.Time,
+                    tick.DeltaTime,
+                    tick.UnscaledDeltaTime,
+                    tick.FrameCount,
+                    tick.Fps,
+                    tick.IsFirstTick
+                )
+            );
 
-            try {
+            try
+            {
                 _cameras.BeginFrame(packet, tick.Time, tick.DeltaTime);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 _cameras.AbandonFrame();
                 TryAbandon(lease.Value);
                 return new TickFailure(exception, IsGameCallback: false);
             }
 
-            try {
+            try
+            {
                 _game.Tick(_context);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 _cameras.AbandonFrame();
                 TryAbandon(lease.Value);
                 return new TickFailure(exception, IsGameCallback: true);
             }
 
-            try {
+            try
+            {
                 // A camera that is still active when Tick returns is a leak: stop without publishing.
                 _cameras.EndFrame();
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 _cameras.AbandonFrame();
                 TryAbandon(lease.Value);
                 return new TickFailure(exception, IsGameCallback: false);
             }
 
-            try {
+            try
+            {
                 _frameRing.Publish(lease.Value);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 TryAbandon(lease.Value);
-                return new TickFailure(WrapRingFailure("publishing a frame", exception), IsGameCallback: false);
+                return new TickFailure(
+                    WrapRingFailure("publishing a frame", exception),
+                    IsGameCallback: false
+                );
             }
 
             // FIFO couples one tick to one finished render attempt, normally one presentation, so
@@ -331,25 +408,34 @@ internal sealed class TickRunner {
             // presentation failure, and a thrown render failure also release the wait because the
             // render loop marks the finished attempt on every path. The mark is not the successful
             // presentation count, which RenderStats.PresentedFrames owns.
-            if (_context.Info.PresentMode == PresentMode.Fifo
-                && !_frameRing.WaitForPresentation(lease.Value.FrameIndex, stopToken)) {
+            if (
+                _context.Info.PresentMode == PresentMode.Fifo
+                && !_frameRing.WaitForPresentation(lease.Value.FrameIndex, stopToken)
+            )
+            {
                 return null;
             }
 
-            if (_stopSignal.IsSet || _context.IsExiting) {
+            if (_stopSignal.IsSet || _context.IsExiting)
+            {
                 return null;
             }
 
             bool lowPower;
-            try {
+            try
+            {
                 IPlatformWindow window = _platform.Window;
                 lowPower = window.IsMinimized || !window.IsFocused;
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 return new TickFailure(WrapPlatformFailure(exception), IsGameCallback: false);
             }
 
             TimeSpan wait = CalculateWait(_timeProvider, tickStartedAt, _pacer, lowPower);
-            _stopSignal.Wait(wait > TimeSpan.Zero ? wait : TimeSpan.FromMilliseconds(UNCAPPED_WAIT_MILLISECONDS));
+            _stopSignal.Wait(
+                wait > TimeSpan.Zero ? wait : TimeSpan.FromMilliseconds(UNCAPPED_WAIT_MILLISECONDS)
+            );
         }
     }
 
@@ -363,7 +449,13 @@ internal sealed class TickRunner {
     /// <param name="lowPower">Whether the window is minimized or unfocused.</param>
     /// <returns>The remaining tick interval, or zero when the tick already exceeded it.</returns>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal static TimeSpan CalculateWait(TimeProvider timeProvider, long tickStartedAt, TickPacer pacer, bool lowPower) {
+    internal static TimeSpan CalculateWait(
+        TimeProvider timeProvider,
+        long tickStartedAt,
+        TickPacer pacer,
+        bool lowPower
+    )
+    {
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(pacer);
 
@@ -371,59 +463,78 @@ internal sealed class TickRunner {
         return pacer.GetWait(elapsed, lowPower);
     }
 
-    private IInput CaptureInput() {
+    private IInput CaptureInput()
+    {
         IInput input = _platform.CaptureInput();
         return input ?? throw new PlatformException("The platform returned a null input snapshot.");
     }
 
-    private void TryAbandon(FrameLease lease) {
-        try {
+    private void TryAbandon(FrameLease lease)
+    {
+        try
+        {
             _frameRing.Abandon(lease);
-        } catch (InvalidOperationException) {
+        }
+        catch (InvalidOperationException)
+        {
             // The tick already failed; the ring self-check is diagnostic only during shutdown.
         }
     }
 
-    private static Exception? CombineFailures(TickFailure? tickFailure, Exception? shutdownFailure) {
-        if (tickFailure is null) {
-            return shutdownFailure is null ? null : CreateGameException("Shutdown", shutdownFailure);
+    private static Exception? CombineFailures(TickFailure? tickFailure, Exception? shutdownFailure)
+    {
+        if (tickFailure is null)
+        {
+            return shutdownFailure is null
+                ? null
+                : CreateGameException("Shutdown", shutdownFailure);
         }
 
         TickFailure tick = tickFailure.Value;
-        if (shutdownFailure is null) {
-            return tick.IsGameCallback ? CreateGameException("Tick", tick.Exception) : tick.Exception;
+        if (shutdownFailure is null)
+        {
+            return tick.IsGameCallback
+                ? CreateGameException("Tick", tick.Exception)
+                : tick.Exception;
         }
 
         AggregateException aggregate = new(tick.Exception, shutdownFailure);
-        if (tick.IsGameCallback) {
+        if (tick.IsGameCallback)
+        {
             return CreateGameException("Tick", aggregate);
         }
 
         return new PlatformException(
             "The tick loop failed and IGame.Shutdown also threw.",
-            aggregate);
+            aggregate
+        );
     }
 
-    private static GameException CreateGameException(string callback, Exception exception) {
+    private static GameException CreateGameException(string callback, Exception exception)
+    {
         return new GameException(
             $"IGame.{callback} threw an exception.",
             DiagnosticCodes.GAME_CALLBACK_FAILED,
-            exception);
+            exception
+        );
     }
 
-    private static Exception WrapPlatformFailure(Exception exception) {
+    private static Exception WrapPlatformFailure(Exception exception)
+    {
         return exception is RayBorkException
             ? exception
             : new PlatformException("A platform operation failed on the tick thread.", exception);
     }
 
-    private static Exception WrapRingFailure(string operation, Exception exception) {
+    private static Exception WrapRingFailure(string operation, Exception exception)
+    {
         return exception is RayBorkException
             ? exception
             : new RayBorkException($"The frame handoff failed while {operation}.", exception);
     }
 
-    private static Exception WrapUnexpectedFailure(Exception exception) {
+    private static Exception WrapUnexpectedFailure(Exception exception)
+    {
         return exception is RayBorkException
             ? exception
             : new RayBorkException("The tick thread failed unexpectedly.", exception);

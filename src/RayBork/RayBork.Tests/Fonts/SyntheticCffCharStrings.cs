@@ -9,7 +9,8 @@ namespace RayBork.Tests.Fonts;
 /// <see cref="Fixed"/>. The helpers cover the operators the tests exercise; raw <see cref="Bytes"/>
 /// and <see cref="EscapeOperator"/> cover the reserved and unknown-opcode cases.
 /// </remarks>
-internal static class SyntheticCffCharStrings {
+internal static class SyntheticCffCharStrings
+{
     internal const byte HSTEM = 1;
     internal const byte VSTEM = 3;
     internal const byte VMOVETO = 4;
@@ -62,15 +63,18 @@ internal static class SyntheticCffCharStrings {
     internal const int FLEX1 = 37;
 
     /// <summary>Concatenates charstring fragments.</summary>
-    internal static byte[] Concat(params byte[][] fragments) {
+    internal static byte[] Concat(params byte[][] fragments)
+    {
         int length = 0;
-        foreach (byte[] fragment in fragments) {
+        foreach (byte[] fragment in fragments)
+        {
             length += fragment.Length;
         }
 
         byte[] result = new byte[length];
         int position = 0;
-        foreach (byte[] fragment in fragments) {
+        foreach (byte[] fragment in fragments)
+        {
             fragment.CopyTo(result, position);
             position += fragment.Length;
         }
@@ -79,9 +83,11 @@ internal static class SyntheticCffCharStrings {
     }
 
     /// <summary>Encodes raw byte values.</summary>
-    internal static byte[] Bytes(params int[] values) {
+    internal static byte[] Bytes(params int[] values)
+    {
         byte[] result = new byte[values.Length];
-        for (int index = 0; index < values.Length; index++) {
+        for (int index = 0; index < values.Length; index++)
+        {
             result[index] = (byte)values[index];
         }
 
@@ -89,35 +95,43 @@ internal static class SyntheticCffCharStrings {
     }
 
     /// <summary>Encodes one integer operand.</summary>
-    internal static byte[] Number(int value) {
-        if (value is >= -107 and <= 107) {
+    internal static byte[] Number(int value)
+    {
+        if (value is >= -107 and <= 107)
+        {
             return [(byte)(value + 139)];
         }
 
-        if (value is >= 108 and <= 1131) {
+        if (value is >= 108 and <= 1131)
+        {
             int adjusted = value - 108;
             return [(byte)(247 + (adjusted >> 8)), (byte)adjusted];
         }
 
-        if (value is >= -1131 and <= -108) {
+        if (value is >= -1131 and <= -108)
+        {
             int adjusted = -value - 108;
             return [(byte)(251 + (adjusted >> 8)), (byte)adjusted];
         }
 
-        if (value is >= short.MinValue and <= short.MaxValue) {
+        if (value is >= short.MinValue and <= short.MaxValue)
+        {
             return [28, (byte)(value >> 8), (byte)value];
         }
 
         throw new ArgumentOutOfRangeException(
             nameof(value),
             value,
-            "A Type 2 charstring integer operand must fit a 16-bit shortint.");
+            "A Type 2 charstring integer operand must fit a 16-bit shortint."
+        );
     }
 
     /// <summary>Encodes one 16.16 fixed operand.</summary>
-    internal static byte[] Fixed(double value) {
+    internal static byte[] Fixed(double value)
+    {
         int fixedValue = (int)Math.Round(value * 65536.0);
-        return [
+        return
+        [
             255,
             (byte)(fixedValue >> 24),
             (byte)(fixedValue >> 16),
@@ -127,9 +141,11 @@ internal static class SyntheticCffCharStrings {
     }
 
     /// <summary>Encodes a sequence of integer operands.</summary>
-    internal static byte[] Numbers(params int[] values) {
+    internal static byte[] Numbers(params int[] values)
+    {
         List<byte> result = [];
-        foreach (int value in values) {
+        foreach (int value in values)
+        {
             result.AddRange(Number(value));
         }
 

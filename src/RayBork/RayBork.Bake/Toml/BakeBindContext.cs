@@ -7,7 +7,8 @@ namespace RayBork.Bake.Toml;
 /// <summary>
 /// The per-source state used while binding one TOML document.
 /// </summary>
-internal sealed class BakeBindContext {
+internal sealed class BakeBindContext
+{
     /// <summary>Initializes a binding context.</summary>
     /// <param name="root">The parsed document root.</param>
     /// <param name="syntax">The syntax index for spans.</param>
@@ -19,7 +20,9 @@ internal sealed class BakeBindContext {
         TomlSyntaxIndex syntax,
         BakeDiagnostics diagnostics,
         string filePath,
-        string? assetPath) {
+        string? assetPath
+    )
+    {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(syntax);
         ArgumentNullException.ThrowIfNull(diagnostics);
@@ -51,10 +54,12 @@ internal sealed class BakeBindContext {
     /// <param name="message">The message.</param>
     /// <param name="path">The TOML path.</param>
     /// <param name="memberPath">The member path.</param>
-    internal void AddError(string message, TomlPath path, string? memberPath) {
+    internal void AddError(string message, TomlPath path, string? memberPath)
+    {
         int? line = null;
         int? column = null;
-        if (TryGetSpan(path, out SourceSpan span)) {
+        if (TryGetSpan(path, out SourceSpan span))
+        {
             line = span.Start.Line + 1;
             column = span.Start.Column + 1;
         }
@@ -67,18 +72,23 @@ internal sealed class BakeBindContext {
             line,
             column,
             AssetPath,
-            memberPath);
+            memberPath
+        );
     }
 
     /// <summary>Adds a binding error located at the key span, falling back to the value span.</summary>
     /// <param name="message">The message.</param>
     /// <param name="path">The TOML path.</param>
     /// <param name="memberPath">The member path.</param>
-    internal void AddKeyError(string message, TomlPath path, string? memberPath) {
+    internal void AddKeyError(string message, TomlPath path, string? memberPath)
+    {
         int? line = null;
         int? column = null;
-        if (Syntax.TryGetKeySpan(path, out SourceSpan keySpan)
-            || Syntax.TryGetValueSpan(path, out keySpan)) {
+        if (
+            Syntax.TryGetKeySpan(path, out SourceSpan keySpan)
+            || Syntax.TryGetValueSpan(path, out keySpan)
+        )
+        {
             line = keySpan.Start.Line + 1;
             column = keySpan.Start.Column + 1;
         }
@@ -91,21 +101,23 @@ internal sealed class BakeBindContext {
             line,
             column,
             AssetPath,
-            memberPath);
+            memberPath
+        );
     }
 
     /// <summary>Adds a binding error without a source position.</summary>
     /// <param name="message">The message.</param>
     /// <param name="memberPath">The member path, when known.</param>
-    internal void AddError(string message, string? memberPath = null)
-        => Diagnostics.Add(
+    internal void AddError(string message, string? memberPath = null) =>
+        Diagnostics.Add(
             BakeSeverity.Error,
             BakeDiagnosticCodes.TOML_INVALID,
             message,
             FilePath,
             assetPath: AssetPath,
-            memberPath: memberPath);
+            memberPath: memberPath
+        );
 
-    private bool TryGetSpan(TomlPath path, out SourceSpan span)
-        => Syntax.TryGetValueSpan(path, out span) || Syntax.TryGetKeySpan(path, out span);
+    private bool TryGetSpan(TomlPath path, out SourceSpan span) =>
+        Syntax.TryGetValueSpan(path, out span) || Syntax.TryGetKeySpan(path, out span);
 }

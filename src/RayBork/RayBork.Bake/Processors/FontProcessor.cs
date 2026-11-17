@@ -23,7 +23,8 @@ namespace RayBork.Bake.Processors;
 /// source, or setting is <c>RB4010</c> and emits no outputs.
 /// </para>
 /// </remarks>
-internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
+internal sealed class FontProcessor : AssetProcessor<FontSidecar>
+{
     private const int DEFAULT_MSDF_PIXEL_SIZE = 32;
     private const int DEFAULT_MSDF_RANGE = 4;
     private const int DEFAULT_MSDF_PADDING = 2;
@@ -41,65 +42,95 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
     public override SidecarPolicy Policy => SidecarPolicy.Optional;
 
     /// <inheritdoc/>
-    protected override FontSidecar CreateDefaultSidecar(AssetProcessorContext context) {
+    protected override FontSidecar CreateDefaultSidecar(AssetProcessorContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
         return new FontSidecar();
     }
 
     /// <inheritdoc/>
-    protected override void Process(AssetProcessorContext context, FontSidecar sidecar) {
+    protected override void Process(AssetProcessorContext context, FontSidecar sidecar)
+    {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(sidecar);
 
-        if (!TryResolveSettings(context, sidecar, out int pixelSize, out int msdfRange, out int padding)) {
+        if (
+            !TryResolveSettings(
+                context,
+                sidecar,
+                out int pixelSize,
+                out int msdfRange,
+                out int padding
+            )
+        )
+        {
             return;
         }
 
         long length;
         byte[] face;
-        try {
+        try
+        {
             length = new FileInfo(context.SourcePath).Length;
-            if (length > uint.MaxValue) {
+            if (length > uint.MaxValue)
+            {
                 context.Diagnostics.Error(
                     FontDiagnosticCodes.FONT_INVALID,
                     $"Font source '{context.RelativePath}' is {length} bytes; the packed face length "
-                        + "must fit a 32-bit unsigned value.");
+                        + "must fit a 32-bit unsigned value."
+                );
                 return;
             }
 
             face = File.ReadAllBytes(context.SourcePath);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
-                $"Font source '{context.RelativePath}' could not be read: {exception.Message}");
+                $"Font source '{context.RelativePath}' could not be read: {exception.Message}"
+            );
             return;
         }
 
-        if (!SfntValidator.TryValidate(face, out string format, out bool cff2, out string? reason)) {
+        if (!SfntValidator.TryValidate(face, out string format, out bool cff2, out string? reason))
+        {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
-                $"Font source '{context.RelativePath}' is not a valid sfnt face: {reason}.");
+                $"Font source '{context.RelativePath}' is not a valid sfnt face: {reason}."
+            );
             return;
         }
 
-        if (cff2) {
+        if (cff2)
+        {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
                 $"Font source '{context.RelativePath}' stores CFF2 outlines; only TrueType 'glyf' and "
-                    + "CFF 1.0 outlines are supported.");
+                    + "CFF 1.0 outlines are supported."
+            );
             return;
         }
 
         string payloadPath = context.BaseAssetPath + FACE_PAYLOAD_SUFFIX;
-        context.Outputs.AddAsset(context.BaseAssetPath, new FontAssetDescriptor {
-            FacePayload = payloadPath,
-            Format = format,
-            ByteLength = (uint)face.Length,
-            MsdfPixelSize = pixelSize,
-            MsdfRange = msdfRange,
-            MsdfPadding = padding,
-        });
+        context.Outputs.AddAsset(
+            context.BaseAssetPath,
+            new FontAssetDescriptor
+            {
+                FacePayload = payloadPath,
+                Format = format,
+                ByteLength = (uint)face.Length,
+                MsdfPixelSize = pixelSize,
+                MsdfRange = msdfRange,
+                MsdfPadding = padding,
+            }
+        );
         context.Outputs.AddData(payloadPath, face, alignment: 16);
     }
 
@@ -108,41 +139,51 @@ internal sealed class FontProcessor : AssetProcessor<FontSidecar> {
         FontSidecar sidecar,
         out int pixelSize,
         out int msdfRange,
-        out int padding) {
+        out int padding
+    )
+    {
         pixelSize = sidecar.MsdfPixelSize ?? DEFAULT_MSDF_PIXEL_SIZE;
         msdfRange = sidecar.MsdfRange ?? DEFAULT_MSDF_RANGE;
         padding = sidecar.MsdfPadding ?? DEFAULT_MSDF_PADDING;
 
-        if (pixelSize <= 0) {
+        if (pixelSize <= 0)
+        {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
                 $"Font source '{context.RelativePath}' declares msdf_pixel_size {pixelSize}; it "
-                    + "must be positive.");
+                    + "must be positive."
+            );
             return false;
         }
 
-        if (msdfRange <= 0) {
+        if (msdfRange <= 0)
+        {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
                 $"Font source '{context.RelativePath}' declares msdf_range {msdfRange}; it must be "
-                    + "positive.");
+                    + "positive."
+            );
             return false;
         }
 
-        if (padding < 0) {
+        if (padding < 0)
+        {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
                 $"Font source '{context.RelativePath}' declares msdf_padding {padding}; it must be "
-                    + "non-negative.");
+                    + "non-negative."
+            );
             return false;
         }
 
-        if (pixelSize <= (2L * padding)) {
+        if (pixelSize <= (2L * padding))
+        {
             context.Diagnostics.Error(
                 FontDiagnosticCodes.FONT_INVALID,
                 $"Font source '{context.RelativePath}' declares msdf_pixel_size {pixelSize} with "
                     + $"msdf_padding {padding}; the pixel size must be greater than twice the padding "
-                    + "so that a glyph box remains.");
+                    + "so that a glyph box remains."
+            );
             return false;
         }
 

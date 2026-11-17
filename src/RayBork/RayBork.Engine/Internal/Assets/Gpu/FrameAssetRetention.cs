@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// destruction through the <see cref="GpuAssetBridge"/>.
 /// </para>
 /// </remarks>
-internal sealed class FrameAssetRetention {
+internal sealed class FrameAssetRetention
+{
     private readonly Lock _gate = new();
     private readonly HashSet<IAssetRetentionTarget> _targets = new(ReferenceComparer.Instance);
 
@@ -30,9 +31,12 @@ internal sealed class FrameAssetRetention {
     /// <summary>
     /// Gets the number of distinct targets currently held by the set.
     /// </summary>
-    internal int Count {
-        get {
-            lock (_gate) {
+    internal int Count
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _targets.Count;
             }
         }
@@ -41,9 +45,12 @@ internal sealed class FrameAssetRetention {
     /// <summary>
     /// Gets whether <see cref="Release"/> already ran.
     /// </summary>
-    internal bool IsReleased {
-        get {
-            lock (_gate) {
+    internal bool IsReleased
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _released;
             }
         }
@@ -55,11 +62,14 @@ internal sealed class FrameAssetRetention {
     /// </summary>
     /// <param name="target">The asset to retain for this frame.</param>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <c>null</c>.</exception>
-    internal void Add(IAssetRetentionTarget target) {
+    internal void Add(IAssetRetentionTarget target)
+    {
         ArgumentNullException.ThrowIfNull(target);
 
-        lock (_gate) {
-            if (_released || !_targets.Add(target)) {
+        lock (_gate)
+        {
+            if (_released || !_targets.Add(target))
+            {
                 return;
             }
 
@@ -75,10 +85,13 @@ internal sealed class FrameAssetRetention {
     /// destruction from <see cref="IAssetRetentionTarget.ReleaseFrameHold"/> cannot deadlock with a
     /// concurrent <see cref="Add"/>.
     /// </remarks>
-    internal void Release() {
+    internal void Release()
+    {
         IAssetRetentionTarget[] targets;
-        lock (_gate) {
-            if (_released) {
+        lock (_gate)
+        {
+            if (_released)
+            {
                 return;
             }
 
@@ -87,7 +100,8 @@ internal sealed class FrameAssetRetention {
             _targets.Clear();
         }
 
-        foreach (IAssetRetentionTarget target in targets) {
+        foreach (IAssetRetentionTarget target in targets)
+        {
             target.ReleaseFrameHold();
         }
     }
@@ -96,10 +110,12 @@ internal sealed class FrameAssetRetention {
     /// Compares retention targets by reference so an asset type that overrides equality cannot merge
     /// two distinct live objects into one hold.
     /// </summary>
-    private sealed class ReferenceComparer : IEqualityComparer<IAssetRetentionTarget> {
+    private sealed class ReferenceComparer : IEqualityComparer<IAssetRetentionTarget>
+    {
         internal static readonly ReferenceComparer Instance = new();
 
-        public bool Equals(IAssetRetentionTarget? x, IAssetRetentionTarget? y) => ReferenceEquals(x, y);
+        public bool Equals(IAssetRetentionTarget? x, IAssetRetentionTarget? y) =>
+            ReferenceEquals(x, y);
 
         public int GetHashCode(IAssetRetentionTarget target) => RuntimeHelpers.GetHashCode(target);
     }

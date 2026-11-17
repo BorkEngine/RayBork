@@ -6,21 +6,25 @@ namespace RayBork.Tests;
 /// Unit tests for the geometry pipeline cache key: the polygon mode is part of the key, so a wireframe
 /// draw can never reuse the filled pipeline over the same shader, render state, and topology.
 /// </summary>
-public sealed class GeometryPipelineKeyTests {
+public sealed class GeometryPipelineKeyTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PipelineKeySeparatesTheFilledAndWireframePolygonModes() {
+    public void PipelineKeySeparatesTheFilledAndWireframePolygonModes()
+    {
         RenderState state = RenderState.Opaque;
         VulkanGeometryPipelineCache.PipelineKey filled = new(
             null!,
             state,
             PrimitiveTopology.TriangleList,
-            Wireframe: false);
+            Wireframe: false
+        );
         VulkanGeometryPipelineCache.PipelineKey wireframe = new(
             null!,
             state,
             PrimitiveTopology.TriangleList,
-            Wireframe: true);
+            Wireframe: true
+        );
 
         Assert.NotEqual(filled, wireframe);
         Assert.Equal(
@@ -29,24 +33,30 @@ public sealed class GeometryPipelineKeyTests {
                 null!,
                 state,
                 PrimitiveTopology.TriangleList,
-                Wireframe: false));
+                Wireframe: false
+            )
+        );
         Assert.Equal(
             wireframe,
             new VulkanGeometryPipelineCache.PipelineKey(
                 null!,
                 state,
                 PrimitiveTopology.TriangleList,
-                Wireframe: true));
+                Wireframe: true
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PipelineKeyKeepsTheRenderStateAndTopologyParts() {
+    public void PipelineKeyKeepsTheRenderStateAndTopologyParts()
+    {
         VulkanGeometryPipelineCache.PipelineKey baseline = new(
             null!,
             RenderState.Opaque,
             PrimitiveTopology.TriangleList,
-            Wireframe: false);
+            Wireframe: false
+        );
 
         Assert.NotEqual(
             baseline,
@@ -54,13 +64,17 @@ public sealed class GeometryPipelineKeyTests {
                 null!,
                 RenderState.Additive,
                 PrimitiveTopology.TriangleList,
-                Wireframe: false));
+                Wireframe: false
+            )
+        );
         Assert.NotEqual(
             baseline,
             new VulkanGeometryPipelineCache.PipelineKey(
                 null!,
                 RenderState.Opaque,
                 PrimitiveTopology.LineList,
-                Wireframe: false));
+                Wireframe: false
+            )
+        );
     }
 }

@@ -29,7 +29,8 @@ namespace RayBork.Internal;
 /// instead of presenting a partial one. Every member is render-thread only.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
+internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable
+{
     private readonly Vk _vulkan;
     private readonly Device _device;
     private readonly RenderPass _renderPass;
@@ -49,7 +50,9 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         int sampleCount,
         int deviceGeneration,
         string deviceName,
-        bool fillModeNonSolid) {
+        bool fillModeNonSolid
+    )
+    {
         _vulkan = vulkan;
         _device = device;
         _renderPass = renderPass;
@@ -82,18 +85,33 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         RenderPass renderPass,
         PipelineLayout pipelineLayout,
         int sampleCount,
-        int deviceGeneration) {
+        int deviceGeneration
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
-        if (renderPass.Handle == 0) {
-            throw new ArgumentException("The render pass must not be the default handle.", nameof(renderPass));
+        if (renderPass.Handle == 0)
+        {
+            throw new ArgumentException(
+                "The render pass must not be the default handle.",
+                nameof(renderPass)
+            );
         }
 
-        if (pipelineLayout.Handle == 0) {
-            throw new ArgumentException("The pipeline layout must not be the default handle.", nameof(pipelineLayout));
+        if (pipelineLayout.Handle == 0)
+        {
+            throw new ArgumentException(
+                "The pipeline layout must not be the default handle.",
+                nameof(pipelineLayout)
+            );
         }
 
-        if (sampleCount <= 0) {
-            throw new ArgumentOutOfRangeException(nameof(sampleCount), sampleCount, "The sample count must be positive.");
+        if (sampleCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(sampleCount),
+                sampleCount,
+                "The sample count must be positive."
+            );
         }
 
         VulkanDeviceCapabilities capabilities = device.Capabilities;
@@ -105,7 +123,8 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
             sampleCount,
             deviceGeneration,
             capabilities.DeviceName,
-            capabilities.FillModeNonSolid);
+            capabilities.FillModeNonSolid
+        );
     }
 
     /// <summary>
@@ -127,30 +146,37 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         VulkanShaderAssetResource shader,
         RenderState renderState,
         RayBork.PrimitiveTopology topology,
-        bool wireframe = false) {
+        bool wireframe = false
+    )
+    {
         ArgumentNullException.ThrowIfNull(shader);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (wireframe && !_fillModeNonSolid) {
+        if (wireframe && !_fillModeNonSolid)
+        {
             throw new GraphicsException(
                 $"The Vulkan device '{_deviceName}' does not support fillModeNonSolid, so the "
                     + $"polygon-mode-line pipeline for shader '{AssetPath.ToPublic(shader.Upload.Path)}' "
                     + "cannot be created. A wireframe model draw requires fillModeNonSolid; the renderer "
                     + "has no CPU line-geometry fallback and reports this instead of drawing nothing.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         PipelineKey key = new(shader, renderState, topology, wireframe);
-        if (_pipelines.TryGetValue(key, out Pipeline cached)) {
+        if (_pipelines.TryGetValue(key, out Pipeline cached))
+        {
             return cached;
         }
 
-        if (shader.DeviceGeneration != _deviceGeneration) {
+        if (shader.DeviceGeneration != _deviceGeneration)
+        {
             throw new GraphicsException(
                 $"The shader '{AssetPath.ToPublic(shader.Upload.Path)}' belongs to a destroyed Vulkan "
                     + "device and cannot create a pipeline on the current one.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         Pipeline pipeline = CreatePipeline(shader, renderState, topology, wireframe);
@@ -162,14 +188,18 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
     /// Destroys every cached pipeline. The call is idempotent and must run before the render pass it
     /// serves and the logical device are destroyed.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        foreach (Pipeline pipeline in _pipelines.Values) {
-            if (pipeline.Handle != 0) {
+        foreach (Pipeline pipeline in _pipelines.Values)
+        {
+            if (pipeline.Handle != 0)
+            {
                 _vulkan.DestroyPipeline(_device, pipeline, null);
             }
         }
@@ -181,13 +211,17 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         VulkanShaderAssetResource shader,
         RenderState renderState,
         RayBork.PrimitiveTopology topology,
-        bool wireframe) {
-        if (shader.Upload is not ShaderGpuUpload upload) {
+        bool wireframe
+    )
+    {
+        if (shader.Upload is not ShaderGpuUpload upload)
+        {
             throw new GraphicsException(
                 $"The shader GPU resource '{AssetPath.ToPublic(shader.Upload.Path)}' does not carry a "
                     + "shader upload descriptor.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         ShaderAssetDescriptor descriptor = upload.Shader;
@@ -195,7 +229,8 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         byte[] fragmentEntryPoint = Encoding.UTF8.GetBytes(descriptor.FragmentEntry + "\0");
         PipelineShaderStageCreateInfo* stages = stackalloc PipelineShaderStageCreateInfo[2];
         VertexInputBindingDescription* vertexBindings = stackalloc VertexInputBindingDescription[1];
-        vertexBindings[0] = new VertexInputBindingDescription {
+        vertexBindings[0] = new VertexInputBindingDescription
+        {
             Binding = 0,
             Stride = MeshAssetDescriptor.VERTEX_STRIDE,
             InputRate = VertexInputRate.Vertex,
@@ -209,26 +244,30 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         attributes[5] = Attribute(5, Format.R32G32Sfloat, 48);
         attributes[6] = Attribute(6, Format.R32G32B32A32Sfloat, 56);
         attributes[7] = Attribute(7, Format.R32G32B32A32Sfloat, 72);
-        PipelineVertexInputStateCreateInfo vertexInput = new() {
+        PipelineVertexInputStateCreateInfo vertexInput = new()
+        {
             SType = StructureType.PipelineVertexInputStateCreateInfo,
             VertexBindingDescriptionCount = 1,
             PVertexBindingDescriptions = vertexBindings,
             VertexAttributeDescriptionCount = 8,
             PVertexAttributeDescriptions = attributes,
         };
-        PipelineInputAssemblyStateCreateInfo inputAssembly = new() {
+        PipelineInputAssemblyStateCreateInfo inputAssembly = new()
+        {
             SType = StructureType.PipelineInputAssemblyStateCreateInfo,
             Topology = ToVulkanTopology(topology),
             PrimitiveRestartEnable = false,
         };
-        PipelineViewportStateCreateInfo viewportState = new() {
+        PipelineViewportStateCreateInfo viewportState = new()
+        {
             SType = StructureType.PipelineViewportStateCreateInfo,
             ViewportCount = 1,
             PViewports = null,
             ScissorCount = 1,
             PScissors = null,
         };
-        PipelineRasterizationStateCreateInfo rasterization = new() {
+        PipelineRasterizationStateCreateInfo rasterization = new()
+        {
             SType = StructureType.PipelineRasterizationStateCreateInfo,
             DepthClampEnable = false,
             RasterizerDiscardEnable = false,
@@ -241,7 +280,8 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
             DepthBiasSlopeFactor = 0f,
             LineWidth = 1f,
         };
-        PipelineMultisampleStateCreateInfo multisample = new() {
+        PipelineMultisampleStateCreateInfo multisample = new()
+        {
             SType = StructureType.PipelineMultisampleStateCreateInfo,
             RasterizationSamples = ToSampleCountFlag(_sampleCount),
             SampleShadingEnable = false,
@@ -251,8 +291,11 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
             AlphaToOneEnable = false,
         };
         PipelineDepthStencilStateCreateInfo depthStencil = CreateDepthStencilState(renderState);
-        PipelineColorBlendAttachmentState blendAttachment = CreateBlendAttachment(renderState.Blend);
-        PipelineColorBlendStateCreateInfo colorBlend = new() {
+        PipelineColorBlendAttachmentState blendAttachment = CreateBlendAttachment(
+            renderState.Blend
+        );
+        PipelineColorBlendStateCreateInfo colorBlend = new()
+        {
             SType = StructureType.PipelineColorBlendStateCreateInfo,
             LogicOpEnable = false,
             LogicOp = LogicOp.Copy,
@@ -262,12 +305,14 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         DynamicState* dynamicStates = stackalloc DynamicState[2];
         dynamicStates[0] = DynamicState.Viewport;
         dynamicStates[1] = DynamicState.Scissor;
-        PipelineDynamicStateCreateInfo dynamicState = new() {
+        PipelineDynamicStateCreateInfo dynamicState = new()
+        {
             SType = StructureType.PipelineDynamicStateCreateInfo,
             DynamicStateCount = 2,
             PDynamicStates = dynamicStates,
         };
-        GraphicsPipelineCreateInfo createInfo = new() {
+        GraphicsPipelineCreateInfo createInfo = new()
+        {
             SType = StructureType.GraphicsPipelineCreateInfo,
             StageCount = 2,
             PStages = stages,
@@ -288,14 +333,17 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         Result result;
         Pipeline pipeline;
         fixed (byte* vertexName = vertexEntryPoint)
-        fixed (byte* fragmentName = fragmentEntryPoint) {
-            stages[0] = new() {
+        fixed (byte* fragmentName = fragmentEntryPoint)
+        {
+            stages[0] = new()
+            {
                 SType = StructureType.PipelineShaderStageCreateInfo,
                 Stage = ShaderStageFlags.VertexBit,
                 Module = shader.VertexModule,
                 PName = vertexName,
             };
-            stages[1] = new() {
+            stages[1] = new()
+            {
                 SType = StructureType.PipelineShaderStageCreateInfo,
                 Stage = ShaderStageFlags.FragmentBit,
                 Module = shader.FragmentModule,
@@ -307,10 +355,12 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
                 1,
                 &createInfo,
                 null,
-                out pipeline);
+                out pipeline
+            );
         }
 
-        if (result != Result.Success || pipeline.Handle == 0) {
+        if (result != Result.Success || pipeline.Handle == 0)
+        {
             throw new GraphicsException(
                 $"The geometry pipeline for shader '{AssetPath.ToPublic(shader.Upload.Path)}', "
                     + $"state (blend {renderState.Blend}, cull {renderState.Cull}, depth "
@@ -318,22 +368,33 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
                     + $"polygon mode {(wireframe ? "line" : "fill")}, and {_sampleCount} sample(s) could "
                     + $"not be created: {result}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return pipeline;
     }
 
-    private static VertexInputAttributeDescription Attribute(uint location, Format format, uint offset) => new() {
-        Location = location,
-        Binding = 0,
-        Format = format,
-        Offset = offset,
-    };
+    private static VertexInputAttributeDescription Attribute(
+        uint location,
+        Format format,
+        uint offset
+    ) =>
+        new()
+        {
+            Location = location,
+            Binding = 0,
+            Format = format,
+            Offset = offset,
+        };
 
-    private static PipelineDepthStencilStateCreateInfo CreateDepthStencilState(RenderState renderState) {
+    private static PipelineDepthStencilStateCreateInfo CreateDepthStencilState(
+        RenderState renderState
+    )
+    {
         bool depthTest = renderState.DepthTest != DepthTest.Disabled;
-        return new PipelineDepthStencilStateCreateInfo {
+        return new PipelineDepthStencilStateCreateInfo
+        {
             SType = StructureType.PipelineDepthStencilStateCreateInfo,
             DepthTestEnable = depthTest,
             DepthWriteEnable = depthTest && renderState.DepthWrite,
@@ -347,8 +408,10 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         };
     }
 
-    private static PipelineColorBlendAttachmentState CreateBlendAttachment(BlendMode blendMode) {
-        PipelineColorBlendAttachmentState attachment = new() {
+    private static PipelineColorBlendAttachmentState CreateBlendAttachment(BlendMode blendMode)
+    {
+        PipelineColorBlendAttachmentState attachment = new()
+        {
             BlendEnable = blendMode != BlendMode.Opaque,
             SrcColorBlendFactor = BlendFactor.One,
             DstColorBlendFactor = BlendFactor.Zero,
@@ -356,12 +419,14 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
             SrcAlphaBlendFactor = BlendFactor.One,
             DstAlphaBlendFactor = BlendFactor.Zero,
             AlphaBlendOp = BlendOp.Add,
-            ColorWriteMask = ColorComponentFlags.RBit
+            ColorWriteMask =
+                ColorComponentFlags.RBit
                 | ColorComponentFlags.GBit
                 | ColorComponentFlags.BBit
                 | ColorComponentFlags.ABit,
         };
-        switch (blendMode) {
+        switch (blendMode)
+        {
             case BlendMode.Opaque:
                 break;
             case BlendMode.Alpha:
@@ -386,61 +451,81 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
                 throw new ArgumentOutOfRangeException(
                     nameof(blendMode),
                     blendMode,
-                    "The blend mode is not defined by the M4 render state.");
+                    "The blend mode is not defined by the M4 render state."
+                );
         }
 
         return attachment;
     }
 
-    private static CullModeFlags ToCullMode(CullMode cullMode) => cullMode switch {
-        CullMode.None => CullModeFlags.None,
-        CullMode.Front => CullModeFlags.FrontBit,
-        CullMode.Back => CullModeFlags.BackBit,
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(cullMode),
-            cullMode,
-            "The cull mode is not defined by the M4 render state."),
-    };
+    private static CullModeFlags ToCullMode(CullMode cullMode) =>
+        cullMode switch
+        {
+            CullMode.None => CullModeFlags.None,
+            CullMode.Front => CullModeFlags.FrontBit,
+            CullMode.Back => CullModeFlags.BackBit,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(cullMode),
+                cullMode,
+                "The cull mode is not defined by the M4 render state."
+            ),
+        };
 
-    private static CompareOp ToCompareOp(DepthTest depthTest) => depthTest switch {
-        DepthTest.Disabled => CompareOp.Always,
-        DepthTest.Greater => CompareOp.Greater,
-        DepthTest.GreaterOrEqual => CompareOp.GreaterOrEqual,
-        DepthTest.Less => CompareOp.Less,
-        DepthTest.LessOrEqual => CompareOp.LessOrEqual,
-        DepthTest.Always => CompareOp.Always,
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(depthTest),
-            depthTest,
-            "The depth test is not defined by the M4 render state."),
-    };
+    private static CompareOp ToCompareOp(DepthTest depthTest) =>
+        depthTest switch
+        {
+            DepthTest.Disabled => CompareOp.Always,
+            DepthTest.Greater => CompareOp.Greater,
+            DepthTest.GreaterOrEqual => CompareOp.GreaterOrEqual,
+            DepthTest.Less => CompareOp.Less,
+            DepthTest.LessOrEqual => CompareOp.LessOrEqual,
+            DepthTest.Always => CompareOp.Always,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(depthTest),
+                depthTest,
+                "The depth test is not defined by the M4 render state."
+            ),
+        };
 
-    private static Silk.NET.Vulkan.PrimitiveTopology ToVulkanTopology(RayBork.PrimitiveTopology topology) =>
-        topology switch {
-            RayBork.PrimitiveTopology.TriangleList => Silk.NET.Vulkan.PrimitiveTopology.TriangleList,
-            RayBork.PrimitiveTopology.TriangleStrip => Silk.NET.Vulkan.PrimitiveTopology.TriangleStrip,
+    private static Silk.NET.Vulkan.PrimitiveTopology ToVulkanTopology(
+        RayBork.PrimitiveTopology topology
+    ) =>
+        topology switch
+        {
+            RayBork.PrimitiveTopology.TriangleList => Silk.NET
+                .Vulkan
+                .PrimitiveTopology
+                .TriangleList,
+            RayBork.PrimitiveTopology.TriangleStrip => Silk.NET
+                .Vulkan
+                .PrimitiveTopology
+                .TriangleStrip,
             RayBork.PrimitiveTopology.LineList => Silk.NET.Vulkan.PrimitiveTopology.LineList,
             RayBork.PrimitiveTopology.LineStrip => Silk.NET.Vulkan.PrimitiveTopology.LineStrip,
             RayBork.PrimitiveTopology.PointList => Silk.NET.Vulkan.PrimitiveTopology.PointList,
             _ => throw new ArgumentOutOfRangeException(
                 nameof(topology),
                 topology,
-                "The primitive topology is not defined for the M4 geometry path."),
+                "The primitive topology is not defined for the M4 geometry path."
+            ),
         };
 
-    private static SampleCountFlags ToSampleCountFlag(int sampleCount) => sampleCount switch {
-        1 => SampleCountFlags.Count1Bit,
-        2 => SampleCountFlags.Count2Bit,
-        4 => SampleCountFlags.Count4Bit,
-        8 => SampleCountFlags.Count8Bit,
-        16 => SampleCountFlags.Count16Bit,
-        32 => SampleCountFlags.Count32Bit,
-        64 => SampleCountFlags.Count64Bit,
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(sampleCount),
-            sampleCount,
-            "The sample count is not a supported Vulkan sample count."),
-    };
+    private static SampleCountFlags ToSampleCountFlag(int sampleCount) =>
+        sampleCount switch
+        {
+            1 => SampleCountFlags.Count1Bit,
+            2 => SampleCountFlags.Count2Bit,
+            4 => SampleCountFlags.Count4Bit,
+            8 => SampleCountFlags.Count8Bit,
+            16 => SampleCountFlags.Count16Bit,
+            32 => SampleCountFlags.Count32Bit,
+            64 => SampleCountFlags.Count64Bit,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(sampleCount),
+                sampleCount,
+                "The sample count is not a supported Vulkan sample count."
+            ),
+        };
 
     /// <summary>
     /// The geometry pipeline cache key. Tests assert that the polygon mode is part of it.
@@ -449,5 +534,6 @@ internal sealed unsafe class VulkanGeometryPipelineCache : IDisposable {
         VulkanShaderAssetResource Shader,
         RenderState RenderState,
         RayBork.PrimitiveTopology Topology,
-        bool Wireframe);
+        bool Wireframe
+    );
 }

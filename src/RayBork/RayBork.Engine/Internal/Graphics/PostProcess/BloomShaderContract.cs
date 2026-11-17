@@ -11,7 +11,8 @@ namespace RayBork.Internal;
 /// than through the bake's entry-point rewriter. The uniform and texture declarations here must match
 /// the instance structs in <c>BloomAbi.glslinc</c> and therefore <see cref="ShaderAbiLayout"/>.
 /// </remarks>
-internal static class BloomShaderContract {
+internal static class BloomShaderContract
+{
     internal const string VERTEX_SPIRV_FILE = "BloomFullscreen.vert.spv";
     internal const string VERTEX_PAYLOAD_PATH = "/shaders/bloom/fullscreen-vert";
     internal const string ENTRY_POINT = "main";
@@ -32,18 +33,21 @@ internal static class BloomShaderContract {
     internal const string SOURCE_COLOR_TEXTURE = "sourceColor";
     internal const string BLOOM_TEXTURE = "bloomTexture";
 
-    internal static readonly ShaderUniformAsset[] PREFILTER_UNIFORMS = [
+    internal static readonly ShaderUniformAsset[] PREFILTER_UNIFORMS =
+    [
         Uniform("uThreshold", ShaderUniformType.Float),
         Uniform("uSoftKnee", ShaderUniformType.Float),
     ];
 
     internal static readonly ShaderUniformAsset[] DOWNSAMPLE_UNIFORMS = [];
 
-    internal static readonly ShaderUniformAsset[] UPSAMPLE_UNIFORMS = [
+    internal static readonly ShaderUniformAsset[] UPSAMPLE_UNIFORMS =
+    [
         Uniform("uScatter", ShaderUniformType.Float),
     ];
 
-    internal static readonly ShaderUniformAsset[] COMPOSITE_UNIFORMS = [
+    internal static readonly ShaderUniformAsset[] COMPOSITE_UNIFORMS =
+    [
         Uniform("uTint", ShaderUniformType.Vector4),
         Uniform("uIntensity", ShaderUniformType.Float),
     ];
@@ -56,9 +60,11 @@ internal static class BloomShaderContract {
 
     internal static readonly string[] COMPOSITE_TEXTURES = [SOURCE_COLOR_TEXTURE, BLOOM_TEXTURE];
 
-    private static ShaderUniformAsset Uniform(string name, ShaderUniformType type) => new() {
-        Name = name,
-        Type = type,
-        Default = [],
-    };
+    private static ShaderUniformAsset Uniform(string name, ShaderUniformType type) =>
+        new()
+        {
+            Name = name,
+            Type = type,
+            Default = [],
+        };
 }

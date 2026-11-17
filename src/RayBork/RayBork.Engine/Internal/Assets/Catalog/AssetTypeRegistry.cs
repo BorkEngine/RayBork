@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// member is thread-safe and may be called without a lock. Registrations are keyed by the registered
 /// CLR type, and a type may appear only once.
 /// </remarks>
-internal sealed class AssetTypeRegistry {
+internal sealed class AssetTypeRegistry
+{
     private readonly Dictionary<Type, AssetTypeRegistration> _registrations;
 
     /// <summary>
@@ -19,14 +20,18 @@ internal sealed class AssetTypeRegistry {
     /// <param name="registrations">The registrations in registration order.</param>
     /// <exception cref="ArgumentNullException"><paramref name="registrations"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">A registered asset type appears more than once.</exception>
-    internal AssetTypeRegistry(IReadOnlyList<AssetTypeRegistration> registrations) {
+    internal AssetTypeRegistry(IReadOnlyList<AssetTypeRegistration> registrations)
+    {
         ArgumentNullException.ThrowIfNull(registrations);
 
         _registrations = new Dictionary<Type, AssetTypeRegistration>(registrations.Count);
-        foreach (AssetTypeRegistration registration in registrations) {
-            if (!_registrations.TryAdd(registration.AssetType, registration)) {
+        foreach (AssetTypeRegistration registration in registrations)
+        {
+            if (!_registrations.TryAdd(registration.AssetType, registration))
+            {
                 throw new InvalidOperationException(
-                    $"The asset type '{registration.AssetType.FullName}' is registered more than once.");
+                    $"The asset type '{registration.AssetType.FullName}' is registered more than once."
+                );
             }
         }
     }
@@ -42,7 +47,8 @@ internal sealed class AssetTypeRegistry {
     /// <param name="assetType">The CLR asset type to test.</param>
     /// <returns><see langword="true"/> when the type is registered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="assetType"/> is <c>null</c>.</exception>
-    internal bool Contains(Type assetType) {
+    internal bool Contains(Type assetType)
+    {
         ArgumentNullException.ThrowIfNull(assetType);
         return _registrations.ContainsKey(assetType);
     }
@@ -56,7 +62,9 @@ internal sealed class AssetTypeRegistry {
     /// <exception cref="ArgumentNullException"><paramref name="assetType"/> is <c>null</c>.</exception>
     internal bool TryGet(
         Type assetType,
-        [NotNullWhen(true)] out AssetTypeRegistration? registration) {
+        [NotNullWhen(true)] out AssetTypeRegistration? registration
+    )
+    {
         ArgumentNullException.ThrowIfNull(assetType);
         return _registrations.TryGetValue(assetType, out registration);
     }
@@ -70,14 +78,17 @@ internal sealed class AssetTypeRegistry {
     /// <exception cref="NotSupportedException">
     /// The type is not registered for loading.
     /// </exception>
-    internal AssetTypeRegistration Get(Type assetType) {
-        if (TryGet(assetType, out AssetTypeRegistration? registration)) {
+    internal AssetTypeRegistration Get(Type assetType)
+    {
+        if (TryGet(assetType, out AssetTypeRegistration? registration))
+        {
             return registration;
         }
 
         throw new NotSupportedException(
             $"The asset type '{assetType.FullName}' is not registered for loading. Built-in engine "
                 + "assets are registered by the engine; register a data type with WithAssetType<T>() "
-                + "or a custom loader with WithAssetLoader<T>() before Build.");
+                + "or a custom loader with WithAssetLoader<T>() before Build."
+        );
     }
 }

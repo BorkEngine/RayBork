@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// alignment-padded payloads. Paths are canonical asset paths without a leading slash. The index is
 /// sorted by ordinal path order; its hash and every payload hash are verified before use.
 /// </remarks>
-internal static class PackFormat {
+internal static class PackFormat
+{
     /// <summary>The ASCII pack magic, <c>RAYBORKP</c>.</summary>
     internal const string MAGIC_TEXT = "RAYBORKP";
 
@@ -81,22 +82,22 @@ internal static class PackFormat {
     /// </summary>
     /// <param name="alignment">The alignment in bytes.</param>
     /// <returns><see langword="true"/> when the alignment is one of the v1 values.</returns>
-    internal static bool IsValidAlignment(uint alignment)
-        => alignment is 1 or 16 or 64 or 256;
+    internal static bool IsValidAlignment(uint alignment) => alignment is 1 or 16 or 64 or 256;
 
     /// <summary>
     /// Validates a stored asset entry type.
     /// </summary>
     /// <param name="type">The entry type to test.</param>
     /// <returns><see langword="true"/> when the type is defined by pack v1.</returns>
-    internal static bool IsValidEntryType(AssetEntryType type)
-        => type is AssetEntryType.Raw
-            or AssetEntryType.Mesh
-            or AssetEntryType.Model
-            or AssetEntryType.Texture
-            or AssetEntryType.Shader
-            or AssetEntryType.Font
-            or AssetEntryType.Data;
+    internal static bool IsValidEntryType(AssetEntryType type) =>
+        type
+            is AssetEntryType.Raw
+                or AssetEntryType.Mesh
+                or AssetEntryType.Model
+                or AssetEntryType.Texture
+                or AssetEntryType.Shader
+                or AssetEntryType.Font
+                or AssetEntryType.Data;
 
     /// <summary>
     /// Rounds a non-negative offset up to the next multiple of a v1 alignment.
@@ -104,6 +105,6 @@ internal static class PackFormat {
     /// <param name="offset">The offset to align.</param>
     /// <param name="alignment">An alignment accepted by <see cref="IsValidAlignment"/>.</param>
     /// <returns>The aligned offset.</returns>
-    internal static long Align(long offset, uint alignment)
-        => checked((offset + (alignment - 1)) & ~(long)(alignment - 1));
+    internal static long Align(long offset, uint alignment) =>
+        checked((offset + (alignment - 1)) & ~(long)(alignment - 1));
 }

@@ -16,11 +16,13 @@ namespace RayBork.Internal;
 /// thread without locks.
 /// </para>
 /// </remarks>
-internal sealed class KerningReader {
+internal sealed class KerningReader
+{
     private readonly KernPairs? _kernPairs;
     private readonly GposKerning? _gpos;
 
-    private KerningReader(KernPairs? kernPairs, GposKerning? gpos) {
+    private KerningReader(KernPairs? kernPairs, GposKerning? gpos)
+    {
         _kernPairs = kernPairs;
         _gpos = gpos;
     }
@@ -37,7 +39,9 @@ internal sealed class KerningReader {
     internal static KerningReader Parse(
         ReadOnlyMemory<byte> kern,
         ReadOnlyMemory<byte> gpos,
-        int glyphCount) {
+        int glyphCount
+    )
+    {
         KernPairs? kernPairs = kern.IsEmpty ? null : KernPairs.TryParse(kern, glyphCount);
         GposKerning? gposKerning = gpos.IsEmpty ? null : GposKerning.TryParse(gpos, glyphCount);
         return new KerningReader(kernPairs, gposKerning);
@@ -47,13 +51,19 @@ internal sealed class KerningReader {
     /// <param name="leftGlyphId">The left glyph identifier.</param>
     /// <param name="rightGlyphId">The right glyph identifier.</param>
     /// <returns>The kerning adjustment in font units, or zero when the pair is not kerned.</returns>
-    internal int GetKerning(int leftGlyphId, int rightGlyphId) {
-        if (_gpos is not null) {
+    internal int GetKerning(int leftGlyphId, int rightGlyphId)
+    {
+        if (_gpos is not null)
+        {
             _gpos.TryGet(leftGlyphId, rightGlyphId, out int gposValue);
             return gposValue;
         }
 
-        if (_kernPairs is not null && _kernPairs.TryGet(leftGlyphId, rightGlyphId, out int kernValue)) {
+        if (
+            _kernPairs is not null
+            && _kernPairs.TryGet(leftGlyphId, rightGlyphId, out int kernValue)
+        )
+        {
             return kernValue;
         }
 

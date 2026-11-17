@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// upload together with the factory that creates the public asset once the upload completes.
 /// </remarks>
 /// <typeparam name="T">The engine asset type the format produces.</typeparam>
-internal interface IEngineAssetFormat<T> {
+internal interface IEngineAssetFormat<T>
+{
     /// <summary>
     /// Gets the pack entry type the format decodes.
     /// </summary>

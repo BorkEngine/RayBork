@@ -8,20 +8,26 @@ namespace RayBork.Tests.Assets;
 /// release used by <see cref="Font"/>, GPU destruction for an uploaded asset, and the exactly-once
 /// teardown contract.
 /// </summary>
-public sealed class EngineAssetTests {
+public sealed class EngineAssetTests
+{
     private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ACpuOnlyReleaseWaitsForTheLastFrameHoldAndRunsExactlyOnce() {
+    public async Task ACpuOnlyReleaseWaitsForTheLastFrameHoldAndRunsExactlyOnce()
+    {
         List<string> events = [];
         EngineAsset? asset = null;
         asset = new EngineAsset(
             "assets/cpu",
             resource: null,
-            static _ => throw new InvalidOperationException("A CPU-only asset must not queue GPU destruction."),
+            static _ =>
+                throw new InvalidOperationException(
+                    "A CPU-only asset must not queue GPU destruction."
+                ),
             () => events.Add("owners-released"),
-            () => events.Add(asset!.IsDisposed ? "release-disposed" : "release-not-disposed"));
+            () => events.Add(asset!.IsDisposed ? "release-disposed" : "release-not-disposed")
+        );
         asset.AddOwnerReference();
         asset.AddFrameHold();
 
@@ -45,14 +51,16 @@ public sealed class EngineAssetTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ForceDisposeRunsTheCpuOnlyReleaseExactlyOnce() {
+    public void ForceDisposeRunsTheCpuOnlyReleaseExactlyOnce()
+    {
         int releases = 0;
         EngineAsset asset = new(
             "assets/cpu-force",
             resource: null,
             static _ => { },
             static () => { },
-            () => releases++);
+            () => releases++
+        );
         asset.AddOwnerReference();
 
         asset.ForceDispose();
@@ -68,18 +76,21 @@ public sealed class EngineAssetTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AGpuAssetQueuesItsDestructionAfterTheLastFrameHoldAndNeverCallsARelease() {
+    public async Task AGpuAssetQueuesItsDestructionAfterTheLastFrameHoldAndNeverCallsARelease()
+    {
         List<string> events = [];
         FakeGpuAssetResource resource = new(CreateUpload(), handle: 1);
         EngineAsset? asset = null;
         asset = new EngineAsset(
             "assets/gpu",
             resource,
-            destroyed => {
+            destroyed =>
+            {
                 Assert.Same(resource, destroyed);
                 events.Add(asset!.IsDisposed ? "destroy-disposed" : "destroy-not-disposed");
             },
-            () => events.Add("owners-released"));
+            () => events.Add("owners-released")
+        );
         asset.AddOwnerReference();
         asset.AddFrameHold();
 
@@ -98,14 +109,16 @@ public sealed class EngineAssetTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ADoubleOwnerReleaseThrowsAndDoesNotDoubleRelease() {
+    public void ADoubleOwnerReleaseThrowsAndDoesNotDoubleRelease()
+    {
         int releases = 0;
         EngineAsset asset = new(
             "assets/double",
             resource: null,
             static _ => { },
             static () => { },
-            () => releases++);
+            () => releases++
+        );
         asset.AddOwnerReference();
         asset.AddOwnerReference();
 
@@ -121,8 +134,10 @@ public sealed class EngineAssetTests {
         Assert.Equal(1, releases);
     }
 
-    private static TextureGpuUpload CreateUpload() {
-        TextureAssetDescriptor descriptor = new() {
+    private static TextureGpuUpload CreateUpload()
+    {
+        TextureAssetDescriptor descriptor = new()
+        {
             Payload = "textures/test-ktx2",
             Width = 1,
             Height = 1,

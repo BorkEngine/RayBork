@@ -26,7 +26,8 @@ namespace RayBork.Internal;
 /// thread-safe.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanDescriptorState : IDisposable {
+internal sealed unsafe class VulkanDescriptorState : IDisposable
+{
     /// <summary>The descriptor set index of the geometry path.</summary>
     internal const uint GEOMETRY_SET = 0;
 
@@ -53,7 +54,8 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     private readonly Device _device;
     private readonly ResourceState _resources;
 
-    private VulkanDescriptorState(Vk vulkan, Device device, ResourceState resources) {
+    private VulkanDescriptorState(Vk vulkan, Device device, ResourceState resources)
+    {
         _vulkan = vulkan;
         _device = device;
         _resources = resources;
@@ -85,32 +87,48 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <exception cref="GraphicsException">
     /// A Vulkan object could not be created. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static VulkanDescriptorState Create(VulkanDevice device, uint bindlessCapacity, uint maxSets) {
+    internal static VulkanDescriptorState Create(
+        VulkanDevice device,
+        uint bindlessCapacity,
+        uint maxSets
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
-        if (bindlessCapacity != ShaderAbiNames.TEXTURE_CAPACITY) {
+        if (bindlessCapacity != ShaderAbiNames.TEXTURE_CAPACITY)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(bindlessCapacity),
                 bindlessCapacity,
                 "The bindless texture descriptor count must equal the fixed shader array size "
-                + $"({ShaderAbiNames.TEXTURE_CAPACITY}) so the set layout matches the generated GLSL.");
+                    + $"({ShaderAbiNames.TEXTURE_CAPACITY}) so the set layout matches the generated GLSL."
+            );
         }
 
-        if (maxSets == 0) {
-            throw new ArgumentOutOfRangeException(nameof(maxSets), maxSets, "At least one descriptor set is required.");
+        if (maxSets == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(maxSets),
+                maxSets,
+                "At least one descriptor set is required."
+            );
         }
 
         Vk vulkan = device.Vulkan;
         DescriptorSetLayout setLayout = CreateSetLayout(vulkan, device.Device, bindlessCapacity);
         DescriptorPool pool = default;
         PipelineLayout pipelineLayout = default;
-        try {
+        try
+        {
             pool = CreatePool(vulkan, device.Device, bindlessCapacity, maxSets);
             pipelineLayout = CreatePipelineLayout(vulkan, device.Device, setLayout);
             return new VulkanDescriptorState(
                 vulkan,
                 device.Device,
-                new ResourceState(setLayout, pool, pipelineLayout, bindlessCapacity));
-        } catch {
+                new ResourceState(setLayout, pool, pipelineLayout, bindlessCapacity)
+            );
+        }
+        catch
+        {
             DestroyPipelineLayout(vulkan, device.Device, pipelineLayout);
             DestroyPool(vulkan, device.Device, pool);
             DestroySetLayout(vulkan, device.Device, setLayout);
@@ -125,20 +143,28 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <exception cref="GraphicsException">
     /// The pool could not allocate the set. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal DescriptorSet AllocateSet() {
+    internal DescriptorSet AllocateSet()
+    {
         DescriptorSetLayout setLayout = SetLayout;
-        DescriptorSetAllocateInfo allocateInfo = new() {
+        DescriptorSetAllocateInfo allocateInfo = new()
+        {
             SType = StructureType.DescriptorSetAllocateInfo,
             DescriptorPool = _resources.Pool,
             DescriptorSetCount = 1,
             PSetLayouts = &setLayout,
         };
-        Result result = _vulkan.AllocateDescriptorSets(_device, &allocateInfo, out DescriptorSet descriptorSet);
-        if (result != Result.Success || descriptorSet.Handle == 0) {
+        Result result = _vulkan.AllocateDescriptorSets(
+            _device,
+            &allocateInfo,
+            out DescriptorSet descriptorSet
+        );
+        if (result != Result.Success || descriptorSet.Handle == 0)
+        {
             throw new GraphicsException(
                 $"The Vulkan geometry descriptor set could not be allocated: {result}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return descriptorSet;
@@ -150,13 +176,16 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <param name="set">The frame set to update.</param>
     /// <param name="buffer">The host-visible frame storage buffer.</param>
     /// <param name="size">The buffer size in bytes.</param>
-    internal void WriteFrameStorageBuffer(DescriptorSet set, Buffer buffer, ulong size) {
-        DescriptorBufferInfo bufferInfo = new() {
+    internal void WriteFrameStorageBuffer(DescriptorSet set, Buffer buffer, ulong size)
+    {
+        DescriptorBufferInfo bufferInfo = new()
+        {
             Buffer = buffer,
             Offset = 0,
             Range = size,
         };
-        WriteDescriptorSet write = new() {
+        WriteDescriptorSet write = new()
+        {
             SType = StructureType.WriteDescriptorSet,
             DstSet = set,
             DstBinding = FRAME_BINDING,
@@ -174,13 +203,16 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <param name="set">The frame set to update.</param>
     /// <param name="buffer">The host-visible instance buffer.</param>
     /// <param name="size">The buffer size in bytes.</param>
-    internal void WriteInstanceStorageBuffer(DescriptorSet set, Buffer buffer, ulong size) {
-        DescriptorBufferInfo bufferInfo = new() {
+    internal void WriteInstanceStorageBuffer(DescriptorSet set, Buffer buffer, ulong size)
+    {
+        DescriptorBufferInfo bufferInfo = new()
+        {
             Buffer = buffer,
             Offset = 0,
             Range = size,
         };
-        WriteDescriptorSet write = new() {
+        WriteDescriptorSet write = new()
+        {
             SType = StructureType.WriteDescriptorSet,
             DstSet = set,
             DstBinding = INSTANCE_BINDING,
@@ -204,28 +236,40 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <param name="slot">The bindless slot to write.</param>
     /// <param name="view">The texture image view.</param>
     /// <param name="sampler">The sampler for the texture's state.</param>
-    internal void WriteBindlessTexture(DescriptorSet[] sets, uint slot, ImageView view, Sampler sampler) {
+    internal void WriteBindlessTexture(
+        DescriptorSet[] sets,
+        uint slot,
+        ImageView view,
+        Sampler sampler
+    )
+    {
         ArgumentNullException.ThrowIfNull(sets);
-        if (sets.Length == 0) {
+        if (sets.Length == 0)
+        {
             return;
         }
 
-        if (slot >= _resources.Capacity) {
+        if (slot >= _resources.Capacity)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(slot),
                 slot,
-                $"The bindless slot must be below the table capacity {_resources.Capacity}.");
+                $"The bindless slot must be below the table capacity {_resources.Capacity}."
+            );
         }
 
         DescriptorImageInfo* imageInfos = stackalloc DescriptorImageInfo[sets.Length];
         WriteDescriptorSet* writes = stackalloc WriteDescriptorSet[sets.Length];
-        for (int index = 0; index < sets.Length; index++) {
-            imageInfos[index] = new DescriptorImageInfo {
+        for (int index = 0; index < sets.Length; index++)
+        {
+            imageInfos[index] = new DescriptorImageInfo
+            {
                 Sampler = sampler,
                 ImageView = view,
                 ImageLayout = ImageLayout.ShaderReadOnlyOptimal,
             };
-            writes[index] = new WriteDescriptorSet {
+            writes[index] = new WriteDescriptorSet
+            {
                 SType = StructureType.WriteDescriptorSet,
                 DstSet = sets[index],
                 DstBinding = TEXTURE_BINDING,
@@ -242,8 +286,10 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <summary>
     /// Destroys the pipeline layout, descriptor pool, and set layout. The call is idempotent.
     /// </summary>
-    public void Dispose() {
-        if (_resources.Disposed) {
+    public void Dispose()
+    {
+        if (_resources.Disposed)
+        {
             return;
         }
 
@@ -253,21 +299,29 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
         _resources.Disposed = true;
     }
 
-    private static DescriptorSetLayout CreateSetLayout(Vk vulkan, Device device, uint bindlessCapacity) {
+    private static DescriptorSetLayout CreateSetLayout(
+        Vk vulkan,
+        Device device,
+        uint bindlessCapacity
+    )
+    {
         DescriptorSetLayoutBinding* bindings = stackalloc DescriptorSetLayoutBinding[3];
-        bindings[FRAME_BINDING] = new DescriptorSetLayoutBinding {
+        bindings[FRAME_BINDING] = new DescriptorSetLayoutBinding
+        {
             Binding = FRAME_BINDING,
             DescriptorType = DescriptorType.StorageBuffer,
             DescriptorCount = 1,
             StageFlags = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit,
         };
-        bindings[TEXTURE_BINDING] = new DescriptorSetLayoutBinding {
+        bindings[TEXTURE_BINDING] = new DescriptorSetLayoutBinding
+        {
             Binding = TEXTURE_BINDING,
             DescriptorType = DescriptorType.CombinedImageSampler,
             DescriptorCount = bindlessCapacity,
             StageFlags = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit,
         };
-        bindings[INSTANCE_BINDING] = new DescriptorSetLayoutBinding {
+        bindings[INSTANCE_BINDING] = new DescriptorSetLayoutBinding
+        {
             Binding = INSTANCE_BINDING,
             DescriptorType = DescriptorType.StorageBuffer,
             DescriptorCount = 1,
@@ -278,106 +332,158 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
         bindingFlags[TEXTURE_BINDING] =
             DescriptorBindingFlags.PartiallyBoundBit | DescriptorBindingFlags.UpdateAfterBindBit;
         bindingFlags[INSTANCE_BINDING] = DescriptorBindingFlags.None;
-        DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo = new() {
+        DescriptorSetLayoutBindingFlagsCreateInfo flagsInfo = new()
+        {
             SType = StructureType.DescriptorSetLayoutBindingFlagsCreateInfo,
             BindingCount = 3,
             PBindingFlags = bindingFlags,
         };
-        DescriptorSetLayoutCreateInfo createInfo = new() {
+        DescriptorSetLayoutCreateInfo createInfo = new()
+        {
             SType = StructureType.DescriptorSetLayoutCreateInfo,
             PNext = &flagsInfo,
             Flags = DescriptorSetLayoutCreateFlags.UpdateAfterBindPoolBit,
             BindingCount = 3,
             PBindings = bindings,
         };
-        Result result = vulkan.CreateDescriptorSetLayout(device, &createInfo, null, out DescriptorSetLayout setLayout);
-        if (result != Result.Success || setLayout.Handle == 0) {
+        Result result = vulkan.CreateDescriptorSetLayout(
+            device,
+            &createInfo,
+            null,
+            out DescriptorSetLayout setLayout
+        );
+        if (result != Result.Success || setLayout.Handle == 0)
+        {
             throw new GraphicsException(
                 $"The Vulkan geometry descriptor set layout could not be created: {result}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return setLayout;
     }
 
-    private static DescriptorPool CreatePool(Vk vulkan, Device device, uint bindlessCapacity, uint maxSets) {
+    private static DescriptorPool CreatePool(
+        Vk vulkan,
+        Device device,
+        uint bindlessCapacity,
+        uint maxSets
+    )
+    {
         DescriptorPoolSize* poolSizes = stackalloc DescriptorPoolSize[2];
         // The frame buffer and the instance buffer are both storage buffers, one descriptor each.
-        poolSizes[0] = new DescriptorPoolSize {
+        poolSizes[0] = new DescriptorPoolSize
+        {
             Type = DescriptorType.StorageBuffer,
             DescriptorCount = checked(maxSets * 2),
         };
-        poolSizes[1] = new DescriptorPoolSize {
+        poolSizes[1] = new DescriptorPoolSize
+        {
             Type = DescriptorType.CombinedImageSampler,
             DescriptorCount = checked(bindlessCapacity * maxSets),
         };
-        DescriptorPoolCreateInfo createInfo = new() {
+        DescriptorPoolCreateInfo createInfo = new()
+        {
             SType = StructureType.DescriptorPoolCreateInfo,
             Flags = DescriptorPoolCreateFlags.UpdateAfterBindBit,
             MaxSets = maxSets,
             PoolSizeCount = 2,
             PPoolSizes = poolSizes,
         };
-        Result result = vulkan.CreateDescriptorPool(device, &createInfo, null, out DescriptorPool pool);
-        if (result != Result.Success || pool.Handle == 0) {
+        Result result = vulkan.CreateDescriptorPool(
+            device,
+            &createInfo,
+            null,
+            out DescriptorPool pool
+        );
+        if (result != Result.Success || pool.Handle == 0)
+        {
             throw new GraphicsException(
                 $"The Vulkan geometry descriptor pool could not be created: {result}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return pool;
     }
 
-    private static PipelineLayout CreatePipelineLayout(Vk vulkan, Device device, DescriptorSetLayout setLayout) {
-        PushConstantRange passIndexRange = new() {
+    private static PipelineLayout CreatePipelineLayout(
+        Vk vulkan,
+        Device device,
+        DescriptorSetLayout setLayout
+    )
+    {
+        PushConstantRange passIndexRange = new()
+        {
             StageFlags = PUSH_CONSTANT_STAGES,
             Offset = PASS_INDEX_PUSH_CONSTANT_OFFSET,
             Size = PASS_INDEX_PUSH_CONSTANT_SIZE,
         };
-        PipelineLayoutCreateInfo createInfo = new() {
+        PipelineLayoutCreateInfo createInfo = new()
+        {
             SType = StructureType.PipelineLayoutCreateInfo,
             SetLayoutCount = 1,
             PSetLayouts = &setLayout,
             PushConstantRangeCount = 1,
             PPushConstantRanges = &passIndexRange,
         };
-        Result result = vulkan.CreatePipelineLayout(device, &createInfo, null, out PipelineLayout pipelineLayout);
-        if (result != Result.Success || pipelineLayout.Handle == 0) {
+        Result result = vulkan.CreatePipelineLayout(
+            device,
+            &createInfo,
+            null,
+            out PipelineLayout pipelineLayout
+        );
+        if (result != Result.Success || pipelineLayout.Handle == 0)
+        {
             throw new GraphicsException(
                 $"The Vulkan geometry pipeline layout could not be created: {result}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return pipelineLayout;
     }
 
-    private static void DestroyPipelineLayout(Vk vulkan, Device device, PipelineLayout pipelineLayout) {
-        if (pipelineLayout.Handle != 0) {
+    private static void DestroyPipelineLayout(
+        Vk vulkan,
+        Device device,
+        PipelineLayout pipelineLayout
+    )
+    {
+        if (pipelineLayout.Handle != 0)
+        {
             vulkan.DestroyPipelineLayout(device, pipelineLayout, null);
         }
     }
 
-    private static void DestroyPool(Vk vulkan, Device device, DescriptorPool pool) {
-        if (pool.Handle != 0) {
+    private static void DestroyPool(Vk vulkan, Device device, DescriptorPool pool)
+    {
+        if (pool.Handle != 0)
+        {
             vulkan.DestroyDescriptorPool(device, pool, null);
         }
     }
 
-    private static void DestroySetLayout(Vk vulkan, Device device, DescriptorSetLayout setLayout) {
-        if (setLayout.Handle != 0) {
+    private static void DestroySetLayout(Vk vulkan, Device device, DescriptorSetLayout setLayout)
+    {
+        if (setLayout.Handle != 0)
+        {
             vulkan.DestroyDescriptorSetLayout(device, setLayout, null);
         }
     }
 
-    private sealed class ResourceState {
+    private sealed class ResourceState
+    {
         internal ResourceState(
             DescriptorSetLayout setLayout,
             DescriptorPool pool,
             PipelineLayout pipelineLayout,
-            uint capacity) {
+            uint capacity
+        )
+        {
             SetLayout = setLayout;
             Pool = pool;
             PipelineLayout = pipelineLayout;

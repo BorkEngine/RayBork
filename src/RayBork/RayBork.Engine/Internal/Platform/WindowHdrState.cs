@@ -19,7 +19,12 @@ namespace RayBork.Internal;
 /// The peak brightness as a multiple of SDR white; <c>1.0</c> when HDR is off or there is no
 /// headroom.
 /// </param>
-internal readonly record struct WindowHdrState(bool HdrEnabled, float SdrWhiteLevel, float HdrHeadroom) {
+internal readonly record struct WindowHdrState(
+    bool HdrEnabled,
+    float SdrWhiteLevel,
+    float HdrHeadroom
+)
+{
     /// <summary>
     /// Gets the SDR state: HDR is disabled and both display-linear scales are exactly one.
     /// </summary>
@@ -37,8 +42,14 @@ internal readonly record struct WindowHdrState(bool HdrEnabled, float SdrWhiteLe
     /// <param name="sdrWhiteLevel">The raw SDR white level property.</param>
     /// <param name="hdrHeadroom">The raw HDR headroom property.</param>
     /// <returns>The normalized state.</returns>
-    internal static WindowHdrState Normalize(bool hdrEnabled, float sdrWhiteLevel, float hdrHeadroom) {
-        if (!hdrEnabled) {
+    internal static WindowHdrState Normalize(
+        bool hdrEnabled,
+        float sdrWhiteLevel,
+        float hdrHeadroom
+    )
+    {
+        if (!hdrEnabled)
+        {
             return Sdr;
         }
 

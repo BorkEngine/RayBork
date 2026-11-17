@@ -19,8 +19,10 @@ namespace RayBork.Tests.Assets.Gpu;
 [SuppressMessage(
     "Design",
     "CA1001",
-    Justification = "The fake's wait handles live for the test run and are deliberately never disposed: the worker is a test double whose lifetime is the test, not a caller's.")]
-internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
+    Justification = "The fake's wait handles live for the test run and are deliberately never disposed: the worker is a test double whose lifetime is the test, not a caller's."
+)]
+internal sealed class FakeAssetGpuWorker : IAssetGpuWorker
+{
     private readonly Lock _gate = new();
     private readonly List<AssetGpuUpload> _uploadCalls = [];
     private readonly List<FakeGpuAssetUploadOperation> _operations = [];
@@ -71,9 +73,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <summary>
     /// Gets the number of <see cref="BeginUpload"/> calls.
     /// </summary>
-    internal int UploadCallCount {
-        get {
-            lock (_gate) {
+    internal int UploadCallCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _uploadCalls.Count;
             }
         }
@@ -82,9 +87,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <summary>
     /// Gets the uploads passed to <see cref="BeginUpload"/>, in call order.
     /// </summary>
-    internal IReadOnlyList<AssetGpuUpload> UploadCalls {
-        get {
-            lock (_gate) {
+    internal IReadOnlyList<AssetGpuUpload> UploadCalls
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return [.. _uploadCalls];
             }
         }
@@ -93,9 +101,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <summary>
     /// Gets the operations <see cref="BeginUpload"/> returned, in call order.
     /// </summary>
-    internal IReadOnlyList<FakeGpuAssetUploadOperation> Operations {
-        get {
-            lock (_gate) {
+    internal IReadOnlyList<FakeGpuAssetUploadOperation> Operations
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return [.. _operations];
             }
         }
@@ -104,9 +115,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <summary>
     /// Gets the operations passed to <see cref="Cancel"/>, in call order.
     /// </summary>
-    internal IReadOnlyList<GpuAssetUploadOperation> CancelCalls {
-        get {
-            lock (_gate) {
+    internal IReadOnlyList<GpuAssetUploadOperation> CancelCalls
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return [.. _cancelCalls];
             }
         }
@@ -115,9 +129,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <summary>
     /// Gets the number of <see cref="Restore"/> calls.
     /// </summary>
-    internal int RestoreCallCount {
-        get {
-            lock (_gate) {
+    internal int RestoreCallCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _restoreCalls.Count;
             }
         }
@@ -126,9 +143,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <summary>
     /// Gets the uploads passed to <see cref="Restore"/>, in call order.
     /// </summary>
-    internal IReadOnlyList<AssetGpuUpload> RestoreCalls {
-        get {
-            lock (_gate) {
+    internal IReadOnlyList<AssetGpuUpload> RestoreCalls
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return [.. _restoreCalls];
             }
         }
@@ -137,9 +157,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <summary>
     /// Gets the resources passed to <see cref="Destroy"/>, in call order.
     /// </summary>
-    internal IReadOnlyList<GpuAssetResource> DestroyCalls {
-        get {
-            lock (_gate) {
+    internal IReadOnlyList<GpuAssetResource> DestroyCalls
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return [.. _destroyCalls];
             }
         }
@@ -168,20 +191,28 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// <param name="timeout">The maximum wait.</param>
     /// <returns>The started operation.</returns>
     /// <exception cref="TimeoutException">The upload did not start in time.</exception>
-    internal FakeGpuAssetUploadOperation WaitForUpload(int index, TimeSpan timeout) {
+    internal FakeGpuAssetUploadOperation WaitForUpload(int index, TimeSpan timeout)
+    {
         FakeGpuAssetUploadOperation? operation = null;
-        if (!SpinWait.SpinUntil(
-            () => {
-                lock (_gate) {
-                    if (_operations.Count <= index) {
-                        return false;
-                    }
+        if (
+            !SpinWait.SpinUntil(
+                () =>
+                {
+                    lock (_gate)
+                    {
+                        if (_operations.Count <= index)
+                        {
+                            return false;
+                        }
 
-                    operation = _operations[index];
-                    return true;
-                }
-            },
-            timeout)) {
+                        operation = _operations[index];
+                        return true;
+                    }
+                },
+                timeout
+            )
+        )
+        {
             throw new TimeoutException($"The fake GPU worker did not start upload {index}.");
         }
 
@@ -193,7 +224,8 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     /// </summary>
     /// <param name="timeout">The maximum wait.</param>
     /// <returns>The started operation.</returns>
-    internal FakeGpuAssetUploadOperation WaitForUpload(TimeSpan timeout) => WaitForUpload(0, timeout);
+    internal FakeGpuAssetUploadOperation WaitForUpload(TimeSpan timeout) =>
+        WaitForUpload(0, timeout);
 
     /// <inheritdoc />
     public bool AreFrameResourcesIdle => FrameResourcesIdle;
@@ -202,14 +234,17 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     public void WaitForFrameResourcesIdle() => WaitForFrameResourcesIdleCount++;
 
     /// <inheritdoc />
-    public GpuAssetUploadOperation BeginUpload(AssetGpuUpload upload) {
+    public GpuAssetUploadOperation BeginUpload(AssetGpuUpload upload)
+    {
         ArgumentNullException.ThrowIfNull(upload);
 
-        lock (_gate) {
+        lock (_gate)
+        {
             _uploadCalls.Add(upload);
         }
 
-        if (UploadException is not null) {
+        if (UploadException is not null)
+        {
             _progress.Set();
             throw UploadException;
         }
@@ -217,8 +252,11 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
         GpuAssetResource resource = UploadHandler is not null
             ? UploadHandler(upload)
             : new FakeGpuAssetResource(upload, NextHandle());
-        FakeGpuAssetUploadOperation operation = new(upload, resource, complete: !DeferUploads, () => _progress.Set());
-        lock (_gate) {
+        FakeGpuAssetUploadOperation operation = new(upload, resource, complete: !DeferUploads, () =>
+            _progress.Set()
+        );
+        lock (_gate)
+        {
             _operations.Add(operation);
         }
 
@@ -230,9 +268,12 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     public bool TryComplete(
         GpuAssetUploadOperation operation,
         out GpuAssetResource? resource,
-        out Exception? error) {
+        out Exception? error
+    )
+    {
         FakeGpuAssetUploadOperation fake = RequireOperation(operation);
-        if (!fake.IsFinished) {
+        if (!fake.IsFinished)
+        {
             resource = null;
             error = null;
             return false;
@@ -244,13 +285,16 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     }
 
     /// <inheritdoc />
-    public void Cancel(GpuAssetUploadOperation operation) {
+    public void Cancel(GpuAssetUploadOperation operation)
+    {
         FakeGpuAssetUploadOperation fake = RequireOperation(operation);
-        if (!fake.TryMarkCanceled()) {
+        if (!fake.TryMarkCanceled())
+        {
             return;
         }
 
-        lock (_gate) {
+        lock (_gate)
+        {
             _cancelCalls.Add(operation);
         }
 
@@ -258,12 +302,15 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     }
 
     /// <inheritdoc />
-    public GpuAssetResource Restore(AssetGpuUpload upload, GpuAssetResource previous) {
-        lock (_gate) {
+    public GpuAssetResource Restore(AssetGpuUpload upload, GpuAssetResource previous)
+    {
+        lock (_gate)
+        {
             _restoreCalls.Add(upload);
         }
 
-        if (RestoreException is not null) {
+        if (RestoreException is not null)
+        {
             _restored.Set();
             throw RestoreException;
         }
@@ -271,7 +318,8 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
         GpuAssetResource restored = RestoreHandler is not null
             ? RestoreHandler(upload, previous)
             : previous;
-        if (ReferenceEquals(restored, previous)) {
+        if (ReferenceEquals(restored, previous))
+        {
             previous.PublishHandle(NextHandle());
         }
 
@@ -280,17 +328,21 @@ internal sealed class FakeAssetGpuWorker : IAssetGpuWorker {
     }
 
     /// <inheritdoc />
-    public void Destroy(GpuAssetResource resource) {
-        lock (_gate) {
+    public void Destroy(GpuAssetResource resource)
+    {
+        lock (_gate)
+        {
             _destroyCalls.Add(resource);
         }
     }
 
-    private static FakeGpuAssetUploadOperation RequireOperation(GpuAssetUploadOperation operation) {
+    private static FakeGpuAssetUploadOperation RequireOperation(GpuAssetUploadOperation operation)
+    {
         ArgumentNullException.ThrowIfNull(operation);
 
         return operation as FakeGpuAssetUploadOperation
             ?? throw new InvalidOperationException(
-                $"The fake GPU worker cannot handle a {operation.GetType().Name} operation.");
+                $"The fake GPU worker cannot handle a {operation.GetType().Name} operation."
+            );
     }
 }

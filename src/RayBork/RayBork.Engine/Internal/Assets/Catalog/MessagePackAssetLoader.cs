@@ -11,12 +11,14 @@ namespace RayBork.Internal;
 /// </remarks>
 /// <typeparam name="T">The registered custom data type.</typeparam>
 internal sealed class MessagePackAssetLoader<T> : IAssetLoader<T>
-    where T : IShapeable<T> {
+    where T : IShapeable<T>
+{
     /// <inheritdoc/>
     public AssetEntryType EntryType => AssetEntryType.Data;
 
     /// <inheritdoc/>
-    public async Task<T> LoadAsync(AssetLoadContext context) {
+    public async Task<T> LoadAsync(AssetLoadContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
 
         byte[] payload = await context.LoadPayloadAsync().ConfigureAwait(false);

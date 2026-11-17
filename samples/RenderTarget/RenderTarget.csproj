@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <PublishAot>true</PublishAot>
-        <RenderTargetPackFileName Condition="'$(RenderTargetPackFileName)' == ''">rendertarget.pck</RenderTargetPackFileName>
+        <RenderTargetPackFileName Condition="'$(RenderTargetPackFileName)' == ''"
+            >rendertarget.pck</RenderTargetPackFileName>
         <!-- Samples are documentation, not shipped API, so they are held to the recommended set. -->
         <AnalysisLevel>latest-recommended</AnalysisLevel>
     </PropertyGroup>
@@ -37,15 +37,22 @@
         Release solution build, where RenderTarget.Assets bakes it beside this executable. A missing
         pack is an error with the build command instead of a published host that cannot start.
     -->
-    <Target Name="RenderTargetCopyPackToPublish"
-            AfterTargets="Publish"
-            Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'">
+    <Target
+        Name="RenderTargetCopyPackToPublish"
+        AfterTargets="Publish"
+        Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'"
+    >
         <PropertyGroup>
             <_RenderTargetSamplePackPath>$(MSBuildProjectDirectory)\bin\$(Configuration)\$(TargetFramework)\$(RenderTargetPackFileName)</_RenderTargetSamplePackPath>
         </PropertyGroup>
-        <Error Condition="!Exists('$(_RenderTargetSamplePackPath)')"
-               Text="RayBork RenderTarget sample: the baked pack '$(_RenderTargetSamplePackPath)' is missing. Build the RenderTarget solution in Release first: dotnet build samples/RenderTarget/RenderTarget.slnx -c Release. RenderTarget.Assets bakes $(RenderTargetPackFileName) beside the sample executable during that build." />
-        <Copy SourceFiles="$(_RenderTargetSamplePackPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+        <Error
+            Condition="!Exists('$(_RenderTargetSamplePackPath)')"
+            Text="RayBork RenderTarget sample: the baked pack '$(_RenderTargetSamplePackPath)' is missing. Build the RenderTarget solution in Release first: dotnet build samples/RenderTarget/RenderTarget.slnx -c Release. RenderTarget.Assets bakes $(RenderTargetPackFileName) beside the sample executable during that build."
+        />
+        <Copy
+            SourceFiles="$(_RenderTargetSamplePackPath)"
+            DestinationFolder="$(PublishDir)"
+            SkipUnchangedFiles="true"
+        />
     </Target>
-
 </Project>

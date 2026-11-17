@@ -6,7 +6,8 @@ namespace RayBork.Tests.Graphics.Text;
 /// Tests the reusable glyph buffer: it grows geometrically, never shrinks, exposes exactly the records
 /// written by the last call, and makes the steady-state recording path allocation-free.
 /// </summary>
-public sealed class TextLayoutBufferTests {
+public sealed class TextLayoutBufferTests
+{
     private const string STEADY_STATE_TEXT = "abcde abcde abcde";
     private const int STEADY_STATE_GLYPHS = 17;
     private const float WRAPPED_STEADY_STATE_MAX_WIDTH = 5f;
@@ -24,11 +25,15 @@ public sealed class TextLayoutBufferTests {
     /// </summary>
     private const int STEADY_STATE_ALLOCATION_BUDGET = 16 * 1024;
 
-    private static readonly string _wrappedSteadyStateText = string.Join(" ", Enumerable.Repeat("abcde", 12));
+    private static readonly string _wrappedSteadyStateText = string.Join(
+        " ",
+        Enumerable.Repeat("abcde", 12)
+    );
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BufferIsReusedAcrossCalls() {
+    public void BufferIsReusedAcrossCalls()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -60,7 +65,8 @@ public sealed class TextLayoutBufferTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BufferWithInitialCapacityDoesNotGrow() {
+    public void BufferWithInitialCapacityDoesNotGrow()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new(8);
 
@@ -72,7 +78,8 @@ public sealed class TextLayoutBufferTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptyTextResetsAPrefilledBuffer() {
+    public void EmptyTextResetsAPrefilledBuffer()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -90,7 +97,8 @@ public sealed class TextLayoutBufferTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BufferGrowsInStepsAndNeverShrinks() {
+    public void BufferGrowsInStepsAndNeverShrinks()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -117,22 +125,36 @@ public sealed class TextLayoutBufferTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SteadyStateArrangeDoesNotAllocatePerCall() {
+    public void SteadyStateArrangeDoesNotAllocatePerCall()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
         ArrangeRepeatedly(
-            metrics, STEADY_STATE_TEXT, TextWrapping.None, 0f, buffer, STEADY_STATE_MEASURED_CALLS);
+            metrics,
+            STEADY_STATE_TEXT,
+            TextWrapping.None,
+            0f,
+            buffer,
+            STEADY_STATE_MEASURED_CALLS
+        );
         int capacityAfterWarmUp = buffer.Capacity;
 
         long before = GC.GetAllocatedBytesForCurrentThread();
         ArrangeRepeatedly(
-            metrics, STEADY_STATE_TEXT, TextWrapping.None, 0f, buffer, STEADY_STATE_MEASURED_CALLS);
+            metrics,
+            STEADY_STATE_TEXT,
+            TextWrapping.None,
+            0f,
+            buffer,
+            STEADY_STATE_MEASURED_CALLS
+        );
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
             allocated < STEADY_STATE_ALLOCATION_BUDGET,
             $"The steady-state arrange allocated {allocated} bytes over "
-                + $"{STEADY_STATE_MEASURED_CALLS} calls.");
+                + $"{STEADY_STATE_MEASURED_CALLS} calls."
+        );
         Assert.Equal(capacityAfterWarmUp, buffer.Capacity);
         Assert.Equal(STEADY_STATE_GLYPHS, buffer.Count);
     }
@@ -144,7 +166,9 @@ public sealed class TextLayoutBufferTests {
     public void SteadyStateWrappedArrangeDoesNotAllocatePerCall(
         TextWrapping wrapping,
         int expectedGlyphs,
-        int expectedLines) {
+        int expectedLines
+    )
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
         ArrangeRepeatedly(
@@ -153,7 +177,8 @@ public sealed class TextLayoutBufferTests {
             wrapping,
             WRAPPED_STEADY_STATE_MAX_WIDTH,
             buffer,
-            STEADY_STATE_MEASURED_CALLS);
+            STEADY_STATE_MEASURED_CALLS
+        );
         int capacityAfterWarmUp = buffer.Capacity;
 
         long before = GC.GetAllocatedBytesForCurrentThread();
@@ -163,13 +188,15 @@ public sealed class TextLayoutBufferTests {
             wrapping,
             WRAPPED_STEADY_STATE_MAX_WIDTH,
             buffer,
-            STEADY_STATE_MEASURED_CALLS);
+            STEADY_STATE_MEASURED_CALLS
+        );
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(
             allocated < STEADY_STATE_ALLOCATION_BUDGET,
             $"The steady-state arrange allocated {allocated} bytes over "
-                + $"{STEADY_STATE_MEASURED_CALLS} calls.");
+                + $"{STEADY_STATE_MEASURED_CALLS} calls."
+        );
         Assert.Equal(capacityAfterWarmUp, buffer.Capacity);
         Assert.Equal(expectedGlyphs, buffer.Count);
         Assert.Equal(expectedLines, result.LineCount);
@@ -181,9 +208,12 @@ public sealed class TextLayoutBufferTests {
         TextWrapping wrapping,
         float maxWidth,
         TextLayoutBuffer buffer,
-        int calls) {
+        int calls
+    )
+    {
         TextLayoutResult result = default;
-        for (int index = 0; index < calls; index++) {
+        for (int index = 0; index < calls; index++)
+        {
             TextLayoutEngine.Arrange(
                 metrics,
                 text,
@@ -192,13 +222,15 @@ public sealed class TextLayoutBufferTests {
                 wrapping,
                 maxWidth,
                 buffer,
-                out result);
+                out result
+            );
         }
 
         return result;
     }
 
-    private static int Arrange(FakeTextMetrics metrics, string text, TextLayoutBuffer buffer) {
+    private static int Arrange(FakeTextMetrics metrics, string text, TextLayoutBuffer buffer)
+    {
         return TextLayoutEngine.Arrange(
             metrics,
             text,
@@ -207,6 +239,7 @@ public sealed class TextLayoutBufferTests {
             TextWrapping.None,
             0f,
             buffer,
-            out _);
+            out _
+        );
     }
 }

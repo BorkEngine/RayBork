@@ -3,10 +3,12 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake;
 
-public sealed class BakeCommandLineTests {
+public sealed class BakeCommandLineTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void HelpAndVersionSucceed() {
+    public void HelpAndVersionSucceed()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = workspace.Builder().Build();
 
@@ -29,7 +31,8 @@ public sealed class BakeCommandLineTests {
     [InlineData("bake", "--bogus")]
     [InlineData("bake", "--verbose", "--quiet")]
     [InlineData("bake", "--mode", "fast")]
-    public void UsageErrorsReturnTwo(params string[] args) {
+    public void UsageErrorsReturnTwo(params string[] args)
+    {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = workspace.Builder().Build();
 
@@ -41,10 +44,12 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SuccessSummaryGoesToStdOutAndTheExitCodeIsZero() {
+    public void SuccessSummaryGoesToStdOutAndTheExitCodeIsZero()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor())
             .Build();
 
@@ -58,7 +63,8 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ProjectRootOverrideTakesPrecedenceOverTheBuilder() {
+    public void ProjectRootOverrideTakesPrecedenceOverTheBuilder()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
         BakeApplication application = new BakeApplicationBuilder()
@@ -73,7 +79,8 @@ public sealed class BakeCommandLineTests {
             "--project-root",
             workspace.ProjectRoot,
             "--output-root",
-            workspace.OutputRoot);
+            workspace.OutputRoot
+        );
 
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
         Assert.True(File.Exists(workspace.GetPackPath()));
@@ -82,31 +89,35 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SourceDiagnosticsAreCanonicalOnStdErrAndReturnOne() {
+    public void SourceDiagnosticsAreCanonicalOnStdErrAndReturnOne()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("a.opt", "source");
-        workspace.WriteAsset("a.toml", """
+        workspace.WriteAsset(
+            "a.toml",
+            """
             [optional]
             value = 1
             bogus = 2
-            """);
-        BakeApplication application = workspace.Builder()
+            """
+        );
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new OptionalSidecarProcessor())
             .Build();
 
         BakeRunResult result = workspace.Run(application);
 
         Assert.Equal(1, result.ExitCode);
-        Assert.Matches(
-            @"Assets/a\.toml\(3,1\): error RB4002: .+",
-            result.Error);
+        Assert.Matches(@"Assets/a\.toml\(3,1\): error RB4002: .+", result.Error);
         Assert.Contains("no pack was written", result.Output);
         Assert.Empty(Directory.GetFiles(workspace.OutputRoot));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConfigurationErrorsReturnTwoWithADiagnostic() {
+    public void ConfigurationErrorsReturnTwoWithADiagnostic()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = new BakeApplicationBuilder()
             .WithProjectRoot(workspace.ProjectRoot)
@@ -122,10 +133,12 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CleanDeletesPacksAndTheIncrementalManifest() {
+    public void CleanDeletesPacksAndTheIncrementalManifest()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor())
             .Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
@@ -136,7 +149,8 @@ public sealed class BakeCommandLineTests {
             application,
             "clean",
             "--output-root",
-            workspace.OutputRoot);
+            workspace.OutputRoot
+        );
 
         Assert.Equal(0, clean.ExitCode);
         Assert.Contains("cleaned 1 pack(s)", clean.Output);
@@ -146,10 +160,12 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InspectListsConfiguredPacksAndAnExplicitPack() {
+    public void InspectListsConfiguredPacksAndAnExplicitPack()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor())
             .Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
@@ -158,14 +174,16 @@ public sealed class BakeCommandLineTests {
             application,
             "inspect",
             "--output-root",
-            workspace.OutputRoot);
+            workspace.OutputRoot
+        );
         BakeRunResult explicitPack = workspace.Run(
             application,
             "inspect",
             "--output-root",
             workspace.OutputRoot,
             "--pack",
-            "assets.pck");
+            "assets.pck"
+        );
 
         Assert.Equal(0, all.ExitCode);
         Assert.Contains("inspected 1 pack(s)", all.Output);
@@ -177,10 +195,12 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InspectExplicitPackDoesNotRequireAConfiguredPack() {
+    public void InspectExplicitPackDoesNotRequireAConfiguredPack()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.count", "source");
-        BakeApplication producing = workspace.Builder()
+        BakeApplication producing = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor())
             .Build();
         Assert.Equal(0, workspace.Run(producing).ExitCode);
@@ -192,7 +212,8 @@ public sealed class BakeCommandLineTests {
             "--output-root",
             workspace.OutputRoot,
             "--pack",
-            "assets.pck");
+            "assets.pck"
+        );
 
         Assert.Equal(0, result.ExitCode);
         Assert.Contains("unit -> Data", result.Output);
@@ -200,7 +221,8 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InspectMissingPackReturnsOne() {
+    public void InspectMissingPackReturnsOne()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = workspace.Builder().Build();
 
@@ -210,7 +232,8 @@ public sealed class BakeCommandLineTests {
             "--output-root",
             workspace.OutputRoot,
             "--pack",
-            "missing.pck");
+            "missing.pck"
+        );
 
         Assert.Equal(1, result.ExitCode);
         Assert.Contains("RB1001", result.Error);
@@ -218,9 +241,11 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnexpectedFailureReturnsThree() {
+    public void UnexpectedFailureReturnsThree()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new ThrowingExtensionsProcessor())
             .Build();
 
@@ -232,10 +257,12 @@ public sealed class BakeCommandLineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void QuietSuppressesTheSummaryButNotTheDiagnostics() {
+    public void QuietSuppressesTheSummaryButNotTheDiagnostics()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("unit.err", "source");
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new ErrorProcessor())
             .Build();
 
@@ -244,7 +271,8 @@ public sealed class BakeCommandLineTests {
             "bake",
             "--output-root",
             workspace.OutputRoot,
-            "--quiet");
+            "--quiet"
+        );
 
         Assert.Equal(1, result.ExitCode);
         Assert.Empty(result.Output);

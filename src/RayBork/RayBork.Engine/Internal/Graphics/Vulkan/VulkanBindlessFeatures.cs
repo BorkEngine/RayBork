@@ -19,32 +19,41 @@ namespace RayBork.Internal;
 /// without the features the backend later enables. Every member is pure and safe on any thread.
 /// </para>
 /// </remarks>
-internal static class VulkanBindlessFeatures {
+internal static class VulkanBindlessFeatures
+{
     /// <summary>The human-readable name of <c>descriptorBindingPartiallyBound</c>.</summary>
     internal const string PARTIALLY_BOUND = "descriptorBindingPartiallyBound";
 
     /// <summary>The human-readable name of <c>descriptorBindingSampledImageUpdateAfterBind</c>.</summary>
-    internal const string SAMPLED_IMAGE_UPDATE_AFTER_BIND = "descriptorBindingSampledImageUpdateAfterBind";
+    internal const string SAMPLED_IMAGE_UPDATE_AFTER_BIND =
+        "descriptorBindingSampledImageUpdateAfterBind";
 
     /// <summary>The human-readable name of <c>shaderSampledImageArrayNonUniformIndexing</c>.</summary>
-    internal const string SAMPLED_IMAGE_ARRAY_NON_UNIFORM_INDEXING = "shaderSampledImageArrayNonUniformIndexing";
+    internal const string SAMPLED_IMAGE_ARRAY_NON_UNIFORM_INDEXING =
+        "shaderSampledImageArrayNonUniformIndexing";
 
     /// <summary>
     /// Collects the required feature names the physical device does not advertise.
     /// </summary>
     /// <param name="features">The device's Vulkan 1.2 feature support snapshot.</param>
     /// <returns>The missing feature names, or an empty list when the subset is supported.</returns>
-    internal static IReadOnlyList<string> GetMissingFeatures(in PhysicalDeviceVulkan12Features features) {
+    internal static IReadOnlyList<string> GetMissingFeatures(
+        in PhysicalDeviceVulkan12Features features
+    )
+    {
         List<string> missing = [];
-        if (features.DescriptorBindingPartiallyBound.Value == 0) {
+        if (features.DescriptorBindingPartiallyBound.Value == 0)
+        {
             missing.Add(PARTIALLY_BOUND);
         }
 
-        if (features.DescriptorBindingSampledImageUpdateAfterBind.Value == 0) {
+        if (features.DescriptorBindingSampledImageUpdateAfterBind.Value == 0)
+        {
             missing.Add(SAMPLED_IMAGE_UPDATE_AFTER_BIND);
         }
 
-        if (features.ShaderSampledImageArrayNonUniformIndexing.Value == 0) {
+        if (features.ShaderSampledImageArrayNonUniformIndexing.Value == 0)
+        {
             missing.Add(SAMPLED_IMAGE_ARRAY_NON_UNIFORM_INDEXING);
         }
 
@@ -58,13 +67,19 @@ internal static class VulkanBindlessFeatures {
     /// <param name="physicalDevice">The physical device to probe.</param>
     /// <returns>The device's Vulkan 1.2 feature support snapshot.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="vulkan"/> is <c>null</c>.</exception>
-    internal static unsafe PhysicalDeviceVulkan12Features Query(Vk vulkan, PhysicalDevice physicalDevice) {
+    internal static unsafe PhysicalDeviceVulkan12Features Query(
+        Vk vulkan,
+        PhysicalDevice physicalDevice
+    )
+    {
         ArgumentNullException.ThrowIfNull(vulkan);
 
-        PhysicalDeviceVulkan12Features features = new() {
+        PhysicalDeviceVulkan12Features features = new()
+        {
             SType = StructureType.PhysicalDeviceVulkan12Features,
         };
-        PhysicalDeviceFeatures2 features2 = new() {
+        PhysicalDeviceFeatures2 features2 = new()
+        {
             SType = StructureType.PhysicalDeviceFeatures2,
             PNext = &features,
         };
@@ -84,13 +99,16 @@ internal static class VulkanBindlessFeatures {
     /// <param name="physicalDevice">The physical device to probe.</param>
     /// <returns>The smaller of the per-stage and per-set update-after-bind sampled-image limits.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="vulkan"/> is <c>null</c>.</exception>
-    internal static unsafe uint QueryTextureCapacity(Vk vulkan, PhysicalDevice physicalDevice) {
+    internal static unsafe uint QueryTextureCapacity(Vk vulkan, PhysicalDevice physicalDevice)
+    {
         ArgumentNullException.ThrowIfNull(vulkan);
 
-        PhysicalDeviceVulkan12Properties properties = new() {
+        PhysicalDeviceVulkan12Properties properties = new()
+        {
             SType = StructureType.PhysicalDeviceVulkan12Properties,
         };
-        PhysicalDeviceProperties2 properties2 = new() {
+        PhysicalDeviceProperties2 properties2 = new()
+        {
             SType = StructureType.PhysicalDeviceProperties2,
             PNext = &properties,
         };
@@ -103,15 +121,18 @@ internal static class VulkanBindlessFeatures {
     /// </summary>
     /// <param name="properties">The device's Vulkan 1.2 properties snapshot.</param>
     /// <returns>The number of update-after-bind sampled images the device supports.</returns>
-    internal static uint GetTextureCapacity(in PhysicalDeviceVulkan12Properties properties) => Math.Min(
-        properties.MaxPerStageDescriptorUpdateAfterBindSampledImages,
-        properties.MaxDescriptorSetUpdateAfterBindSampledImages);
+    internal static uint GetTextureCapacity(in PhysicalDeviceVulkan12Properties properties) =>
+        Math.Min(
+            properties.MaxPerStageDescriptorUpdateAfterBindSampledImages,
+            properties.MaxDescriptorSetUpdateAfterBindSampledImages
+        );
 
     /// <summary>
     /// Enables the required subset on a device-creation feature chain.
     /// </summary>
     /// <param name="features">The feature structure to fill.</param>
-    internal static void Enable(ref PhysicalDeviceVulkan12Features features) {
+    internal static void Enable(ref PhysicalDeviceVulkan12Features features)
+    {
         features.DescriptorBindingPartiallyBound = true;
         features.DescriptorBindingSampledImageUpdateAfterBind = true;
         features.ShaderSampledImageArrayNonUniformIndexing = true;

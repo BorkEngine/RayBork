@@ -26,7 +26,8 @@ namespace RayBork.Internal;
 /// populated by the tick runner and the camera recorder.
 /// </para>
 /// </remarks>
-internal sealed class RenderFramePacket {
+internal sealed class RenderFramePacket
+{
     private CameraPass[] _passes = new CameraPass[2];
     private RenderDrawRecord[] _recordPool = new RenderDrawRecord[8];
     private int _passCount;
@@ -38,12 +39,15 @@ internal sealed class RenderFramePacket {
     /// <see cref="Reset"/> instead.
     /// </summary>
     /// <param name="frameIndex">The tick frame index assigned by the frame ring.</param>
-    internal RenderFramePacket(long frameIndex) {
-        for (int index = 0; index < _passes.Length; index++) {
+    internal RenderFramePacket(long frameIndex)
+    {
+        for (int index = 0; index < _passes.Length; index++)
+        {
             _passes[index] = new CameraPass();
         }
 
-        for (int index = 0; index < _recordPool.Length; index++) {
+        for (int index = 0; index < _recordPool.Length; index++)
+        {
             _recordPool[index] = new RenderDrawRecord();
         }
 
@@ -89,12 +93,15 @@ internal sealed class RenderFramePacket {
     /// set was already released by the ring and is replaced with a fresh set.
     /// </summary>
     /// <param name="frameIndex">The tick frame index assigned by the frame ring.</param>
-    internal void Reset(long frameIndex) {
-        for (int index = 0; index < _passCount; index++) {
+    internal void Reset(long frameIndex)
+    {
+        for (int index = 0; index < _passCount; index++)
+        {
             _passes[index].Reset();
         }
 
-        for (int index = 0; index < _recordCount; index++) {
+        for (int index = 0; index < _recordCount; index++)
+        {
             _recordPool[index].Reset();
         }
 
@@ -114,9 +121,13 @@ internal sealed class RenderFramePacket {
     /// <param name="time">Absolute seconds since the app started.</param>
     /// <param name="deltaTime">Clamped seconds since the previous tick.</param>
     /// <exception cref="InvalidOperationException">The packet is sealed.</exception>
-    internal void BeginRecording(double time, double deltaTime) {
-        if (_sealed) {
-            throw new InvalidOperationException("The frame packet is sealed; recording cannot start.");
+    internal void BeginRecording(double time, double deltaTime)
+    {
+        if (_sealed)
+        {
+            throw new InvalidOperationException(
+                "The frame packet is sealed; recording cannot start."
+            );
         }
 
         Time = time;
@@ -128,15 +139,21 @@ internal sealed class RenderFramePacket {
     /// </summary>
     /// <returns>The pass to populate and record draws into.</returns>
     /// <exception cref="InvalidOperationException">The packet is sealed.</exception>
-    internal CameraPass BeginPass() {
-        if (_sealed) {
-            throw new InvalidOperationException("The frame packet is sealed; a pass cannot be recorded.");
+    internal CameraPass BeginPass()
+    {
+        if (_sealed)
+        {
+            throw new InvalidOperationException(
+                "The frame packet is sealed; a pass cannot be recorded."
+            );
         }
 
-        if (_passCount == _passes.Length) {
+        if (_passCount == _passes.Length)
+        {
             int previousLength = _passes.Length;
             Array.Resize(ref _passes, checked(_passes.Length * 2));
-            for (int index = previousLength; index < _passes.Length; index++) {
+            for (int index = previousLength; index < _passes.Length; index++)
+            {
                 _passes[index] = new CameraPass();
             }
         }
@@ -152,15 +169,21 @@ internal sealed class RenderFramePacket {
     /// </summary>
     /// <returns>The record to populate.</returns>
     /// <exception cref="InvalidOperationException">The packet is sealed.</exception>
-    internal RenderDrawRecord RentDrawRecord() {
-        if (_sealed) {
-            throw new InvalidOperationException("The frame packet is sealed; a draw cannot be recorded.");
+    internal RenderDrawRecord RentDrawRecord()
+    {
+        if (_sealed)
+        {
+            throw new InvalidOperationException(
+                "The frame packet is sealed; a draw cannot be recorded."
+            );
         }
 
-        if (_recordCount == _recordPool.Length) {
+        if (_recordCount == _recordPool.Length)
+        {
             int previousLength = _recordPool.Length;
             Array.Resize(ref _recordPool, checked(_recordPool.Length * 2));
-            for (int index = previousLength; index < _recordPool.Length; index++) {
+            for (int index = previousLength; index < _recordPool.Length; index++)
+            {
                 _recordPool[index] = new RenderDrawRecord();
             }
         }
@@ -171,8 +194,10 @@ internal sealed class RenderFramePacket {
     /// <summary>
     /// Stops recording and seals every active pass. Idempotent.
     /// </summary>
-    internal void Seal() {
-        for (int index = 0; index < _passCount; index++) {
+    internal void Seal()
+    {
+        for (int index = 0; index < _passCount; index++)
+        {
             _passes[index].Seal();
         }
 

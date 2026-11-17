@@ -5,7 +5,8 @@ namespace RayBork.Bake.Processors;
 /// <summary>
 /// Adapts a processor's or validator's diagnostic calls into the bake diagnostic bag.
 /// </summary>
-internal sealed class BakeProcessorDiagnosticSink : IAssetProcessorDiagnostics {
+internal sealed class BakeProcessorDiagnosticSink : IAssetProcessorDiagnostics
+{
     private readonly string _ownerName;
     private readonly string _sourcePath;
     private readonly string? _assetPath;
@@ -23,7 +24,9 @@ internal sealed class BakeProcessorDiagnosticSink : IAssetProcessorDiagnostics {
         string sourcePath,
         string? assetPath,
         string defaultCode,
-        BakeDiagnostics diagnostics) {
+        BakeDiagnostics diagnostics
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(ownerName);
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
         ArgumentException.ThrowIfNullOrWhiteSpace(defaultCode);
@@ -40,7 +43,8 @@ internal sealed class BakeProcessorDiagnosticSink : IAssetProcessorDiagnostics {
     internal bool HasError { get; private set; }
 
     /// <inheritdoc/>
-    public void Error(string code, string message) {
+    public void Error(string code, string message)
+    {
         HasError = true;
         Add(BakeSeverity.Error, code, message);
     }
@@ -51,11 +55,12 @@ internal sealed class BakeProcessorDiagnosticSink : IAssetProcessorDiagnostics {
     /// <inheritdoc/>
     public void Info(string code, string message) => Add(BakeSeverity.Info, code, message);
 
-    private void Add(BakeSeverity severity, string code, string message)
-        => _diagnostics.Add(
+    private void Add(BakeSeverity severity, string code, string message) =>
+        _diagnostics.Add(
             severity,
             string.IsNullOrWhiteSpace(code) ? _defaultCode : code,
             $"{_ownerName}: {message}",
             _sourcePath,
-            assetPath: _assetPath);
+            assetPath: _assetPath
+        );
 }

@@ -8,7 +8,8 @@ using Tomlyn.Model;
 namespace RayBork.Bake.Sources;
 
 /// <summary>Binds a processor's settings table from its sidecar or table-named source.</summary>
-internal static class BakeSidecarBinder {
+internal static class BakeSidecarBinder
+{
     /// <summary>Binds the sidecar for one processor source.</summary>
     /// <param name="project">The validated project.</param>
     /// <param name="source">The processor source.</param>
@@ -21,7 +22,9 @@ internal static class BakeSidecarBinder {
         BakeSource source,
         AssetProcessorContext context,
         BakeDiagnostics diagnostics,
-        out object? sidecar) {
+        out object? sidecar
+    )
+    {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(context);
@@ -29,29 +32,35 @@ internal static class BakeSidecarBinder {
 
         sidecar = null;
         BakeProcessorRegistration? processor = source.Processor;
-        if (processor is null || processor.Policy == SidecarPolicy.None) {
+        if (processor is null || processor.Policy == SidecarPolicy.None)
+        {
             return true;
         }
 
-        if (source.SidecarDocument is null) {
+        if (source.SidecarDocument is null)
+        {
             return TryDefaultOrMissing(project, source, context, diagnostics, out sidecar);
         }
 
         TomlDocument sidecarDocument = source.SidecarDocument;
         string diagnosticPath = BakePath.ForDiagnostic(
             project.ProjectRoot,
-            source.SidecarPath ?? source.FullPath);
+            source.SidecarPath ?? source.FullPath
+        );
         TomlTable root = sidecarDocument.Root;
         var bindContext = new BakeBindContext(
             root,
             sidecarDocument.Syntax,
             diagnostics,
             diagnosticPath,
-            source.BaseAssetPath);
+            source.BaseAssetPath
+        );
 
         bool structureValid = true;
-        foreach (string key in root.Keys.OrderBy(key => key, StringComparer.Ordinal)) {
-            if (string.Equals(key, processor.Name, StringComparison.Ordinal)) {
+        foreach (string key in root.Keys.OrderBy(key => key, StringComparer.Ordinal))
+        {
+            if (string.Equals(key, processor.Name, StringComparison.Ordinal))
+            {
                 continue;
             }
 
@@ -60,41 +69,53 @@ internal static class BakeSidecarBinder {
                 $"Unknown root key '{key}' in the sidecar of processor '{processor.Name}'; a "
                     + $"sidecar contains only the '[{processor.Name}]' table.",
                 TomlPath.Root.Child(key),
-                memberPath: key);
+                memberPath: key
+            );
         }
 
-        if (!root.TryGetValue(processor.Name, out object? tableValue)
-            || tableValue is not TomlTable sidecarTable) {
+        if (
+            !root.TryGetValue(processor.Name, out object? tableValue)
+            || tableValue is not TomlTable sidecarTable
+        )
+        {
             bindContext.AddError(
                 $"The sidecar of processor '{processor.Name}' has no '[{processor.Name}]' table.",
-                memberPath: processor.Name);
+                memberPath: processor.Name
+            );
             return false;
         }
 
-        if (!structureValid || processor.SidecarShape is null) {
+        if (!structureValid || processor.SidecarShape is null)
+        {
             return false;
         }
 
         int before = diagnostics.Count;
         object? bound;
-        try {
+        try
+        {
             bound = TomlShapeBinder.BindTable(
                 processor.SidecarShape,
                 bindContext,
                 sidecarTable,
-                processor.Name);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+                processor.Name
+            );
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.TOML_INVALID,
                 $"Binding the sidecar of processor '{processor.Name}' failed unexpectedly: "
                     + exception.Message,
                 diagnosticPath,
-                assetPath: source.BaseAssetPath);
+                assetPath: source.BaseAssetPath
+            );
             return false;
         }
 
-        if (diagnostics.Count != before || bound is null) {
+        if (diagnostics.Count != before || bound is null)
+        {
             return false;
         }
 
@@ -107,13 +128,19 @@ internal static class BakeSidecarBinder {
         BakeSource source,
         AssetProcessorContext context,
         BakeDiagnostics diagnostics,
-        out object? sidecar) {
+        out object? sidecar
+    )
+    {
         sidecar = null;
         BakeProcessorRegistration processor = source.Processor!;
         string diagnosticPath = BakePath.ForDiagnostic(project.ProjectRoot, source.FullPath);
 
-        if (processor.Policy == SidecarPolicy.Required) {
-            string expected = source.RelativePath.EndsWith(".toml", StringComparison.OrdinalIgnoreCase)
+        if (processor.Policy == SidecarPolicy.Required)
+        {
+            string expected = source.RelativePath.EndsWith(
+                ".toml",
+                StringComparison.OrdinalIgnoreCase
+            )
                 ? source.RelativePath
                 : source.BaseAssetPath + ".toml";
             diagnostics.Add(
@@ -121,32 +148,39 @@ internal static class BakeSidecarBinder {
                 BakeDiagnosticCodes.TOML_INVALID,
                 $"The required sidecar for processor '{processor.Name}' is missing ('{expected}').",
                 diagnosticPath,
-                assetPath: source.BaseAssetPath);
+                assetPath: source.BaseAssetPath
+            );
             return false;
         }
 
-        try {
+        try
+        {
             object? created = processor.CreateDefaultSidecar(context);
-            if (created is null) {
+            if (created is null)
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.TOML_INVALID,
                     $"The processor '{processor.Name}' returned a null default sidecar.",
                     diagnosticPath,
-                    assetPath: source.BaseAssetPath);
+                    assetPath: source.BaseAssetPath
+                );
                 return false;
             }
 
             sidecar = created;
             return true;
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.TOML_INVALID,
                 $"Creating the default sidecar for processor '{processor.Name}' failed: "
                     + exception.Message,
                 diagnosticPath,
-                assetPath: source.BaseAssetPath);
+                assetPath: source.BaseAssetPath
+            );
             return false;
         }
     }

@@ -19,7 +19,8 @@ namespace RayBork;
 /// lifetime; it is not disposable and not thread-safe.
 /// </para>
 /// </remarks>
-public sealed class TonemappingSettings {
+public sealed class TonemappingSettings
+{
     private float _exposure;
     private float _agxWhite;
     private float _agxContrast;
@@ -32,7 +33,8 @@ public sealed class TonemappingSettings {
     /// <param name="agxWhite">The AgX white in scene-linear units. It must be finite and at least <c>2</c>.</param>
     /// <param name="agxContrast">The AgX curve contrast. It must be finite and at least <c>1</c>.</param>
     /// <exception cref="ArgumentOutOfRangeException">A value is outside its documented range.</exception>
-    internal TonemappingSettings(float exposure, float agxWhite, float agxContrast) {
+    internal TonemappingSettings(float exposure, float agxWhite, float agxContrast)
+    {
         ValidateExposure(exposure, nameof(Exposure));
         ValidateAgxWhite(agxWhite, nameof(AgxWhite));
         ValidateAgxContrast(agxContrast, nameof(AgxContrast));
@@ -52,9 +54,11 @@ public sealed class TonemappingSettings {
     /// Read and write it on the tick thread. A write during <see cref="IGame.Tick"/> applies to the
     /// frame that tick records.
     /// </remarks>
-    public float Exposure {
+    public float Exposure
+    {
         get => _exposure;
-        set {
+        set
+        {
             ValidateExposure(value, nameof(Exposure));
             TickThread.RequireCurrent(nameof(Exposure));
             _exposure = value;
@@ -74,9 +78,11 @@ public sealed class TonemappingSettings {
     /// Read and write it on the tick thread. A write during <see cref="IGame.Tick"/> applies to the
     /// frame that tick records.
     /// </remarks>
-    public float AgxWhite {
+    public float AgxWhite
+    {
         get => _agxWhite;
-        set {
+        set
+        {
             ValidateAgxWhite(value, nameof(AgxWhite));
             TickThread.RequireCurrent(nameof(AgxWhite));
             _agxWhite = value;
@@ -94,9 +100,11 @@ public sealed class TonemappingSettings {
     /// Read and write it on the tick thread. A write during <see cref="IGame.Tick"/> applies to the
     /// frame that tick records.
     /// </remarks>
-    public float AgxContrast {
+    public float AgxContrast
+    {
         get => _agxContrast;
-        set {
+        set
+        {
             ValidateAgxContrast(value, nameof(AgxContrast));
             TickThread.RequireCurrent(nameof(AgxContrast));
             _agxContrast = value;
@@ -109,30 +117,39 @@ public sealed class TonemappingSettings {
     /// <returns>The value snapshot the frame packet carries to the render thread.</returns>
     internal TonemappingSnapshot Snapshot() => new(_exposure, _agxWhite, _agxContrast);
 
-    private static void ValidateExposure(float exposure, string paramName) {
-        if (!float.IsFinite(exposure)) {
+    private static void ValidateExposure(float exposure, string paramName)
+    {
+        if (!float.IsFinite(exposure))
+        {
             throw new ArgumentOutOfRangeException(
                 paramName,
                 exposure,
-                "The exposure must be finite.");
+                "The exposure must be finite."
+            );
         }
     }
 
-    private static void ValidateAgxWhite(float agxWhite, string paramName) {
-        if (!float.IsFinite(agxWhite) || agxWhite < AgxCurveParameters.MIN_WHITE) {
+    private static void ValidateAgxWhite(float agxWhite, string paramName)
+    {
+        if (!float.IsFinite(agxWhite) || agxWhite < AgxCurveParameters.MIN_WHITE)
+        {
             throw new ArgumentOutOfRangeException(
                 paramName,
                 agxWhite,
-                "The AgX white must be finite and at least 2.");
+                "The AgX white must be finite and at least 2."
+            );
         }
     }
 
-    private static void ValidateAgxContrast(float agxContrast, string paramName) {
-        if (!float.IsFinite(agxContrast) || agxContrast < 1f) {
+    private static void ValidateAgxContrast(float agxContrast, string paramName)
+    {
+        if (!float.IsFinite(agxContrast) || agxContrast < 1f)
+        {
             throw new ArgumentOutOfRangeException(
                 paramName,
                 agxContrast,
-                "The AgX contrast must be finite and at least 1.");
+                "The AgX contrast must be finite and at least 1."
+            );
         }
     }
 }

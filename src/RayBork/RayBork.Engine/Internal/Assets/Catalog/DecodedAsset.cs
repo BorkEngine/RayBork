@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The engine asset type the factory creates.</typeparam>
-internal sealed class DecodedAsset<T> {
+internal sealed class DecodedAsset<T>
+{
     /// <summary>
     /// Initializes a decoded asset from its upload, asset factory, and optional CPU-only teardown.
     /// </summary>
@@ -30,7 +31,12 @@ internal sealed class DecodedAsset<T> {
     /// <see langword="null"/> when the asset has no CPU state beyond the public object.
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="create"/> is <c>null</c>.</exception>
-    internal DecodedAsset(AssetGpuUpload? upload, Func<EngineAsset, T> create, Action? release = null) {
+    internal DecodedAsset(
+        AssetGpuUpload? upload,
+        Func<EngineAsset, T> create,
+        Action? release = null
+    )
+    {
         ArgumentNullException.ThrowIfNull(create);
 
         Upload = upload;

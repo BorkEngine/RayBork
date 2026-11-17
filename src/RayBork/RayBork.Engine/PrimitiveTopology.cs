@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// The primitive topology of a mesh.
 /// </summary>
-public enum PrimitiveTopology {
+public enum PrimitiveTopology
+{
     /// <summary>Independent triangles, with three indices per triangle.</summary>
     TriangleList = 0,
 

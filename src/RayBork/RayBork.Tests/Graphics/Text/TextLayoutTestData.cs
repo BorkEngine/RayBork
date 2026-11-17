@@ -7,7 +7,8 @@ namespace RayBork.Tests.Graphics.Text;
 /// tests use to a glyph with a <c>0.5</c> em advance (the emoji is <c>1</c> em) and an empty quad, so
 /// positions, line widths, and bounds are easy to hand-compute.
 /// </summary>
-internal static class TextLayoutTestData {
+internal static class TextLayoutTestData
+{
     internal const float LINE_HEIGHT = 1.5f;
     internal const float ASCENT = 1f;
     internal const float ADVANCE = 0.5f;
@@ -22,7 +23,8 @@ internal static class TextLayoutTestData {
     internal const int GLYPH_EMOJI = 50;
     internal const int GLYPH_REPLACEMENT = 99;
 
-    internal static FakeTextMetrics CreateUniform() {
+    internal static FakeTextMetrics CreateUniform()
+    {
         return new FakeTextMetrics(LINE_HEIGHT, ASCENT)
             .Glyph('a', GLYPH_A, ADVANCE)
             .Glyph('b', GLYPH_B, ADVANCE)

@@ -31,17 +31,20 @@ namespace RayBork.Bake.Sources;
 /// created or rewritten. Duplicate canonical paths are reported immediately and fail the pack.
 /// </para>
 /// </remarks>
-internal static class BakeSourceDiscovery {
+internal static class BakeSourceDiscovery
+{
     /// <summary>Discovers the sources of every configured pack.</summary>
     /// <param name="project">The validated project.</param>
     /// <param name="diagnostics">The diagnostic bag.</param>
     /// <returns>The source lists.</returns>
-    internal static BakeSourceSet Discover(BakeProject project, BakeDiagnostics diagnostics) {
+    internal static BakeSourceSet Discover(BakeProject project, BakeDiagnostics diagnostics)
+    {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
         var packs = new List<BakePackSources>(project.Packs.Count);
-        foreach (BakePack pack in project.Packs) {
+        foreach (BakePack pack in project.Packs)
+        {
             packs.Add(DiscoverPack(project, pack, diagnostics));
         }
 
@@ -51,32 +54,46 @@ internal static class BakeSourceDiscovery {
     private static BakePackSources DiscoverPack(
         BakeProject project,
         BakePack pack,
-        BakeDiagnostics diagnostics) {
+        BakeDiagnostics diagnostics
+    )
+    {
         var sources = new List<BakeSource>();
         var byBasePath = new Dictionary<string, BakeSource>(StringComparer.Ordinal);
         var fileStems = new Dictionary<string, BakeSource>(StringComparer.OrdinalIgnoreCase);
         var tomlPaths = new List<(string FullPath, string RelativePath)>();
         var otherPaths = new List<(string FullPath, string RelativePath)>();
 
-        foreach (string fullPath in BakePath.EnumerateFilesSorted(pack.Root)) {
-            if (!TryMakeRelative(pack.Root, fullPath, out string relativePath)) {
+        foreach (string fullPath in BakePath.EnumerateFilesSorted(pack.Root))
+        {
+            if (!TryMakeRelative(pack.Root, fullPath, out string relativePath))
+            {
                 continue;
             }
 
-            bool isPlainToml = BakePath.IsToml(relativePath)
-                && !(project.ProcessorRegistry.TryMatch(relativePath, out BakeProcessorMatch tomlMatch)
-                    && tomlMatch.Extension.Contains('.', StringComparison.Ordinal));
-            if (isPlainToml) {
+            bool isPlainToml =
+                BakePath.IsToml(relativePath)
+                && !(
+                    project.ProcessorRegistry.TryMatch(
+                        relativePath,
+                        out BakeProcessorMatch tomlMatch
+                    ) && tomlMatch.Extension.Contains('.', StringComparison.Ordinal)
+                );
+            if (isPlainToml)
+            {
                 tomlPaths.Add((fullPath, relativePath));
-            } else {
+            }
+            else
+            {
                 otherPaths.Add((fullPath, relativePath));
             }
         }
 
         var tomlFiles = new List<TomlFile>(tomlPaths.Count);
-        foreach ((string fullPath, string relativePath) in tomlPaths) {
+        foreach ((string fullPath, string relativePath) in tomlPaths)
+        {
             TomlFile? toml = ReadTomlFile(project, fullPath, relativePath, diagnostics);
-            if (toml is not null) {
+            if (toml is not null)
+            {
                 tomlFiles.Add(toml);
             }
         }
@@ -87,26 +104,33 @@ internal static class BakeSourceDiscovery {
         var tableTomls = new List<(TomlFile Toml, BakeProcessorRegistration Processor)>();
         var trackedInputs = new HashSet<string>(PathComparer);
 
-        foreach (TomlFile toml in tomlFiles) {
+        foreach (TomlFile toml in tomlFiles)
+        {
             TomlTable root = toml.Document.Root;
             string diagnosticPath = DiagnosticPath(project, toml.FullPath);
 
-            if (root.TryGetValue("raybork", out object? metadata) && metadata is TomlTable) {
+            if (root.TryGetValue("raybork", out object? metadata) && metadata is TomlTable)
+            {
                 dataTomls.Add(toml);
                 continue;
             }
 
             string stem = BakePath.RemoveFinalExtension(toml.RelativePath);
-            if (owners.TryGetValue(stem, out OwnerCandidate? owner)) {
-                if (owner.Processor.Policy == SidecarPolicy.None) {
+            if (owners.TryGetValue(stem, out OwnerCandidate? owner))
+            {
+                if (owner.Processor.Policy == SidecarPolicy.None)
+                {
                     diagnostics.Add(
                         BakeSeverity.Error,
                         BakeDiagnosticCodes.TOML_INVALID,
                         $"The TOML file '{toml.RelativePath}' is next to '{owner.RelativePath}', whose "
                             + $"processor '{owner.Processor.Name}' declares no sidecar.",
                         diagnosticPath,
-                        assetPath: owner.BaseAssetPath);
-                } else {
+                        assetPath: owner.BaseAssetPath
+                    );
+                }
+                else
+                {
                     sidecarTomls.Add(toml);
                 }
 
@@ -115,26 +139,31 @@ internal static class BakeSourceDiscovery {
 
             List<(TomlTable Table, BakeProcessorRegistration Processor)> namedTables =
                 FindNamedTables(root, project.Processors);
-            if (namedTables.Count == 1) {
+            if (namedTables.Count == 1)
+            {
                 tableTomls.Add((toml, namedTables[0].Processor));
                 CollectTrackedInputs(
                     namedTables[0].Table,
                     Path.GetDirectoryName(toml.FullPath) ?? pack.Root,
                     pack.Root,
-                    trackedInputs);
+                    trackedInputs
+                );
                 continue;
             }
 
-            if (namedTables.Count > 1) {
+            if (namedTables.Count > 1)
+            {
                 string names = string.Join(
                     ", ",
-                    namedTables.Select(static entry => $"'{entry.Processor.Name}'"));
+                    namedTables.Select(static entry => $"'{entry.Processor.Name}'")
+                );
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.TOML_INVALID,
                     $"The TOML file '{toml.RelativePath}' declares more than one processor table: "
                         + $"{names}. A TOML file may be a source or sidecar for exactly one processor.",
-                    diagnosticPath);
+                    diagnosticPath
+                );
                 continue;
             }
 
@@ -144,40 +173,58 @@ internal static class BakeSourceDiscovery {
                 $"The TOML file '{toml.RelativePath}' has no root '[raybork]' table, no matching "
                     + "sibling source, and no table naming a registered processor. It is an orphan "
                     + "sidecar.",
-                diagnosticPath);
+                diagnosticPath
+            );
         }
 
-        foreach ((string fullPath, string relativePath) in otherPaths) {
-            if (trackedInputs.Contains(fullPath)) {
+        foreach ((string fullPath, string relativePath) in otherPaths)
+        {
+            if (trackedInputs.Contains(fullPath))
+            {
                 continue;
             }
 
-            ClassifyNonToml(project, pack, fullPath, relativePath, sources, byBasePath, fileStems, diagnostics);
+            ClassifyNonToml(
+                project,
+                pack,
+                fullPath,
+                relativePath,
+                sources,
+                byBasePath,
+                fileStems,
+                diagnostics
+            );
         }
 
-        foreach (TomlFile toml in dataTomls) {
+        foreach (TomlFile toml in dataTomls)
+        {
             AddDataToml(project, pack, toml, sources, byBasePath, diagnostics);
         }
 
-        foreach (TomlFile toml in sidecarTomls) {
+        foreach (TomlFile toml in sidecarTomls)
+        {
             string stem = BakePath.RemoveFinalExtension(toml.RelativePath);
-            if (!fileStems.TryGetValue(stem, out BakeSource? sibling)) {
+            if (!fileStems.TryGetValue(stem, out BakeSource? sibling))
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.TOML_INVALID,
                     $"The sidecar '{toml.RelativePath}' has no matching source file.",
-                    DiagnosticPath(project, toml.FullPath));
+                    DiagnosticPath(project, toml.FullPath)
+                );
                 continue;
             }
 
-            if (sibling.SidecarPath is not null) {
+            if (sibling.SidecarPath is not null)
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.TOML_INVALID,
                     $"The source '{sibling.RelativePath}' has more than one sidecar: "
                         + $"'{sibling.SidecarRelativePath}' and '{toml.RelativePath}'.",
                     DiagnosticPath(project, toml.FullPath),
-                    assetPath: sibling.BaseAssetPath);
+                    assetPath: sibling.BaseAssetPath
+                );
                 continue;
             }
 
@@ -186,34 +233,46 @@ internal static class BakeSourceDiscovery {
             sibling.SidecarDocument = toml.Document;
         }
 
-        foreach ((TomlFile toml, BakeProcessorRegistration processor) in tableTomls) {
+        foreach ((TomlFile toml, BakeProcessorRegistration processor) in tableTomls)
+        {
             AddTableToml(project, pack, toml, processor, sources, byBasePath, diagnostics);
         }
 
-        sources.Sort(static (left, right) => string.CompareOrdinal(left.RelativePath, right.RelativePath));
+        sources.Sort(
+            static (left, right) => string.CompareOrdinal(left.RelativePath, right.RelativePath)
+        );
         return new BakePackSources(pack, sources);
     }
 
     private static Dictionary<string, OwnerCandidate> BuildOwners(
         BakeProject project,
-        IReadOnlyList<(string FullPath, string RelativePath)> files) {
+        IReadOnlyList<(string FullPath, string RelativePath)> files
+    )
+    {
         var owners = new Dictionary<string, OwnerCandidate>(StringComparer.OrdinalIgnoreCase);
-        foreach ((string fullPath, string relativePath) in files) {
-            if (!project.ProcessorRegistry.TryMatch(relativePath, out BakeProcessorMatch match)) {
+        foreach ((string fullPath, string relativePath) in files)
+        {
+            if (!project.ProcessorRegistry.TryMatch(relativePath, out BakeProcessorMatch match))
+            {
                 continue;
             }
 
-            if (!BakePath.TryToCanonicalBase(
-                relativePath,
-                match.Extension,
-                out string baseAssetPath,
-                out _)) {
+            if (
+                !BakePath.TryToCanonicalBase(
+                    relativePath,
+                    match.Extension,
+                    out string baseAssetPath,
+                    out _
+                )
+            )
+            {
                 continue;
             }
 
             owners.TryAdd(
                 BakePath.RemoveMatchedExtension(relativePath, match.Extension),
-                new OwnerCandidate(relativePath, baseAssetPath, match.Processor));
+                new OwnerCandidate(relativePath, baseAssetPath, match.Processor)
+            );
         }
 
         return owners;
@@ -227,20 +286,28 @@ internal static class BakeSourceDiscovery {
         List<BakeSource> sources,
         Dictionary<string, BakeSource> byBasePath,
         Dictionary<string, BakeSource> fileStems,
-        BakeDiagnostics diagnostics) {
-        if (project.ProcessorRegistry.TryMatch(relativePath, out BakeProcessorMatch match)) {
-            if (!BakePath.TryToCanonicalBase(
-                relativePath,
-                match.Extension,
-                out string baseAssetPath,
-                out string? reason)) {
+        BakeDiagnostics diagnostics
+    )
+    {
+        if (project.ProcessorRegistry.TryMatch(relativePath, out BakeProcessorMatch match))
+        {
+            if (
+                !BakePath.TryToCanonicalBase(
+                    relativePath,
+                    match.Extension,
+                    out string baseAssetPath,
+                    out string? reason
+                )
+            )
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.SOURCE_INVALID,
                     $"The processor source '{relativePath}' does not map to a canonical base asset "
                         + $"path: {reason}. The processor '{match.Processor.Name}' owns the "
                         + $"'{match.Extension}' extension.",
-                    DiagnosticPath(project, fullPath));
+                    DiagnosticPath(project, fullPath)
+                );
                 return;
             }
 
@@ -251,7 +318,8 @@ internal static class BakeSourceDiscovery {
                 relativePath,
                 baseAssetPath,
                 match.Processor,
-                match.Extension);
+                match.Extension
+            );
             AddSource(
                 pack,
                 source,
@@ -260,32 +328,40 @@ internal static class BakeSourceDiscovery {
                 fileStems,
                 addFileStem: match.Processor.Policy != SidecarPolicy.None,
                 project,
-                diagnostics);
+                diagnostics
+            );
             return;
         }
 
         BakeProcessorRegistration? fallback = project.ProcessorRegistry.Fallback;
-        if (fallback is null) {
+        if (fallback is null)
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.SOURCE_INVALID,
                 $"The source '{relativePath}' in pack '{pack.PackPath}' is not claimed by any "
                     + "processor, and no raw fallback processor is registered.",
-                DiagnosticPath(project, fullPath));
+                DiagnosticPath(project, fullPath)
+            );
             return;
         }
 
         string extension = BakePath.GetFinalExtension(relativePath);
-        if (!BakePath.TryToCanonicalBase(
-            relativePath,
-            extension,
-            out string rawBasePath,
-            out string? rawReason)) {
+        if (
+            !BakePath.TryToCanonicalBase(
+                relativePath,
+                extension,
+                out string rawBasePath,
+                out string? rawReason
+            )
+        )
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.SOURCE_INVALID,
                 $"The raw source '{relativePath}' does not map to a canonical asset path: {rawReason}.",
-                DiagnosticPath(project, fullPath));
+                DiagnosticPath(project, fullPath)
+            );
             return;
         }
 
@@ -296,7 +372,8 @@ internal static class BakeSourceDiscovery {
             relativePath,
             rawBasePath,
             fallback,
-            extension);
+            extension
+        );
         AddSource(
             pack,
             rawSource,
@@ -305,7 +382,8 @@ internal static class BakeSourceDiscovery {
             fileStems,
             addFileStem: false,
             project,
-            diagnostics);
+            diagnostics
+        );
     }
 
     private static void AddDataToml(
@@ -314,18 +392,25 @@ internal static class BakeSourceDiscovery {
         TomlFile toml,
         List<BakeSource> sources,
         Dictionary<string, BakeSource> byBasePath,
-        BakeDiagnostics diagnostics) {
-        if (!BakePath.TryToCanonicalBase(
-            toml.RelativePath,
-            "toml",
-            out string assetPath,
-            out string? reason)) {
+        BakeDiagnostics diagnostics
+    )
+    {
+        if (
+            !BakePath.TryToCanonicalBase(
+                toml.RelativePath,
+                "toml",
+                out string assetPath,
+                out string? reason
+            )
+        )
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.SOURCE_INVALID,
                 $"The data TOML '{toml.RelativePath}' does not map to a canonical asset path: "
                     + $"{reason}. A data TOML name must not contain an extension or dot.",
-                DiagnosticPath(project, toml.FullPath));
+                DiagnosticPath(project, toml.FullPath)
+            );
             return;
         }
 
@@ -337,7 +422,8 @@ internal static class BakeSourceDiscovery {
             assetPath,
             processor: null,
             matchedExtension: null,
-            toml.Document);
+            toml.Document
+        );
         AddSource(
             pack,
             source,
@@ -346,7 +432,8 @@ internal static class BakeSourceDiscovery {
             new Dictionary<string, BakeSource>(StringComparer.OrdinalIgnoreCase),
             addFileStem: false,
             project,
-            diagnostics);
+            diagnostics
+        );
     }
 
     private static void AddTableToml(
@@ -356,18 +443,25 @@ internal static class BakeSourceDiscovery {
         BakeProcessorRegistration processor,
         List<BakeSource> sources,
         Dictionary<string, BakeSource> byBasePath,
-        BakeDiagnostics diagnostics) {
-        if (!BakePath.TryToCanonicalBase(
-            toml.RelativePath,
-            "toml",
-            out string assetPath,
-            out string? reason)) {
+        BakeDiagnostics diagnostics
+    )
+    {
+        if (
+            !BakePath.TryToCanonicalBase(
+                toml.RelativePath,
+                "toml",
+                out string assetPath,
+                out string? reason
+            )
+        )
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.SOURCE_INVALID,
                 $"The processor TOML '{toml.RelativePath}' does not map to a canonical asset "
                     + $"path: {reason}.",
-                DiagnosticPath(project, toml.FullPath));
+                DiagnosticPath(project, toml.FullPath)
+            );
             return;
         }
 
@@ -380,7 +474,9 @@ internal static class BakeSourceDiscovery {
             assetPath,
             processor,
             matchedExtension: "toml",
-            document) {
+            document
+        )
+        {
             SidecarPath = toml.FullPath,
             SidecarRelativePath = toml.RelativePath,
             SidecarDocument = document,
@@ -393,20 +489,27 @@ internal static class BakeSourceDiscovery {
             new Dictionary<string, BakeSource>(StringComparer.OrdinalIgnoreCase),
             addFileStem: false,
             project,
-            diagnostics);
+            diagnostics
+        );
     }
 
     private static List<(TomlTable Table, BakeProcessorRegistration Processor)> FindNamedTables(
         TomlTable root,
-        IReadOnlyList<BakeProcessorRegistration> processors) {
+        IReadOnlyList<BakeProcessorRegistration> processors
+    )
+    {
         var matches = new List<(TomlTable, BakeProcessorRegistration)>();
-        foreach (string key in root.Keys) {
-            if (root[key] is not TomlTable table) {
+        foreach (string key in root.Keys)
+        {
+            if (root[key] is not TomlTable table)
+            {
                 continue;
             }
 
-            foreach (BakeProcessorRegistration processor in processors) {
-                if (string.Equals(key, processor.Name, StringComparison.Ordinal)) {
+            foreach (BakeProcessorRegistration processor in processors)
+            {
+                if (string.Equals(key, processor.Name, StringComparison.Ordinal))
+                {
                     matches.Add((table, processor));
                     break;
                 }
@@ -420,43 +523,58 @@ internal static class BakeSourceDiscovery {
         object? value,
         string sourceDirectory,
         string packRoot,
-        HashSet<string> trackedInputs) {
-        switch (value) {
+        HashSet<string> trackedInputs
+    )
+    {
+        switch (value)
+        {
             case string text:
-                if (string.IsNullOrWhiteSpace(text) || Path.IsPathRooted(text)) {
+                if (string.IsNullOrWhiteSpace(text) || Path.IsPathRooted(text))
+                {
                     return;
                 }
 
                 string candidate;
-                try {
+                try
+                {
                     candidate = Path.GetFullPath(Path.Combine(sourceDirectory, text));
-                } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-                    or PathTooLongException) {
+                }
+                catch (Exception exception)
+                    when (exception
+                            is ArgumentException
+                                or NotSupportedException
+                                or PathTooLongException
+                    )
+                {
                     return;
                 }
 
-                if (BakePath.IsUnderRoot(packRoot, candidate) && File.Exists(candidate)) {
+                if (BakePath.IsUnderRoot(packRoot, candidate) && File.Exists(candidate))
+                {
                     trackedInputs.Add(candidate);
                 }
 
                 return;
 
             case TomlTable table:
-                foreach (object item in table.Values) {
+                foreach (object item in table.Values)
+                {
                     CollectTrackedInputs(item, sourceDirectory, packRoot, trackedInputs);
                 }
 
                 return;
 
             case TomlArray array:
-                foreach (object? item in array) {
+                foreach (object? item in array)
+                {
                     CollectTrackedInputs(item, sourceDirectory, packRoot, trackedInputs);
                 }
 
                 return;
 
             case TomlTableArray tableArray:
-                foreach (TomlTable table in tableArray) {
+                foreach (TomlTable table in tableArray)
+                {
                     CollectTrackedInputs(table, sourceDirectory, packRoot, trackedInputs);
                 }
 
@@ -472,8 +590,11 @@ internal static class BakeSourceDiscovery {
         Dictionary<string, BakeSource> fileStems,
         bool addFileStem,
         BakeProject project,
-        BakeDiagnostics diagnostics) {
-        if (byBasePath.TryGetValue(source.BaseAssetPath, out BakeSource? existing)) {
+        BakeDiagnostics diagnostics
+    )
+    {
+        if (byBasePath.TryGetValue(source.BaseAssetPath, out BakeSource? existing))
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.SOURCE_INVALID,
@@ -481,15 +602,18 @@ internal static class BakeSourceDiscovery {
                     + $"'{pack.PackPath}' both map to the canonical asset path "
                     + $"'{source.BaseAssetPath}'.",
                 DiagnosticPath(project, source.FullPath),
-                assetPath: source.BaseAssetPath);
+                assetPath: source.BaseAssetPath
+            );
             return;
         }
 
         byBasePath.Add(source.BaseAssetPath, source);
-        if (addFileStem && source.MatchedExtension is not null) {
+        if (addFileStem && source.MatchedExtension is not null)
+        {
             fileStems.TryAdd(
                 BakePath.RemoveMatchedExtension(source.RelativePath, source.MatchedExtension),
-                source);
+                source
+            );
         }
 
         sources.Add(source);
@@ -499,23 +623,31 @@ internal static class BakeSourceDiscovery {
         BakeProject project,
         string fullPath,
         string relativePath,
-        BakeDiagnostics diagnostics) {
+        BakeDiagnostics diagnostics
+    )
+    {
         string diagnosticPath = DiagnosticPath(project, fullPath);
-        if (!BakeSourceText.TryRead(fullPath, diagnosticPath, diagnostics, out string text)) {
+        if (!BakeSourceText.TryRead(fullPath, diagnosticPath, diagnostics, out string text))
+        {
             return null;
         }
 
-        if (!TomlDocument.TryParse(text, diagnosticPath, diagnostics, out TomlDocument? document)
-            || document is null) {
+        if (
+            !TomlDocument.TryParse(text, diagnosticPath, diagnostics, out TomlDocument? document)
+            || document is null
+        )
+        {
             return null;
         }
 
         return new TomlFile(fullPath, relativePath, document);
     }
 
-    private static bool TryMakeRelative(string root, string fullPath, out string relativePath) {
+    private static bool TryMakeRelative(string root, string fullPath, out string relativePath)
+    {
         relativePath = string.Empty;
-        if (!BakePath.IsUnderRoot(root, fullPath)) {
+        if (!BakePath.IsUnderRoot(root, fullPath))
+        {
             return false;
         }
 
@@ -523,16 +655,17 @@ internal static class BakeSourceDiscovery {
         return relativePath.Length > 0 && relativePath != ".";
     }
 
-    private static string DiagnosticPath(BakeProject project, string fullPath)
-        => BakePath.ForDiagnostic(project.ProjectRoot, fullPath);
+    private static string DiagnosticPath(BakeProject project, string fullPath) =>
+        BakePath.ForDiagnostic(project.ProjectRoot, fullPath);
 
-    private static StringComparer PathComparer
-        => OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+    private static StringComparer PathComparer =>
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     private sealed record TomlFile(string FullPath, string RelativePath, TomlDocument Document);
 
     private sealed record OwnerCandidate(
         string RelativePath,
         string BaseAssetPath,
-        BakeProcessorRegistration Processor);
+        BakeProcessorRegistration Processor
+    );
 }

@@ -6,7 +6,8 @@ namespace RayBork.Tests.Assets.Gpu;
 /// One fake GPU upload. It completes immediately by default or stays pending until a test calls
 /// <see cref="Complete"/> or <see cref="Fail"/> when the worker is in deferred mode.
 /// </summary>
-internal sealed class FakeGpuAssetUploadOperation : GpuAssetUploadOperation {
+internal sealed class FakeGpuAssetUploadOperation : GpuAssetUploadOperation
+{
     private readonly Action _onProgress;
     private int _finished;
     private int _canceled;
@@ -25,13 +26,16 @@ internal sealed class FakeGpuAssetUploadOperation : GpuAssetUploadOperation {
         AssetGpuUpload upload,
         GpuAssetResource resource,
         bool complete,
-        Action onProgress)
-        : base(upload) {
+        Action onProgress
+    )
+        : base(upload)
+    {
         ArgumentNullException.ThrowIfNull(onProgress);
 
         Resource = resource;
         _onProgress = onProgress;
-        if (complete) {
+        if (complete)
+        {
             MarkFinished();
         }
     }
@@ -59,7 +63,8 @@ internal sealed class FakeGpuAssetUploadOperation : GpuAssetUploadOperation {
     /// <summary>
     /// Finishes the operation successfully.
     /// </summary>
-    internal void Complete() {
+    internal void Complete()
+    {
         MarkFinished();
         _onProgress();
     }
@@ -68,7 +73,8 @@ internal sealed class FakeGpuAssetUploadOperation : GpuAssetUploadOperation {
     /// Finishes the operation with <paramref name="error"/>.
     /// </summary>
     /// <param name="error">The failure the bridge observes.</param>
-    internal void Fail(Exception error) {
+    internal void Fail(Exception error)
+    {
         ArgumentNullException.ThrowIfNull(error);
 
         Error = error;
@@ -80,8 +86,10 @@ internal sealed class FakeGpuAssetUploadOperation : GpuAssetUploadOperation {
     /// Marks the operation canceled.
     /// </summary>
     /// <returns><see langword="true"/> for the first call; <see langword="false"/> afterwards.</returns>
-    internal bool TryMarkCanceled() {
-        if (Interlocked.Exchange(ref _canceled, 1) != 0) {
+    internal bool TryMarkCanceled()
+    {
+        if (Interlocked.Exchange(ref _canceled, 1) != 0)
+        {
             return false;
         }
 

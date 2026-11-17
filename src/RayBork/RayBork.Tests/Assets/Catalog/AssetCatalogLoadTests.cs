@@ -3,17 +3,23 @@ using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests.Assets.Catalog;
 
-public sealed class AssetCatalogLoadTests {
+public sealed class AssetCatalogLoadTests
+{
     private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadsMeshMetadataAndCreatesOneUpload() {
+    public async Task LoadsMeshMetadataAndCreatesOneUpload()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken);
+        Mesh mesh = await harness.Catalog.Load<Mesh>(
+            "/meshes/quad",
+            TestContext.Current.CancellationToken
+        );
 
-        try {
+        try
+        {
             Assert.Equal("/meshes/quad", mesh.Path);
             Assert.False(mesh.IsProcedural);
             Assert.Equal(3, mesh.VertexCount);
@@ -27,15 +33,19 @@ public sealed class AssetCatalogLoadTests {
             Assert.Equal(1, harness.Worker.UploadCallCount);
             MeshGpuUpload upload = Assert.IsType<MeshGpuUpload>(harness.Worker.UploadCalls[0]);
             Assert.Equal("meshes/quad", upload.Path);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadedMeshRoundTripsThePackedCpuVerticesAndIndices() {
-        Vertex[] vertices = [
+    public async Task LoadedMeshRoundTripsThePackedCpuVerticesAndIndices()
+    {
+        Vertex[] vertices =
+        [
             new(
                 new System.Numerics.Vector3(1.5f, -2.5f, 3.5f),
                 new System.Numerics.Vector3(0f, 0f, 1f),
@@ -44,12 +54,17 @@ public sealed class AssetCatalogLoadTests {
                 new System.Numerics.Vector2(0.625f, 0.75f),
                 new System.Numerics.Vector2(0.875f, 1f),
                 new Color(0.2f, 0.4f, 0.6f, 0.8f),
-                new System.Numerics.Vector4(1f, 0f, 0f, -1f)),
+                new System.Numerics.Vector4(1f, 0f, 0f, -1f)
+            ),
             new(new System.Numerics.Vector3(-1f, 2f, -3f)),
-            new(new System.Numerics.Vector3(0f, 0f, 0f), normal: new System.Numerics.Vector3(0f, 1f, 0f)),
+            new(
+                new System.Numerics.Vector3(0f, 0f, 0f),
+                normal: new System.Numerics.Vector3(0f, 1f, 0f)
+            ),
         ];
         uint[] indices = [2, 1, 0];
-        MeshAssetDescriptor descriptor = new() {
+        MeshAssetDescriptor descriptor = new()
+        {
             Payload = "meshes/cpu-mesh",
             VertexCount = 3,
             IndexCount = 3,
@@ -58,15 +73,25 @@ public sealed class AssetCatalogLoadTests {
         };
         byte[] pack = CatalogTestData.BuildPack(
             ("meshes/cpu", AssetEntryType.Mesh, AssetSerialization.Serialize(descriptor)),
-            ("meshes/cpu-mesh", AssetEntryType.Raw, CatalogTestData.CreateMeshPayload(vertices, indices)));
+            (
+                "meshes/cpu-mesh",
+                AssetEntryType.Raw,
+                CatalogTestData.CreateMeshPayload(vertices, indices)
+            )
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
-        Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/cpu", TestContext.Current.CancellationToken);
+        Mesh mesh = await harness.Catalog.Load<Mesh>(
+            "/meshes/cpu",
+            TestContext.Current.CancellationToken
+        );
 
-        try {
+        try
+        {
             Assert.False(mesh.IsProcedural);
             Assert.Equal(3, mesh.Vertices.Length);
-            for (int index = 0; index < vertices.Length; index++) {
+            for (int index = 0; index < vertices.Length; index++)
+            {
                 Vertex expected = vertices[index];
                 Vertex actual = mesh.Vertices.Span[index];
                 Assert.Equal(expected.Position, actual.Position);
@@ -80,58 +105,83 @@ public sealed class AssetCatalogLoadTests {
             }
 
             Assert.Equal(indices, mesh.Indices.ToArray());
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ReservedProceduralPathIsNeverResolvedFromAPack() {
+    public async Task ReservedProceduralPathIsNeverResolvedFromAPack()
+    {
         byte[] pack = CatalogTestData.BuildPack(
-            ("_procedural/mesh/7", AssetEntryType.Mesh, AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())),
-            ("_procedural/mesh/7-mesh", AssetEntryType.Raw, CatalogTestData.CreateMeshPayload()));
+            (
+                "_procedural/mesh/7",
+                AssetEntryType.Mesh,
+                AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())
+            ),
+            ("_procedural/mesh/7-mesh", AssetEntryType.Raw, CatalogTestData.CreateMeshPayload())
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
         Assert.False(harness.Catalog.Exists("/_procedural/mesh/7"));
-        AssetNotFoundException loadFailure = await Assert.ThrowsAsync<AssetNotFoundException>(
-            () => harness.Catalog.Load<Mesh>("/_procedural/mesh/7", TestContext.Current.CancellationToken));
+        AssetNotFoundException loadFailure = await Assert.ThrowsAsync<AssetNotFoundException>(() =>
+            harness.Catalog.Load<Mesh>("/_procedural/mesh/7", TestContext.Current.CancellationToken)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, loadFailure.DiagnosticCode);
-        await Assert.ThrowsAsync<AssetNotFoundException>(
-            () => harness.Catalog.LoadData("/_procedural/mesh/7", TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<AssetNotFoundException>(() =>
+            harness.Catalog.LoadData("/_procedural/mesh/7", TestContext.Current.CancellationToken)
+        );
         Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadsTextureMetadata() {
+    public async Task LoadsTextureMetadata()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        Texture texture = await harness.Catalog.Load<Texture>("/textures/albedo", TestContext.Current.CancellationToken);
+        Texture texture = await harness.Catalog.Load<Texture>(
+            "/textures/albedo",
+            TestContext.Current.CancellationToken
+        );
 
-        try {
+        try
+        {
             Assert.Equal("/textures/albedo", texture.Path);
             Assert.Equal(4, texture.Width);
             Assert.Equal(2, texture.Height);
             Assert.Equal(3, texture.MipLevels);
             Assert.Equal(TextureFormat.Rgba8Srgb, texture.Format);
             Assert.True(texture.IsSrgb);
-            Assert.Equal(new SamplerState(TextureFilter.Linear, TextureWrap.Repeat, 1f), texture.Sampler);
+            Assert.Equal(
+                new SamplerState(TextureFilter.Linear, TextureWrap.Repeat, 1f),
+                texture.Sampler
+            );
             Assert.Equal(1, harness.Worker.UploadCallCount);
             Assert.IsType<TextureGpuUpload>(harness.Worker.UploadCalls[0]);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadsShaderMetadataFromTheDescriptor() {
+    public async Task LoadsShaderMetadataFromTheDescriptor()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        Shader shader = await harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken);
+        Shader shader = await harness.Catalog.Load<Shader>(
+            "/shaders/basic",
+            TestContext.Current.CancellationToken
+        );
 
-        try {
+        try
+        {
             Assert.Equal("/shaders/basic", shader.Path);
             Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, shader.Stages);
             Assert.Equal(RenderState.AlphaBlend, shader.DefaultRenderState);
@@ -141,14 +191,17 @@ public sealed class AssetCatalogLoadTests {
             Assert.Equal(new ShaderTextureBinding("mainTexture", 0), binding);
             Assert.Equal(1, harness.Worker.UploadCallCount);
             Assert.IsType<ShaderGpuUpload>(harness.Worker.UploadCalls[0]);
-        } finally {
+        }
+        finally
+        {
             shader.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task SamePathAndTypeReturnsTheSameObjectAndOneUpload() {
+    public async Task SamePathAndTypeReturnsTheSameObjectAndOneUpload()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -166,20 +219,26 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadDataReturnsDescriptorBytesForTypedAssets() {
+    public async Task LoadDataReturnsDescriptorBytesForTypedAssets()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
         byte[] descriptor = await harness.Catalog.LoadData(
             "/meshes/quad",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
-        Assert.Equal(AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor()), descriptor);
+        Assert.Equal(
+            AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor()),
+            descriptor
+        );
         Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadDataReturnsMessagePackBytesForDataEntriesAndAFreshArrayPerCall() {
+    public async Task LoadDataReturnsMessagePackBytesForDataEntriesAndAFreshArrayPerCall()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -193,15 +252,23 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CustomDataReturnsAFreshInstanceAndCreatesNoUpload() {
+    public async Task CustomDataReturnsAFreshInstanceAndCreatesNoUpload()
+    {
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [CatalogTestData.BuildStandardPack()],
-            assetTypes: [CatalogTestData.SettingsRegistration]);
+            assetTypes: [CatalogTestData.SettingsRegistration]
+        );
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        CatalogTestSettings first = await harness.Catalog.Load<CatalogTestSettings>("/data/settings", cancellationToken);
-        CatalogTestSettings second = await harness.Catalog.Load<CatalogTestSettings>("data/settings", cancellationToken);
+        CatalogTestSettings first = await harness.Catalog.Load<CatalogTestSettings>(
+            "/data/settings",
+            cancellationToken
+        );
+        CatalogTestSettings second = await harness.Catalog.Load<CatalogTestSettings>(
+            "data/settings",
+            cancellationToken
+        );
 
         Assert.NotSame(first, second);
         Assert.Equal("catalog", first.Name);
@@ -212,17 +279,22 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CustomDataLoadInvokesTheRegisteredLoaderWithTheCanonicalContext() {
+    public async Task CustomDataLoadInvokesTheRegisteredLoaderWithTheCanonicalContext()
+    {
         RecordingAssetLoader loader = new();
-        AssetTypeRegistration registration = new LoaderAssetTypeRegistration<CatalogTestSettings>(loader);
+        AssetTypeRegistration registration = new LoaderAssetTypeRegistration<CatalogTestSettings>(
+            loader
+        );
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [CatalogTestData.BuildStandardPack()],
-            assetTypes: [registration]);
+            assetTypes: [registration]
+        );
 
         CatalogTestSettings settings = await harness.Catalog.Load<CatalogTestSettings>(
             "/data/settings",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("catalog", settings.Name);
         Assert.Equal(7, settings.Difficulty);
@@ -233,11 +305,13 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task EngineLoadWaitsForTheDeferredGpuUploadWhileOtherLoadsComplete() {
+    public async Task EngineLoadWaitsForTheDeferredGpuUploadWhileOtherLoadsComplete()
+    {
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [CatalogTestData.BuildStandardPack()],
-            assetTypes: [CatalogTestData.SettingsRegistration]);
+            assetTypes: [CatalogTestData.SettingsRegistration]
+        );
         harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -246,28 +320,36 @@ public sealed class AssetCatalogLoadTests {
         Assert.False(load.IsCompleted);
 
         byte[] descriptor = await harness.Catalog.LoadData("/meshes/quad", cancellationToken);
-        Assert.Equal(AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor()), descriptor);
+        Assert.Equal(
+            AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor()),
+            descriptor
+        );
         CatalogTestSettings settings = await harness.Catalog.Load<CatalogTestSettings>(
             "/data/settings",
-            cancellationToken);
+            cancellationToken
+        );
         Assert.Equal("catalog", settings.Name);
         Assert.False(load.IsCompleted);
 
         upload.Complete();
         Texture texture = await load.WaitAsync(_timeout, cancellationToken);
 
-        try {
+        try
+        {
             Assert.Equal("/textures/albedo", texture.Path);
             Assert.Equal(4, texture.Width);
             Assert.Equal(1, harness.Worker.UploadCallCount);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CancellationWhileTheUploadIsPendingAcquiresNoReferenceAndAllowsARetry() {
+    public async Task CancellationWhileTheUploadIsPendingAcquiresNoReferenceAndAllowsARetry()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -287,7 +369,8 @@ public sealed class AssetCatalogLoadTests {
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 1,
-            "A load with no remaining waiters must destroy the uploaded resource.");
+            "A load with no remaining waiters must destroy the uploaded resource."
+        );
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
 
         Task<Mesh> retryTask = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
@@ -295,25 +378,30 @@ public sealed class AssetCatalogLoadTests {
         retryUpload.Complete();
         Mesh retry = await retryTask.WaitAsync(_timeout, cancellationToken);
 
-        try {
+        try
+        {
             Assert.Equal(3, retry.VertexCount);
             Assert.Equal(2, harness.Worker.UploadCallCount);
-        } finally {
+        }
+        finally
+        {
             retry.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnregisteredTypeThrowsNotSupportedNamingBothRegistrationMethods() {
+    public void UnregisteredTypeThrowsNotSupportedNamingBothRegistrationMethods()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        NotSupportedException thrown = Assert.Throws<NotSupportedException>(
-            () => {
-                _ = harness.Catalog.Load<CatalogTestSettings>(
-                    "/data/settings",
-                    TestContext.Current.CancellationToken);
-            });
+        NotSupportedException thrown = Assert.Throws<NotSupportedException>(() =>
+        {
+            _ = harness.Catalog.Load<CatalogTestSettings>(
+                "/data/settings",
+                TestContext.Current.CancellationToken
+            );
+        });
 
         Assert.Contains("WithAssetType<T>()", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("WithAssetLoader<T>()", thrown.Message, StringComparison.Ordinal);
@@ -321,7 +409,8 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ExistsMatchesTheCanonicalPathAndRejectsInvalidInput() {
+    public void ExistsMatchesTheCanonicalPathAndRejectsInvalidInput()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
         Assert.True(harness.Catalog.Exists("/MESHES/Quad"));
@@ -342,37 +431,43 @@ public sealed class AssetCatalogLoadTests {
     [InlineData("meshes\\quad")]
     [InlineData("meshes/quad.glb")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LoadRejectsInvalidPaths(string path) {
+    public void LoadRejectsInvalidPaths(string path)
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        Assert.Throws<ArgumentException>(
-            () => {
-                _ = harness.Catalog.Load<Mesh>(path, TestContext.Current.CancellationToken);
-            });
-        Assert.Throws<ArgumentException>(
-            () => {
-                _ = harness.Catalog.LoadData(path, TestContext.Current.CancellationToken);
-            });
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = harness.Catalog.Load<Mesh>(path, TestContext.Current.CancellationToken);
+        });
+        Assert.Throws<ArgumentException>(() =>
+        {
+            _ = harness.Catalog.LoadData(path, TestContext.Current.CancellationToken);
+        });
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task MissingPathThrowsAssetNotFound() {
+    public async Task MissingPathThrowsAssetNotFound()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(
-            () => harness.Catalog.Load<Mesh>("/meshes/absent", TestContext.Current.CancellationToken));
+        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(() =>
+            harness.Catalog.Load<Mesh>("/meshes/absent", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, thrown.DiagnosticCode);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TypeMismatchThrowsAssetTypeMismatch() {
+    public async Task TypeMismatchThrowsAssetTypeMismatch()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
         AssetTypeMismatchException thrown = await Assert.ThrowsAsync<AssetTypeMismatchException>(
-            () => harness.Catalog.Load<Texture>("/meshes/quad", TestContext.Current.CancellationToken));
+            () =>
+                harness.Catalog.Load<Texture>("/meshes/quad", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, thrown.DiagnosticCode);
         Assert.Equal(0, harness.Worker.UploadCallCount);
@@ -380,16 +475,24 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ModelAndFontEntriesRequestedAsMeshThrowTypeMismatch() {
+    public async Task ModelAndFontEntriesRequestedAsMeshThrowTypeMismatch()
+    {
         byte[] pack = CatalogTestData.BuildPack(
             (CatalogTestData.MODEL_PATH, AssetEntryType.Model, [1, 2, 3]),
-            (CatalogTestData.FONT_PATH, AssetEntryType.Font, [4, 5, 6]));
+            (CatalogTestData.FONT_PATH, AssetEntryType.Font, [4, 5, 6])
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
         AssetTypeMismatchException model = await Assert.ThrowsAsync<AssetTypeMismatchException>(
-            () => harness.Catalog.Load<Mesh>("/models/castle", TestContext.Current.CancellationToken));
-        AssetTypeMismatchException font = await Assert.ThrowsAsync<AssetTypeMismatchException>(
-            () => harness.Catalog.Load<Mesh>("/" + CatalogTestData.FONT_PATH, TestContext.Current.CancellationToken));
+            () =>
+                harness.Catalog.Load<Mesh>("/models/castle", TestContext.Current.CancellationToken)
+        );
+        AssetTypeMismatchException font = await Assert.ThrowsAsync<AssetTypeMismatchException>(() =>
+            harness.Catalog.Load<Mesh>(
+                "/" + CatalogTestData.FONT_PATH,
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, model.DiagnosticCode);
         Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, font.DiagnosticCode);
@@ -398,34 +501,59 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BuiltInPackIsMountedBelowUserPacks() {
+    public async Task BuiltInPackIsMountedBelowUserPacks()
+    {
         // A 4 KiB zero payload is guaranteed to shrink under Zstandard, so this smoke test proves
         // that the catalog mounts and reads a compressed pack rather than a Debug fixture.
         byte[] compressiblePayload = new byte[4096];
         byte[] builtIn = CatalogTestData.BuildPack(
             PackCompressionPolicy.Release,
-            ("textures/shared", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(8))),
+            (
+                "textures/shared",
+                AssetEntryType.Texture,
+                AssetSerialization.Serialize(CreateTexture(8))
+            ),
             ("textures/shared-ktx2", AssetEntryType.Raw, compressiblePayload),
-            ("textures/builtin-only", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(16))),
-            ("textures/builtin-only-ktx2", AssetEntryType.Raw, compressiblePayload));
-        using (PackArchive compressedArchive = PackArchive.Open(builtIn, "compressed-catalog.pck")) {
+            (
+                "textures/builtin-only",
+                AssetEntryType.Texture,
+                AssetSerialization.Serialize(CreateTexture(16))
+            ),
+            ("textures/builtin-only-ktx2", AssetEntryType.Raw, compressiblePayload)
+        );
+        using (PackArchive compressedArchive = PackArchive.Open(builtIn, "compressed-catalog.pck"))
+        {
             Assert.Contains(compressedArchive.Entries, static entry => entry.IsCompressed);
         }
 
         byte[] user = CatalogTestData.BuildPack(
-            ("textures/shared", AssetEntryType.Texture, AssetSerialization.Serialize(CreateTexture(4))),
-            ("textures/shared-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));
+            (
+                "textures/shared",
+                AssetEntryType.Texture,
+                AssetSerialization.Serialize(CreateTexture(4))
+            ),
+            ("textures/shared-ktx2", AssetEntryType.Raw, CatalogTestData.CreateTexturePayload())
+        );
         using CatalogTestHarness harness = new(builtIn, [user]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        Texture shadowed = await harness.Catalog.Load<Texture>("/textures/shared", cancellationToken);
-        Texture builtInOnly = await harness.Catalog.Load<Texture>("/textures/builtin-only", cancellationToken);
+        Texture shadowed = await harness.Catalog.Load<Texture>(
+            "/textures/shared",
+            cancellationToken
+        );
+        Texture builtInOnly = await harness.Catalog.Load<Texture>(
+            "/textures/builtin-only",
+            cancellationToken
+        );
 
-        try {
+        try
+        {
             Assert.Equal(4, shadowed.Width);
             Assert.Equal(16, builtInOnly.Width);
             Assert.True(harness.Catalog.Exists("/textures/builtin-only"));
-        } finally {
+        }
+        finally
+        {
             shadowed.Dispose();
             builtInOnly.Dispose();
         }
@@ -433,7 +561,8 @@ public sealed class AssetCatalogLoadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RelativePackPathsResolveAgainstTheAppBaseDirectory() {
+    public void RelativePackPathsResolveAgainstTheAppBaseDirectory()
+    {
         string fileName = "relative-catalog-" + Guid.NewGuid().ToString("N") + ".pck";
         string fullPath = Path.Combine(AppContext.BaseDirectory, fileName);
         File.WriteAllBytes(fullPath, CatalogTestData.BuildStandardPack());
@@ -444,43 +573,50 @@ public sealed class AssetCatalogLoadTests {
             bridge,
             ReadOnlyMemory<byte>.Empty,
             [fileName],
-            []);
+            []
+        );
 
-        try {
+        try
+        {
             catalog.Start();
 
             Assert.True(catalog.Exists("/meshes/quad"));
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
             File.Delete(fullPath);
         }
     }
 
-    private static TextureAssetDescriptor CreateTexture(uint width) => new() {
-        Payload = width == 16 ? "textures/builtin-only-ktx2" : "textures/shared-ktx2",
-        Width = width,
-        Height = 2,
-        MipLevels = 1,
-        Format = TextureFormat.Rgba8Srgb,
-        IsSrgb = true,
-        Filter = TextureFilter.Linear,
-        Wrap = TextureWrap.Repeat,
-        MaxAnisotropy = 1f,
-    };
+    private static TextureAssetDescriptor CreateTexture(uint width) =>
+        new()
+        {
+            Payload = width == 16 ? "textures/builtin-only-ktx2" : "textures/shared-ktx2",
+            Width = width,
+            Height = 2,
+            MipLevels = 1,
+            Format = TextureFormat.Rgba8Srgb,
+            IsSrgb = true,
+            Filter = TextureFilter.Linear,
+            Wrap = TextureWrap.Repeat,
+            MaxAnisotropy = 1f,
+        };
 
-    internal static void WaitUntil(Func<bool> condition, string message) => Assert.True(
-        SpinWait.SpinUntil(condition, _timeout),
-        message);
+    internal static void WaitUntil(Func<bool> condition, string message) =>
+        Assert.True(SpinWait.SpinUntil(condition, _timeout), message);
 
-    private sealed class RecordingAssetLoader : IAssetLoader<CatalogTestSettings> {
+    private sealed class RecordingAssetLoader : IAssetLoader<CatalogTestSettings>
+    {
         internal string? Path { get; private set; }
 
         internal byte[]? Payload { get; private set; }
 
         public AssetEntryType EntryType => AssetEntryType.Data;
 
-        public async Task<CatalogTestSettings> LoadAsync(AssetLoadContext context) {
+        public async Task<CatalogTestSettings> LoadAsync(AssetLoadContext context)
+        {
             Path = context.Path;
             byte[] payload = await context.LoadPayloadAsync().ConfigureAwait(false);
             Payload = payload;

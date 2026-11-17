@@ -49,7 +49,8 @@ namespace RayBork.Internal;
 /// it when the logical device is recreated.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
+internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker
+{
     private readonly Func<VulkanDevice> _deviceAccessor;
     private readonly Func<int> _deviceGenerationAccessor;
     private readonly Func<VulkanBindlessTextureTable> _bindlessTextureTableAccessor;
@@ -81,7 +82,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         Func<VulkanBindlessTextureTable> bindlessTextureTableAccessor,
         Func<bool> frameResourcesIdleAccessor,
         Action waitForFrameResourcesIdle,
-        ILogger logger) {
+        ILogger logger
+    )
+    {
         ArgumentNullException.ThrowIfNull(deviceAccessor);
         ArgumentNullException.ThrowIfNull(deviceGenerationAccessor);
         ArgumentNullException.ThrowIfNull(bindlessTextureTableAccessor);
@@ -116,8 +119,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// Gets the number of pending uploads that still own a staging buffer. Diagnostic, for tests; a
     /// successful completion and a cancellation both free the staging allocation.
     /// </summary>
-    internal int PendingStagingBufferCount
-        => _pending.Count(operation => operation.StagingBuffer.Handle != 0);
+    internal int PendingStagingBufferCount =>
+        _pending.Count(operation => operation.StagingBuffer.Handle != 0);
 
     /// <summary>
     /// Gets the number of samplers the per-device cache owns. Diagnostic, for tests; textures with the
@@ -126,17 +129,22 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     internal int SamplerCount => _samplers.Count;
 
     /// <inheritdoc />
-    public GpuAssetUploadOperation BeginUpload(AssetGpuUpload upload) {
+    public GpuAssetUploadOperation BeginUpload(AssetGpuUpload upload)
+    {
         ArgumentNullException.ThrowIfNull(upload);
 
-        VulkanAssetUploadOperation operation = upload.Kind switch {
+        VulkanAssetUploadOperation operation = upload.Kind switch
+        {
             AssetGpuUploadKind.Texture => BeginTexture((TextureGpuUpload)upload),
-            AssetGpuUploadKind.ProceduralTexture => BeginProceduralTexture((ProceduralTextureGpuUpload)upload),
+            AssetGpuUploadKind.ProceduralTexture => BeginProceduralTexture(
+                (ProceduralTextureGpuUpload)upload
+            ),
             AssetGpuUploadKind.Mesh => BeginMesh((MeshGpuUpload)upload),
             AssetGpuUploadKind.Shader => BeginShader((ShaderGpuUpload)upload),
             _ => throw VulkanAssetErrors.UploadFailed(
                 upload.Path,
-                $"the upload kind {upload.Kind} is not supported."),
+                $"the upload kind {upload.Kind} is not supported."
+            ),
         };
 
         _pending.Add(operation);
@@ -147,26 +155,37 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "A failing completion is returned to the bridge as a failed upload instead of escaping the render thread.")]
+        Justification = "A failing completion is returned to the bridge as a failed upload instead of escaping the render thread."
+    )]
     public bool TryComplete(
         GpuAssetUploadOperation operation,
         out GpuAssetResource? resource,
-        out Exception? error) {
+        out Exception? error
+    )
+    {
         VulkanAssetUploadOperation upload = RequireUploadOperation(operation);
-        if (!upload.IsFinished && !upload.IsCanceled) {
-            try {
-                if (upload.HasCopy
+        if (!upload.IsFinished && !upload.IsCanceled)
+        {
+            try
+            {
+                if (
+                    upload.HasCopy
                     && !VulkanAssetUploadCommands.TryComplete(
                         upload.Device,
                         upload.Submission,
-                        upload.Upload.Path)) {
+                        upload.Upload.Path
+                    )
+                )
+                {
                     resource = null;
                     error = null;
                     return false;
                 }
 
                 CompleteUpload(upload);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 FailUpload(upload, exception);
             }
         }
@@ -180,36 +199,49 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Cancellation runs during shutdown after the device may already be gone; the failure is logged and the loop continues.")]
-    public void Cancel(GpuAssetUploadOperation operation) {
+        Justification = "Cancellation runs during shutdown after the device may already be gone; the failure is logged and the loop continues."
+    )]
+    public void Cancel(GpuAssetUploadOperation operation)
+    {
         VulkanAssetUploadOperation upload = RequireUploadOperation(operation);
-        if (!upload.TryMarkCanceled()) {
+        if (!upload.TryMarkCanceled())
+        {
             return;
         }
 
         _pending.Remove(upload);
-        try {
-            if (!upload.IsFinished) {
-                if (upload.HasCopy) {
+        try
+        {
+            if (!upload.IsFinished)
+            {
+                if (upload.HasCopy)
+                {
                     // The copy may still be writing the staging buffer or the destination image. Wait
                     // for it before anything is freed; cancellation and shutdown are rare.
                     VulkanAssetUploadCommands.Wait(
                         upload.Device,
                         upload.Submission,
-                        upload.Upload.Path);
+                        upload.Upload.Path
+                    );
                 }
 
-                upload.MarkFailed(VulkanAssetErrors.UploadFailed(
-                    upload.Upload.Path,
-                    "the GPU upload was canceled before it completed."));
+                upload.MarkFailed(
+                    VulkanAssetErrors.UploadFailed(
+                        upload.Upload.Path,
+                        "the GPU upload was canceled before it completed."
+                    )
+                );
             }
 
             DestroyUploadObjects(upload);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _logger.LogError(
                 exception,
                 "The GPU asset upload of '{Path}' could not be canceled cleanly.",
-                AssetPath.ToPublic(upload.Upload.Path));
+                AssetPath.ToPublic(upload.Upload.Path)
+            );
             DestroyUploadObjects(upload);
         }
     }
@@ -221,23 +253,31 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// its handles, and the previous instance is returned so the bridge keeps one live entry and the
     /// public asset identity is unchanged.
     /// </remarks>
-    public GpuAssetResource Restore(AssetGpuUpload upload, GpuAssetResource previous) {
+    public GpuAssetResource Restore(AssetGpuUpload upload, GpuAssetResource previous)
+    {
         ArgumentNullException.ThrowIfNull(upload);
         ArgumentNullException.ThrowIfNull(previous);
-        if (upload.Kind != previous.Kind) {
+        if (upload.Kind != previous.Kind)
+        {
             throw new InvalidOperationException(
-                $"Cannot restore a {previous.Kind} resource from a {upload.Kind} upload.");
+                $"Cannot restore a {previous.Kind} resource from a {upload.Kind} upload."
+            );
         }
 
-        if (previous.IsDestroyed) {
+        if (previous.IsDestroyed)
+        {
             throw new InvalidOperationException(
-                $"The GPU asset resource for '{AssetPath.ToPublic(upload.Path)}' is queued for destruction and cannot be restored.");
+                $"The GPU asset resource for '{AssetPath.ToPublic(upload.Path)}' is queued for destruction and cannot be restored."
+            );
         }
 
         GpuAssetResource restored = UploadAndWait(upload);
-        try {
+        try
+        {
             previous.AdoptRestored(restored);
-        } catch {
+        }
+        catch
+        {
             Destroy(restored);
             throw;
         }
@@ -245,11 +285,13 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         // UploadAndWait registered the temporary instance. The live entry the bridge keeps is the
         // previous instance, so move the registry entry to it; otherwise a later destruction would
         // free the adopted handles twice.
-        if (restored is VulkanAssetResource restoredResource) {
+        if (restored is VulkanAssetResource restoredResource)
+        {
             _resources.Remove(restoredResource);
         }
 
-        if (previous is VulkanAssetResource previousResource) {
+        if (previous is VulkanAssetResource previousResource)
+        {
             _resources.Add(previousResource);
         }
 
@@ -260,30 +302,37 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// Starts an upload and waits for it on the render thread. Used only by <see cref="Restore"/>,
     /// which runs after a device recovery when the device is idle and the wait is acceptable.
     /// </summary>
-    private GpuAssetResource UploadAndWait(AssetGpuUpload upload) {
+    private GpuAssetResource UploadAndWait(AssetGpuUpload upload)
+    {
         VulkanAssetUploadOperation operation = RequireUploadOperation(BeginUpload(upload));
-        try {
-            if (operation.HasCopy) {
-                VulkanAssetUploadCommands.Wait(
-                    operation.Device,
-                    operation.Submission,
-                    upload.Path);
+        try
+        {
+            if (operation.HasCopy)
+            {
+                VulkanAssetUploadCommands.Wait(operation.Device, operation.Submission, upload.Path);
             }
 
-            if (!TryComplete(operation, out GpuAssetResource? resource, out Exception? error)) {
+            if (!TryComplete(operation, out GpuAssetResource? resource, out Exception? error))
+            {
                 throw VulkanAssetErrors.UploadFailed(
                     upload.Path,
-                    "the upload did not finish after its fence signaled.");
+                    "the upload did not finish after its fence signaled."
+                );
             }
 
-            if (error is not null) {
+            if (error is not null)
+            {
                 throw error;
             }
 
-            return resource ?? throw VulkanAssetErrors.UploadFailed(
-                upload.Path,
-                "the upload finished without a resource.");
-        } catch {
+            return resource
+                ?? throw VulkanAssetErrors.UploadFailed(
+                    upload.Path,
+                    "the upload finished without a resource."
+                );
+        }
+        catch
+        {
             Cancel(operation);
             throw;
         }
@@ -293,13 +342,17 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// Adopts a finished upload: frees the staging and submission objects, reserves the texture's
     /// bindless slot, registers the destination resource as live, and marks the operation complete.
     /// </summary>
-    private void CompleteUpload(VulkanAssetUploadOperation upload) {
-        VulkanAssetResource resource = upload.Resource ?? throw VulkanAssetErrors.UploadFailed(
-            upload.Upload.Path,
-            "the upload finished without a resource.");
+    private void CompleteUpload(VulkanAssetUploadOperation upload)
+    {
+        VulkanAssetResource resource = upload.Resource
+            ?? throw VulkanAssetErrors.UploadFailed(
+                upload.Upload.Path,
+                "the upload finished without a resource."
+            );
 
         DestroyUploadTransients(upload);
-        if (resource is VulkanTextureAssetResource texture) {
+        if (resource is VulkanTextureAssetResource texture)
+        {
             AdoptBindlessSlot(texture);
         }
 
@@ -317,19 +370,25 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// The table is full or the descriptor write failed. The diagnostic code is <c>RB1010</c> and the
     /// message names the capacity and the texture path.
     /// </exception>
-    private void AdoptBindlessSlot(VulkanTextureAssetResource texture) {
+    private void AdoptBindlessSlot(VulkanTextureAssetResource texture)
+    {
         VulkanBindlessTextureTable table = _bindlessTextureTableAccessor();
-        if (!table.TryAllocate(out uint slot)) {
+        if (!table.TryAllocate(out uint slot))
+        {
             throw VulkanAssetErrors.UploadFailed(
                 texture.Upload.Path,
                 $"the bindless texture table is full ({table.Capacity} slots, including the reserved "
                     + "white slot); dispose live textures or increase the device's update-after-bind "
-                    + "sampled-image limits");
+                    + "sampled-image limits"
+            );
         }
 
-        try {
+        try
+        {
             table.WriteTexture(slot, texture.View, texture.Sampler);
-        } catch {
+        }
+        catch
+        {
             table.Release(slot);
             throw;
         }
@@ -341,7 +400,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// Finishes a failed upload: frees its staging, submission, and partial resource, and records the
     /// failure for the bridge to observe.
     /// </summary>
-    private void FailUpload(VulkanAssetUploadOperation upload, Exception exception) {
+    private void FailUpload(VulkanAssetUploadOperation upload, Exception exception)
+    {
         _pending.Remove(upload);
         DestroyUploadObjects(upload);
         upload.MarkFailed(exception);
@@ -350,8 +410,12 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// <summary>
     /// Frees the staging buffer, command pool, and fence of an upload after its copy finished.
     /// </summary>
-    private void DestroyUploadTransients(VulkanAssetUploadOperation upload) {
-        DestroyStagingBuffer(upload.Device, new StagingAllocation(upload.StagingBuffer, upload.StagingMemory));
+    private void DestroyUploadTransients(VulkanAssetUploadOperation upload)
+    {
+        DestroyStagingBuffer(
+            upload.Device,
+            new StagingAllocation(upload.StagingBuffer, upload.StagingMemory)
+        );
         VulkanAssetUploadCommands.Destroy(upload.Device, _logger, upload.Submission);
         upload.ClearTransients();
     }
@@ -360,33 +424,43 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     /// Frees everything a canceled or failed upload owns, including the partial destination resource.
     /// Idempotent because the operation clears the handles after the first cleanup.
     /// </summary>
-    private void DestroyUploadObjects(VulkanAssetUploadOperation upload) {
+    private void DestroyUploadObjects(VulkanAssetUploadOperation upload)
+    {
         DestroyUploadTransients(upload);
-        if (upload.Resource is VulkanAssetResource resource) {
+        if (upload.Resource is VulkanAssetResource resource)
+        {
             _resources.Remove(resource);
             DestroyResource(resource);
             upload.ClearResource();
         }
     }
 
-    private static VulkanAssetUploadOperation RequireUploadOperation(GpuAssetUploadOperation operation) {
+    private static VulkanAssetUploadOperation RequireUploadOperation(
+        GpuAssetUploadOperation operation
+    )
+    {
         ArgumentNullException.ThrowIfNull(operation);
 
         return operation as VulkanAssetUploadOperation
             ?? throw new InvalidOperationException(
-                $"The Vulkan asset worker cannot handle a {operation.GetType().Name} operation.");
+                $"The Vulkan asset worker cannot handle a {operation.GetType().Name} operation."
+            );
     }
 
     /// <inheritdoc />
-    public void Destroy(GpuAssetResource resource) {
-        if (resource is null) {
+    public void Destroy(GpuAssetResource resource)
+    {
+        if (resource is null)
+        {
             return;
         }
 
-        if (resource is not VulkanAssetResource vulkanResource) {
+        if (resource is not VulkanAssetResource vulkanResource)
+        {
             _logger.LogWarning(
                 "The Vulkan asset worker was asked to destroy the unknown resource type {ResourceType}.",
-                resource.GetType().Name);
+                resource.GetType().Name
+            );
             return;
         }
 
@@ -408,24 +482,32 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Shutdown destroys every resource best-effort so one failure cannot leave the rest alive.")]
-    internal void DestroyAllResources() {
+        Justification = "Shutdown destroys every resource best-effort so one failure cannot leave the rest alive."
+    )]
+    internal void DestroyAllResources()
+    {
         VulkanAssetUploadOperation[] pending = [.. _pending];
-        foreach (VulkanAssetUploadOperation upload in pending) {
-            try {
+        foreach (VulkanAssetUploadOperation upload in pending)
+        {
+            try
+            {
                 Cancel(upload);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 _logger.LogError(
                     exception,
                     "The pending GPU asset upload of '{Path}' could not be canceled before the device was destroyed.",
-                    AssetPath.ToPublic(upload.Upload.Path));
+                    AssetPath.ToPublic(upload.Upload.Path)
+                );
             }
         }
 
         _pending.Clear();
         VulkanAssetResource[] resources = [.. _resources];
         _resources.Clear();
-        foreach (VulkanAssetResource resource in resources) {
+        foreach (VulkanAssetResource resource in resources)
+        {
             DestroyResource(resource);
         }
 
@@ -435,22 +517,28 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Resource destruction is best-effort during upload failure and shutdown; each failure is logged.")]
-    private void DestroyResource(VulkanAssetResource resource) {
-        try {
+        Justification = "Resource destruction is best-effort during upload failure and shutdown; each failure is logged."
+    )]
+    private void DestroyResource(VulkanAssetResource resource)
+    {
+        try
+        {
             int currentGeneration = _deviceGenerationAccessor();
-            if (resource.DeviceGeneration != currentGeneration) {
+            if (resource.DeviceGeneration != currentGeneration)
+            {
                 // The resource's device was destroyed. Its handles were released with the device, and
                 // touching them on the current device would be invalid.
                 _logger.LogDebug(
                     "Skipping the destruction of the GPU asset resource for '{Path}': it belongs to device generation {ResourceGeneration}, the current generation is {CurrentGeneration}.",
                     AssetPath.ToPublic(resource.Upload.Path),
                     resource.DeviceGeneration,
-                    currentGeneration);
+                    currentGeneration
+                );
                 return;
             }
 
-            switch (resource) {
+            switch (resource)
+            {
                 case VulkanTextureAssetResource texture:
                     DestroyTexture(texture);
                     break;
@@ -463,24 +551,30 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 default:
                     _logger.LogWarning(
                         "The Vulkan asset worker was asked to destroy the unknown resource type {ResourceType}.",
-                        resource.GetType().Name);
+                        resource.GetType().Name
+                    );
                     break;
             }
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             // Destruction is best effort: the app is tearing down or the device is already gone, and
             // there is no caller that could handle a failure.
             _logger.LogError(
                 exception,
                 "The GPU asset resource for '{Path}' could not be destroyed.",
-                AssetPath.ToPublic(resource.Upload.Path));
+                AssetPath.ToPublic(resource.Upload.Path)
+            );
         }
     }
 
-    private VulkanAssetUploadOperation BeginTexture(TextureGpuUpload upload) {
+    private VulkanAssetUploadOperation BeginTexture(TextureGpuUpload upload)
+    {
         VulkanDevice device = _deviceAccessor();
         Ktx2Texture texture = Ktx2Reader.Read(upload.Ktx2Data.Span, upload.Texture);
         TextureLevelRange[] levels = new TextureLevelRange[texture.MipLevels];
-        for (int level = 0; level < texture.MipLevels; level++) {
+        for (int level = 0; level < texture.MipLevels; level++)
+        {
             Ktx2Level levelData = texture.Levels[level];
             levels[level] = new TextureLevelRange(levelData.ByteOffset, levelData.ByteLength);
         }
@@ -496,62 +590,88 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             upload.Texture.Filter,
             upload.Texture.Wrap,
             upload.Texture.MaxAnisotropy,
-            upload.Texture.Payload);
+            upload.Texture.Payload
+        );
     }
 
-    private VulkanAssetUploadOperation BeginProceduralTexture(ProceduralTextureGpuUpload upload) {
-        if (!Enum.IsDefined(upload.Format)
-            || upload.Format is not (TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb or TextureFormat.R8Unorm)) {
+    private VulkanAssetUploadOperation BeginProceduralTexture(ProceduralTextureGpuUpload upload)
+    {
+        if (
+            !Enum.IsDefined(upload.Format)
+            || upload.Format
+                is not (
+                    TextureFormat.Rgba8Unorm
+                    or TextureFormat.Rgba8Srgb
+                    or TextureFormat.R8Unorm
+                )
+        )
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 upload.Path,
-                $"the procedural texture format {upload.Format} is not an uncompressed procedural format");
+                $"the procedural texture format {upload.Format} is not an uncompressed procedural format"
+            );
         }
 
-        if (!Enum.IsDefined(upload.Filter) || !Enum.IsDefined(upload.Wrap)) {
+        if (!Enum.IsDefined(upload.Filter) || !Enum.IsDefined(upload.Wrap))
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 upload.Path,
-                "the procedural texture sampler state is not valid");
+                "the procedural texture sampler state is not valid"
+            );
         }
 
-        if (!float.IsFinite(upload.MaxAnisotropy) || upload.MaxAnisotropy < 1f) {
+        if (!float.IsFinite(upload.MaxAnisotropy) || upload.MaxAnisotropy < 1f)
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 upload.Path,
-                "the procedural texture maximum anisotropy must be finite and at least 1");
+                "the procedural texture maximum anisotropy must be finite and at least 1"
+            );
         }
 
-        uint fullMipCount = VulkanTextureFormat.FullMipCount((uint)upload.Width, (uint)upload.Height);
-        if (upload.MipLevels > checked((int)fullMipCount)) {
+        uint fullMipCount = VulkanTextureFormat.FullMipCount(
+            (uint)upload.Width,
+            (uint)upload.Height
+        );
+        if (upload.MipLevels > checked((int)fullMipCount))
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 upload.Path,
                 $"the procedural texture has {upload.MipLevels} mip level(s); "
-                    + $"{upload.Width}x{upload.Height} supports at most {fullMipCount}");
+                    + $"{upload.Width}x{upload.Height} supports at most {fullMipCount}"
+            );
         }
 
         TextureLevelRange[] levels = new TextureLevelRange[upload.MipLevels];
         ReadOnlySpan<int> levelLengths = upload.LevelByteLengths.Span;
         ulong offset = 0;
-        for (int level = 0; level < levels.Length; level++) {
+        for (int level = 0; level < levels.Length; level++)
+        {
             int expectedLength = VulkanTextureFormat.GetLevelByteLength(
                 upload.Format,
                 VulkanTextureFormat.LevelExtent((uint)upload.Width, level),
-                VulkanTextureFormat.LevelExtent((uint)upload.Height, level));
+                VulkanTextureFormat.LevelExtent((uint)upload.Height, level)
+            );
             int length = levelLengths[level];
-            if (length != expectedLength) {
+            if (length != expectedLength)
+            {
                 throw VulkanAssetErrors.DecodeFailed(
                     upload.Path,
                     $"mip level {level} of the {upload.Width}x{upload.Height} {upload.Format} procedural "
-                        + $"texture is {length} byte(s); the level requires {expectedLength}");
+                        + $"texture is {length} byte(s); the level requires {expectedLength}"
+                );
             }
 
             levels[level] = new TextureLevelRange(offset, (ulong)length);
             offset += (ulong)length;
         }
 
-        if (offset != (ulong)upload.PixelData.Length) {
+        if (offset != (ulong)upload.PixelData.Length)
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 upload.Path,
                 $"the procedural mip levels describe {offset} byte(s), but the payload is "
-                    + $"{upload.PixelData.Length} byte(s)");
+                    + $"{upload.PixelData.Length} byte(s)"
+            );
         }
 
         VulkanDevice device = _deviceAccessor();
@@ -566,7 +686,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             upload.Filter,
             upload.Wrap,
             upload.MaxAnisotropy,
-            upload.Path);
+            upload.Path
+        );
     }
 
     private VulkanAssetUploadOperation BeginTextureUpload(
@@ -580,7 +701,9 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         TextureFilter filter,
         TextureWrap wrap,
         float maxAnisotropy,
-        string payloadPath) {
+        string payloadPath
+    )
+    {
         int mipLevels = levels.Length;
         Format format = VulkanTextureFormat.ToVkFormat(textureFormat);
         ValidateTextureSupport(device, upload, textureFormat, format);
@@ -588,40 +711,51 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         int deviceGeneration = _deviceGenerationAccessor();
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
-        PhysicalDeviceMemoryProperties memoryProperties = vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
+        PhysicalDeviceMemoryProperties memoryProperties = vulkan.GetPhysicalDeviceMemoryProperties(
+            device.PhysicalDevice
+        );
         Image image = default;
         DeviceMemory memory = default;
         ImageView view = default;
         StagingAllocation staging = default;
         VulkanAssetUploadCommands.UploadSubmission submission = default;
         VulkanTextureAssetResource? resource = null;
-        try {
+        try
+        {
             image = CreateImage(device, upload.Path, width, height, mipLevels, format);
-            MemoryRequirements requirements = vulkan.GetImageMemoryRequirements(deviceHandle, image);
+            MemoryRequirements requirements = vulkan.GetImageMemoryRequirements(
+                deviceHandle,
+                image
+            );
             memory = VulkanAssetMemory.Allocate(
                 device,
                 memoryProperties,
                 requirements,
                 MemoryPropertyFlags.DeviceLocalBit,
                 upload.Path,
-                $"{format} texture image");
+                $"{format} texture image"
+            );
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.BindImageMemory(deviceHandle, image, memory, 0),
                 upload.Path,
-                "vkBindImageMemory");
+                "vkBindImageMemory"
+            );
 
-            ImageViewCreateInfo viewInfo = new() {
+            ImageViewCreateInfo viewInfo = new()
+            {
                 SType = StructureType.ImageViewCreateInfo,
                 Image = image,
                 ViewType = ImageViewType.Type2D,
                 Format = format,
-                Components = new ComponentMapping {
+                Components = new ComponentMapping
+                {
                     R = ComponentSwizzle.Identity,
                     G = ComponentSwizzle.Identity,
                     B = ComponentSwizzle.Identity,
                     A = ComponentSwizzle.Identity,
                 },
-                SubresourceRange = new ImageSubresourceRange {
+                SubresourceRange = new ImageSubresourceRange
+                {
                     AspectMask = ImageAspectFlags.ColorBit,
                     BaseMipLevel = 0,
                     LevelCount = (uint)mipLevels,
@@ -632,14 +766,16 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.CreateImageView(deviceHandle, &viewInfo, null, out view),
                 upload.Path,
-                "vkCreateImageView");
+                "vkCreateImageView"
+            );
 
             Sampler sampler = _samplers.GetOrCreate(
                 filter,
                 wrap,
                 maxAnisotropy,
                 upload.Path,
-                payloadPath);
+                payloadPath
+            );
             resource = new VulkanTextureAssetResource(
                 upload,
                 image,
@@ -650,36 +786,45 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 width,
                 height,
                 mipLevels,
-                deviceGeneration);
+                deviceGeneration
+            );
 
             staging = CreateStagingBuffer(
                 device,
                 memoryProperties,
                 levelData.Span,
                 upload.Path,
-                "texture");
+                "texture"
+            );
             submission = VulkanAssetUploadCommands.RecordAndSubmit(
                 device,
                 _logger,
                 upload.Path,
-                (recordVulkan, commandBuffer) => RecordTextureUpload(
-                    recordVulkan,
-                    commandBuffer,
-                    staging.Buffer,
-                    image,
-                    width,
-                    height,
-                    levels));
+                (recordVulkan, commandBuffer) =>
+                    RecordTextureUpload(
+                        recordVulkan,
+                        commandBuffer,
+                        staging.Buffer,
+                        image,
+                        width,
+                        height,
+                        levels
+                    )
+            );
             return new VulkanAssetUploadOperation(
                 upload,
                 device,
                 submission,
                 staging.Buffer,
                 staging.Memory,
-                resource);
-        } catch {
+                resource
+            );
+        }
+        catch
+        {
             DestroyFailedUpload(device, upload, submission, staging, resource);
-            if (resource is null) {
+            if (resource is null)
+            {
                 DestroyImageView(vulkan, deviceHandle, view);
                 DestroyImage(vulkan, deviceHandle, image);
                 DestroyMemory(vulkan, deviceHandle, memory);
@@ -689,21 +834,26 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
-    private VulkanAssetUploadOperation BeginMesh(MeshGpuUpload upload) {
+    private VulkanAssetUploadOperation BeginMesh(MeshGpuUpload upload)
+    {
         MeshAssetDescriptor descriptor = upload.Mesh;
-        if (descriptor.VertexCount == 0 || descriptor.IndexCount == 0) {
+        if (descriptor.VertexCount == 0 || descriptor.IndexCount == 0)
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 descriptor.Payload,
-                "the mesh descriptor declares no vertices or no indices");
+                "the mesh descriptor declares no vertices or no indices"
+            );
         }
 
         long vertexBytes = (long)descriptor.VertexCount * MeshAssetDescriptor.VERTEX_STRIDE;
         long indexBytes = (long)descriptor.IndexCount * sizeof(uint);
         long expectedBytes = vertexBytes + indexBytes;
-        if (upload.VertexAndIndexData.Length != expectedBytes) {
+        if (upload.VertexAndIndexData.Length != expectedBytes)
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 descriptor.Payload,
-                $"the mesh payload is {upload.VertexAndIndexData.Length} byte(s); {descriptor.VertexCount} vertices at {MeshAssetDescriptor.VERTEX_STRIDE} bytes and {descriptor.IndexCount} 32-bit indices require {expectedBytes}");
+                $"the mesh payload is {upload.VertexAndIndexData.Length} byte(s); {descriptor.VertexCount} vertices at {MeshAssetDescriptor.VERTEX_STRIDE} bytes and {descriptor.IndexCount} 32-bit indices require {expectedBytes}"
+            );
         }
 
         ulong vertexSize = (ulong)vertexBytes;
@@ -712,32 +862,44 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         int deviceGeneration = _deviceGenerationAccessor();
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
-        PhysicalDeviceMemoryProperties memoryProperties = vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
+        PhysicalDeviceMemoryProperties memoryProperties = vulkan.GetPhysicalDeviceMemoryProperties(
+            device.PhysicalDevice
+        );
         Buffer vertexBuffer = default;
         Buffer indexBuffer = default;
         DeviceMemory memory = default;
         StagingAllocation staging = default;
         VulkanAssetUploadCommands.UploadSubmission submission = default;
         VulkanMeshAssetResource? resource = null;
-        try {
+        try
+        {
             vertexBuffer = CreateBuffer(
                 device,
                 vertexSize,
                 BufferUsageFlags.VertexBufferBit | BufferUsageFlags.TransferDstBit,
                 upload.Path,
-                "vertex buffer");
+                "vertex buffer"
+            );
             indexBuffer = CreateBuffer(
                 device,
                 indexSize,
                 BufferUsageFlags.IndexBufferBit | BufferUsageFlags.TransferDstBit,
                 upload.Path,
-                "index buffer");
+                "index buffer"
+            );
 
-            MemoryRequirements vertexRequirements = vulkan.GetBufferMemoryRequirements(deviceHandle, vertexBuffer);
-            MemoryRequirements indexRequirements = vulkan.GetBufferMemoryRequirements(deviceHandle, indexBuffer);
+            MemoryRequirements vertexRequirements = vulkan.GetBufferMemoryRequirements(
+                deviceHandle,
+                vertexBuffer
+            );
+            MemoryRequirements indexRequirements = vulkan.GetBufferMemoryRequirements(
+                deviceHandle,
+                indexBuffer
+            );
             ulong indexOffset = Align(vertexRequirements.Size, indexRequirements.Alignment);
             ulong allocationSize = indexOffset + indexRequirements.Size;
-            uint memoryTypeBits = vertexRequirements.MemoryTypeBits & indexRequirements.MemoryTypeBits;
+            uint memoryTypeBits =
+                vertexRequirements.MemoryTypeBits & indexRequirements.MemoryTypeBits;
             memory = VulkanAssetMemory.Allocate(
                 device,
                 memoryProperties,
@@ -745,15 +907,18 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 memoryTypeBits,
                 MemoryPropertyFlags.DeviceLocalBit,
                 upload.Path,
-                "mesh vertex and index buffers");
+                "mesh vertex and index buffers"
+            );
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.BindBufferMemory(deviceHandle, vertexBuffer, memory, 0),
                 upload.Path,
-                "vkBindBufferMemory for the vertex buffer");
+                "vkBindBufferMemory for the vertex buffer"
+            );
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.BindBufferMemory(deviceHandle, indexBuffer, memory, indexOffset),
                 upload.Path,
-                "vkBindBufferMemory for the index buffer");
+                "vkBindBufferMemory for the index buffer"
+            );
 
             resource = new VulkanMeshAssetResource(
                 upload,
@@ -762,35 +927,44 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 memory,
                 vertexSize,
                 indexSize,
-                deviceGeneration);
+                deviceGeneration
+            );
             staging = CreateStagingBuffer(
                 device,
                 memoryProperties,
                 upload.VertexAndIndexData.Span,
                 upload.Path,
-                "mesh");
+                "mesh"
+            );
             submission = VulkanAssetUploadCommands.RecordAndSubmit(
                 device,
                 _logger,
                 upload.Path,
-                (recordVulkan, commandBuffer) => RecordMeshUpload(
-                    recordVulkan,
-                    commandBuffer,
-                    staging.Buffer,
-                    vertexBuffer,
-                    indexBuffer,
-                    vertexSize,
-                    indexSize));
+                (recordVulkan, commandBuffer) =>
+                    RecordMeshUpload(
+                        recordVulkan,
+                        commandBuffer,
+                        staging.Buffer,
+                        vertexBuffer,
+                        indexBuffer,
+                        vertexSize,
+                        indexSize
+                    )
+            );
             return new VulkanAssetUploadOperation(
                 upload,
                 device,
                 submission,
                 staging.Buffer,
                 staging.Memory,
-                resource);
-        } catch {
+                resource
+            );
+        }
+        catch
+        {
             DestroyFailedUpload(device, upload, submission, staging, resource);
-            if (resource is null) {
+            if (resource is null)
+            {
                 DestroyBuffer(vulkan, deviceHandle, indexBuffer);
                 DestroyBuffer(vulkan, deviceHandle, vertexBuffer);
                 DestroyMemory(vulkan, deviceHandle, memory);
@@ -800,7 +974,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         }
     }
 
-    private VulkanAssetUploadOperation BeginShader(ShaderGpuUpload upload) {
+    private VulkanAssetUploadOperation BeginShader(ShaderGpuUpload upload)
+    {
         ValidateShaderDescriptor(upload.Shader);
         VulkanDevice device = _deviceAccessor();
         int deviceGeneration = _deviceGenerationAccessor();
@@ -809,24 +984,35 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             upload.VertexSpirv,
             upload.Shader.VertexPayload,
             upload.Path,
-            "vertex");
+            "vertex"
+        );
         ShaderModule fragmentModule = default;
-        try {
+        try
+        {
             fragmentModule = CreateShaderModule(
                 device,
                 upload.FragmentSpirv,
                 upload.Shader.FragmentPayload,
                 upload.Path,
-                "fragment");
-            VulkanShaderAssetResource resource = new(upload, vertexModule, fragmentModule, deviceGeneration);
+                "fragment"
+            );
+            VulkanShaderAssetResource resource = new(
+                upload,
+                vertexModule,
+                fragmentModule,
+                deviceGeneration
+            );
             return new VulkanAssetUploadOperation(
                 upload,
                 device,
                 default,
                 default,
                 default,
-                resource);
-        } catch {
+                resource
+            );
+        }
+        catch
+        {
             DestroyShaderModule(device.Vulkan, device.Device, fragmentModule);
             DestroyShaderModule(device.Vulkan, device.Device, vertexModule);
             throw;
@@ -840,27 +1026,36 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Cleanup after a failed upload may itself fail; the original upload failure is what the caller needs.")]
+        Justification = "Cleanup after a failed upload may itself fail; the original upload failure is what the caller needs."
+    )]
     private void DestroyFailedUpload(
         VulkanDevice device,
         AssetGpuUpload upload,
         VulkanAssetUploadCommands.UploadSubmission submission,
         StagingAllocation staging,
-        VulkanAssetResource? resource) {
-        if (submission.Fence.Handle != 0) {
-            try {
+        VulkanAssetResource? resource
+    )
+    {
+        if (submission.Fence.Handle != 0)
+        {
+            try
+            {
                 VulkanAssetUploadCommands.Wait(device, submission, upload.Path);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 _logger.LogError(
                     exception,
                     "The failed GPU asset upload of '{Path}' could not be waited out before cleanup.",
-                    AssetPath.ToPublic(upload.Path));
+                    AssetPath.ToPublic(upload.Path)
+                );
             }
         }
 
         VulkanAssetUploadCommands.Destroy(device, _logger, submission);
         DestroyStagingBuffer(device, staging);
-        if (resource is not null) {
+        if (resource is not null)
+        {
             DestroyResource(resource);
         }
     }
@@ -869,19 +1064,32 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         VulkanDevice device,
         AssetGpuUpload upload,
         TextureFormat textureFormat,
-        Format format) {
-        if (VulkanTextureFormat.IsBlockCompressed(textureFormat) && !device.Capabilities.TextureCompressionBc) {
+        Format format
+    )
+    {
+        if (
+            VulkanTextureFormat.IsBlockCompressed(textureFormat)
+            && !device.Capabilities.TextureCompressionBc
+        )
+        {
             throw VulkanAssetErrors.UploadFailed(
                 upload.Path,
-                $"the texture is {textureFormat} but the device does not support textureCompressionBC.");
+                $"the texture is {textureFormat} but the device does not support textureCompressionBC."
+            );
         }
 
-        FormatProperties formatProperties = device.Vulkan.GetPhysicalDeviceFormatProperties(device.PhysicalDevice, format);
-        FormatFeatureFlags requiredFeatures = FormatFeatureFlags.SampledImageBit | FormatFeatureFlags.TransferDstBit;
-        if ((formatProperties.OptimalTilingFeatures & requiredFeatures) != requiredFeatures) {
+        FormatProperties formatProperties = device.Vulkan.GetPhysicalDeviceFormatProperties(
+            device.PhysicalDevice,
+            format
+        );
+        FormatFeatureFlags requiredFeatures =
+            FormatFeatureFlags.SampledImageBit | FormatFeatureFlags.TransferDstBit;
+        if ((formatProperties.OptimalTilingFeatures & requiredFeatures) != requiredFeatures)
+        {
             throw VulkanAssetErrors.UploadFailed(
                 upload.Path,
-                $"the device does not support sampling and transfer-destination use of {format} with optimal tiling (supported features 0x{(uint)formatProperties.OptimalTilingFeatures:X8}).");
+                $"the device does not support sampling and transfer-destination use of {format} with optimal tiling (supported features 0x{(uint)formatProperties.OptimalTilingFeatures:X8})."
+            );
         }
     }
 
@@ -891,20 +1099,30 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         uint width,
         uint height,
         int mipLevels,
-        Format format) {
-        PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice);
-        if (width > properties.Limits.MaxImageDimension2D
-            || height > properties.Limits.MaxImageDimension2D) {
+        Format format
+    )
+    {
+        PhysicalDeviceProperties properties = device.Vulkan.GetPhysicalDeviceProperties(
+            device.PhysicalDevice
+        );
+        if (
+            width > properties.Limits.MaxImageDimension2D
+            || height > properties.Limits.MaxImageDimension2D
+        )
+        {
             throw VulkanAssetErrors.UploadFailed(
                 canonicalPath,
-                $"the {width}x{height} texture exceeds the device's maximum 2D image dimension {properties.Limits.MaxImageDimension2D}.");
+                $"the {width}x{height} texture exceeds the device's maximum 2D image dimension {properties.Limits.MaxImageDimension2D}."
+            );
         }
 
-        ImageCreateInfo createInfo = new() {
+        ImageCreateInfo createInfo = new()
+        {
             SType = StructureType.ImageCreateInfo,
             ImageType = ImageType.Type2D,
             Format = format,
-            Extent = new Extent3D {
+            Extent = new Extent3D
+            {
                 Width = width,
                 Height = height,
                 Depth = 1,
@@ -917,10 +1135,23 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             SharingMode = SharingMode.Exclusive,
             InitialLayout = ImageLayout.Undefined,
         };
-        Result result = device.Vulkan.CreateImage(device.Device, &createInfo, null, out Image image);
-        VulkanAssetErrors.ThrowIfFailed(result, canonicalPath, $"vkCreateImage for the {format} texture");
-        if (image.Handle == 0) {
-            throw VulkanAssetErrors.UploadFailed(canonicalPath, "vkCreateImage returned a zero image handle.");
+        Result result = device.Vulkan.CreateImage(
+            device.Device,
+            &createInfo,
+            null,
+            out Image image
+        );
+        VulkanAssetErrors.ThrowIfFailed(
+            result,
+            canonicalPath,
+            $"vkCreateImage for the {format} texture"
+        );
+        if (image.Handle == 0)
+        {
+            throw VulkanAssetErrors.UploadFailed(
+                canonicalPath,
+                "vkCreateImage returned a zero image handle."
+            );
         }
 
         return image;
@@ -931,17 +1162,33 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         ulong size,
         BufferUsageFlags usage,
         string canonicalPath,
-        string description) {
-        BufferCreateInfo createInfo = new() {
+        string description
+    )
+    {
+        BufferCreateInfo createInfo = new()
+        {
             SType = StructureType.BufferCreateInfo,
             Size = size,
             Usage = usage,
             SharingMode = SharingMode.Exclusive,
         };
-        Result result = device.Vulkan.CreateBuffer(device.Device, &createInfo, null, out Buffer buffer);
-        VulkanAssetErrors.ThrowIfFailed(result, canonicalPath, $"vkCreateBuffer for the {description}");
-        if (buffer.Handle == 0) {
-            throw VulkanAssetErrors.UploadFailed(canonicalPath, $"vkCreateBuffer returned a zero handle for the {description}.");
+        Result result = device.Vulkan.CreateBuffer(
+            device.Device,
+            &createInfo,
+            null,
+            out Buffer buffer
+        );
+        VulkanAssetErrors.ThrowIfFailed(
+            result,
+            canonicalPath,
+            $"vkCreateBuffer for the {description}"
+        );
+        if (buffer.Handle == 0)
+        {
+            throw VulkanAssetErrors.UploadFailed(
+                canonicalPath,
+                $"vkCreateBuffer returned a zero handle for the {description}."
+            );
         }
 
         return buffer;
@@ -954,15 +1201,19 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         Image image,
         uint width,
         uint height,
-        ReadOnlySpan<TextureLevelRange> levels) {
-        ImageSubresourceRange range = new() {
+        ReadOnlySpan<TextureLevelRange> levels
+    )
+    {
+        ImageSubresourceRange range = new()
+        {
             AspectMask = ImageAspectFlags.ColorBit,
             BaseMipLevel = 0,
             LevelCount = (uint)levels.Length,
             BaseArrayLayer = 0,
             LayerCount = 1,
         };
-        ImageMemoryBarrier toTransfer = new() {
+        ImageMemoryBarrier toTransfer = new()
+        {
             SType = StructureType.ImageMemoryBarrier,
             SrcAccessMask = AccessFlags.None,
             DstAccessMask = AccessFlags.TransferWriteBit,
@@ -983,22 +1234,32 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             0,
             null,
             1,
-            &toTransfer);
+            &toTransfer
+        );
 
-        for (int level = 0; level < levels.Length; level++) {
+        for (int level = 0; level < levels.Length; level++)
+        {
             TextureLevelRange levelData = levels[level];
-            BufferImageCopy copy = new() {
+            BufferImageCopy copy = new()
+            {
                 BufferOffset = levelData.ByteOffset,
                 BufferRowLength = 0,
                 BufferImageHeight = 0,
-                ImageSubresource = new ImageSubresourceLayers {
+                ImageSubresource = new ImageSubresourceLayers
+                {
                     AspectMask = ImageAspectFlags.ColorBit,
                     MipLevel = (uint)level,
                     BaseArrayLayer = 0,
                     LayerCount = 1,
                 },
-                ImageOffset = new Offset3D { X = 0, Y = 0, Z = 0 },
-                ImageExtent = new Extent3D {
+                ImageOffset = new Offset3D
+                {
+                    X = 0,
+                    Y = 0,
+                    Z = 0,
+                },
+                ImageExtent = new Extent3D
+                {
                     Width = (uint)VulkanTextureFormat.LevelExtent(width, level),
                     Height = (uint)VulkanTextureFormat.LevelExtent(height, level),
                     Depth = 1,
@@ -1010,7 +1271,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
                 image,
                 ImageLayout.TransferDstOptimal,
                 1,
-                &copy);
+                &copy
+            );
         }
 
         ImageMemoryBarrier toShaderRead = toTransfer;
@@ -1028,7 +1290,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             0,
             null,
             1,
-            &toShaderRead);
+            &toShaderRead
+        );
     }
 
     private static void RecordMeshUpload(
@@ -1038,21 +1301,26 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         Buffer vertexBuffer,
         Buffer indexBuffer,
         ulong vertexSize,
-        ulong indexSize) {
-        BufferCopy vertexCopy = new() {
+        ulong indexSize
+    )
+    {
+        BufferCopy vertexCopy = new()
+        {
             SrcOffset = 0,
             DstOffset = 0,
             Size = vertexSize,
         };
         vulkan.CmdCopyBuffer(commandBuffer, stagingBuffer, vertexBuffer, 1, &vertexCopy);
-        BufferCopy indexCopy = new() {
+        BufferCopy indexCopy = new()
+        {
             SrcOffset = vertexSize,
             DstOffset = 0,
             Size = indexSize,
         };
         vulkan.CmdCopyBuffer(commandBuffer, stagingBuffer, indexBuffer, 1, &indexCopy);
 
-        MemoryBarrier barrier = new() {
+        MemoryBarrier barrier = new()
+        {
             SType = StructureType.MemoryBarrier,
             SrcAccessMask = AccessFlags.TransferWriteBit,
             DstAccessMask = AccessFlags.VertexAttributeReadBit | AccessFlags.IndexReadBit,
@@ -1067,7 +1335,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             0,
             null,
             0,
-            null);
+            null
+        );
     }
 
     private StagingAllocation CreateStagingBuffer(
@@ -1075,9 +1344,15 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         PhysicalDeviceMemoryProperties memoryProperties,
         ReadOnlySpan<byte> data,
         string canonicalPath,
-        string description) {
-        if (data.IsEmpty) {
-            throw VulkanAssetErrors.UploadFailed(canonicalPath, $"the {description} payload is empty.");
+        string description
+    )
+    {
+        if (data.IsEmpty)
+        {
+            throw VulkanAssetErrors.UploadFailed(
+                canonicalPath,
+                $"the {description} payload is empty."
+            );
         }
 
         Vk vulkan = device.Vulkan;
@@ -1085,8 +1360,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         Buffer buffer = default;
         DeviceMemory memory = default;
         void* mapped = null;
-        try {
-            BufferCreateInfo createInfo = new() {
+        try
+        {
+            BufferCreateInfo createInfo = new()
+            {
                 SType = StructureType.BufferCreateInfo,
                 Size = (ulong)data.Length,
                 Usage = BufferUsageFlags.TransferSrcBit,
@@ -1095,28 +1372,45 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.CreateBuffer(deviceHandle, &createInfo, null, out buffer),
                 canonicalPath,
-                "vkCreateBuffer for the staging buffer");
+                "vkCreateBuffer for the staging buffer"
+            );
 
-            MemoryRequirements requirements = vulkan.GetBufferMemoryRequirements(deviceHandle, buffer);
+            MemoryRequirements requirements = vulkan.GetBufferMemoryRequirements(
+                deviceHandle,
+                buffer
+            );
             memory = VulkanAssetMemory.Allocate(
                 device,
                 memoryProperties,
                 requirements,
                 MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit,
                 canonicalPath,
-                "staging buffer");
+                "staging buffer"
+            );
             VulkanAssetErrors.ThrowIfFailed(
                 vulkan.BindBufferMemory(deviceHandle, buffer, memory, 0),
                 canonicalPath,
-                "vkBindBufferMemory for the staging buffer");
+                "vkBindBufferMemory for the staging buffer"
+            );
             VulkanAssetErrors.ThrowIfFailed(
-                vulkan.MapMemory(deviceHandle, memory, 0, (ulong)data.Length, MemoryMapFlags.None, &mapped),
+                vulkan.MapMemory(
+                    deviceHandle,
+                    memory,
+                    0,
+                    (ulong)data.Length,
+                    MemoryMapFlags.None,
+                    &mapped
+                ),
                 canonicalPath,
-                "vkMapMemory for the staging buffer");
+                "vkMapMemory for the staging buffer"
+            );
             data.CopyTo(new Span<byte>(mapped, data.Length));
             return new StagingAllocation(buffer, memory);
-        } catch {
-            if (mapped is not null) {
+        }
+        catch
+        {
+            if (mapped is not null)
+            {
                 vulkan.UnmapMemory(deviceHandle, memory);
             }
 
@@ -1131,61 +1425,91 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         ReadOnlyMemory<byte> spirv,
         string payloadPath,
         string canonicalPath,
-        string stage) {
-        if (spirv.IsEmpty) {
-            throw VulkanAssetErrors.DecodeFailed(payloadPath, $"the {stage} SPIR-V module is empty");
-        }
-
-        if (spirv.Length % sizeof(uint) != 0) {
+        string stage
+    )
+    {
+        if (spirv.IsEmpty)
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 payloadPath,
-                $"the {stage} SPIR-V module is {spirv.Length} byte(s), which is not a whole number of 32-bit words");
+                $"the {stage} SPIR-V module is empty"
+            );
+        }
+
+        if (spirv.Length % sizeof(uint) != 0)
+        {
+            throw VulkanAssetErrors.DecodeFailed(
+                payloadPath,
+                $"the {stage} SPIR-V module is {spirv.Length} byte(s), which is not a whole number of 32-bit words"
+            );
         }
 
         // Copy into a uint[] so the code pointer is 4-byte aligned; the payload may be a slice of a
         // larger pack buffer.
         uint[] code = MemoryMarshal.Cast<byte, uint>(spirv.Span).ToArray();
-        fixed (uint* codePointer = code) {
-            ShaderModuleCreateInfo createInfo = new() {
+        fixed (uint* codePointer = code)
+        {
+            ShaderModuleCreateInfo createInfo = new()
+            {
                 SType = StructureType.ShaderModuleCreateInfo,
                 CodeSize = (nuint)(code.Length * sizeof(uint)),
                 PCode = codePointer,
             };
-            Result result = device.Vulkan.CreateShaderModule(device.Device, &createInfo, null, out ShaderModule module);
-            VulkanAssetErrors.ThrowIfFailed(result, canonicalPath, $"vkCreateShaderModule for the {stage} stage");
-            if (module.Handle == 0) {
+            Result result = device.Vulkan.CreateShaderModule(
+                device.Device,
+                &createInfo,
+                null,
+                out ShaderModule module
+            );
+            VulkanAssetErrors.ThrowIfFailed(
+                result,
+                canonicalPath,
+                $"vkCreateShaderModule for the {stage} stage"
+            );
+            if (module.Handle == 0)
+            {
                 throw VulkanAssetErrors.UploadFailed(
                     canonicalPath,
-                    $"vkCreateShaderModule returned a zero {stage} module handle.");
+                    $"vkCreateShaderModule returned a zero {stage} module handle."
+                );
             }
 
             return module;
         }
     }
 
-    private static void ValidateShaderDescriptor(ShaderAssetDescriptor descriptor) {
+    private static void ValidateShaderDescriptor(ShaderAssetDescriptor descriptor)
+    {
         const ShaderStageMask requiredStages = ShaderStageMask.Vertex | ShaderStageMask.Fragment;
-        if ((descriptor.Stages & requiredStages) != requiredStages) {
+        if ((descriptor.Stages & requiredStages) != requiredStages)
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 descriptor.VertexPayload,
-                $"the shader descriptor declares stages '{descriptor.Stages}', but a vertex and fragment module are required");
+                $"the shader descriptor declares stages '{descriptor.Stages}', but a vertex and fragment module are required"
+            );
         }
 
-        if (string.IsNullOrWhiteSpace(descriptor.VertexEntry)) {
+        if (string.IsNullOrWhiteSpace(descriptor.VertexEntry))
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 descriptor.VertexPayload,
-                "the shader descriptor has no vertex entry point name");
+                "the shader descriptor has no vertex entry point name"
+            );
         }
 
-        if (string.IsNullOrWhiteSpace(descriptor.FragmentEntry)) {
+        if (string.IsNullOrWhiteSpace(descriptor.FragmentEntry))
+        {
             throw VulkanAssetErrors.DecodeFailed(
                 descriptor.FragmentPayload,
-                "the shader descriptor has no fragment entry point name");
+                "the shader descriptor has no fragment entry point name"
+            );
         }
     }
 
-    private void DestroyTexture(VulkanTextureAssetResource texture) {
-        if (!texture.TryRelease()) {
+    private void DestroyTexture(VulkanTextureAssetResource texture)
+    {
+        if (!texture.TryRelease())
+        {
             return;
         }
 
@@ -1200,8 +1524,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         texture.ReleaseBindlessSlot(_bindlessTextureTableAccessor());
     }
 
-    private void DestroyMesh(VulkanMeshAssetResource mesh) {
-        if (!mesh.TryRelease()) {
+    private void DestroyMesh(VulkanMeshAssetResource mesh)
+    {
+        if (!mesh.TryRelease())
+        {
             return;
         }
 
@@ -1213,8 +1539,10 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         DestroyMemory(vulkan, deviceHandle, mesh.Memory);
     }
 
-    private void DestroyShader(VulkanShaderAssetResource shader) {
-        if (!shader.TryRelease()) {
+    private void DestroyShader(VulkanShaderAssetResource shader)
+    {
+        if (!shader.TryRelease())
+        {
             return;
         }
 
@@ -1225,7 +1553,8 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
         DestroyShaderModule(vulkan, deviceHandle, shader.VertexModule);
     }
 
-    private void DestroyStagingBuffer(VulkanDevice device, StagingAllocation staging) {
+    private void DestroyStagingBuffer(VulkanDevice device, StagingAllocation staging)
+    {
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
         DestroyBuffer(vulkan, deviceHandle, staging.Buffer);
@@ -1235,15 +1564,21 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Best-effort teardown: the device may already be lost when the image view is destroyed.")]
-    private void DestroyImageView(Vk vulkan, Device device, ImageView view) {
-        if (view.Handle == 0) {
+        Justification = "Best-effort teardown: the device may already be lost when the image view is destroyed."
+    )]
+    private void DestroyImageView(Vk vulkan, Device device, ImageView view)
+    {
+        if (view.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             vulkan.DestroyImageView(device, view, null);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _logger.LogError(exception, "The Vulkan asset image view could not be destroyed.");
         }
     }
@@ -1251,15 +1586,21 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Best-effort teardown: the device may already be lost when the image is destroyed.")]
-    private void DestroyImage(Vk vulkan, Device device, Image image) {
-        if (image.Handle == 0) {
+        Justification = "Best-effort teardown: the device may already be lost when the image is destroyed."
+    )]
+    private void DestroyImage(Vk vulkan, Device device, Image image)
+    {
+        if (image.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             vulkan.DestroyImage(device, image, null);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _logger.LogError(exception, "The Vulkan asset image could not be destroyed.");
         }
     }
@@ -1267,15 +1608,21 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Best-effort teardown: the device may already be lost when the buffer is destroyed.")]
-    private void DestroyBuffer(Vk vulkan, Device device, Buffer buffer) {
-        if (buffer.Handle == 0) {
+        Justification = "Best-effort teardown: the device may already be lost when the buffer is destroyed."
+    )]
+    private void DestroyBuffer(Vk vulkan, Device device, Buffer buffer)
+    {
+        if (buffer.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             vulkan.DestroyBuffer(device, buffer, null);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _logger.LogError(exception, "The Vulkan asset buffer could not be destroyed.");
         }
     }
@@ -1283,15 +1630,21 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Best-effort teardown: the device may already be lost when the allocation is freed.")]
-    private void DestroyMemory(Vk vulkan, Device device, DeviceMemory memory) {
-        if (memory.Handle == 0) {
+        Justification = "Best-effort teardown: the device may already be lost when the allocation is freed."
+    )]
+    private void DestroyMemory(Vk vulkan, Device device, DeviceMemory memory)
+    {
+        if (memory.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             vulkan.FreeMemory(device, memory, null);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _logger.LogError(exception, "The Vulkan asset memory could not be freed.");
         }
     }
@@ -1299,20 +1652,27 @@ internal sealed unsafe class VulkanAssetWorker : IAssetGpuWorker {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Best-effort teardown: the device may already be lost when the shader module is destroyed.")]
-    private void DestroyShaderModule(Vk vulkan, Device device, ShaderModule module) {
-        if (module.Handle == 0) {
+        Justification = "Best-effort teardown: the device may already be lost when the shader module is destroyed."
+    )]
+    private void DestroyShaderModule(Vk vulkan, Device device, ShaderModule module)
+    {
+        if (module.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             vulkan.DestroyShaderModule(device, module, null);
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _logger.LogError(exception, "The Vulkan asset shader module could not be destroyed.");
         }
     }
 
-    private static ulong Align(ulong value, ulong alignment) => ((value + alignment - 1) / alignment) * alignment;
+    private static ulong Align(ulong value, ulong alignment) =>
+        ((value + alignment - 1) / alignment) * alignment;
 
     /// <summary>
     /// The staging buffer and memory allocated for one upload, destroyed after the upload fence

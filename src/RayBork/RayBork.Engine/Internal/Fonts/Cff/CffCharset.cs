@@ -17,7 +17,8 @@ namespace RayBork.Internal;
 /// many <c>seac</c> glyphs is O(log glyphs) per component instead of a linear scan.
 /// </para>
 /// </remarks>
-internal sealed class CffCharset {
+internal sealed class CffCharset
+{
     /// <summary>The glyph count of the predefined ISOAdobe charset.</summary>
     internal const int ISO_ADOBE_GLYPH_COUNT = 229;
 
@@ -31,13 +32,16 @@ internal sealed class CffCharset {
 
     private readonly ReadOnlyMemory<SidGlyph> _lookup;
 
-    private CffCharset(ushort[] sids) {
+    private CffCharset(ushort[] sids)
+    {
         SidGlyph[] lookup = new SidGlyph[sids.Length];
-        for (int glyphId = 0; glyphId < sids.Length; glyphId++) {
+        for (int glyphId = 0; glyphId < sids.Length; glyphId++)
+        {
             lookup[glyphId] = new SidGlyph(sids[glyphId], (ushort)glyphId);
         }
 
-        Array.Sort(lookup, static (first, second) => {
+        Array.Sort(lookup, static (first, second) =>
+        {
             int bySid = first.Sid.CompareTo(second.Sid);
             return bySid != 0 ? bySid : first.GlyphId.CompareTo(second.GlyphId);
         });
@@ -61,29 +65,40 @@ internal sealed class CffCharset {
         ReadOnlyMemory<byte> table,
         int glyphCount,
         int offset,
-        string context) {
-        if (glyphCount < 1) {
+        string context
+    )
+    {
+        if (glyphCount < 1)
+        {
             throw new FontFormatException($"{context} needs at least one glyph");
         }
 
         ushort[] sids = new ushort[glyphCount];
-        if (offset is PREDEFINED_ISO_ADOBE or PREDEFINED_EXPERT or PREDEFINED_EXPERT_SUBSET) {
-            if (offset == PREDEFINED_EXPERT) {
+        if (offset is PREDEFINED_ISO_ADOBE or PREDEFINED_EXPERT or PREDEFINED_EXPERT_SUBSET)
+        {
+            if (offset == PREDEFINED_EXPERT)
+            {
                 throw new FontUnsupportedException(
-                    $"{context} uses the predefined Expert charset; only the predefined ISOAdobe charset is supported");
+                    $"{context} uses the predefined Expert charset; only the predefined ISOAdobe charset is supported"
+                );
             }
 
-            if (offset == PREDEFINED_EXPERT_SUBSET) {
+            if (offset == PREDEFINED_EXPERT_SUBSET)
+            {
                 throw new FontUnsupportedException(
-                    $"{context} uses the predefined ExpertSubset charset; only the predefined ISOAdobe charset is supported");
+                    $"{context} uses the predefined ExpertSubset charset; only the predefined ISOAdobe charset is supported"
+                );
             }
 
-            if (glyphCount > ISO_ADOBE_GLYPH_COUNT) {
+            if (glyphCount > ISO_ADOBE_GLYPH_COUNT)
+            {
                 throw new FontFormatException(
-                    $"{context} is the predefined ISOAdobe charset with {ISO_ADOBE_GLYPH_COUNT} glyphs but the face has {glyphCount} glyph(s)");
+                    $"{context} is the predefined ISOAdobe charset with {ISO_ADOBE_GLYPH_COUNT} glyphs but the face has {glyphCount} glyph(s)"
+                );
             }
 
-            for (int glyphId = 0; glyphId < glyphCount; glyphId++) {
+            for (int glyphId = 0; glyphId < glyphCount; glyphId++)
+            {
                 sids[glyphId] = (ushort)glyphId;
             }
 
@@ -93,43 +108,58 @@ internal sealed class CffCharset {
         SfntReader reader = new(table.Span, context);
         reader.Require(offset, 1);
         int format = reader.ReadByte(offset);
-        if (format is not FORMAT_0 and not FORMAT_1 and not FORMAT_2) {
+        if (format is not FORMAT_0 and not FORMAT_1 and not FORMAT_2)
+        {
             throw new FontFormatException(
-                $"{context} uses the charset format {format}; formats 0, 1, and 2 are supported");
+                $"{context} uses the charset format {format}; formats 0, 1, and 2 are supported"
+            );
         }
 
         int position = offset + 1;
         int assigned = 1;
-        while (assigned < glyphCount) {
-            switch (format) {
+        while (assigned < glyphCount)
+        {
+            switch (format)
+            {
                 case FORMAT_0:
                     reader.Require(position, (glyphCount - assigned) * sizeof(ushort));
-                    for (; assigned < glyphCount; assigned++) {
+                    for (; assigned < glyphCount; assigned++)
+                    {
                         sids[assigned] = reader.ReadUInt16(position);
                         position += sizeof(ushort);
                     }
 
                     break;
                 case FORMAT_1:
-                case FORMAT_2: {
-                    reader.Require(position, sizeof(ushort) + (format == FORMAT_1 ? 1 : sizeof(ushort)));
+                case FORMAT_2:
+                {
+                    reader.Require(
+                        position,
+                        sizeof(ushort) + (format == FORMAT_1 ? 1 : sizeof(ushort))
+                    );
                     int firstSid = reader.ReadUInt16(position);
-                    int rangeLength = format == FORMAT_1
-                        ? reader.ReadByte(position + sizeof(ushort))
-                        : reader.ReadUInt16(position + sizeof(ushort));
+                    int rangeLength =
+                        format == FORMAT_1
+                            ? reader.ReadByte(position + sizeof(ushort))
+                            : reader.ReadUInt16(position + sizeof(ushort));
                     position += format == FORMAT_1 ? 3 : 4;
                     int left = rangeLength;
-                    if (firstSid + left > MAX_SID) {
+                    if (firstSid + left > MAX_SID)
+                    {
                         throw new FontFormatException(
-                            $"{context} has a range starting at SID {firstSid} with {left} following glyph(s); the last SID exceeds {MAX_SID}");
+                            $"{context} has a range starting at SID {firstSid} with {left} following glyph(s); the last SID exceeds {MAX_SID}"
+                        );
                     }
 
-                    if (left >= glyphCount - assigned) {
+                    if (left >= glyphCount - assigned)
+                    {
                         throw new FontFormatException(
-                            $"{context} has a range that covers {left + 1} glyph(s) but only {glyphCount - assigned} glyph(s) remain");
+                            $"{context} has a range that covers {left + 1} glyph(s) but only {glyphCount - assigned} glyph(s) remain"
+                        );
                     }
 
-                    for (int index = 0; index <= left; index++) {
+                    for (int index = 0; index <= left; index++)
+                    {
                         sids[assigned++] = (ushort)(firstSid + index);
                     }
 
@@ -138,7 +168,8 @@ internal sealed class CffCharset {
 
                 default:
                     throw new FontFormatException(
-                        $"{context} uses the charset format {format}; formats 0, 1, and 2 are supported");
+                        $"{context} uses the charset format {format}; formats 0, 1, and 2 are supported"
+                    );
             }
         }
 
@@ -149,8 +180,10 @@ internal sealed class CffCharset {
     /// <param name="sid">The SID to resolve.</param>
     /// <param name="glyphId">The matching glyph identifier, or zero when none matches.</param>
     /// <returns><see langword="true"/> when the SID maps to a glyph.</returns>
-    internal bool TryGetGlyphId(int sid, out int glyphId) {
-        if ((uint)sid > MAX_SID) {
+    internal bool TryGetGlyphId(int sid, out int glyphId)
+    {
+        if ((uint)sid > MAX_SID)
+        {
             glyphId = 0;
             return false;
         }
@@ -159,16 +192,21 @@ internal sealed class CffCharset {
         ReadOnlySpan<SidGlyph> lookup = _lookup.Span;
         int low = 0;
         int high = lookup.Length;
-        while (low < high) {
+        while (low < high)
+        {
             int middle = low + ((high - low) / 2);
-            if (lookup[middle].Sid < value) {
+            if (lookup[middle].Sid < value)
+            {
                 low = middle + 1;
-            } else {
+            }
+            else
+            {
                 high = middle;
             }
         }
 
-        if (low < lookup.Length && lookup[low].Sid == value) {
+        if (low < lookup.Length && lookup[low].Sid == value)
+        {
             glyphId = lookup[low].GlyphId;
             return true;
         }
@@ -177,8 +215,10 @@ internal sealed class CffCharset {
         return false;
     }
 
-    private readonly struct SidGlyph {
-        internal SidGlyph(ushort sid, ushort glyphId) {
+    private readonly struct SidGlyph
+    {
+        internal SidGlyph(ushort sid, ushort glyphId)
+        {
             Sid = sid;
             GlyphId = glyphId;
         }

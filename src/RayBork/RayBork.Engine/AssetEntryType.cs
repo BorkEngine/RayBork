@@ -17,7 +17,8 @@ namespace RayBork;
 /// version 1.
 /// </para>
 /// </remarks>
-public enum AssetEntryType : ushort {
+public enum AssetEntryType : ushort
+{
     /// <summary>An opaque payload with no descriptor.</summary>
     Raw = 0,
 

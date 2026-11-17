@@ -20,7 +20,8 @@ namespace RayBork;
 /// a ray from a render-pixel position.
 /// </para>
 /// </remarks>
-public readonly record struct Ray {
+public readonly record struct Ray
+{
     private readonly Vector3 _origin;
     private readonly Vector3 _direction;
 
@@ -33,21 +34,24 @@ public readonly record struct Ray {
     /// A component of <paramref name="origin"/> is not finite, or <paramref name="direction"/> is not
     /// finite or is zero.
     /// </exception>
-    public Ray(Vector3 origin, Vector3 direction) {
+    public Ray(Vector3 origin, Vector3 direction)
+    {
         _origin = ValidateOrigin(origin, nameof(origin));
         _direction = NormalizeDirection(direction, nameof(direction));
     }
 
     /// <summary>Gets the finite world-space start point.</summary>
     /// <exception cref="ArgumentException">The assigned origin has a non-finite component.</exception>
-    public Vector3 Origin {
+    public Vector3 Origin
+    {
         get => _origin;
         init => _origin = ValidateOrigin(value, nameof(Origin));
     }
 
     /// <summary>Gets the unit world-space direction.</summary>
     /// <exception cref="ArgumentException">The assigned direction is non-finite or zero.</exception>
-    public Vector3 Direction {
+    public Vector3 Direction
+    {
         get => _direction;
         init => _direction = NormalizeDirection(value, nameof(Direction));
     }
@@ -55,32 +59,42 @@ public readonly record struct Ray {
     /// <summary>Deconstructs the ray into its origin and unit direction.</summary>
     /// <param name="origin">The finite world-space start point.</param>
     /// <param name="direction">The unit world-space direction.</param>
-    public void Deconstruct(out Vector3 origin, out Vector3 direction) {
+    public void Deconstruct(out Vector3 origin, out Vector3 direction)
+    {
         origin = _origin;
         direction = _direction;
     }
 
-    private static Vector3 ValidateOrigin(Vector3 origin, string parameterName) {
-        if (!float.IsFinite(origin.X) || !float.IsFinite(origin.Y) || !float.IsFinite(origin.Z)) {
+    private static Vector3 ValidateOrigin(Vector3 origin, string parameterName)
+    {
+        if (!float.IsFinite(origin.X) || !float.IsFinite(origin.Y) || !float.IsFinite(origin.Z))
+        {
             throw new ArgumentException("The ray origin must be finite.", parameterName);
         }
 
         return origin;
     }
 
-    private static Vector3 NormalizeDirection(Vector3 direction, string parameterName) {
+    private static Vector3 NormalizeDirection(Vector3 direction, string parameterName)
+    {
         // Measure in double so a large finite direction cannot overflow to infinity before the divide.
         double length = Math.Sqrt(
             ((double)direction.X * direction.X)
-            + ((double)direction.Y * direction.Y)
-            + ((double)direction.Z * direction.Z));
-        if (!(length > 0d) || !double.IsFinite(length)) {
-            throw new ArgumentException("The ray direction must be finite and non-zero.", parameterName);
+                + ((double)direction.Y * direction.Y)
+                + ((double)direction.Z * direction.Z)
+        );
+        if (!(length > 0d) || !double.IsFinite(length))
+        {
+            throw new ArgumentException(
+                "The ray direction must be finite and non-zero.",
+                parameterName
+            );
         }
 
         return new Vector3(
             (float)(direction.X / length),
             (float)(direction.Y / length),
-            (float)(direction.Z / length));
+            (float)(direction.Z / length)
+        );
     }
 }

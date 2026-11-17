@@ -6,12 +6,14 @@ using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests;
 
-public sealed class AssetLifecycleTests {
+public sealed class AssetLifecycleTests
+{
     private const int FAST_TARGET_FPS = 1000;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetupLoadsEveryAssetKindAndShutdownDisposesThem() {
+    public void SetupLoadsEveryAssetKindAndShutdownDisposesThem()
+    {
         using TempPackDirectory directory = new();
         string packPath = directory.GetPath("game.pck");
         File.WriteAllBytes(packPath, CatalogTestData.BuildStandardPack());
@@ -28,26 +30,41 @@ public sealed class AssetLifecycleTests {
         bool metadataReadableBeforeShutdown = false;
 
         ScriptedGame game = new();
-        game.SetupHandler = async context => {
+        game.SetupHandler = async context =>
+        {
             setupContext = context;
-            catalogHadAllPaths = context.Assets.Exists("/meshes/quad")
+            catalogHadAllPaths =
+                context.Assets.Exists("/meshes/quad")
                 && context.Assets.Exists("/textures/albedo")
                 && context.Assets.Exists("/shaders/basic")
                 && context.Assets.Exists("/data/settings");
-            mesh = await context.Assets.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken);
-            texture = await context.Assets.Load<Texture>("/textures/albedo", TestContext.Current.CancellationToken);
-            shader = await context.Assets.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken);
+            mesh = await context.Assets.Load<Mesh>(
+                "/meshes/quad",
+                TestContext.Current.CancellationToken
+            );
+            texture = await context.Assets.Load<Texture>(
+                "/textures/albedo",
+                TestContext.Current.CancellationToken
+            );
+            shader = await context.Assets.Load<Shader>(
+                "/shaders/basic",
+                TestContext.Current.CancellationToken
+            );
             settings = await context.Assets.Load<CatalogTestSettings>(
                 "/data/settings",
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
         };
-        game.TickHandler = context => {
-            metadataReadableBeforeShutdown = mesh!.VertexCount == 3
+        game.TickHandler = context =>
+        {
+            metadataReadableBeforeShutdown =
+                mesh!.VertexCount == 3
                 && texture!.Width == 4
                 && shader!.Stages == (ShaderStageMask.Vertex | ShaderStageMask.Fragment);
             context.RequestExit();
         };
-        game.ShutdownHandler = () => {
+        game.ShutdownHandler = () =>
+        {
             Assert.False(mesh!.IsDisposed);
             mesh.Dispose();
             texture!.Dispose();
@@ -56,9 +73,12 @@ public sealed class AssetLifecycleTests {
         };
 
         RayBorkApp app = BuildApp(game, platform, renderer, packPath);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -77,25 +97,28 @@ public sealed class AssetLifecycleTests {
         Assert.Equal(expectedUploads, worker.UploadCallCount);
         Assert.Equal(expectedUploads, worker.DestroyCalls.Count);
         Assert.Throws<ObjectDisposedException>(() => setupContext!.Assets.Exists("/meshes/quad"));
-        Assert.Throws<ObjectDisposedException>(
-            () => {
-                _ = setupContext!.Assets.Load<Mesh>(
-                    "/meshes/quad",
-                    TestContext.Current.CancellationToken);
-            });
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            _ = setupContext!.Assets.Load<Mesh>(
+                "/meshes/quad",
+                TestContext.Current.CancellationToken
+            );
+        });
         Assert.True(platform.IsDisposed);
         Assert.Equal(1, renderer.DisposeCallCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AppRunsWithoutPacksAndTheCatalogIsDisposedAfterRun() {
+    public void AppRunsWithoutPacksAndTheCatalogIsDisposedAfterRun()
+    {
         FakeRendererBackend renderer = new();
         FakeEnginePlatform platform = new();
         EngineContext? setupContext = null;
         bool exists = true;
         ScriptedGame game = new();
-        game.SetupHandler = context => {
+        game.SetupHandler = context =>
+        {
             setupContext = context;
             exists = context.Assets.Exists("/anything");
             return Task.CompletedTask;
@@ -107,9 +130,12 @@ public sealed class AssetLifecycleTests {
             .WithTargetFps(FAST_TARGET_FPS)
             .WithLoggerFactory(NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -125,7 +151,8 @@ public sealed class AssetLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CatalogStopDisposesAssetsTheGameForgotToRelease() {
+    public void CatalogStopDisposesAssetsTheGameForgotToRelease()
+    {
         using TempPackDirectory directory = new();
         string packPath = directory.GetPath("game.pck");
         File.WriteAllBytes(packPath, CatalogTestData.BuildStandardPack());
@@ -135,17 +162,22 @@ public sealed class AssetLifecycleTests {
         Mesh? mesh = null;
 
         ScriptedGame game = new();
-        game.SetupHandler = async context => {
+        game.SetupHandler = async context =>
+        {
             mesh = await context.Assets.Load<Mesh>(
                 "/meshes/quad",
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
         };
         game.TickHandler = context => context.RequestExit();
 
         RayBorkApp app = BuildApp(game, platform, renderer, packPath);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -158,20 +190,22 @@ public sealed class AssetLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingPackIsAStartupFailureThatSkipsGameCallbacksAndCleansUp() {
+    public void MissingPackIsAStartupFailureThatSkipsGameCallbacksAndCleansUp()
+    {
         using TempPackDirectory directory = new();
         string missing = directory.GetPath("missing.pck");
         FakeRendererBackend renderer = new();
         FakeEnginePlatform platform = new();
-        ScriptedGame game = new() {
-            TickHandler = context => context.RequestExit(),
-        };
+        ScriptedGame game = new() { TickHandler = context => context.RequestExit() };
 
         RayBorkApp app = BuildApp(game, platform, renderer, missing);
         AssetPackException thrown;
-        try {
+        try
+        {
             thrown = Assert.Throws<AssetPackException>(() => app.Run());
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -187,22 +221,28 @@ public sealed class AssetLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CorruptPackIsAStartupFailureBeforeSetup() {
+    public void CorruptPackIsAStartupFailureBeforeSetup()
+    {
         using TempPackDirectory directory = new();
         string packPath = directory.GetPath("corrupt.pck");
         File.WriteAllBytes(packPath, CatalogTestData.BuildStandardPack()[..20]);
         FakeRendererBackend renderer = new();
         FakeEnginePlatform platform = new();
-        ScriptedGame game = new() {
-            SetupHandler = _ => Task.FromException(new InvalidOperationException("Setup must not run.")),
+        ScriptedGame game = new()
+        {
+            SetupHandler = _ =>
+                Task.FromException(new InvalidOperationException("Setup must not run.")),
             TickHandler = context => context.RequestExit(),
         };
 
         RayBorkApp app = BuildApp(game, platform, renderer, packPath);
         AssetPackException thrown;
-        try {
+        try
+        {
             thrown = Assert.Throws<AssetPackException>(() => app.Run());
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -216,7 +256,9 @@ public sealed class AssetLifecycleTests {
         ScriptedGame game,
         FakeEnginePlatform platform,
         FakeRendererBackend renderer,
-        string packPath) => new RayBorkAppBuilder()
+        string packPath
+    ) =>
+        new RayBorkAppBuilder()
             .WithGame(game)
             .WithTargetFps(FAST_TARGET_FPS)
             .WithLoggerFactory(NullLoggerFactory.Instance)

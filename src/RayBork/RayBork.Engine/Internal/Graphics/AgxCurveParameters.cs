@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// display peak.
 /// </para>
 /// </remarks>
-internal readonly struct AgxCurveParameters {
+internal readonly struct AgxCurveParameters
+{
     /// <summary>
     /// The allenwp curve crossover: 18% middle gray, where the toe and shoulder intersections meet.
     /// </summary>
@@ -31,7 +32,15 @@ internal readonly struct AgxCurveParameters {
     /// </summary>
     internal const double MIN_WHITE = 2.0;
 
-    private AgxCurveParameters(double outputMax, double white, double contrast, double toeA, double slope, double w) {
+    private AgxCurveParameters(
+        double outputMax,
+        double white,
+        double contrast,
+        double toeA,
+        double slope,
+        double w
+    )
+    {
         OutputMax = outputMax;
         White = white;
         Contrast = contrast;
@@ -70,13 +79,15 @@ internal readonly struct AgxCurveParameters {
     /// The curve output maximum: <c>1.0</c> for SDR, or the HDR display headroom.
     /// </param>
     /// <returns>The derived curve parameters.</returns>
-    internal static AgxCurveParameters Create(float agxWhite, float agxContrast, float outputMax) {
+    internal static AgxCurveParameters Create(float agxWhite, float agxContrast, float outputMax)
+    {
         double contrast = agxContrast;
         double white = Math.Max(MIN_WHITE, agxWhite) * outputMax;
         double shoulderMax = outputMax - CROSSOVER_POINT;
         double toeA = ((1.0 / CROSSOVER_POINT) - 1.0) * Math.Pow(CROSSOVER_POINT, contrast);
         double slopeDenominator = Math.Pow(CROSSOVER_POINT, contrast) + toeA;
-        double slope = (contrast * Math.Pow(CROSSOVER_POINT, contrast - 1.0) * toeA)
+        double slope =
+            (contrast * Math.Pow(CROSSOVER_POINT, contrast - 1.0) * toeA)
             / (slopeDenominator * slopeDenominator);
         double w = (white - CROSSOVER_POINT) * (white - CROSSOVER_POINT) / shoulderMax * slope;
         return new AgxCurveParameters(outputMax, white, contrast, toeA, slope, w);

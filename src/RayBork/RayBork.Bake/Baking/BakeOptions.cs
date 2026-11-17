@@ -1,7 +1,8 @@
 namespace RayBork.Bake.Baking;
 
 /// <summary>The invocation inputs of one bake or check.</summary>
-internal sealed class BakeOptions {
+internal sealed class BakeOptions
+{
     /// <summary>Initializes invocation options.</summary>
     /// <param name="outputRoot">The absolute output root.</param>
     /// <param name="mode">The payload compression mode.</param>
@@ -13,7 +14,9 @@ internal sealed class BakeOptions {
         BakeMode mode,
         bool check,
         bool force,
-        bool warningsAsErrors) {
+        bool warningsAsErrors
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(outputRoot);
         OutputRoot = outputRoot;
         Mode = mode;

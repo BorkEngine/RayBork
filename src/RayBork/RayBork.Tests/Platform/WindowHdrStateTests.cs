@@ -2,10 +2,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class WindowHdrStateTests {
+public sealed class WindowHdrStateTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SdrIsDisabledWithUnitScales() {
+    public void SdrIsDisabledWithUnitScales()
+    {
         WindowHdrState state = WindowHdrState.Sdr;
 
         Assert.False(state.HdrEnabled);
@@ -15,7 +17,8 @@ public sealed class WindowHdrStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NormalizeForcesSdrWhenHdrIsDisabled() {
+    public void NormalizeForcesSdrWhenHdrIsDisabled()
+    {
         WindowHdrState state = WindowHdrState.Normalize(false, 2.5f, 4f);
 
         Assert.Equal(WindowHdrState.Sdr, state);
@@ -23,7 +26,8 @@ public sealed class WindowHdrStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NormalizePreservesValidValues() {
+    public void NormalizePreservesValidValues()
+    {
         WindowHdrState state = WindowHdrState.Normalize(true, 2.5f, 4f);
 
         Assert.True(state.HdrEnabled);
@@ -38,7 +42,8 @@ public sealed class WindowHdrStateTests {
     [InlineData(0f)]
     [InlineData(-1f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NormalizeFallsBackToUnitWhiteLevelForInvalidValues(float sdrWhiteLevel) {
+    public void NormalizeFallsBackToUnitWhiteLevelForInvalidValues(float sdrWhiteLevel)
+    {
         WindowHdrState state = WindowHdrState.Normalize(true, sdrWhiteLevel, 4f);
 
         Assert.True(state.HdrEnabled);
@@ -54,7 +59,8 @@ public sealed class WindowHdrStateTests {
     [InlineData(float.PositiveInfinity)]
     [InlineData(float.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NormalizeFallsBackToUnitHeadroomForInvalidValues(float hdrHeadroom) {
+    public void NormalizeFallsBackToUnitHeadroomForInvalidValues(float hdrHeadroom)
+    {
         WindowHdrState state = WindowHdrState.Normalize(true, 2.5f, hdrHeadroom);
 
         Assert.True(state.HdrEnabled);
@@ -64,7 +70,8 @@ public sealed class WindowHdrStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NormalizeKeepsHeadroomOfExactlyOne() {
+    public void NormalizeKeepsHeadroomOfExactlyOne()
+    {
         WindowHdrState state = WindowHdrState.Normalize(true, 1f, 1f);
 
         Assert.True(state.HdrEnabled);
@@ -74,7 +81,8 @@ public sealed class WindowHdrStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RecordEqualityComparesEveryValue() {
+    public void RecordEqualityComparesEveryValue()
+    {
         WindowHdrState first = new(true, 2f, 3f);
         WindowHdrState same = new(true, 2f, 3f);
         WindowHdrState differentEnabled = new(false, 2f, 3f);

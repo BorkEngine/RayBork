@@ -21,7 +21,8 @@ namespace RayBork.Tests;
 /// renderer seam members.
 /// </para>
 /// </remarks>
-internal sealed class HdrPresentTestHost : IDisposable {
+internal sealed class HdrPresentTestHost : IDisposable
+{
     private readonly SdlTestHost _sdlHost;
     private readonly RenderSettings _settings;
     private readonly IReadOnlyList<string> _instanceExtensions;
@@ -36,7 +37,9 @@ internal sealed class HdrPresentTestHost : IDisposable {
         SdlTestHost sdlHost,
         RenderSettings settings,
         IReadOnlyList<string> instanceExtensions,
-        WindowSurfaceState initialState) {
+        WindowSurfaceState initialState
+    )
+    {
         _sdlHost = sdlHost;
         _settings = settings;
         _instanceExtensions = instanceExtensions;
@@ -68,8 +71,19 @@ internal sealed class HdrPresentTestHost : IDisposable {
     internal static HdrPresentTestHost CreateOrSkip(
         TonemappingMode tonemapping,
         WindowHdrState hdr,
-        int sampleCount = 4) {
-        if (!TryCreate(out HdrPresentTestHost? host, out string skipReason, tonemapping, hdr, sampleCount)) {
+        int sampleCount = 4
+    )
+    {
+        if (
+            !TryCreate(
+                out HdrPresentTestHost? host,
+                out string skipReason,
+                tonemapping,
+                hdr,
+                sampleCount
+            )
+        )
+        {
             Assert.Skip(skipReason);
         }
 
@@ -90,21 +104,35 @@ internal sealed class HdrPresentTestHost : IDisposable {
         out string skipReason,
         TonemappingMode tonemapping,
         WindowHdrState hdr,
-        int sampleCount = 4) {
+        int sampleCount = 4
+    )
+    {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
+        if (
+            !SdlTestHost.TryCreateVulkan(
+                out SdlTestHost? sdlHost,
+                out skipReason,
+                minimalTestMode: true
+            )
+        )
+        {
             return false;
         }
 
         HdrPresentTestHost? candidate = null;
         bool succeeded = false;
-        try {
+        try
+        {
             IReadOnlyList<string> extensions;
-            try {
+            try
+            {
                 extensions = sdlHost!.Platform.GetVulkanInstanceExtensions();
-            } catch (PlatformException exception) {
-                skipReason = $"SDL cannot provide the Vulkan instance extensions: {exception.Message}";
+            }
+            catch (PlatformException exception)
+            {
+                skipReason =
+                    $"SDL cannot provide the Vulkan instance extensions: {exception.Message}";
                 return false;
             }
 
@@ -113,8 +141,10 @@ internal sealed class HdrPresentTestHost : IDisposable {
                 sdlHost.Platform.Window.RenderHeight,
                 sdlHost.Platform.Window.IsMinimized,
                 sdlHost.Platform.Window.IsFocused,
-                hdr);
-            RenderSettings settings = new() {
+                hdr
+            );
+            RenderSettings settings = new()
+            {
                 PresentMode = PresentMode.Mailbox,
                 SampleCount = sampleCount,
                 Tonemapping = tonemapping,
@@ -122,9 +152,12 @@ internal sealed class HdrPresentTestHost : IDisposable {
                 ValidationEnabled = true,
             };
             candidate = new HdrPresentTestHost(sdlHost, settings, extensions, initialState);
-            try {
+            try
+            {
                 candidate.Initialize();
-            } catch (GraphicsException exception) when (IsEnvironmentalFailure(exception)) {
+            }
+            catch (GraphicsException exception) when (IsEnvironmentalFailure(exception))
+            {
                 skipReason = exception.Message;
                 return false;
             }
@@ -133,11 +166,17 @@ internal sealed class HdrPresentTestHost : IDisposable {
             candidate = null;
             succeeded = true;
             return true;
-        } finally {
-            if (!succeeded) {
-                if (candidate is not null) {
+        }
+        finally
+        {
+            if (!succeeded)
+            {
+                if (candidate is not null)
+                {
                     candidate.Dispose();
-                } else {
+                }
+                else
+                {
                     sdlHost?.Dispose();
                 }
             }
@@ -145,8 +184,10 @@ internal sealed class HdrPresentTestHost : IDisposable {
     }
 
     /// <inheritdoc />
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -156,8 +197,10 @@ internal sealed class HdrPresentTestHost : IDisposable {
         _sdlHost.Dispose();
     }
 
-    private void Initialize() {
-        RendererBackendOptions options = new() {
+    private void Initialize()
+    {
+        RendererBackendOptions options = new()
+        {
             Settings = _settings,
             InstanceExtensions = _instanceExtensions,
             SurfaceProvider = _surfaceProvider,
@@ -169,8 +212,18 @@ internal sealed class HdrPresentTestHost : IDisposable {
     }
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>
-        exception.InnerException is DllNotFoundException or SymbolLoadingException or TypeInitializationException or PlatformException
-        || exception.Message.StartsWith(VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX, StringComparison.Ordinal)
-        || exception.Message.StartsWith(VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX, StringComparison.Ordinal)
+        exception.InnerException
+            is DllNotFoundException
+                or SymbolLoadingException
+                or TypeInitializationException
+                or PlatformException
+        || exception.Message.StartsWith(
+            VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX,
+            StringComparison.Ordinal
+        )
+        || exception.Message.StartsWith(
+            VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX,
+            StringComparison.Ordinal
+        )
         || (exception.InnerException is GraphicsException inner && IsEnvironmentalFailure(inner));
 }

@@ -2,16 +2,19 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class RendererIntegrationTests {
+public sealed class RendererIntegrationTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BackendInitializesBeforeSetupAndPublishesInfo() {
+    public void BackendInitializesBeforeSetupAndPublishesInfo()
+    {
         using AppTestHost host = new(new ScriptedGame());
         EngineInfo expectedInfo = host.FakeRenderer.Info;
         bool initializedBeforeSetup = false;
         EngineInfo infoDuringSetup = default;
 
-        host.Game.SetupHandler = context => {
+        host.Game.SetupHandler = context =>
+        {
             initializedBeforeSetup = host.FakeRenderer.InitializeCallCount == 1;
             infoDuringSetup = context.Info;
             return Task.CompletedTask;
@@ -29,18 +32,21 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SurfaceIsCreatedOnMainThreadBeforeSetupAndDestroyedAfterShutdown() {
+    public void SurfaceIsCreatedOnMainThreadBeforeSetupAndDestroyedAfterShutdown()
+    {
         int mainThreadId = Environment.CurrentManagedThreadId;
         using AppTestHost host = new(new ScriptedGame());
         bool surfaceCreatedBeforeSetup = false;
         bool surfaceDestroyedDuringShutdown = true;
 
-        host.Game.SetupHandler = _ => {
+        host.Game.SetupHandler = _ =>
+        {
             surfaceCreatedBeforeSetup = host.FakeRenderer.SurfaceHandle != IntPtr.Zero;
             return Task.CompletedTask;
         };
         host.Game.TickHandler = context => context.RequestExit();
-        host.Game.ShutdownHandler = () => {
+        host.Game.ShutdownHandler = () =>
+        {
             surfaceDestroyedDuringShutdown = host.FakeRenderer.SurfaceDestroyed;
             return Task.CompletedTask;
         };
@@ -52,41 +58,64 @@ public sealed class RendererIntegrationTests {
         Assert.True(host.FakeRenderer.SurfaceDestroyed);
         Assert.Equal(mainThreadId, host.Platform.CreateSurfaceThreadId);
         Assert.Equal(mainThreadId, host.Platform.DestroySurfaceThreadId);
-        Assert.Equal(host.FakeRenderer.SurfaceHandle, Assert.Single(host.Platform.DestroyedSurfaces));
+        Assert.Equal(
+            host.FakeRenderer.SurfaceHandle,
+            Assert.Single(host.Platform.DestroyedSurfaces)
+        );
         Assert.Equal(1, host.Platform.CreateSurfaceCallCount);
-        Assert.Same(host.Platform.VulkanInstanceExtensions, host.FakeRenderer.Options!.InstanceExtensions);
+        Assert.Same(
+            host.Platform.VulkanInstanceExtensions,
+            host.FakeRenderer.Options!.InstanceExtensions
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PublishedFramesAreSubmittedAndPresentedInOrder() {
+    public void PublishedFramesAreSubmittedAndPresentedInOrder()
+    {
         using ManualResetEventSlim firstFrameSubmitted = new(false);
         using ManualResetEventSlim secondFrameSubmitted = new(false);
         RenderStats capturedStats = default;
 
         using AppTestHost host = new(new ScriptedGame());
-        host.FakeRenderer.OnSubmit = _ => {
+        host.FakeRenderer.OnSubmit = _ =>
+        {
             int count = host.FakeRenderer.SubmitFrames.Count;
-            if (count >= 1) {
+            if (count >= 1)
+            {
                 firstFrameSubmitted.Set();
             }
 
-            if (count >= 2) {
+            if (count >= 2)
+            {
                 secondFrameSubmitted.Set();
             }
         };
-        host.Game.TickHandler = context => {
-            if (context.FrameCount == 2) {
+        host.Game.TickHandler = context =>
+        {
+            if (context.FrameCount == 2)
+            {
                 // The first frame was published after the previous tick, so the renderer must
                 // consume it; waiting here keeps the assertion independent of thread scheduling.
-                Assert.True(firstFrameSubmitted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+                Assert.True(
+                    firstFrameSubmitted.Wait(
+                        AppTestHost.TIMEOUT,
+                        TestContext.Current.CancellationToken
+                    )
+                );
                 return;
             }
 
-            if (context.FrameCount >= 3) {
+            if (context.FrameCount >= 3)
+            {
                 // The second Submit happens after the first Present and Stats publication, so the
                 // status snapshot read below is a completed frame even when the renderer runs ahead.
-                Assert.True(secondFrameSubmitted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+                Assert.True(
+                    secondFrameSubmitted.Wait(
+                        AppTestHost.TIMEOUT,
+                        TestContext.Current.CancellationToken
+                    )
+                );
                 capturedStats = context.Stats;
                 context.RequestExit();
             }
@@ -96,8 +125,12 @@ public sealed class RendererIntegrationTests {
 
         long[] frames = [.. host.FakeRenderer.SubmitFrames];
         Assert.NotEmpty(frames);
-        for (int i = 1; i < frames.Length; i++) {
-            Assert.True(frames[i] > frames[i - 1], $"Submitted frames must be monotonic; frame {frames[i]} followed {frames[i - 1]}.");
+        for (int i = 1; i < frames.Length; i++)
+        {
+            Assert.True(
+                frames[i] > frames[i - 1],
+                $"Submitted frames must be monotonic; frame {frames[i]} followed {frames[i - 1]}."
+            );
         }
 
         Assert.Equal(frames.Length, host.FakeRenderer.PresentCount);
@@ -107,7 +140,8 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RenderStatusInfoEqualsBackendInfoAfterRun() {
+    public void RenderStatusInfoEqualsBackendInfoAfterRun()
+    {
         using AppTestHost host = new(new ScriptedGame());
         host.Game.TickHandler = context => context.RequestExit();
 
@@ -118,7 +152,8 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InitializeFailureThrowsBeforeSetupAndDisposesBackendAndPlatform() {
+    public void InitializeFailureThrowsBeforeSetupAndDisposesBackendAndPlatform()
+    {
         InvalidOperationException initializeException = new("initialize failed");
         using AppTestHost host = new(new ScriptedGame());
         host.FakeRenderer.InitializeException = initializeException;
@@ -137,7 +172,8 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SurfaceCreationFailureIsReportedAsGraphicsException() {
+    public void SurfaceCreationFailureIsReportedAsGraphicsException()
+    {
         PlatformException surfaceException = new("surface creation failed");
         using AppTestHost host = new(new ScriptedGame());
         host.Platform.SurfaceCreationException = surfaceException;
@@ -155,12 +191,14 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TickFailureRunsShutdownThenDisposesBackend() {
+    public void TickFailureRunsShutdownThenDisposesBackend()
+    {
         InvalidOperationException tickException = new("tick failed");
         using AppTestHost host = new(new ScriptedGame());
         int disposeCountDuringShutdown = -1;
         host.Game.TickHandler = _ => throw tickException;
-        host.Game.ShutdownHandler = () => {
+        host.Game.ShutdownHandler = () =>
+        {
             disposeCountDuringShutdown = host.FakeRenderer.DisposeCallCount;
             return Task.CompletedTask;
         };
@@ -176,7 +214,8 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SubmitFailureStopsTheAppAndRethrows() {
+    public void SubmitFailureStopsTheAppAndRethrows()
+    {
         InvalidOperationException submitException = new("submit failed");
         using AppTestHost host = new(new ScriptedGame());
         host.FakeRenderer.SubmitException = submitException;
@@ -193,7 +232,8 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RequestExitPublishesTheFinalFrameBeforeShutdown() {
+    public void RequestExitPublishesTheFinalFrameBeforeShutdown()
+    {
         using AppTestHost host = new(new ScriptedGame());
         host.Game.TickHandler = context => context.RequestExit();
 
@@ -207,11 +247,14 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MinimizedWindowIsVisibleToTheBackend() {
+    public void MinimizedWindowIsVisibleToTheBackend()
+    {
         using AppTestHost host = new(new ScriptedGame());
         host.Platform.InitializeHook = () => host.Platform.FakeWindow.IsMinimized = true;
-        host.Game.TickHandler = context => {
-            if (context.FrameCount >= 3) {
+        host.Game.TickHandler = context =>
+        {
+            if (context.FrameCount >= 3)
+            {
                 context.RequestExit();
             }
         };
@@ -225,35 +268,48 @@ public sealed class RendererIntegrationTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeFromAnotherThreadWhileRenderingStopsCleanly() {
+    public void DisposeFromAnotherThreadWhileRenderingStopsCleanly()
+    {
         using ManualResetEventSlim tickStarted = new(false);
         using ManualResetEventSlim releaseTick = new(false);
 
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.TickHandler = _ => {
+        game.TickHandler = _ =>
+        {
             tickStarted.Set();
             releaseTick.Wait(AppTestHost.TIMEOUT);
         };
 
         Exception? runFailure = null;
-        Thread runThread = new(() => {
-            try {
+        Thread runThread = new(() =>
+        {
+            try
+            {
                 host.App.Run();
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 runFailure = exception;
             }
         });
 
         runThread.Start();
-        try {
-            Assert.True(tickStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+        try
+        {
+            Assert.True(
+                tickStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken)
+            );
 
             Exception? disposeFailure = null;
-            Thread disposeThread = new(() => {
-                try {
+            Thread disposeThread = new(() =>
+            {
+                try
+                {
                     host.App.Dispose();
-                } catch (Exception exception) {
+                }
+                catch (Exception exception)
+                {
                     disposeFailure = exception;
                 }
             });
@@ -270,7 +326,9 @@ public sealed class RendererIntegrationTests {
             Assert.Equal(1, host.FakeRenderer.DisposeCallCount);
             Assert.True(host.FakeRenderer.SurfaceDestroyed);
             Assert.True(host.Platform.IsDisposed);
-        } finally {
+        }
+        finally
+        {
             releaseTick.Set();
             runThread.Join(AppTestHost.TIMEOUT);
         }

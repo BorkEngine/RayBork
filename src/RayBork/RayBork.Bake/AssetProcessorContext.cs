@@ -8,7 +8,8 @@ namespace RayBork.Bake;
 /// Additional tracked dependencies, such as the GLSL files named by a shader TOML, are registered
 /// with <see cref="AddInput"/>.
 /// </remarks>
-public sealed class AssetProcessorContext {
+public sealed class AssetProcessorContext
+{
     private readonly List<string> _additionalInputs = [];
 
     /// <summary>Initializes a per-source context.</summary>
@@ -26,7 +27,9 @@ public sealed class AssetProcessorContext {
         string sourceFileName,
         string sourceFileNameWithoutExtension,
         IAssetOutputSink outputs,
-        IAssetProcessorDiagnostics diagnostics) {
+        IAssetProcessorDiagnostics diagnostics
+    )
+    {
         SourcePath = sourcePath;
         RelativePath = relativePath;
         BaseAssetPath = baseAssetPath;
@@ -68,28 +71,44 @@ public sealed class AssetProcessorContext {
     /// </param>
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or invalid.</exception>
     /// <exception cref="FileNotFoundException">The file does not exist.</exception>
-    public void AddInput(string path) {
+    public void AddInput(string path)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
 
         string candidate;
-        try {
+        try
+        {
             candidate = Path.GetFullPath(
                 Path.IsPathRooted(path)
                     ? path
-                    : Path.Combine(Path.GetDirectoryName(SourcePath) ?? Directory.GetCurrentDirectory(), path));
-        } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-            or PathTooLongException) {
-            throw new ArgumentException($"Invalid additional input path '{path}'.", nameof(path), exception);
+                    : Path.Combine(
+                        Path.GetDirectoryName(SourcePath) ?? Directory.GetCurrentDirectory(),
+                        path
+                    )
+            );
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            throw new ArgumentException(
+                $"Invalid additional input path '{path}'.",
+                nameof(path),
+                exception
+            );
         }
 
-        if (!File.Exists(candidate)) {
+        if (!File.Exists(candidate))
+        {
             throw new FileNotFoundException(
                 $"The additional input '{path}' does not exist.",
-                candidate);
+                candidate
+            );
         }
 
-        foreach (string existing in _additionalInputs) {
-            if (string.Equals(existing, candidate, StringComparison.Ordinal)) {
+        foreach (string existing in _additionalInputs)
+        {
+            if (string.Equals(existing, candidate, StringComparison.Ordinal))
+            {
                 return;
             }
         }

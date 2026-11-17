@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// <c>(major &lt;&lt; 22) | (minor &lt;&lt; 12) | patch</c>. The engine uses the packed value in
 /// <see cref="EngineInfo.VulkanApiVersion"/> and formats it only for logs and diagnostics.
 /// </remarks>
-internal static class VulkanVersion {
+internal static class VulkanVersion
+{
     private const int MAJOR_SHIFT = 22;
     private const int MINOR_SHIFT = 12;
     private const uint MAJOR_MASK = 0x7Fu;
@@ -32,21 +33,22 @@ internal static class VulkanVersion {
     /// </summary>
     /// <param name="version">The packed Vulkan version.</param>
     /// <returns>The unpacked version components.</returns>
-    internal static (int Major, int Minor, int Patch) Unpack(uint version) => (
-        (int)((version >> MAJOR_SHIFT) & MAJOR_MASK),
-        (int)((version >> MINOR_SHIFT) & MINOR_MASK),
-        (int)(version & PATCH_MASK));
+    internal static (int Major, int Minor, int Patch) Unpack(uint version) =>
+        (
+            (int)((version >> MAJOR_SHIFT) & MAJOR_MASK),
+            (int)((version >> MINOR_SHIFT) & MINOR_MASK),
+            (int)(version & PATCH_MASK)
+        );
 
     /// <summary>
     /// Formats a packed Vulkan version as <c>major.minor.patch</c>.
     /// </summary>
     /// <param name="version">The packed Vulkan version.</param>
     /// <returns>The formatted version, for example <c>1.2.0</c>.</returns>
-    internal static string Format(uint version) {
+    internal static string Format(uint version)
+    {
         (int major, int minor, int patch) = Unpack(version);
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"{major}.{minor}.{patch}");
+        return string.Create(CultureInfo.InvariantCulture, $"{major}.{minor}.{patch}");
     }
 
     /// <summary>
@@ -54,10 +56,9 @@ internal static class VulkanVersion {
     /// </summary>
     /// <param name="version">The packed Vulkan version.</param>
     /// <returns>The formatted name, for example <c>Vulkan 1.2</c>.</returns>
-    internal static string FormatRendererName(uint version) {
+    internal static string FormatRendererName(uint version)
+    {
         (int major, int minor, _) = Unpack(version);
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"Vulkan {major}.{minor}");
+        return string.Create(CultureInfo.InvariantCulture, $"Vulkan {major}.{minor}");
     }
 }

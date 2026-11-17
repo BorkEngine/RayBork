@@ -20,12 +20,12 @@ namespace RayBork;
 /// camera. An effect and its stack own no engine object and do not dispose the effect's shader.
 /// </para>
 /// </remarks>
-public abstract class PostProcessEffect {
+public abstract class PostProcessEffect
+{
     private readonly List<PostProcessEffectSnapshot> _snapshotPool = [];
     private bool _enabled = true;
 
-    private protected PostProcessEffect() {
-    }
+    private protected PostProcessEffect() { }
 
     /// <summary>
     /// Gets or sets whether this effect runs. The default is <see langword="true"/>.
@@ -35,9 +35,11 @@ public abstract class PostProcessEffect {
     /// afterwards does not remove it from an already recorded frame.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public bool Enabled {
+    public bool Enabled
+    {
         get => _enabled;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Enabled));
             _enabled = value;
         }
@@ -63,9 +65,13 @@ public abstract class PostProcessEffect {
     /// </summary>
     /// <typeparam name="T">The concrete snapshot type the effect owns.</typeparam>
     /// <returns>A free snapshot to fill, or <see langword="null"/>.</returns>
-    internal T? TakeSnapshot<T>() where T : PostProcessEffectSnapshot {
-        for (int index = _snapshotPool.Count - 1; index >= 0; index--) {
-            if (_snapshotPool[index] is T snapshot) {
+    internal T? TakeSnapshot<T>()
+        where T : PostProcessEffectSnapshot
+    {
+        for (int index = _snapshotPool.Count - 1; index >= 0; index--)
+        {
+            if (_snapshotPool[index] is T snapshot)
+            {
                 _snapshotPool.RemoveAt(index);
                 return snapshot;
             }
@@ -79,7 +85,8 @@ public abstract class PostProcessEffect {
     /// that held it is recycled.
     /// </summary>
     /// <param name="snapshot">The snapshot to pool.</param>
-    internal void ReturnSnapshot(PostProcessEffectSnapshot snapshot) {
+    internal void ReturnSnapshot(PostProcessEffectSnapshot snapshot)
+    {
         ArgumentNullException.ThrowIfNull(snapshot);
         _snapshotPool.Add(snapshot);
     }

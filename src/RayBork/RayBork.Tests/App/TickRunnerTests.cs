@@ -2,10 +2,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class TickRunnerTests {
+public sealed class TickRunnerTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CalculateWaitUsesTheTimeSinceTheCurrentTickStarted() {
+    public void CalculateWaitUsesTheTimeSinceTheCurrentTickStarted()
+    {
         ManualTimeProvider time = new();
         TickPacer pacer = new(100);
         long tickStartedAt = time.GetTimestamp();
@@ -18,7 +20,8 @@ public sealed class TickRunnerTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CalculateWaitDoesNotUseThePreviousTickInterval() {
+    public void CalculateWaitDoesNotUseThePreviousTickInterval()
+    {
         ManualTimeProvider time = new();
         TickPacer pacer = new(60);
         long tickStartedAt = time.GetTimestamp();
@@ -28,12 +31,16 @@ public sealed class TickRunnerTests {
 
         double expected = (1.0 / 60.0) - 0.001;
         Assert.Equal(expected, wait.TotalSeconds, precision: 6);
-        Assert.True(wait < TimeSpan.FromSeconds(1.0 / 60.0), "The previous tick interval must not be used as the elapsed time.");
+        Assert.True(
+            wait < TimeSpan.FromSeconds(1.0 / 60.0),
+            "The previous tick interval must not be used as the elapsed time."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CalculateWaitReturnsZeroWhenTheTickOverrunsTheInterval() {
+    public void CalculateWaitReturnsZeroWhenTheTickOverrunsTheInterval()
+    {
         ManualTimeProvider time = new();
         TickPacer pacer = new(100);
         long tickStartedAt = time.GetTimestamp();
@@ -46,7 +53,8 @@ public sealed class TickRunnerTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CalculateWaitAppliesTheLowPowerThirtyFpsCap() {
+    public void CalculateWaitAppliesTheLowPowerThirtyFpsCap()
+    {
         ManualTimeProvider time = new();
         TickPacer pacer = new(1000);
         long tickStartedAt = time.GetTimestamp();
@@ -60,11 +68,16 @@ public sealed class TickRunnerTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CalculateWaitRejectsNullDependencies() {
+    public void CalculateWaitRejectsNullDependencies()
+    {
         ManualTimeProvider time = new();
         TickPacer pacer = new(60);
 
-        Assert.Throws<ArgumentNullException>(() => TickRunner.CalculateWait(null!, 0, pacer, lowPower: false));
-        Assert.Throws<ArgumentNullException>(() => TickRunner.CalculateWait(time, 0, null!, lowPower: false));
+        Assert.Throws<ArgumentNullException>(() =>
+            TickRunner.CalculateWait(null!, 0, pacer, lowPower: false)
+        );
+        Assert.Throws<ArgumentNullException>(() =>
+            TickRunner.CalculateWait(time, 0, null!, lowPower: false)
+        );
     }
 }

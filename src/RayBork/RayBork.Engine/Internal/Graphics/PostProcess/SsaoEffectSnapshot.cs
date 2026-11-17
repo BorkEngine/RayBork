@@ -24,7 +24,8 @@ namespace RayBork.Internal;
 /// layout array across cameras.
 /// </para>
 /// </remarks>
-internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
+internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot
+{
     private readonly PostProcessInstanceRecord[] _instanceLayout = new PostProcessInstanceRecord[4];
 
     private EngineAsset? _aoProgram;
@@ -51,8 +52,7 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
     private int _compositeColorOffset;
     private int _compositeIntensityOffset;
 
-    private SsaoEffectSnapshot() {
-    }
+    private SsaoEffectSnapshot() { }
 
     /// <summary>Gets the frozen quality variant.</summary>
     internal SsaoQuality Quality => _settings.Quality;
@@ -85,7 +85,9 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
     internal static SsaoEffectSnapshot Rent(
         PostProcessEffect owner,
         SsaoSettings settings,
-        SsaoAssets assets) {
+        SsaoAssets assets
+    )
+    {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(assets);
         ObjectDisposedException.ThrowIf(assets.IsDisposed, assets);
@@ -98,16 +100,23 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         ObjectDisposedException.ThrowIf(composite.IsDisposed, composite);
         Texture blueNoise = assets.BlueNoise;
 
-        SsaoEffectSnapshot snapshot =
-            owner.TakeSnapshot<SsaoEffectSnapshot>() ?? new SsaoEffectSnapshot();
+        SsaoEffectSnapshot snapshot = owner.TakeSnapshot<SsaoEffectSnapshot>()
+            ?? new SsaoEffectSnapshot();
         snapshot.Fill(settings, ao, denoise, composite, blueNoise);
         return snapshot;
     }
 
     /// <inheritdoc/>
-    internal override void Retain(FrameAssetRetention retention) {
+    internal override void Retain(FrameAssetRetention retention)
+    {
         ArgumentNullException.ThrowIfNull(retention);
-        if (_aoProgram is null || _denoiseProgram is null || _compositeProgram is null || _blueNoise is null) {
+        if (
+            _aoProgram is null
+            || _denoiseProgram is null
+            || _compositeProgram is null
+            || _blueNoise is null
+        )
+        {
             return;
         }
 
@@ -118,7 +127,8 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
     }
 
     /// <inheritdoc/>
-    protected override void ReleaseState() {
+    protected override void ReleaseState()
+    {
         _aoProgram = null;
         _denoiseProgram = null;
         _compositeProgram = null;
@@ -146,7 +156,8 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
     }
 
     /// <inheritdoc/>
-    internal override void Run(PostProcessContext context) {
+    internal override void Run(PostProcessContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
         EngineAsset aoProgram = _aoProgram
             ?? throw new InvalidOperationException("The SSAO snapshot ran after it was reset.");
@@ -158,10 +169,12 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
             ?? throw new InvalidOperationException("The SSAO snapshot ran after it was reset.");
 
         uint depthSlot = context.SourceDepthSlot;
-        if (depthSlot == 0) {
+        if (depthSlot == 0)
+        {
             throw new InvalidOperationException(
                 "The SSAO effect requires the camera target's resolved depth, but the render pass has "
-                    + "no depth slot.");
+                    + "no depth slot."
+            );
         }
 
         // Capture the chain input before the first CompleteColorTarget. The composite pass
@@ -169,22 +182,27 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         // slot is the original scene color when SSAO is first; otherwise it is the prior effect.
         uint sourceColorSlot = context.SourceColorSlot;
         uint blueNoiseSlot = PostProcessContext.ResolveTextureSlot(blueNoise);
-        if (!Matrix4x4.Invert(context.Pass.Projection, out Matrix4x4 projectionInverse)) {
+        if (!Matrix4x4.Invert(context.Pass.Projection, out Matrix4x4 projectionInverse))
+        {
             throw new InvalidOperationException(
-                "The SSAO effect could not invert the camera projection matrix.");
+                "The SSAO effect could not invert the camera projection matrix."
+            );
         }
 
         float near = NearFromProjection(context.Pass.Projection);
 
         Pipeline aoPipeline = context.GetOrCreateFullscreenPipeline(
             aoProgram,
-            PostProcessContext.FullscreenRenderState);
+            PostProcessContext.FullscreenRenderState
+        );
         Pipeline denoisePipeline = context.GetOrCreateFullscreenPipeline(
             denoiseProgram,
-            PostProcessContext.FullscreenRenderState);
+            PostProcessContext.FullscreenRenderState
+        );
         Pipeline compositePipeline = context.GetOrCreateFullscreenPipeline(
             compositeProgram,
-            PostProcessContext.FullscreenRenderState);
+            PostProcessContext.FullscreenRenderState
+        );
 
         VulkanPostTarget ao = context.RentColorTarget();
         RecordAo(context, ao, aoPipeline, depthSlot, blueNoiseSlot, projectionInverse, near);
@@ -199,7 +217,8 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
             depthSlot,
             blueNoiseSlot,
             projectionInverse,
-            iteration: 0);
+            iteration: 0
+        );
         context.CompleteAuxiliaryTarget(firstDenoise);
 
         VulkanPostTarget secondDenoise = context.RentColorTarget();
@@ -211,7 +230,8 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
             depthSlot,
             blueNoiseSlot,
             projectionInverse,
-            iteration: 1);
+            iteration: 1
+        );
         context.CompleteAuxiliaryTarget(secondDenoise);
 
         VulkanPostTarget composite = context.RentColorTarget();
@@ -220,7 +240,8 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
             composite,
             compositePipeline,
             sourceColorSlot,
-            secondDenoise.BindlessSlot);
+            secondDenoise.BindlessSlot
+        );
         context.CompleteColorTarget(composite);
     }
 
@@ -229,7 +250,9 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         ShaderProgram ao,
         ShaderProgram denoise,
         ShaderProgram composite,
-        Texture blueNoise) {
+        Texture blueNoise
+    )
+    {
         _settings = settings;
         _aoProgram = ao.Lifetime;
         _denoiseProgram = denoise.Lifetime;
@@ -268,7 +291,9 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         uint depthSlot,
         uint blueNoiseSlot,
         Matrix4x4 projectionInverse,
-        float near) {
+        float near
+    )
+    {
         ulong offset = context.ReserveInstanceRecord(_aoStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _aoStride);
         WriteHeader(record);
@@ -283,7 +308,8 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         WriteUInt32(
             record,
             ShaderAbiLayout.TEXTURE_INDEX_START + ShaderAbiLayout.TEXTURE_INDEX_SIZE,
-            blueNoiseSlot);
+            blueNoiseSlot
+        );
         context.RecordFullscreenPass(destination, pipeline, offset, _aoStride);
     }
 
@@ -295,7 +321,9 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         uint depthSlot,
         uint blueNoiseSlot,
         Matrix4x4 projectionInverse,
-        uint iteration) {
+        uint iteration
+    )
+    {
         ulong offset = context.ReserveInstanceRecord(_denoiseStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _denoiseStride);
         WriteHeader(record);
@@ -309,11 +337,13 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         WriteUInt32(
             record,
             ShaderAbiLayout.TEXTURE_INDEX_START + ShaderAbiLayout.TEXTURE_INDEX_SIZE,
-            depthSlot);
+            depthSlot
+        );
         WriteUInt32(
             record,
             ShaderAbiLayout.TEXTURE_INDEX_START + (2 * ShaderAbiLayout.TEXTURE_INDEX_SIZE),
-            blueNoiseSlot);
+            blueNoiseSlot
+        );
         context.RecordFullscreenPass(destination, pipeline, offset, _denoiseStride);
     }
 
@@ -322,7 +352,9 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         VulkanPostTarget destination,
         Pipeline pipeline,
         uint sourceColorSlot,
-        uint aoSlot) {
+        uint aoSlot
+    )
+    {
         ulong offset = context.ReserveInstanceRecord(_compositeStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _compositeStride);
         WriteHeader(record);
@@ -332,43 +364,55 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         WriteUInt32(
             record,
             ShaderAbiLayout.TEXTURE_INDEX_START + ShaderAbiLayout.TEXTURE_INDEX_SIZE,
-            aoSlot);
+            aoSlot
+        );
         context.RecordFullscreenPass(destination, pipeline, offset, _compositeStride);
     }
 
-    private static float NearFromProjection(in Matrix4x4 projection) {
+    private static float NearFromProjection(in Matrix4x4 projection)
+    {
         const float minNear = 1e-4f;
         float near;
-        if (projection.M44 == 1f) {
+        if (projection.M44 == 1f)
+        {
             // Orthographic reverse-Z: M33 = 1/(far-near), M43 = far/(far-near).
             near = (projection.M43 - 1f) / projection.M33;
-        } else {
+        }
+        else
+        {
             // Perspective reverse-Z: M33 = near/(far-near), M43 = near*far/(far-near). The infinite
             // far variant has M33 = 0 and M43 = near.
-            near = projection.M33 == 0f
-                ? projection.M43
-                : projection.M43 / (projection.M33 + 1f);
+            near = projection.M33 == 0f ? projection.M43 : projection.M43 / (projection.M33 + 1f);
         }
 
         return float.IsFinite(near) && near > 0f ? near : minNear;
     }
 
-    private static int UniformOffset(ShaderProgram program, string name) {
-        if (!program.UniformsByName.TryGetValue(name, out ShaderAbiUniform uniform)) {
+    private static int UniformOffset(ShaderProgram program, string name)
+    {
+        if (!program.UniformsByName.TryGetValue(name, out ShaderAbiUniform uniform))
+        {
             throw new InvalidOperationException(
-                $"The built-in SSAO shader '{program.Path}' does not declare the required uniform '{name}'.");
+                $"The built-in SSAO shader '{program.Path}' does not declare the required uniform '{name}'."
+            );
         }
 
         return uniform.Offset;
     }
 
-    private static void WriteHeader(Span<byte> record) {
-        VulkanInstanceRecordWriter.WriteMatrix(record, ShaderAbiLayout.TRANSFORM_OFFSET, Matrix4x4.Identity);
+    private static void WriteHeader(Span<byte> record)
+    {
+        VulkanInstanceRecordWriter.WriteMatrix(
+            record,
+            ShaderAbiLayout.TRANSFORM_OFFSET,
+            Matrix4x4.Identity
+        );
         VulkanInstanceRecordWriter.WriteVector4(record, ShaderAbiLayout.COLOR_OFFSET, Vector4.One);
         VulkanInstanceRecordWriter.WriteVector4(
             record,
             ShaderAbiLayout.UV_RECT_OFFSET,
-            new Vector4(0f, 0f, 1f, 1f));
+            new Vector4(0f, 0f, 1f, 1f)
+        );
     }
 
     private static void WriteMatrix(Span<byte> record, int offset, Matrix4x4 value) =>

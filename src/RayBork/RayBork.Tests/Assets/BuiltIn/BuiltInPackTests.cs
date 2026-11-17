@@ -9,7 +9,8 @@ namespace RayBork.Tests.Assets.BuiltIn;
 /// The pack is produced by the engine's build target before this assembly compiles, so these tests
 /// exercise the real embedded bytes instead of a checked-in fixture. No generated pack is committed.
 /// </remarks>
-public sealed class BuiltInPackTests {
+public sealed class BuiltInPackTests
+{
     private const string DISPLAY_PATH = "<built-in>";
     private const string WHITE_PATH = "textures/white";
     private const string WHITE_PAYLOAD_PATH = "textures/white-ktx2";
@@ -78,7 +79,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmbeddedPackIsNonEmptyAndOpens() {
+    public void EmbeddedPackIsNonEmptyAndOpens()
+    {
         ReadOnlyMemory<byte> bytes = BuiltInAssetPack.Bytes;
 
         Assert.False(bytes.IsEmpty);
@@ -92,7 +94,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ContainsTheBuiltInAssetAndPayloadEntries() {
+    public void ContainsTheBuiltInAssetAndPayloadEntries()
+    {
         using PackArchive archive = OpenBuiltInPack();
 
         AssertEntry(archive, WHITE_PATH, AssetEntryType.Texture, isGpuPayload: false);
@@ -107,7 +110,12 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, MESH_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, PRIMITIVE_SHADER_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, PRIMITIVE_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
-        AssertEntry(archive, PRIMITIVE_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(
+            archive,
+            PRIMITIVE_FRAGMENT_PAYLOAD_PATH,
+            AssetEntryType.Raw,
+            isGpuPayload: true
+        );
         AssertEntry(archive, MSDF_SHADER_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, MSDF_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, MSDF_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, isGpuPayload: true);
@@ -130,7 +138,12 @@ public sealed class BuiltInPackTests {
         AssertEntry(archive, BLOOM_PREFILTER_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, BLOOM_PREFILTER_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, BLOOM_DOWNSAMPLE_PATH, AssetEntryType.Shader, isGpuPayload: false);
-        AssertEntry(archive, BLOOM_DOWNSAMPLE_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
+        AssertEntry(
+            archive,
+            BLOOM_DOWNSAMPLE_FRAGMENT_PATH,
+            AssetEntryType.Raw,
+            isGpuPayload: true
+        );
         AssertEntry(archive, BLOOM_UPSAMPLE_PATH, AssetEntryType.Shader, isGpuPayload: false);
         AssertEntry(archive, BLOOM_UPSAMPLE_FRAGMENT_PATH, AssetEntryType.Raw, isGpuPayload: true);
         AssertEntry(archive, BLOOM_COMPOSITE_PATH, AssetEntryType.Shader, isGpuPayload: false);
@@ -139,7 +152,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ContainsTheDefaultFiraSansFontDescriptorAndFacePayload() {
+    public void ContainsTheDefaultFiraSansFontDescriptorAndFacePayload()
+    {
         using PackArchive archive = OpenBuiltInPack();
 
         AssertTrueTypeFont(archive, FONT_PATH, FONT_FACE_PAYLOAD_PATH, FONT_BYTE_LENGTH);
@@ -147,15 +161,22 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ContainsTheMonoFontDescriptorAndFacePayload() {
+    public void ContainsTheMonoFontDescriptorAndFacePayload()
+    {
         using PackArchive archive = OpenBuiltInPack();
 
-        AssertTrueTypeFont(archive, MONO_FONT_PATH, MONO_FONT_FACE_PAYLOAD_PATH, MONO_FONT_BYTE_LENGTH);
+        AssertTrueTypeFont(
+            archive,
+            MONO_FONT_PATH,
+            MONO_FONT_FACE_PAYLOAD_PATH,
+            MONO_FONT_BYTE_LENGTH
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WhiteTextureIsAnOpaqueOnePixelSrgbTexture() {
+    public void WhiteTextureIsAnOpaqueOnePixelSrgbTexture()
+    {
         using PackArchive archive = OpenBuiltInPack();
         TextureAssetDescriptor descriptor = ReadTextureDescriptor(archive, WHITE_PATH);
 
@@ -173,7 +194,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ErrorTextureIsTheFourByFourCheckerboard() {
+    public void ErrorTextureIsTheFourByFourCheckerboard()
+    {
         using PackArchive archive = OpenBuiltInPack();
         TextureAssetDescriptor descriptor = ReadTextureDescriptor(archive, ERROR_PATH);
 
@@ -191,7 +213,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BlueNoiseTextureIsTheLinear128SquareRepeatImage() {
+    public void BlueNoiseTextureIsTheLinear128SquareRepeatImage()
+    {
         using PackArchive archive = OpenBuiltInPack();
         TextureAssetDescriptor descriptor = ReadTextureDescriptor(archive, BLUE_NOISE_PATH);
 
@@ -209,7 +232,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SsaoShadersUseTheCommittedMainEntryPointAndTheBakedContracts() {
+    public void SsaoShadersUseTheCommittedMainEntryPointAndTheBakedContracts()
+    {
         using PackArchive archive = OpenBuiltInPack();
 
         ShaderAssetDescriptor ao = ReadShaderDescriptor(archive, SSAO_AO_64_PATH);
@@ -219,7 +243,18 @@ public sealed class BuiltInPackTests {
         Assert.Equal("main", ao.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, ao.Stages);
         Assert.Equal(RenderState.Opaque, ao.DefaultRenderState);
-        Assert.Equal(["uProjectionInverse", "uRadius", "uDistanceFalloff", "uNear", "uBiasOffset", "uBiasMultiplier", "uScreenSpaceRadius"], ao.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(
+            [
+                "uProjectionInverse",
+                "uRadius",
+                "uDistanceFalloff",
+                "uNear",
+                "uBiasOffset",
+                "uBiasMultiplier",
+                "uScreenSpaceRadius",
+            ],
+            ao.Uniforms.Select(static uniform => uniform.Name)
+        );
         Assert.Equal(["sceneDepth", "blueNoise"], ao.Textures);
         AssertSpirvPayload(archive, ao.VertexPayload);
         AssertSpirvPayload(archive, ao.FragmentPayload);
@@ -227,7 +262,17 @@ public sealed class BuiltInPackTests {
         ShaderAssetDescriptor denoise = ReadShaderDescriptor(archive, SSAO_DENOISE_16_PATH);
         Assert.Equal(SSAO_VERTEX_PAYLOAD_PATH, denoise.VertexPayload);
         Assert.Equal(SSAO_DENOISE_16_FRAGMENT_PATH, denoise.FragmentPayload);
-        Assert.Equal(["uProjectionInverse", "uDenoiseRadius", "uRadius", "uDistanceFalloff", "uScreenSpaceRadius", "uIteration"], denoise.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(
+            [
+                "uProjectionInverse",
+                "uDenoiseRadius",
+                "uRadius",
+                "uDistanceFalloff",
+                "uScreenSpaceRadius",
+                "uIteration",
+            ],
+            denoise.Uniforms.Select(static uniform => uniform.Name)
+        );
         Assert.Equal(["aoTexture", "sceneDepth", "blueNoise"], denoise.Textures);
         AssertSpirvPayload(archive, denoise.VertexPayload);
         AssertSpirvPayload(archive, denoise.FragmentPayload);
@@ -235,7 +280,10 @@ public sealed class BuiltInPackTests {
         ShaderAssetDescriptor composite = ReadShaderDescriptor(archive, SSAO_COMPOSITE_PATH);
         Assert.Equal(SSAO_VERTEX_PAYLOAD_PATH, composite.VertexPayload);
         Assert.Equal(SSAO_COMPOSITE_FRAGMENT_PATH, composite.FragmentPayload);
-        Assert.Equal(["uAoColor", "uIntensity"], composite.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(
+            ["uAoColor", "uIntensity"],
+            composite.Uniforms.Select(static uniform => uniform.Name)
+        );
         Assert.Equal(["sourceColor", "aoTexture"], composite.Textures);
         AssertSpirvPayload(archive, composite.VertexPayload);
         AssertSpirvPayload(archive, composite.FragmentPayload);
@@ -243,7 +291,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BloomShadersUseTheCommittedMainEntryPointAndTheBakedContracts() {
+    public void BloomShadersUseTheCommittedMainEntryPointAndTheBakedContracts()
+    {
         using PackArchive archive = OpenBuiltInPack();
 
         ShaderAssetDescriptor prefilter = ReadShaderDescriptor(archive, BLOOM_PREFILTER_PATH);
@@ -253,7 +302,10 @@ public sealed class BuiltInPackTests {
         Assert.Equal("main", prefilter.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, prefilter.Stages);
         Assert.Equal(RenderState.Opaque, prefilter.DefaultRenderState);
-        Assert.Equal(["uThreshold", "uSoftKnee"], prefilter.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(
+            ["uThreshold", "uSoftKnee"],
+            prefilter.Uniforms.Select(static uniform => uniform.Name)
+        );
         Assert.Equal(["bloomSource"], prefilter.Textures);
         AssertSpirvPayload(archive, prefilter.VertexPayload);
         AssertSpirvPayload(archive, prefilter.FragmentPayload);
@@ -277,7 +329,10 @@ public sealed class BuiltInPackTests {
         ShaderAssetDescriptor composite = ReadShaderDescriptor(archive, BLOOM_COMPOSITE_PATH);
         Assert.Equal(BLOOM_VERTEX_PAYLOAD_PATH, composite.VertexPayload);
         Assert.Equal(BLOOM_COMPOSITE_FRAGMENT_PATH, composite.FragmentPayload);
-        Assert.Equal(["uTint", "uIntensity"], composite.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(
+            ["uTint", "uIntensity"],
+            composite.Uniforms.Select(static uniform => uniform.Name)
+        );
         Assert.Equal(ShaderUniformType.Vector4, composite.Uniforms[0].Type);
         Assert.Equal(ShaderUniformType.Float, composite.Uniforms[1].Type);
         Assert.Equal(["sourceColor", "bloomTexture"], composite.Textures);
@@ -287,7 +342,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PresentShaderCarriesBothMainSpirvStages() {
+    public void PresentShaderCarriesBothMainSpirvStages()
+    {
         using PackArchive archive = OpenBuiltInPack();
         ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, PRESENT_PATH);
 
@@ -307,7 +363,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeshShaderCarriesTheGeneratedAbiMetadata() {
+    public void MeshShaderCarriesTheGeneratedAbiMetadata()
+    {
         using PackArchive archive = OpenBuiltInPack();
         ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, MESH_SHADER_PATH);
 
@@ -318,13 +375,15 @@ public sealed class BuiltInPackTests {
         Assert.Equal("main_fragment", descriptor.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, descriptor.Stages);
         Assert.Equal(
-            new RenderState {
+            new RenderState
+            {
                 Blend = BlendMode.Opaque,
                 Cull = CullMode.Back,
                 DepthTest = DepthTest.GreaterOrEqual,
                 DepthWrite = true,
             },
-            descriptor.DefaultRenderState);
+            descriptor.DefaultRenderState
+        );
 
         ShaderUniformAsset uniform = Assert.Single(descriptor.Uniforms);
         Assert.Equal("uTint", uniform.Name);
@@ -338,7 +397,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PrimitiveShaderHasNoUniformsOrTexturesAndTheVertexColorState() {
+    public void PrimitiveShaderHasNoUniformsOrTexturesAndTheVertexColorState()
+    {
         using PackArchive archive = OpenBuiltInPack();
         ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, PRIMITIVE_SHADER_PATH);
 
@@ -348,13 +408,15 @@ public sealed class BuiltInPackTests {
         Assert.Equal("main_fragment", descriptor.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, descriptor.Stages);
         Assert.Equal(
-            new RenderState {
+            new RenderState
+            {
                 Blend = BlendMode.Opaque,
                 Cull = CullMode.Back,
                 DepthTest = DepthTest.GreaterOrEqual,
                 DepthWrite = true,
             },
-            descriptor.DefaultRenderState);
+            descriptor.DefaultRenderState
+        );
         Assert.Empty(descriptor.Uniforms);
         Assert.Empty(descriptor.Textures);
 
@@ -364,7 +426,8 @@ public sealed class BuiltInPackTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MsdfShaderHasTheTextStateAndOneTextureBinding() {
+    public void MsdfShaderHasTheTextStateAndOneTextureBinding()
+    {
         using PackArchive archive = OpenBuiltInPack();
         ShaderAssetDescriptor descriptor = ReadShaderDescriptor(archive, MSDF_SHADER_PATH);
 
@@ -374,13 +437,15 @@ public sealed class BuiltInPackTests {
         Assert.Equal("main_fragment", descriptor.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, descriptor.Stages);
         Assert.Equal(
-            new RenderState {
+            new RenderState
+            {
                 Blend = BlendMode.Alpha,
                 Cull = CullMode.None,
                 DepthTest = DepthTest.GreaterOrEqual,
                 DepthWrite = false,
             },
-            descriptor.DefaultRenderState);
+            descriptor.DefaultRenderState
+        );
         Assert.Empty(descriptor.Uniforms);
         Assert.Equal(["mainTexture"], descriptor.Textures);
 
@@ -388,33 +453,50 @@ public sealed class BuiltInPackTests {
         AssertSpirvPayload(archive, descriptor.FragmentPayload);
     }
 
-    private static PackArchive OpenBuiltInPack()
-        => PackArchive.Open(BuiltInAssetPack.Bytes, DISPLAY_PATH);
+    private static PackArchive OpenBuiltInPack() =>
+        PackArchive.Open(BuiltInAssetPack.Bytes, DISPLAY_PATH);
 
     private static void AssertEntry(
         PackArchive archive,
         string path,
         AssetEntryType type,
-        bool isGpuPayload) {
-        Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
+        bool isGpuPayload
+    )
+    {
+        Assert.True(
+            archive.TryGetEntry(path, out PackEntry? entry),
+            $"The entry '{path}' is missing."
+        );
         Assert.Equal(path, entry.Path);
         Assert.Equal(type, entry.Type);
         Assert.Equal(isGpuPayload ? GPU_PAYLOAD_ALIGNMENT : 1u, entry.Alignment);
         Assert.False(entry.IsCompressed);
     }
 
-    private static TextureAssetDescriptor ReadTextureDescriptor(PackArchive archive, string path) {
-        Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
+    private static TextureAssetDescriptor ReadTextureDescriptor(PackArchive archive, string path)
+    {
+        Assert.True(
+            archive.TryGetEntry(path, out PackEntry? entry),
+            $"The entry '{path}' is missing."
+        );
         return AssetSerialization.Deserialize<TextureAssetDescriptor>(archive.ReadPayload(entry));
     }
 
-    private static ShaderAssetDescriptor ReadShaderDescriptor(PackArchive archive, string path) {
-        Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
+    private static ShaderAssetDescriptor ReadShaderDescriptor(PackArchive archive, string path)
+    {
+        Assert.True(
+            archive.TryGetEntry(path, out PackEntry? entry),
+            $"The entry '{path}' is missing."
+        );
         return AssetSerialization.Deserialize<ShaderAssetDescriptor>(archive.ReadPayload(entry));
     }
 
-    private static FontAssetDescriptor ReadFontDescriptor(PackArchive archive, string path) {
-        Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
+    private static FontAssetDescriptor ReadFontDescriptor(PackArchive archive, string path)
+    {
+        Assert.True(
+            archive.TryGetEntry(path, out PackEntry? entry),
+            $"The entry '{path}' is missing."
+        );
         return AssetSerialization.Deserialize<FontAssetDescriptor>(archive.ReadPayload(entry));
     }
 
@@ -422,7 +504,9 @@ public sealed class BuiltInPackTests {
         PackArchive archive,
         string path,
         string payloadPath,
-        uint byteLength) {
+        uint byteLength
+    )
+    {
         FontAssetDescriptor descriptor = ReadFontDescriptor(archive, path);
 
         Assert.Equal(payloadPath, descriptor.FacePayload);
@@ -437,16 +521,19 @@ public sealed class BuiltInPackTests {
         Assert.Equal(_trueTypeMagic, face.AsSpan(0, _trueTypeMagic.Length).ToArray());
     }
 
-    private static void AssertKtx2Payload(PackArchive archive, string path) {
+    private static void AssertKtx2Payload(PackArchive archive, string path)
+    {
         byte[] payload = ReadRawPayload(archive, path);
 
         Assert.True(
             payload.Length > _ktx2Identifier.Length,
-            $"The KTX2 payload '{path}' is {payload.Length} bytes.");
+            $"The KTX2 payload '{path}' is {payload.Length} bytes."
+        );
         Assert.Equal(_ktx2Identifier, payload.AsSpan(0, _ktx2Identifier.Length).ToArray());
     }
 
-    private static void AssertSpirvPayload(PackArchive archive, string path) {
+    private static void AssertSpirvPayload(PackArchive archive, string path)
+    {
         byte[] payload = ReadRawPayload(archive, path);
 
         Assert.True(payload.Length > _spirvMagic.Length, $"The SPIR-V payload '{path}' is empty.");
@@ -454,8 +541,12 @@ public sealed class BuiltInPackTests {
         Assert.Equal(0, payload.Length % sizeof(uint));
     }
 
-    private static byte[] ReadRawPayload(PackArchive archive, string path) {
-        Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"The entry '{path}' is missing.");
+    private static byte[] ReadRawPayload(PackArchive archive, string path)
+    {
+        Assert.True(
+            archive.TryGetEntry(path, out PackEntry? entry),
+            $"The entry '{path}' is missing."
+        );
         return archive.ReadPayload(entry);
     }
 }

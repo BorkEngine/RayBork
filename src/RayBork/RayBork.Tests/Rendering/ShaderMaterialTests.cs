@@ -7,18 +7,22 @@ namespace RayBork.Tests.Rendering;
 /// Tests the public shader material identity contract: a material is an independent instance over one
 /// internal program, and disposing one material never invalidates a sibling.
 /// </summary>
-public sealed class ShaderMaterialTests {
+public sealed class ShaderMaterialTests
+{
     private const string VALUE_UNIFORM = RenderingTestAssets.VALUE_UNIFORM;
     private const string TEXTURE_BINDING = RenderingTestAssets.TEXTURE_BINDING;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MaterialsOverOneProgramAreDistinctAndShareTheProgram() {
+    public void MaterialsOverOneProgramAreDistinctAndShareTheProgram()
+    {
         ShaderProgram program = RenderingTestAssets.CreateProgram(defaultValue: 0.5f);
-        try {
+        try
+        {
             Shader first = program.CreateMaterial();
             Shader second = program.CreateMaterial();
-            try {
+            try
+            {
                 Assert.NotSame(first, second);
                 Assert.Same(program, first.Program);
                 Assert.Same(program, second.Program);
@@ -28,30 +32,38 @@ public sealed class ShaderMaterialTests {
                 Assert.Equal(program.DefaultRenderState, first.DefaultRenderState);
                 Assert.Equal(
                     program.Uniforms.Select(uniform => uniform.Name),
-                    first.Uniforms.Select(uniform => uniform.Name));
+                    first.Uniforms.Select(uniform => uniform.Name)
+                );
                 Assert.Equal(
                     program.Textures.Select(texture => texture.Name),
-                    first.Textures.Select(texture => texture.Name));
+                    first.Textures.Select(texture => texture.Name)
+                );
                 Assert.False(program.IsDisposed);
-            } finally {
+            }
+            finally
+            {
                 first.Dispose();
                 second.Dispose();
             }
 
             Assert.False(program.IsDisposed);
-        } finally {
+        }
+        finally
+        {
             RenderingTestAssets.ReleaseProgram(program);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposingOneMaterialLeavesTheSiblingUsable() {
+    public void DisposingOneMaterialLeavesTheSiblingUsable()
+    {
         var destroyed = new List<GpuAssetResource>();
         ShaderProgram program = RenderingTestAssets.CreateProgram(destroyed: destroyed);
         Shader disposedMaterial = program.CreateMaterial();
         Shader survivingMaterial = program.CreateMaterial();
-        try {
+        try
+        {
             OnTickThread(() => disposedMaterial.SetUniform(VALUE_UNIFORM, 7f));
             disposedMaterial.Dispose();
 
@@ -60,18 +72,24 @@ public sealed class ShaderMaterialTests {
             Assert.False(program.IsDisposed);
             Assert.Empty(destroyed);
 
-            OnTickThread(() => {
+            OnTickThread(() =>
+            {
                 survivingMaterial.SetUniform(VALUE_UNIFORM, 3f);
                 Assert.Equal(
                     3f,
                     RenderingTestAssets.ReadInstanceFloat(
                         survivingMaterial,
                         survivingMaterial.InstanceData,
-                        VALUE_UNIFORM));
+                        VALUE_UNIFORM
+                    )
+                );
                 survivingMaterial.ResetUniforms();
             });
-        } finally {
-            if (!survivingMaterial.IsDisposed) {
+        }
+        finally
+        {
+            if (!survivingMaterial.IsDisposed)
+            {
                 survivingMaterial.Dispose();
             }
 
@@ -81,31 +99,48 @@ public sealed class ShaderMaterialTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryMaterialStartsWithItsOwnCopyOfTheProgramBakeDefaults() {
+    public void EveryMaterialStartsWithItsOwnCopyOfTheProgramBakeDefaults()
+    {
         ShaderProgram program = RenderingTestAssets.CreateProgram(defaultValue: 1.25f);
         Shader first = program.CreateMaterial();
         Shader second = program.CreateMaterial();
-        try {
-            OnTickThread(() => {
+        try
+        {
+            OnTickThread(() =>
+            {
                 first.SetUniform(VALUE_UNIFORM, 9f);
                 first.SetUniform(TEXTURE_BINDING, null);
 
                 Assert.Equal(
                     9f,
-                    RenderingTestAssets.ReadInstanceFloat(first, first.InstanceData, VALUE_UNIFORM));
+                    RenderingTestAssets.ReadInstanceFloat(first, first.InstanceData, VALUE_UNIFORM)
+                );
                 Assert.Equal(
                     1.25f,
-                    RenderingTestAssets.ReadInstanceFloat(second, second.InstanceData, VALUE_UNIFORM));
+                    RenderingTestAssets.ReadInstanceFloat(
+                        second,
+                        second.InstanceData,
+                        VALUE_UNIFORM
+                    )
+                );
                 Assert.Equal(
                     1.25f,
-                    RenderingTestAssets.ReadInstanceFloat(second, second.DefaultInstanceData, VALUE_UNIFORM));
+                    RenderingTestAssets.ReadInstanceFloat(
+                        second,
+                        second.DefaultInstanceData,
+                        VALUE_UNIFORM
+                    )
+                );
 
                 first.ResetUniforms();
                 Assert.Equal(
                     1.25f,
-                    RenderingTestAssets.ReadInstanceFloat(first, first.InstanceData, VALUE_UNIFORM));
+                    RenderingTestAssets.ReadInstanceFloat(first, first.InstanceData, VALUE_UNIFORM)
+                );
             });
-        } finally {
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
             RenderingTestAssets.ReleaseProgram(program);
@@ -114,14 +149,17 @@ public sealed class ShaderMaterialTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TextureBindingOwnershipIsPerMaterial() {
+    public void TextureBindingOwnershipIsPerMaterial()
+    {
         var destroyed = new List<GpuAssetResource>();
         ShaderProgram program = RenderingTestAssets.CreateProgram();
         Shader first = program.CreateMaterial();
         Shader second = program.CreateMaterial();
         Texture texture = RenderingTestAssets.CreateTexture("textures/material", destroyed);
-        try {
-            OnTickThread(() => {
+        try
+        {
+            OnTickThread(() =>
+            {
                 first.SetUniform(TEXTURE_BINDING, texture);
                 Assert.Same(texture, first.TextureValues[0]);
                 Assert.Null(second.TextureValues[0]);
@@ -136,8 +174,11 @@ public sealed class ShaderMaterialTests {
             Assert.True(texture.IsDisposed);
             Assert.Single(destroyed);
             Assert.Null(second.TextureValues[0]);
-        } finally {
-            if (!first.IsDisposed) {
+        }
+        finally
+        {
+            if (!first.IsDisposed)
+            {
                 first.Dispose();
             }
 
@@ -148,12 +189,15 @@ public sealed class ShaderMaterialTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ResettingOneMaterialDoesNotChangeTheSiblingCursor() {
+    public void ResettingOneMaterialDoesNotChangeTheSiblingCursor()
+    {
         ShaderProgram program = RenderingTestAssets.CreateProgram(defaultValue: 0.25f);
         Shader first = program.CreateMaterial();
         Shader second = program.CreateMaterial();
-        try {
-            OnTickThread(() => {
+        try
+        {
+            OnTickThread(() =>
+            {
                 first.SetUniform(VALUE_UNIFORM, 5f);
                 second.SetUniform(VALUE_UNIFORM, 6f);
 
@@ -161,12 +205,20 @@ public sealed class ShaderMaterialTests {
 
                 Assert.Equal(
                     0.25f,
-                    RenderingTestAssets.ReadInstanceFloat(first, first.InstanceData, VALUE_UNIFORM));
+                    RenderingTestAssets.ReadInstanceFloat(first, first.InstanceData, VALUE_UNIFORM)
+                );
                 Assert.Equal(
                     6f,
-                    RenderingTestAssets.ReadInstanceFloat(second, second.InstanceData, VALUE_UNIFORM));
+                    RenderingTestAssets.ReadInstanceFloat(
+                        second,
+                        second.InstanceData,
+                        VALUE_UNIFORM
+                    )
+                );
             });
-        } finally {
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
             RenderingTestAssets.ReleaseProgram(program);
@@ -175,7 +227,8 @@ public sealed class ShaderMaterialTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheLastMaterialDisposalReleasesTheProgramAndQueuesItsDestructionOnce() {
+    public void TheLastMaterialDisposalReleasesTheProgramAndQueuesItsDestructionOnce()
+    {
         var destroyed = new List<GpuAssetResource>();
         ShaderProgram program = RenderingTestAssets.CreateProgram(destroyed: destroyed);
         Shader first = program.CreateMaterial();
@@ -196,19 +249,24 @@ public sealed class ShaderMaterialTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreatingAMaterialFromADisposedProgramThrows() {
+    public void CreatingAMaterialFromADisposedProgramThrows()
+    {
         var destroyed = new List<GpuAssetResource>();
         ShaderProgram program = RenderingTestAssets.CreateProgram(destroyed: destroyed);
         Shader material = program.CreateMaterial();
-        try {
+        try
+        {
             RenderingTestAssets.ReleaseProgram(program);
             material.Dispose();
 
             Assert.True(program.IsDisposed);
             Assert.Single(destroyed);
             Assert.Throws<ObjectDisposedException>(program.CreateMaterial);
-        } finally {
-            if (!material.IsDisposed) {
+        }
+        finally
+        {
+            if (!material.IsDisposed)
+            {
                 material.Dispose();
             }
         }
@@ -216,7 +274,8 @@ public sealed class ShaderMaterialTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AMaterialWhoseProgramWasForceDisposedReportsDisposedAndRejectsReads() {
+    public void AMaterialWhoseProgramWasForceDisposedReportsDisposedAndRejectsReads()
+    {
         ShaderProgram program = RenderingTestAssets.CreateProgram();
         Shader material = program.CreateMaterial();
         RenderingTestAssets.ReleaseProgram(program);
@@ -233,11 +292,15 @@ public sealed class ShaderMaterialTests {
         Assert.Throws<ObjectDisposedException>(material.Dispose);
     }
 
-    private static void OnTickThread(Action action) {
+    private static void OnTickThread(Action action)
+    {
         TickThread.Attach();
-        try {
+        try
+        {
             action();
-        } finally {
+        }
+        finally
+        {
             TickThread.Detach();
         }
     }

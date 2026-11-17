@@ -23,7 +23,8 @@ namespace RayBork;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The custom asset type produced by the loader.</typeparam>
-public interface IAssetLoader<T> {
+public interface IAssetLoader<T>
+{
     /// <summary>
     /// Gets the pack entry type that this loader accepts.
     /// </summary>

@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <!-- The builder uses WithProjectRoot("."), so a direct `dotnet run` must start in this
@@ -47,23 +46,32 @@
         the intermediate output so dotnet clean removes it. Explicit project and output roots keep the
         bake independent of the working directory.
     -->
-    <Target Name="PongBakeAssets"
-            AfterTargets="Build"
-            DependsOnTargets="RayBorkCopyShadercNative"
-            Condition="'$(DesignTimeBuild)' != 'true'">
+    <Target
+        Name="PongBakeAssets"
+        AfterTargets="Build"
+        DependsOnTargets="RayBorkCopyShadercNative"
+        Condition="'$(DesignTimeBuild)' != 'true'"
+    >
         <PropertyGroup>
             <_PongPackDirectory>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)pong-pack</_PongPackDirectory>
             <_PongPackPath>$(_PongPackDirectory)\$(PongPackFileName)</_PongPackPath>
             <_PongSamplePackDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\bin\$(Configuration)\$(TargetFramework)'))</_PongSamplePackDirectory>
         </PropertyGroup>
         <MakeDir Directories="$(_PongPackDirectory);$(_PongSamplePackDirectory)" />
-        <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(TargetPath)&quot; bake --project-root &quot;$(MSBuildProjectDirectory)&quot; --output-root &quot;$(_PongPackDirectory)&quot;"
-              WorkingDirectory="$(MSBuildProjectDirectory)"
-              StandardOutputImportance="high"
-              StandardErrorImportance="high" />
-        <Error Condition="!Exists('$(_PongPackPath)')"
-               Text="RayBork Pong sample: the bake did not produce '$(_PongPackPath)'." />
-        <Copy SourceFiles="$(_PongPackPath)" DestinationFolder="$(_PongSamplePackDirectory)" SkipUnchangedFiles="true" />
+        <Exec
+            Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(TargetPath)&quot; bake --project-root &quot;$(MSBuildProjectDirectory)&quot; --output-root &quot;$(_PongPackDirectory)&quot;"
+            WorkingDirectory="$(MSBuildProjectDirectory)"
+            StandardOutputImportance="high"
+            StandardErrorImportance="high"
+        />
+        <Error
+            Condition="!Exists('$(_PongPackPath)')"
+            Text="RayBork Pong sample: the bake did not produce '$(_PongPackPath)'."
+        />
+        <Copy
+            SourceFiles="$(_PongPackPath)"
+            DestinationFolder="$(_PongSamplePackDirectory)"
+            SkipUnchangedFiles="true"
+        />
     </Target>
-
 </Project>

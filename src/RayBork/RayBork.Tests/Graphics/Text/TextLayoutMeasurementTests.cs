@@ -7,12 +7,14 @@ namespace RayBork.Tests.Graphics.Text;
 /// Tests <see cref="TextLayoutEngine.Measure"/>: the widest line advance including kerning and the
 /// line-count based height. Measurement ignores wrapping and a width limit and needs no glyph texture.
 /// </summary>
-public sealed class TextLayoutMeasurementTests {
+public sealed class TextLayoutMeasurementTests
+{
     private const float TOLERANCE = 1e-5f;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureSingleLine() {
+    public void MeasureSingleLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab", 1f);
@@ -22,8 +24,10 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureIncludesKerning() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void MeasureIncludesKerning()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_A, TextLayoutTestData.GLYPH_B, 0.25f);
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab", 1f);
@@ -33,7 +37,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureMultiLineUsesTheWidestLine() {
+    public void MeasureMultiLineUsesTheWidestLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab\ncde", 1f);
@@ -43,7 +48,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureTrailingNewlineAddsAnEmptyLine() {
+    public void MeasureTrailingNewlineAddsAnEmptyLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab\n", 1f);
@@ -53,7 +59,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureEmptyTextIsZero() {
+    public void MeasureEmptyTextIsZero()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, string.Empty, 1f);
@@ -63,7 +70,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureAtRequestedSize() {
+    public void MeasureAtRequestedSize()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab", 2f);
@@ -73,7 +81,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureIgnoresCarriageReturn() {
+    public void MeasureIgnoresCarriageReturn()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         // The fake maps \r with a 0.5 em advance, so "a\rb" would measure 1.5 without the read guard.
@@ -84,7 +93,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureWhitespaceOnlyText() {
+    public void MeasureWhitespaceOnlyText()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "   ", 1f);
@@ -94,7 +104,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureUnpairedSurrogateAsTheReplacementGlyph() {
+    public void MeasureUnpairedSurrogateAsTheReplacementGlyph()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "\uD83D", 1f);
@@ -104,7 +115,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureConsecutiveNewlines() {
+    public void MeasureConsecutiveNewlines()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "\n\n", 1f);
@@ -114,8 +126,10 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureResetsKerningAtNewlines() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void MeasureResetsKerningAtNewlines()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_B, TextLayoutTestData.GLYPH_C, 1f);
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab\ncd", 1f);
@@ -126,7 +140,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureIgnoresCarriageReturnBeforeNewline() {
+    public void MeasureIgnoresCarriageReturnBeforeNewline()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab\r\ncd", 1f);
@@ -136,7 +151,8 @@ public sealed class TextLayoutMeasurementTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureMultiLineAtRequestedSize() {
+    public void MeasureMultiLineAtRequestedSize()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
         Vector2 size = TextLayoutEngine.Measure(metrics, "ab\ncde", 2f);
@@ -144,7 +160,8 @@ public sealed class TextLayoutMeasurementTests {
         AssertVector(new Vector2(3f, 6f), size);
     }
 
-    private static void AssertVector(Vector2 expected, Vector2 actual) {
+    private static void AssertVector(Vector2 expected, Vector2 actual)
+    {
         Assert.Equal(expected.X, actual.X, TOLERANCE);
         Assert.Equal(expected.Y, actual.Y, TOLERANCE);
     }

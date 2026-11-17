@@ -11,4 +11,5 @@ internal readonly record struct VulkanQueueFamilyInfo(
     uint Index,
     bool SupportsGraphics,
     bool SupportsPresent,
-    uint QueueCount);
+    uint QueueCount
+);

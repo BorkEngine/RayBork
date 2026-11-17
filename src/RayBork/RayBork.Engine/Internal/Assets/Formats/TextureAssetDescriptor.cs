@@ -10,9 +10,8 @@ namespace RayBork.Internal;
 /// with a compiled shape and never uses reflection.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class TextureAssetDescriptor {
-
-
+internal sealed partial class TextureAssetDescriptor
+{
     /// <summary>Gets the canonical path of the KTX2 payload entry.</summary>
     public required string Payload { get; init; }
 

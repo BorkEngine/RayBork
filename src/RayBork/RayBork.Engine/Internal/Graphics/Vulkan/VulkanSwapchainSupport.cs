@@ -10,14 +10,17 @@ namespace RayBork.Internal;
 /// recreated. A surface is usable only when it advertises at least one format and one present mode;
 /// the swapchain task turns this snapshot into images and views.
 /// </remarks>
-internal sealed class VulkanSwapchainSupport {
+internal sealed class VulkanSwapchainSupport
+{
     private readonly VulkanSurfaceFormat[] _formats;
     private readonly PresentModeKHR[] _presentModes;
 
     private VulkanSwapchainSupport(
         SurfaceCapabilitiesKHR capabilities,
         VulkanSurfaceFormat[] formats,
-        PresentModeKHR[] presentModes) {
+        PresentModeKHR[] presentModes
+    )
+    {
         Capabilities = capabilities;
         _formats = formats;
         _presentModes = presentModes;
@@ -48,8 +51,7 @@ internal sealed class VulkanSwapchainSupport {
     /// </summary>
     /// <param name="format">The format to look for.</param>
     /// <returns><see langword="true"/> when at least one pair uses the format.</returns>
-    internal bool HasFormat(Format format) =>
-        Array.Exists(_formats, pair => pair.Format == format);
+    internal bool HasFormat(Format format) => Array.Exists(_formats, pair => pair.Format == format);
 
     /// <summary>
     /// Gets whether the surface advertises a specific format and color-space pair.
@@ -91,15 +93,33 @@ internal sealed class VulkanSwapchainSupport {
     internal static VulkanSwapchainSupport Query(
         Vk vulkan,
         PhysicalDevice device,
-        SurfaceKHR surface) {
+        SurfaceKHR surface
+    )
+    {
         ArgumentNullException.ThrowIfNull(vulkan);
 
-        SurfaceCapabilitiesKHR capabilities = VulkanNativeFunctions.GetSurfaceCapabilities(vulkan, device, surface);
-        SurfaceFormatKHR[] nativeFormats = VulkanNativeFunctions.GetSurfaceFormats(vulkan, device, surface);
-        PresentModeKHR[] presentModes = VulkanNativeFunctions.GetSurfacePresentModes(vulkan, device, surface);
+        SurfaceCapabilitiesKHR capabilities = VulkanNativeFunctions.GetSurfaceCapabilities(
+            vulkan,
+            device,
+            surface
+        );
+        SurfaceFormatKHR[] nativeFormats = VulkanNativeFunctions.GetSurfaceFormats(
+            vulkan,
+            device,
+            surface
+        );
+        PresentModeKHR[] presentModes = VulkanNativeFunctions.GetSurfacePresentModes(
+            vulkan,
+            device,
+            surface
+        );
         VulkanSurfaceFormat[] formats = new VulkanSurfaceFormat[nativeFormats.Length];
-        for (int index = 0; index < nativeFormats.Length; index++) {
-            formats[index] = new VulkanSurfaceFormat(nativeFormats[index].Format, nativeFormats[index].ColorSpace);
+        for (int index = 0; index < nativeFormats.Length; index++)
+        {
+            formats[index] = new VulkanSurfaceFormat(
+                nativeFormats[index].Format,
+                nativeFormats[index].ColorSpace
+            );
         }
 
         return new VulkanSwapchainSupport(capabilities, formats, presentModes);

@@ -9,7 +9,8 @@ namespace RayBork;
 /// Rotations use the right-handed, Y-up System.Numerics convention: forward is <c>-Z</c>.
 /// Angle arguments and results are in degrees.
 /// </remarks>
-public static class QuaternionExtensions {
+public static class QuaternionExtensions
+{
     private const float DEGREES_TO_RADIANS = MathF.PI / 180f;
     private const float RADIANS_TO_DEGREES = 180f / MathF.PI;
     private const float MINIMUM_LENGTH_SQUARED = 1e-6f;
@@ -18,7 +19,8 @@ public static class QuaternionExtensions {
     private const float GIMBAL_LOCK_THRESHOLD = 1f - 1e-6f;
     private const float LINEAR_SLERP_THRESHOLD = 1f - 1e-5f;
 
-    extension(Quaternion) {
+    extension(Quaternion)
+    {
         /// <summary>
         /// Creates a rotation from Euler angles in degrees.
         /// </summary>
@@ -27,7 +29,11 @@ public static class QuaternionExtensions {
         /// <param name="z">The angle around the Z axis, in degrees.</param>
         /// <returns>The composed rotation.</returns>
         public static Quaternion Euler(float x, float y, float z) =>
-            Quaternion.CreateFromYawPitchRoll(y * DEGREES_TO_RADIANS, x * DEGREES_TO_RADIANS, z * DEGREES_TO_RADIANS);
+            Quaternion.CreateFromYawPitchRoll(
+                y * DEGREES_TO_RADIANS,
+                x * DEGREES_TO_RADIANS,
+                z * DEGREES_TO_RADIANS
+            );
 
         /// <summary>
         /// Creates a rotation of a given angle around an axis.
@@ -36,15 +42,21 @@ public static class QuaternionExtensions {
         /// <param name="axis">The rotation axis. It must not be zero.</param>
         /// <returns>The normalized rotation.</returns>
         /// <exception cref="ArgumentException"><paramref name="axis"/> has zero length.</exception>
-        public static Quaternion AngleAxis(float degrees, Vector3 axis) {
+        public static Quaternion AngleAxis(float degrees, Vector3 axis)
+        {
             float lengthSquared = axis.LengthSquared();
 
-            if (lengthSquared == 0f) {
+            if (lengthSquared == 0f)
+            {
                 throw new ArgumentException("The rotation axis must not be zero.", nameof(axis));
             }
 
             return Quaternion.Normalize(
-                Quaternion.CreateFromAxisAngle(axis / MathF.Sqrt(lengthSquared), degrees * DEGREES_TO_RADIANS));
+                Quaternion.CreateFromAxisAngle(
+                    axis / MathF.Sqrt(lengthSquared),
+                    degrees * DEGREES_TO_RADIANS
+                )
+            );
         }
 
         /// <summary>
@@ -57,16 +69,25 @@ public static class QuaternionExtensions {
         /// <paramref name="forward"/> or <paramref name="upwards"/> has zero length, or the two
         /// directions are parallel.
         /// </exception>
-        public static Quaternion LookRotation(Vector3 forward, Vector3 upwards) {
+        public static Quaternion LookRotation(Vector3 forward, Vector3 upwards)
+        {
             float forwardLengthSquared = forward.LengthSquared();
             float upwardsLengthSquared = upwards.LengthSquared();
 
-            if (forwardLengthSquared == 0f) {
-                throw new ArgumentException("The forward vector must not be zero.", nameof(forward));
+            if (forwardLengthSquared == 0f)
+            {
+                throw new ArgumentException(
+                    "The forward vector must not be zero.",
+                    nameof(forward)
+                );
             }
 
-            if (upwardsLengthSquared == 0f) {
-                throw new ArgumentException("The upwards vector must not be zero.", nameof(upwards));
+            if (upwardsLengthSquared == 0f)
+            {
+                throw new ArgumentException(
+                    "The upwards vector must not be zero.",
+                    nameof(upwards)
+                );
             }
 
             Vector3 forwardDirection = forward / MathF.Sqrt(forwardLengthSquared);
@@ -74,20 +95,35 @@ public static class QuaternionExtensions {
             Vector3 right = Vector3.Cross(forwardDirection, upwardsDirection);
             float rightLengthSquared = right.LengthSquared();
 
-            if (rightLengthSquared < MINIMUM_LENGTH_SQUARED) {
+            if (rightLengthSquared < MINIMUM_LENGTH_SQUARED)
+            {
                 throw new ArgumentException(
                     "The forward and upwards vectors must not be parallel.",
-                    nameof(upwards));
+                    nameof(upwards)
+                );
             }
 
             right /= MathF.Sqrt(rightLengthSquared);
             Vector3 up = Vector3.Cross(right, forwardDirection);
 
             Matrix4x4 rotationMatrix = new(
-                right.X, right.Y, right.Z, 0f,
-                up.X, up.Y, up.Z, 0f,
-                -forwardDirection.X, -forwardDirection.Y, -forwardDirection.Z, 0f,
-                0f, 0f, 0f, 1f);
+                right.X,
+                right.Y,
+                right.Z,
+                0f,
+                up.X,
+                up.Y,
+                up.Z,
+                0f,
+                -forwardDirection.X,
+                -forwardDirection.Y,
+                -forwardDirection.Z,
+                0f,
+                0f,
+                0f,
+                0f,
+                1f
+            );
 
             return Quaternion.Normalize(Quaternion.CreateFromRotationMatrix(rotationMatrix));
         }
@@ -101,15 +137,18 @@ public static class QuaternionExtensions {
         /// <exception cref="ArgumentException">
         /// <paramref name="from"/> or <paramref name="to"/> has zero length.
         /// </exception>
-        public static Quaternion FromToRotation(Vector3 from, Vector3 to) {
+        public static Quaternion FromToRotation(Vector3 from, Vector3 to)
+        {
             float fromLengthSquared = from.LengthSquared();
             float toLengthSquared = to.LengthSquared();
 
-            if (fromLengthSquared == 0f) {
+            if (fromLengthSquared == 0f)
+            {
                 throw new ArgumentException("The from vector must not be zero.", nameof(from));
             }
 
-            if (toLengthSquared == 0f) {
+            if (toLengthSquared == 0f)
+            {
                 throw new ArgumentException("The to vector must not be zero.", nameof(to));
             }
 
@@ -117,18 +156,24 @@ public static class QuaternionExtensions {
             Vector3 toDirection = to / MathF.Sqrt(toLengthSquared);
             float dot = Math.Clamp(Vector3.Dot(fromDirection, toDirection), -1f, 1f);
 
-            if (dot > 1f - OPPOSITE_DOT_THRESHOLD) {
+            if (dot > 1f - OPPOSITE_DOT_THRESHOLD)
+            {
                 return Quaternion.Identity;
             }
 
-            if (dot < -1f + OPPOSITE_DOT_THRESHOLD) {
+            if (dot < -1f + OPPOSITE_DOT_THRESHOLD)
+            {
                 Vector3 perpendicularAxis = Vector3.Cross(Vector3.UnitX, fromDirection);
 
-                if (perpendicularAxis.LengthSquared() < MINIMUM_LENGTH_SQUARED) {
+                if (perpendicularAxis.LengthSquared() < MINIMUM_LENGTH_SQUARED)
+                {
                     perpendicularAxis = Vector3.Cross(Vector3.UnitY, fromDirection);
                 }
 
-                return Quaternion.CreateFromAxisAngle(Vector3.Normalize(perpendicularAxis), MathF.PI);
+                return Quaternion.CreateFromAxisAngle(
+                    Vector3.Normalize(perpendicularAxis),
+                    MathF.PI
+                );
             }
 
             Vector3 axis = Vector3.Normalize(Vector3.Cross(fromDirection, toDirection));
@@ -136,7 +181,8 @@ public static class QuaternionExtensions {
         }
     }
 
-    extension(Quaternion value) {
+    extension(Quaternion value)
+    {
         /// <summary>
         /// Gets the quaternion scaled to unit length.
         /// </summary>
@@ -145,9 +191,12 @@ public static class QuaternionExtensions {
         /// <summary>
         /// Gets the Euler angles in degrees, ordered as X, Y, and Z.
         /// </summary>
-        public Vector3 EulerAngles {
-            get {
-                if (value.LengthSquared() == 0f) {
+        public Vector3 EulerAngles
+        {
+            get
+            {
+                if (value.LengthSquared() == 0f)
+                {
                     return Vector3.Zero;
                 }
 
@@ -157,10 +206,13 @@ public static class QuaternionExtensions {
                 float yaw;
                 float roll;
 
-                if (MathF.Abs(sinPitch) > GIMBAL_LOCK_THRESHOLD) {
+                if (MathF.Abs(sinPitch) > GIMBAL_LOCK_THRESHOLD)
+                {
                     yaw = MathF.Atan2(-matrix.M13, matrix.M11);
                     roll = 0f;
-                } else {
+                }
+                else
+                {
                     yaw = MathF.Atan2(matrix.M31, matrix.M33);
                     roll = MathF.Atan2(matrix.M12, matrix.M22);
                 }
@@ -168,7 +220,8 @@ public static class QuaternionExtensions {
                 return new Vector3(
                     NormalizeDegrees(pitch * RADIANS_TO_DEGREES),
                     NormalizeDegrees(yaw * RADIANS_TO_DEGREES),
-                    NormalizeDegrees(roll * RADIANS_TO_DEGREES));
+                    NormalizeDegrees(roll * RADIANS_TO_DEGREES)
+                );
             }
         }
 
@@ -177,7 +230,8 @@ public static class QuaternionExtensions {
         /// </summary>
         /// <param name="other">The other rotation.</param>
         /// <returns>The angle in degrees, in the range <c>[0, 180]</c>.</returns>
-        public float Angle(Quaternion other) {
+        public float Angle(Quaternion other)
+        {
             float dot = Quaternion.Dot(NormalizeOrIdentity(value), NormalizeOrIdentity(other));
             return MathF.Acos(Math.Clamp(MathF.Abs(dot), 0f, 1f)) * 2f * RADIANS_TO_DEGREES;
         }
@@ -190,13 +244,15 @@ public static class QuaternionExtensions {
         /// The resulting normalized rotation axis, or <c>(1, 0, 0)</c> when the rotation is the
         /// identity.
         /// </param>
-        public void ToAngleAxis(out float angle, out Vector3 axis) {
+        public void ToAngleAxis(out float angle, out Vector3 axis)
+        {
             Quaternion normalized = NormalizeOrIdentity(value);
             float sinHalfAngle = MathF.Sqrt(MathF.Max(0f, 1f - (normalized.W * normalized.W)));
 
             angle = 2f * MathF.Acos(Math.Clamp(normalized.W, -1f, 1f)) * RADIANS_TO_DEGREES;
 
-            if (sinHalfAngle < MINIMUM_SIN_HALF_ANGLE) {
+            if (sinHalfAngle < MINIMUM_SIN_HALF_ANGLE)
+            {
                 axis = Vector3.UnitX;
                 return;
             }
@@ -213,10 +269,12 @@ public static class QuaternionExtensions {
         /// The rotation that is at most <paramref name="maxDegreesDelta"/> degrees from this rotation
         /// in the direction of <paramref name="target"/>, or the target when it is closer.
         /// </returns>
-        public Quaternion RotateTowards(Quaternion target, float maxDegreesDelta) {
+        public Quaternion RotateTowards(Quaternion target, float maxDegreesDelta)
+        {
             float angle = Angle(value, target);
 
-            if (angle <= 0f) {
+            if (angle <= 0f)
+            {
                 return NormalizeOrIdentity(target);
             }
 
@@ -229,19 +287,22 @@ public static class QuaternionExtensions {
         /// <param name="target">The target rotation.</param>
         /// <param name="t">The interpolation factor, clamped to <c>[0, 1]</c>.</param>
         /// <returns>The interpolated rotation.</returns>
-        public Quaternion Slerp(Quaternion target, float t) {
+        public Quaternion Slerp(Quaternion target, float t)
+        {
             t = Math.Clamp(t, 0f, 1f);
 
             Quaternion from = NormalizeOrIdentity(value);
             Quaternion to = NormalizeOrIdentity(target);
             float dot = Quaternion.Dot(from, to);
 
-            if (dot < 0f) {
+            if (dot < 0f)
+            {
                 to = Quaternion.Negate(to);
                 dot = -dot;
             }
 
-            if (dot > LINEAR_SLERP_THRESHOLD) {
+            if (dot > LINEAR_SLERP_THRESHOLD)
+            {
                 return Quaternion.Normalize(Quaternion.Lerp(from, to, t));
             }
 
@@ -254,7 +315,8 @@ public static class QuaternionExtensions {
                 (from.X * fromWeight) + (to.X * toWeight),
                 (from.Y * fromWeight) + (to.Y * toWeight),
                 (from.Z * fromWeight) + (to.Z * toWeight),
-                (from.W * fromWeight) + (to.W * toWeight));
+                (from.W * fromWeight) + (to.W * toWeight)
+            );
         }
     }
 

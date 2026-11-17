@@ -6,10 +6,12 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <summary>
 /// Unit tests for the narrow KTX2 2.0 reader that the Vulkan texture upload uses.
 /// </summary>
-public sealed class Ktx2ReaderTests {
+public sealed class Ktx2ReaderTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReadsRgba8PayloadWithCompleteMipChain() {
+    public void ReadsRgba8PayloadWithCompleteMipChain()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Srgb, 4, 4);
         TextureAssetDescriptor descriptor = Descriptor(TextureFormat.Rgba8Srgb, 4, 4, isSrgb: true);
 
@@ -20,10 +22,13 @@ public sealed class Ktx2ReaderTests {
         Assert.Equal(4u, texture.Width);
         Assert.Equal(4u, texture.Height);
         Assert.Equal(3, texture.MipLevels);
-        Assert.Equal(new ulong[] { 64, 16, 4 }, texture.Levels.Select(static level => level.ByteLength));
-        Assert.All(
-            texture.Levels,
-            level => Assert.True(level.ByteOffset + level.ByteLength <= (ulong)payload.Length));
+        Assert.Equal(
+            new ulong[] { 64, 16, 4 },
+            texture.Levels.Select(static level => level.ByteLength)
+        );
+        Assert.All(texture.Levels, level =>
+            Assert.True(level.ByteOffset + level.ByteLength <= (ulong)payload.Length)
+        );
     }
 
     [Theory]
@@ -34,7 +39,8 @@ public sealed class Ktx2ReaderTests {
     [InlineData(TextureFormat.Bc5Unorm, false)]
     [InlineData(TextureFormat.R8Unorm, false)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReadsEveryPackedFormat(TextureFormat format, bool isSrgb) {
+    public void ReadsEveryPackedFormat(TextureFormat format, bool isSrgb)
+    {
         byte[] payload = Ktx2TestWriter.Write(format, 4, 4);
         TextureAssetDescriptor descriptor = Descriptor(format, 4, 4, isSrgb);
 
@@ -49,7 +55,8 @@ public sealed class Ktx2ReaderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReadsOneByOneTextureWithASingleLevel() {
+    public void ReadsOneByOneTextureWithASingleLevel()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.R8Unorm, 1, 1);
         TextureAssetDescriptor descriptor = Descriptor(TextureFormat.R8Unorm, 1, 1, isSrgb: false);
 
@@ -62,51 +69,77 @@ public sealed class Ktx2ReaderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsBadIdentifier() {
+    public void RejectsBadIdentifier()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         payload[0] ^= 0xFF;
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "identifier");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "identifier"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsIdentifierThatIsNotVersion2() {
+    public void RejectsIdentifierThatIsNotVersion2()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         payload[5] = (byte)'1';
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "identifier");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "identifier"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsTruncatedHeader() {
+    public void RejectsTruncatedHeader()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4)[..40];
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "header is truncated");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "header is truncated"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsNon2dPayload() {
+    public void RejectsNon2dPayload()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         WriteUInt32(payload, Ktx2TestWriter.PIXEL_DEPTH_OFFSET, 1);
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "not a 2D image");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "not a 2D image"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsArrayLayers() {
+    public void RejectsArrayLayers()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         WriteUInt32(payload, Ktx2TestWriter.LAYER_COUNT_OFFSET, 1);
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "array layer");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "array layer"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsMultipleFaces() {
+    public void RejectsMultipleFaces()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         WriteUInt32(payload, Ktx2TestWriter.FACE_COUNT_OFFSET, 6);
 
@@ -118,83 +151,119 @@ public sealed class Ktx2ReaderTests {
     [InlineData(2u, "Zstandard")]
     [InlineData(99u, "unknown (99)")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsUnsupportedSupercompression(uint scheme, string expectedSchemeName) {
+    public void RejectsUnsupportedSupercompression(uint scheme, string expectedSchemeName)
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         WriteUInt32(payload, Ktx2TestWriter.SUPERCOMPRESSION_OFFSET, scheme);
 
         AssertInvalid(
             payload,
             Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
-            expectedSchemeName);
+            expectedSchemeName
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsIncompleteMipChain() {
+    public void RejectsIncompleteMipChain()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4, mipLevels: 2);
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "mip level");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "mip level"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsDescriptorMipCountThatDisagreesWithTheChain() {
+    public void RejectsDescriptorMipCountThatDisagreesWithTheChain()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
 
         AssertInvalid(
             payload,
             Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false, mipLevels: 2),
-            "mip level");
+            "mip level"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsTruncatedLevelIndex() {
+    public void RejectsTruncatedLevelIndex()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
-        byte[] truncated = payload[..(Ktx2TestWriter.HEADER_SIZE + Ktx2TestWriter.LEVEL_INDEX_ENTRY_SIZE)];
+        byte[] truncated = payload[
+            ..(Ktx2TestWriter.HEADER_SIZE + Ktx2TestWriter.LEVEL_INDEX_ENTRY_SIZE)
+        ];
 
-        AssertInvalid(truncated, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "level index is truncated");
+        AssertInvalid(
+            truncated,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "level index is truncated"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsTruncatedLevelData() {
+    public void RejectsTruncatedLevelData()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         byte[] truncated = payload[..^8];
 
-        AssertInvalid(truncated, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "does not lie inside");
+        AssertInvalid(
+            truncated,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "does not lie inside"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsMisalignedLevelOffset() {
+    public void RejectsMisalignedLevelOffset()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         int entry = Ktx2TestWriter.LevelEntryOffset(0);
         ulong offset = BinaryPrimitives.ReadUInt64LittleEndian(payload.AsSpan(entry));
         BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(entry), offset + 1);
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "not aligned");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "not aligned"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsWrongLevelByteLength() {
+    public void RejectsWrongLevelByteLength()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         int entry = Ktx2TestWriter.LevelEntryOffset(0);
         ulong length = BinaryPrimitives.ReadUInt64LittleEndian(payload.AsSpan(entry + 8));
         BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(entry + 8), length - 4);
         BinaryPrimitives.WriteUInt64LittleEndian(payload.AsSpan(entry + 16), length - 4);
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "requires");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "requires"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsKeyValueData() {
+    public void RejectsKeyValueData()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
         WriteUInt32(payload, Ktx2TestWriter.KVD_LENGTH_FIELD, 1);
 
-        AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false), "key/value");
+        AssertInvalid(
+            payload,
+            Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
+            "key/value"
+        );
     }
 
     [Theory]
@@ -206,12 +275,18 @@ public sealed class Ktx2ReaderTests {
     [InlineData("texel-block")]
     [InlineData("bytes-plane")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsMalformedDataFormatDescriptor(string corruption) {
+    public void RejectsMalformedDataFormatDescriptor(string corruption)
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Srgb, 4, 4);
         int dfd = Ktx2TestWriter.DfdOffset(payload);
-        switch (corruption) {
+        switch (corruption)
+        {
             case "total-size":
-                WriteUInt32(payload, dfd, BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(dfd)) + 1);
+                WriteUInt32(
+                    payload,
+                    dfd,
+                    BinaryPrimitives.ReadUInt32LittleEndian(payload.AsSpan(dfd)) + 1
+                );
                 break;
             case "version":
                 WriteUInt32(payload, dfd + 8, 1);
@@ -232,10 +307,15 @@ public sealed class Ktx2ReaderTests {
                 WriteUInt32(payload, dfd + 20, 8u);
                 break;
             default:
-                throw new ArgumentOutOfRangeException(nameof(corruption), corruption, "Unknown corruption.");
+                throw new ArgumentOutOfRangeException(
+                    nameof(corruption),
+                    corruption,
+                    "Unknown corruption."
+                );
         }
 
-        string expected = corruption switch {
+        string expected = corruption switch
+        {
             "total-size" => "total size",
             "version" => "version is 1",
             "block-size" => "block size 8",
@@ -243,60 +323,73 @@ public sealed class Ktx2ReaderTests {
             "transfer-function" => "transfer function",
             "texel-block" => "texel block",
             "bytes-plane" => "byte(s) per texel block",
-            _ => throw new ArgumentOutOfRangeException(nameof(corruption), corruption, "Unknown corruption."),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(corruption),
+                corruption,
+                "Unknown corruption."
+            ),
         };
         AssertInvalid(payload, Descriptor(TextureFormat.Rgba8Srgb, 4, 4, isSrgb: true), expected);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsDescriptorDimensionMismatch() {
+    public void RejectsDescriptorDimensionMismatch()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 4, 4);
 
         AssertInvalid(
             payload,
             Descriptor(TextureFormat.Rgba8Unorm, 8, 8, isSrgb: false),
-            "does not match the descriptor extent");
+            "does not match the descriptor extent"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsDescriptorFormatMismatch() {
+    public void RejectsDescriptorFormatMismatch()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Srgb, 4, 4);
 
         AssertInvalid(
             payload,
             Descriptor(TextureFormat.Rgba8Unorm, 4, 4, isSrgb: false),
-            "vkFormat");
+            "vkFormat"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsDescriptorSrgbFlagThatDisagreesWithTheFormat() {
+    public void RejectsDescriptorSrgbFlagThatDisagreesWithTheFormat()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Srgb, 4, 4);
 
         AssertInvalid(
             payload,
             Descriptor(TextureFormat.Rgba8Srgb, 4, 4, isSrgb: false),
-            "sRGB flag");
+            "sRGB flag"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsPayloadTransferThatDisagreesWithTheDescriptor() {
+    public void RejectsPayloadTransferThatDisagreesWithTheDescriptor()
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Srgb, 4, 4, srgb: false);
 
         AssertInvalid(
             payload,
             Descriptor(TextureFormat.Rgba8Srgb, 4, 4, isSrgb: true),
-            "transfer function");
+            "transfer function"
+        );
     }
 
     [Theory]
     [InlineData(TextureFormat.Rgba16Float)]
     [InlineData(TextureFormat.Depth32Float)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsRenderTargetFormatsInPackedTextures(TextureFormat format) {
+    public void RejectsRenderTargetFormatsInPackedTextures(TextureFormat format)
+    {
         byte[] payload = Ktx2TestWriter.Write(TextureFormat.Rgba8Unorm, 1, 1);
 
         AssertInvalid(payload, Descriptor(format, 1, 1, isSrgb: false), "render-target");
@@ -305,8 +398,12 @@ public sealed class Ktx2ReaderTests {
     private static AssetLoadException AssertInvalid(
         byte[] payload,
         TextureAssetDescriptor descriptor,
-        string expectedMessagePart) {
-        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => Ktx2Reader.Read(payload, descriptor));
+        string expectedMessagePart
+    )
+    {
+        AssetLoadException failure = Assert.Throws<AssetLoadException>(() =>
+            Ktx2Reader.Read(payload, descriptor)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, failure.DiagnosticCode);
         Assert.Contains(expectedMessagePart, failure.Message, StringComparison.Ordinal);
         return failure;
@@ -317,7 +414,10 @@ public sealed class Ktx2ReaderTests {
         uint width,
         uint height,
         bool isSrgb,
-        uint? mipLevels = null) => new() {
+        uint? mipLevels = null
+    ) =>
+        new()
+        {
             Payload = "textures/test-ktx2",
             Width = width,
             Height = height,

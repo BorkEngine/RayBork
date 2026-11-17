@@ -22,7 +22,8 @@ namespace RayBork.Tests;
 /// Shutdown releases exactly the preloaded resources, once each.
 /// </para>
 /// </remarks>
-internal static class EnginePreloadCounts {
+internal static class EnginePreloadCounts
+{
     /// <summary>The GPU-uploaded assets preloaded into <see cref="EngineDefaults"/>.</summary>
     internal const int DEFAULTS = 3;
 

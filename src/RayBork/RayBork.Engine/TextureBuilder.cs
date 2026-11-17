@@ -25,7 +25,8 @@ namespace RayBork;
 /// runtime block encoder and no raw KTX2 upload: block-compressed textures come from the bake.
 /// </para>
 /// </remarks>
-public sealed class TextureBuilder {
+public sealed class TextureBuilder
+{
     /// <summary>The largest accepted base-level width or height in pixels. It matches the bake limit.</summary>
     private const int MAX_DIMENSION = 16384;
 
@@ -67,20 +68,25 @@ public sealed class TextureBuilder {
         int height,
         TextureFormat format,
         bool generateMips,
-        SamplerState? sampler) {
+        SamplerState? sampler
+    )
+    {
         ArgumentNullException.ThrowIfNull(service);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(width, MAX_DIMENSION);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(height, MAX_DIMENSION);
-        if (!IsSupportedFormat(format)) {
+        if (!IsSupportedFormat(format))
+        {
             throw new ArgumentException(
                 $"The texture format '{format}' is not a procedural texture format; use Rgba8Unorm, "
                     + "Rgba8Srgb, or R8Unorm.",
-                nameof(format));
+                nameof(format)
+            );
         }
 
-        if (sampler.HasValue) {
+        if (sampler.HasValue)
+        {
             ValidateSampler(sampler.Value);
         }
 
@@ -95,8 +101,10 @@ public sealed class TextureBuilder {
     /// <summary>
     /// Gets the base-level width in pixels.
     /// </summary>
-    public int Width {
-        get {
+    public int Width
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _width;
         }
@@ -105,8 +113,10 @@ public sealed class TextureBuilder {
     /// <summary>
     /// Gets the base-level height in pixels.
     /// </summary>
-    public int Height {
-        get {
+    public int Height
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _height;
         }
@@ -115,8 +125,10 @@ public sealed class TextureBuilder {
     /// <summary>
     /// Gets the uncompressed storage format.
     /// </summary>
-    public TextureFormat Format {
-        get {
+    public TextureFormat Format
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _format;
         }
@@ -125,8 +137,10 @@ public sealed class TextureBuilder {
     /// <summary>
     /// Gets the sampler state the built texture uses.
     /// </summary>
-    public SamplerState Sampler {
-        get {
+    public SamplerState Sampler
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _sampler;
         }
@@ -135,8 +149,10 @@ public sealed class TextureBuilder {
     /// <summary>
     /// Gets whether <see cref="BuildAsync"/> generates the full mip chain when no chain exists.
     /// </summary>
-    public bool GenerateMipsEnabled {
-        get {
+    public bool GenerateMipsEnabled
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _generateMips;
         }
@@ -153,15 +169,18 @@ public sealed class TextureBuilder {
     /// </param>
     /// <exception cref="ArgumentException">The buffer length does not match the size and format.</exception>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    public void SetPixels(ReadOnlySpan<byte> pixels) {
+    public void SetPixels(ReadOnlySpan<byte> pixels)
+    {
         _service.ThrowIfStopped();
         int bytesPerPixel = BytesPerPixel(_format);
         long expected = (long)_width * _height * bytesPerPixel;
-        if (pixels.Length != expected) {
+        if (pixels.Length != expected)
+        {
             throw new ArgumentException(
                 $"The pixel buffer is {pixels.Length} bytes; a {_width}x{_height} {_format} base level "
                     + $"requires exactly {expected} bytes (width × height × {bytesPerPixel}).",
-                nameof(pixels));
+                nameof(pixels)
+            );
         }
 
         _basePixels = pixels.ToArray();
@@ -181,38 +200,49 @@ public sealed class TextureBuilder {
     /// The color count does not match the size, or a component is not finite.
     /// </exception>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    public void SetPixels(ReadOnlySpan<Color> colors) {
+    public void SetPixels(ReadOnlySpan<Color> colors)
+    {
         _service.ThrowIfStopped();
         long expected = (long)_width * _height;
-        if (colors.Length != expected) {
+        if (colors.Length != expected)
+        {
             throw new ArgumentException(
                 $"The color buffer has {colors.Length} entries; a {_width}x{_height} texture requires "
                     + $"exactly {expected}.",
-                nameof(colors));
+                nameof(colors)
+            );
         }
 
-        for (int index = 0; index < colors.Length; index++) {
+        for (int index = 0; index < colors.Length; index++)
+        {
             Color color = colors[index];
-            if (!IsFinite(color)) {
+            if (!IsFinite(color))
+            {
                 throw new ArgumentException(
                     $"The color at index {index} has a non-finite component.",
-                    nameof(colors));
+                    nameof(colors)
+                );
             }
         }
 
         int bytesPerPixel = BytesPerPixel(_format);
         byte[] pixels = new byte[checked(colors.Length * bytesPerPixel)];
-        for (int pixel = 0; pixel < colors.Length; pixel++) {
+        for (int pixel = 0; pixel < colors.Length; pixel++)
+        {
             Color color = colors[pixel];
             int offset = pixel * bytesPerPixel;
-            if (bytesPerPixel == 1) {
+            if (bytesPerPixel == 1)
+            {
                 pixels[offset] = ToUnormByte(color.R);
                 continue;
             }
 
-            pixels[offset] = _format == TextureFormat.Rgba8Srgb ? ToSrgbByte(color.R) : ToUnormByte(color.R);
-            pixels[offset + 1] = _format == TextureFormat.Rgba8Srgb ? ToSrgbByte(color.G) : ToUnormByte(color.G);
-            pixels[offset + 2] = _format == TextureFormat.Rgba8Srgb ? ToSrgbByte(color.B) : ToUnormByte(color.B);
+            pixels[offset] =
+                _format == TextureFormat.Rgba8Srgb ? ToSrgbByte(color.R) : ToUnormByte(color.R);
+            pixels[offset + 1] =
+                _format == TextureFormat.Rgba8Srgb ? ToSrgbByte(color.G) : ToUnormByte(color.G);
+            pixels[offset + 2] =
+                _format == TextureFormat.Rgba8Srgb ? ToSrgbByte(color.B) : ToUnormByte(color.B);
             pixels[offset + 3] = ToUnormByte(color.A);
         }
 
@@ -232,10 +262,14 @@ public sealed class TextureBuilder {
     /// stored bytes; for the sRGB format it does not decode the transfer function first. A build with
     /// mip generation enabled calls this automatically when no chain exists.
     /// </remarks>
-    public void GenerateMips() {
+    public void GenerateMips()
+    {
         _service.ThrowIfStopped();
-        if (_basePixels is null) {
-            throw new InvalidOperationException("Set the base-level pixels before generating mipmaps.");
+        if (_basePixels is null)
+        {
+            throw new InvalidOperationException(
+                "Set the base-level pixels before generating mipmaps."
+            );
         }
 
         _mipChain = BuildMipChain(_basePixels, _width, _height, BytesPerPixel(_format));
@@ -257,13 +291,18 @@ public sealed class TextureBuilder {
     /// container. The returned texture has <see cref="Texture.IsProcedural"/> set and a reserved
     /// synthetic <see cref="Texture.Path"/>.
     /// </remarks>
-    public async Task<Texture> BuildAsync(CancellationToken cancellationToken = default) {
+    public async Task<Texture> BuildAsync(CancellationToken cancellationToken = default)
+    {
         _service.ThrowIfStopped();
-        if (_basePixels is null) {
-            throw new InvalidOperationException("Set the base-level pixels before building the texture.");
+        if (_basePixels is null)
+        {
+            throw new InvalidOperationException(
+                "Set the base-level pixels before building the texture."
+            );
         }
 
-        if (_generateMips && _mipChain is null) {
+        if (_generateMips && _mipChain is null)
+        {
             GenerateMips();
         }
 
@@ -271,7 +310,8 @@ public sealed class TextureBuilder {
         byte[] pixelData = ConcatenateLevels(levels, out int[] levelByteLengths);
         int id = ProceduralAssetIds.NextTextureId();
         string canonicalPath = ProceduralAssetIds.TexturePath(id);
-        TextureAssetDescriptor descriptor = new() {
+        TextureAssetDescriptor descriptor = new()
+        {
             Payload = canonicalPath,
             Width = checked((uint)_width),
             Height = checked((uint)_height),
@@ -291,61 +331,91 @@ public sealed class TextureBuilder {
             _sampler.Wrap,
             _sampler.MaxAnisotropy,
             pixelData,
-            levelByteLengths);
-        GpuAssetResource resource = await _service.UploadAsync(upload, cancellationToken).ConfigureAwait(false);
-        try {
-            EngineAsset lifetime = new(canonicalPath, resource, _service.QueueDestruction, static () => { });
+            levelByteLengths
+        );
+        GpuAssetResource resource = await _service
+            .UploadAsync(upload, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            EngineAsset lifetime = new(
+                canonicalPath,
+                resource,
+                _service.QueueDestruction,
+                static () => { }
+            );
             lifetime.AddOwnerReference();
             return new Texture(lifetime, descriptor, isProcedural: true);
-        } catch {
+        }
+        catch
+        {
             _service.QueueDestruction(resource);
             throw;
         }
     }
 
-    private static void ValidateSampler(SamplerState sampler) {
-        if (!Enum.IsDefined(sampler.Filter)) {
-            throw new ArgumentException("The sampler filter is not a defined value.", nameof(sampler));
+    private static void ValidateSampler(SamplerState sampler)
+    {
+        if (!Enum.IsDefined(sampler.Filter))
+        {
+            throw new ArgumentException(
+                "The sampler filter is not a defined value.",
+                nameof(sampler)
+            );
         }
 
-        if (!Enum.IsDefined(sampler.Wrap)) {
-            throw new ArgumentException("The sampler wrap mode is not a defined value.", nameof(sampler));
+        if (!Enum.IsDefined(sampler.Wrap))
+        {
+            throw new ArgumentException(
+                "The sampler wrap mode is not a defined value.",
+                nameof(sampler)
+            );
         }
 
-        if (!float.IsFinite(sampler.MaxAnisotropy) || sampler.MaxAnisotropy < 1f) {
+        if (!float.IsFinite(sampler.MaxAnisotropy) || sampler.MaxAnisotropy < 1f)
+        {
             throw new ArgumentException(
                 "The sampler maximum anisotropy must be finite and at least 1.",
-                nameof(sampler));
+                nameof(sampler)
+            );
         }
     }
 
-    private static bool IsSupportedFormat(TextureFormat format) => format is
-        TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb or TextureFormat.R8Unorm;
+    private static bool IsSupportedFormat(TextureFormat format) =>
+        format is TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb or TextureFormat.R8Unorm;
 
-    private static int BytesPerPixel(TextureFormat format) => format switch {
-        TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb => 4,
-        TextureFormat.R8Unorm => 1,
-        _ => throw new ArgumentException(
-            $"The texture format '{format}' is not a procedural texture format.",
-            nameof(format)),
-    };
+    private static int BytesPerPixel(TextureFormat format) =>
+        format switch
+        {
+            TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb => 4,
+            TextureFormat.R8Unorm => 1,
+            _ => throw new ArgumentException(
+                $"The texture format '{format}' is not a procedural texture format.",
+                nameof(format)
+            ),
+        };
 
-    private static byte[] ConcatenateLevels(byte[][] levels, out int[] levelByteLengths) {
+    private static byte[] ConcatenateLevels(byte[][] levels, out int[] levelByteLengths)
+    {
         long totalLength = 0;
-        foreach (byte[] level in levels) {
+        foreach (byte[] level in levels)
+        {
             totalLength += level.Length;
         }
 
-        if (totalLength > int.MaxValue) {
+        if (totalLength > int.MaxValue)
+        {
             throw new InvalidOperationException(
                 $"The {levels.Length}-level mip chain is {totalLength} bytes, which exceeds the maximum "
-                    + "upload size.");
+                    + "upload size."
+            );
         }
 
         byte[] pixelData = new byte[totalLength];
         levelByteLengths = new int[levels.Length];
         int offset = 0;
-        for (int level = 0; level < levels.Length; level++) {
+        for (int level = 0; level < levels.Length; level++)
+        {
             byte[] pixels = levels[level];
             pixels.CopyTo(pixelData, offset);
             levelByteLengths[level] = pixels.Length;
@@ -355,14 +425,28 @@ public sealed class TextureBuilder {
         return pixelData;
     }
 
-    private static byte[][] BuildMipChain(byte[] basePixels, int width, int height, int bytesPerPixel) {
+    private static byte[][] BuildMipChain(
+        byte[] basePixels,
+        int width,
+        int height,
+        int bytesPerPixel
+    )
+    {
         int levelCount = LevelCount(width, height);
         byte[][] levels = new byte[levelCount][];
         levels[0] = basePixels;
         int currentWidth = width;
         int currentHeight = height;
-        for (int level = 1; level < levelCount; level++) {
-            byte[] next = Downsample(levels[level - 1], currentWidth, currentHeight, bytesPerPixel, out int nextWidth, out int nextHeight);
+        for (int level = 1; level < levelCount; level++)
+        {
+            byte[] next = Downsample(
+                levels[level - 1],
+                currentWidth,
+                currentHeight,
+                bytesPerPixel,
+                out int nextWidth,
+                out int nextHeight
+            );
             levels[level] = next;
             currentWidth = nextWidth;
             currentHeight = nextHeight;
@@ -377,23 +461,30 @@ public sealed class TextureBuilder {
         int height,
         int bytesPerPixel,
         out int nextWidth,
-        out int nextHeight) {
+        out int nextHeight
+    )
+    {
         nextWidth = Math.Max(1, width / 2);
         nextHeight = Math.Max(1, height / 2);
         byte[] destination = new byte[nextWidth * nextHeight * bytesPerPixel];
-        for (int y = 0; y < nextHeight; y++) {
+        for (int y = 0; y < nextHeight; y++)
+        {
             int sourceY0 = y * height / nextHeight;
             int sourceY1 = (y + 1) * height / nextHeight;
-            for (int x = 0; x < nextWidth; x++) {
+            for (int x = 0; x < nextWidth; x++)
+            {
                 int sourceX0 = x * width / nextWidth;
                 int sourceX1 = (x + 1) * width / nextWidth;
                 int count = (sourceX1 - sourceX0) * (sourceY1 - sourceY0);
                 int destinationOffset = ((y * nextWidth) + x) * bytesPerPixel;
-                for (int channel = 0; channel < bytesPerPixel; channel++) {
+                for (int channel = 0; channel < bytesPerPixel; channel++)
+                {
                     int sum = 0;
-                    for (int sourceY = sourceY0; sourceY < sourceY1; sourceY++) {
+                    for (int sourceY = sourceY0; sourceY < sourceY1; sourceY++)
+                    {
                         int rowOffset = sourceY * width * bytesPerPixel;
-                        for (int sourceX = sourceX0; sourceX < sourceX1; sourceX++) {
+                        for (int sourceX = sourceX0; sourceX < sourceX1; sourceX++)
+                        {
                             sum += source[rowOffset + (sourceX * bytesPerPixel) + channel];
                         }
                     }
@@ -406,11 +497,13 @@ public sealed class TextureBuilder {
         return destination;
     }
 
-    private static int LevelCount(int width, int height) {
+    private static int LevelCount(int width, int height)
+    {
         int levels = 1;
         int levelWidth = width;
         int levelHeight = height;
-        while (levelWidth > 1 || levelHeight > 1) {
+        while (levelWidth > 1 || levelHeight > 1)
+        {
             levelWidth = Math.Max(1, levelWidth / 2);
             levelHeight = Math.Max(1, levelHeight / 2);
             levels++;
@@ -419,16 +512,19 @@ public sealed class TextureBuilder {
         return levels;
     }
 
-    private static byte ToUnormByte(float linear) {
+    private static byte ToUnormByte(float linear)
+    {
         float clamped = Math.Clamp(linear, 0f, 1f);
         return (byte)((int)((clamped * UNORM_MAX) + 0.5f));
     }
 
-    private static byte ToSrgbByte(float linear) {
+    private static byte ToSrgbByte(float linear)
+    {
         float clamped = Math.Clamp(linear, 0f, 1f);
-        float encoded = clamped <= SRGB_LINEAR_THRESHOLD
-            ? SRGB_SLOPE * clamped
-            : (SRGB_SCALE * MathF.Pow(clamped, SRGB_EXPONENT)) - SRGB_OFFSET;
+        float encoded =
+            clamped <= SRGB_LINEAR_THRESHOLD
+                ? SRGB_SLOPE * clamped
+                : (SRGB_SCALE * MathF.Pow(clamped, SRGB_EXPONENT)) - SRGB_OFFSET;
         return ToUnormByte(encoded);
     }
 

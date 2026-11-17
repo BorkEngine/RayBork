@@ -4,7 +4,8 @@ namespace RayBork.Tests;
 /// A scripted <see cref="IGame"/> that records callback counts, thread ids, thread names, and the
 /// first-tick engine context snapshot.
 /// </summary>
-internal sealed class ScriptedGame : IGame {
+internal sealed class ScriptedGame : IGame
+{
     public Func<EngineContext, Task>? SetupHandler { get; set; }
 
     public Action<EngineContext>? TickHandler { get; set; }
@@ -53,31 +54,36 @@ internal sealed class ScriptedGame : IGame {
 
     public long LastTickFrameCount { get; private set; }
 
-    public async Task Setup(EngineContext context) {
+    public async Task Setup(EngineContext context)
+    {
         SetupCount++;
         SetupThreadId = Environment.CurrentManagedThreadId;
         SetupThreadName = Thread.CurrentThread.Name;
         SetupContext = context;
 
-        if (SetupHandler is not null) {
+        if (SetupHandler is not null)
+        {
             await SetupHandler(context);
         }
 
-        if (YieldInSetup) {
+        if (YieldInSetup)
+        {
             await Task.Yield();
         }
 
         SetupCompletionThreadId = Environment.CurrentManagedThreadId;
     }
 
-    public void Tick(EngineContext context) {
+    public void Tick(EngineContext context)
+    {
         TickCount++;
         LastTickThreadId = Environment.CurrentManagedThreadId;
         LastTickContext = context;
         LastTickTime = context.Time;
         LastTickFrameCount = context.FrameCount;
 
-        if (TickCount == 1) {
+        if (TickCount == 1)
+        {
             FirstTickThreadId = LastTickThreadId;
             FirstTickFrameCount = context.FrameCount;
             FirstTickDeltaTime = context.DeltaTime;
@@ -88,16 +94,19 @@ internal sealed class ScriptedGame : IGame {
         TickHandler?.Invoke(context);
     }
 
-    public async Task Shutdown() {
+    public async Task Shutdown()
+    {
         ShutdownCount++;
         ShutdownThreadId = Environment.CurrentManagedThreadId;
         ShutdownThreadName = Thread.CurrentThread.Name;
 
-        if (ShutdownHandler is not null) {
+        if (ShutdownHandler is not null)
+        {
             await ShutdownHandler();
         }
 
-        if (YieldInShutdown) {
+        if (YieldInShutdown)
+        {
             await Task.Yield();
         }
 

@@ -4,23 +4,28 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
-public sealed class Vulkan12BackendTests {
+public sealed class Vulkan12BackendTests
+{
     private static readonly Color _clearColor = new(0.25f, 0.5f, 0.75f, 1f);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void BackendInitializesAndReportsInfo() {
+    public void BackendInitializesAndReportsInfo()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
         VulkanSwapchainFormat expectedFormat = VulkanSwapchainFormatSelection.Select(
             capabilities.SurfaceFormats,
-            WindowHdrState.Sdr);
+            WindowHdrState.Sdr
+        );
         VulkanPresentModeChoice expectedPresentMode = VulkanPresentModeSelection.Select(
             capabilities.Swapchain.PresentModes,
-            host.Settings.PresentMode);
+            host.Settings.PresentMode
+        );
         int expectedSampleCount = VulkanSampleCountSelection.Select(
             host.Settings.SampleCount,
-            capabilities.SupportedSampleCounts);
+            capabilities.SupportedSampleCounts
+        );
 
         EngineInfo info = host.Backend.Info;
 
@@ -38,13 +43,17 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void BindlessCapabilitiesAndTableAreReported() {
+    public void BindlessCapabilitiesAndTableAreReported()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
         VulkanBindlessTextureTable table = host.Backend.BindlessTextures;
 
         Assert.True(capabilities.DescriptorIndexing);
-        Assert.Equal(VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY, capabilities.BindlessTextureCapacity);
+        Assert.Equal(
+            VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
+            capabilities.BindlessTextureCapacity
+        );
         Assert.Equal(capabilities.BindlessTextureCapacity, table.Capacity);
         // The white slot plus the scene target's internal resolved color and depth source slots.
         Assert.Equal(3, table.LiveCount);
@@ -55,18 +64,23 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void HdrWindowStateSelectsScRgbWhenSupported() {
+    public void HdrWindowStateSelectsScRgbWhenSupported()
+    {
         WindowHdrState hdr = new(true, 2f, 6.25f);
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: hdr);
         EngineInfo info = host.Backend.Info;
 
-        if (info.HdrOutput) {
+        if (info.HdrOutput)
+        {
             Assert.Equal("R16G16B16A16_SFLOAT", info.SwapchainFormat);
-        } else {
+        }
+        else
+        {
             Assert.False(host.Device.Capabilities.SupportsHdrFloatFormat);
             Assert.Contains(
                 info.SwapchainFormat,
-                new[] { "B8G8R8A8_SRGB", "R8G8B8A8_SRGB", "B8G8R8A8_UNORM", "R8G8B8A8_UNORM" });
+                new[] { "B8G8R8A8_SRGB", "R8G8B8A8_SRGB", "B8G8R8A8_UNORM", "R8G8B8A8_UNORM" }
+            );
         }
 
         RenderFrame(host, 1);
@@ -75,10 +89,12 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SubmitAndPresentThreeFramesAreValidationClean() {
+    public void SubmitAndPresentThreeFramesAreValidationClean()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
 
-        for (int frame = 1; frame <= 3; frame++) {
+        for (int frame = 1; frame <= 3; frame++)
+        {
             RenderFrame(host, frame);
         }
 
@@ -87,11 +103,14 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void StatsDescribeTheFrame() {
+    public void StatsDescribeTheFrame()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         const long frameIndex = 42;
 
-        host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, frameIndex, _clearColor));
+        host.Backend.Submit(
+            BackendPacketTestHelper.CreateClearingPacket(host, frameIndex, _clearColor)
+        );
         RenderStats stats = host.Backend.Stats;
         EngineInfo info = host.Backend.Info;
 
@@ -116,13 +135,17 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void PresentedFramesCountsOnlySuccessfulPresentations() {
+    public void PresentedFramesCountsOnlySuccessfulPresentations()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
 
         Assert.Equal(0, host.Backend.Stats.PresentedFrames);
 
-        for (long frameIndex = 1; frameIndex <= 3; frameIndex++) {
-            host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, frameIndex, _clearColor));
+        for (long frameIndex = 1; frameIndex <= 3; frameIndex++)
+        {
+            host.Backend.Submit(
+                BackendPacketTestHelper.CreateClearingPacket(host, frameIndex, _clearColor)
+            );
             Assert.Equal(frameIndex - 1, host.Backend.Stats.PresentedFrames);
 
             host.Backend.Present();
@@ -137,7 +160,8 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void AFrameSkippedOnAMinimizedSurfaceDoesNotCountAsPresented() {
+    public void AFrameSkippedOnAMinimizedSurfaceDoesNotCountAsPresented()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         host.State = host.State with { IsMinimized = true };
 
@@ -151,16 +175,19 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void CpuFrameMillisecondsExcludesTheSwapchainAcquireWait() {
+    public void CpuFrameMillisecondsExcludesTheSwapchainAcquireWait()
+    {
         const double acquireDelayMilliseconds = 200;
         const double maxCpuFrameMilliseconds = 100;
 
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         int acquireHookCalls = 0;
-        host.Backend.BeforeAcquireForTests = () => {
+        host.Backend.BeforeAcquireForTests = () =>
+        {
             Interlocked.Increment(ref acquireHookCalls);
             long startedAt = Stopwatch.GetTimestamp();
-            while (Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds < acquireDelayMilliseconds) {
+            while (Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds < acquireDelayMilliseconds)
+            {
                 Thread.SpinWait(100);
             }
         };
@@ -175,7 +202,8 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SceneColorClearIsTheCameraPassColor() {
+    public void SceneColorClearIsTheCameraPassColor()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         Extent2D extent = host.SceneTarget.Extent;
@@ -187,7 +215,8 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void HdrClearColorAboveOneIsStoredLiterally() {
+    public void HdrClearColorAboveOneIsStoredLiterally()
+    {
         Color hdrClear = new(4f, 2f, 0.5f, 1f);
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         host.Backend.Submit(BackendPacketTestHelper.CreateClearingPacket(host, 1, hdrClear));
@@ -199,8 +228,12 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ClearOnlyColorKeepsDepthUndefined() {
-        using BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: 1, hdr: WindowHdrState.Sdr);
+    public void ClearOnlyColorKeepsDepthUndefined()
+    {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(
+            sampleCount: 1,
+            hdr: WindowHdrState.Sdr
+        );
         BackendPacketTestHelper.SubmitClearingFrame(host, 1, _clearColor, ClearMode.Color);
 
         AssertColorNear(_clearColor, ReadColor(host, 1, 1), 1e-4f);
@@ -209,8 +242,12 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DepthIsClearedToZero() {
-        using BackendTestHost host = BackendTestHost.CreateOrSkip(sampleCount: 1, hdr: WindowHdrState.Sdr);
+    public void DepthIsClearedToZero()
+    {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(
+            sampleCount: 1,
+            hdr: WindowHdrState.Sdr
+        );
         RenderFrame(host, 1);
         Extent2D extent = host.SceneTarget.Extent;
 
@@ -225,10 +262,12 @@ public sealed class Vulkan12BackendTests {
     [InlineData(4)]
     [InlineData(1)]
     [InlineData(8)]
-    public void MsaaResolveProducesTheClearColor(int requestedSampleCount) {
+    public void MsaaResolveProducesTheClearColor(int requestedSampleCount)
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(
             sampleCount: requestedSampleCount,
-            hdr: WindowHdrState.Sdr);
+            hdr: WindowHdrState.Sdr
+        );
         RenderFrame(host, 1);
         Extent2D extent = host.SceneTarget.Extent;
 
@@ -239,12 +278,14 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ResizeRecreatesThePresentationPath() {
+    public void ResizeRecreatesThePresentationPath()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         EngineInfo infoBefore = host.Backend.Info;
 
-        if (!TryResizeWindow(host, 400, 300)) {
+        if (!TryResizeWindow(host, 400, 300))
+        {
             Assert.Skip("The host did not apply the SDL window resize synchronously.");
         }
 
@@ -261,7 +302,8 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void MinimizedSurfaceIdles() {
+    public void MinimizedSurfaceIdles()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         host.State = host.State with { IsMinimized = true };
 
@@ -277,7 +319,8 @@ public sealed class Vulkan12BackendTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void HdrStateChangeRecreatesThePath() {
+    public void HdrStateChangeRecreatesThePath()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         Assert.False(host.Backend.Info.HdrOutput);
@@ -289,15 +332,22 @@ public sealed class Vulkan12BackendTests {
         Assert.Empty(host.Instance.ConsumeValidationErrors());
     }
 
-    private static void RenderFrame(BackendTestHost host, long frameIndex) {
+    private static void RenderFrame(BackendTestHost host, long frameIndex)
+    {
         BackendPacketTestHelper.SubmitClearingFrame(host, frameIndex, _clearColor);
     }
 
-    private static bool TryResizeWindow(BackendTestHost host, int width, int height) {
+    private static bool TryResizeWindow(BackendTestHost host, int width, int height)
+    {
         host.Platform.Window.SetSize(width, height);
-        for (int attempt = 0; attempt < 200; attempt++) {
+        for (int attempt = 0; attempt < 200; attempt++)
+        {
             host.Platform.Pump(TimeSpan.Zero);
-            if (host.Platform.Window.RenderWidth == width && host.Platform.Window.RenderHeight == height) {
+            if (
+                host.Platform.Window.RenderWidth == width
+                && host.Platform.Window.RenderHeight == height
+            )
+            {
                 return true;
             }
         }
@@ -305,25 +355,43 @@ public sealed class Vulkan12BackendTests {
         return false;
     }
 
-    private static (float R, float G, float B) ReadColor(BackendTestHost host, uint x, uint y) {
-        VulkanReadback.ReadSceneColorPixel(host.Device, host.SceneTarget, x, y, out float r, out float g, out float b);
+    private static (float R, float G, float B) ReadColor(BackendTestHost host, uint x, uint y)
+    {
+        VulkanReadback.ReadSceneColorPixel(
+            host.Device,
+            host.SceneTarget,
+            x,
+            y,
+            out float r,
+            out float g,
+            out float b
+        );
         return (r, g, b);
     }
 
-    private static float ReadDepth(BackendTestHost host, uint x, uint y) {
+    private static float ReadDepth(BackendTestHost host, uint x, uint y)
+    {
         VulkanReadback.ReadSceneDepthPixel(host.Device, host.SceneTarget, x, y, out float depth);
         return depth;
     }
 
-    private static void AssertColorNear(Color expected, (float R, float G, float B) actual, float tolerance) {
+    private static void AssertColorNear(
+        Color expected,
+        (float R, float G, float B) actual,
+        float tolerance
+    )
+    {
         Assert.True(
             MathF.Abs(expected.R - actual.R) <= tolerance,
-            $"Red {actual.R} is not within {tolerance} of {expected.R}.");
+            $"Red {actual.R} is not within {tolerance} of {expected.R}."
+        );
         Assert.True(
             MathF.Abs(expected.G - actual.G) <= tolerance,
-            $"Green {actual.G} is not within {tolerance} of {expected.G}.");
+            $"Green {actual.G} is not within {tolerance} of {expected.G}."
+        );
         Assert.True(
             MathF.Abs(expected.B - actual.B) <= tolerance,
-            $"Blue {actual.B} is not within {tolerance} of {expected.B}.");
+            $"Blue {actual.B} is not within {tolerance} of {expected.B}."
+        );
     }
 }

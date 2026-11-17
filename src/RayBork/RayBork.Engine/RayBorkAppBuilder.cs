@@ -13,7 +13,8 @@ namespace RayBork;
 /// initialize SDL, create a window, or create the logger factory. Those happen in
 /// <see cref="RayBorkApp.Run"/>.
 /// </remarks>
-public sealed class RayBorkAppBuilder {
+public sealed class RayBorkAppBuilder
+{
     private const string DEFAULT_TITLE = "RayBork";
     private const int DEFAULT_WIDTH = 1280;
     private const int DEFAULT_HEIGHT = 720;
@@ -58,8 +59,7 @@ public sealed class RayBorkAppBuilder {
     /// window titled <c>RayBork</c>, a <c>0.25</c> second delta clamp, an uncapped tick loop, and the
     /// default ZLogger console factory filtered at <see cref="LogLevel.Information"/>.
     /// </summary>
-    public RayBorkAppBuilder() {
-    }
+    public RayBorkAppBuilder() { }
 
     /// <summary>
     /// Sets the game whose callbacks run on the tick thread.
@@ -68,7 +68,8 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="game"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithGame(IGame game) {
+    public RayBorkAppBuilder WithGame(IGame game)
+    {
         ThrowIfBuilt();
         ArgumentNullException.ThrowIfNull(game);
         _game = game;
@@ -83,11 +84,16 @@ public sealed class RayBorkAppBuilder {
     /// <exception cref="ArgumentNullException"><paramref name="title"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException"><paramref name="title"/> is empty or whitespace.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithTitle(string title) {
+    public RayBorkAppBuilder WithTitle(string title)
+    {
         ThrowIfBuilt();
         ArgumentNullException.ThrowIfNull(title);
-        if (string.IsNullOrWhiteSpace(title)) {
-            throw new ArgumentException("The window title must not be empty or whitespace.", nameof(title));
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            throw new ArgumentException(
+                "The window title must not be empty or whitespace.",
+                nameof(title)
+            );
         }
 
         _title = title;
@@ -104,7 +110,8 @@ public sealed class RayBorkAppBuilder {
     /// <paramref name="width"/> or <paramref name="height"/> is zero or negative.
     /// </exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithSize(int width, int height) {
+    public RayBorkAppBuilder WithSize(int width, int height)
+    {
         ThrowIfBuilt();
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
@@ -119,7 +126,8 @@ public sealed class RayBorkAppBuilder {
     /// <param name="resizable">Whether the window is resizable.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithResizable(bool resizable = true) {
+    public RayBorkAppBuilder WithResizable(bool resizable = true)
+    {
         ThrowIfBuilt();
         _resizable = resizable;
         return this;
@@ -134,13 +142,16 @@ public sealed class RayBorkAppBuilder {
     /// <paramref name="seconds"/> is not finite or is not greater than zero.
     /// </exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithMaxDeltaTime(double seconds) {
+    public RayBorkAppBuilder WithMaxDeltaTime(double seconds)
+    {
         ThrowIfBuilt();
-        if (!double.IsFinite(seconds) || seconds <= 0.0) {
+        if (!double.IsFinite(seconds) || seconds <= 0.0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(seconds),
                 seconds,
-                "The maximum delta time must be finite and greater than zero.");
+                "The maximum delta time must be finite and greater than zero."
+            );
         }
 
         _maxDeltaTime = seconds;
@@ -160,7 +171,8 @@ public sealed class RayBorkAppBuilder {
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithAssetsPack(string path) {
+    public RayBorkAppBuilder WithAssetsPack(string path)
+    {
         ThrowIfBuilt();
         ValidatePackPath(path, nameof(path));
         _assetPackPaths.Add(path);
@@ -176,10 +188,12 @@ public sealed class RayBorkAppBuilder {
     /// <exception cref="ArgumentNullException">The array or one of its elements is <c>null</c>.</exception>
     /// <exception cref="ArgumentException">An element is empty or whitespace.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithAssetsPacks(params string[] paths) {
+    public RayBorkAppBuilder WithAssetsPacks(params string[] paths)
+    {
         ThrowIfBuilt();
         ArgumentNullException.ThrowIfNull(paths);
-        foreach (string path in paths) {
+        foreach (string path in paths)
+        {
             ValidatePackPath(path, nameof(paths));
             _assetPackPaths.Add(path);
         }
@@ -205,16 +219,20 @@ public sealed class RayBorkAppBuilder {
     /// The builder already built an app, or the type already has a different registration.
     /// </exception>
     public RayBorkAppBuilder WithAssetType<T>()
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         ThrowIfBuilt();
         Type assetType = typeof(T);
-        if (_dataTypes.Contains(assetType)) {
+        if (_dataTypes.Contains(assetType))
+        {
             return this;
         }
 
-        if (_assetTypes.ContainsKey(assetType)) {
+        if (_assetTypes.ContainsKey(assetType))
+        {
             throw new InvalidOperationException(
-                $"The asset type '{assetType.FullName}' is registered more than once.");
+                $"The asset type '{assetType.FullName}' is registered more than once."
+            );
         }
 
         _dataTypes.Add(assetType);
@@ -222,7 +240,9 @@ public sealed class RayBorkAppBuilder {
             assetType,
             new LoaderAssetTypeRegistration<T>(
                 new MessagePackAssetLoader<T>(),
-                "custom data could not be deserialized"));
+                "custom data could not be deserialized"
+            )
+        );
         return this;
     }
 
@@ -251,12 +271,15 @@ public sealed class RayBorkAppBuilder {
     /// <exception cref="InvalidOperationException">
     /// The builder already built an app, or <typeparamref name="T"/> is already registered.
     /// </exception>
-    public RayBorkAppBuilder WithAssetLoader<T>(IAssetLoader<T> loader) {
+    public RayBorkAppBuilder WithAssetLoader<T>(IAssetLoader<T> loader)
+    {
         ThrowIfBuilt();
         ArgumentNullException.ThrowIfNull(loader);
-        if (_assetTypes.ContainsKey(typeof(T))) {
+        if (_assetTypes.ContainsKey(typeof(T)))
+        {
             throw new InvalidOperationException(
-                $"The asset type '{typeof(T).FullName}' is registered more than once.");
+                $"The asset type '{typeof(T).FullName}' is registered more than once."
+            );
         }
 
         _assetTypes.Add(typeof(T), new LoaderAssetTypeRegistration<T>(loader));
@@ -271,10 +294,16 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithPresentMode(PresentMode mode = PresentMode.Mailbox) {
+    public RayBorkAppBuilder WithPresentMode(PresentMode mode = PresentMode.Mailbox)
+    {
         ThrowIfBuilt();
-        if (!Enum.IsDefined(mode)) {
-            throw new ArgumentOutOfRangeException(nameof(mode), mode, "The present mode is not a defined value.");
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                mode,
+                "The present mode is not a defined value."
+            );
         }
 
         _presentMode = mode;
@@ -294,7 +323,8 @@ public sealed class RayBorkAppBuilder {
     /// <paramref name="sampleCount"/> is zero or negative.
     /// </exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithMSAA(int sampleCount = 4) {
+    public RayBorkAppBuilder WithMSAA(int sampleCount = 4)
+    {
         ThrowIfBuilt();
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleCount);
         _sampleCount = sampleCount;
@@ -311,10 +341,16 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="mode"/> is not a defined value.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithTonemapping(TonemappingMode mode = TonemappingMode.AgX) {
+    public RayBorkAppBuilder WithTonemapping(TonemappingMode mode = TonemappingMode.AgX)
+    {
         ThrowIfBuilt();
-        if (!Enum.IsDefined(mode)) {
-            throw new ArgumentOutOfRangeException(nameof(mode), mode, "The tone mapping mode is not a defined value.");
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                mode,
+                "The tone mapping mode is not a defined value."
+            );
         }
 
         _tonemapping = mode;
@@ -330,9 +366,11 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="ev"/> is not finite.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithExposure(float ev = 0f) {
+    public RayBorkAppBuilder WithExposure(float ev = 0f)
+    {
         ThrowIfBuilt();
-        if (!float.IsFinite(ev)) {
+        if (!float.IsFinite(ev))
+        {
             throw new ArgumentOutOfRangeException(nameof(ev), ev, "The exposure must be finite.");
         }
 
@@ -353,13 +391,16 @@ public sealed class RayBorkAppBuilder {
     /// <paramref name="white"/> is not finite or is less than <c>2</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithAgxWhite(float white = AgxToneMap.DEFAULT_AGX_WHITE) {
+    public RayBorkAppBuilder WithAgxWhite(float white = AgxToneMap.DEFAULT_AGX_WHITE)
+    {
         ThrowIfBuilt();
-        if (!float.IsFinite(white) || white < AgxCurveParameters.MIN_WHITE) {
+        if (!float.IsFinite(white) || white < AgxCurveParameters.MIN_WHITE)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(white),
                 white,
-                "The AgX white must be finite and at least 2.");
+                "The AgX white must be finite and at least 2."
+            );
         }
 
         _agxWhite = white;
@@ -377,13 +418,16 @@ public sealed class RayBorkAppBuilder {
     /// <paramref name="contrast"/> is not finite or is less than <c>1</c>.
     /// </exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithAgxContrast(float contrast = AgxToneMap.DEFAULT_AGX_CONTRAST) {
+    public RayBorkAppBuilder WithAgxContrast(float contrast = AgxToneMap.DEFAULT_AGX_CONTRAST)
+    {
         ThrowIfBuilt();
-        if (!float.IsFinite(contrast) || contrast < 1f) {
+        if (!float.IsFinite(contrast) || contrast < 1f)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(contrast),
                 contrast,
-                "The AgX contrast must be finite and at least 1.");
+                "The AgX contrast must be finite and at least 1."
+            );
         }
 
         _agxContrast = contrast;
@@ -399,7 +443,8 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="framesPerSecond"/> is negative.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithTargetFps(int framesPerSecond) {
+    public RayBorkAppBuilder WithTargetFps(int framesPerSecond)
+    {
         ThrowIfBuilt();
         ArgumentOutOfRangeException.ThrowIfNegative(framesPerSecond);
         _targetFps = framesPerSecond;
@@ -413,7 +458,8 @@ public sealed class RayBorkAppBuilder {
     /// <param name="enabled">Whether validation is requested.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithValidation(bool enabled = true) {
+    public RayBorkAppBuilder WithValidation(bool enabled = true)
+    {
         ThrowIfBuilt();
         _validationEnabled = enabled;
         return this;
@@ -426,10 +472,16 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="state"/> is not a defined value.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithWindowState(WindowState state) {
+    public RayBorkAppBuilder WithWindowState(WindowState state)
+    {
         ThrowIfBuilt();
-        if (!Enum.IsDefined(state)) {
-            throw new ArgumentOutOfRangeException(nameof(state), state, "The window state is not a defined value.");
+        if (!Enum.IsDefined(state))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(state),
+                state,
+                "The window state is not a defined value."
+            );
         }
 
         _windowState = state;
@@ -443,7 +495,8 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithLoggerFactory(ILoggerFactory loggerFactory) {
+    public RayBorkAppBuilder WithLoggerFactory(ILoggerFactory loggerFactory)
+    {
         ThrowIfBuilt();
         ArgumentNullException.ThrowIfNull(loggerFactory);
         _loggerFactory = loggerFactory;
@@ -458,10 +511,16 @@ public sealed class RayBorkAppBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="level"/> is not a defined value.</exception>
     /// <exception cref="InvalidOperationException">The builder already built an app.</exception>
-    public RayBorkAppBuilder WithLogLevel(LogLevel level) {
+    public RayBorkAppBuilder WithLogLevel(LogLevel level)
+    {
         ThrowIfBuilt();
-        if (!Enum.IsDefined(level)) {
-            throw new ArgumentOutOfRangeException(nameof(level), level, "The log level is not a defined value.");
+        if (!Enum.IsDefined(level))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(level),
+                level,
+                "The log level is not a defined value."
+            );
         }
 
         _logLevel = level;
@@ -475,11 +534,13 @@ public sealed class RayBorkAppBuilder {
     /// <exception cref="InvalidOperationException">
     /// No game was supplied, or the builder already built an app.
     /// </exception>
-    public RayBorkApp Build() {
+    public RayBorkApp Build()
+    {
         return Build(
             loggerFactory => new SdlPlatform(loggerFactory),
             static () => new Vulkan12Backend(),
-            TimeProvider.System);
+            TimeProvider.System
+        );
     }
 
     /// <summary>
@@ -497,12 +558,15 @@ public sealed class RayBorkAppBuilder {
     internal RayBorkApp Build(
         PlatformFactory platformFactory,
         RendererBackendFactory rendererBackendFactory,
-        TimeProvider timeProvider) {
+        TimeProvider timeProvider
+    )
+    {
         ArgumentNullException.ThrowIfNull(platformFactory);
         ArgumentNullException.ThrowIfNull(rendererBackendFactory);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ThrowIfBuilt();
-        if (_game is null) {
+        if (_game is null)
+        {
             throw new InvalidOperationException("A game is required. Call WithGame before Build.");
         }
 
@@ -510,7 +574,8 @@ public sealed class RayBorkAppBuilder {
         // a built-in engine asset type fails the duplicate-registration check here.
         _ = new AssetTypeRegistry([.. BuiltInAssetLoaders.CreateDefault(), .. _assetTypes.Values]);
 
-        AppConfiguration configuration = new() {
+        AppConfiguration configuration = new()
+        {
             Game = _game,
             Title = _title,
             Width = _width,
@@ -519,7 +584,8 @@ public sealed class RayBorkAppBuilder {
             MaxDeltaTime = _maxDeltaTime,
             TargetFps = _targetFps,
             WindowState = _windowState,
-            RenderSettings = new RenderSettings {
+            RenderSettings = new RenderSettings
+            {
                 PresentMode = _presentMode,
                 SampleCount = _sampleCount,
                 Tonemapping = _tonemapping,
@@ -538,17 +604,25 @@ public sealed class RayBorkAppBuilder {
         return new RayBorkApp(configuration, platformFactory, rendererBackendFactory, timeProvider);
     }
 
-    private static void ValidatePackPath(string path, string parameterName) {
+    private static void ValidatePackPath(string path, string parameterName)
+    {
         ArgumentNullException.ThrowIfNull(path, parameterName);
-        if (string.IsNullOrWhiteSpace(path)) {
-            throw new ArgumentException("An asset pack path must not be empty or whitespace.", parameterName);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException(
+                "An asset pack path must not be empty or whitespace.",
+                parameterName
+            );
         }
     }
 
-    private void ThrowIfBuilt() {
-        if (_built) {
+    private void ThrowIfBuilt()
+    {
+        if (_built)
+        {
             throw new InvalidOperationException(
-                "This builder already built a RayBorkApp. A builder can be used only once.");
+                "This builder already built a RayBorkApp. A builder can be used only once."
+            );
         }
     }
 }

@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// instance, the Silk.NET API, and the native loader.
 /// </para>
 /// </remarks>
-internal sealed class VulkanInstance : IDisposable {
+internal sealed class VulkanInstance : IDisposable
+{
     /// <summary>
     /// The Vulkan API version the renderer requests from the loader.
     /// </summary>
@@ -51,7 +52,9 @@ internal sealed class VulkanInstance : IDisposable {
         DebugUtilsMessengerEXT debugMessenger,
         bool validationLayersEnabled,
         bool swapchainColorSpaceExtensionEnabled,
-        ILogger logger) {
+        ILogger logger
+    )
+    {
         _vulkan = vulkan;
         _loader = loader;
         _handle = handle;
@@ -110,13 +113,16 @@ internal sealed class VulkanInstance : IDisposable {
     /// The Vulkan loader is unavailable, a required platform extension is missing, instance creation
     /// failed, or validation reported an error. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static unsafe VulkanInstance Create(VulkanInstanceOptions options) {
-        lock (_processGate) {
+    internal static unsafe VulkanInstance Create(VulkanInstanceOptions options)
+    {
+        lock (_processGate)
+        {
             return CreateCore(options);
         }
     }
 
-    private static unsafe VulkanInstance CreateCore(VulkanInstanceOptions options) {
+    private static unsafe VulkanInstance CreateCore(VulkanInstanceOptions options)
+    {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrEmpty(options.ApplicationName);
         ArgumentNullException.ThrowIfNull(options.ApplicationVersion);
@@ -125,9 +131,12 @@ internal sealed class VulkanInstance : IDisposable {
 
         VulkanLoader loader = VulkanLoader.Load(options.Logger);
         Vk vulkan;
-        try {
+        try
+        {
             vulkan = new(loader);
-        } catch {
+        }
+        catch
+        {
             loader.Dispose();
             throw;
         }
@@ -136,53 +145,72 @@ internal sealed class VulkanInstance : IDisposable {
         VulkanValidation? validation = null;
         DebugUtilsMessengerEXT debugMessenger = default;
         bool validationLayersEnabled = false;
-        try {
+        try
+        {
             IReadOnlyList<string> availableExtensions = EnumerateInstanceExtensions(vulkan);
             VulkanInstanceExtensions.Require(availableExtensions, options.SurfaceExtensions);
 
-            validationLayersEnabled = options.RequestValidation
-                && EnumerateInstanceLayers(vulkan).Contains(VulkanValidation.LayerName, StringComparer.Ordinal);
-            if (options.RequestValidation && !validationLayersEnabled) {
+            validationLayersEnabled =
+                options.RequestValidation
+                && EnumerateInstanceLayers(vulkan)
+                    .Contains(VulkanValidation.LayerName, StringComparer.Ordinal);
+            if (options.RequestValidation && !validationLayersEnabled)
+            {
                 options.Logger.LogWarning(
                     "The Vulkan validation layer {Layer} is not available; validation stays disabled.",
-                    VulkanValidation.LayerName);
+                    VulkanValidation.LayerName
+                );
             }
 
-            bool debugUtilsAvailable = availableExtensions.Contains(DEBUG_UTILS_EXTENSION_NAME, StringComparer.Ordinal);
+            bool debugUtilsAvailable = availableExtensions.Contains(
+                DEBUG_UTILS_EXTENSION_NAME,
+                StringComparer.Ordinal
+            );
             bool createDebugMessenger = validationLayersEnabled && debugUtilsAvailable;
-            if (validationLayersEnabled && !debugUtilsAvailable) {
+            if (validationLayersEnabled && !debugUtilsAvailable)
+            {
                 options.Logger.LogWarning(
                     "The {Extension} instance extension is not available; validation messages cannot be captured.",
-                    DEBUG_UTILS_EXTENSION_NAME);
+                    DEBUG_UTILS_EXTENSION_NAME
+                );
             }
 
             bool swapchainColorSpaceExtensionEnabled = availableExtensions.Contains(
                 SWAPCHAIN_COLORSPACE_EXTENSION_NAME,
-                StringComparer.Ordinal);
+                StringComparer.Ordinal
+            );
             string[] enabledExtensions = BuildEnabledExtensions(
                 options.SurfaceExtensions,
                 createDebugMessenger,
-                swapchainColorSpaceExtensionEnabled);
+                swapchainColorSpaceExtensionEnabled
+            );
             string[] enabledLayers = validationLayersEnabled ? [VulkanValidation.LayerName] : [];
             handle = CreateInstanceHandle(vulkan, options, enabledExtensions, enabledLayers);
             vulkan.CurrentInstance = handle;
 
-            if (swapchainColorSpaceExtensionEnabled) {
+            if (swapchainColorSpaceExtensionEnabled)
+            {
                 options.Logger.LogInformation(
                     "Vulkan swapchain color-space extension {Extension} enabled.",
-                    SWAPCHAIN_COLORSPACE_EXTENSION_NAME);
-            } else {
+                    SWAPCHAIN_COLORSPACE_EXTENSION_NAME
+                );
+            }
+            else
+            {
                 options.Logger.LogWarning(
                     "The {Extension} instance extension is not available; HDR presentation falls back to SDR.",
-                    SWAPCHAIN_COLORSPACE_EXTENSION_NAME);
+                    SWAPCHAIN_COLORSPACE_EXTENSION_NAME
+                );
             }
 
-            if (createDebugMessenger) {
+            if (createDebugMessenger)
+            {
                 validation = new VulkanValidation(options.Logger);
                 debugMessenger = VulkanNativeFunctions.CreateDebugMessenger(
                     vulkan,
                     handle,
-                    validation.CreateMessengerCreateInfo());
+                    validation.CreateMessengerCreateInfo()
+                );
             }
 
             VulkanInstance instance = new(
@@ -193,24 +221,32 @@ internal sealed class VulkanInstance : IDisposable {
                 debugMessenger,
                 validationLayersEnabled,
                 swapchainColorSpaceExtensionEnabled,
-                options.Logger);
+                options.Logger
+            );
             instance.ThrowIfValidationError("creating the Vulkan instance");
             options.Logger.LogInformation(
                 "Vulkan instance created: API {ApiVersion}; validation {Validation}; debug messenger {DebugMessenger}; swapchain color space {ColorSpace}.",
                 VulkanVersion.Format(VulkanInstance.ApiVersion),
                 instance.ValidationLayersEnabled ? "enabled" : "disabled",
                 instance.DebugMessengerEnabled ? "enabled" : "disabled",
-                instance.SwapchainColorSpaceExtensionEnabled ? "enabled" : "disabled");
+                instance.SwapchainColorSpaceExtensionEnabled ? "enabled" : "disabled"
+            );
             return instance;
-        } catch {
-            try {
+        }
+        catch
+        {
+            try
+            {
                 DestroyMessengerBestEffort(vulkan, handle, debugMessenger);
                 validation?.Dispose();
-                if (handle.Handle != 0) {
+                if (handle.Handle != 0)
+                {
                     vulkan.DestroyInstance(handle, null);
                     vulkan.CurrentInstance = null;
                 }
-            } finally {
+            }
+            finally
+            {
                 loader.Dispose();
             }
 
@@ -222,8 +258,7 @@ internal sealed class VulkanInstance : IDisposable {
     /// Returns and clears the validation errors recorded since the previous call.
     /// </summary>
     /// <returns>The recorded error messages, or an empty list when validation is inactive.</returns>
-    internal IReadOnlyList<string> ConsumeValidationErrors() =>
-        _validation?.ConsumeErrors() ?? [];
+    internal IReadOnlyList<string> ConsumeValidationErrors() => _validation?.ConsumeErrors() ?? [];
 
     /// <summary>
     /// Throws when validation errors were recorded since the previous call.
@@ -233,7 +268,8 @@ internal sealed class VulkanInstance : IDisposable {
     /// At least one validation error was recorded. The message lists every error and the diagnostic
     /// code is <c>RB3001</c>.
     /// </exception>
-    internal void ThrowIfValidationError(string operation) {
+    internal void ThrowIfValidationError(string operation)
+    {
         ArgumentException.ThrowIfNullOrEmpty(operation);
         _validation?.ThrowIfErrors(operation);
     }
@@ -248,13 +284,17 @@ internal sealed class VulkanInstance : IDisposable {
     /// driver libraries that registered thread-local state on the render thread, and running that
     /// teardown on the stopping render thread crashes when the thread exits.
     /// </remarks>
-    public void Dispose() {
-        if (_renderThreadDisposed) {
+    public void Dispose()
+    {
+        if (_renderThreadDisposed)
+        {
             return;
         }
 
         _renderThreadDisposed = true;
-        _logger.LogDebug("Vulkan instance render-thread disposal completed; teardown is deferred to the main thread.");
+        _logger.LogDebug(
+            "Vulkan instance render-thread disposal completed; teardown is deferred to the main thread."
+        );
     }
 
     /// <summary>
@@ -266,39 +306,50 @@ internal sealed class VulkanInstance : IDisposable {
     /// surface references the instance. Destroying the instance and loader here, rather than on the
     /// render thread, keeps driver thread-local destructors valid until that thread has exited.
     /// </remarks>
-    internal unsafe void DisposeFromMainThread() {
-        lock (_processGate) {
+    internal unsafe void DisposeFromMainThread()
+    {
+        lock (_processGate)
+        {
             DisposeFromMainThreadCore();
         }
     }
 
-    private unsafe void DisposeFromMainThreadCore() {
-        if (_tornDown) {
+    private unsafe void DisposeFromMainThreadCore()
+    {
+        if (_tornDown)
+        {
             return;
         }
 
         _tornDown = true;
         Vk? vulkan = _vulkan;
-        try {
-            if (vulkan is not null) {
-                if (_debugMessenger.Handle != 0) {
+        try
+        {
+            if (vulkan is not null)
+            {
+                if (_debugMessenger.Handle != 0)
+                {
                     DestroyMessengerBestEffort(vulkan, _handle, _debugMessenger);
                     _debugMessenger = default;
                 }
 
                 _validation?.Dispose();
                 _validation = null;
-                if (_handle.Handle != 0) {
+                if (_handle.Handle != 0)
+                {
                     vulkan.DestroyInstance(_handle, null);
                     _handle = default;
                 }
 
                 vulkan.CurrentInstance = null;
-                if (vulkan is IDisposable disposable) {
+                if (vulkan is IDisposable disposable)
+                {
                     disposable.Dispose();
                 }
             }
-        } finally {
+        }
+        finally
+        {
             _vulkan = null;
             _loader?.Dispose();
             _loader = null;
@@ -306,28 +357,38 @@ internal sealed class VulkanInstance : IDisposable {
         }
     }
 
-    private static unsafe IReadOnlyList<string> EnumerateInstanceExtensions(Vk vulkan) {
+    private static unsafe IReadOnlyList<string> EnumerateInstanceExtensions(Vk vulkan)
+    {
         uint count = 0;
         Result result = vulkan.EnumerateInstanceExtensionProperties((string?)null, &count, null);
         ThrowIfEnumerateFailed(result, "vkEnumerateInstanceExtensionProperties");
-        if (count == 0) {
+        if (count == 0)
+        {
             return [];
         }
 
         ExtensionProperties[] properties = new ExtensionProperties[count];
-        fixed (ExtensionProperties* propertiesPointer = properties) {
-            result = vulkan.EnumerateInstanceExtensionProperties((string?)null, &count, propertiesPointer);
+        fixed (ExtensionProperties* propertiesPointer = properties)
+        {
+            result = vulkan.EnumerateInstanceExtensionProperties(
+                (string?)null,
+                &count,
+                propertiesPointer
+            );
         }
 
         ThrowIfEnumerateFailed(result, "vkEnumerateInstanceExtensionProperties");
         List<string> names = new((int)count);
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < count; index++)
+        {
             string? name;
-            fixed (byte* namePointer = properties[index].ExtensionName) {
+            fixed (byte* namePointer = properties[index].ExtensionName)
+            {
                 name = Marshal.PtrToStringUTF8((IntPtr)namePointer);
             }
 
-            if (!string.IsNullOrEmpty(name)) {
+            if (!string.IsNullOrEmpty(name))
+            {
                 names.Add(name);
             }
         }
@@ -335,28 +396,34 @@ internal sealed class VulkanInstance : IDisposable {
         return names;
     }
 
-    private static unsafe IReadOnlyList<string> EnumerateInstanceLayers(Vk vulkan) {
+    private static unsafe IReadOnlyList<string> EnumerateInstanceLayers(Vk vulkan)
+    {
         uint count = 0;
         Result result = vulkan.EnumerateInstanceLayerProperties(&count, null);
         ThrowIfEnumerateFailed(result, "vkEnumerateInstanceLayerProperties");
-        if (count == 0) {
+        if (count == 0)
+        {
             return [];
         }
 
         LayerProperties[] properties = new LayerProperties[count];
-        fixed (LayerProperties* propertiesPointer = properties) {
+        fixed (LayerProperties* propertiesPointer = properties)
+        {
             result = vulkan.EnumerateInstanceLayerProperties(&count, propertiesPointer);
         }
 
         ThrowIfEnumerateFailed(result, "vkEnumerateInstanceLayerProperties");
         List<string> names = new((int)count);
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < count; index++)
+        {
             string? name;
-            fixed (byte* namePointer = properties[index].LayerName) {
+            fixed (byte* namePointer = properties[index].LayerName)
+            {
                 name = Marshal.PtrToStringUTF8((IntPtr)namePointer);
             }
 
-            if (!string.IsNullOrEmpty(name)) {
+            if (!string.IsNullOrEmpty(name))
+            {
                 names.Add(name);
             }
         }
@@ -368,15 +435,20 @@ internal sealed class VulkanInstance : IDisposable {
         Vk vulkan,
         VulkanInstanceOptions options,
         IReadOnlyList<string> enabledExtensions,
-        IReadOnlyList<string> enabledLayers) {
+        IReadOnlyList<string> enabledLayers
+    )
+    {
         IntPtr applicationName = Marshal.StringToCoTaskMemUTF8(options.ApplicationName);
         IntPtr engineName = Marshal.StringToCoTaskMemUTF8(ENGINE_NAME);
         IntPtr[] extensionPointers = AllocateUtf8Pointers(enabledExtensions);
         IntPtr[] layerPointers = AllocateUtf8Pointers(enabledLayers);
-        try {
+        try
+        {
             fixed (IntPtr* extensionPointer = extensionPointers)
-            fixed (IntPtr* layerPointer = layerPointers) {
-                ApplicationInfo applicationInfo = new() {
+            fixed (IntPtr* layerPointer = layerPointers)
+            {
+                ApplicationInfo applicationInfo = new()
+                {
                     SType = StructureType.ApplicationInfo,
                     PApplicationName = (byte*)applicationName,
                     ApplicationVersion = PackApplicationVersion(options.ApplicationVersion),
@@ -384,7 +456,8 @@ internal sealed class VulkanInstance : IDisposable {
                     EngineVersion = PackApplicationVersion(EngineVersion.Current),
                     ApiVersion = RequestedApiVersion,
                 };
-                InstanceCreateInfo createInfo = new() {
+                InstanceCreateInfo createInfo = new()
+                {
                     SType = StructureType.InstanceCreateInfo,
                     PApplicationInfo = &applicationInfo,
                     EnabledExtensionCount = (uint)enabledExtensions.Count,
@@ -393,23 +466,29 @@ internal sealed class VulkanInstance : IDisposable {
                     PpEnabledLayerNames = (byte**)layerPointer,
                 };
                 Result result = vulkan.CreateInstance(&createInfo, null, out Instance handle);
-                if (result != Result.Success) {
+                if (result != Result.Success)
+                {
                     throw new GraphicsException(
                         $"Vulkan instance creation failed with {result}.",
                         DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                        null);
+                        null
+                    );
                 }
 
-                if (handle.Handle == 0) {
+                if (handle.Handle == 0)
+                {
                     throw new GraphicsException(
                         "Vulkan instance creation returned a zero instance handle.",
                         DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                        null);
+                        null
+                    );
                 }
 
                 return handle;
             }
-        } finally {
+        }
+        finally
+        {
             FreeUtf8Pointer(applicationName);
             FreeUtf8Pointer(engineName);
             FreeUtf8Pointers(extensionPointers);
@@ -420,13 +499,23 @@ internal sealed class VulkanInstance : IDisposable {
     private static string[] BuildEnabledExtensions(
         IReadOnlyList<string> surfaceExtensions,
         bool createDebugMessenger,
-        bool enableSwapchainColorSpace) {
+        bool enableSwapchainColorSpace
+    )
+    {
         List<string> enabled = [.. surfaceExtensions];
-        if (createDebugMessenger && !enabled.Contains(DEBUG_UTILS_EXTENSION_NAME, StringComparer.Ordinal)) {
+        if (
+            createDebugMessenger
+            && !enabled.Contains(DEBUG_UTILS_EXTENSION_NAME, StringComparer.Ordinal)
+        )
+        {
             enabled.Add(DEBUG_UTILS_EXTENSION_NAME);
         }
 
-        if (enableSwapchainColorSpace && !enabled.Contains(SWAPCHAIN_COLORSPACE_EXTENSION_NAME, StringComparer.Ordinal)) {
+        if (
+            enableSwapchainColorSpace
+            && !enabled.Contains(SWAPCHAIN_COLORSPACE_EXTENSION_NAME, StringComparer.Ordinal)
+        )
+        {
             enabled.Add(SWAPCHAIN_COLORSPACE_EXTENSION_NAME);
         }
 
@@ -436,47 +525,62 @@ internal sealed class VulkanInstance : IDisposable {
     private static uint PackApplicationVersion(Version version) =>
         VulkanVersion.Pack(version.Major, version.Minor, Math.Max(0, version.Build));
 
-    private static IntPtr[] AllocateUtf8Pointers(IReadOnlyList<string> values) {
+    private static IntPtr[] AllocateUtf8Pointers(IReadOnlyList<string> values)
+    {
         IntPtr[] pointers = new IntPtr[values.Count];
-        for (int index = 0; index < values.Count; index++) {
+        for (int index = 0; index < values.Count; index++)
+        {
             pointers[index] = Marshal.StringToCoTaskMemUTF8(values[index]);
         }
 
         return pointers;
     }
 
-    private static void FreeUtf8Pointers(IntPtr[] pointers) {
-        foreach (IntPtr pointer in pointers) {
+    private static void FreeUtf8Pointers(IntPtr[] pointers)
+    {
+        foreach (IntPtr pointer in pointers)
+        {
             FreeUtf8Pointer(pointer);
         }
     }
 
-    private static void FreeUtf8Pointer(IntPtr pointer) {
-        if (pointer != IntPtr.Zero) {
+    private static void FreeUtf8Pointer(IntPtr pointer)
+    {
+        if (pointer != IntPtr.Zero)
+        {
             Marshal.FreeCoTaskMem(pointer);
         }
     }
 
-    private static void ThrowIfEnumerateFailed(Result result, string operation) {
-        if (result != Result.Success) {
+    private static void ThrowIfEnumerateFailed(Result result, string operation)
+    {
+        if (result != Result.Success)
+        {
             throw new GraphicsException(
                 $"The Vulkan command {operation} failed with {result}.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
     }
 
     private static void DestroyMessengerBestEffort(
         Vk vulkan,
         Instance instance,
-        DebugUtilsMessengerEXT messenger) {
-        if (messenger.Handle == 0 || instance.Handle == 0) {
+        DebugUtilsMessengerEXT messenger
+    )
+    {
+        if (messenger.Handle == 0 || instance.Handle == 0)
+        {
             return;
         }
 
-        try {
+        try
+        {
             VulkanNativeFunctions.DestroyDebugMessenger(vulkan, instance, messenger);
-        } catch (GraphicsException) {
+        }
+        catch (GraphicsException)
+        {
             // Cleanup must not replace the original creation failure.
         }
     }

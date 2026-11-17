@@ -3,12 +3,14 @@ using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests.Assets.Procedural;
 
-public sealed class ProceduralAppTests {
+public sealed class ProceduralAppTests
+{
     private const int FAST_TARGET_FPS = 1000;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetupBuildsProceduralAssetsOnAWorkerThreadAndShutdownDisposesThem() {
+    public void SetupBuildsProceduralAssetsOnAWorkerThreadAndShutdownDisposesThem()
+    {
         FakeAssetGpuWorker worker = new();
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
@@ -24,39 +26,36 @@ public sealed class ProceduralAppTests {
         int textureMipLevels = 0;
         TextureFormat textureFormat = TextureFormat.Rgba8Unorm;
         ScriptedGame game = new();
-        game.SetupHandler = async context => {
+        game.SetupHandler = async context =>
+        {
             setupContext = context;
             CancellationToken cancellationToken = TestContext.Current.CancellationToken;
-            Task<Mesh> meshBuild = Task.Run(
-                () => {
-                    MeshBuilder builder = context.CreateMeshBuilder();
-                    builder.SetVertices([
-                        new Vertex(System.Numerics.Vector3.Zero),
-                        new Vertex(new System.Numerics.Vector3(1f, 0f, 0f)),
-                        new Vertex(new System.Numerics.Vector3(0f, 1f, 0f)),
-                    ]);
-                    builder.SetIndices([0, 1, 2]);
-                    builder.ComputeNormals();
-                    return builder.BuildAsync(cancellationToken);
-                });
-            Task<Texture> textureBuild = Task.Run(
-                () => {
-                    TextureBuilder builder = context.CreateTextureBuilder(2, 2);
-                    builder.SetPixels([
-                        Color.Red,
-                        Color.Green,
-                        Color.Blue,
-                        Color.White,
-                    ]);
-                    return builder.BuildAsync(cancellationToken);
-                });
+            Task<Mesh> meshBuild = Task.Run(() =>
+            {
+                MeshBuilder builder = context.CreateMeshBuilder();
+                builder.SetVertices([
+                    new Vertex(System.Numerics.Vector3.Zero),
+                    new Vertex(new System.Numerics.Vector3(1f, 0f, 0f)),
+                    new Vertex(new System.Numerics.Vector3(0f, 1f, 0f)),
+                ]);
+                builder.SetIndices([0, 1, 2]);
+                builder.ComputeNormals();
+                return builder.BuildAsync(cancellationToken);
+            });
+            Task<Texture> textureBuild = Task.Run(() =>
+            {
+                TextureBuilder builder = context.CreateTextureBuilder(2, 2);
+                builder.SetPixels([Color.Red, Color.Green, Color.Blue, Color.White]);
+                return builder.BuildAsync(cancellationToken);
+            });
 
             mesh = await meshBuild;
             texture = await textureBuild;
             leftoverBuilder = context.CreateMeshBuilder();
         };
         game.TickHandler = context => context.RequestExit();
-        game.ShutdownHandler = () => {
+        game.ShutdownHandler = () =>
+        {
             meshWasProcedural = mesh!.IsProcedural;
             meshPath = mesh.Path;
             meshVertexCount = mesh.VertexCount;
@@ -74,9 +73,12 @@ public sealed class ProceduralAppTests {
             .WithTargetFps(FAST_TARGET_FPS)
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -99,15 +101,18 @@ public sealed class ProceduralAppTests {
         Assert.Throws<ObjectDisposedException>(() => setupContext!.CreateMeshBuilder());
         Assert.Throws<ObjectDisposedException>(() => setupContext!.CreateTextureBuilder(1, 1));
         Assert.Throws<ObjectDisposedException>(() => leftoverBuilder!.ComputeBounds());
-        Assert.Throws<ObjectDisposedException>(
-            () => leftoverBuilder!.BuildAsync(TestContext.Current.CancellationToken)
+        Assert.Throws<ObjectDisposedException>(() =>
+            leftoverBuilder!
+                .BuildAsync(TestContext.Current.CancellationToken)
                 .GetAwaiter()
-                .GetResult());
+                .GetResult()
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TickCanStartABuildAndShutdownCanAwaitItWithoutBlockingTheTick() {
+    public void TickCanStartABuildAndShutdownCanAwaitItWithoutBlockingTheTick()
+    {
         FakeAssetGpuWorker worker = new();
         FakeRendererBackend renderer = new() { AssetGpuWorker = worker };
         FakeEnginePlatform platform = new();
@@ -116,7 +121,8 @@ public sealed class ProceduralAppTests {
         string? path = null;
         bool meshWasProcedural = false;
         ScriptedGame game = new();
-        game.SetupHandler = context => {
+        game.SetupHandler = context =>
+        {
             MeshBuilder builder = context.CreateMeshBuilder();
             builder.SetVertices([
                 new Vertex(System.Numerics.Vector3.Zero),
@@ -127,12 +133,14 @@ public sealed class ProceduralAppTests {
             build = builder.BuildAsync(TestContext.Current.CancellationToken);
             return Task.CompletedTask;
         };
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             Assert.NotNull(build);
             path = context.Assets.Exists("/_procedural/mesh/1") ? "resolvable" : "reserved";
             context.RequestExit();
         };
-        game.ShutdownHandler = async () => {
+        game.ShutdownHandler = async () =>
+        {
             mesh = await build!;
             meshWasProcedural = mesh.IsProcedural;
             mesh.Dispose();
@@ -143,9 +151,12 @@ public sealed class ProceduralAppTests {
             .WithTargetFps(FAST_TARGET_FPS)
             .WithLoggerFactory(Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
             .Build(_ => platform, () => renderer, TimeProvider.System);
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 

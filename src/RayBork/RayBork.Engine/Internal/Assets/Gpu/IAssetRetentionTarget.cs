@@ -17,7 +17,8 @@ namespace RayBork.Internal;
 /// <see cref="ReleaseFrameHold"/> must not run while the frame ring lock is held.
 /// </para>
 /// </remarks>
-internal interface IAssetRetentionTarget {
+internal interface IAssetRetentionTarget
+{
     /// <summary>
     /// Adds one frame hold. The matching <see cref="ReleaseFrameHold"/> is called exactly once.
     /// </summary>

@@ -29,8 +29,10 @@ namespace RayBork;
 /// post-processing.
 /// </para>
 /// </remarks>
-public sealed class ShaderPostProcessEffect : PostProcessEffect {
-    private const ShaderStageMask REQUIRED_STAGES = ShaderStageMask.Vertex | ShaderStageMask.Fragment;
+public sealed class ShaderPostProcessEffect : PostProcessEffect
+{
+    private const ShaderStageMask REQUIRED_STAGES =
+        ShaderStageMask.Vertex | ShaderStageMask.Fragment;
 
     private readonly Shader _shader;
 
@@ -43,7 +45,8 @@ public sealed class ShaderPostProcessEffect : PostProcessEffect {
     /// binding and may declare <c>sourceDepth</c>.
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="shader"/> is <see langword="null"/>.</exception>
-    public ShaderPostProcessEffect(Shader shader) {
+    public ShaderPostProcessEffect(Shader shader)
+    {
         ArgumentNullException.ThrowIfNull(shader);
         _shader = shader;
     }
@@ -54,47 +57,68 @@ public sealed class ShaderPostProcessEffect : PostProcessEffect {
     public Shader Shader => _shader;
 
     /// <inheritdoc/>
-    internal override PostProcessEffectSnapshot Capture(PostProcessCaptureContext context) {
+    internal override PostProcessEffectSnapshot Capture(PostProcessCaptureContext context)
+    {
         Shader shader = _shader;
         ObjectDisposedException.ThrowIf(shader.IsDisposed, shader);
 
         ShaderProgram program = shader.Program;
-        if ((program.Stages & REQUIRED_STAGES) != REQUIRED_STAGES) {
+        if ((program.Stages & REQUIRED_STAGES) != REQUIRED_STAGES)
+        {
             throw new InvalidOperationException(
                 $"The post-process shader '{shader.Path}' must declare both the vertex and fragment "
                     + $"stages (it declares {program.Stages}). Add a vertex stage that maps the engine "
-                    + "fullscreen quad and a fragment stage that writes the post-processed color.");
+                    + "fullscreen quad and a fragment stage that writes the post-processed color."
+            );
         }
 
-        if (!program.TexturesByName.TryGetValue(PostProcessNames.SOURCE_COLOR, out ShaderAbiTexture sourceColor)) {
+        if (
+            !program.TexturesByName.TryGetValue(
+                PostProcessNames.SOURCE_COLOR,
+                out ShaderAbiTexture sourceColor
+            )
+        )
+        {
             throw new InvalidOperationException(
                 $"The post-process shader '{shader.Path}' does not declare the required reserved "
                     + $"'{PostProcessNames.SOURCE_COLOR}' texture binding. Declare it in the shader sidecar "
-                    + "so the engine can bind the camera target's current color to it.");
+                    + "so the engine can bind the camera target's current color to it."
+            );
         }
 
         int sourceDepthBinding = -1;
-        if (program.TexturesByName.TryGetValue(PostProcessNames.SOURCE_DEPTH, out ShaderAbiTexture sourceDepth)) {
-            if (!context.TargetHasDepth) {
+        if (
+            program.TexturesByName.TryGetValue(
+                PostProcessNames.SOURCE_DEPTH,
+                out ShaderAbiTexture sourceDepth
+            )
+        )
+        {
+            if (!context.TargetHasDepth)
+            {
                 throw new InvalidOperationException(
                     $"The post-process shader '{shader.Path}' declares the reserved "
                         + $"'{PostProcessNames.SOURCE_DEPTH}' texture binding, but {context.TargetDescription} "
                         + "has no depth attachment to bind to it. Use a target created with Depth: true, or "
-                        + "remove the sourceDepth binding.");
+                        + "remove the sourceDepth binding."
+                );
             }
 
             sourceDepthBinding = sourceDepth.Slot;
         }
 
         ReadOnlySpan<Texture?> textures = shader.TextureValues;
-        for (int index = 0; index < textures.Length; index++) {
-            if (index == sourceColor.Slot || index == sourceDepthBinding) {
+        for (int index = 0; index < textures.Length; index++)
+        {
+            if (index == sourceColor.Slot || index == sourceDepthBinding)
+            {
                 // The engine overrides the reserved bindings, so a material value there is ignored.
                 continue;
             }
 
             Texture? texture = textures[index];
-            if (texture is not null) {
+            if (texture is not null)
+            {
                 ObjectDisposedException.ThrowIf(texture.IsDisposed, texture);
             }
         }
@@ -107,6 +131,7 @@ public sealed class ShaderPostProcessEffect : PostProcessEffect {
             sourceColor.Slot,
             sourceDepthBinding,
             context.TargetHasDepth,
-            context.TargetDescription);
+            context.TargetDescription
+        );
     }
 }

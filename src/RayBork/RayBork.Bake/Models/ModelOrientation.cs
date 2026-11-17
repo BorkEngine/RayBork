@@ -23,7 +23,8 @@ namespace RayBork.Bake.Models;
 /// <item><term><c>-y</c></term><description>+90 degrees about <c>+X</c>; maps <c>-Y</c> to <c>-Z</c></description></item>
 /// </list>
 /// </remarks>
-internal static class ModelOrientation {
+internal static class ModelOrientation
+{
     /// <summary>The sidecar default: the source faces <c>+Z</c>.</summary>
     internal const string DEFAULT_FRONT = "+z";
 
@@ -32,10 +33,12 @@ internal static class ModelOrientation {
     /// <param name="rotation">The correction rotation when the token is valid.</param>
     /// <param name="reason">The failure reason when the token is invalid.</param>
     /// <returns><see langword="true"/> when the token is one of the six supported axes.</returns>
-    internal static bool TryResolve(string front, out Quaternion rotation, out string? reason) {
+    internal static bool TryResolve(string front, out Quaternion rotation, out string? reason)
+    {
         ArgumentNullException.ThrowIfNull(front);
 
-        switch (front.Trim().ToLowerInvariant()) {
+        switch (front.Trim().ToLowerInvariant())
+        {
             case "-z":
                 rotation = Quaternion.Identity;
                 reason = null;

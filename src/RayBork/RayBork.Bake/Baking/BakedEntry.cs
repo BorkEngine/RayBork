@@ -3,7 +3,8 @@ using RayBork.Internal;
 namespace RayBork.Bake.Baking;
 
 /// <summary>One asset entry produced by a source, before pack composition.</summary>
-internal sealed class BakedEntry {
+internal sealed class BakedEntry
+{
     /// <summary>Initializes a baked entry.</summary>
     /// <param name="path">The canonical asset path.</param>
     /// <param name="type">The pack entry type.</param>
@@ -15,7 +16,9 @@ internal sealed class BakedEntry {
         AssetEntryType type,
         byte[] payload,
         uint alignment,
-        string sourceId) {
+        string sourceId
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         ArgumentNullException.ThrowIfNull(payload);
 
@@ -43,8 +46,10 @@ internal sealed class BakedEntry {
 }
 
 /// <summary>Maps shaped output types to pack entry types.</summary>
-internal static class BakeEntryTypes {
-    private static readonly Dictionary<Type, AssetEntryType> _shapeTypes = new() {
+internal static class BakeEntryTypes
+{
+    private static readonly Dictionary<Type, AssetEntryType> _shapeTypes = new()
+    {
         [typeof(TextureAssetDescriptor)] = AssetEntryType.Texture,
         [typeof(MeshAssetDescriptor)] = AssetEntryType.Mesh,
         [typeof(ShaderAssetDescriptor)] = AssetEntryType.Shader,
@@ -55,7 +60,8 @@ internal static class BakeEntryTypes {
     /// <summary>Maps an engine descriptor type to its pack type; every other shapeable type is data.</summary>
     /// <param name="shapeType">The shaped output's CLR type.</param>
     /// <returns>The pack entry type.</returns>
-    internal static AssetEntryType FromShapeType(Type shapeType) {
+    internal static AssetEntryType FromShapeType(Type shapeType)
+    {
         ArgumentNullException.ThrowIfNull(shapeType);
 
         return _shapeTypes.TryGetValue(shapeType, out AssetEntryType entryType)
@@ -66,6 +72,5 @@ internal static class BakeEntryTypes {
     /// <summary>Gets whether an alignment is one the RAYBORKP v1 writer accepts.</summary>
     /// <param name="alignment">The alignment.</param>
     /// <returns><see langword="true"/> for 1, 16, 64, or 256.</returns>
-    internal static bool IsValidAlignment(uint alignment)
-        => alignment is 1 or 16 or 64 or 256;
+    internal static bool IsValidAlignment(uint alignment) => alignment is 1 or 16 or 64 or 256;
 }

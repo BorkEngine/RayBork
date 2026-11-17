@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Selects how the system cursor behaves over the window.
 /// </summary>
-public enum CursorMode {
+public enum CursorMode
+{
     /// <summary>
     /// The cursor is visible and moves normally.
     /// </summary>

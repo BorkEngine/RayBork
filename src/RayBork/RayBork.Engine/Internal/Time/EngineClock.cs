@@ -5,7 +5,8 @@ namespace RayBork.Internal;
 /// not thread-safe: <see cref="Start"/>, <see cref="BeginTick"/>, and <see cref="Time"/> must be
 /// used from the owning tick thread. The clock does not allocate after construction.
 /// </summary>
-internal sealed class EngineClock {
+internal sealed class EngineClock
+{
     private const int FPS_WINDOW_CAPACITY = 2048;
     private const int FPS_WINDOW_MINIMUM_SAMPLES = 2;
     private const double FPS_WINDOW_SECONDS = 1.0;
@@ -29,13 +30,16 @@ internal sealed class EngineClock {
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="maxDeltaTime"/> is not finite or is not greater than zero.
     /// </exception>
-    internal EngineClock(TimeProvider timeProvider, double maxDeltaTime) {
+    internal EngineClock(TimeProvider timeProvider, double maxDeltaTime)
+    {
         ArgumentNullException.ThrowIfNull(timeProvider);
-        if (!double.IsFinite(maxDeltaTime) || maxDeltaTime <= 0.0) {
+        if (!double.IsFinite(maxDeltaTime) || maxDeltaTime <= 0.0)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(maxDeltaTime),
                 maxDeltaTime,
-                "The maximum delta time must be finite and greater than zero.");
+                "The maximum delta time must be finite and greater than zero."
+            );
         }
 
         _timeProvider = timeProvider;
@@ -46,9 +50,12 @@ internal sealed class EngineClock {
     /// Gets the live elapsed seconds since <see cref="Start"/>, including time spent in asynchronous
     /// setup. Returns zero before the clock is started.
     /// </summary>
-    internal double Time {
-        get {
-            if (!_started) {
+    internal double Time
+    {
+        get
+        {
+            if (!_started)
+            {
                 return 0.0;
             }
             return _timeProvider.GetElapsedTime(_startTimestamp).TotalSeconds;
@@ -59,8 +66,10 @@ internal sealed class EngineClock {
     /// Records the start timestamp. A clock can be started exactly once.
     /// </summary>
     /// <exception cref="InvalidOperationException">The clock was already started.</exception>
-    internal void Start() {
-        if (_started) {
+    internal void Start()
+    {
+        if (_started)
+        {
             throw new InvalidOperationException("The clock has already been started.");
         }
 
@@ -74,8 +83,10 @@ internal sealed class EngineClock {
     /// ticks measure the raw interval since the previous call.
     /// </summary>
     /// <exception cref="InvalidOperationException"><see cref="Start"/> has not been called.</exception>
-    internal TickTime BeginTick() {
-        if (!_started) {
+    internal TickTime BeginTick()
+    {
+        if (!_started)
+        {
             throw new InvalidOperationException("The clock must be started before the first tick.");
         }
 
@@ -93,27 +104,34 @@ internal sealed class EngineClock {
         return new TickTime(time, deltaTime, unscaledDeltaTime, _frameCount, fps, isFirstTick);
     }
 
-    private double UpdateFpsWindow(double timestamp) {
-        if (_fpsCount == FPS_WINDOW_CAPACITY) {
+    private double UpdateFpsWindow(double timestamp)
+    {
+        if (_fpsCount == FPS_WINDOW_CAPACITY)
+        {
             _tickTimestamps[_fpsHead] = timestamp;
             _fpsHead = (_fpsHead + 1) % FPS_WINDOW_CAPACITY;
-        } else {
+        }
+        else
+        {
             _tickTimestamps[(_fpsHead + _fpsCount) % FPS_WINDOW_CAPACITY] = timestamp;
             _fpsCount++;
         }
 
         // Drop samples older than the window, but keep two so a single long stall still reports a
         // meaningful rate instead of dropping to zero.
-        while (_fpsCount > FPS_WINDOW_MINIMUM_SAMPLES) {
+        while (_fpsCount > FPS_WINDOW_MINIMUM_SAMPLES)
+        {
             double oldest = _tickTimestamps[_fpsHead];
-            if (timestamp - oldest <= FPS_WINDOW_SECONDS) {
+            if (timestamp - oldest <= FPS_WINDOW_SECONDS)
+            {
                 break;
             }
             _fpsHead = (_fpsHead + 1) % FPS_WINDOW_CAPACITY;
             _fpsCount--;
         }
 
-        if (_fpsCount < FPS_WINDOW_MINIMUM_SAMPLES) {
+        if (_fpsCount < FPS_WINDOW_MINIMUM_SAMPLES)
+        {
             return 0.0;
         }
 

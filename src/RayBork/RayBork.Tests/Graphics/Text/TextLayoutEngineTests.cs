@@ -8,12 +8,14 @@ namespace RayBork.Tests.Graphics.Text;
 /// within lines, glyph quads, and block bounds. Every expectation is hand-computed from the fake
 /// metrics; the engine needs no GPU, asset catalog, or font parser.
 /// </summary>
-public sealed class TextLayoutEngineTests {
+public sealed class TextLayoutEngineTests
+{
     private const float TOLERANCE = 1e-5f;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptyTextHasNoLinesAndZeroBounds() {
+    public void EmptyTextHasNoLinesAndZeroBounds()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -30,7 +32,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SingleLineLeftAlignedStartsAtTheOrigin() {
+    public void SingleLineLeftAlignedStartsAtTheOrigin()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -44,7 +47,8 @@ public sealed class TextLayoutEngineTests {
             buffer.Glyphs[1],
             TextLayoutTestData.GLYPH_B,
             TextLayoutTestData.ADVANCE,
-            -TextLayoutTestData.ASCENT);
+            -TextLayoutTestData.ASCENT
+        );
         AssertVector(new Vector2(0f, -TextLayoutTestData.LINE_HEIGHT), result.BoundsMin);
         AssertVector(new Vector2(TextLayoutTestData.ADVANCE * 2f, 0f), result.BoundsMax);
     }
@@ -54,7 +58,8 @@ public sealed class TextLayoutEngineTests {
     [InlineData(TextAlignment.Center)]
     [InlineData(TextAlignment.Right)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SingleLineWithoutMaxWidthIsTheSameForEveryAlignment(TextAlignment alignment) {
+    public void SingleLineWithoutMaxWidthIsTheSameForEveryAlignment(TextAlignment alignment)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -66,7 +71,8 @@ public sealed class TextLayoutEngineTests {
             buffer.Glyphs[1],
             TextLayoutTestData.GLYPH_B,
             TextLayoutTestData.ADVANCE,
-            -TextLayoutTestData.ASCENT);
+            -TextLayoutTestData.ASCENT
+        );
     }
 
     [Theory]
@@ -74,11 +80,19 @@ public sealed class TextLayoutEngineTests {
     [InlineData(TextAlignment.Center, 0.5f)]
     [InlineData(TextAlignment.Right, 1f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SingleLineAlignmentShiftsInsideMaxWidth(TextAlignment alignment, float offset) {
+    public void SingleLineAlignmentShiftsInsideMaxWidth(TextAlignment alignment, float offset)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Arrange(metrics, "ab", buffer, out TextLayoutResult result, alignment: alignment, maxWidth: 2f);
+        Arrange(
+            metrics,
+            "ab",
+            buffer,
+            out TextLayoutResult result,
+            alignment: alignment,
+            maxWidth: 2f
+        );
 
         Assert.Equal(1, result.LineCount);
         Assert.Equal(offset, buffer.Glyphs[0].Position.X, TOLERANCE);
@@ -89,7 +103,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NewlinesStartNewLines() {
+    public void NewlinesStartNewLines()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -112,11 +127,20 @@ public sealed class TextLayoutEngineTests {
     public void AlignmentShiftsEveryLineInsideMaxWidth(
         TextAlignment alignment,
         float firstOffset,
-        float secondOffset) {
+        float secondOffset
+    )
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Arrange(metrics, "ab\nc", buffer, out TextLayoutResult result, alignment: alignment, maxWidth: 2f);
+        Arrange(
+            metrics,
+            "ab\nc",
+            buffer,
+            out TextLayoutResult result,
+            alignment: alignment,
+            maxWidth: 2f
+        );
 
         Assert.Equal(2, result.LineCount);
         Assert.Equal(firstOffset, buffer.Glyphs[0].Position.X, TOLERANCE);
@@ -131,7 +155,11 @@ public sealed class TextLayoutEngineTests {
     [InlineData(TextAlignment.Center, 0.25f)]
     [InlineData(TextAlignment.Right, 0.5f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AlignmentWithoutMaxWidthUsesTheWidestLine(TextAlignment alignment, float secondOffset) {
+    public void AlignmentWithoutMaxWidthUsesTheWidestLine(
+        TextAlignment alignment,
+        float secondOffset
+    )
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -144,7 +172,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CarriageReturnsAreIgnored() {
+    public void CarriageReturnsAreIgnored()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -157,7 +186,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CarriageReturnBeforeNewlineIsIgnored() {
+    public void CarriageReturnBeforeNewlineIsIgnored()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -170,7 +200,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CarriageReturnOnlyTextHasOneEmptyLine() {
+    public void CarriageReturnOnlyTextHasOneEmptyLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -184,7 +215,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SurrogatePairsDecodeToOneGlyph() {
+    public void SurrogatePairsDecodeToOneGlyph()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -199,13 +231,24 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnpairedSurrogatesDecodeToTheReplacementGlyph() {
+    public void UnpairedSurrogatesDecodeToTheReplacementGlyph()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer high = new();
         TextLayoutBuffer low = new();
 
-        int highCount = Arrange(metrics, new string((char)0xD83D, 1), high, out TextLayoutResult highResult);
-        int lowCount = Arrange(metrics, new string((char)0xDE00, 1), low, out TextLayoutResult lowResult);
+        int highCount = Arrange(
+            metrics,
+            new string((char)0xD83D, 1),
+            high,
+            out TextLayoutResult highResult
+        );
+        int lowCount = Arrange(
+            metrics,
+            new string((char)0xDE00, 1),
+            low,
+            out TextLayoutResult lowResult
+        );
 
         Assert.Equal(1, highCount);
         Assert.Equal(1, lowCount);
@@ -217,7 +260,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnpairedSurrogateInsideTextTakesOneGlyphSlot() {
+    public void UnpairedSurrogateInsideTextTakesOneGlyphSlot()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -232,10 +276,27 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void HandComputedQuadPositionsAndSizes() {
+    public void HandComputedQuadPositionsAndSizes()
+    {
         FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 2f, ascent: 1.2f)
-            .Glyph('a', 7, advanceX: 0.5f, bearingX: 0.1f, bearingY: -0.25f, width: 0.4f, height: 0.9f)
-            .Glyph('b', 8, advanceX: 0.75f, bearingX: -0.05f, bearingY: 0.15f, width: 0.6f, height: 0.3f);
+            .Glyph(
+                'a',
+                7,
+                advanceX: 0.5f,
+                bearingX: 0.1f,
+                bearingY: -0.25f,
+                width: 0.4f,
+                height: 0.9f
+            )
+            .Glyph(
+                'b',
+                8,
+                advanceX: 0.75f,
+                bearingX: -0.05f,
+                bearingY: 0.15f,
+                width: 0.6f,
+                height: 0.3f
+            );
         TextLayoutBuffer buffer = new();
 
         int count = Arrange(metrics, "ab", buffer, out TextLayoutResult result, size: 2f);
@@ -250,9 +311,17 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BlockBoundsIncludeGlyphOvershoot() {
-        FakeTextMetrics metrics = new FakeTextMetrics()
-            .Glyph('a', 7, advanceX: 0.5f, bearingX: -0.5f, bearingY: 0.2f, width: 1f, height: 1.5f);
+    public void BlockBoundsIncludeGlyphOvershoot()
+    {
+        FakeTextMetrics metrics = new FakeTextMetrics().Glyph(
+            'a',
+            7,
+            advanceX: 0.5f,
+            bearingX: -0.5f,
+            bearingY: 0.2f,
+            width: 1f,
+            height: 1.5f
+        );
         TextLayoutBuffer buffer = new();
 
         Arrange(metrics, "a", buffer, out TextLayoutResult result);
@@ -264,7 +333,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BaselinesUseAscentAndLineHeight() {
+    public void BaselinesUseAscentAndLineHeight()
+    {
         FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 1.2f, ascent: 0.8f)
             .Glyph('a', 1, advanceX: 0.5f, bearingY: 0.1f, width: 0.2f, height: 0.5f)
             .Glyph('b', 2, advanceX: 0.5f, bearingY: 0.1f, width: 0.2f, height: 0.5f)
@@ -286,7 +356,8 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LineHeightIsIndependentOfAscent() {
+    public void LineHeightIsIndependentOfAscent()
+    {
         FakeTextMetrics metrics = new FakeTextMetrics(lineHeight: 2.5f, ascent: 1f)
             .Glyph('a', 1, advanceX: 0.5f)
             .Glyph('b', 2, advanceX: 0.5f)
@@ -309,11 +380,19 @@ public sealed class TextLayoutEngineTests {
     [InlineData(TextAlignment.Center, -0.5f)]
     [InlineData(TextAlignment.Right, -1f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OverflowingLineUsesANegativeAlignmentOffset(TextAlignment alignment, float offset) {
+    public void OverflowingLineUsesANegativeAlignmentOffset(TextAlignment alignment, float offset)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Arrange(metrics, "abcd", buffer, out TextLayoutResult result, alignment: alignment, maxWidth: 1f);
+        Arrange(
+            metrics,
+            "abcd",
+            buffer,
+            out TextLayoutResult result,
+            alignment: alignment,
+            maxWidth: 1f
+        );
 
         Assert.Equal(1, result.LineCount);
         Assert.Equal(offset, buffer.Glyphs[0].Position.X, TOLERANCE);
@@ -328,7 +407,8 @@ public sealed class TextLayoutEngineTests {
     [InlineData(TextAlignment.Center, 0.25f)]
     [InlineData(TextAlignment.Right, 0.5f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WrappedLinesAlignByTheirOwnWidth(TextAlignment alignment, float offset) {
+    public void WrappedLinesAlignByTheirOwnWidth(TextAlignment alignment, float offset)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -339,7 +419,8 @@ public sealed class TextLayoutEngineTests {
             out TextLayoutResult result,
             alignment: alignment,
             wrapping: TextWrapping.Word,
-            maxWidth: 1.5f);
+            maxWidth: 1.5f
+        );
 
         Assert.Equal(2, result.LineCount);
         // Both lines are one world unit wide while the unwrapped paragraph is 2.5 wide; an
@@ -352,8 +433,10 @@ public sealed class TextLayoutEngineTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnmappedRunesAreSkippedAndDoNotBreakKerning() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void UnmappedRunesAreSkippedAndDoNotBreakKerning()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_A, TextLayoutTestData.GLYPH_B, 0.25f);
         TextLayoutBuffer buffer = new();
 
@@ -374,11 +457,23 @@ public sealed class TextLayoutEngineTests {
         float size = 1f,
         TextAlignment alignment = TextAlignment.Left,
         TextWrapping wrapping = TextWrapping.None,
-        float maxWidth = 0f) {
-        return TextLayoutEngine.Arrange(metrics, text, size, alignment, wrapping, maxWidth, buffer, out result);
+        float maxWidth = 0f
+    )
+    {
+        return TextLayoutEngine.Arrange(
+            metrics,
+            text,
+            size,
+            alignment,
+            wrapping,
+            maxWidth,
+            buffer,
+            out result
+        );
     }
 
-    private static void AssertGlyph(TextGlyphInstance glyph, int glyphId, float x, float y) {
+    private static void AssertGlyph(TextGlyphInstance glyph, int glyphId, float x, float y)
+    {
         Assert.Equal(glyphId, glyph.GlyphId);
         Assert.Equal(x, glyph.Position.X, TOLERANCE);
         Assert.Equal(y, glyph.Position.Y, TOLERANCE);
@@ -390,13 +485,16 @@ public sealed class TextLayoutEngineTests {
         float x,
         float y,
         float width,
-        float height) {
+        float height
+    )
+    {
         AssertGlyph(glyph, glyphId, x, y);
         Assert.Equal(width, glyph.Size.X, TOLERANCE);
         Assert.Equal(height, glyph.Size.Y, TOLERANCE);
     }
 
-    private static void AssertVector(Vector2 expected, Vector2 actual) {
+    private static void AssertVector(Vector2 expected, Vector2 actual)
+    {
         Assert.Equal(expected.X, actual.X, TOLERANCE);
         Assert.Equal(expected.Y, actual.Y, TOLERANCE);
     }

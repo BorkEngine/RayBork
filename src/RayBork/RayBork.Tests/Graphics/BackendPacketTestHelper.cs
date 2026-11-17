@@ -14,7 +14,8 @@ namespace RayBork.Tests;
 /// the pass, matching the production camera path: the backend no longer reads a builder-level clear
 /// color.
 /// </remarks>
-internal static class BackendPacketTestHelper {
+internal static class BackendPacketTestHelper
+{
     /// <summary>
     /// Creates a sealed frame with one camera pass that clears the whole scene target.
     /// </summary>
@@ -33,7 +34,9 @@ internal static class BackendPacketTestHelper {
         int height,
         ClearMode clearMode = ClearMode.ColorAndDepth,
         double time = 0.0,
-        double deltaTime = 0.0) {
+        double deltaTime = 0.0
+    )
+    {
         RenderFramePacket packet = new(frameIndex);
         packet.BeginRecording(time, deltaTime);
         CameraPass pass = packet.BeginPass();
@@ -48,7 +51,8 @@ internal static class BackendPacketTestHelper {
             viewportWidth: width,
             viewportHeight: height,
             clearMode,
-            clearColor);
+            clearColor
+        );
         packet.Seal();
         return packet;
     }
@@ -66,7 +70,9 @@ internal static class BackendPacketTestHelper {
         BackendTestHost host,
         long frameIndex,
         Color clearColor,
-        ClearMode clearMode = ClearMode.ColorAndDepth) {
+        ClearMode clearMode = ClearMode.ColorAndDepth
+    )
+    {
         ArgumentNullException.ThrowIfNull(host);
         Extent2D extent = host.SceneTarget.Extent;
         return CreateClearingPacket(
@@ -74,7 +80,8 @@ internal static class BackendPacketTestHelper {
             clearColor,
             checked((int)extent.Width),
             checked((int)extent.Height),
-            clearMode);
+            clearMode
+        );
     }
 
     /// <summary>
@@ -88,7 +95,9 @@ internal static class BackendPacketTestHelper {
         BackendTestHost host,
         long frameIndex,
         Color clearColor,
-        ClearMode clearMode = ClearMode.ColorAndDepth) {
+        ClearMode clearMode = ClearMode.ColorAndDepth
+    )
+    {
         ArgumentNullException.ThrowIfNull(host);
         host.Backend.Submit(CreateClearingPacket(host, frameIndex, clearColor, clearMode));
         host.Backend.Present();

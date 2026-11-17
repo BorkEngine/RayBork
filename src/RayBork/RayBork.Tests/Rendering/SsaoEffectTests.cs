@@ -6,7 +6,8 @@ namespace RayBork.Tests.Rendering;
 /// <summary>
 /// Tests the public SSAO settings and the internal snapshot capture path without a GPU.
 /// </summary>
-public sealed class SsaoEffectTests {
+public sealed class SsaoEffectTests
+{
     [Theory]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     [InlineData(SsaoQuality.Performance, 8, 4)]
@@ -17,49 +18,57 @@ public sealed class SsaoEffectTests {
     public void QualitySelectsTheBakedSampleCounts(
         SsaoQuality quality,
         int expectedAoSamples,
-        int expectedDenoiseSamples) {
+        int expectedDenoiseSamples
+    )
+    {
         Assert.Equal(expectedAoSamples, SsaoQualityInfo.AoSampleCount(quality));
         Assert.Equal(expectedDenoiseSamples, SsaoQualityInfo.DenoiseSampleCount(quality));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void QualitySelectsThePrecompiledShaderPath() {
+    public void QualitySelectsThePrecompiledShaderPath()
+    {
         Assert.Equal(
             SsaoShaderContract.AO_8_PATH,
-            SsaoQualityInfo.AoShaderPath(SsaoQuality.Performance));
+            SsaoQualityInfo.AoShaderPath(SsaoQuality.Performance)
+        );
+        Assert.Equal(SsaoShaderContract.AO_16_PATH, SsaoQualityInfo.AoShaderPath(SsaoQuality.Low));
         Assert.Equal(
             SsaoShaderContract.AO_16_PATH,
-            SsaoQualityInfo.AoShaderPath(SsaoQuality.Low));
-        Assert.Equal(
-            SsaoShaderContract.AO_16_PATH,
-            SsaoQualityInfo.AoShaderPath(SsaoQuality.Medium));
-        Assert.Equal(
-            SsaoShaderContract.AO_64_PATH,
-            SsaoQualityInfo.AoShaderPath(SsaoQuality.High));
+            SsaoQualityInfo.AoShaderPath(SsaoQuality.Medium)
+        );
+        Assert.Equal(SsaoShaderContract.AO_64_PATH, SsaoQualityInfo.AoShaderPath(SsaoQuality.High));
         Assert.Equal(
             SsaoShaderContract.AO_64_PATH,
-            SsaoQualityInfo.AoShaderPath(SsaoQuality.Ultra));
+            SsaoQualityInfo.AoShaderPath(SsaoQuality.Ultra)
+        );
         Assert.Equal(
             SsaoShaderContract.DENOISE_4_PATH,
-            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Performance));
+            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Performance)
+        );
         Assert.Equal(
             SsaoShaderContract.DENOISE_4_PATH,
-            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Low));
+            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Low)
+        );
         Assert.Equal(
             SsaoShaderContract.DENOISE_8_PATH,
-            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Medium));
+            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Medium)
+        );
         Assert.Equal(
             SsaoShaderContract.DENOISE_8_PATH,
-            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.High));
+            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.High)
+        );
         Assert.Equal(
             SsaoShaderContract.DENOISE_16_PATH,
-            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Ultra));
+            SsaoQualityInfo.DenoiseShaderPath(SsaoQuality.Ultra)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheDefaultSettingsMatchTheApprovedContract() {
+    public void TheDefaultSettingsMatchTheApprovedContract()
+    {
         var effect = new SsaoEffect();
 
         Assert.Equal(SsaoQuality.Medium, effect.Quality);
@@ -75,12 +84,15 @@ public sealed class SsaoEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EverySettingRejectsAnInvalidValueWithAClearException() {
-        OnTickThread(() => {
+    public void EverySettingRejectsAnInvalidValueWithAClearException()
+    {
+        OnTickThread(() =>
+        {
             var effect = new SsaoEffect();
 
-            ArgumentOutOfRangeException quality = Assert.Throws<ArgumentOutOfRangeException>(
-                () => effect.Quality = (SsaoQuality)99);
+            ArgumentOutOfRangeException quality = Assert.Throws<ArgumentOutOfRangeException>(() =>
+                effect.Quality = (SsaoQuality)99
+            );
             Assert.Contains("defined", quality.Message, StringComparison.Ordinal);
 
             AssertRejects(() => effect.Radius = 0f, nameof(SsaoEffect.Radius), "greater than zero");
@@ -88,28 +100,42 @@ public sealed class SsaoEffectTests {
             AssertRejects(
                 () => effect.DistanceFalloff = 0f,
                 nameof(SsaoEffect.DistanceFalloff),
-                "greater than zero");
+                "greater than zero"
+            );
             AssertRejects(
                 () => effect.DistanceFalloff = float.PositiveInfinity,
                 nameof(SsaoEffect.DistanceFalloff),
-                "finite");
-            AssertRejects(() => effect.Intensity = -1f, nameof(SsaoEffect.Intensity), "non-negative");
+                "finite"
+            );
+            AssertRejects(
+                () => effect.Intensity = -1f,
+                nameof(SsaoEffect.Intensity),
+                "non-negative"
+            );
             AssertRejects(
                 () => effect.Intensity = float.NaN,
                 nameof(SsaoEffect.Intensity),
-                "finite");
+                "finite"
+            );
             AssertRejects(
                 () => effect.DenoiseRadius = -1,
                 nameof(SsaoEffect.DenoiseRadius),
-                "zero or positive");
-            AssertRejects(() => effect.BiasOffset = float.NaN, nameof(SsaoEffect.BiasOffset), "finite");
+                "zero or positive"
+            );
+            AssertRejects(
+                () => effect.BiasOffset = float.NaN,
+                nameof(SsaoEffect.BiasOffset),
+                "finite"
+            );
             AssertRejects(
                 () => effect.BiasMultiplier = float.PositiveInfinity,
                 nameof(SsaoEffect.BiasMultiplier),
-                "finite");
+                "finite"
+            );
 
-            ArgumentException color = Assert.Throws<ArgumentException>(
-                () => effect.Color = new Color(0f, float.NaN, 0f, 1f));
+            ArgumentException color = Assert.Throws<ArgumentException>(() =>
+                effect.Color = new Color(0f, float.NaN, 0f, 1f)
+            );
             Assert.Contains("finite", color.Message, StringComparison.Ordinal);
 
             // A rejected value leaves the previous value in place.
@@ -124,7 +150,8 @@ public sealed class SsaoEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SettingsAreTickThreadOnly() {
+    public void SettingsAreTickThreadOnly()
+    {
         var effect = new SsaoEffect();
 
         Assert.Throws<InvalidOperationException>(() => effect.Radius = 2f);
@@ -133,11 +160,13 @@ public sealed class SsaoEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CaptureRejectsADepthlessTargetBeforeTouchingTheAssets() {
+    public void CaptureRejectsADepthlessTargetBeforeTouchingTheAssets()
+    {
         var effect = new SsaoEffect();
 
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-            () => PostProcessSnapshots.Capture(effect, targetHasDepth: false, "render texture 7"));
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            PostProcessSnapshots.Capture(effect, targetHasDepth: false, "render texture 7")
+        );
 
         Assert.Contains("depth", thrown.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("render texture 7", thrown.Message, StringComparison.Ordinal);
@@ -145,22 +174,27 @@ public sealed class SsaoEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CaptureRequiresThePreloadedSsaoAssets() {
+    public void CaptureRequiresThePreloadedSsaoAssets()
+    {
         var effect = new SsaoEffect();
 
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-            () => PostProcessSnapshots.Capture(effect, targetHasDepth: true, "the app scene target"));
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            PostProcessSnapshots.Capture(effect, targetHasDepth: true, "the app scene target")
+        );
 
         Assert.Contains("built-in SSAO assets", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task SnapshotFreezesTheSettingsAndQualityAndIsPooledAfterReset() {
+    public async Task SnapshotFreezesTheSettingsAndQualityAndIsPooledAfterReset()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         SsaoAssets assets = await SsaoAssets.LoadAsync(harness.Catalog);
-        OnTickThread(() => {
-            var effect = new SsaoEffect(assets) {
+        OnTickThread(() =>
+        {
+            var effect = new SsaoEffect(assets)
+            {
                 Quality = SsaoQuality.Medium,
                 Radius = 2.25f,
                 DenoiseRadius = 7,
@@ -205,7 +239,8 @@ public sealed class SsaoEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DuplicateAndDisabledStackEntriesAreCapturedForRendering() {
+    public async Task DuplicateAndDisabledStackEntriesAreCapturedForRendering()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         SsaoAssets assets = await SsaoAssets.LoadAsync(harness.Catalog);
         using CameraTestHost host = new();
@@ -214,11 +249,13 @@ public sealed class SsaoEffectTests {
         PostProcessStack stack = new();
         var first = new SsaoEffect(assets);
         var second = new SsaoEffect(assets) { Enabled = false };
-        try {
+        try
+        {
             stack.Add(first);
             stack.Add(second);
             stack.Add(first);
-            using (Camera camera = host.CreatePerspectiveCamera(postProcess: stack)) {
+            using (Camera camera = host.CreatePerspectiveCamera(postProcess: stack))
+            {
                 Assert.True(camera.IsDisposed == false);
             }
 
@@ -227,16 +264,25 @@ public sealed class SsaoEffectTests {
             // carry a full four-pass layout and the disabled entry keeps its position.
             CameraPass pass = host.Packet.Passes[0];
             Assert.Equal(3, pass.PostProcessEffectCount);
-            Assert.Equal(2, pass.PostProcessEffects.ToArray().Count(static snapshot => snapshot.Enabled));
+            Assert.Equal(
+                2,
+                pass.PostProcessEffects.ToArray().Count(static snapshot => snapshot.Enabled)
+            );
             Assert.False(pass.PostProcessEffects[1].Enabled);
-            SsaoEffectSnapshot firstSnapshot = Assert.IsType<SsaoEffectSnapshot>(pass.PostProcessEffects[0]);
+            SsaoEffectSnapshot firstSnapshot = Assert.IsType<SsaoEffectSnapshot>(
+                pass.PostProcessEffects[0]
+            );
             Assert.IsType<DisabledPostProcessEffectSnapshot>(pass.PostProcessEffects[1]);
-            SsaoEffectSnapshot secondSnapshot = Assert.IsType<SsaoEffectSnapshot>(pass.PostProcessEffects[2]);
+            SsaoEffectSnapshot secondSnapshot = Assert.IsType<SsaoEffectSnapshot>(
+                pass.PostProcessEffects[2]
+            );
             Assert.Equal(4, firstSnapshot.InstanceLayout.Length);
             Assert.Equal(4, secondSnapshot.InstanceLayout.Length);
             Assert.True(firstSnapshot.InstanceLayout[0].Stride > 0);
             Assert.True(secondSnapshot.InstanceLayout[0].Stride > 0);
-        } finally {
+        }
+        finally
+        {
             host.EndFrame();
             host.Service.DetachSsaoAssets();
             assets.Dispose();
@@ -245,10 +291,12 @@ public sealed class SsaoEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TheBuiltInAssetsExposeTheThreeArenaAndTheBlueNoiseContract() {
+    public async Task TheBuiltInAssetsExposeTheThreeArenaAndTheBlueNoiseContract()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         SsaoAssets assets = await SsaoAssets.LoadAsync(harness.Catalog);
-        try {
+        try
+        {
             Assert.False(assets.IsDisposed);
             Assert.Equal(128, assets.BlueNoise.Width);
             Assert.Equal(128, assets.BlueNoise.Height);
@@ -258,61 +306,73 @@ public sealed class SsaoEffectTests {
             Assert.Equal(TextureWrap.Repeat, assets.BlueNoise.Sampler.Wrap);
             Assert.Equal(
                 SsaoShaderContract.AO_8_PATH,
-                assets.AoProgram(SsaoQuality.Performance).Path);
-            Assert.Equal(
-                SsaoShaderContract.AO_16_PATH,
-                assets.AoProgram(SsaoQuality.Medium).Path);
-            Assert.Equal(
-                SsaoShaderContract.AO_64_PATH,
-                assets.AoProgram(SsaoQuality.Ultra).Path);
+                assets.AoProgram(SsaoQuality.Performance).Path
+            );
+            Assert.Equal(SsaoShaderContract.AO_16_PATH, assets.AoProgram(SsaoQuality.Medium).Path);
+            Assert.Equal(SsaoShaderContract.AO_64_PATH, assets.AoProgram(SsaoQuality.Ultra).Path);
             Assert.Equal(
                 SsaoShaderContract.DENOISE_16_PATH,
-                assets.DenoiseProgram(SsaoQuality.Ultra).Path);
-        } finally {
+                assets.DenoiseProgram(SsaoQuality.Ultra).Path
+            );
+        }
+        finally
+        {
             assets.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DisposedAssetsAreRejectedByCapture() {
+    public async Task DisposedAssetsAreRejectedByCapture()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         SsaoAssets assets = await SsaoAssets.LoadAsync(harness.Catalog);
         assets.Dispose();
 
         var effect = new SsaoEffect(assets);
-        Assert.Throws<ObjectDisposedException>(
-            () => PostProcessSnapshots.Capture(effect, targetHasDepth: true, "the app scene target"));
+        Assert.Throws<ObjectDisposedException>(() =>
+            PostProcessSnapshots.Capture(effect, targetHasDepth: true, "the app scene target")
+        );
     }
 
-    private static SsaoEffectSnapshot Capture(SsaoEffect effect, SsaoAssets assets) {
+    private static SsaoEffectSnapshot Capture(SsaoEffect effect, SsaoAssets assets)
+    {
         PostProcessEffectSnapshot snapshot = PostProcessSnapshots.Capture(
             effect,
             targetHasDepth: true,
             "the app scene target",
-            assets);
+            assets
+        );
         return Assert.IsType<SsaoEffectSnapshot>(snapshot);
     }
 
     private static void AssertRejects(
         Action action,
         string parameterName,
-        string expectedMessagePart) {
+        string expectedMessagePart
+    )
+    {
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(action);
         Assert.Equal(parameterName, thrown.ParamName);
         Assert.Contains(expectedMessagePart, thrown.Message, StringComparison.Ordinal);
     }
 
-    private static void OnTickThread(Action action) {
+    private static void OnTickThread(Action action)
+    {
         bool attached = TickThread.IsCurrent;
-        if (!attached) {
+        if (!attached)
+        {
             TickThread.Attach();
         }
 
-        try {
+        try
+        {
             action();
-        } finally {
-            if (!attached) {
+        }
+        finally
+        {
+            if (!attached)
+            {
                 TickThread.Detach();
             }
         }

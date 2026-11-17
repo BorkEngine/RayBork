@@ -18,7 +18,8 @@ namespace RayBork.Internal;
 /// upload does not.
 /// </para>
 /// </remarks>
-internal static class ProceduralAssetIds {
+internal static class ProceduralAssetIds
+{
     /// <summary>The first segment of every reserved procedural path.</summary>
     internal const string RESERVED_PREFIX = "_procedural";
 
@@ -36,18 +37,22 @@ internal static class ProceduralAssetIds {
     /// <summary>Builds the canonical path of a procedural mesh.</summary>
     /// <param name="id">The id from <see cref="NextMeshId"/>.</param>
     /// <returns>The canonical path <c>_procedural/mesh/{id}</c> without a leading slash.</returns>
-    internal static string MeshPath(int id) => RESERVED_PREFIX + "/mesh/" + id.ToString(CultureInfo.InvariantCulture);
+    internal static string MeshPath(int id) =>
+        RESERVED_PREFIX + "/mesh/" + id.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Builds the canonical path of a procedural texture.</summary>
     /// <param name="id">The id from <see cref="NextTextureId"/>.</param>
     /// <returns>The canonical path <c>_procedural/texture/{id}</c> without a leading slash.</returns>
-    internal static string TexturePath(int id) => RESERVED_PREFIX + "/texture/" + id.ToString(CultureInfo.InvariantCulture);
+    internal static string TexturePath(int id) =>
+        RESERVED_PREFIX + "/texture/" + id.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>Tests whether a canonical path is inside the reserved procedural prefix.</summary>
     /// <param name="canonicalPath">A canonical path without a leading slash.</param>
     /// <returns><see langword="true"/> when the catalog must never resolve the path.</returns>
-    internal static bool IsReserved(string canonicalPath) {
-        if (!canonicalPath.StartsWith(RESERVED_PREFIX, StringComparison.Ordinal)) {
+    internal static bool IsReserved(string canonicalPath)
+    {
+        if (!canonicalPath.StartsWith(RESERVED_PREFIX, StringComparison.Ordinal))
+        {
             return false;
         }
 

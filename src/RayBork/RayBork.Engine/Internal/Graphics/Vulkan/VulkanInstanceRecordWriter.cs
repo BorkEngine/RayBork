@@ -12,13 +12,14 @@ namespace RayBork.Internal;
 /// buffers. They allocate nothing and are safe from any single thread; the callers serialize the
 /// buffers by frame slot.
 /// </remarks>
-internal static class VulkanInstanceRecordWriter {
+internal static class VulkanInstanceRecordWriter
+{
     /// <summary>Rounds a byte offset up to <paramref name="alignment"/>.</summary>
     /// <param name="value">The byte offset to align.</param>
     /// <param name="alignment">The positive alignment in bytes.</param>
     /// <returns>The smallest multiple of <paramref name="alignment"/> not below <paramref name="value"/>.</returns>
-    internal static ulong AlignUp(ulong value, ulong alignment)
-        => checked(((value + alignment - 1) / alignment) * alignment);
+    internal static ulong AlignUp(ulong value, ulong alignment) =>
+        checked(((value + alignment - 1) / alignment) * alignment);
 
     /// <summary>
     /// Writes one System.Numerics matrix in its storage order.
@@ -31,7 +32,8 @@ internal static class VulkanInstanceRecordWriter {
     /// <param name="destination">The record buffer.</param>
     /// <param name="offset">The byte offset of the matrix.</param>
     /// <param name="value">The matrix to write.</param>
-    internal static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value) {
+    internal static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value)
+    {
         Span<byte> target = destination[offset..];
         WriteSingle(target, 0, value.M11);
         WriteSingle(target, 4, value.M12);
@@ -55,7 +57,8 @@ internal static class VulkanInstanceRecordWriter {
     /// <param name="destination">The record buffer.</param>
     /// <param name="offset">The byte offset of the vector.</param>
     /// <param name="value">The vector to write.</param>
-    internal static void WriteVector4(Span<byte> destination, int offset, Vector4 value) {
+    internal static void WriteVector4(Span<byte> destination, int offset, Vector4 value)
+    {
         Span<byte> target = destination[offset..];
         WriteSingle(target, 0, value.X);
         WriteSingle(target, 4, value.Y);
@@ -67,13 +70,13 @@ internal static class VulkanInstanceRecordWriter {
     /// <param name="destination">The record buffer.</param>
     /// <param name="offset">The byte offset of the value.</param>
     /// <param name="value">The value to write.</param>
-    internal static void WriteSingle(Span<byte> destination, int offset, float value)
-        => BinaryPrimitives.WriteSingleLittleEndian(destination[offset..], value);
+    internal static void WriteSingle(Span<byte> destination, int offset, float value) =>
+        BinaryPrimitives.WriteSingleLittleEndian(destination[offset..], value);
 
     /// <summary>Writes one little-endian <c>uint</c> at a byte offset.</summary>
     /// <param name="destination">The record buffer.</param>
     /// <param name="offset">The byte offset of the value.</param>
     /// <param name="value">The value to write.</param>
-    internal static void WriteUInt32(Span<byte> destination, int offset, uint value)
-        => BinaryPrimitives.WriteUInt32LittleEndian(destination[offset..], value);
+    internal static void WriteUInt32(Span<byte> destination, int offset, uint value) =>
+        BinaryPrimitives.WriteUInt32LittleEndian(destination[offset..], value);
 }

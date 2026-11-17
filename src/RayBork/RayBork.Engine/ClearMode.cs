@@ -4,7 +4,8 @@ namespace RayBork;
 /// Selects the buffers a <see cref="Camera"/> pass clears before it draws.
 /// </summary>
 [Flags]
-public enum ClearMode {
+public enum ClearMode
+{
     /// <summary>Clears nothing; the pass is an overlay over the previous contents.</summary>
     None = 0,
 

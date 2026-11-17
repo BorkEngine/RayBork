@@ -9,7 +9,8 @@ namespace RayBork.Tests.Rendering;
 /// Builds detached engine assets for camera, model, and batch-planner unit tests without a pack or a
 /// GPU device.
 /// </summary>
-internal static class RenderingTestAssets {
+internal static class RenderingTestAssets
+{
     internal const string MESH_PATH = "meshes/test";
     internal const string SHADER_PATH = "shaders/test";
     internal const string TEXTURE_PATH = "textures/test";
@@ -21,8 +22,11 @@ internal static class RenderingTestAssets {
         string path = MESH_PATH,
         PrimitiveTopology topology = PrimitiveTopology.TriangleList,
         int indexCount = 6,
-        BoundingBox? bounds = null) {
-        MeshAssetDescriptor descriptor = new() {
+        BoundingBox? bounds = null
+    )
+    {
+        MeshAssetDescriptor descriptor = new()
+        {
             Payload = path + "-mesh",
             VertexCount = 3,
             IndexCount = (uint)indexCount,
@@ -30,7 +34,12 @@ internal static class RenderingTestAssets {
             Topology = topology,
         };
         var upload = new MeshGpuUpload(path, descriptor, ReadOnlyMemory<byte>.Empty);
-        var asset = new EngineAsset(path, new FakeGpuAssetResource(upload, 1), static _ => { }, static () => { });
+        var asset = new EngineAsset(
+            path,
+            new FakeGpuAssetResource(upload, 1),
+            static _ => { },
+            static () => { }
+        );
         asset.AddOwnerReference();
         Vertex[] vertices = [new Vertex(Vector3.Zero)];
         uint[] indices = new uint[indexCount];
@@ -43,9 +52,12 @@ internal static class RenderingTestAssets {
         float defaultValue = 0f,
         ShaderStageMask stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
         List<GpuAssetResource>? destroyed = null,
-        string[]? textures = null) {
+        string[]? textures = null
+    )
+    {
         string[] declaredTextures = textures ?? [TEXTURE_BINDING];
-        ShaderAssetDescriptor descriptor = new() {
+        ShaderAssetDescriptor descriptor = new()
+        {
             AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
@@ -53,8 +65,10 @@ internal static class RenderingTestAssets {
             FragmentEntry = "main_fragment",
             Stages = stages,
             DefaultRenderState = defaultRenderState ?? RenderState.Opaque,
-            Uniforms = [
-                new ShaderUniformAsset {
+            Uniforms =
+            [
+                new ShaderUniformAsset
+                {
                     Name = VALUE_UNIFORM,
                     Type = ShaderUniformType.Float,
                     Default = [defaultValue],
@@ -62,13 +76,21 @@ internal static class RenderingTestAssets {
             ],
             Textures = declaredTextures,
         };
-        var upload = new ShaderGpuUpload(path, descriptor, ReadOnlyMemory<byte>.Empty, ReadOnlyMemory<byte>.Empty);
-        Action<GpuAssetResource> queueDestruction = destroyed is null ? static _ => { } : destroyed.Add;
+        var upload = new ShaderGpuUpload(
+            path,
+            descriptor,
+            ReadOnlyMemory<byte>.Empty,
+            ReadOnlyMemory<byte>.Empty
+        );
+        Action<GpuAssetResource> queueDestruction = destroyed is null
+            ? static _ => { }
+            : destroyed.Add;
         var asset = new EngineAsset(
             path,
             new FakeGpuAssetResource(upload, 1),
             queueDestruction,
-            static () => { });
+            static () => { }
+        );
         asset.AddOwnerReference();
         return new ShaderProgram(asset, descriptor);
     }
@@ -79,8 +101,17 @@ internal static class RenderingTestAssets {
         float defaultValue = 0f,
         ShaderStageMask stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
         List<GpuAssetResource>? destroyed = null,
-        string[]? textures = null) {
-        ShaderProgram program = CreateProgram(path, defaultRenderState, defaultValue, stages, destroyed, textures);
+        string[]? textures = null
+    )
+    {
+        ShaderProgram program = CreateProgram(
+            path,
+            defaultRenderState,
+            defaultValue,
+            stages,
+            destroyed,
+            textures
+        );
         Shader material = program.CreateMaterial();
         // The helper's reference only stood in for the catalog's cache reference; the material owns
         // the program from here on.
@@ -88,17 +119,26 @@ internal static class RenderingTestAssets {
         return material;
     }
 
-    internal static void ReleaseProgram(ShaderProgram program) {
+    internal static void ReleaseProgram(ShaderProgram program)
+    {
         ArgumentNullException.ThrowIfNull(program);
-        try {
+        try
+        {
             program.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // Shutdown-style force disposal already removed the helper's reference.
         }
     }
 
-    internal static Texture CreateTexture(string path = TEXTURE_PATH, List<GpuAssetResource>? destroyed = null) {
-        TextureAssetDescriptor descriptor = new() {
+    internal static Texture CreateTexture(
+        string path = TEXTURE_PATH,
+        List<GpuAssetResource>? destroyed = null
+    )
+    {
+        TextureAssetDescriptor descriptor = new()
+        {
             Payload = path + "-ktx2",
             Width = 1,
             Height = 1,
@@ -110,12 +150,15 @@ internal static class RenderingTestAssets {
             MaxAnisotropy = 1f,
         };
         var upload = new TextureGpuUpload(path, descriptor, ReadOnlyMemory<byte>.Empty);
-        Action<GpuAssetResource> queueDestruction = destroyed is null ? static _ => { } : destroyed.Add;
+        Action<GpuAssetResource> queueDestruction = destroyed is null
+            ? static _ => { }
+            : destroyed.Add;
         var asset = new EngineAsset(
             path,
             new FakeGpuAssetResource(upload, 1),
             queueDestruction,
-            static () => { });
+            static () => { }
+        );
         asset.AddOwnerReference();
         return new Texture(asset, descriptor);
     }
@@ -124,43 +167,54 @@ internal static class RenderingTestAssets {
         string[]? partNames = null,
         Mesh[]? meshes = null,
         Shader[]? materials = null,
-        Transform? localTransform = null) {
+        Transform? localTransform = null
+    )
+    {
         Mesh[] modelMeshes = meshes ?? [CreateMesh(MODEL_PATH + "-mesh")];
-        string[] names = partNames ?? [.. Enumerable.Range(0, modelMeshes.Length).Select(index => $"part-{index}")];
+        string[] names = partNames
+            ?? [.. Enumerable.Range(0, modelMeshes.Length).Select(index => $"part-{index}")];
         Transform local = localTransform ?? Transform.Identity;
-        if (materials is null) {
+        if (materials is null)
+        {
             materials = new Shader[modelMeshes.Length];
-            for (int index = 0; index < materials.Length; index++) {
+            for (int index = 0; index < materials.Length; index++)
+            {
                 materials[index] = CreateShader(MODEL_PATH + "-shader-" + index);
             }
-        } else if (materials.Length != modelMeshes.Length) {
+        }
+        else if (materials.Length != modelMeshes.Length)
+        {
             throw new ArgumentException("Every mesh must have one material.", nameof(materials));
         }
 
         ModelPart[] parts = new ModelPart[modelMeshes.Length];
-        for (int index = 0; index < modelMeshes.Length; index++) {
+        for (int index = 0; index < modelMeshes.Length; index++)
+        {
             parts[index] = new ModelPart(
                 names[index],
                 modelMeshes[index],
                 materials[index],
-                localTransform: local);
+                localTransform: local
+            );
         }
 
         return new Model(parts);
     }
 
-    internal static float ReadInstanceFloat(Shader shader, ReadOnlySpan<byte> template, string uniformName) {
-        ShaderAbiUniform uniform = shader.Abi.Uniforms.First(candidate => candidate.Name == uniformName);
+    internal static float ReadInstanceFloat(
+        Shader shader,
+        ReadOnlySpan<byte> template,
+        string uniformName
+    )
+    {
+        ShaderAbiUniform uniform = shader.Abi.Uniforms.First(candidate =>
+            candidate.Name == uniformName
+        );
         return BinaryPrimitives.ReadSingleLittleEndian(
-            template.Slice(uniform.Offset - ShaderAbiLayout.INSTANCE_HEADER_SIZE, sizeof(float)));
+            template.Slice(uniform.Offset - ShaderAbiLayout.INSTANCE_HEADER_SIZE, sizeof(float))
+        );
     }
 
-    internal static float[] BoundsToArray(BoundingBox bounds) => [
-        bounds.Min.X,
-        bounds.Min.Y,
-        bounds.Min.Z,
-        bounds.Max.X,
-        bounds.Max.Y,
-        bounds.Max.Z,
-    ];
+    internal static float[] BoundsToArray(BoundingBox bounds) =>
+        [bounds.Min.X, bounds.Min.Y, bounds.Min.Z, bounds.Max.X, bounds.Max.Y, bounds.Max.Z];
 }

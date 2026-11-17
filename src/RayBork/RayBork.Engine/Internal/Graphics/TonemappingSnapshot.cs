@@ -18,13 +18,16 @@ namespace RayBork.Internal;
 /// <param name="Exposure">The exposure in stops, applied as <c>2^Exposure</c> before tone mapping.</param>
 /// <param name="AgxWhite">The AgX white in scene-linear units before the display headroom scaling.</param>
 /// <param name="AgxContrast">The AgX curve contrast.</param>
-internal readonly record struct TonemappingSnapshot(float Exposure, float AgxWhite, float AgxContrast) {
+internal readonly record struct TonemappingSnapshot(
+    float Exposure,
+    float AgxWhite,
+    float AgxContrast
+)
+{
     /// <summary>
     /// Gets the startup defaults: neutral exposure, Godot's default AgX white, and its default
     /// contrast.
     /// </summary>
-    internal static TonemappingSnapshot Default => new(
-        0f,
-        AgxToneMap.DEFAULT_AGX_WHITE,
-        AgxToneMap.DEFAULT_AGX_CONTRAST);
+    internal static TonemappingSnapshot Default =>
+        new(0f, AgxToneMap.DEFAULT_AGX_WHITE, AgxToneMap.DEFAULT_AGX_CONTRAST);
 }

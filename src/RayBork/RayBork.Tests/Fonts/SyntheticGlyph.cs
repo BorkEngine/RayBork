@@ -3,8 +3,10 @@ using RayBork.Internal;
 namespace RayBork.Tests.Fonts;
 
 /// <summary>A synthetic glyph point in font units; on-curve unless marked otherwise.</summary>
-internal readonly struct SyntheticPoint {
-    internal SyntheticPoint(int x, int y, bool onCurve = true) {
+internal readonly struct SyntheticPoint
+{
+    internal SyntheticPoint(int x, int y, bool onCurve = true)
+    {
         X = x;
         Y = y;
         OnCurve = onCurve;
@@ -18,7 +20,8 @@ internal readonly struct SyntheticPoint {
 }
 
 /// <summary>The component transform a synthetic composite glyph declares.</summary>
-internal enum SyntheticComponentTransform {
+internal enum SyntheticComponentTransform
+{
     None,
     Scale,
     XAndYScale,
@@ -26,7 +29,8 @@ internal enum SyntheticComponentTransform {
 }
 
 /// <summary>One synthetic composite component.</summary>
-internal readonly struct SyntheticComponent {
+internal readonly struct SyntheticComponent
+{
     private SyntheticComponent(
         int glyphId,
         int offsetX,
@@ -38,7 +42,9 @@ internal readonly struct SyntheticComponent {
         SyntheticComponentTransform transform,
         bool wordArguments,
         bool scaledOffset,
-        bool pointMatched) {
+        bool pointMatched
+    )
+    {
         GlyphId = glyphId;
         OffsetX = offsetX;
         OffsetY = offsetY;
@@ -75,46 +81,52 @@ internal readonly struct SyntheticComponent {
     internal bool PointMatched { get; }
 
     /// <summary>Creates a translated component with 16-bit arguments.</summary>
-    internal static SyntheticComponent Translate(int glyphId, int offsetX, int offsetY) => new(
-        glyphId,
-        offsetX,
-        offsetY,
-        1f,
-        0f,
-        0f,
-        1f,
-        SyntheticComponentTransform.None,
-        wordArguments: true,
-        scaledOffset: false,
-        pointMatched: false);
+    internal static SyntheticComponent Translate(int glyphId, int offsetX, int offsetY) =>
+        new(
+            glyphId,
+            offsetX,
+            offsetY,
+            1f,
+            0f,
+            0f,
+            1f,
+            SyntheticComponentTransform.None,
+            wordArguments: true,
+            scaledOffset: false,
+            pointMatched: false
+        );
 
     /// <summary>Creates a component with 8-bit arguments.</summary>
-    internal static SyntheticComponent ByteArguments(int glyphId, sbyte offsetX, sbyte offsetY) => new(
-        glyphId,
-        offsetX,
-        offsetY,
-        1f,
-        0f,
-        0f,
-        1f,
-        SyntheticComponentTransform.None,
-        wordArguments: false,
-        scaledOffset: false,
-        pointMatched: false);
+    internal static SyntheticComponent ByteArguments(int glyphId, sbyte offsetX, sbyte offsetY) =>
+        new(
+            glyphId,
+            offsetX,
+            offsetY,
+            1f,
+            0f,
+            0f,
+            1f,
+            SyntheticComponentTransform.None,
+            wordArguments: false,
+            scaledOffset: false,
+            pointMatched: false
+        );
 
     /// <summary>Creates a uniformly scaled component with 16-bit arguments.</summary>
-    internal static SyntheticComponent Scale(int glyphId, int offsetX, int offsetY, float scale) => new(
-        glyphId,
-        offsetX,
-        offsetY,
-        scale,
-        0f,
-        0f,
-        scale,
-        SyntheticComponentTransform.Scale,
-        wordArguments: true,
-        scaledOffset: false,
-        pointMatched: false);
+    internal static SyntheticComponent Scale(int glyphId, int offsetX, int offsetY, float scale) =>
+        new(
+            glyphId,
+            offsetX,
+            offsetY,
+            scale,
+            0f,
+            0f,
+            scale,
+            SyntheticComponentTransform.Scale,
+            wordArguments: true,
+            scaledOffset: false,
+            pointMatched: false
+        );
 
     /// <summary>Creates a component with independent x and y scales.</summary>
     internal static SyntheticComponent ScaleXAndY(
@@ -122,7 +134,9 @@ internal readonly struct SyntheticComponent {
         int offsetX,
         int offsetY,
         float scaleX,
-        float scaleY) => new(
+        float scaleY
+    ) =>
+        new(
             glyphId,
             offsetX,
             offsetY,
@@ -133,7 +147,8 @@ internal readonly struct SyntheticComponent {
             SyntheticComponentTransform.XAndYScale,
             wordArguments: true,
             scaledOffset: false,
-            pointMatched: false);
+            pointMatched: false
+        );
 
     /// <summary>Creates a component with a full 2x2 transform and unscaled offsets.</summary>
     internal static SyntheticComponent TwoByTwo(
@@ -143,7 +158,9 @@ internal readonly struct SyntheticComponent {
         float a,
         float b,
         float c,
-        float d) => new(
+        float d
+    ) =>
+        new(
             glyphId,
             offsetX,
             offsetY,
@@ -154,7 +171,8 @@ internal readonly struct SyntheticComponent {
             SyntheticComponentTransform.TwoByTwo,
             wordArguments: true,
             scaledOffset: false,
-            pointMatched: false);
+            pointMatched: false
+        );
 
     /// <summary>Creates a component with a full 2x2 transform and scaled offsets.</summary>
     internal static SyntheticComponent TwoByTwoScaledOffsets(
@@ -164,7 +182,9 @@ internal readonly struct SyntheticComponent {
         float a,
         float b,
         float c,
-        float d) => new(
+        float d
+    ) =>
+        new(
             glyphId,
             offsetX,
             offsetY,
@@ -175,39 +195,46 @@ internal readonly struct SyntheticComponent {
             SyntheticComponentTransform.TwoByTwo,
             wordArguments: true,
             scaledOffset: true,
-            pointMatched: false);
+            pointMatched: false
+        );
 
     /// <summary>Creates a component that uses point-matched arguments.</summary>
-    internal static SyntheticComponent PointMatch(int glyphId) => new(
-        glyphId,
-        0,
-        0,
-        1f,
-        0f,
-        0f,
-        1f,
-        SyntheticComponentTransform.None,
-        wordArguments: true,
-        scaledOffset: false,
-        pointMatched: true);
+    internal static SyntheticComponent PointMatch(int glyphId) =>
+        new(
+            glyphId,
+            0,
+            0,
+            1f,
+            0f,
+            0f,
+            1f,
+            SyntheticComponentTransform.None,
+            wordArguments: true,
+            scaledOffset: false,
+            pointMatched: true
+        );
 }
 
 /// <summary>The outline source of one synthetic glyph.</summary>
-internal enum SyntheticGlyphKind {
+internal enum SyntheticGlyphKind
+{
     Simple,
     Empty,
     Composite,
 }
 
 /// <summary>One glyph of a synthetic face.</summary>
-internal sealed class SyntheticGlyph {
+internal sealed class SyntheticGlyph
+{
     private SyntheticGlyph(
         SyntheticGlyphKind kind,
         int advanceWidth,
         int leftSideBearing,
         SyntheticPoint[][] contours,
         SyntheticComponent[] components,
-        FontBounds? bounds) {
+        FontBounds? bounds
+    )
+    {
         Kind = kind;
         AdvanceWidth = advanceWidth;
         LeftSideBearing = leftSideBearing;
@@ -231,10 +258,17 @@ internal sealed class SyntheticGlyph {
     internal static SyntheticGlyph Simple(
         int advanceWidth,
         int leftSideBearing,
-        SyntheticPoint[][] contours) {
-        foreach (SyntheticPoint[] contour in contours) {
-            if (contour.Length == 0) {
-                throw new ArgumentException("A synthetic contour needs at least one point.", nameof(contours));
+        SyntheticPoint[][] contours
+    )
+    {
+        foreach (SyntheticPoint[] contour in contours)
+        {
+            if (contour.Length == 0)
+            {
+                throw new ArgumentException(
+                    "A synthetic contour needs at least one point.",
+                    nameof(contours)
+                );
             }
         }
 
@@ -244,26 +278,17 @@ internal sealed class SyntheticGlyph {
             leftSideBearing,
             contours,
             [],
-            null);
+            null
+        );
     }
 
-    internal static SyntheticGlyph Empty(int advanceWidth) => new(
-        SyntheticGlyphKind.Empty,
-        advanceWidth,
-        0,
-        [],
-        [],
-        null);
+    internal static SyntheticGlyph Empty(int advanceWidth) =>
+        new(SyntheticGlyphKind.Empty, advanceWidth, 0, [], [], null);
 
     internal static SyntheticGlyph Composite(
         int advanceWidth,
         int leftSideBearing,
         FontBounds? bounds,
-        SyntheticComponent[] components) => new(
-            SyntheticGlyphKind.Composite,
-            advanceWidth,
-            leftSideBearing,
-            [],
-            components,
-            bounds);
+        SyntheticComponent[] components
+    ) => new(SyntheticGlyphKind.Composite, advanceWidth, leftSideBearing, [], components, bounds);
 }

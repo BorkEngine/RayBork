@@ -8,7 +8,8 @@ namespace RayBork;
 /// to completion; their continuations resume on the tick thread unless
 /// <see cref="Task.ConfigureAwait(bool)"/> opts out.
 /// </remarks>
-public interface IGame {
+public interface IGame
+{
     /// <summary>
     /// Runs once before the first tick. This is where assets are loaded, shaders are configured, and
     /// render targets are created.

@@ -16,7 +16,8 @@ namespace RayBork.Internal;
 /// suitable; the renderer never falls back to one texture per draw, a smaller array, a min/max resolve,
 /// or an unsampleable depth view.
 /// </remarks>
-internal static class VulkanPhysicalDeviceSelector {
+internal static class VulkanPhysicalDeviceSelector
+{
     private const uint REQUIRED_API_VERSION = (1u << 22) | (2u << 12);
 
     /// <summary>
@@ -29,7 +30,8 @@ internal static class VulkanPhysicalDeviceSelector {
         && candidate.SupportsGraphicsQueue
         && candidate.SupportsPresentQueue
         && candidate.HasSwapchainExtension
-        && candidate.BindlessTextureCapacity >= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY
+        && candidate.BindlessTextureCapacity
+            >= VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY
         && string.IsNullOrEmpty(candidate.MissingBindlessFeatures)
         && VulkanDepthStencilResolve.SelectDepthResolveMode(candidate.SupportedDepthResolveModes)
             != ResolveModeFlags.None;
@@ -48,25 +50,34 @@ internal static class VulkanPhysicalDeviceSelector {
     /// No candidate is suitable. The message contains one line per rejected candidate naming the
     /// rejection reasons; the diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static int Select(IReadOnlyList<VulkanPhysicalDeviceCandidate> candidates) {
+    internal static int Select(IReadOnlyList<VulkanPhysicalDeviceCandidate> candidates)
+    {
         ArgumentNullException.ThrowIfNull(candidates);
 
         int bestIndex = -1;
         int bestRank = int.MaxValue;
         uint bestApiVersion = 0;
         StringBuilder rejected = new();
-        foreach (VulkanPhysicalDeviceCandidate candidate in candidates) {
-            if (!IsSuitable(candidate)) {
+        foreach (VulkanPhysicalDeviceCandidate candidate in candidates)
+        {
+            if (!IsSuitable(candidate))
+            {
                 rejected.AppendLine(DescribeRejection(candidate));
                 continue;
             }
 
             int rank = GetRank(candidate.DeviceType);
-            bool isBetter = bestIndex < 0
+            bool isBetter =
+                bestIndex < 0
                 || rank < bestRank
                 || (rank == bestRank && candidate.ApiVersion > bestApiVersion)
-                || (rank == bestRank && candidate.ApiVersion == bestApiVersion && candidate.Index < bestIndex);
-            if (!isBetter) {
+                || (
+                    rank == bestRank
+                    && candidate.ApiVersion == bestApiVersion
+                    && candidate.Index < bestIndex
+                );
+            if (!isBetter)
+            {
                 continue;
             }
 
@@ -75,66 +86,90 @@ internal static class VulkanPhysicalDeviceSelector {
             bestApiVersion = candidate.ApiVersion;
         }
 
-        if (bestIndex >= 0) {
+        if (bestIndex >= 0)
+        {
             return bestIndex;
         }
 
-        string detail = rejected.Length > 0
-            ? " No candidate qualifies:" + Environment.NewLine + rejected
-            : " The Vulkan loader reported no physical-device facts.";
+        string detail =
+            rejected.Length > 0
+                ? " No candidate qualifies:" + Environment.NewLine + rejected
+                : " The Vulkan loader reported no physical-device facts.";
         throw new GraphicsException(
             "No suitable Vulkan 1.2 physical device was found." + detail,
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
-    private static string DescribeRejection(in VulkanPhysicalDeviceCandidate candidate) {
+    private static string DescribeRejection(in VulkanPhysicalDeviceCandidate candidate)
+    {
         List<string> reasons = [];
-        if (candidate.ApiVersion < REQUIRED_API_VERSION) {
-            reasons.Add($"API {VulkanVersion.Format(candidate.ApiVersion)} is older than Vulkan 1.2");
+        if (candidate.ApiVersion < REQUIRED_API_VERSION)
+        {
+            reasons.Add(
+                $"API {VulkanVersion.Format(candidate.ApiVersion)} is older than Vulkan 1.2"
+            );
         }
 
-        if (!candidate.SupportsGraphicsQueue) {
+        if (!candidate.SupportsGraphicsQueue)
+        {
             reasons.Add("no graphics queue family");
         }
 
-        if (!candidate.SupportsPresentQueue) {
+        if (!candidate.SupportsPresentQueue)
+        {
             reasons.Add("no presentation queue family");
         }
 
-        if (!candidate.HasSwapchainExtension) {
+        if (!candidate.HasSwapchainExtension)
+        {
             reasons.Add("the VK_KHR_swapchain extension is missing");
         }
 
-        if (candidate.BindlessTextureCapacity < VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY) {
+        if (
+            candidate.BindlessTextureCapacity
+            < VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY
+        )
+        {
             reasons.Add(
                 "update-after-bind sampled-image capacity "
-                + $"{candidate.BindlessTextureCapacity.ToString(CultureInfo.InvariantCulture)} is below the "
-                + "required "
-                + $"{VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}");
+                    + $"{candidate.BindlessTextureCapacity.ToString(CultureInfo.InvariantCulture)} is below the "
+                    + "required "
+                    + $"{VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY.ToString(CultureInfo.InvariantCulture)}"
+            );
         }
 
-        if (!string.IsNullOrEmpty(candidate.MissingBindlessFeatures)) {
-            reasons.Add($"descriptor-indexing features missing: {candidate.MissingBindlessFeatures}");
+        if (!string.IsNullOrEmpty(candidate.MissingBindlessFeatures))
+        {
+            reasons.Add(
+                $"descriptor-indexing features missing: {candidate.MissingBindlessFeatures}"
+            );
         }
 
-        if (VulkanDepthStencilResolve.SelectDepthResolveMode(candidate.SupportedDepthResolveModes)
-            == ResolveModeFlags.None) {
+        if (
+            VulkanDepthStencilResolve.SelectDepthResolveMode(candidate.SupportedDepthResolveModes)
+            == ResolveModeFlags.None
+        )
+        {
             reasons.Add(
                 "no sample-zero depth/stencil resolve mode "
-                + $"({VulkanDepthStencilResolve.PROPERTY_NAME} is "
-                + $"{VulkanDepthStencilResolve.Describe(candidate.SupportedDepthResolveModes)}; need "
-                + $"{VulkanDepthStencilResolve.MODE_NAME})");
+                    + $"({VulkanDepthStencilResolve.PROPERTY_NAME} is "
+                    + $"{VulkanDepthStencilResolve.Describe(candidate.SupportedDepthResolveModes)}; need "
+                    + $"{VulkanDepthStencilResolve.MODE_NAME})"
+            );
         }
 
         return $"- [{candidate.Index}] {candidate.Name}: {string.Join("; ", reasons)}.";
     }
 
-    private static int GetRank(PhysicalDeviceType deviceType) => deviceType switch {
-        PhysicalDeviceType.DiscreteGpu => 0,
-        PhysicalDeviceType.IntegratedGpu => 1,
-        PhysicalDeviceType.VirtualGpu => 2,
-        PhysicalDeviceType.Cpu => 3,
-        _ => 4,
-    };
+    private static int GetRank(PhysicalDeviceType deviceType) =>
+        deviceType switch
+        {
+            PhysicalDeviceType.DiscreteGpu => 0,
+            PhysicalDeviceType.IntegratedGpu => 1,
+            PhysicalDeviceType.VirtualGpu => 2,
+            PhysicalDeviceType.Cpu => 3,
+            _ => 4,
+        };
 }

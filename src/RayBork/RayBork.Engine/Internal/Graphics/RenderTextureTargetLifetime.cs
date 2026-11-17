@@ -22,7 +22,8 @@ namespace RayBork.Internal;
 /// the one the public dimensions report.
 /// </para>
 /// </remarks>
-internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
+internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget
+{
     private readonly Lock _gate = new();
     private readonly Action<RenderTextureTargetLifetime> _queueDestruction;
     private int _frameHoldCount;
@@ -50,7 +51,9 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
         long targetId,
         RenderTextureDescription description,
         int sampleCount,
-        Action<RenderTextureTargetLifetime> queueDestruction) {
+        Action<RenderTextureTargetLifetime> queueDestruction
+    )
+    {
         ArgumentNullException.ThrowIfNull(queueDestruction);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(targetId);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleCount);
@@ -68,9 +71,12 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// Gets the current description of the target. A successful resize updates its width and height;
     /// the color format, depth flag, and requested sample count stay fixed for the target's lifetime.
     /// </summary>
-    internal RenderTextureDescription Description {
-        get {
-            lock (_gate) {
+    internal RenderTextureDescription Description
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _description;
             }
         }
@@ -82,9 +88,12 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// only after the render thread released the frame slot. Render-thread and tick-thread state
     /// guarded by the lifetime's lock.
     /// </summary>
-    internal bool IsInUse {
-        get {
-            lock (_gate) {
+    internal bool IsInUse
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _frameHoldCount > 0;
             }
         }
@@ -95,8 +104,10 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// color format, depth flag, and requested sample count must not change. Render-thread only.
     /// </summary>
     /// <param name="description">The description with the new width and height.</param>
-    internal void UpdateDescription(RenderTextureDescription description) {
-        lock (_gate) {
+    internal void UpdateDescription(RenderTextureDescription description)
+    {
+        lock (_gate)
+        {
             _description = description;
         }
     }
@@ -106,9 +117,12 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// a different fallback count, so the value is read from the lifetime rather than frozen on the
     /// public object.
     /// </summary>
-    internal int SampleCount {
-        get {
-            lock (_gate) {
+    internal int SampleCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _sampleCount;
             }
         }
@@ -119,9 +133,11 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// different fallback. Render-thread only.
     /// </summary>
     /// <param name="sampleCount">The new effective sample count.</param>
-    internal void SetSampleCount(int sampleCount) {
+    internal void SetSampleCount(int sampleCount)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(sampleCount);
-        lock (_gate) {
+        lock (_gate)
+        {
             _sampleCount = sampleCount;
         }
     }
@@ -131,8 +147,10 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// every live render target during shutdown, so a public <see cref="RenderTexture"/> that the game
     /// still holds reports <see cref="IsDisposed"/> and its later <c>Dispose</c> is a no-op.
     /// </summary>
-    internal void MarkDestroyed() {
-        lock (_gate) {
+    internal void MarkDestroyed()
+    {
+        lock (_gate)
+        {
             _disposed = true;
             _destroyQueued = true;
         }
@@ -142,18 +160,24 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// Gets whether the target is disposed: its owner reference was released, or the backend destroyed
     /// every live target at shutdown. It stays readable after disposal.
     /// </summary>
-    internal bool IsDisposed {
-        get {
-            lock (_gate) {
+    internal bool IsDisposed
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _disposed;
             }
         }
     }
 
     /// <summary>Gets the frame slot that last used the target, or <c>-1</c> when it was never used.</summary>
-    internal int LastUseFrameSlot {
-        get {
-            lock (_gate) {
+    internal int LastUseFrameSlot
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _lastUseFrameSlot;
             }
         }
@@ -164,8 +188,10 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// the previous slot's fence, before it records the frame.
     /// </summary>
     /// <param name="frameSlot">The current frame slot.</param>
-    internal void SetLastUseFrameSlot(int frameSlot) {
-        lock (_gate) {
+    internal void SetLastUseFrameSlot(int frameSlot)
+    {
+        lock (_gate)
+        {
             _lastUseFrameSlot = frameSlot;
         }
     }
@@ -174,10 +200,13 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
     /// Releases the owner reference. The target is queued for destruction once no frame hold remains.
     /// Idempotent.
     /// </summary>
-    internal void ReleaseOwner() {
+    internal void ReleaseOwner()
+    {
         bool queue;
-        lock (_gate) {
-            if (_disposed) {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return;
             }
 
@@ -185,15 +214,18 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
             queue = TryClaimDestructionLocked();
         }
 
-        if (queue) {
+        if (queue)
+        {
             _queueDestruction(this);
         }
     }
 
     /// <inheritdoc/>
     /// <exception cref="ObjectDisposedException">The owner reference was already released.</exception>
-    public void AddFrameHold() {
-        lock (_gate) {
+    public void AddFrameHold()
+    {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
             _frameHoldCount++;
@@ -202,26 +234,33 @@ internal sealed class RenderTextureTargetLifetime : IAssetRetentionTarget {
 
     /// <inheritdoc/>
     /// <exception cref="InvalidOperationException">The frame-hold count is already zero.</exception>
-    public void ReleaseFrameHold() {
+    public void ReleaseFrameHold()
+    {
         bool queue;
-        lock (_gate) {
-            if (_frameHoldCount <= 0) {
+        lock (_gate)
+        {
+            if (_frameHoldCount <= 0)
+            {
                 throw new InvalidOperationException(
                     "The render target frame-hold count is already zero; every frame hold is released "
-                        + "exactly once.");
+                        + "exactly once."
+                );
             }
 
             _frameHoldCount--;
             queue = TryClaimDestructionLocked();
         }
 
-        if (queue) {
+        if (queue)
+        {
             _queueDestruction(this);
         }
     }
 
-    private bool TryClaimDestructionLocked() {
-        if (!_disposed || _frameHoldCount != 0 || _destroyQueued) {
+    private bool TryClaimDestructionLocked()
+    {
+        if (!_disposed || _frameHoldCount != 0 || _destroyQueued)
+        {
             return false;
         }
 

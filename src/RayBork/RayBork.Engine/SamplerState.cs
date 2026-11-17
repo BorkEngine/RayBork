@@ -12,4 +12,5 @@ namespace RayBork;
 public readonly record struct SamplerState(
     TextureFilter Filter,
     TextureWrap Wrap,
-    float MaxAnisotropy = 1f);
+    float MaxAnisotropy = 1f
+);

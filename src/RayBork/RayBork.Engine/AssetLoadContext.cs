@@ -19,7 +19,8 @@ namespace RayBork;
 /// requests the asset type and path it is currently loading instead of queueing the request forever.
 /// </para>
 /// </remarks>
-public sealed class AssetLoadContext {
+public sealed class AssetLoadContext
+{
     private readonly AssetCatalog _catalog;
     private readonly string _canonicalPath;
     private readonly LoadChain? _chain;
@@ -43,7 +44,9 @@ public sealed class AssetLoadContext {
         string canonicalPath,
         byte[] payload,
         LoadChain? chain,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken
+    )
+    {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(canonicalPath);
         ArgumentNullException.ThrowIfNull(payload);
@@ -87,8 +90,11 @@ public sealed class AssetLoadContext {
     /// <exception cref="AssetLoadException">The payload is corrupt or a nested load fails.</exception>
     /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
     /// <exception cref="OperationCanceledException">The context token is canceled.</exception>
-    public Task<T> LoadAsync<T>(string path, CancellationToken cancellationToken = default) {
-        CancellationToken token = cancellationToken.CanBeCanceled ? cancellationToken : CancellationToken;
+    public Task<T> LoadAsync<T>(string path, CancellationToken cancellationToken = default)
+    {
+        CancellationToken token = cancellationToken.CanBeCanceled
+            ? cancellationToken
+            : CancellationToken;
         return _catalog.LoadCore<T>(path, _chain, token);
     }
 
@@ -107,8 +113,11 @@ public sealed class AssetLoadContext {
     /// <exception cref="AssetLoadException">The payload is corrupt or exceeds the supported size.</exception>
     /// <exception cref="ObjectDisposedException">The catalog is disposed.</exception>
     /// <exception cref="OperationCanceledException">The context token is canceled.</exception>
-    public Task<byte[]> LoadDataAsync(string path, CancellationToken cancellationToken = default) {
-        CancellationToken token = cancellationToken.CanBeCanceled ? cancellationToken : CancellationToken;
+    public Task<byte[]> LoadDataAsync(string path, CancellationToken cancellationToken = default)
+    {
+        CancellationToken token = cancellationToken.CanBeCanceled
+            ? cancellationToken
+            : CancellationToken;
         return _catalog.LoadData(path, token);
     }
 

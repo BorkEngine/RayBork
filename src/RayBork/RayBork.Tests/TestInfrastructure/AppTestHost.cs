@@ -8,7 +8,8 @@ namespace RayBork.Tests;
 /// fast tick loop, so lifecycle tests do not touch SDL or the GPU. The default logger is silent
 /// unless a test asks for the real default factory.
 /// </summary>
-internal sealed class AppTestHost : IDisposable {
+internal sealed class AppTestHost : IDisposable
+{
     internal const int FAST_TARGET_FPS = 1000;
     internal static readonly TimeSpan TIMEOUT = TimeSpan.FromSeconds(10);
 
@@ -20,7 +21,9 @@ internal sealed class AppTestHost : IDisposable {
         int targetFps = FAST_TARGET_FPS,
         double maxDeltaTime = 0.25,
         FakeRendererBackend? rendererBackend = null,
-        Action<RayBorkAppBuilder>? configure = null) {
+        Action<RayBorkAppBuilder>? configure = null
+    )
+    {
         ArgumentNullException.ThrowIfNull(game);
 
         Game = game;
@@ -32,9 +35,12 @@ internal sealed class AppTestHost : IDisposable {
             .WithMaxDeltaTime(maxDeltaTime)
             .WithLogLevel(logLevel);
 
-        if (loggerFactory is not null) {
+        if (loggerFactory is not null)
+        {
             builder = builder.WithLoggerFactory(loggerFactory);
-        } else if (!useDefaultLoggerFactory) {
+        }
+        else if (!useDefaultLoggerFactory)
+        {
             builder = builder.WithLoggerFactory(NullLoggerFactory.Instance);
         }
 

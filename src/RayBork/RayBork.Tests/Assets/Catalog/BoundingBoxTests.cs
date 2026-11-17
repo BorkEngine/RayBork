@@ -2,10 +2,12 @@ using System.Numerics;
 
 namespace RayBork.Tests.Assets.Catalog;
 
-public sealed class BoundingBoxTests {
+public sealed class BoundingBoxTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MinAndMaxRoundTripAndEqualityComparesBothCorners() {
+    public void MinAndMaxRoundTripAndEqualityComparesBothCorners()
+    {
         BoundingBox box = new(new Vector3(1f, 2f, 3f), new Vector3(4f, 5f, 6f));
         BoundingBox same = new(new Vector3(1f, 2f, 3f), new Vector3(4f, 5f, 6f));
         BoundingBox differentMin = new(new Vector3(0f, 2f, 3f), new Vector3(4f, 5f, 6f));

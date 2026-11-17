@@ -28,7 +28,8 @@ namespace RayBork.Internal;
 /// the rune to the next mapped glyph.
 /// </para>
 /// </remarks>
-internal interface ITextMetrics {
+internal interface ITextMetrics
+{
     /// <summary>
     /// Gets the baseline-to-baseline distance in em units, including the line gap. It must be positive.
     /// </summary>

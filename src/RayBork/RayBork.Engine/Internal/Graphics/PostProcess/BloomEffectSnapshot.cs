@@ -31,11 +31,15 @@ namespace RayBork.Internal;
 /// and target arrays across cameras.
 /// </para>
 /// </remarks>
-internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
-    private readonly PostProcessInstanceRecord[] _instanceLayout =
-        new PostProcessInstanceRecord[BloomPyramid.MAX_PASSES];
+internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot
+{
+    private readonly PostProcessInstanceRecord[] _instanceLayout = new PostProcessInstanceRecord[
+        BloomPyramid.MAX_PASSES
+    ];
     private readonly Extent2D[] _levels = new Extent2D[BloomPyramid.MAX_LEVELS];
-    private readonly VulkanPostTarget?[] _downsampleTargets = new VulkanPostTarget?[BloomPyramid.MAX_LEVELS];
+    private readonly VulkanPostTarget?[] _downsampleTargets = new VulkanPostTarget?[
+        BloomPyramid.MAX_LEVELS
+    ];
 
     private EngineAsset? _prefilterProgram;
     private EngineAsset? _downsampleProgram;
@@ -52,8 +56,7 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
     private int _tintOffset;
     private int _intensityOffset;
 
-    private BloomEffectSnapshot() {
-    }
+    private BloomEffectSnapshot() { }
 
     /// <summary>Gets the frozen threshold.</summary>
     internal float Threshold => _settings.Threshold;
@@ -86,7 +89,9 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
     internal static BloomEffectSnapshot Rent(
         PostProcessEffect owner,
         BloomSettings settings,
-        BloomAssets assets) {
+        BloomAssets assets
+    )
+    {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(assets);
         ObjectDisposedException.ThrowIf(assets.IsDisposed, assets);
@@ -100,19 +105,23 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         ObjectDisposedException.ThrowIf(upsample.IsDisposed, upsample);
         ObjectDisposedException.ThrowIf(composite.IsDisposed, composite);
 
-        BloomEffectSnapshot snapshot =
-            owner.TakeSnapshot<BloomEffectSnapshot>() ?? new BloomEffectSnapshot();
+        BloomEffectSnapshot snapshot = owner.TakeSnapshot<BloomEffectSnapshot>()
+            ?? new BloomEffectSnapshot();
         snapshot.Fill(settings, prefilter, downsample, upsample, composite);
         return snapshot;
     }
 
     /// <inheritdoc/>
-    internal override void Retain(FrameAssetRetention retention) {
+    internal override void Retain(FrameAssetRetention retention)
+    {
         ArgumentNullException.ThrowIfNull(retention);
-        if (_prefilterProgram is null
+        if (
+            _prefilterProgram is null
             || _downsampleProgram is null
             || _upsampleProgram is null
-            || _compositeProgram is null) {
+            || _compositeProgram is null
+        )
+        {
             return;
         }
 
@@ -123,7 +132,8 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
     }
 
     /// <inheritdoc/>
-    protected override void ReleaseState() {
+    protected override void ReleaseState()
+    {
         _prefilterProgram = null;
         _downsampleProgram = null;
         _upsampleProgram = null;
@@ -144,7 +154,8 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
     }
 
     /// <inheritdoc/>
-    internal override void Run(PostProcessContext context) {
+    internal override void Run(PostProcessContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
         EngineAsset prefilterProgram = _prefilterProgram
             ?? throw new InvalidOperationException("The bloom snapshot ran after it was reset.");
@@ -160,26 +171,32 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         int levelCount = BloomPyramid.BuildLevels(
             checked((int)context.Extent.Width),
             checked((int)context.Extent.Height),
-            _levels);
+            _levels
+        );
 
         Pipeline prefilterPipeline = context.GetOrCreateFullscreenPipeline(
             prefilterProgram,
-            PostProcessContext.FullscreenRenderState);
+            PostProcessContext.FullscreenRenderState
+        );
         Pipeline compositePipeline = context.GetOrCreateFullscreenPipeline(
             compositeProgram,
-            PostProcessContext.FullscreenRenderState);
+            PostProcessContext.FullscreenRenderState
+        );
 
         // A one-level pyramid is only the prefilter and the composite; do not create the downsample and
         // upsample pipelines when the target collapses to that case.
         Pipeline downsamplePipeline = default;
         Pipeline upsamplePipeline = default;
-        if (levelCount > 1) {
+        if (levelCount > 1)
+        {
             downsamplePipeline = context.GetOrCreateFullscreenPipeline(
                 downsampleProgram,
-                PostProcessContext.FullscreenRenderState);
+                PostProcessContext.FullscreenRenderState
+            );
             upsamplePipeline = context.GetOrCreateFullscreenPipeline(
                 upsampleProgram,
-                PostProcessContext.FullscreenRenderState);
+                PostProcessContext.FullscreenRenderState
+            );
         }
 
         VulkanPostTarget current = context.RentColorTarget(_levels[0]);
@@ -187,26 +204,30 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         context.CompleteAuxiliaryTarget(current);
         _downsampleTargets[0] = current;
 
-        for (int level = 1; level < levelCount; level++) {
+        for (int level = 1; level < levelCount; level++)
+        {
             VulkanPostTarget downsampled = context.RentColorTarget(_levels[level]);
             RecordDownsample(
                 context,
                 downsampled,
                 downsamplePipeline,
-                _downsampleTargets[level - 1]!.BindlessSlot);
+                _downsampleTargets[level - 1]!.BindlessSlot
+            );
             context.CompleteAuxiliaryTarget(downsampled);
             _downsampleTargets[level] = downsampled;
         }
 
         VulkanPostTarget bloom = _downsampleTargets[levelCount - 1]!;
-        for (int level = levelCount - 2; level >= 0; level--) {
+        for (int level = levelCount - 2; level >= 0; level--)
+        {
             VulkanPostTarget upsampled = context.RentColorTarget(_levels[level]);
             RecordUpsample(
                 context,
                 upsampled,
                 upsamplePipeline,
                 bloom.BindlessSlot,
-                _downsampleTargets[level]!.BindlessSlot);
+                _downsampleTargets[level]!.BindlessSlot
+            );
             context.CompleteAuxiliaryTarget(upsampled);
             bloom = upsampled;
         }
@@ -221,7 +242,9 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         ShaderProgram prefilter,
         ShaderProgram downsample,
         ShaderProgram upsample,
-        ShaderProgram composite) {
+        ShaderProgram composite
+    )
+    {
         _settings = settings;
         _prefilterProgram = prefilter.Lifetime;
         _downsampleProgram = downsample.Lifetime;
@@ -239,11 +262,13 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
 
         int index = 0;
         _instanceLayout[index++] = new PostProcessInstanceRecord(_prefilterStride, 1);
-        for (int level = 1; level < BloomPyramid.MAX_LEVELS; level++) {
+        for (int level = 1; level < BloomPyramid.MAX_LEVELS; level++)
+        {
             _instanceLayout[index++] = new PostProcessInstanceRecord(_downsampleStride, 1);
         }
 
-        for (int level = 1; level < BloomPyramid.MAX_LEVELS; level++) {
+        for (int level = 1; level < BloomPyramid.MAX_LEVELS; level++)
+        {
             _instanceLayout[index++] = new PostProcessInstanceRecord(_upsampleStride, 1);
         }
 
@@ -254,7 +279,9 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         PostProcessContext context,
         VulkanPostTarget destination,
         Pipeline pipeline,
-        uint sourceSlot) {
+        uint sourceSlot
+    )
+    {
         ulong offset = context.ReserveInstanceRecord(_prefilterStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _prefilterStride);
         WriteHeader(record);
@@ -268,7 +295,9 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         PostProcessContext context,
         VulkanPostTarget destination,
         Pipeline pipeline,
-        uint sourceSlot) {
+        uint sourceSlot
+    )
+    {
         ulong offset = context.ReserveInstanceRecord(_downsampleStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _downsampleStride);
         WriteHeader(record);
@@ -281,7 +310,9 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         VulkanPostTarget destination,
         Pipeline pipeline,
         uint coarseSlot,
-        uint fineSlot) {
+        uint fineSlot
+    )
+    {
         ulong offset = context.ReserveInstanceRecord(_upsampleStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _upsampleStride);
         WriteHeader(record);
@@ -289,7 +320,8 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         WriteUInt32(
             record,
             ShaderAbiLayout.TEXTURE_INDEX_START + ShaderAbiLayout.TEXTURE_INDEX_SIZE,
-            fineSlot);
+            fineSlot
+        );
         WriteSingle(record, _scatterOffset, _settings.Scatter);
         context.RecordFullscreenPass(destination, pipeline, offset, _upsampleStride);
     }
@@ -299,7 +331,9 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         VulkanPostTarget destination,
         Pipeline pipeline,
         uint sourceSlot,
-        uint bloomSlot) {
+        uint bloomSlot
+    )
+    {
         ulong offset = context.ReserveInstanceRecord(_compositeStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _compositeStride);
         WriteHeader(record);
@@ -307,31 +341,42 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         WriteUInt32(
             record,
             ShaderAbiLayout.TEXTURE_INDEX_START + ShaderAbiLayout.TEXTURE_INDEX_SIZE,
-            bloomSlot);
+            bloomSlot
+        );
         WriteVector4(
             record,
             _tintOffset,
-            new Vector4(_settings.Tint.R, _settings.Tint.G, _settings.Tint.B, _settings.Tint.A));
+            new Vector4(_settings.Tint.R, _settings.Tint.G, _settings.Tint.B, _settings.Tint.A)
+        );
         WriteSingle(record, _intensityOffset, _settings.Intensity);
         context.RecordFullscreenPass(destination, pipeline, offset, _compositeStride);
     }
 
-    private static int UniformOffset(ShaderProgram program, string name) {
-        if (!program.UniformsByName.TryGetValue(name, out ShaderAbiUniform uniform)) {
+    private static int UniformOffset(ShaderProgram program, string name)
+    {
+        if (!program.UniformsByName.TryGetValue(name, out ShaderAbiUniform uniform))
+        {
             throw new InvalidOperationException(
-                $"The built-in bloom shader '{program.Path}' does not declare the required uniform '{name}'.");
+                $"The built-in bloom shader '{program.Path}' does not declare the required uniform '{name}'."
+            );
         }
 
         return uniform.Offset;
     }
 
-    private static void WriteHeader(Span<byte> record) {
-        VulkanInstanceRecordWriter.WriteMatrix(record, ShaderAbiLayout.TRANSFORM_OFFSET, Matrix4x4.Identity);
+    private static void WriteHeader(Span<byte> record)
+    {
+        VulkanInstanceRecordWriter.WriteMatrix(
+            record,
+            ShaderAbiLayout.TRANSFORM_OFFSET,
+            Matrix4x4.Identity
+        );
         VulkanInstanceRecordWriter.WriteVector4(record, ShaderAbiLayout.COLOR_OFFSET, Vector4.One);
         VulkanInstanceRecordWriter.WriteVector4(
             record,
             ShaderAbiLayout.UV_RECT_OFFSET,
-            new Vector4(0f, 0f, 1f, 1f));
+            new Vector4(0f, 0f, 1f, 1f)
+        );
     }
 
     private static void WriteVector4(Span<byte> record, int offset, Vector4 value) =>

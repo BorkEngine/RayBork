@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <RootNamespace>RayBork</RootNamespace>
         <IsAotCompatible>true</IsAotCompatible>
@@ -16,7 +15,10 @@
 
     <ItemGroup>
         <!-- Committed SPIR-V blobs are build inputs; the runtime never runs glslc. -->
-        <EmbeddedResource Include="Shaders\*.spv" LogicalName="RayBork.Shaders.%(Filename)%(Extension)" />
+        <EmbeddedResource
+            Include="Shaders\*.spv"
+            LogicalName="RayBork.Shaders.%(Filename)%(Extension)"
+        />
     </ItemGroup>
 
     <ItemGroup>
@@ -35,5 +37,4 @@
          generated pack is compiled into this assembly, so the engine needs no pack file, tooling,
          shader compiler, or filesystem I/O at startup. -->
     <Import Project="..\..\..\build\RayBork.BuiltInAssets.targets" />
-
 </Project>

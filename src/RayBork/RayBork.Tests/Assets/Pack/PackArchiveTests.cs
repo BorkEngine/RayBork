@@ -3,14 +3,16 @@ using RayBork.Internal;
 
 namespace RayBork.Tests.Assets;
 
-public sealed class PackArchiveTests {
+public sealed class PackArchiveTests
+{
     private const string DISPLAY_PATH = "corrupt.pck";
     private const int THREAD_COUNT = 8;
     private const int READ_COUNT = 25;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OpenFromMemoryExposesEntryMetadata() {
+    public void OpenFromMemoryExposesEntryMetadata()
+    {
         byte[] pack = PackTestData.BuildStandardPack();
 
         using PackArchive archive = Open(pack);
@@ -30,7 +32,8 @@ public sealed class PackArchiveTests {
         Assert.Equal(5u, settings.UncompressedSize);
         Assert.Equal(
             PackCompression.ComputePayloadHash(PackTestData.SettingsPayload),
-            settings.StoredHash);
+            settings.StoredHash
+        );
 
         PackEntry mesh = archive.Entries[1];
         Assert.Equal(PackTestData.MESH_PATH, mesh.Path);
@@ -48,7 +51,8 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TryGetEntryFindsKnownAndAbsentPaths() {
+    public void TryGetEntryFindsKnownAndAbsentPaths()
+    {
         using PackArchive archive = Open(PackTestData.BuildStandardPack());
 
         Assert.True(archive.TryGetEntry(PackTestData.SETTINGS_PATH, out PackEntry? settings));
@@ -60,7 +64,8 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReadPayloadReturnsAFreshArrayEachTime() {
+    public void ReadPayloadReturnsAFreshArrayEachTime()
+    {
         byte[] pack = PackTestData.BuildStandardPack(PackCompressionPolicy.Release);
         using PackArchive archive = Open(pack);
         PackEntry entry = archive.Entries[2];
@@ -77,7 +82,8 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReadPayloadRejectsForeignEntries() {
+    public void ReadPayloadRejectsForeignEntries()
+    {
         byte[] pack = PackTestData.BuildStandardPack();
         using PackArchive archive = Open(pack);
         using PackArchive other = PackArchive.Open(pack.AsMemory(), "other.pck");
@@ -90,7 +96,8 @@ public sealed class PackArchiveTests {
             real.StoredLength,
             real.UncompressedSize,
             real.Alignment,
-            real.StoredHash);
+            real.StoredHash
+        );
 
         Assert.Throws<ArgumentException>(() => archive.ReadPayload(copy));
         Assert.Throws<ArgumentException>(() => other.ReadPayload(real));
@@ -99,7 +106,8 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConcurrentPayloadReadsAreSafe() {
+    public void ConcurrentPayloadReadsAreSafe()
+    {
         byte[] pack = PackTestData.BuildStandardPack(PackCompressionPolicy.Release);
         using PackArchive archive = Open(pack);
         PackEntry[] entries = archive.Entries.ToArray();
@@ -107,29 +115,40 @@ public sealed class PackArchiveTests {
 
         var failures = new ConcurrentQueue<Exception>();
         var threads = new Thread[THREAD_COUNT];
-        for (int i = 0; i < threads.Length; i++) {
-            threads[i] = new Thread(() => {
-                try {
-                    for (int read = 0; read < READ_COUNT; read++) {
-                        for (int entry = 0; entry < entries.Length; entry++) {
+        for (int i = 0; i < threads.Length; i++)
+        {
+            threads[i] = new Thread(() =>
+            {
+                try
+                {
+                    for (int read = 0; read < READ_COUNT; read++)
+                    {
+                        for (int entry = 0; entry < entries.Length; entry++)
+                        {
                             byte[] payload = archive.ReadPayload(entries[entry]);
-                            if (!payload.AsSpan().SequenceEqual(expected[entry])) {
+                            if (!payload.AsSpan().SequenceEqual(expected[entry]))
+                            {
                                 throw new InvalidOperationException(
-                                    $"Concurrent read of '{entries[entry].Path}' returned different bytes.");
+                                    $"Concurrent read of '{entries[entry].Path}' returned different bytes."
+                                );
                             }
                         }
                     }
-                } catch (Exception exception) {
+                }
+                catch (Exception exception)
+                {
                     failures.Enqueue(exception);
                 }
             });
         }
 
-        foreach (Thread thread in threads) {
+        foreach (Thread thread in threads)
+        {
             thread.Start();
         }
 
-        foreach (Thread thread in threads) {
+        foreach (Thread thread in threads)
+        {
             thread.Join();
         }
 
@@ -138,20 +157,23 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeIsIdempotentAndRejectsUseAfterDispose() {
+    public void DisposeIsIdempotentAndRejectsUseAfterDispose()
+    {
         PackArchive archive = Open(PackTestData.BuildStandardPack());
         PackEntry entry = archive.Entries[0];
         archive.Dispose();
         archive.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => archive.ReadPayload(entry));
-        Assert.Throws<ObjectDisposedException>(
-            () => archive.TryGetEntry(PackTestData.SETTINGS_PATH, out _));
+        Assert.Throws<ObjectDisposedException>(() =>
+            archive.TryGetEntry(PackTestData.SETTINGS_PATH, out _)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OpenFromFileReadsThroughTheMemoryMap() {
+    public void OpenFromFileReadsThroughTheMemoryMap()
+    {
         using var directory = new TempPackDirectory();
         string path = directory.GetPath("assets.pck");
         PackTestData.CreateStandardBuilder(PackCompressionPolicy.Release).Write(path);
@@ -168,7 +190,8 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingOrUnreadableFileIsRb1001() {
+    public void MissingOrUnreadableFileIsRb1001()
+    {
         using var directory = new TempPackDirectory();
         string missing = directory.GetPath("missing.pck");
         string empty = directory.GetPath("empty.pck");
@@ -176,30 +199,35 @@ public sealed class PackArchiveTests {
         File.WriteAllBytes(empty, []);
         File.WriteAllBytes(truncated, new byte[20]);
 
-        AssetPackException missingException = Assert.Throws<AssetPackException>(
-            () => PackArchive.Open(missing));
+        AssetPackException missingException = Assert.Throws<AssetPackException>(() =>
+            PackArchive.Open(missing)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_PACK_READ_FAILED, missingException.DiagnosticCode);
         Assert.Contains(missing, missingException.Message);
 
-        AssetPackException emptyException = Assert.Throws<AssetPackException>(
-            () => PackArchive.Open(empty));
+        AssetPackException emptyException = Assert.Throws<AssetPackException>(() =>
+            PackArchive.Open(empty)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_PACK_READ_FAILED, emptyException.DiagnosticCode);
 
-        AssetPackException truncatedException = Assert.Throws<AssetPackException>(
-            () => PackArchive.Open(truncated));
+        AssetPackException truncatedException = Assert.Throws<AssetPackException>(() =>
+            PackArchive.Open(truncated)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_PACK_READ_FAILED, truncatedException.DiagnosticCode);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OpenFileRejectsNullEmptyAndWhitespacePaths() {
+    public void OpenFileRejectsNullEmptyAndWhitespacePaths()
+    {
         Assert.Throws<ArgumentNullException>(() => PackArchive.Open((string)null!));
         Assert.Throws<ArgumentException>(() => PackArchive.Open(" "));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OpenMemoryRequiresADisplayPath() {
+    public void OpenMemoryRequiresADisplayPath()
+    {
         byte[] pack = PackTestData.BuildStandardPack();
 
         Assert.Throws<ArgumentNullException>(() => PackArchive.Open(pack.AsMemory(), null!));
@@ -209,21 +237,25 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryTruncatedHeaderLengthIsRb1001() {
+    public void EveryTruncatedHeaderLengthIsRb1001()
+    {
         byte[] pack = PackTestData.BuildStandardPack();
 
-        for (int length = 0; length < PackFormat.PREFIX_LENGTH; length++) {
+        for (int length = 0; length < PackFormat.PREFIX_LENGTH; length++)
+        {
             byte[] truncated = pack[..length];
             AssetPackException exception = AssertOpenFails(
                 truncated,
-                DiagnosticCodes.ASSET_PACK_READ_FAILED);
+                DiagnosticCodes.ASSET_PACK_READ_FAILED
+            );
             Assert.Contains(DISPLAY_PATH, exception.Message);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TruncatedIndexIsRb1001() {
+    public void TruncatedIndexIsRb1001()
+    {
         var editor = new PackTestPack(PackTestData.BuildStandardPack());
         editor.SetHeaderUInt32(PackFormat.INDEX_LENGTH_OFFSET, (uint)editor.Bytes.Length);
 
@@ -232,12 +264,14 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BadMagicOrVersionIsRb1002() {
+    public void BadMagicOrVersionIsRb1002()
+    {
         byte[] badMagic = PackTestData.BuildStandardPack();
         badMagic[0] = (byte)'X';
         AssetPackException magicException = AssertOpenFails(
             badMagic,
-            DiagnosticCodes.ASSET_PACK_UNSUPPORTED_VERSION);
+            DiagnosticCodes.ASSET_PACK_UNSUPPORTED_VERSION
+        );
         Assert.Contains("magic", magicException.Message);
 
         var versionEditor = new PackTestPack(PackTestData.BuildStandardPack());
@@ -247,12 +281,14 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NonZeroHeaderFlagsOrReservedIsRb1002() {
+    public void NonZeroHeaderFlagsOrReservedIsRb1002()
+    {
         var flagsEditor = new PackTestPack(PackTestData.BuildStandardPack());
         flagsEditor.SetHeaderUInt32(PackFormat.FLAGS_OFFSET, 1);
         AssetPackException flagsException = AssertOpenFails(
             flagsEditor.Bytes,
-            DiagnosticCodes.ASSET_PACK_UNSUPPORTED_VERSION);
+            DiagnosticCodes.ASSET_PACK_UNSUPPORTED_VERSION
+        );
         Assert.Contains("flags", flagsException.Message);
 
         var reservedEditor = new PackTestPack(PackTestData.BuildStandardPack());
@@ -262,11 +298,10 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void HeaderEntryCountAndIndexFieldsAreValidated() {
+    public void HeaderEntryCountAndIndexFieldsAreValidated()
+    {
         var countEditor = new PackTestPack(PackTestData.BuildStandardPack());
-        countEditor.SetHeaderUInt32(
-            PackFormat.ENTRY_COUNT_OFFSET,
-            PackFormat.MAX_ENTRY_COUNT + 1);
+        countEditor.SetHeaderUInt32(PackFormat.ENTRY_COUNT_OFFSET, PackFormat.MAX_ENTRY_COUNT + 1);
         AssertOpenFails(countEditor.Bytes, DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
 
         var offsetEditor = new PackTestPack(PackTestData.BuildStandardPack());
@@ -276,25 +311,29 @@ public sealed class PackArchiveTests {
         var lengthEditor = new PackTestPack(PackTestData.BuildStandardPack());
         lengthEditor.SetHeaderUInt32(
             PackFormat.INDEX_LENGTH_OFFSET,
-            PackFormat.MAX_INDEX_LENGTH + 1);
+            PackFormat.MAX_INDEX_LENGTH + 1
+        );
         AssertOpenFails(lengthEditor.Bytes, DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void IndexHashMismatchIsRb1004() {
+    public void IndexHashMismatchIsRb1004()
+    {
         var editor = new PackTestPack(PackTestData.BuildStandardPack());
         editor.CorruptIndexHash();
 
         AssetPackException exception = AssertOpenFails(
             editor.Bytes,
-            DiagnosticCodes.ASSET_PACK_INDEX_HASH_MISMATCH);
+            DiagnosticCodes.ASSET_PACK_INDEX_HASH_MISMATCH
+        );
         Assert.Contains("index hash", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EntryCountMismatchIsRb1003() {
+    public void EntryCountMismatchIsRb1003()
+    {
         byte[] pack = BuildSmallPathPack();
 
         var larger = new PackTestPack((byte[])pack.Clone());
@@ -305,37 +344,43 @@ public sealed class PackArchiveTests {
         smaller.SetHeaderUInt32(PackFormat.ENTRY_COUNT_OFFSET, 2);
         AssetPackException exception = AssertOpenFails(
             smaller.Bytes,
-            DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
+            DiagnosticCodes.ASSET_PACK_INVALID_INDEX
+        );
         Assert.Contains("trailing bytes", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NonCanonicalIndexPathIsRb1003() {
+    public void NonCanonicalIndexPathIsRb1003()
+    {
         var editor = new PackTestPack(BuildSmallPathPack());
         editor.SetPath("aaa", "AAA");
 
         AssetPackException exception = AssertOpenFails(
             editor.Bytes,
-            DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
+            DiagnosticCodes.ASSET_PACK_INVALID_INDEX
+        );
         Assert.Contains("not canonical", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnsortedIndexIsRb1003() {
+    public void UnsortedIndexIsRb1003()
+    {
         var editor = new PackTestPack(BuildSmallPathPack());
         editor.SetPath("aaa", "zzz");
 
         AssetPackException exception = AssertOpenFails(
             editor.Bytes,
-            DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
+            DiagnosticCodes.ASSET_PACK_INVALID_INDEX
+        );
         Assert.Contains("sorts before", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MalformedUtf8IndexPathIsRb1003() {
+    public void MalformedUtf8IndexPathIsRb1003()
+    {
         var editor = new PackTestPack(BuildSmallPathPack());
         PackTestEntryLocation location = editor.FindEntry("aaa");
         editor.Bytes[location.PathOffset + 2] = 0xFF;
@@ -343,37 +388,43 @@ public sealed class PackArchiveTests {
 
         AssetPackException exception = AssertOpenFails(
             editor.Bytes,
-            DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
+            DiagnosticCodes.ASSET_PACK_INVALID_INDEX
+        );
         Assert.Contains("UTF-8", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownEntryTypeMessageNamesTheEntryPath() {
+    public void UnknownEntryTypeMessageNamesTheEntryPath()
+    {
         var editor = new PackTestPack(BuildSmallPathPack());
         editor.SetField("bbb", PackTestEntryField.Type, 99);
 
         AssetPackException exception = AssertOpenFails(
             editor.Bytes,
-            DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
+            DiagnosticCodes.ASSET_PACK_INVALID_INDEX
+        );
         Assert.Contains("bbb", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateIndexPathIsRb1003() {
+    public void DuplicateIndexPathIsRb1003()
+    {
         var editor = new PackTestPack(BuildSmallPathPack());
         editor.SetPath("bbb", "aaa");
 
         AssetPackException exception = AssertOpenFails(
             editor.Bytes,
-            DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
+            DiagnosticCodes.ASSET_PACK_INVALID_INDEX
+        );
         Assert.Contains("duplicate asset path", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownTypeFlagAndAlignmentFieldsAreRb1003() {
+    public void UnknownTypeFlagAndAlignmentFieldsAreRb1003()
+    {
         var typeEditor = new PackTestPack(BuildSmallPathPack());
         typeEditor.SetField("aaa", PackTestEntryField.Type, 99);
         AssertOpenFails(typeEditor.Bytes, DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
@@ -393,19 +444,22 @@ public sealed class PackArchiveTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UncompressedLengthMismatchIsRb1003() {
+    public void UncompressedLengthMismatchIsRb1003()
+    {
         var editor = new PackTestPack(BuildSmallPathPack());
         editor.SetField("aaa", PackTestEntryField.UncompressedSize, 2);
 
         AssetPackException exception = AssertOpenFails(
             editor.Bytes,
-            DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
+            DiagnosticCodes.ASSET_PACK_INVALID_INDEX
+        );
         Assert.Contains("stored length", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PayloadOffsetsAndBoundsAreValidated() {
+    public void PayloadOffsetsAndBoundsAreValidated()
+    {
         byte[] pack = BuildSmallPathPack();
 
         var beforeData = new PackTestPack((byte[])pack.Clone());
@@ -413,10 +467,7 @@ public sealed class PackArchiveTests {
         AssertOpenFails(beforeData.Bytes, DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
 
         var pastEnd = new PackTestPack((byte[])pack.Clone());
-        pastEnd.SetField(
-            "aaa",
-            PackTestEntryField.Offset,
-            (ulong)pack.Length + 1);
+        pastEnd.SetField("aaa", PackTestEntryField.Offset, (ulong)pack.Length + 1);
         AssertOpenFails(pastEnd.Bytes, DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
 
         var alignedBuilder = new PackBuilder("paths.pck", PackCompressionPolicy.Debug);
@@ -427,20 +478,24 @@ public sealed class PackArchiveTests {
         AssertOpenFails(alignmentEditor.Bytes, DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
 
         var storedPastEnd = new PackTestPack(
-            PackTestData.BuildStandardPack(PackCompressionPolicy.Release));
+            PackTestData.BuildStandardPack(PackCompressionPolicy.Release)
+        );
         ulong textureOffset = storedPastEnd.GetField(
             PackTestData.TEXTURE_PATH,
-            PackTestEntryField.Offset);
+            PackTestEntryField.Offset
+        );
         storedPastEnd.SetField(
             PackTestData.TEXTURE_PATH,
             PackTestEntryField.StoredLength,
-            (uint)(storedPastEnd.Bytes.Length - (int)textureOffset + 1));
+            (uint)(storedPastEnd.Bytes.Length - (int)textureOffset + 1)
+        );
         AssertOpenFails(storedPastEnd.Bytes, DiagnosticCodes.ASSET_PACK_INVALID_INDEX);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PayloadHashMismatchIsRb1005() {
+    public void PayloadHashMismatchIsRb1005()
+    {
         var editor = new PackTestPack(PackTestData.BuildStandardPack());
         editor.FlipPayloadByte(PackTestData.SETTINGS_PATH, 0);
         using PackArchive archive = Open(editor.Bytes);
@@ -448,14 +503,18 @@ public sealed class PackArchiveTests {
         AssetLoadException exception = AssertPayloadFails(
             archive,
             archive.Entries[0],
-            DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH);
+            DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH
+        );
         Assert.Contains(PackTestData.SETTINGS_PATH, exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CompressedPayloadHashMismatchIsRb1005() {
-        var editor = new PackTestPack(PackTestData.BuildStandardPack(PackCompressionPolicy.Release));
+    public void CompressedPayloadHashMismatchIsRb1005()
+    {
+        var editor = new PackTestPack(
+            PackTestData.BuildStandardPack(PackCompressionPolicy.Release)
+        );
         using PackArchive probe = Open(editor.Bytes);
         PackEntry compressed = Assert.Single(probe.Entries, entry => entry.IsCompressed);
         editor.FlipPayloadByte(compressed.Path, 0);
@@ -464,13 +523,17 @@ public sealed class PackArchiveTests {
         AssertPayloadFails(
             archive,
             archive.Entries.Single(entry => entry.IsCompressed),
-            DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH);
+            DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CorruptCompressedPayloadIsRb1008() {
-        var editor = new PackTestPack(PackTestData.BuildStandardPack(PackCompressionPolicy.Release));
+    public void CorruptCompressedPayloadIsRb1008()
+    {
+        var editor = new PackTestPack(
+            PackTestData.BuildStandardPack(PackCompressionPolicy.Release)
+        );
         using PackArchive probe = Open(editor.Bytes);
         PackEntry compressed = Assert.Single(probe.Entries, entry => entry.IsCompressed);
         editor.SetPayloadByte(compressed.Path, 0, 0x00);
@@ -481,43 +544,52 @@ public sealed class PackArchiveTests {
         AssetLoadException exception = AssertPayloadFails(
             archive,
             corrupt,
-            DiagnosticCodes.ASSET_LOAD_FAILED);
+            DiagnosticCodes.ASSET_LOAD_FAILED
+        );
         Assert.Contains(corrupt.Path, exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DeclaredDecompressedSizeMismatchIsRb1008() {
+    public void DeclaredDecompressedSizeMismatchIsRb1008()
+    {
         var shorter = new PackTestPack(
-            PackTestData.BuildStandardPack(PackCompressionPolicy.Release));
+            PackTestData.BuildStandardPack(PackCompressionPolicy.Release)
+        );
         using PackArchive probe = Open(shorter.Bytes);
         PackEntry compressed = Assert.Single(probe.Entries, entry => entry.IsCompressed);
         shorter.SetField(
             compressed.Path,
             PackTestEntryField.UncompressedSize,
-            compressed.UncompressedSize - 1);
+            compressed.UncompressedSize - 1
+        );
         using PackArchive shortArchive = Open(shorter.Bytes);
         AssertPayloadFails(
             shortArchive,
             shortArchive.Entries.Single(entry => entry.IsCompressed),
-            DiagnosticCodes.ASSET_LOAD_FAILED);
+            DiagnosticCodes.ASSET_LOAD_FAILED
+        );
 
         var longer = new PackTestPack(
-            PackTestData.BuildStandardPack(PackCompressionPolicy.Release));
+            PackTestData.BuildStandardPack(PackCompressionPolicy.Release)
+        );
         longer.SetField(
             compressed.Path,
             PackTestEntryField.UncompressedSize,
-            compressed.UncompressedSize + 1);
+            compressed.UncompressedSize + 1
+        );
         using PackArchive longArchive = Open(longer.Bytes);
         AssertPayloadFails(
             longArchive,
             longArchive.Entries.Single(entry => entry.IsCompressed),
-            DiagnosticCodes.ASSET_LOAD_FAILED);
+            DiagnosticCodes.ASSET_LOAD_FAILED
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FailedPayloadReadLeavesTheArchiveUsable() {
+    public void FailedPayloadReadLeavesTheArchiveUsable()
+    {
         var editor = new PackTestPack(PackTestData.BuildStandardPack());
         editor.FlipPayloadByte(PackTestData.SETTINGS_PATH, 0);
         using PackArchive archive = Open(editor.Bytes);
@@ -525,16 +597,17 @@ public sealed class PackArchiveTests {
         AssertPayloadFails(
             archive,
             archive.Entries[0],
-            DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH);
+            DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH
+        );
 
         Assert.Equal(PackTestData.Pattern(1000, 7), archive.ReadPayload(archive.Entries[1]));
         Assert.Equal(PackTestData.Repeated(4096, 0xFE), archive.ReadPayload(archive.Entries[2]));
     }
 
-    private static PackArchive Open(byte[] pack)
-        => PackArchive.Open(pack.AsMemory(), DISPLAY_PATH);
+    private static PackArchive Open(byte[] pack) => PackArchive.Open(pack.AsMemory(), DISPLAY_PATH);
 
-    private static byte[] BuildSmallPathPack() {
+    private static byte[] BuildSmallPathPack()
+    {
         var builder = new PackBuilder("paths.pck", PackCompressionPolicy.Debug);
         builder.Add("aaa", AssetEntryType.Raw, [1], 1);
         builder.Add("bbb", AssetEntryType.Raw, [2], 1);
@@ -542,9 +615,11 @@ public sealed class PackArchiveTests {
         return builder.Build();
     }
 
-    private static AssetPackException AssertOpenFails(byte[] pack, string expectedCode) {
-        AssetPackException exception = Assert.Throws<AssetPackException>(
-            () => PackArchive.Open(pack.AsMemory(), DISPLAY_PATH));
+    private static AssetPackException AssertOpenFails(byte[] pack, string expectedCode)
+    {
+        AssetPackException exception = Assert.Throws<AssetPackException>(() =>
+            PackArchive.Open(pack.AsMemory(), DISPLAY_PATH)
+        );
 
         Assert.Equal(expectedCode, exception.DiagnosticCode);
         Assert.Contains(DISPLAY_PATH, exception.Message);
@@ -554,9 +629,12 @@ public sealed class PackArchiveTests {
     private static AssetLoadException AssertPayloadFails(
         PackArchive archive,
         PackEntry entry,
-        string expectedCode) {
-        AssetLoadException exception = Assert.Throws<AssetLoadException>(
-            () => archive.ReadPayload(entry));
+        string expectedCode
+    )
+    {
+        AssetLoadException exception = Assert.Throws<AssetLoadException>(() =>
+            archive.ReadPayload(entry)
+        );
 
         Assert.Equal(expectedCode, exception.DiagnosticCode);
         Assert.Contains(DISPLAY_PATH, exception.Message);

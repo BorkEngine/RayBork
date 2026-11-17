@@ -20,7 +20,8 @@ namespace RayBork.Bake.Shaders;
 /// unchanged. The inspector validates the rewritten module before it reaches the pack.
 /// </para>
 /// </remarks>
-internal static class SpirvEntryPointRewriter {
+internal static class SpirvEntryPointRewriter
+{
     private const uint SPIRV_MAGIC = 0x07230203;
     private const int HEADER_WORD_COUNT = 5;
     private const int OP_ENTRY_POINT = 15;
@@ -40,84 +41,104 @@ internal static class SpirvEntryPointRewriter {
         string expectedName,
         string requestedName,
         out byte[] renamed,
-        out string message) {
+        out string message
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(expectedName);
         ArgumentException.ThrowIfNullOrWhiteSpace(requestedName);
 
         renamed = [];
         message = string.Empty;
 
-        if (module.Length < HEADER_WORD_COUNT * sizeof(uint) || module.Length % sizeof(uint) != 0) {
+        if (module.Length < HEADER_WORD_COUNT * sizeof(uint) || module.Length % sizeof(uint) != 0)
+        {
             message = "the compiled module has no complete SPIR-V header.";
             return false;
         }
 
         var words = new uint[module.Length / sizeof(uint)];
-        for (int word = 0; word < words.Length; word++) {
+        for (int word = 0; word < words.Length; word++)
+        {
             words[word] = BinaryPrimitives.ReadUInt32LittleEndian(
-                module.Slice(word * sizeof(uint), sizeof(uint)));
+                module.Slice(word * sizeof(uint), sizeof(uint))
+            );
         }
 
-        if (words[0] != SPIRV_MAGIC) {
+        if (words[0] != SPIRV_MAGIC)
+        {
             message = "the compiled module has the wrong SPIR-V magic.";
             return false;
         }
 
         var output = new List<uint>(words.Length + 8);
-        for (int index = 0; index < HEADER_WORD_COUNT; index++) {
+        for (int index = 0; index < HEADER_WORD_COUNT; index++)
+        {
             output.Add(words[index]);
         }
 
         bool renamedEntryPoint = false;
-        for (int index = HEADER_WORD_COUNT; index < words.Length;) {
+        for (int index = HEADER_WORD_COUNT; index < words.Length; )
+        {
             uint instruction = words[index];
             int wordCount = checked((int)(instruction >> 16));
             int opcode = checked((int)(instruction & 0xFFFF));
-            if (wordCount == 0 || index + wordCount > words.Length) {
+            if (wordCount == 0 || index + wordCount > words.Length)
+            {
                 message = "the compiled module has a malformed instruction stream.";
                 return false;
             }
 
-            if (opcode == OP_ENTRY_POINT
+            if (
+                opcode == OP_ENTRY_POINT
                 && !renamedEntryPoint
                 && wordCount >= ENTRY_POINT_FIXED_WORD_COUNT + 1
-                && words[index + 1] == (uint)executionModel) {
+                && words[index + 1] == (uint)executionModel
+            )
+            {
                 string name = ReadEntryPointName(
                     words,
                     index + ENTRY_POINT_FIXED_WORD_COUNT,
-                    wordCount - ENTRY_POINT_FIXED_WORD_COUNT);
-                if (string.Equals(name, expectedName, StringComparison.Ordinal)) {
+                    wordCount - ENTRY_POINT_FIXED_WORD_COUNT
+                );
+                if (string.Equals(name, expectedName, StringComparison.Ordinal))
+                {
                     WriteEntryPointInstruction(
                         output,
                         instruction,
                         words,
                         index,
                         wordCount,
-                        requestedName);
+                        requestedName
+                    );
                     renamedEntryPoint = true;
                     index += wordCount;
                     continue;
                 }
             }
 
-            for (int offset = 0; offset < wordCount; offset++) {
+            for (int offset = 0; offset < wordCount; offset++)
+            {
                 output.Add(words[index + offset]);
             }
 
             index += wordCount;
         }
 
-        if (!renamedEntryPoint) {
-            message = $"the compiled module has no '{expectedName}' entry point for the "
+        if (!renamedEntryPoint)
+        {
+            message =
+                $"the compiled module has no '{expectedName}' entry point for the "
                 + $"{executionModel} stage.";
             return false;
         }
 
         var bytes = new byte[output.Count * sizeof(uint)];
-        for (int word = 0; word < output.Count; word++) {
+        for (int word = 0; word < output.Count; word++)
+        {
             BinaryPrimitives.WriteUInt32LittleEndian(
                 bytes.AsSpan(word * sizeof(uint), sizeof(uint)),
-                output[word]);
+                output[word]
+            );
         }
 
         renamed = bytes;
@@ -130,11 +151,14 @@ internal static class SpirvEntryPointRewriter {
         uint[] words,
         int index,
         int wordCount,
-        string requestedName) {
+        string requestedName
+    )
+    {
         int oldNameWordCount = EntryPointNameWordCount(
             words,
             index + ENTRY_POINT_FIXED_WORD_COUNT,
-            wordCount - ENTRY_POINT_FIXED_WORD_COUNT);
+            wordCount - ENTRY_POINT_FIXED_WORD_COUNT
+        );
         int interfaceWordCount = wordCount - ENTRY_POINT_FIXED_WORD_COUNT - oldNameWordCount;
         byte[] nameBytes = Encoding.UTF8.GetBytes(requestedName);
         int newNameWordCount = (nameBytes.Length + 1 + (sizeof(uint) - 1)) / sizeof(uint);
@@ -145,23 +169,28 @@ internal static class SpirvEntryPointRewriter {
         output.Add(words[index + 2]);
 
         var nameWords = new uint[newNameWordCount];
-        for (int offset = 0; offset < nameBytes.Length; offset++) {
+        for (int offset = 0; offset < nameBytes.Length; offset++)
+        {
             nameWords[offset / 4] |= (uint)nameBytes[offset] << ((offset % 4) * 8);
         }
 
         output.AddRange(nameWords);
 
         int interfaceStart = index + ENTRY_POINT_FIXED_WORD_COUNT + oldNameWordCount;
-        for (int interfaceWord = interfaceStart; interfaceWord < index + wordCount; interfaceWord++) {
+        for (int interfaceWord = interfaceStart; interfaceWord < index + wordCount; interfaceWord++)
+        {
             output.Add(words[interfaceWord]);
         }
     }
 
-    private static int EntryPointNameWordCount(uint[] words, int firstWord, int availableWords) {
+    private static int EntryPointNameWordCount(uint[] words, int firstWord, int availableWords)
+    {
         int byteCount = availableWords * sizeof(uint);
-        for (int offset = 0; offset < byteCount; offset++) {
+        for (int offset = 0; offset < byteCount; offset++)
+        {
             uint word = words[firstWord + (offset / 4)];
-            if (((word >> ((offset % 4) * 8)) & 0xFF) == 0) {
+            if (((word >> ((offset % 4) * 8)) & 0xFF) == 0)
+            {
                 return (offset + 1 + (sizeof(uint) - 1)) / sizeof(uint);
             }
         }
@@ -169,16 +198,19 @@ internal static class SpirvEntryPointRewriter {
         return availableWords;
     }
 
-    private static string ReadEntryPointName(uint[] words, int firstWord, int wordCount) {
+    private static string ReadEntryPointName(uint[] words, int firstWord, int wordCount)
+    {
         int byteCount = wordCount * sizeof(uint);
         var bytes = new byte[byteCount];
-        for (int offset = 0; offset < byteCount; offset++) {
+        for (int offset = 0; offset < byteCount; offset++)
+        {
             uint word = words[firstWord + (offset / 4)];
             bytes[offset] = (byte)(word >> ((offset % 4) * 8));
         }
 
         int length = Array.IndexOf(bytes, (byte)0);
-        if (length < 0) {
+        if (length < 0)
+        {
             length = bytes.Length;
         }
 

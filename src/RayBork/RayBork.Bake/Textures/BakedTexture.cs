@@ -10,12 +10,14 @@ namespace RayBork.Bake;
 /// cross-check them against the KTX2 header; the payload is emitted unchanged at the sibling raw
 /// entry.
 /// </remarks>
-public sealed class BakedTexture {
+public sealed class BakedTexture
+{
     /// <summary>Initializes a baked texture.</summary>
     /// <param name="payload">The complete KTX2 payload bytes.</param>
     /// <param name="format">The concrete format stored in the payload.</param>
     /// <param name="mipLevels">The number of mip levels in the payload.</param>
-    internal BakedTexture(byte[] payload, TextureFormat format, uint mipLevels) {
+    internal BakedTexture(byte[] payload, TextureFormat format, uint mipLevels)
+    {
         ArgumentNullException.ThrowIfNull(payload);
 
         Payload = payload;

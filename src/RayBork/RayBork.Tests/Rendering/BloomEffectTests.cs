@@ -8,10 +8,12 @@ namespace RayBork.Tests.Rendering;
 /// Tests the public bloom settings, the pyramid extents, and the internal snapshot capture path without
 /// a GPU.
 /// </summary>
-public sealed class BloomEffectTests {
+public sealed class BloomEffectTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheDefaultSettingsMatchTheApprovedContract() {
+    public void TheDefaultSettingsMatchTheApprovedContract()
+    {
         var effect = new BloomEffect();
 
         Assert.Equal(1f, effect.Threshold);
@@ -24,21 +26,52 @@ public sealed class BloomEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EverySettingRejectsAnInvalidValueWithAClearException() {
-        OnTickThread(() => {
+    public void EverySettingRejectsAnInvalidValueWithAClearException()
+    {
+        OnTickThread(() =>
+        {
             var effect = new BloomEffect();
 
-            AssertRejects(() => effect.Threshold = -1f, nameof(BloomEffect.Threshold), "non-negative");
-            AssertRejects(() => effect.Threshold = float.NaN, nameof(BloomEffect.Threshold), "finite");
-            AssertRejects(() => effect.SoftKnee = -1f, nameof(BloomEffect.SoftKnee), "non-negative");
-            AssertRejects(() => effect.SoftKnee = float.PositiveInfinity, nameof(BloomEffect.SoftKnee), "finite");
-            AssertRejects(() => effect.Intensity = -1f, nameof(BloomEffect.Intensity), "non-negative");
-            AssertRejects(() => effect.Intensity = float.NaN, nameof(BloomEffect.Intensity), "finite");
+            AssertRejects(
+                () => effect.Threshold = -1f,
+                nameof(BloomEffect.Threshold),
+                "non-negative"
+            );
+            AssertRejects(
+                () => effect.Threshold = float.NaN,
+                nameof(BloomEffect.Threshold),
+                "finite"
+            );
+            AssertRejects(
+                () => effect.SoftKnee = -1f,
+                nameof(BloomEffect.SoftKnee),
+                "non-negative"
+            );
+            AssertRejects(
+                () => effect.SoftKnee = float.PositiveInfinity,
+                nameof(BloomEffect.SoftKnee),
+                "finite"
+            );
+            AssertRejects(
+                () => effect.Intensity = -1f,
+                nameof(BloomEffect.Intensity),
+                "non-negative"
+            );
+            AssertRejects(
+                () => effect.Intensity = float.NaN,
+                nameof(BloomEffect.Intensity),
+                "finite"
+            );
             AssertRejects(() => effect.Scatter = -1f, nameof(BloomEffect.Scatter), "non-negative");
-            AssertRejects(() => effect.Scatter = float.PositiveInfinity, nameof(BloomEffect.Scatter), "finite");
+            AssertRejects(
+                () => effect.Scatter = float.PositiveInfinity,
+                nameof(BloomEffect.Scatter),
+                "finite"
+            );
 
-            ArgumentException tint = Assert.Throws<ArgumentException>(
-                () => effect.Tint = new Color(1f, float.NaN, 1f, 1f));
+            ArgumentException tint = Assert.Throws<ArgumentException>(() =>
+                effect.Tint = new Color(1f, float.NaN, 1f, 1f)
+            );
             Assert.Contains("finite", tint.Message, StringComparison.Ordinal);
 
             // A rejected value leaves the previous value in place.
@@ -52,7 +85,8 @@ public sealed class BloomEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SettingsAreTickThreadOnly() {
+    public void SettingsAreTickThreadOnly()
+    {
         var effect = new BloomEffect();
 
         Assert.Throws<InvalidOperationException>(() => effect.Threshold = 2f);
@@ -64,32 +98,40 @@ public sealed class BloomEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CaptureRequiresThePreloadedBloomAssets() {
+    public void CaptureRequiresThePreloadedBloomAssets()
+    {
         var effect = new BloomEffect();
 
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-            () => PostProcessSnapshots.Capture(effect, targetHasDepth: true, "the app scene target"));
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            PostProcessSnapshots.Capture(effect, targetHasDepth: true, "the app scene target")
+        );
 
         Assert.Contains("built-in bloom assets", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CaptureAcceptsADepthlessTargetAndReportsTheMaximumLayout() {
+    public async Task CaptureAcceptsADepthlessTargetAndReportsTheMaximumLayout()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         BloomAssets assets = await BloomAssets.LoadAsync(harness.Catalog);
-        try {
-            OnTickThread(() => {
+        try
+        {
+            OnTickThread(() =>
+            {
                 var effect = new BloomEffect(assets);
                 BloomEffectSnapshot snapshot = Assert.IsType<BloomEffectSnapshot>(
                     PostProcessSnapshots.Capture(
                         effect,
                         targetHasDepth: false,
                         "render texture 3",
-                        bloomAssets: assets));
+                        bloomAssets: assets
+                    )
+                );
 
                 Assert.Equal(BloomPyramid.MAX_PASSES, snapshot.InstanceLayout.Length);
-                for (int index = 0; index < snapshot.InstanceLayout.Length; index++) {
+                for (int index = 0; index < snapshot.InstanceLayout.Length; index++)
+                {
                     Assert.True(snapshot.InstanceLayout[index].Stride > 0);
                     Assert.Equal(1, snapshot.InstanceLayout[index].Count);
                 }
@@ -102,21 +144,26 @@ public sealed class BloomEffectTests {
                 Assert.Equal(144, snapshot.InstanceLayout[9].Stride);
                 snapshot.Reset();
             });
-        } finally {
+        }
+        finally
+        {
             assets.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TheCameraServiceCapturesABloomEffectOverTheAttachedAssets() {
+    public async Task TheCameraServiceCapturesABloomEffectOverTheAttachedAssets()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         BloomAssets assets = await BloomAssets.LoadAsync(harness.Catalog);
         using CameraTestHost host = new();
         host.Service.AttachBloomAssets(assets);
         host.BeginFrame();
-        try {
-            var effect = new BloomEffect {
+        try
+        {
+            var effect = new BloomEffect
+            {
                 Threshold = 3f,
                 SoftKnee = 0.25f,
                 Intensity = 1.5f,
@@ -124,19 +171,24 @@ public sealed class BloomEffectTests {
             };
             PostProcessStack stack = new();
             stack.Add(effect);
-            using (Camera camera = host.CreatePerspectiveCamera(postProcess: stack)) {
+            using (Camera camera = host.CreatePerspectiveCamera(postProcess: stack))
+            {
                 Assert.False(camera.IsDisposed);
             }
 
             CameraPass pass = host.Packet.Passes[0];
-            BloomEffectSnapshot snapshot = Assert.IsType<BloomEffectSnapshot>(pass.PostProcessEffects[0]);
+            BloomEffectSnapshot snapshot = Assert.IsType<BloomEffectSnapshot>(
+                pass.PostProcessEffects[0]
+            );
             Assert.True(snapshot.Enabled);
             Assert.Equal(3f, snapshot.Threshold);
             Assert.Equal(0.25f, snapshot.SoftKnee);
             Assert.Equal(1.5f, snapshot.Intensity);
             Assert.Equal(0.2f, snapshot.Scatter);
             host.EndFrame();
-        } finally {
+        }
+        finally
+        {
             host.Service.DetachBloomAssets();
             assets.Dispose();
         }
@@ -144,12 +196,16 @@ public sealed class BloomEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task SnapshotFreezesTheSettingsAndIsPooledAfterReset() {
+    public async Task SnapshotFreezesTheSettingsAndIsPooledAfterReset()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         BloomAssets assets = await BloomAssets.LoadAsync(harness.Catalog);
-        try {
-            OnTickThread(() => {
-                var effect = new BloomEffect(assets) {
+        try
+        {
+            OnTickThread(() =>
+            {
+                var effect = new BloomEffect(assets)
+                {
                     Threshold = 2f,
                     SoftKnee = 0.25f,
                     Intensity = 1.5f,
@@ -191,41 +247,50 @@ public sealed class BloomEffectTests {
                 Assert.Same(second, reused);
                 reused.Reset();
             });
-        } finally {
+        }
+        finally
+        {
             assets.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TheBuiltInAssetsExposeTheFourPyramidPrograms() {
+    public async Task TheBuiltInAssetsExposeTheFourPyramidPrograms()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         BloomAssets assets = await BloomAssets.LoadAsync(harness.Catalog);
-        try {
+        try
+        {
             Assert.False(assets.IsDisposed);
             Assert.Equal(BloomShaderContract.PREFILTER_PATH, assets.PrefilterProgram.Path);
             Assert.Equal(BloomShaderContract.DOWNSAMPLE_PATH, assets.DownsampleProgram.Path);
             Assert.Equal(BloomShaderContract.UPSAMPLE_PATH, assets.UpsampleProgram.Path);
             Assert.Equal(BloomShaderContract.COMPOSITE_PATH, assets.CompositeProgram.Path);
-        } finally {
+        }
+        finally
+        {
             assets.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DisposedAssetsAreRejectedByCapture() {
+    public async Task DisposedAssetsAreRejectedByCapture()
+    {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         BloomAssets assets = await BloomAssets.LoadAsync(harness.Catalog);
         assets.Dispose();
 
         var effect = new BloomEffect(assets);
-        Assert.Throws<ObjectDisposedException>(
-            () => PostProcessSnapshots.Capture(
+        Assert.Throws<ObjectDisposedException>(() =>
+            PostProcessSnapshots.Capture(
                 effect,
                 targetHasDepth: true,
                 "the app scene target",
-                bloomAssets: assets));
+                bloomAssets: assets
+            )
+        );
     }
 
     [Theory]
@@ -241,13 +306,16 @@ public sealed class BloomEffectTests {
         int width,
         int height,
         int[] expectedWidths,
-        int[] expectedHeights) {
+        int[] expectedHeights
+    )
+    {
         Span<Extent2D> levels = stackalloc Extent2D[BloomPyramid.MAX_LEVELS];
 
         int count = BloomPyramid.BuildLevels(width, height, levels);
 
         Assert.Equal(expectedWidths.Length, count);
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < count; index++)
+        {
             Assert.Equal((uint)expectedWidths[index], levels[index].Width);
             Assert.Equal((uint)expectedHeights[index], levels[index].Height);
         }
@@ -255,7 +323,8 @@ public sealed class BloomEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ThePyramidRejectsInvalidExtentsAndAShortDestination() {
+    public void ThePyramidRejectsInvalidExtentsAndAShortDestination()
+    {
         Extent2D[] levels = new Extent2D[BloomPyramid.MAX_LEVELS];
         Assert.Throws<ArgumentOutOfRangeException>(() => BloomPyramid.BuildLevels(0, 64, levels));
         Assert.Throws<ArgumentOutOfRangeException>(() => BloomPyramid.BuildLevels(64, -1, levels));
@@ -264,34 +333,44 @@ public sealed class BloomEffectTests {
         Assert.Throws<ArgumentException>(() => BloomPyramid.BuildLevels(64, 64, shortLevels));
     }
 
-    private static BloomEffectSnapshot Capture(BloomEffect effect, BloomAssets assets) {
+    private static BloomEffectSnapshot Capture(BloomEffect effect, BloomAssets assets)
+    {
         PostProcessEffectSnapshot snapshot = PostProcessSnapshots.Capture(
             effect,
             targetHasDepth: true,
             "the app scene target",
-            bloomAssets: assets);
+            bloomAssets: assets
+        );
         return Assert.IsType<BloomEffectSnapshot>(snapshot);
     }
 
     private static void AssertRejects(
         Action action,
         string parameterName,
-        string expectedMessagePart) {
+        string expectedMessagePart
+    )
+    {
         ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(action);
         Assert.Equal(parameterName, thrown.ParamName);
         Assert.Contains(expectedMessagePart, thrown.Message, StringComparison.Ordinal);
     }
 
-    private static void OnTickThread(Action action) {
+    private static void OnTickThread(Action action)
+    {
         bool attached = TickThread.IsCurrent;
-        if (!attached) {
+        if (!attached)
+        {
             TickThread.Attach();
         }
 
-        try {
+        try
+        {
             action();
-        } finally {
-            if (!attached) {
+        }
+        finally
+        {
+            if (!attached)
+            {
                 TickThread.Detach();
             }
         }

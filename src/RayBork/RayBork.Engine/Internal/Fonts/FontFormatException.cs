@@ -17,11 +17,13 @@ namespace RayBork.Internal;
 /// reason.
 /// </para>
 /// </remarks>
-internal sealed class FontFormatException : Exception {
+internal sealed class FontFormatException : Exception
+{
     /// <summary>Initializes a font format failure.</summary>
     /// <param name="reason">The actionable cause, without a sentence prefix.</param>
     internal FontFormatException(string reason)
-        : base($"The font face is invalid: {reason}.") {
+        : base($"The font face is invalid: {reason}.")
+    {
         Reason = reason;
     }
 

@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// The bytes are a full KTX2 file, including its level index; the worker never parses a source image
 /// format.
 /// </remarks>
-internal sealed class TextureGpuUpload : AssetGpuUpload {
+internal sealed class TextureGpuUpload : AssetGpuUpload
+{
     /// <summary>
     /// Initializes a texture upload.
     /// </summary>
@@ -16,8 +17,13 @@ internal sealed class TextureGpuUpload : AssetGpuUpload {
     /// <param name="descriptor">The packed texture descriptor.</param>
     /// <param name="ktx2Data">The complete KTX2 2.0 payload.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal TextureGpuUpload(string path, TextureAssetDescriptor descriptor, ReadOnlyMemory<byte> ktx2Data)
-        : base(AssetGpuUploadKind.Texture, path) {
+    internal TextureGpuUpload(
+        string path,
+        TextureAssetDescriptor descriptor,
+        ReadOnlyMemory<byte> ktx2Data
+    )
+        : base(AssetGpuUploadKind.Texture, path)
+    {
         ArgumentNullException.ThrowIfNull(descriptor);
 
         Texture = descriptor;

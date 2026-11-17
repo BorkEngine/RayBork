@@ -6,7 +6,8 @@ using RayBork.Bake.Sources;
 namespace RayBork.Bake.Processors;
 
 /// <summary>The accepted result of processing one source.</summary>
-internal sealed class ProcessedSource {
+internal sealed class ProcessedSource
+{
     /// <summary>Initializes a processed source.</summary>
     /// <param name="source">The source.</param>
     /// <param name="entries">The emitted entries.</param>
@@ -14,7 +15,9 @@ internal sealed class ProcessedSource {
     internal ProcessedSource(
         BakeSource source,
         IReadOnlyList<BakedEntry> entries,
-        IReadOnlyList<string> additionalInputs) {
+        IReadOnlyList<string> additionalInputs
+    )
+    {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(additionalInputs);
@@ -35,7 +38,8 @@ internal sealed class ProcessedSource {
 }
 
 /// <summary>Runs one processor source and discards every output on failure.</summary>
-internal static class BakeProcessorRunner {
+internal static class BakeProcessorRunner
+{
     /// <summary>Processes one source.</summary>
     /// <param name="project">The validated project.</param>
     /// <param name="source">The processor source.</param>
@@ -44,13 +48,16 @@ internal static class BakeProcessorRunner {
     internal static ProcessedSource? Run(
         BakeProject project,
         BakeSource source,
-        BakeDiagnostics diagnostics) {
+        BakeDiagnostics diagnostics
+    )
+    {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(diagnostics);
 
         BakeProcessorRegistration? processor = source.Processor;
-        if (processor is null) {
+        if (processor is null)
+        {
             throw new ArgumentException("The source is not a processor source.", nameof(source));
         }
 
@@ -60,13 +67,15 @@ internal static class BakeProcessorRunner {
             source.SourceId,
             diagnosticPath,
             processor.Name,
-            diagnostics);
+            diagnostics
+        );
         var diagnosticSink = new BakeProcessorDiagnosticSink(
             processor.Name,
             diagnosticPath,
             source.BaseAssetPath,
             BakeDiagnosticCodes.PROCESSOR_FAILED,
-            diagnostics);
+            diagnostics
+        );
         var context = new AssetProcessorContext(
             source.FullPath,
             source.RelativePath,
@@ -74,30 +83,38 @@ internal static class BakeProcessorRunner {
             fileName,
             Path.GetFileNameWithoutExtension(fileName),
             outputSink,
-            diagnosticSink);
+            diagnosticSink
+        );
 
-        if (!BakeSidecarBinder.TryBind(project, source, context, diagnostics, out object? sidecar)) {
+        if (!BakeSidecarBinder.TryBind(project, source, context, diagnostics, out object? sidecar))
+        {
             return null;
         }
 
-        if (diagnosticSink.HasError) {
+        if (diagnosticSink.HasError)
+        {
             return null;
         }
 
-        try {
+        try
+        {
             processor.Process(context, sidecar);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             diagnostics.Add(
                 BakeSeverity.Error,
                 BakeDiagnosticCodes.PROCESSOR_FAILED,
                 $"The processor '{processor.Name}' failed while processing "
                     + $"'{source.RelativePath}': {exception.Message}",
                 diagnosticPath,
-                assetPath: source.BaseAssetPath);
+                assetPath: source.BaseAssetPath
+            );
             return null;
         }
 
-        if (diagnosticSink.HasError || outputSink.HasError) {
+        if (diagnosticSink.HasError || outputSink.HasError)
+        {
             return null;
         }
 

@@ -11,7 +11,8 @@ namespace RayBork;
 /// <c>origin + direction * t</c>; <see cref="Ray.Direction"/> is unit length, so it is a world
 /// distance. <c>default(Ray)</c> has a zero direction and every ray query reports a miss for it.
 /// </remarks>
-public readonly struct RayCollision {
+public readonly struct RayCollision
+{
     /// <summary>
     /// Gets whether the ray hit the shape.
     /// </summary>
@@ -38,7 +39,8 @@ public readonly struct RayCollision {
     /// <param name="distance">The ray parameter of the hit.</param>
     /// <param name="point">The hit point.</param>
     /// <param name="normal">The normalized surface normal at the hit point.</param>
-    internal RayCollision(float distance, Vector3 point, Vector3 normal) {
+    internal RayCollision(float distance, Vector3 point, Vector3 normal)
+    {
         Hit = true;
         Distance = distance;
         Point = point;

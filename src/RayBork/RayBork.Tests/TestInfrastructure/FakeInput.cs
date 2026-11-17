@@ -7,7 +7,8 @@ namespace RayBork.Tests;
 /// An empty <see cref="IInput"/> snapshot. Every level query reports up, every edge query reports
 /// absent, and no gamepads are connected.
 /// </summary>
-internal sealed class FakeInput : IInput {
+internal sealed class FakeInput : IInput
+{
     public string TextInput => string.Empty;
 
     public Vector2 MousePosition => Vector2.Zero;

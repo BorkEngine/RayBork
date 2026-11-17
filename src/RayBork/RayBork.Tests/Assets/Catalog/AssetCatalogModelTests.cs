@@ -8,19 +8,22 @@ namespace RayBork.Tests.Assets.Catalog;
 /// Tests the M4 model loader: every <see cref="IAssetCatalog.Load{T}"/> call returns a new
 /// <see cref="Model"/> wrapper with its own materials over the shared cached part meshes and programs.
 /// </summary>
-public sealed class AssetCatalogModelTests {
+public sealed class AssetCatalogModelTests
+{
     private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadModelReturnsANewWrapperWithItsOwnMaterials() {
+    public async Task LoadModelReturnsANewWrapperWithItsOwnMaterials()
+    {
         using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
         Model first = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
         Model second = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
 
-        try {
+        try
+        {
             Assert.NotSame(first, second);
 
             ModelPart firstPart = Assert.Single(first.Parts);
@@ -37,7 +40,8 @@ public sealed class AssetCatalogModelTests {
             // the model bounds are the union of the part bounds.
             Assert.Equal(
                 new BoundingBox(new Vector3(0f, 0f, 0f), new Vector3(2f, 4f, 6f)),
-                firstPart.Bounds);
+                firstPart.Bounds
+            );
             Assert.Equal(firstPart.Bounds, first.Bounds);
             Assert.Equal(new Transform(new Vector3(1f, 2f, 3f)), firstPart.LocalTransform);
 
@@ -45,23 +49,28 @@ public sealed class AssetCatalogModelTests {
             Assert.Equal(2, harness.Worker.UploadCallCount);
             Assert.False(first.IsDisposed);
             Assert.False(second.IsDisposed);
-        } finally {
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
         }
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 2,
-            "Disposing both models releases the shared mesh and the shared program exactly once each.");
+            "Disposing both models releases the shared mesh and the shared program exactly once each."
+        );
         Assert.True(first.IsDisposed);
         Assert.True(second.IsDisposed);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ModelDisposeReleasesEveryDistinctPartAssetOnce() {
+    public async Task ModelDisposeReleasesEveryDistinctPartAssetOnce()
+    {
         using CatalogTestHarness harness = new(
-            userPacks: [BuildModelPack(CreateDescriptor(partCount: 2, shareParts: true))]);
+            userPacks: [BuildModelPack(CreateDescriptor(partCount: 2, shareParts: true))]
+        );
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Model model = await harness.Catalog.Load<Model>("/models/castle", cancellationToken);
         ModelPart first = model.Parts[0];
@@ -78,7 +87,8 @@ public sealed class AssetCatalogModelTests {
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 2,
-            "The shared mesh and the one shared program are released exactly once each.");
+            "The shared mesh and the one shared program are released exactly once each."
+        );
         Assert.True(first.Mesh.IsDisposed);
         Assert.True(first.Shader.IsDisposed);
         Assert.True(second.Shader.IsDisposed);
@@ -86,10 +96,19 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TwoModelsSharingPartsEachReleaseTheirOwnReference() {
+    public async Task TwoModelsSharingPartsEachReleaseTheirOwnReference()
+    {
         PackBuilder builder = CatalogTestData.CreateStandardBuilder();
-        builder.Add("models/castle", AssetEntryType.Model, AssetSerialization.Serialize(CreateDescriptor()));
-        builder.Add("models/tower", AssetEntryType.Model, AssetSerialization.Serialize(CreateDescriptor()));
+        builder.Add(
+            "models/castle",
+            AssetEntryType.Model,
+            AssetSerialization.Serialize(CreateDescriptor())
+        );
+        builder.Add(
+            "models/tower",
+            AssetEntryType.Model,
+            AssetSerialization.Serialize(CreateDescriptor())
+        );
         using CatalogTestHarness harness = new(userPacks: [builder.Build()]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
@@ -115,21 +134,23 @@ public sealed class AssetCatalogModelTests {
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 2,
-            "The last model reference destroys the shared mesh and the shared program.");
+            "The last model reference destroys the shared mesh and the shared program."
+        );
         Assert.True(sharedMesh.IsDisposed);
         Assert.True(towerMaterial.IsDisposed);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task PartWithAnEmptyShaderPathFailsTheLoadWithoutAPartUpload() {
+    public async Task PartWithAnEmptyShaderPathFailsTheLoadWithoutAPartUpload()
+    {
         using CatalogTestHarness harness = new(
-            userPacks: [BuildModelPack(CreateDescriptor(shaderPath: ""))]);
+            userPacks: [BuildModelPack(CreateDescriptor(shaderPath: ""))]
+        );
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Model>(
-                "/models/castle",
-                TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Model>("/models/castle", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains("has no shader path", thrown.Message, StringComparison.Ordinal);
@@ -138,36 +159,45 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AFailedModelLoadReleasesThePartReferencesItAlreadyAcquired() {
+    public async Task AFailedModelLoadReleasesThePartReferencesItAlreadyAcquired()
+    {
         using CatalogTestHarness harness = new(
-            userPacks: [BuildModelPack(CreateDescriptor(shaderPath: "shaders/missing"))]);
+            userPacks: [BuildModelPack(CreateDescriptor(shaderPath: "shaders/missing"))]
+        );
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(
-            () => harness.Catalog.Load<Model>("/models/castle", cancellationToken));
+        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(() =>
+            harness.Catalog.Load<Model>("/models/castle", cancellationToken)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, thrown.DiagnosticCode);
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 1,
-            "The model load must release the mesh reference it acquired before the shader failed.");
+            "The model load must release the mesh reference it acquired before the shader failed."
+        );
 
         Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
-        try {
+        try
+        {
             Assert.False(mesh.IsDisposed);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AnAlreadyCanceledModelLoadAcquiresNoPart() {
+    public async Task AnAlreadyCanceledModelLoadAcquiresNoPart()
+    {
         using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => harness.Catalog.Load<Model>("/models/castle", cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            harness.Catalog.Load<Model>("/models/castle", cancellation.Token)
+        );
 
         Assert.Equal(0, harness.Worker.UploadCallCount);
         Assert.Empty(harness.Worker.DestroyCalls);
@@ -175,7 +205,8 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CancellationAfterPartAcquisitionReleasesTheAcquiredParts() {
+    public async Task CancellationAfterPartAcquisitionReleasesTheAcquiredParts()
+    {
         using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
         harness.Worker.DeferUploads = true;
         using CancellationTokenSource cancellation = new();
@@ -197,27 +228,35 @@ public sealed class AssetCatalogModelTests {
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 2,
-            "Cancellation must release the acquired mesh and the material's program reference.");
+            "Cancellation must release the acquired mesh and the material's program reference."
+        );
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
 
         harness.Worker.DeferUploads = false;
         Model retry = await harness.Catalog.Load<Model>(
             "/models/castle",
-            TestContext.Current.CancellationToken);
-        try {
+            TestContext.Current.CancellationToken
+        );
+        try
+        {
             Assert.Single(retry.Parts);
-        } finally {
+        }
+        finally
+        {
             retry.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadModelOnAMeshEntryThrowsAssetTypeMismatch() {
+    public async Task LoadModelOnAMeshEntryThrowsAssetTypeMismatch()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
         AssetTypeMismatchException thrown = await Assert.ThrowsAsync<AssetTypeMismatchException>(
-            () => harness.Catalog.Load<Model>("/meshes/quad", TestContext.Current.CancellationToken));
+            () =>
+                harness.Catalog.Load<Model>("/meshes/quad", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_TYPE_MISMATCH, thrown.DiagnosticCode);
         Assert.Equal(0, harness.Worker.UploadCallCount);
@@ -225,48 +264,58 @@ public sealed class AssetCatalogModelTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AMissingModelPathThrowsAssetNotFound() {
+    public async Task AMissingModelPathThrowsAssetNotFound()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(
-            () => harness.Catalog.Load<Model>("/models/absent", TestContext.Current.CancellationToken));
+        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(() =>
+            harness.Catalog.Load<Model>("/models/absent", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, thrown.DiagnosticCode);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadModelAfterTheCatalogStoppedThrowsObjectDisposed() {
+    public async Task LoadModelAfterTheCatalogStoppedThrowsObjectDisposed()
+    {
         using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateDescriptor())]);
         harness.Catalog.Stop();
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(
-            () => harness.Catalog.Load<Model>("/models/castle", TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            harness.Catalog.Load<Model>("/models/castle", TestContext.Current.CancellationToken)
+        );
     }
 
-    public static TheoryData<string> InvalidDescriptors => new() {
-        "empty-parts",
-        "null-parts",
-        "empty-name",
-        "non-canonical-mesh",
-        "empty-shader",
-        "non-canonical-shader",
-        "short-transform",
-        "non-finite-transform",
-        "short-bounds",
-        "non-finite-bounds",
-        "inverted-bounds",
-        "invalid-model-bounds",
-    };
+    public static TheoryData<string> InvalidDescriptors =>
+        new()
+        {
+            "empty-parts",
+            "null-parts",
+            "empty-name",
+            "non-canonical-mesh",
+            "empty-shader",
+            "non-canonical-shader",
+            "short-transform",
+            "non-finite-transform",
+            "short-bounds",
+            "non-finite-bounds",
+            "inverted-bounds",
+            "invalid-model-bounds",
+        };
 
     [Theory]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     [MemberData(nameof(InvalidDescriptors))]
-    public async Task InvalidModelDescriptorsFailAsAssetLoadWithoutAPartUpload(string variant) {
-        using CatalogTestHarness harness = new(userPacks: [BuildModelPack(CreateInvalidDescriptor(variant))]);
+    public async Task InvalidModelDescriptorsFailAsAssetLoadWithoutAPartUpload(string variant)
+    {
+        using CatalogTestHarness harness = new(
+            userPacks: [BuildModelPack(CreateInvalidDescriptor(variant))]
+        );
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Model>("/models/castle", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Model>("/models/castle", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Equal(0, harness.Worker.UploadCallCount);
@@ -275,26 +324,29 @@ public sealed class AssetCatalogModelTests {
     private static ModelAssetDescriptor CreateDescriptor(
         int partCount = 1,
         bool shareParts = true,
-        string shaderPath = CatalogTestData.SHADER_PATH) {
+        string shaderPath = CatalogTestData.SHADER_PATH
+    )
+    {
         ModelPartAsset[] parts = new ModelPartAsset[partCount];
-        for (int index = 0; index < partCount; index++) {
+        for (int index = 0; index < partCount; index++)
+        {
             parts[index] = CreatePart(
                 name: shareParts ? "body" : $"body-{index}",
                 meshPath: shareParts ? CatalogTestData.MESH_PATH : $"meshes/quad-{index}",
-                shaderPath: shaderPath);
+                shaderPath: shaderPath
+            );
         }
 
-        return new ModelAssetDescriptor {
-            Parts = parts,
-            Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
-        };
+        return new ModelAssetDescriptor { Parts = parts, Bounds = [-1f, -2f, -3f, 1f, 2f, 3f] };
     }
 
     private static ModelPartAsset CreatePart(
         string name = "body",
         string meshPath = CatalogTestData.MESH_PATH,
-        string shaderPath = CatalogTestData.SHADER_PATH)
-        => new() {
+        string shaderPath = CatalogTestData.SHADER_PATH
+    ) =>
+        new()
+        {
             Name = name,
             MeshPath = meshPath,
             ShaderPath = shaderPath,
@@ -302,30 +354,47 @@ public sealed class AssetCatalogModelTests {
             Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
         };
 
-    private static ModelAssetDescriptor CreateInvalidDescriptor(string variant) {
+    private static ModelAssetDescriptor CreateInvalidDescriptor(string variant)
+    {
         ModelPartAsset valid = CreatePart();
-        return variant switch {
-            "empty-parts" => new ModelAssetDescriptor { Parts = [], Bounds = [-1f, -2f, -3f, 1f, 2f, 3f] },
-            "null-parts" => new ModelAssetDescriptor { Parts = null!, Bounds = [-1f, -2f, -3f, 1f, 2f, 3f] },
-            "empty-name" => new ModelAssetDescriptor {
+        return variant switch
+        {
+            "empty-parts" => new ModelAssetDescriptor
+            {
+                Parts = [],
+                Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
+            },
+            "null-parts" => new ModelAssetDescriptor
+            {
+                Parts = null!,
+                Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
+            },
+            "empty-name" => new ModelAssetDescriptor
+            {
                 Parts = [CreatePart(name: " ")],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "non-canonical-mesh" => new ModelAssetDescriptor {
+            "non-canonical-mesh" => new ModelAssetDescriptor
+            {
                 Parts = [CreatePart(meshPath: "/meshes/quad")],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "empty-shader" => new ModelAssetDescriptor {
+            "empty-shader" => new ModelAssetDescriptor
+            {
                 Parts = [CreatePart(shaderPath: "")],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "non-canonical-shader" => new ModelAssetDescriptor {
+            "non-canonical-shader" => new ModelAssetDescriptor
+            {
                 Parts = [CreatePart(shaderPath: "/shaders/basic")],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "short-transform" => new ModelAssetDescriptor {
-                Parts = [
-                    new ModelPartAsset {
+            "short-transform" => new ModelAssetDescriptor
+            {
+                Parts =
+                [
+                    new ModelPartAsset
+                    {
                         Name = valid.Name,
                         MeshPath = valid.MeshPath,
                         ShaderPath = valid.ShaderPath,
@@ -335,9 +404,12 @@ public sealed class AssetCatalogModelTests {
                 ],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "non-finite-transform" => new ModelAssetDescriptor {
-                Parts = [
-                    new ModelPartAsset {
+            "non-finite-transform" => new ModelAssetDescriptor
+            {
+                Parts =
+                [
+                    new ModelPartAsset
+                    {
                         Name = valid.Name,
                         MeshPath = valid.MeshPath,
                         ShaderPath = valid.ShaderPath,
@@ -347,9 +419,12 @@ public sealed class AssetCatalogModelTests {
                 ],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "short-bounds" => new ModelAssetDescriptor {
-                Parts = [
-                    new ModelPartAsset {
+            "short-bounds" => new ModelAssetDescriptor
+            {
+                Parts =
+                [
+                    new ModelPartAsset
+                    {
                         Name = valid.Name,
                         MeshPath = valid.MeshPath,
                         ShaderPath = valid.ShaderPath,
@@ -359,9 +434,12 @@ public sealed class AssetCatalogModelTests {
                 ],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "non-finite-bounds" => new ModelAssetDescriptor {
-                Parts = [
-                    new ModelPartAsset {
+            "non-finite-bounds" => new ModelAssetDescriptor
+            {
+                Parts =
+                [
+                    new ModelPartAsset
+                    {
                         Name = valid.Name,
                         MeshPath = valid.MeshPath,
                         ShaderPath = valid.ShaderPath,
@@ -371,9 +449,12 @@ public sealed class AssetCatalogModelTests {
                 ],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "inverted-bounds" => new ModelAssetDescriptor {
-                Parts = [
-                    new ModelPartAsset {
+            "inverted-bounds" => new ModelAssetDescriptor
+            {
+                Parts =
+                [
+                    new ModelPartAsset
+                    {
                         Name = valid.Name,
                         MeshPath = valid.MeshPath,
                         ShaderPath = valid.ShaderPath,
@@ -383,17 +464,27 @@ public sealed class AssetCatalogModelTests {
                 ],
                 Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
             },
-            "invalid-model-bounds" => new ModelAssetDescriptor {
+            "invalid-model-bounds" => new ModelAssetDescriptor
+            {
                 Parts = [valid],
                 Bounds = [1f, -2f, -3f, -1f, 2f, 3f],
             },
-            _ => throw new ArgumentOutOfRangeException(nameof(variant), variant, "Unknown descriptor variant."),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(variant),
+                variant,
+                "Unknown descriptor variant."
+            ),
         };
     }
 
-    private static byte[] BuildModelPack(ModelAssetDescriptor descriptor) {
+    private static byte[] BuildModelPack(ModelAssetDescriptor descriptor)
+    {
         PackBuilder builder = CatalogTestData.CreateStandardBuilder();
-        builder.Add("models/castle", AssetEntryType.Model, AssetSerialization.Serialize(descriptor));
+        builder.Add(
+            "models/castle",
+            AssetEntryType.Model,
+            AssetSerialization.Serialize(descriptor)
+        );
         return builder.Build();
     }
 }

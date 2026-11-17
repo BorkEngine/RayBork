@@ -17,7 +17,8 @@ namespace RayBork.Bake;
 /// must not retain per-source state. All output goes through <see cref="AssetProcessorContext"/>.
 /// </para>
 /// </remarks>
-public interface IAssetProcessor {
+public interface IAssetProcessor
+{
     /// <summary>Gets the stable processor name used in diagnostics and configuration hashing.</summary>
     string Name { get; }
 

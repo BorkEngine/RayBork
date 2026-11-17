@@ -5,10 +5,12 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <summary>
 /// GPU tests for shader uploads through the GPU asset bridge and the Vulkan worker.
 /// </summary>
-public sealed class VulkanShaderUploadTests {
+public sealed class VulkanShaderUploadTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void UploadCreatesBothShaderModules() {
+    public void UploadCreatesBothShaderModules()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
 
@@ -32,17 +34,23 @@ public sealed class VulkanShaderUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void BeginUploadCompletesImmediatelyForShaderModules() {
+    public void BeginUploadCompletesImmediatelyForShaderModules()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
 
         VulkanAssetUploadOperation operation = Assert.IsType<VulkanAssetUploadOperation>(
-            harness.Worker.BeginUpload(AssetUploadTestData.Shader()));
+            harness.Worker.BeginUpload(AssetUploadTestData.Shader())
+        );
 
         Assert.False(operation.IsFinished);
 
         // A shader upload records no GPU copy, so the first poll returns the modules without waiting.
-        bool completed = harness.Worker.TryComplete(operation, out GpuAssetResource? resource, out Exception? error);
+        bool completed = harness.Worker.TryComplete(
+            operation,
+            out GpuAssetResource? resource,
+            out Exception? error
+        );
 
         Assert.True(completed);
         Assert.Null(error);
@@ -59,7 +67,8 @@ public sealed class VulkanShaderUploadTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ModuleThatIsNotWordAlignedFailsTheUploadWithRB1008() {
+    public void ModuleThatIsNotWordAlignedFailsTheUploadWithRB1008()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         ShaderGpuUpload broken = AssetUploadTestData.Shader(vertexSpirv: new byte[] { 1, 2, 3 });
@@ -67,7 +76,9 @@ public sealed class VulkanShaderUploadTests {
         Task<GpuAssetResource> task = harness.Bridge.UploadAsync(broken, CancellationToken.None);
         harness.Bridge.ProcessPending(harness.Worker);
 
-        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => task.GetAwaiter().GetResult());
+        AssetLoadException failure = Assert.Throws<AssetLoadException>(() =>
+            task.GetAwaiter().GetResult()
+        );
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, failure.DiagnosticCode);
         Assert.Contains("32-bit words", failure.Message, StringComparison.Ordinal);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);

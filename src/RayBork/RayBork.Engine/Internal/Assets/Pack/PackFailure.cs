@@ -4,7 +4,8 @@ namespace RayBork.Internal;
 /// Creates the coded exceptions the pack reader reports, with messages that always name the pack
 /// display path and, where available, the offending entry path.
 /// </summary>
-internal static class PackFailure {
+internal static class PackFailure
+{
     /// <summary>
     /// A pack is missing, unreadable, or truncated before its header or index is complete.
     /// </summary>
@@ -15,11 +16,13 @@ internal static class PackFailure {
     internal static AssetPackException ReadFailed(
         string displayPath,
         string reason,
-        Exception? innerException = null)
-        => new(
+        Exception? innerException = null
+    ) =>
+        new(
             $"Asset pack '{displayPath}' could not be read: {reason}.",
             DiagnosticCodes.ASSET_PACK_READ_FAILED,
-            innerException);
+            innerException
+        );
 
     /// <summary>
     /// A pack has an unsupported magic, version, or header flag.
@@ -27,11 +30,12 @@ internal static class PackFailure {
     /// <param name="displayPath">The pack identifier used in diagnostics.</param>
     /// <param name="reason">The concrete failure.</param>
     /// <returns>The exception to throw.</returns>
-    internal static AssetPackException UnsupportedFormat(string displayPath, string reason)
-        => new(
+    internal static AssetPackException UnsupportedFormat(string displayPath, string reason) =>
+        new(
             $"Asset pack '{displayPath}' uses an unsupported format: {reason}.",
             DiagnosticCodes.ASSET_PACK_UNSUPPORTED_VERSION,
-            null);
+            null
+        );
 
     /// <summary>
     /// A pack index is structurally invalid.
@@ -43,11 +47,13 @@ internal static class PackFailure {
     internal static AssetPackException InvalidIndex(
         string displayPath,
         string reason,
-        Exception? innerException = null)
-        => new(
+        Exception? innerException = null
+    ) =>
+        new(
             $"Asset pack '{displayPath}' has an invalid index: {reason}.",
             DiagnosticCodes.ASSET_PACK_INVALID_INDEX,
-            innerException);
+            innerException
+        );
 
     /// <summary>
     /// The index hash does not match the index bytes.
@@ -59,12 +65,14 @@ internal static class PackFailure {
     internal static AssetPackException IndexHashMismatch(
         string displayPath,
         uint storedHash,
-        uint actualHash)
-        => new(
+        uint actualHash
+    ) =>
+        new(
             $"Asset pack '{displayPath}' has an index hash mismatch: "
                 + $"the header stores 0x{storedHash:x8} but the index hashes to 0x{actualHash:x8}.",
             DiagnosticCodes.ASSET_PACK_INDEX_HASH_MISMATCH,
-            null);
+            null
+        );
 
     /// <summary>
     /// A stored payload hash does not match the index.
@@ -78,12 +86,14 @@ internal static class PackFailure {
         string displayPath,
         string entryPath,
         ulong storedHash,
-        ulong actualHash)
-        => new(
+        ulong actualHash
+    ) =>
+        new(
             $"Asset pack '{displayPath}' entry '{entryPath}' has a payload hash mismatch: "
                 + $"the index stores 0x{storedHash:x16} but the payload hashes to 0x{actualHash:x16}.",
             DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH,
-            null);
+            null
+        );
 
     /// <summary>
     /// A stored payload could not be decompressed to its declared size.
@@ -97,9 +107,11 @@ internal static class PackFailure {
         string displayPath,
         string entryPath,
         string reason,
-        Exception? innerException = null)
-        => new(
+        Exception? innerException = null
+    ) =>
+        new(
             $"Asset pack '{displayPath}' entry '{entryPath}' could not be decoded: {reason}.",
             DiagnosticCodes.ASSET_LOAD_FAILED,
-            innerException);
+            innerException
+        );
 }

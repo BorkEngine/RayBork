@@ -1,7 +1,8 @@
 namespace RayBork.Bake.Diagnostics;
 
 /// <summary>The severity of one bake diagnostic.</summary>
-internal enum BakeSeverity {
+internal enum BakeSeverity
+{
     /// <summary>A failure that prevents publishing the pack.</summary>
     Error,
 
@@ -31,17 +32,22 @@ internal readonly record struct BakeDiagnostic(
     int? Line,
     int? Column,
     string? AssetPath,
-    string? MemberPath) {
+    string? MemberPath
+)
+{
     /// <summary>Formats the diagnostic as <c>path(line,col): severity RBxxxx: message</c>.</summary>
     /// <returns>The canonical single-line rendering.</returns>
-    internal string Format() {
-        string severity = Severity switch {
+    internal string Format()
+    {
+        string severity = Severity switch
+        {
             BakeSeverity.Warning => "warning",
             BakeSeverity.Info => "info",
             _ => "error",
         };
 
-        string location = FilePath switch {
+        string location = FilePath switch
+        {
             null => string.Empty,
             _ when Line is int line && Column is int column => $"{FilePath}({line},{column}): ",
             _ when Line is int line => $"{FilePath}({line}): ",

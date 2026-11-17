@@ -5,10 +5,12 @@ namespace RayBork.Tests.Fonts.Glyph;
 /// <summary>
 /// Tests the validated per-font MSDF settings the <c>Font</c> creates from the face descriptor.
 /// </summary>
-public sealed class FontGlyphSettingsTests {
+public sealed class FontGlyphSettingsTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultsMatchTheMsdfGenerator() {
+    public void DefaultsMatchTheMsdfGenerator()
+    {
         FontGlyphSettings settings = FontGlyphSettings.CreateDefault(1000);
 
         Assert.Equal(1000, settings.UnitsPerEm);
@@ -19,7 +21,8 @@ public sealed class FontGlyphSettingsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ZeroPaddingIsAccepted() {
+    public void ZeroPaddingIsAccepted()
+    {
         FontGlyphSettings settings = new(1000, 32, 4, 0);
 
         Assert.Equal(0, settings.MsdfPadding);
@@ -34,12 +37,10 @@ public sealed class FontGlyphSettingsTests {
     [InlineData(1000, 32, 4, -1)]
     [InlineData(1000, 4, 4, 2)]
     [InlineData(1000, 3, 4, 2)]
-    public void InvalidValuesAreRejected(
-        int unitsPerEm,
-        int pixelSize,
-        int range,
-        int padding) {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new FontGlyphSettings(unitsPerEm, pixelSize, range, padding));
+    public void InvalidValuesAreRejected(int unitsPerEm, int pixelSize, int range, int padding)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new FontGlyphSettings(unitsPerEm, pixelSize, range, padding)
+        );
     }
 }

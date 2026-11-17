@@ -3,7 +3,8 @@ namespace RayBork.Internal;
 /// <summary>
 /// The outcome of one glyph generation enqueue request.
 /// </summary>
-internal enum GlyphEnqueueResult {
+internal enum GlyphEnqueueResult
+{
     /// <summary>The request was added to the FIFO queue.</summary>
     Queued,
 

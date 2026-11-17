@@ -31,7 +31,8 @@ namespace RayBork.Internal;
 /// metrics. The default instance is the empty layout.
 /// </para>
 /// </remarks>
-internal readonly struct MsdfGlyphLayout {
+internal readonly struct MsdfGlyphLayout
+{
     /// <summary>Initializes a layout.</summary>
     /// <param name="textureWidth">The texture width in pixels.</param>
     /// <param name="textureHeight">The texture height in pixels.</param>
@@ -53,7 +54,9 @@ internal readonly struct MsdfGlyphLayout {
         float bearingXEm,
         float bearingYEm,
         float widthEm,
-        float heightEm) {
+        float heightEm
+    )
+    {
         TextureWidth = textureWidth;
         TextureHeight = textureHeight;
         Scale = scale;
@@ -108,7 +111,6 @@ internal readonly struct MsdfGlyphLayout {
     /// The point in texture pixels, x to the right and y downward, with row zero at the outline's
     /// maximum y.
     /// </returns>
-    internal Vector2 ToPixel(Vector2 fontPoint) => new(
-        (fontPoint.X * Scale) + OriginX,
-        OriginY - (fontPoint.Y * Scale));
+    internal Vector2 ToPixel(Vector2 fontPoint) =>
+        new((fontPoint.X * Scale) + OriginX, OriginY - (fontPoint.Y * Scale));
 }

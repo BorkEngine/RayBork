@@ -4,14 +4,21 @@ using RayBork.Tests.Rendering;
 
 namespace RayBork.Tests;
 
-public sealed class CameraMathTests {
+public sealed class CameraMathTests
+{
     private const float TOLERANCE = 1e-5f;
     private const float ASPECT = 16f / 9f;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerspectiveMapsNearToOneAndInfinityToZero() {
-        Matrix4x4 projection = CameraMath.CreatePerspectiveProjection(60f, ASPECT, 0.1f, float.PositiveInfinity);
+    public void PerspectiveMapsNearToOneAndInfinityToZero()
+    {
+        Matrix4x4 projection = CameraMath.CreatePerspectiveProjection(
+            60f,
+            ASPECT,
+            0.1f,
+            float.PositiveInfinity
+        );
 
         Assert.Equal(1f, ProjectDepth(projection, -0.1f), TOLERANCE);
         Assert.Equal(0f, ProjectDepth(projection, -1_000_000f), TOLERANCE);
@@ -19,7 +26,8 @@ public sealed class CameraMathTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerspectiveFiniteFarMapsTheFarPlaneToZero() {
+    public void PerspectiveFiniteFarMapsTheFarPlaneToZero()
+    {
         Matrix4x4 projection = CameraMath.CreatePerspectiveProjection(60f, ASPECT, 0.1f, 500f);
 
         Assert.Equal(1f, ProjectDepth(projection, -0.1f), TOLERANCE);
@@ -29,8 +37,14 @@ public sealed class CameraMathTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerspectiveYFlipMapsWorldUpToTheTopOfTheScreen() {
-        Matrix4x4 projection = CameraMath.CreatePerspectiveProjection(60f, ASPECT, 0.1f, float.PositiveInfinity);
+    public void PerspectiveYFlipMapsWorldUpToTheTopOfTheScreen()
+    {
+        Matrix4x4 projection = CameraMath.CreatePerspectiveProjection(
+            60f,
+            ASPECT,
+            0.1f,
+            float.PositiveInfinity
+        );
 
         Vector3 below = ProjectNdc(projection, new Vector3(0f, -1f, -5f));
         Vector3 above = ProjectNdc(projection, new Vector3(0f, 1f, -5f));
@@ -43,9 +57,20 @@ public sealed class CameraMathTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerspectiveUsesTheViewportAspectRatio() {
-        Matrix4x4 wide = CameraMath.CreatePerspectiveProjection(60f, 2f, 0.1f, float.PositiveInfinity);
-        Matrix4x4 square = CameraMath.CreatePerspectiveProjection(60f, 1f, 0.1f, float.PositiveInfinity);
+    public void PerspectiveUsesTheViewportAspectRatio()
+    {
+        Matrix4x4 wide = CameraMath.CreatePerspectiveProjection(
+            60f,
+            2f,
+            0.1f,
+            float.PositiveInfinity
+        );
+        Matrix4x4 square = CameraMath.CreatePerspectiveProjection(
+            60f,
+            1f,
+            0.1f,
+            float.PositiveInfinity
+        );
 
         Assert.Equal(square.M11 / 2f, wide.M11, TOLERANCE);
         Assert.Equal(square.M22, wide.M22, TOLERANCE);
@@ -53,7 +78,8 @@ public sealed class CameraMathTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OrthographicMapsNearToOneFarToZeroAndUsesHeightAndAspect() {
+    public void OrthographicMapsNearToOneFarToZeroAndUsesHeightAndAspect()
+    {
         Matrix4x4 projection = CameraMath.CreateOrthographicProjection(4f, 2f, 0.5f, 20f);
 
         Assert.Equal(1f, ProjectDepth(projection, -0.5f), TOLERANCE);
@@ -75,14 +101,17 @@ public sealed class CameraMathTests {
     [InlineData(60f, 0f, 100f)]
     [InlineData(60f, -1f, 100f)]
     [InlineData(60f, float.PositiveInfinity, float.PositiveInfinity)]
-    public void InvalidPerspectiveParametersThrow(float fieldOfView, float near, float far) {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => CameraMath.ValidatePerspective(fieldOfView, near, far));
+    public void InvalidPerspectiveParametersThrow(float fieldOfView, float near, float far)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CameraMath.ValidatePerspective(fieldOfView, near, far)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerspectiveValidationAcceptsTheDocumentedRange() {
+    public void PerspectiveValidationAcceptsTheDocumentedRange()
+    {
         CameraMath.ValidatePerspective(60f, 0.1f, 100f);
         CameraMath.ValidatePerspective(60f, 0.1f, float.PositiveInfinity);
         CameraMath.ValidatePerspective(179f, float.Epsilon, 1e30f);
@@ -95,14 +124,17 @@ public sealed class CameraMathTests {
     [InlineData(float.NaN, 0.1f, 100f)]
     [InlineData(4f, 0.1f, float.PositiveInfinity)]
     [InlineData(4f, 0.1f, 0.05f)]
-    public void InvalidOrthographicParametersThrow(float height, float near, float far) {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => CameraMath.ValidateOrthographic(height, near, far));
+    public void InvalidOrthographicParametersThrow(float height, float near, float far)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            CameraMath.ValidateOrthographic(height, near, far)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SingularCameraTransformThrows() {
+    public void SingularCameraTransformThrows()
+    {
         Transform singular = new(Vector3.Zero, Quaternion.Identity, new Vector3(1f, 0f, 1f));
 
         Assert.Throws<InvalidOperationException>(() => CameraMath.CreateViewMatrix(singular));
@@ -110,7 +142,8 @@ public sealed class CameraMathTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NullViewportResolvesToTheFullTarget() {
+    public void NullViewportResolvesToTheFullTarget()
+    {
         Rect viewport = CameraMath.ResolveViewport(null, 1280, 720, "viewport");
 
         Assert.Equal(new Rect(0f, 0f, 1280f, 720f), viewport);
@@ -118,8 +151,14 @@ public sealed class CameraMathTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ViewportIsClampedToTheTarget() {
-        Rect viewport = CameraMath.ResolveViewport(new Rect(-10f, -20f, 200f, 100f), 1280, 720, "viewport");
+    public void ViewportIsClampedToTheTarget()
+    {
+        Rect viewport = CameraMath.ResolveViewport(
+            new Rect(-10f, -20f, 200f, 100f),
+            1280,
+            720,
+            "viewport"
+        );
 
         Assert.Equal(new Rect(0f, 0f, 190f, 80f), viewport);
     }
@@ -131,42 +170,59 @@ public sealed class CameraMathTests {
     [InlineData(0f, 0f, 10f, -1f)]
     [InlineData(2000f, 0f, 10f, 10f)]
     [InlineData(0f, 2000f, 10f, 10f)]
-    public void InvalidViewportThrows(float x, float y, float width, float height) {
+    public void InvalidViewportThrows(float x, float y, float width, float height)
+    {
         Assert.Equal(
             "viewport",
-            Assert.Throws<ArgumentException>(
-                () => CameraMath.ResolveViewport(new Rect(x, y, width, height), 1280, 720, "viewport")).ParamName);
+            Assert
+                .Throws<ArgumentException>(() =>
+                    CameraMath.ResolveViewport(new Rect(x, y, width, height), 1280, 720, "viewport")
+                )
+                .ParamName
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptyTargetThrows() {
-        Assert.Throws<ArgumentException>(() => CameraMath.ResolveViewport(null, 0, 720, "viewport"));
-        Assert.Throws<ArgumentException>(() => CameraMath.ResolveViewport(null, 1280, -1, "viewport"));
+    public void EmptyTargetThrows()
+    {
+        Assert.Throws<ArgumentException>(() =>
+            CameraMath.ResolveViewport(null, 0, 720, "viewport")
+        );
+        Assert.Throws<ArgumentException>(() =>
+            CameraMath.ResolveViewport(null, 1280, -1, "viewport")
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NullClearColorIsOpaqueBlackAndHdrValuesAreAccepted() {
+    public void NullClearColorIsOpaqueBlackAndHdrValuesAreAccepted()
+    {
         Assert.Equal(Color.Black, CameraMath.ResolveClearColor(null, "clearColor"));
 
         Color hdr = new(4f, 2f, 0.5f, 1f);
         Assert.Equal(hdr, CameraMath.ResolveClearColor(hdr, "clearColor"));
 
-        Assert.Throws<ArgumentException>(
-            () => CameraMath.ResolveClearColor(new Color(float.NaN, 0f, 0f, 1f), "clearColor"));
+        Assert.Throws<ArgumentException>(() =>
+            CameraMath.ResolveClearColor(new Color(float.NaN, 0f, 0f, 1f), "clearColor")
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ViewProjectionPlacesAPointInFrontOfTheCameraOnScreen() {
+    public void ViewProjectionPlacesAPointInFrontOfTheCameraOnScreen()
+    {
         CameraTestHost host = new();
-        using (host) {
+        using (host)
+        {
             host.BeginFrame();
-            Camera camera = host.CreatePerspectiveCamera(transform: new Transform(new Vector3(0f, 0f, 5f)));
+            Camera camera = host.CreatePerspectiveCamera(
+                transform: new Transform(new Vector3(0f, 0f, 5f))
+            );
             Vector4 clip = Vector4.Transform(
                 new Vector4(0f, 0f, 0f, 1f),
-                camera.ViewProjectionMatrix);
+                camera.ViewProjectionMatrix
+            );
 
             Assert.True(clip.W > 0f);
             Assert.Equal(0f, clip.X / clip.W, TOLERANCE);
@@ -178,12 +234,14 @@ public sealed class CameraMathTests {
         }
     }
 
-    private static float ProjectDepth(Matrix4x4 projection, float viewZ) {
+    private static float ProjectDepth(Matrix4x4 projection, float viewZ)
+    {
         Vector3 ndc = ProjectNdc(projection, new Vector3(0f, 0f, viewZ));
         return ndc.Z;
     }
 
-    private static Vector3 ProjectNdc(Matrix4x4 projection, Vector3 viewPosition) {
+    private static Vector3 ProjectNdc(Matrix4x4 projection, Vector3 viewPosition)
+    {
         Vector4 clip = Vector4.Transform(new Vector4(viewPosition, 1f), projection);
         return new Vector3(clip.X / clip.W, clip.Y / clip.W, clip.Z / clip.W);
     }

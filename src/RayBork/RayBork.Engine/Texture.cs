@@ -23,7 +23,8 @@ namespace RayBork;
 /// and directly disposing the view still throws.
 /// </para>
 /// </remarks>
-public sealed class Texture : IAsset {
+public sealed class Texture : IAsset
+{
     private readonly ITextureOwner _owner;
     private readonly int _width;
     private readonly int _height;
@@ -41,9 +42,12 @@ public sealed class Texture : IAsset {
     /// <param name="descriptor">The packed or synthetic texture descriptor.</param>
     /// <param name="isProcedural">Whether the texture was built by a <see cref="TextureBuilder"/>.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal Texture(EngineAsset asset, TextureAssetDescriptor descriptor, bool isProcedural = false)
-        : this((ITextureOwner)asset, descriptor, isProcedural, isRenderTargetView: false) {
-    }
+    internal Texture(
+        EngineAsset asset,
+        TextureAssetDescriptor descriptor,
+        bool isProcedural = false
+    )
+        : this((ITextureOwner)asset, descriptor, isProcedural, isRenderTargetView: false) { }
 
     /// <summary>
     /// Initializes a texture over a non-asset lifetime.
@@ -56,7 +60,13 @@ public sealed class Texture : IAsset {
     /// <see cref="RenderTexture"/> creates and disposes.
     /// </param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal Texture(ITextureOwner owner, TextureAssetDescriptor descriptor, bool isProcedural, bool isRenderTargetView) {
+    internal Texture(
+        ITextureOwner owner,
+        TextureAssetDescriptor descriptor,
+        bool isProcedural,
+        bool isRenderTargetView
+    )
+    {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(descriptor);
 
@@ -80,8 +90,10 @@ public sealed class Texture : IAsset {
     /// <c>/_procedural/texture/</c>.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
-    public bool IsProcedural {
-        get {
+    public bool IsProcedural
+    {
+        get
+        {
             ThrowIfDisposed();
             return _isProcedural;
         }
@@ -92,8 +104,10 @@ public sealed class Texture : IAsset {
     /// changes in place when the owning <see cref="RenderTexture"/> is resized.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
-    public int Width {
-        get {
+    public int Width
+    {
+        get
+        {
             ThrowIfDisposed();
             return _owner is RenderTextureViewLifetime view ? view.Width : _width;
         }
@@ -104,8 +118,10 @@ public sealed class Texture : IAsset {
     /// changes in place when the owning <see cref="RenderTexture"/> is resized.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
-    public int Height {
-        get {
+    public int Height
+    {
+        get
+        {
             ThrowIfDisposed();
             return _owner is RenderTextureViewLifetime view ? view.Height : _height;
         }
@@ -115,8 +131,10 @@ public sealed class Texture : IAsset {
     /// Gets the number of mip levels in the uploaded image.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
-    public int MipLevels {
-        get {
+    public int MipLevels
+    {
+        get
+        {
             ThrowIfDisposed();
             return _mipLevels;
         }
@@ -126,8 +144,10 @@ public sealed class Texture : IAsset {
     /// Gets the GPU format of the texture.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
-    public TextureFormat Format {
-        get {
+    public TextureFormat Format
+    {
+        get
+        {
             ThrowIfDisposed();
             return _format;
         }
@@ -138,8 +158,10 @@ public sealed class Texture : IAsset {
     /// linear and return <see langword="false"/>.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
-    public bool IsSrgb {
-        get {
+    public bool IsSrgb
+    {
+        get
+        {
             ThrowIfDisposed();
             return _isSrgb;
         }
@@ -149,8 +171,10 @@ public sealed class Texture : IAsset {
     /// Gets the sampler state of the texture.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The texture is disposed.</exception>
-    public SamplerState Sampler {
-        get {
+    public SamplerState Sampler
+    {
+        get
+        {
             ThrowIfDisposed();
             return _sampler;
         }
@@ -170,9 +194,11 @@ public sealed class Texture : IAsset {
     /// its <see cref="RenderTexture"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">The texture is a render target view.</exception>
-    internal EngineAsset Lifetime => _owner.EngineAsset
+    internal EngineAsset Lifetime =>
+        _owner.EngineAsset
         ?? throw new InvalidOperationException(
-            "A render target view has no engine-asset lifetime; its RenderTexture owns it.");
+            "A render target view has no engine-asset lifetime; its RenderTexture owns it."
+        );
 
     /// <summary>
     /// Gets the bindless binding resource the renderer samples, or <see langword="null"/> when the GPU
@@ -194,8 +220,10 @@ public sealed class Texture : IAsset {
     /// Retires the view and releases the owner reference the render texture held on it when the
     /// owning render texture is disposed. A non-view texture is unaffected.
     /// </summary>
-    internal void RetireRenderTargetView() {
-        if (_owner is RenderTextureViewLifetime view) {
+    internal void RetireRenderTargetView()
+    {
+        if (_owner is RenderTextureViewLifetime view)
+        {
             view.Retire();
             view.ReleaseOwnerReference();
         }
@@ -222,12 +250,16 @@ public sealed class Texture : IAsset {
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Design",
         "CA1065",
-        Justification = "Disposing a render target view is a documented usage error; throwing a clear InvalidOperationException tells the caller to dispose the owning RenderTexture instead of silently leaking the target.")]
-    public void Dispose() {
-        if (_isRenderTargetView) {
+        Justification = "Disposing a render target view is a documented usage error; throwing a clear InvalidOperationException tells the caller to dispose the owning RenderTexture instead of silently leaking the target."
+    )]
+    public void Dispose()
+    {
+        if (_isRenderTargetView)
+        {
             throw new InvalidOperationException(
                 "A render target view is owned by its RenderTexture; dispose the RenderTexture "
-                    + "instead of the view.");
+                    + "instead of the view."
+            );
         }
 
         ObjectDisposedException.ThrowIf(_owner.IsDisposed, this);

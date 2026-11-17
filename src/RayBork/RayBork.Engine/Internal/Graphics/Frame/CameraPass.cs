@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// is ready or rendering.
 /// </para>
 /// </remarks>
-internal sealed class CameraPass {
+internal sealed class CameraPass
+{
     private RenderDrawRecord[] _draws = new RenderDrawRecord[4];
     private PostProcessEffectSnapshot[] _postProcessEffects = new PostProcessEffectSnapshot[2];
     private int _drawCount;
@@ -81,11 +82,15 @@ internal sealed class CameraPass {
     internal int PostProcessEffectCount => _postProcessEffectCount;
 
     /// <summary>Gets whether the pass has at least one enabled post-process effect.</summary>
-    internal bool HasEnabledPostProcessEffects {
-        get {
+    internal bool HasEnabledPostProcessEffects
+    {
+        get
+        {
             ReadOnlySpan<PostProcessEffectSnapshot> effects = PostProcessEffects;
-            for (int index = 0; index < effects.Length; index++) {
-                if (effects[index].Enabled) {
+            for (int index = 0; index < effects.Length; index++)
+            {
+                if (effects[index].Enabled)
+                {
                     return true;
                 }
             }
@@ -112,7 +117,9 @@ internal sealed class CameraPass {
         int viewportHeight,
         ClearMode clearMode,
         Color clearColor,
-        long targetId = 0) {
+        long targetId = 0
+    )
+    {
         Index = index;
         View = view;
         Projection = projection;
@@ -135,14 +142,18 @@ internal sealed class CameraPass {
     /// <param name="record">The pooled record rented from the frame packet.</param>
     /// <exception cref="ArgumentNullException"><paramref name="record"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">The pass is sealed.</exception>
-    internal void Add(RenderDrawRecord record) {
+    internal void Add(RenderDrawRecord record)
+    {
         ArgumentNullException.ThrowIfNull(record);
-        if (_sealed) {
+        if (_sealed)
+        {
             throw new InvalidOperationException(
-                "The camera pass is already sealed; a draw cannot be recorded into a sealed pass.");
+                "The camera pass is already sealed; a draw cannot be recorded into a sealed pass."
+            );
         }
 
-        if (_drawCount == _draws.Length) {
+        if (_drawCount == _draws.Length)
+        {
             Array.Resize(ref _draws, checked(_draws.Length * 2));
         }
 
@@ -155,14 +166,18 @@ internal sealed class CameraPass {
     /// <param name="effect">The snapshot captured for this camera.</param>
     /// <exception cref="ArgumentNullException"><paramref name="effect"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">The pass is sealed.</exception>
-    internal void AddPostProcessEffect(PostProcessEffectSnapshot effect) {
+    internal void AddPostProcessEffect(PostProcessEffectSnapshot effect)
+    {
         ArgumentNullException.ThrowIfNull(effect);
-        if (_sealed) {
+        if (_sealed)
+        {
             throw new InvalidOperationException(
-                "The camera pass is already sealed; a post-process effect cannot be recorded into a sealed pass.");
+                "The camera pass is already sealed; a post-process effect cannot be recorded into a sealed pass."
+            );
         }
 
-        if (_postProcessEffectCount == _postProcessEffects.Length) {
+        if (_postProcessEffectCount == _postProcessEffects.Length)
+        {
             Array.Resize(ref _postProcessEffects, checked(_postProcessEffects.Length * 2));
         }
 
@@ -178,9 +193,11 @@ internal sealed class CameraPass {
     /// Clears the pass for reuse by the next frame that owns the slot. Called only while the slot is
     /// free, so no render thread can observe the partly reset list.
     /// </summary>
-    internal void Reset() {
+    internal void Reset()
+    {
         Array.Clear(_draws, 0, _drawCount);
-        for (int index = 0; index < _postProcessEffectCount; index++) {
+        for (int index = 0; index < _postProcessEffectCount; index++)
+        {
             _postProcessEffects[index].Reset();
         }
 

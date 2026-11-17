@@ -3,7 +3,8 @@ namespace RayBork.Internal;
 /// <summary>
 /// The startup options that the main thread passes to <see cref="IEnginePlatform.Initialize"/>.
 /// </summary>
-internal sealed record PlatformOptions {
+internal sealed record PlatformOptions
+{
     /// <summary>
     /// Gets the initial window title.
     /// </summary>

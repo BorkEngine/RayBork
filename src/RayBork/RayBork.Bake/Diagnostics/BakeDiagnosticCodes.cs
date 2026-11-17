@@ -3,7 +3,8 @@ namespace RayBork.Bake.Diagnostics;
 /// <summary>
 /// The stable diagnostic codes used by the bake tooling.
 /// </summary>
-internal static class BakeDiagnosticCodes {
+internal static class BakeDiagnosticCodes
+{
     /// <summary>The builder configuration or a registered processor is invalid.</summary>
     internal const string CONFIGURATION_INVALID = "RB4001";
 

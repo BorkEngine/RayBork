@@ -24,7 +24,8 @@ namespace RayBork.Tests;
 /// samples.
 /// </para>
 /// </remarks>
-public sealed class TextDrawGpuTests {
+public sealed class TextDrawGpuTests
+{
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private static readonly Color _textColor = new(0.9f, 0.35f, 0.1f, 1f);
     private static readonly Color _occluderColor = new(0.2f, 0.8f, 0.4f, 1f);
@@ -39,8 +40,11 @@ public sealed class TextDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DrawTextRendersItsGlyphsAtTheExpectedScreenAreaAndOrientation() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void DrawTextRendersItsGlyphsAtTheExpectedScreenAreaAndOrientation()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Font font = harness.LoadFont();
         harness.WarmGlyphs(font, ORIENTATION_TEXT);
         (TextLayoutResult layout, TextGlyphInstance[] glyphs) = ArrangeText(font, ORIENTATION_TEXT);
@@ -48,19 +52,28 @@ public sealed class TextDrawGpuTests {
         InkArea blockArea = default;
         InkArea glyphArea = default;
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 camera.DrawText(font, ORIENTATION_TEXT, transform, TEXT_SIZE, _textColor);
-                blockArea = ScreenArea(camera, harness, layout.BoundsMin, layout.BoundsMax, transform);
+                blockArea = ScreenArea(
+                    camera,
+                    harness,
+                    layout.BoundsMin,
+                    layout.BoundsMax,
+                    transform
+                );
                 glyphArea = ScreenArea(
                     camera,
                     harness,
                     glyphs[0].Position,
                     glyphs[0].Position + glyphs[0].Size,
-                    transform);
+                    transform
+                );
             },
             transform: null,
             clearColor: _clearColor,
-            height: ORTHOGRAPHIC_HEIGHT);
+            height: ORTHOGRAPHIC_HEIGHT
+        );
 
         RenderStats stats = harness.Host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
@@ -78,9 +91,10 @@ public sealed class TextDrawGpuTests {
         AssertColorNear(_clearColor, harness.ReadColor(inkX, mirroredY), INK_TOLERANCE);
 
         // The probes outside the text block stay the clear color.
-        uint backgroundX = blockArea.MinX >= BACKGROUND_MARGIN
-            ? checked((uint)(blockArea.MinX - BACKGROUND_MARGIN))
-            : checked((uint)(blockArea.MaxX + BACKGROUND_MARGIN));
+        uint backgroundX =
+            blockArea.MinX >= BACKGROUND_MARGIN
+                ? checked((uint)(blockArea.MinX - BACKGROUND_MARGIN))
+                : checked((uint)(blockArea.MaxX + BACKGROUND_MARGIN));
         AssertColorNear(_clearColor, harness.ReadColor(backgroundX, inkY));
         AssertColorNear(_clearColor, harness.ReadColor(2, 2));
         Assert.Empty(harness.Host.Instance.ConsumeValidationErrors());
@@ -88,33 +102,40 @@ public sealed class TextDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void AnOpaqueQuadInFrontOfTheTextHidesIt() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void AnOpaqueQuadInFrontOfTheTextHidesIt()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Font font = harness.LoadFont();
         harness.WarmGlyphs(font, SAMPLE_TEXT);
         (TextLayoutResult layout, TextGlyphInstance[] glyphs) = ArrangeText(font, SAMPLE_TEXT);
         Transform transform = CenteredTransform(layout, TEXT_Z);
         (uint X, uint Y) ink = default;
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 camera.DrawText(font, SAMPLE_TEXT, transform, TEXT_SIZE, _textColor);
                 ink = GlyphCenterPixel(camera, glyphs[1], transform);
             },
             transform: null,
             clearColor: _clearColor,
-            height: ORTHOGRAPHIC_HEIGHT);
+            height: ORTHOGRAPHIC_HEIGHT
+        );
         AssertColorNear(_textColor, harness.ReadColor(ink.X, ink.Y), INK_TOLERANCE);
 
         // The point is a camera-facing opaque quad with depth writes, recorded one world unit in front
         // of the text. The text's greater-or-equal depth test rejects every covered fragment.
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 camera.DrawText(font, SAMPLE_TEXT, transform, TEXT_SIZE, _textColor);
                 camera.DrawPoint(new Vector3(0f, 0f, TEXT_Z + 1f), _occluderColor, 2f);
             },
             transform: null,
             clearColor: _clearColor,
-            height: ORTHOGRAPHIC_HEIGHT);
+            height: ORTHOGRAPHIC_HEIGHT
+        );
 
         RenderStats stats = harness.Host.Backend.Stats;
         Assert.Equal(2, stats.DrawCalls);
@@ -126,8 +147,11 @@ public sealed class TextDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TwoStringsInTheSameFrameAndFontReportOneDrawCall() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void TwoStringsInTheSameFrameAndFontReportOneDrawCall()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Font font = harness.LoadFont();
         harness.WarmGlyphs(font, SAMPLE_TEXT);
         (TextLayoutResult layout, TextGlyphInstance[] glyphs) = ArrangeText(font, SAMPLE_TEXT);
@@ -136,7 +160,8 @@ public sealed class TextDrawGpuTests {
         (uint X, uint Y) firstInk = default;
         (uint X, uint Y) secondInk = default;
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 camera.DrawText(font, SAMPLE_TEXT, first, TEXT_SIZE, _textColor);
                 camera.DrawText(font, SAMPLE_TEXT, second, TEXT_SIZE, _textColor);
                 firstInk = GlyphCenterPixel(camera, glyphs[1], first);
@@ -144,7 +169,8 @@ public sealed class TextDrawGpuTests {
             },
             transform: null,
             clearColor: _clearColor,
-            height: ORTHOGRAPHIC_HEIGHT);
+            height: ORTHOGRAPHIC_HEIGHT
+        );
 
         RenderStats stats = harness.Host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
@@ -159,7 +185,11 @@ public sealed class TextDrawGpuTests {
     /// <summary>
     /// Lays the text out with the engine layout engine over the loaded font's metrics.
     /// </summary>
-    private static (TextLayoutResult Result, TextGlyphInstance[] Glyphs) ArrangeText(Font font, string text) {
+    private static (TextLayoutResult Result, TextGlyphInstance[] Glyphs) ArrangeText(
+        Font font,
+        string text
+    )
+    {
         TextLayoutBuffer buffer = new();
         TextLayoutEngine.Arrange(
             font.Metrics,
@@ -169,7 +199,8 @@ public sealed class TextDrawGpuTests {
             TextWrapping.None,
             0f,
             buffer,
-            out TextLayoutResult result);
+            out TextLayoutResult result
+        );
         return (result, buffer.Glyphs.ToArray());
     }
 
@@ -177,7 +208,8 @@ public sealed class TextDrawGpuTests {
     /// Places the layout origin so the block's layout bounds are centered on the world origin in the
     /// plane at <paramref name="z"/>.
     /// </summary>
-    private static Transform CenteredTransform(TextLayoutResult layout, float z) {
+    private static Transform CenteredTransform(TextLayoutResult layout, float z)
+    {
         Vector2 center = (layout.BoundsMin + layout.BoundsMax) * 0.5f;
         return new Transform(new Vector3(-center.X, -center.Y, z));
     }
@@ -185,7 +217,12 @@ public sealed class TextDrawGpuTests {
     /// <summary>
     /// Gets the center pixel of one laid-out glyph's padded quad.
     /// </summary>
-    private static (uint X, uint Y) GlyphCenterPixel(Camera camera, TextGlyphInstance glyph, Transform transform) {
+    private static (uint X, uint Y) GlyphCenterPixel(
+        Camera camera,
+        TextGlyphInstance glyph,
+        Transform transform
+    )
+    {
         Vector2 local = glyph.Position + (glyph.Size * 0.5f);
         Vector2 screen = camera.WorldToScreen(transform.TransformPoint(new Vector3(local, 0f)));
         return (Pixel(screen.X), Pixel(screen.Y));
@@ -199,13 +236,17 @@ public sealed class TextDrawGpuTests {
         PrimitiveDrawGpuHarness harness,
         Vector2 localMin,
         Vector2 localMax,
-        Transform transform) {
+        Transform transform
+    )
+    {
         Vector2 minimum = new(float.PositiveInfinity);
         Vector2 maximum = new(float.NegativeInfinity);
-        for (int corner = 0; corner < 4; corner++) {
+        for (int corner = 0; corner < 4; corner++)
+        {
             Vector2 local = new(
                 (corner & 1) == 0 ? localMin.X : localMax.X,
-                (corner & 2) == 0 ? localMin.Y : localMax.Y);
+                (corner & 2) == 0 ? localMin.Y : localMax.Y
+            );
             Vector2 screen = camera.WorldToScreen(transform.TransformPoint(new Vector3(local, 0f)));
             minimum = Vector2.Min(minimum, screen);
             maximum = Vector2.Max(maximum, screen);
@@ -217,21 +258,30 @@ public sealed class TextDrawGpuTests {
             Math.Clamp((int)MathF.Floor(minimum.X), 0, width - 1),
             Math.Clamp((int)MathF.Floor(minimum.Y), 0, height - 1),
             Math.Clamp((int)MathF.Ceiling(maximum.X), 0, width - 1),
-            Math.Clamp((int)MathF.Ceiling(maximum.Y), 0, height - 1));
+            Math.Clamp((int)MathF.Ceiling(maximum.Y), 0, height - 1)
+        );
     }
 
     private static uint Pixel(float coordinate) => checked((uint)MathF.Floor(coordinate));
 
-    private static void AssertColorNear(Color expected, (float R, float G, float B) actual, float tolerance = COLOR_TOLERANCE) {
+    private static void AssertColorNear(
+        Color expected,
+        (float R, float G, float B) actual,
+        float tolerance = COLOR_TOLERANCE
+    )
+    {
         Assert.True(
             MathF.Abs(expected.R - actual.R) <= tolerance,
-            $"Red {actual.R} is not within {tolerance} of {expected.R}.");
+            $"Red {actual.R} is not within {tolerance} of {expected.R}."
+        );
         Assert.True(
             MathF.Abs(expected.G - actual.G) <= tolerance,
-            $"Green {actual.G} is not within {tolerance} of {expected.G}.");
+            $"Green {actual.G} is not within {tolerance} of {expected.G}."
+        );
         Assert.True(
             MathF.Abs(expected.B - actual.B) <= tolerance,
-            $"Blue {actual.B} is not within {tolerance} of {expected.B}.");
+            $"Blue {actual.B} is not within {tolerance} of {expected.B}."
+        );
     }
 
     private readonly record struct InkArea(int MinX, int MinY, int MaxX, int MaxY);

@@ -27,11 +27,13 @@ namespace RayBork.Internal;
 /// and carries no state beyond the reason.
 /// </para>
 /// </remarks>
-internal sealed class FontUnsupportedException : Exception {
+internal sealed class FontUnsupportedException : Exception
+{
     /// <summary>Initializes an unsupported-feature failure.</summary>
     /// <param name="reason">The actionable cause, without a sentence prefix.</param>
     internal FontUnsupportedException(string reason)
-        : base($"The font face uses an unsupported feature: {reason}.") {
+        : base($"The font face uses an unsupported feature: {reason}.")
+    {
         Reason = reason;
     }
 

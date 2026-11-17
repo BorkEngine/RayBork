@@ -9,7 +9,8 @@ namespace RayBork;
 /// denoise samples, <see cref="Low"/> 16/4, <see cref="Medium"/> 16/8 (the default), <see
 /// cref="High"/> 64/8, and <see cref="Ultra"/> 64/16. Every value uses two denoise iterations.
 /// </remarks>
-public enum SsaoQuality {
+public enum SsaoQuality
+{
     /// <summary>8 AO samples and 4 denoise samples per pixel.</summary>
     Performance,
 

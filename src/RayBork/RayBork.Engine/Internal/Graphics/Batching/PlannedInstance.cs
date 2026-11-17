@@ -22,4 +22,8 @@ namespace RayBork.Internal;
 /// <param name="Record">The draw record that supplies the per-instance data.</param>
 /// <param name="InstanceIndex">The zero-based index into the record's instance arrays.</param>
 /// <param name="Depth">The view-space depth of the instance origin; larger values are farther away.</param>
-internal readonly record struct PlannedInstance(RenderDrawRecord Record, int InstanceIndex, float Depth);
+internal readonly record struct PlannedInstance(
+    RenderDrawRecord Record,
+    int InstanceIndex,
+    float Depth
+);

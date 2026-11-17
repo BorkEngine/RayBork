@@ -3,10 +3,12 @@ using System.Runtime.InteropServices;
 
 namespace RayBork.Tests.Assets.Procedural;
 
-public sealed class VertexTests {
+public sealed class VertexTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LayoutIsSequentialAndExactlyEightyEightBytes() {
+    public void LayoutIsSequentialAndExactlyEightyEightBytes()
+    {
         Assert.Equal(88, Marshal.SizeOf<Vertex>());
         Assert.Equal(0, Marshal.OffsetOf<Vertex>(nameof(Vertex.Position)).ToInt32());
         Assert.Equal(12, Marshal.OffsetOf<Vertex>(nameof(Vertex.Normal)).ToInt32());
@@ -20,7 +22,8 @@ public sealed class VertexTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorUsesTheDocumentedAttributeDefaults() {
+    public void ConstructorUsesTheDocumentedAttributeDefaults()
+    {
         Vertex vertex = new(new Vector3(1f, 2f, 3f));
 
         Assert.Equal(new Vector3(1f, 2f, 3f), vertex.Position);
@@ -35,7 +38,8 @@ public sealed class VertexTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorStoresEveryOptionalAttribute() {
+    public void ConstructorStoresEveryOptionalAttribute()
+    {
         Vertex vertex = new(
             new Vector3(1f, 2f, 3f),
             new Vector3(0f, 0f, 1f),
@@ -44,7 +48,8 @@ public sealed class VertexTests {
             new Vector2(0.5f, 0.6f),
             new Vector2(0.7f, 0.8f),
             new Color(0.25f, 0.5f, 0.75f, 0.5f),
-            new Vector4(1f, 0f, 0f, -1f));
+            new Vector4(1f, 0f, 0f, -1f)
+        );
 
         Assert.Equal(new Vector3(1f, 2f, 3f), vertex.Position);
         Assert.Equal(new Vector3(0f, 0f, 1f), vertex.Normal);
@@ -58,7 +63,8 @@ public sealed class VertexTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultStructIsAllZero() {
+    public void DefaultStructIsAllZero()
+    {
         Vertex vertex = default;
 
         Assert.Equal(Vector3.Zero, vertex.Position);

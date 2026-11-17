@@ -40,7 +40,8 @@ namespace RayBork.Internal;
 /// whitespace can start a line. Kerning never spans a line break.
 /// </para>
 /// </remarks>
-internal static class TextLayoutEngine {
+internal static class TextLayoutEngine
+{
     private const char CARRIAGE_RETURN = '\r';
     private const int NO_GLYPH = int.MinValue;
 
@@ -79,7 +80,9 @@ internal static class TextLayoutEngine {
         TextWrapping wrapping,
         float maxWidth,
         TextLayoutBuffer buffer,
-        out TextLayoutResult result) {
+        out TextLayoutResult result
+    )
+    {
         ArgumentNullException.ThrowIfNull(metrics);
         ArgumentNullException.ThrowIfNull(buffer);
         ValidateSize(size);
@@ -94,10 +97,21 @@ internal static class TextLayoutEngine {
             maxWidth,
             out int lineCount,
             out int glyphCount,
-            out float widestLine);
+            out float widestLine
+        );
         float boxWidth = maxWidth > 0f ? maxWidth : widestLine;
         Span<TextGlyphInstance> glyphs = buffer.Reserve(glyphCount);
-        result = Emit(metrics, text, size, alignment, wrapping, maxWidth, boxWidth, lineCount, glyphs);
+        result = Emit(
+            metrics,
+            text,
+            size,
+            alignment,
+            wrapping,
+            maxWidth,
+            boxWidth,
+            lineCount,
+            glyphs
+        );
         return glyphCount;
     }
 
@@ -116,7 +130,8 @@ internal static class TextLayoutEngine {
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="size"/> is not finite and positive.
     /// </exception>
-    internal static Vector2 Measure(ITextMetrics metrics, ReadOnlySpan<char> text, float size) {
+    internal static Vector2 Measure(ITextMetrics metrics, ReadOnlySpan<char> text, float size)
+    {
         ArgumentNullException.ThrowIfNull(metrics);
         ValidateSize(size);
         MeasureBlock(
@@ -127,46 +142,60 @@ internal static class TextLayoutEngine {
             0f,
             out int lineCount,
             out _,
-            out float widestLine);
+            out float widestLine
+        );
         return new Vector2(widestLine, lineCount * metrics.LineHeight * size);
     }
 
-    private static void ValidateSize(float size) {
-        if (!float.IsFinite(size) || size <= 0f) {
+    private static void ValidateSize(float size)
+    {
+        if (!float.IsFinite(size) || size <= 0f)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(size),
                 size,
-                "The text size must be finite and positive.");
+                "The text size must be finite and positive."
+            );
         }
     }
 
-    private static void ValidateAlignment(TextAlignment alignment) {
-        if (alignment is not (TextAlignment.Left or TextAlignment.Center or TextAlignment.Right)) {
+    private static void ValidateAlignment(TextAlignment alignment)
+    {
+        if (alignment is not (TextAlignment.Left or TextAlignment.Center or TextAlignment.Right))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(alignment),
                 alignment,
-                "The text alignment is not defined.");
+                "The text alignment is not defined."
+            );
         }
     }
 
-    private static void ValidateWrapping(TextWrapping wrapping, float maxWidth) {
-        if (wrapping is not (TextWrapping.None or TextWrapping.Word or TextWrapping.Character)) {
+    private static void ValidateWrapping(TextWrapping wrapping, float maxWidth)
+    {
+        if (wrapping is not (TextWrapping.None or TextWrapping.Word or TextWrapping.Character))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(wrapping),
                 wrapping,
-                "The text wrapping mode is not defined.");
+                "The text wrapping mode is not defined."
+            );
         }
-        if (!float.IsFinite(maxWidth) || maxWidth < 0f) {
+        if (!float.IsFinite(maxWidth) || maxWidth < 0f)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(maxWidth),
                 maxWidth,
-                "The maximum width must be finite and non-negative.");
+                "The maximum width must be finite and non-negative."
+            );
         }
-        if (wrapping != TextWrapping.None && maxWidth <= 0f) {
+        if (wrapping != TextWrapping.None && maxWidth <= 0f)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(maxWidth),
                 maxWidth,
-                "Text wrapping requires a positive maximum width.");
+                "Text wrapping requires a positive maximum width."
+            );
         }
     }
 
@@ -178,15 +207,19 @@ internal static class TextLayoutEngine {
         float maxWidth,
         out int lineCount,
         out int glyphCount,
-        out float widestLine) {
+        out float widestLine
+    )
+    {
         lineCount = 0;
         glyphCount = 0;
         widestLine = 0f;
         LineEnumerator lines = new(metrics, text, size, wrapping, maxWidth);
-        while (lines.MoveNext(out _, out _, out float lineAdvance, out int count)) {
+        while (lines.MoveNext(out _, out _, out float lineAdvance, out int count))
+        {
             lineCount++;
             glyphCount += count;
-            if (lineAdvance > widestLine) {
+            if (lineAdvance > widestLine)
+            {
                 widestLine = lineAdvance;
             }
         }
@@ -201,8 +234,11 @@ internal static class TextLayoutEngine {
         float maxWidth,
         float boxWidth,
         int lineCount,
-        Span<TextGlyphInstance> glyphs) {
-        if (lineCount == 0) {
+        Span<TextGlyphInstance> glyphs
+    )
+    {
+        if (lineCount == 0)
+        {
             return new TextLayoutResult(0, Vector2.Zero, Vector2.Zero);
         }
 
@@ -212,8 +248,10 @@ internal static class TextLayoutEngine {
         int glyphIndex = 0;
         int lineIndex = 0;
         LineEnumerator lines = new(metrics, text, size, wrapping, maxWidth);
-        while (lines.MoveNext(out int lineStart, out int lineEnd, out float lineAdvance, out _)) {
-            float offset = alignment switch {
+        while (lines.MoveNext(out int lineStart, out int lineEnd, out float lineAdvance, out _))
+        {
+            float offset = alignment switch
+            {
                 TextAlignment.Center => (boxWidth - lineAdvance) / 2f,
                 TextAlignment.Right => boxWidth - lineAdvance,
                 _ => 0f,
@@ -222,9 +260,15 @@ internal static class TextLayoutEngine {
             float pen = offset;
             int lastGlyphId = NO_GLYPH;
             int index = lineStart;
-            while (TryReadGlyph(metrics, text, lineEnd, ref index, out _, out TextGlyphMetrics glyph)) {
+            while (
+                TryReadGlyph(metrics, text, lineEnd, ref index, out _, out TextGlyphMetrics glyph)
+            )
+            {
                 float glyphPen = PlaceGlyph(ref pen, metrics, lastGlyphId, glyph, size);
-                Vector2 position = new(glyphPen + glyph.BearingX * size, baselineY + glyph.BearingY * size);
+                Vector2 position = new(
+                    glyphPen + glyph.BearingX * size,
+                    baselineY + glyph.BearingY * size
+                );
                 Vector2 glyphSize = new(glyph.Width * size, glyph.Height * size);
                 glyphs[glyphIndex] = new TextGlyphInstance(glyph.GlyphId, position, glyphSize);
                 glyphIndex++;
@@ -243,15 +287,20 @@ internal static class TextLayoutEngine {
         int end,
         ref int index,
         out int runeIndex,
-        out TextGlyphMetrics glyph) {
-        while (index < end) {
+        out TextGlyphMetrics glyph
+    )
+    {
+        while (index < end)
+        {
             int start = index;
             Rune rune = DecodeRune(text, index, end, out int consumed);
             index += consumed;
-            if (rune.Value == CARRIAGE_RETURN) {
+            if (rune.Value == CARRIAGE_RETURN)
+            {
                 continue;
             }
-            if (metrics.TryGetGlyphMetrics(rune, out glyph)) {
+            if (metrics.TryGetGlyphMetrics(rune, out glyph))
+            {
                 runeIndex = start;
                 return true;
             }
@@ -269,9 +318,12 @@ internal static class TextLayoutEngine {
         float size,
         ref float pen,
         ref int lastGlyphId,
-        ref int glyphCount) {
+        ref int glyphCount
+    )
+    {
         int index = start;
-        while (TryReadGlyph(metrics, text, end, ref index, out _, out TextGlyphMetrics glyph)) {
+        while (TryReadGlyph(metrics, text, end, ref index, out _, out TextGlyphMetrics glyph))
+        {
             PlaceGlyph(ref pen, metrics, lastGlyphId, glyph, size);
             lastGlyphId = glyph.GlyphId;
             glyphCount++;
@@ -291,8 +343,11 @@ internal static class TextLayoutEngine {
         ITextMetrics metrics,
         int lastGlyphId,
         in TextGlyphMetrics glyph,
-        float size) {
-        if (lastGlyphId != NO_GLYPH) {
+        float size
+    )
+    {
+        if (lastGlyphId != NO_GLYPH)
+        {
             pen += metrics.GetKerning(lastGlyphId, glyph.GlyphId) * size;
         }
         float origin = pen;
@@ -300,24 +355,29 @@ internal static class TextLayoutEngine {
         return origin;
     }
 
-    private static Rune DecodeRune(ReadOnlySpan<char> text, int start, int end, out int consumed) {
+    private static Rune DecodeRune(ReadOnlySpan<char> text, int start, int end, out int consumed)
+    {
         OperationStatus status = Rune.DecodeFromUtf16(
             text.Slice(start, end - start),
             out Rune rune,
-            out consumed);
-        if (status != OperationStatus.Done) {
+            out consumed
+        );
+        if (status != OperationStatus.Done)
+        {
             consumed = 1;
             return Rune.ReplacementChar;
         }
         return rune;
     }
 
-    private static int FindParagraphEnd(ReadOnlySpan<char> text, int start) {
+    private static int FindParagraphEnd(ReadOnlySpan<char> text, int start)
+    {
         int relative = text.Slice(start).IndexOf('\n');
         return relative < 0 ? text.Length : start + relative;
     }
 
-    private ref struct LineEnumerator {
+    private ref struct LineEnumerator
+    {
         private readonly ITextMetrics _metrics;
         private readonly ReadOnlySpan<char> _text;
         private readonly float _size;
@@ -333,7 +393,9 @@ internal static class TextLayoutEngine {
             ReadOnlySpan<char> text,
             float size,
             TextWrapping wrapping,
-            float maxWidth) {
+            float maxWidth
+        )
+        {
             _metrics = metrics;
             _text = text;
             _size = size;
@@ -345,12 +407,21 @@ internal static class TextLayoutEngine {
             _finished = text.Length == 0;
         }
 
-        internal bool MoveNext(out int lineStart, out int lineEnd, out float lineAdvance, out int glyphCount) {
-            if (_finished) {
+        internal bool MoveNext(
+            out int lineStart,
+            out int lineEnd,
+            out float lineAdvance,
+            out int glyphCount
+        )
+        {
+            if (_finished)
+            {
                 return Finish(out lineStart, out lineEnd, out lineAdvance, out glyphCount);
             }
-            if (_started && _position >= _paragraphEnd) {
-                if (_paragraphEnd >= _text.Length) {
+            if (_started && _position >= _paragraphEnd)
+            {
+                if (_paragraphEnd >= _text.Length)
+                {
                     _finished = true;
                     return Finish(out lineStart, out lineEnd, out lineAdvance, out glyphCount);
                 }
@@ -359,7 +430,8 @@ internal static class TextLayoutEngine {
             }
             _started = true;
             lineStart = _position;
-            switch (_wrapping) {
+            switch (_wrapping)
+            {
                 case TextWrapping.Word:
                     return EmitWordLine(out lineEnd, out lineAdvance, out glyphCount);
                 case TextWrapping.Character:
@@ -373,7 +445,9 @@ internal static class TextLayoutEngine {
             out int lineStart,
             out int lineEnd,
             out float lineAdvance,
-            out int glyphCount) {
+            out int glyphCount
+        )
+        {
             lineStart = 0;
             lineEnd = 0;
             lineAdvance = 0f;
@@ -381,7 +455,8 @@ internal static class TextLayoutEngine {
             return false;
         }
 
-        private bool EmitUnwrappedLine(out int lineEnd, out float lineAdvance, out int glyphCount) {
+        private bool EmitUnwrappedLine(out int lineEnd, out float lineAdvance, out int glyphCount)
+        {
             float pen = 0f;
             int lastGlyphId = NO_GLYPH;
             glyphCount = 0;
@@ -393,39 +468,47 @@ internal static class TextLayoutEngine {
                 _size,
                 ref pen,
                 ref lastGlyphId,
-                ref glyphCount);
+                ref glyphCount
+            );
             lineEnd = _paragraphEnd;
             lineAdvance = pen;
             _position = _paragraphEnd;
             return true;
         }
 
-        private bool EmitWordLine(out int lineEnd, out float lineAdvance, out int glyphCount) {
+        private bool EmitWordLine(out int lineEnd, out float lineAdvance, out int glyphCount)
+        {
             int index = _position;
             float pen = 0f;
             int lastGlyphId = NO_GLYPH;
             int count = 0;
             bool hasGlyph = false;
-            while (index < _paragraphEnd) {
+            while (index < _paragraphEnd)
+            {
                 int gapStart = index;
-                while (index < _paragraphEnd) {
+                while (index < _paragraphEnd)
+                {
                     Rune rune = DecodeRune(_text, index, _paragraphEnd, out int consumed);
-                    if (!Rune.IsWhiteSpace(rune)) {
+                    if (!Rune.IsWhiteSpace(rune))
+                    {
                         break;
                     }
                     index += consumed;
                 }
                 int gapEnd = index;
                 int wordStart = index;
-                while (index < _paragraphEnd) {
+                while (index < _paragraphEnd)
+                {
                     Rune rune = DecodeRune(_text, index, _paragraphEnd, out int consumed);
-                    if (rune.Value != CARRIAGE_RETURN && Rune.IsWhiteSpace(rune)) {
+                    if (rune.Value != CARRIAGE_RETURN && Rune.IsWhiteSpace(rune))
+                    {
                         break;
                     }
                     index += consumed;
                 }
                 int wordEnd = index;
-                if (wordStart == wordEnd) {
+                if (wordStart == wordEnd)
+                {
                     MeasureRange(
                         _metrics,
                         _text,
@@ -434,7 +517,8 @@ internal static class TextLayoutEngine {
                         _size,
                         ref pen,
                         ref lastGlyphId,
-                        ref count);
+                        ref count
+                    );
                     break;
                 }
 
@@ -449,7 +533,8 @@ internal static class TextLayoutEngine {
                     _size,
                     ref candidatePen,
                     ref candidateLastGlyphId,
-                    ref candidateCount);
+                    ref candidateCount
+                );
                 MeasureRange(
                     _metrics,
                     _text,
@@ -458,8 +543,10 @@ internal static class TextLayoutEngine {
                     _size,
                     ref candidatePen,
                     ref candidateLastGlyphId,
-                    ref candidateCount);
-                if (hasGlyph && candidatePen > _maxWidth) {
+                    ref candidateCount
+                );
+                if (hasGlyph && candidatePen > _maxWidth)
+                {
                     lineEnd = gapStart;
                     lineAdvance = pen;
                     glyphCount = count;
@@ -479,24 +566,31 @@ internal static class TextLayoutEngine {
             return true;
         }
 
-        private bool EmitCharacterLine(out int lineEnd, out float lineAdvance, out int glyphCount) {
+        private bool EmitCharacterLine(out int lineEnd, out float lineAdvance, out int glyphCount)
+        {
             int index = _position;
             float pen = 0f;
             int lastGlyphId = NO_GLYPH;
             glyphCount = 0;
-            while (index < _paragraphEnd) {
-                if (!TryReadGlyph(
+            while (index < _paragraphEnd)
+            {
+                if (
+                    !TryReadGlyph(
                         _metrics,
                         _text,
                         _paragraphEnd,
                         ref index,
                         out int glyphIndex,
-                        out TextGlyphMetrics glyph)) {
+                        out TextGlyphMetrics glyph
+                    )
+                )
+                {
                     break;
                 }
                 float candidatePen = pen;
                 PlaceGlyph(ref candidatePen, _metrics, lastGlyphId, glyph, _size);
-                if (glyphCount > 0 && candidatePen > _maxWidth) {
+                if (glyphCount > 0 && candidatePen > _maxWidth)
+                {
                     lineEnd = glyphIndex;
                     lineAdvance = pen;
                     _position = glyphIndex;

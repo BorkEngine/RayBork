@@ -10,7 +10,8 @@ internal readonly record struct MonitorInfo(
     Rect Bounds,
     Rect WorkArea,
     float DpiScale,
-    int RefreshRate);
+    int RefreshRate
+);
 
 /// <summary>
 /// Assigns stable process-lifetime monitor indices to SDL3 display ids and keeps the current
@@ -22,7 +23,8 @@ internal readonly record struct MonitorInfo(
 /// its old index back. The snapshot arrays are replaced, never mutated, so a caller may hold one
 /// across a refresh.
 /// </remarks>
-internal sealed class MonitorRegistry {
+internal sealed class MonitorRegistry
+{
     private const float DEFAULT_DPI_SCALE = 1f;
 
     private readonly Dictionary<uint, int> _stableIndices = [];
@@ -50,29 +52,48 @@ internal sealed class MonitorRegistry {
     /// Replaces the monitor snapshot, allocating stable indices for display ids that were not seen
     /// before.
     /// </summary>
-    internal void Update(IReadOnlyList<MonitorInfo> monitors, uint primaryDisplayId) {
+    internal void Update(IReadOnlyList<MonitorInfo> monitors, uint primaryDisplayId)
+    {
         ArgumentNullException.ThrowIfNull(monitors);
         _primaryDisplayId = primaryDisplayId;
 
         List<(uint DisplayId, Monitor Monitor)> entries = new(monitors.Count);
-        for (int i = 0; i < monitors.Count; i++) {
+        for (int i = 0; i < monitors.Count; i++)
+        {
             MonitorInfo info = monitors[i];
-            if (!_stableIndices.TryGetValue(info.DisplayId, out int index)) {
+            if (!_stableIndices.TryGetValue(info.DisplayId, out int index))
+            {
                 index = _nextIndex++;
                 _stableIndices.Add(info.DisplayId, index);
             }
 
-            entries.Add((info.DisplayId, new Monitor(index, info.Name, info.Bounds, info.WorkArea, info.DpiScale, info.RefreshRate)));
+            entries.Add(
+                (
+                    info.DisplayId,
+                    new Monitor(
+                        index,
+                        info.Name,
+                        info.Bounds,
+                        info.WorkArea,
+                        info.DpiScale,
+                        info.RefreshRate
+                    )
+                )
+            );
         }
 
         entries.Sort(static (left, right) => left.Monitor.Index.CompareTo(right.Monitor.Index));
         Monitor[] next = new Monitor[entries.Count];
         _byDisplayId.Clear();
-        for (int i = 0; i < entries.Count; i++) {
+        for (int i = 0; i < entries.Count; i++)
+        {
             (uint displayId, Monitor monitor) = entries[i];
             next[i] = monitor;
-            if (!_byDisplayId.TryAdd(displayId, monitor)) {
-                throw new InvalidOperationException($"The monitor list contains duplicate display id {displayId}.");
+            if (!_byDisplayId.TryAdd(displayId, monitor))
+            {
+                throw new InvalidOperationException(
+                    $"The monitor list contains duplicate display id {displayId}."
+                );
             }
         }
 
@@ -83,12 +104,15 @@ internal sealed class MonitorRegistry {
     /// Gets the monitor for a display id, falling back to the primary monitor and then the first
     /// connected monitor.
     /// </summary>
-    internal Monitor GetCurrent(uint displayId) {
-        if (displayId != 0 && _byDisplayId.TryGetValue(displayId, out Monitor monitor)) {
+    internal Monitor GetCurrent(uint displayId)
+    {
+        if (displayId != 0 && _byDisplayId.TryGetValue(displayId, out Monitor monitor))
+        {
             return monitor;
         }
 
-        if (_primaryDisplayId != 0 && _byDisplayId.TryGetValue(_primaryDisplayId, out monitor)) {
+        if (_primaryDisplayId != 0 && _byDisplayId.TryGetValue(_primaryDisplayId, out monitor))
+        {
             return monitor;
         }
 
@@ -100,9 +124,12 @@ internal sealed class MonitorRegistry {
     /// <summary>
     /// Looks up the SDL3 display id for a stable monitor index.
     /// </summary>
-    internal bool TryGetDisplayId(int monitorIndex, out uint displayId) {
-        foreach (KeyValuePair<uint, Monitor> pair in _byDisplayId) {
-            if (pair.Value.Index == monitorIndex) {
+    internal bool TryGetDisplayId(int monitorIndex, out uint displayId)
+    {
+        foreach (KeyValuePair<uint, Monitor> pair in _byDisplayId)
+        {
+            if (pair.Value.Index == monitorIndex)
+            {
                 displayId = pair.Key;
                 return true;
             }

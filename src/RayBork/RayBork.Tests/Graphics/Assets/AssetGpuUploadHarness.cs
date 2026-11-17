@@ -15,7 +15,8 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <c>BeginUpload</c> and <c>TryComplete</c> directly. Dispose closes the bridge, which cancels any
 /// pending upload and destroys every live resource before the backend is disposed.
 /// </remarks>
-internal sealed class AssetGpuUploadHarness : IDisposable {
+internal sealed class AssetGpuUploadHarness : IDisposable
+{
     private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(30);
 
     private readonly GpuAssetBridge _bridge = new();
@@ -24,7 +25,8 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
     /// Creates the harness for an initialized backend.
     /// </summary>
     /// <param name="backend">The initialized test backend.</param>
-    internal AssetGpuUploadHarness(Vulkan12Backend backend) {
+    internal AssetGpuUploadHarness(Vulkan12Backend backend)
+    {
         ArgumentNullException.ThrowIfNull(backend);
 
         Backend = backend;
@@ -58,14 +60,17 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
     /// <param name="upload">The upload to create.</param>
     /// <returns>The created resource.</returns>
     /// <exception cref="AssetLoadException">The upload or the resource creation failed.</exception>
-    internal GpuAssetResource Upload(AssetGpuUpload upload) {
+    internal GpuAssetResource Upload(AssetGpuUpload upload)
+    {
         Task<GpuAssetResource> task = _bridge.UploadAsync(upload, CancellationToken.None);
         bool completed = SpinWait.SpinUntil(
-            () => {
+            () =>
+            {
                 _bridge.ProcessPending(Worker);
                 return task.IsCompleted;
             },
-            _timeout);
+            _timeout
+        );
         Assert.True(completed, "The GPU upload did not complete.");
         return task.GetAwaiter().GetResult();
     }
@@ -74,7 +79,8 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
     /// Queues a destruction, drains the bridge, and waits for the worker to destroy or skip it.
     /// </summary>
     /// <param name="resource">The resource to destroy.</param>
-    internal void Destroy(GpuAssetResource resource) {
+    internal void Destroy(GpuAssetResource resource)
+    {
         _bridge.Destroy(resource);
         _bridge.ProcessPending(Worker);
     }
@@ -92,15 +98,18 @@ internal sealed class AssetGpuUploadHarness : IDisposable {
     /// <param name="task">The pending build or upload task.</param>
     /// <returns>The completed result.</returns>
     /// <exception cref="AssetLoadException">The upload or the build failed.</exception>
-    internal T WaitFor<T>(Task<T> task) {
+    internal T WaitFor<T>(Task<T> task)
+    {
         ArgumentNullException.ThrowIfNull(task);
 
         bool completed = SpinWait.SpinUntil(
-            () => {
+            () =>
+            {
                 _bridge.ProcessPending(Worker);
                 return task.IsCompleted;
             },
-            _timeout);
+            _timeout
+        );
         Assert.True(completed, "The GPU upload did not complete.");
         return task.GetAwaiter().GetResult();
     }

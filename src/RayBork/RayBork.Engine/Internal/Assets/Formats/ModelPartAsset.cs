@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// X/Y/Z. <see cref="Bounds"/> carries six floats: minimum X/Y/Z and maximum X/Y/Z.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class ModelPartAsset {
+internal sealed partial class ModelPartAsset
+{
     /// <summary>Gets the part name from the source scene.</summary>
     public required string Name { get; init; }
 
