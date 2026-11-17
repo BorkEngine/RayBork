@@ -58,22 +58,25 @@ public sealed class WindowStateTests
             Assert.Skip("The dummy video driver does not support SDL fullscreen.");
         }
 
+        // Probe borderless support with raw SDL before accepting the engine path: the engine only
+        // falls back to exclusive fullscreen after the borderless request fails, and the exclusive
+        // fallback also installs a display mode.
+        bool borderlessSupported = TryProbeBorderlessFullscreen(handle);
         DrainWindowEvents(host);
 
         window.SetFullscreen(true);
         host.Platform.Pump(TimeSpan.Zero);
 
         Assert.True(window.IsFullscreen);
-        if (window.State == WindowState.Fullscreen)
-        {
-            // The engine only falls back to exclusive fullscreen after the borderless request
-            // fails, and that fallback installs an explicit display mode.
-            Assert.True(SDL.GetWindowFullscreenMode(handle).HasValue);
-        }
-        else
+        if (borderlessSupported)
         {
             Assert.Equal(WindowState.BorderlessFullscreen, window.State);
             Assert.False(SDL.GetWindowFullscreenMode(handle).HasValue);
+        }
+        else
+        {
+            Assert.Equal(WindowState.Fullscreen, window.State);
+            Assert.True(SDL.GetWindowFullscreenMode(handle).HasValue);
         }
 
         window.SetFullscreen(false);
@@ -81,6 +84,41 @@ public sealed class WindowStateTests
 
         Assert.False(window.IsFullscreen);
         Assert.Equal(WindowState.Normal, window.State);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void QueuedLeaveAfterANewerEntryKeepsTheBorderlessKind()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        IWindow window = host.Platform.Window;
+        IntPtr handle = GetHandle(host);
+        if (!TryProbeNativeFullscreen(handle))
+        {
+            Assert.Skip("The dummy video driver does not support SDL fullscreen.");
+        }
+
+        if (!TryProbeBorderlessFullscreen(handle))
+        {
+            Assert.Skip("The dummy video driver does not support borderless SDL fullscreen.");
+        }
+
+        DrainWindowEvents(host);
+
+        window.SetFullscreen(true);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.Equal(WindowState.BorderlessFullscreen, window.State);
+
+        // Restore and re-enter in one command drain. The leave event queued by Restore is handled
+        // after the newer entry has already been confirmed, so the leave handler may cancel only
+        // the pending entry: clearing the kind would report Fullscreen for a borderless window.
+        window.Restore();
+        window.SetFullscreen(true);
+        host.Platform.Pump(TimeSpan.Zero);
+
+        Assert.True(window.IsFullscreen);
+        Assert.Equal(WindowState.BorderlessFullscreen, window.State);
+        Assert.False(SDL.GetWindowFullscreenMode(handle).HasValue);
     }
 
     [Fact]
@@ -362,6 +400,23 @@ public sealed class WindowStateTests
 
     private static bool TryProbeNativeFullscreen(IntPtr handle)
     {
+        if (!SDL.SetWindowFullscreen(handle, true))
+        {
+            return false;
+        }
+
+        bool entered = HasNativeFullscreen(handle);
+        bool left = SDL.SetWindowFullscreen(handle, false);
+        return entered && left && !HasNativeFullscreen(handle);
+    }
+
+    private static bool TryProbeBorderlessFullscreen(IntPtr handle)
+    {
+        if (!SDL.SetWindowFullscreenMode(handle, IntPtr.Zero))
+        {
+            return false;
+        }
+
         if (!SDL.SetWindowFullscreen(handle, true))
         {
             return false;

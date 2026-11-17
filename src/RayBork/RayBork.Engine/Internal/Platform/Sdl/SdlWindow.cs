@@ -412,18 +412,21 @@ internal sealed class SdlWindow : IPlatformWindow
     internal void HandleStateEvent() => RefreshSnapshot();
 
     /// <summary>
-    /// Cancels a pending engine fullscreen entry and the cached kind after SDL reports that the
-    /// window left fullscreen, then refreshes the snapshot. Runs on the main thread.
+    /// Cancels a pending engine fullscreen entry after SDL reports that the window left fullscreen,
+    /// then refreshes the snapshot. Runs on the main thread.
     /// </summary>
     /// <remarks>
     /// The window manager can abandon an engine-requested entry before the compositor confirms it.
     /// The leave event is the only notification that the transition will not complete, so the
-    /// engine must not wait for a confirmation that will never arrive.
+    /// engine must not wait for a confirmation that will never arrive. The cached kind is not
+    /// cleared here: SDL queues the leave event, so this handler can run after a newer entry has
+    /// already been confirmed in the same command drain. The trailing refresh keeps the kind for a
+    /// native fullscreen state and clears it for a windowed state with no pending entry, including
+    /// the abandoned entry this method cancels.
     /// </remarks>
     internal void HandleFullscreenLeave()
     {
         _fullscreenEntryPending = false;
-        _fullscreenKind = FullscreenKind.None;
         RefreshSnapshot();
     }
 
