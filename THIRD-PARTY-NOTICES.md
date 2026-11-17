@@ -397,7 +397,10 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ## Test and tooling dependencies
 
-These packages are JIT-only and are not part of the runtime publish graph.
+These dependencies are JIT-only and are not part of the runtime publish graph. CSharpier 1.4.0 is a
+local dotnet tool rather than a package: it is pinned in `.config/dotnet-tools.json`, installed with
+`dotnet tool restore`, applied with `dotnet csharpier format .`, and checked in CI with
+`dotnet csharpier check .`.
 
 | Package | Version | License | Classification | Purpose | AOT status |
 | --- | --- | --- | --- | --- | --- |
@@ -412,12 +415,14 @@ These packages are JIT-only and are not part of the runtime publish graph.
 | `Silk.NET.Shaderc` | 2.23.0 | MIT | Tooling | Managed shaderc bindings for the GLSL compiler | JIT only; not in the runtime publish graph. |
 | `Silk.NET.Shaderc.Native` | 2.23.0 | Apache-2.0 | Tooling | Per-RID native libshaderc binaries for the bake | JIT only; not in the runtime publish graph. |
 | `SharpGLTF.Core` | 1.0.7 | MIT | Tooling | glTF 2.0/GLB reading for the model processor | JIT only; not in the runtime publish graph. |
+| `csharpier` | 1.4.0 | MIT | Tooling | C# and project XML formatter; pinned in `.config/dotnet-tools.json`; CI runs `dotnet csharpier check .` | Not in the runtime publish graph; local dotnet tool only. |
 
 ## Maintaining this file
 
 - Add or remove a row when a package is added or removed; group the rows by classification and keep
   the runtime, platform, and test/tooling tables intact.
-- Keep versions identical to `Directory.Packages.props`; a review that finds a drift blocks merge.
+- Keep versions identical to `Directory.Packages.props`, and keep tool-manifest pins in
+  `.config/dotnet-tools.json` identical to this table too; a review that finds a drift blocks merge.
 - Keep the license value to the SPDX identifier used by the package metadata.
 - Update the status paragraph when a milestone turns a deferred AOT status into an exercised gate.
 - System components such as the Vulkan loader and the optional validation layer are recorded in the

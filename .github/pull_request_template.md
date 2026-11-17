@@ -17,7 +17,10 @@
 ## Verification
 
 CI runs unit, architecture, and GPU tests: `build-test` on Windows and Ubuntu, plus the Ubuntu `gpu`
-job under Xvfb with lavapipe. The `docs` and `pr-title` checks also run in CI. The sample solutions,
+job under Xvfb with lavapipe. The `format`, `docs`, and `pr-title` checks also run in CI: `format`
+restores the pinned CSharpier 1.4.0 tool with `dotnet tool restore` and runs
+`dotnet csharpier check .` over the whole repository, samples included. Locally,
+`dotnet tool restore` and `dotnet csharpier format .` apply the same layout. The sample solutions,
 the Native AOT `win-x64` and `linux-x64` publishes, and the Windows and Linux host runs remain local;
 report their results. WSL is a Linux build environment only: Linux host runs use the conformant
 lavapipe ICD, not WSLg hardware Vulkan. The samples own their solutions and are not part of
@@ -28,28 +31,24 @@ manual bake and no `--assets` argument are required.
 - [ ] `dotnet build src/RayBork/RayBork.slnx -c Release`
 - [ ] `dotnet test src/RayBork/RayBork.slnx -c Debug --no-build`
 - [ ] `dotnet test src/RayBork/RayBork.slnx -c Debug --filter "Category=Gpu"`
-- [ ] `dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore`
+- [ ] `dotnet tool restore`
+- [ ] `dotnet csharpier check .` (the root check covers every sample solution)
 - [ ] `pwsh scripts/check-docs.ps1`
 - [ ] `git diff --check`
 - [ ] `dotnet build samples/RenderTarget/RenderTarget.slnx -c Debug`
 - [ ] `dotnet build samples/RenderTarget/RenderTarget.slnx -c Release`
-- [ ] `dotnet format samples/RenderTarget/RenderTarget.slnx --verify-no-changes --no-restore`
 - [ ] `dotnet run --project samples/RenderTarget/RenderTarget.csproj -c Debug -- --frames 30` exits `0`, and `samples/RenderTarget/bin/Debug/net11.0/rendertarget.pck` exists
 - [ ] `dotnet build samples/PrimitiveGallery/PrimitiveGallery.slnx -c Debug`
 - [ ] `dotnet build samples/PrimitiveGallery/PrimitiveGallery.slnx -c Release`
-- [ ] `dotnet format samples/PrimitiveGallery/PrimitiveGallery.slnx --verify-no-changes --no-restore`
 - [ ] `dotnet run --project samples/PrimitiveGallery/PrimitiveGallery.csproj -c Debug -- --frames 30` exits `0` (no pack)
 - [ ] `dotnet build samples/Castle/Castle.slnx -c Debug`
 - [ ] `dotnet build samples/Castle/Castle.slnx -c Release`
-- [ ] `dotnet format samples/Castle/Castle.slnx --verify-no-changes --no-restore`
 - [ ] `dotnet run --project samples/Castle/Castle.csproj -c Debug -- --frames 30` exits `0`, and `samples/Castle/bin/Debug/net11.0/castle.pck` exists
 - [ ] `dotnet build samples/Pong/Pong.slnx -c Debug`
 - [ ] `dotnet build samples/Pong/Pong.slnx -c Release`
-- [ ] `dotnet format samples/Pong/Pong.slnx --verify-no-changes --no-restore`
 - [ ] `dotnet run --project samples/Pong/Pong.csproj -c Debug -- --frames 30` exits `0`, and `samples/Pong/bin/Debug/net11.0/pong.pck` exists
 - [ ] `dotnet build samples/Text/Text.slnx -c Debug`
 - [ ] `dotnet build samples/Text/Text.slnx -c Release`
-- [ ] `dotnet format samples/Text/Text.slnx --verify-no-changes --no-restore`
 - [ ] `dotnet run --project samples/Text/Text.csproj -c Debug -- --frames 30` exits `0`, and `samples/Text/bin/Debug/net11.0/text.pck` exists
 - [ ] RenderTarget is the M8 AOT gate. `win-x64` publish on Windows: `dotnet publish samples/RenderTarget/RenderTarget.csproj -c Release -r win-x64 -p:PublishAot=true` after the Release solution build above, which is what bakes `rendertarget.pck`; the publish directory contains `rendertarget.pck` beside the executable and no bake tooling (`RenderTarget.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, shaderc natives, glTF packages)
 - [ ] Windows host run: `samples/RenderTarget/bin/Release/net11.0/win-x64/publish/RenderTarget.exe --frames 30` exits `0` and loads `rendertarget.pck` beside the executable
