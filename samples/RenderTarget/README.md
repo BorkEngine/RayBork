@@ -30,10 +30,14 @@ Every tick records up to four camera passes in creation order:
 
 The offscreen scene has a central cube, a ring of four colored cubes that turns the opposite way while
 the offscreen camera orbits, a sphere, and a grid. The main scene has a rotating ring of six cubes, a
-stand, and the monitor that shows the offscreen color. The monitor sways around the vertical axis but
-never turns its back to the camera, so the offscreen content stays readable. The monitor is a textured
-`DrawQuad`; it uses the same world-space 2D primitive path as every other quad in the samples, and the
-target's `ColorTexture` is the texture.
+stand, and the monitor that shows the offscreen color. The two rings and the offscreen camera orbit are
+transform hierarchies: each ring turns a parent at its center and the cubes are fixed local transforms
+attached to it, and the orbiting camera is a local transform on a rotating parent. Every moving group
+advances its own wrapped angle, so no group derives its phase from another and a wrap in one angle
+cannot move the others. The monitor sways around the vertical axis but never turns its back to the
+camera, so the offscreen content stays readable. The monitor is a textured `DrawQuad`; it uses the same
+world-space 2D primitive path as every other quad in the samples, and the target's `ColorTexture` is the
+texture.
 
 ## Split-screen
 
@@ -119,7 +123,8 @@ in a later camera's target sample.
   HDR components above `1`.
 - `ReadPixelsAsync` returns display-referred RGBA8 in top-left row-major order after the frame's
   exposure, AgX tone mapping, and sRGB encoding. The sample prints the center RGB bytes and writes the
-  full image as a binary PPM P6 file.
+  full image as a 24-bit uncompressed BMP: bottom-up BGR rows with zero padding, and the readback's
+  opaque alpha dropped.
 
 Both readbacks wait for the last completed frame that wrote or sampled the target and stall the render
 thread while they copy the image, so the sample calls them only on the F2 press, not every frame.
@@ -129,10 +134,12 @@ keeps its layout and state, depth is never read, and later frames keep sampling 
 usual.
 
 The status line in the HUD and the console both report the target size, the center linear color, the
-center RGBA8 color, and the saved file. The file is `rendertarget-readback.ppm` beside the running
+center RGBA8 color, and the saved file. The file is `rendertarget-readback.bmp` beside the running
 executable (the build output directory for `dotnet run`, or the publish directory for a published
-host). PPM stores RGB only, so the readback's opaque alpha is dropped. The sample uses PPM because it
-needs no image codec or extra package.
+host). The BMP is standard, 24-bit, and uncompressed: it has a 14-byte `BITMAPFILEHEADER` and a 40-byte
+`BITMAPINFOHEADER` with a positive height, so rows are stored bottom-up in BGR order with zero padding
+to a 4-byte boundary, and the readback's opaque alpha is dropped. The sample writes it with
+`BinaryPrimitives` and `FileStream`, so it needs no image codec or extra package.
 
 ## Controls
 
@@ -140,7 +147,7 @@ needs no image codec or extra package.
 | --- | --- |
 | `S` | Toggle the split-screen scene cameras. |
 | `E` | Toggle the vignette post-process stack on the single scene camera. |
-| `F2` | Read the offscreen target and save `rendertarget-readback.ppm`. |
+| `F2` | Read the offscreen target and save `rendertarget-readback.bmp`. |
 | `R` | Reset the procedural rotation to zero and reverse its direction. |
 | `Escape` | Request exit. |
 

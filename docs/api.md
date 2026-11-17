@@ -191,7 +191,7 @@ and a camera-target-sized composite, and viewport store-back on the scene target
 methods observe. The RenderTarget sample ships as the M8 sample and Native AOT gate: it renders a
 procedural scene into a `640x360` `Rgba16Float` render texture, samples it on a monitor in a later
 camera, toggles a two-camera split-screen view with `S`, applies a baked custom vignette/tint post
-shader with `E`, and reads the offscreen target back to a PPM screenshot with `F2`.
+shader with `E`, and reads the offscreen target back to a 24-bit uncompressed BMP screenshot with `F2`.
 The remaining rows name the milestone that owns the deferred surface; the full code blocks in the
 section pages stay the 1.0 contract.
 
@@ -562,13 +562,14 @@ receive the post-process stack because an M8 viewport effect's source is the ful
 the app-lifetime `PostProcessStack` with one `ShaderPostProcessEffect`; the baked shader declares
 `sourceColor` and `uTint`/`uVignette`, and the engine overrides the reserved binding. `F2` calls
 `ReadColorsAsync` and `ReadPixelsAsync`, prints the center colors, and writes
-`rendertarget-readback.ppm` beside the executable. `R` resets the procedural rotation, the sample
-accepts `--frames` and `--help`, and it loads the adjacent pack automatically. The Windows `win-x64`
-publish finished with zero AOT/trim warnings and contains `rendertarget.pck` beside
-`RenderTarget.exe` with no bake tooling; the published Windows host ran `--frames 30` to exit `0` on
-the hardware driver. The `linux-x64` publish also finished with zero warnings, contains
-`rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published host ran
-`--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver. The Windows suite is
+`rendertarget-readback.bmp` beside the executable. The file is a standard 24-bit uncompressed BMP:
+bottom-up BGR rows with zero padding, alpha dropped, and no image codec or package involved. `R`
+resets the procedural rotation, the sample accepts `--frames` and `--help`, and it loads the adjacent
+pack automatically. The Windows `win-x64` publish finished with zero AOT/trim warnings and contains
+`rendertarget.pck` beside `RenderTarget.exe` with no bake tooling; the published Windows host ran
+`--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
+warnings, contains `rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published host
+ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver. The Windows suite is
 2,977 tests with no skips (239 GPU); the lavapipe run is 2,970 passed with 7 skipped HDR/
 scRGB-present tests, because lavapipe exposes only SDR. The sample is a plain user-facing example and
 contains no test-only draw assertion.

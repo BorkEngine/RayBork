@@ -132,8 +132,9 @@ raised threshold.
 `samples/RenderTarget` is the M8 sample and Native AOT gate: it renders a procedural scene into a
 `640x360` `Rgba16Float` render texture, samples the target on a monitor in a later camera, toggles a
 two-camera split-screen view with `S`, applies a baked custom vignette/tint post shader with `E`, and
-reads the offscreen target back to a PPM screenshot with `F2`. The suite is 2,977 tests,
-239 of them GPU integration tests, and every sample builds. The Windows
+reads the offscreen target back to a 24-bit uncompressed BMP screenshot with `F2` (bottom-up BGR rows,
+opaque alpha dropped, no image codec or package). The suite is 2,977 tests, 239 of them GPU integration
+tests, and every sample builds. The Windows
 hardware path runs all 2,977 with no skips (239 GPU); the conformant lavapipe Linux path
 reports 2,970 passed, 0 failed, and 7 skipped, because lavapipe exposes only SDR and
 the seven existing HDR/scRGB-present tests report the skip; its GPU-filtered run is

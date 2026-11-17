@@ -25,12 +25,28 @@ namespace RenderTarget;
 /// </remarks>
 internal sealed class RenderTargetGame : IGame {
     private const string EFFECT_PATH = "/shaders/vignette";
-    private const string SCREENSHOT_FILE_NAME = "rendertarget-readback.ppm";
+    private const string SCREENSHOT_FILE_NAME = "rendertarget-readback.bmp";
 
     private const float FIELD_OF_VIEW_DEGREES = 50f;
     private const float NEAR_PLANE = 0.05f;
     private const float FAR_PLANE = 100f;
     private const float SCENE_RADIANS_PER_SECOND = 0.7f;
+
+    // Every moving group advances its own wrapped angle. The old sample derived all of them from one
+    // shared wrapped scene angle, so wrapping that angle at +/-Tau changed every derived phase at
+    // once and the cubes jumped roughly every nine seconds. The speed scale of a group now lives in
+    // its own accumulator, so a wrap in one angle cannot move another group.
+    private const float RING_SPEED_SCALE = 0.8f;
+    private const float OFFSCREEN_RING_SPEED_SCALE = -1.4f;
+    private const float ORBIT_SPEED_SCALE = 0.45f;
+    private const float MONITOR_SPEED_SCALE = 0.8f;
+
+    private const float RING_RADIUS = 3.3f;
+    private const float RING_CENTER_HEIGHT = 0.6f;
+    private const float OFFSCREEN_RING_RADIUS = 1.9f;
+    private const float OFFSCREEN_RING_CENTER_HEIGHT = 0.5f;
+    private const float RING_LOCAL_YAW_OFFSET_RADIANS = 20f * (MathF.PI / 180f);
+    private const float MONITOR_SWAY_RADIANS = 0.55f;
 
     private const int TARGET_WIDTH = 640;
     private const int TARGET_HEIGHT = 360;
@@ -71,16 +87,34 @@ internal sealed class RenderTargetGame : IGame {
         Color.Crimson,
     ];
 
+    // The cube transforms are local to their ring parents and never change. Building them once keeps
+    // the per-frame work to a parent composition instead of a polar position from a shared angle.
+    private static readonly Transform[] _ringCubes = CreateRingLocals(
+        _ringColors.Length,
+        RING_RADIUS,
+        RING_LOCAL_YAW_OFFSET_RADIANS);
+    private static readonly Transform[] _offscreenRingCubes = CreateUnrotatedRingLocals(
+        _offscreenColors.Length,
+        OFFSCREEN_RING_RADIUS);
+
     private static readonly Vector3 _lookTarget = new(0f, 1.9f, 0f);
     private static readonly Vector3 _offscreenLookTarget = new(0f, 1.0f, 0f);
     private static readonly Transform _hudTransform = new(new Vector3(0f, 0f, 1f));
+    private static readonly Transform _offscreenCameraLocal = new(new Vector3(0f, 2.7f, 4.6f));
+    private static readonly Quaternion _monitorSwayLeft =
+        Quaternion.CreateFromAxisAngle(Vector3.UnitY, -MONITOR_SWAY_RADIANS);
+    private static readonly Quaternion _monitorSwayRight =
+        Quaternion.CreateFromAxisAngle(Vector3.UnitY, MONITOR_SWAY_RADIANS);
 
     private readonly int _frameLimit;
     private readonly PostProcessStack _postEffects = new();
 
     private RenderTexture? _target;
     private Shader? _effectShader;
-    private float _sceneAngle;
+    private float _ringAngle;
+    private float _offscreenRingAngle;
+    private float _orbitAngle;
+    private float _monitorPhase;
     private float _spinDirection = 1f;
     private bool _splitScreen;
     private int _frameCount;
@@ -118,12 +152,11 @@ internal sealed class RenderTargetGame : IGame {
     public void Tick(EngineContext context) {
         HandleInput(context);
 
-        _sceneAngle += _spinDirection * (float)context.DeltaTime * SCENE_RADIANS_PER_SECOND;
-        if (_sceneAngle >= MathF.Tau) {
-            _sceneAngle -= MathF.Tau;
-        } else if (_sceneAngle <= -MathF.Tau) {
-            _sceneAngle += MathF.Tau;
-        }
+        float delta = (float)context.DeltaTime * SCENE_RADIANS_PER_SECOND * _spinDirection;
+        _ringAngle = WrapAngle(_ringAngle + (delta * RING_SPEED_SCALE));
+        _offscreenRingAngle = WrapAngle(_offscreenRingAngle + (delta * OFFSCREEN_RING_SPEED_SCALE));
+        _orbitAngle = WrapAngle(_orbitAngle + (delta * ORBIT_SPEED_SCALE));
+        _monitorPhase = WrapAngle(_monitorPhase + (delta * MONITOR_SPEED_SCALE));
 
         RenderFrame(context);
 
@@ -163,7 +196,10 @@ internal sealed class RenderTargetGame : IGame {
 
         if (input.IsKeyPressed(Key.R)) {
             // Reset the animation to its start and reverse it so the reset is visible.
-            _sceneAngle = 0f;
+            _ringAngle = 0f;
+            _offscreenRingAngle = 0f;
+            _orbitAngle = 0f;
+            _monitorPhase = 0f;
             _spinDirection = -_spinDirection;
         }
 
@@ -254,33 +290,35 @@ internal sealed class RenderTargetGame : IGame {
         camera.DrawCube(new Vector3(0f, 0.75f, 0f), 1.2f, 1.2f, 1.2f, Color.GoldenRod);
         camera.DrawSphere(new Vector3(0f, 2.2f, 0f), 0.4f, Color.SkyBlue);
 
-        // The ring turns the other way, so the monitor is visibly a second live render.
+        // The ring turns the other way, so the monitor is visibly a second live render. Its parent
+        // owns the rotation; the four cube transforms stay fixed in the parent's local space.
+        Transform ringParent = new(
+            new Vector3(0f, OFFSCREEN_RING_CENTER_HEIGHT, 0f),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, _offscreenRingAngle),
+            Vector3.One);
         for (int index = 0; index < _offscreenColors.Length; index++) {
-            float angle = (-_sceneAngle * 1.4f)
-                + (index * MathF.Tau / _offscreenColors.Length);
-            Vector3 position = new(
-                MathF.Cos(angle) * 1.9f,
-                0.5f,
-                MathF.Sin(angle) * 1.9f);
-            camera.DrawCube(position, 0.7f, 0.7f, 0.7f, _offscreenColors[index]);
+            camera.DrawCube(
+                _offscreenRingCubes[index].WithParent(ringParent),
+                new Vector3(0.7f),
+                _offscreenColors[index]);
         }
     }
 
     private void DrawScene(Camera camera) {
         camera.DrawGrid(slices: 20, spacing: 1f, _gridColor);
 
+        // The ring parent turns; each cube is a fixed local transform attached to it. A frame never
+        // rebuilds a cube position from a shared scene angle, so wrapping one angle cannot teleport
+        // the ring.
+        Transform ringParent = new(
+            new Vector3(0f, RING_CENTER_HEIGHT, 0f),
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, _ringAngle),
+            Vector3.One);
         for (int index = 0; index < _ringColors.Length; index++) {
-            float angle = (_sceneAngle * 0.8f)
-                + (index * MathF.Tau / _ringColors.Length);
-            Vector3 position = new(
-                MathF.Cos(angle) * 3.3f,
-                0.6f,
-                MathF.Sin(angle) * 3.3f);
-            Transform cube = new(
-                position,
-                Quaternion.Euler(0f, (angle * (180f / MathF.PI)) + 20f, 0f),
-                Vector3.One);
-            camera.DrawCube(cube, new Vector3(1.15f), _ringColors[index]);
+            camera.DrawCube(
+                _ringCubes[index].WithParent(ringParent),
+                new Vector3(1.15f),
+                _ringColors[index]);
         }
 
         camera.DrawCylinder(new Vector3(0f, 0f, 0f), 0.3f, 1.5f, _standColor);
@@ -288,8 +326,7 @@ internal sealed class RenderTargetGame : IGame {
         // The monitor sways around the vertical axis but never turns its back to the main camera, so
         // the offscreen color stays readable. The bezel is a slightly larger solid quad behind the
         // textured quad; a small offset along the monitor normal avoids z-fighting.
-        float yaw = MathF.Sin(_sceneAngle * 0.8f) * 0.55f;
-        Quaternion rotation = Quaternion.Euler(0f, yaw, 0f);
+        Quaternion rotation = MonitorSwayRotation(_monitorPhase);
         Vector3 center = new(0f, 2.35f, 0f);
         Vector3 normal = Vector3.Transform(Vector3.UnitZ, rotation);
 
@@ -345,7 +382,7 @@ internal sealed class RenderTargetGame : IGame {
     }
 
     /// <summary>
-    /// Reads the offscreen target once and saves the display-referred pixels as a binary PPM.
+    /// Reads the offscreen target once and saves the display-referred pixels as a 24-bit BMP.
     /// </summary>
     /// <remarks>
     /// Both readbacks stall the render thread while they wait for the target's last-use fence, so this
@@ -372,7 +409,7 @@ internal sealed class RenderTargetGame : IGame {
                 $"{pixels[centerOffset]} {pixels[centerOffset + 1]} {pixels[centerOffset + 2]}");
 
             string path = Path.Combine(AppContext.BaseDirectory, SCREENSHOT_FILE_NAME);
-            PpmScreenshot.Write(path, width, height, pixels);
+            BmpScreenshot.Write(path, width, height, pixels);
 
             _readbackStatus = FormattableString.Invariant(
                 $"readback {width}x{height} center: linear ({linear})  rgba8 ({bytes})  saved {SCREENSHOT_FILE_NAME}");
@@ -385,11 +422,13 @@ internal sealed class RenderTargetGame : IGame {
     }
 
     private Transform OffscreenCameraTransform() {
-        float orbit = _sceneAngle * 0.45f;
-        Vector3 position = new(
-            MathF.Sin(orbit) * 4.6f,
-            2.7f,
-            MathF.Cos(orbit) * 4.6f);
+        // The camera is a fixed local transform on an orbiting parent; the parent composes the world
+        // position instead of the sample evaluating sin/cos of the orbit angle.
+        Transform orbitParent = new(
+            Vector3.Zero,
+            Quaternion.CreateFromAxisAngle(Vector3.UnitY, _orbitAngle),
+            Vector3.One);
+        Vector3 position = _offscreenCameraLocal.WithParent(orbitParent).Position;
         return LookAt(position, _offscreenLookTarget);
     }
 
@@ -405,5 +444,51 @@ internal sealed class RenderTargetGame : IGame {
     private static Transform LookAt(Vector3 position, Vector3 target) {
         Vector3 forward = Vector3.Normalize(target - position);
         return new Transform(position, Quaternion.LookRotation(forward, Vector3.UnitY), Vector3.One);
+    }
+
+    private static float WrapAngle(float angle) {
+        angle %= MathF.Tau;
+        return angle < 0f ? angle + MathF.Tau : angle;
+    }
+
+    private static Quaternion MonitorSwayRotation(float phase) {
+        // A triangle wave moves left and right at a constant rate; smoothstep eases both ends so the
+        // sway settles instead of reversing abruptly, and the 0/Tau boundary is seamless.
+        float fraction = (phase / MathF.Tau) - MathF.Floor(phase / MathF.Tau);
+        float triangle = 1f - MathF.Abs((2f * fraction) - 1f);
+        float eased = triangle * triangle * (3f - (2f * triangle));
+        return Quaternion.Slerp(_monitorSwayLeft, _monitorSwayRight, eased);
+    }
+
+    /// <summary>
+    /// Builds the fixed local transforms of a ring whose parent owns the rotation.
+    /// </summary>
+    /// <remarks>
+    /// Positions and local yaws come from axis-angle quaternions, so the ring is built without
+    /// trigonometry and a frame only composes a local transform with its parent.
+    /// </remarks>
+    private static Transform[] CreateRingLocals(int count, float radius, float localYawOffsetRadians) {
+        Transform[] locals = new Transform[count];
+        for (int index = 0; index < count; index++) {
+            float angle = index * MathF.Tau / count;
+            Quaternion placement = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angle);
+            Quaternion yaw = Quaternion.CreateFromAxisAngle(Vector3.UnitY, angle + localYawOffsetRadians);
+            locals[index] = new Transform(
+                Vector3.Transform(new Vector3(radius, 0f, 0f), placement),
+                yaw,
+                Vector3.One);
+        }
+
+        return locals;
+    }
+
+    private static Transform[] CreateUnrotatedRingLocals(int count, float radius) {
+        Transform[] locals = new Transform[count];
+        for (int index = 0; index < count; index++) {
+            Quaternion placement = Quaternion.CreateFromAxisAngle(Vector3.UnitY, index * MathF.Tau / count);
+            locals[index] = new Transform(Vector3.Transform(new Vector3(radius, 0f, 0f), placement));
+        }
+
+        return locals;
     }
 }
