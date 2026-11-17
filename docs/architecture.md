@@ -1,8 +1,10 @@
 # RayBork Architecture
 
-Status: M8 as-built through the render texture color, depth, resize, and readback paths, the camera
-post-process core, built-in SSAO and bloom, and the RenderTarget sample, on top of the
-M7 orthographic and
+Status: M9 as-built through the input and window polish: `IWindow.IsCursorOnScreen` and
+`IWindow.SetTextInputArea`, the committed-only IME text-input lifecycle, stable monitor-index
+validation, the pending fullscreen entry, and the Input sample and Native AOT gate, on top of the
+M8 render texture color, depth, resize, and readback paths, the camera post-process core, built-in
+SSAO and bloom, and the RenderTarget sample; the M7 orthographic and
 screen-space surface, the M6 font and text runtime, the M5 primitive and collision surface,
 the M4 core 3D renderer, the M3 asset pipeline, the M2 renderer foundation, and the M1 host,
 platform, threads, frame handoff, HDR presentation, recovery, and time. M0 established the build,
@@ -87,6 +89,7 @@ samples/Pong -> RayBork.Engine (M7 sample, was the M7 Native AOT gate)
 samples/Pong/Pong.Assets -> RayBork.Bake, samples/Pong (M7 assets executable, JIT)
 samples/RenderTarget -> RayBork.Engine (M8 sample and Native AOT gate)
 samples/RenderTarget/RenderTarget.Assets -> RayBork.Bake (M8 assets executable, JIT)
+samples/Input -> RayBork.Engine (M9 sample and Native AOT gate, single project, no pack)
 samples/Text -> RayBork.Engine (M6 sample, was the M6 Native AOT gate)
 samples/Text/Text.Assets -> RayBork.Bake (M6 assets executable, JIT)
 samples/PrimitiveGallery -> RayBork.Engine (M5 sample, was the M5 Native AOT gate)
@@ -105,12 +108,13 @@ Samples (M11) -> RayBork.Engine
 | `samples/Pong/Pong.Assets` | M7 assets executable: references `RayBork.Bake` and the `samples/Pong` project (so `PongSettings` has one definition), bakes `pong.pck` from the checked-in original paddle PNG and the `Pong.PongSettings` TOML data at sample build time, and copies it beside the sample executable. JIT only. |
 | `samples/RenderTarget` | M8 sample and Native AOT gate: up to four camera passes per tick. An offscreen perspective camera draws a procedural scene into a `640x360` `Rgba16Float` render texture with depth and 4x MSAA; the single scene camera (or two half-width split-screen cameras, `S`) draws the main procedural scene and samples the target's `ColorTexture` on a monitor; a later orthographic HUD camera loads the scene color and clears depth. The single scene camera runs an app-lifetime `PostProcessStack` with one baked custom vignette/tint `ShaderPostProcessEffect` (`E`), and `F2` reads both readback methods and writes a 24-bit uncompressed BMP screenshot. The split cameras stay stackless because an M8 viewport effect's source is the full target. It mounts its adjacent `rendertarget.pck` and exits on Escape or `--frames`. |
 | `samples/RenderTarget/RenderTarget.Assets` | M8 assets executable: references `RayBork.Bake`, bakes `rendertarget.pck` from the checked-in vignette shader sources at sample build time, and copies it beside the sample executable. JIT only. |
+| `samples/Input` | M9 sample and Native AOT gate: a single-project solution with no assets executable, no pack, and no `--assets` argument, so the engine's built-in pack supplies its shaders and fonts. It draws a screen-space HUD with a text field that appends committed `IInput.TextInput`, a window/monitor panel, a gamepad panel, an event log, and a status line. The field copies, cuts, and pastes through `IWindow.SetClipboardText`/`GetClipboardText`, blinks a caret, and calls `IWindow.SetTextInputArea` each drawn tick so native IME candidates follow the field. The playground toggles fullscreen with `Alt+Enter` and borderless with `B`, cycles cursor modes with `C`, moves across monitors in stable-index order with `M`, requests rumble on `R` and the gamepad South button, and exits on Escape or `--frames`. |
 | `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It also draws a presented-FPS/render-statistics status line in the built-in mono face, anchored with `ScreenToWorldTransform`, and runs the built-in SSAO effect by default with an `A` toggle. |
 | `samples/Text` | M6 sample, was the M6 Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans and JetBrains Mono faces and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both proportional faces, a camera-facing billboard, a lazily generated Greek line, a mono status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
 | `samples/Text/Text.Assets` | M6 assets executable: bakes `text.pck` from the checked-in Lora face at sample build time. JIT only. |
 | `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, runs the built-in SSAO effect by default with an `A` toggle, and toggles its one camera between perspective and orthographic with `O`; its orthographic height is derived from the orbit distance and its status line, anchored with `ScreenToWorldTransform`, shows the projection. When the pointer ray hits the model bounds, it adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
-| `samples/` | Instancing (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
+| `samples/` | The sample set is seven samples: Castle, Pong, Text, PrimitiveGallery, RenderTarget, Input, and the M11 Instancing sample. Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
 
 Rules:
 
@@ -190,7 +194,7 @@ The host talks to SDL3 only through two internal interfaces:
 
 | Interface | Thread | Contract |
 | --- | --- | --- |
-| `IEnginePlatform` | Main for `Initialize`, `Pump`, `Dispose`, and the Vulkan surface operations; Tick for `CaptureInput` and the vibration queue | Owns SDL initialization, the window, the event pump, monitor snapshots, gamepad reconciliation, queued rumble, and the cached window HDR state. Exposes `IWindow` and returns a new `IInput` snapshot per capture. `GetVulkanInstanceExtensions`, `CreateVulkanSurface`, and `DestroyVulkanSurface` are main-thread only. |
+| `IEnginePlatform` | Main for `Initialize`, `Pump`, `Dispose`, and the Vulkan surface operations; Tick for `CaptureInput` and the vibration queue | Owns SDL initialization, the window, the event pump, monitor snapshots, the native text-input lifecycle, the cursor-on-screen snapshot, gamepad reconciliation, queued rumble, and the cached window HDR state. Exposes `IWindow` and returns a new `IInput` snapshot per capture. `GetVulkanInstanceExtensions`, `CreateVulkanSurface`, and `DestroyVulkanSurface` are main-thread only. |
 | `IPlatformWindow` | Main for commands and snapshots; Tick for `BeginTick` | Extends `IWindow` with `ApplyPendingCommands` and `BeginTick` so the host can promote pending resize state at a tick boundary. |
 
 The implementation:
@@ -223,6 +227,30 @@ The implementation:
   action commands in order, and validates arguments on the caller. `BeginTick` promotes a pending
   resize to `WasResized` for exactly one tick. Clipboard reads return the cached value and queue a
   main-thread refresh.
+- Text input is started at startup and restarted on focus gain, restore, or show only when the
+  window is focused and neither minimized nor hidden; it stops on focus loss, minimize, hide, and
+  dispose. Only `SDL_EVENT_TEXT_INPUT` appends to `Input.TextInput`; `SDL_EVENT_TEXT_EDITING` and
+  `SDL_EVENT_TEXT_EDITING_CANDIDATES` are ignored, so composition state has no public surface.
+  `SetTextInputArea` is a queued window command: `WindowCommandQueue` rounds the logical window
+  rectangle and cursor offset on the caller, `SdlWindow` applies them on the main thread, and a zero
+  width or height clears the platform area.
+- Cursor-on-screen is an Any-thread snapshot written on the main thread. Mouse enter and leave set
+  it, focus gain and loss and restore/show refresh it from the platform, minimize and hide clear
+  it, and `CursorMode` changes do not touch it.
+- `SetMonitor` validates the caller's index against the entries in the current `Monitors` snapshot
+  with the pure `MonitorRegistry.ContainsMonitorIndex` helper, not against `Monitors.Count`: stable
+  indices keep gaps after a hotplug, so a count is not an upper bound. An absent index throws on
+  the caller; a queued move whose display disappears before it is applied logs a warning.
+- `SdlWindow` records the pending engine fullscreen entry so an asynchronous
+  `SDL_SetWindowFullscreen(true)` on X11 or Wayland keeps its Borderless or Exclusive kind until the
+  native Fullscreen flag appears. Size and monitor commands are remembered for the windowed restore
+  while an entry is pending, and `WindowLeaveFullscreen` cancels an abandoned pending entry without
+  clearing a confirmed kind. The dummy test driver confirms synchronously, so the real asynchronous
+  entry and leave behavior remains a manual check.
+- The M9 input matrix tests cover the key and text-input paths, cursor-on-screen tracking, the
+  text-input area, gamepad mapping/hotplug/rumble, window state, and monitor-index validation; the
+  `samples/Input` sample is the M9 sample and Native AOT gate and is a single-project solution with
+  no assets executable and no pack.
 - `SdlInput` writes keyboard, mouse, text, and gamepad events into `InputState` under a `Lock`.
   SDL reports mouse position and relative motion in window coordinates, so `SdlInput` scales both
   axes by the window snapshot's `RenderWidth / Width` and `RenderHeight / Height` ratios at
@@ -1664,7 +1692,17 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   2,977 tests, 239 of them GPU integration tests, and every sample solution builds; the lavapipe
   Linux run reports 2,970 passed with 7 skipped HDR/scRGB-present tests. `samples/Text`,
   `samples/Pong`, `samples/Castle`, and `samples/PrimitiveGallery` remain buildable and publishable
-  samples but are not the M8 gate. The M1-M3 diagnostic host was removed in M7.
+  samples but are not the M8 gate. M9 moves the gate to `samples/Input`: it is a single-project
+  solution, `samples/Input/Input.slnx`, outside `src/RayBork/RayBork.slnx`, with no assets
+  executable and no pack, so its publish needs no bake step and no `--assets` argument. It records
+  the text-field, window/monitor, gamepad, and event-log HUD, appends committed `IInput.TextInput`,
+  calls `IWindow.SetTextInputArea`, and runs `--frames 30`. Both publishes must finish with zero
+  AOT/trim warnings and the publish directory must contain no bake tooling; the milestone lead runs
+  that publish gate, the sample's build and `--frames 30` run are the local checks, and the sample
+  README carries the exact commands. The final M9 suite is 3,024 tests, 239 of them GPU integration
+  tests, with 3,023 passed and one dummy-driver borderless skip. `samples/RenderTarget` remains the
+  M8 sample and gate and stays buildable and publishable. The M1-M3 diagnostic host was removed in
+  M7.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the
   gates that mount a user pack (M4 `samples/Castle`, M6 `samples/Text`, M7 `samples/Pong`, and M8

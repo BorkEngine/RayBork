@@ -1,6 +1,6 @@
 # RayBork API Reference
 
-Status: **v0.1 M8**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M9**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
@@ -41,7 +41,12 @@ RenderTarget sample and Native AOT gate; the shipped surface is listed in
 [§1.6](#16-milestone-availability), the render target and camera-pass contract in
 [§7.11](api/rendering/render-targets.md#711-render-targets-and-multiple-cameras), and the
 post-process surface in
-[§7.13](api/rendering/post-processing.md#713-camera-post-processing). The rest of the API
+[§7.13](api/rendering/post-processing.md#713-camera-post-processing). M9 ships the input and window
+polish: `IWindow.IsCursorOnScreen`, `IWindow.SetTextInputArea`, a committed-only IME contract where
+typed and committed text arrives through `IInput.TextInput` and composition text and candidate lists
+stay post-1.0, a focus-driven native text-input lifecycle, stable monitor-index validation that
+tolerates non-contiguous indices after a hotplug, asynchronous fullscreen entries that keep their
+borderless or exclusive kind, and the `samples/Input` sample and Native AOT gate. The rest of the API
 reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
@@ -244,6 +249,8 @@ of the public API; it is not deferred to post-1.0.
 | `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
 | `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ReadColorsAsync`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color, depth, resize, and readback paths) | M8 |
 | `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`, `SsaoQuality`, `BloomEffect`, the `CreateCamera` `postProcess` parameter, the reserved `sourceColor`/`sourceDepth` custom post shader contract, built-in SSAO with baked quality variants and blue noise, the built-in fast dual-filter bloom, target-sized chains, and viewport store-back | M8 |
+| `IWindow.IsCursorOnScreen` | M9 |
+| `IWindow.SetTextInputArea(Rect area, int cursorOffset)` | M9 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
 current asset surface after M4; see §6.
@@ -466,6 +473,28 @@ single-sample `Rgba16Float` targets per target extent per frame ring slot, rotat
 source, and stores its result back into the camera target for the camera viewport only, leaving depth
 unchanged; both readback methods and a later camera sample see the result. See
 [Post-processing §7.13](api/rendering/post-processing.md#713-camera-post-processing).
+
+**M9 subset.** `IWindow` adds `IsCursorOnScreen` and `SetTextInputArea`. `IsCursorOnScreen` is an
+Any-thread snapshot that is true while the pointer is over the client area, is unaffected by
+`CursorMode`, is false while the window is minimized or hidden, and refreshes from the platform on
+a focus change. `SetTextInputArea(Rect area, int cursorOffset)` is an Any-thread queued, coalesced
+setter in logical window units, the same units as `Width` and `Height` and not render pixels;
+`cursorOffset` is a non-negative offset from `area.X` in the same units, and a zero width or height
+clears the platform area. The text-input contract is committed-only: SDL text input starts on
+startup, restarts on focus gain, restore, or show when the window is focused and visible, stops on
+focus loss, minimize, hide, or dispose, typed and IME-committed text arrives through
+`IInput.TextInput`, and the SDL text-editing and candidate-list events are ignored. Composition
+preview and candidate lists are post-1.0; the text input area only places the native candidate
+window. `SetMonitor` validates a stable index against the entries in `Monitors`, so indices may be
+non-contiguous after a hotplug, and an asynchronous fullscreen entry keeps its borderless or
+exclusive kind while size and monitor commands are remembered for the windowed restore. M9 adds the
+input matrix tests for keyboard and text input, gamepad mapping, hotplug, rumble, and the window
+state and monitor-index validation paths; the gamepad API is unchanged. The rest of §8 and §9 is
+unchanged. `samples/Input` is the M9 sample and Native AOT gate: a single-project solution with no
+assets executable and no pack that exercises the text field and committed IME text, the clipboard,
+cursor modes and `IsCursorOnScreen`, fullscreen and borderless, stable monitor indices, DPI and
+resize, the focus cap, and gamepad hotplug and rumble. `samples/RenderTarget` remains the M8 sample
+and Native AOT gate.
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and

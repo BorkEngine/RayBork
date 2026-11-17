@@ -60,14 +60,18 @@ public enum Key {
 
 - `Key` is a **physical** scancode. `Key.W` is the key in the W position on a US layout, regardless
   of the user's keyboard layout. This is what games want for movement.
-- `TextInput` is the UTF-16 text entered during the current tick, in layout order. It is the right
-  API for names, chat, and console input. It is empty when no text was entered.
+- `TextInput` is the UTF-16 committed text for the current tick, in layout order: typed text and
+  committed IME text both arrive here. It is the right API for names, chat, and console input, and
+  it is empty when no text was committed.
 - `IsKeyPressed` is true for the first press of a key only; OS-generated repeat events do not set
   it. `IsKeyPressedRepeat` is true only for an OS-generated repeat event, never for the first
   press. `IsKeyDown`/`IsKeyUp` are level state.
 - Input is snapshotted at the start of `Tick`; events that arrive while `Tick` runs are applied to
   the next tick. A slow `Tick` therefore coalesces input.
-- IME composition, text editing, and clipboard image are M9. v1 handles direct text input.
+- `IInput` exposes no composition state. SDL text-editing and candidate-list events are ignored, so
+  an in-progress composition has no preview API; committed text arrives through `TextInput` and
+  `IWindow.SetTextInputArea` places the native candidate window. Composition preview and candidate
+  lists are post-1.0.
 
 ### 9.2 Mouse
 
@@ -145,4 +149,7 @@ public enum GamepadTrigger {
   their own. SDL's gamecontroller mapping database supplies the button/axis mapping.
 - Hotplug is polled at tick boundaries. Rumble is best-effort; an unsupported device logs at Debug
   and ignores the call.
+- Hotplug, the stable `InstanceId`, and duration-bounded `SetVibration`/`StopVibration` are verified
+  in M9: the input matrix tests and the `samples/Input` gamepad panel exercise them, and M9 adds no
+  new gamepad API.
 - Touch, motion sensors, and haptics beyond simple rumble are post-1.0.

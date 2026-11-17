@@ -170,6 +170,17 @@ blue-noise texture, and the SSAO/bloom programs add no NuGet dependency. `Collis
 migration note; after 1.0 a breaking change to this surface would need the obsolete/migration cycle
 above.
 
+The M9 input and window surface is additive: `IWindow.IsCursorOnScreen` and
+`IWindow.SetTextInputArea` are new members, and every existing `IWindow` call keeps its meaning. The
+committed-only IME contract is the v1 contract: typed and IME-committed text arrives through
+`IInput.TextInput`, text editing and candidate lists are not exposed, and `SetTextInputArea` only
+places the native candidate window. No migration is required: the two members are optional, existing
+`IWindow` calls keep their documented meanings, and the monitor-index and fullscreen fixes only make
+the documented behavior hold on asynchronous platforms. Composition preview and candidate lists are
+post-1.0. These
+are 0.x preview additions and this paragraph is their migration note; after 1.0 a breaking change
+to this surface would need the obsolete/migration cycle above.
+
 Mouse input now uses render pixels instead of logical window coordinates. `Input.MousePosition` and
 `Input.MouseDelta` are physical framebuffer pixels with a top-left origin and fractional values, so a
 game passes `MousePosition` directly to `Camera.ScreenToWorldRay` and compares `WorldToScreen` output
