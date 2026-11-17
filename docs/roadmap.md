@@ -899,7 +899,8 @@ blocking glyph generation.
 - **Built-in fonts.** The built-in pack carries Fira Sans Regular version 4.203 at
   `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload and the JetBrains Mono variable face
   version 2.211 at `/fonts/jetbrains-mono` with its `/fonts/jetbrains-mono-face` payload, produced by
-  the ordinary font processor with the default 32/4/2 MSDF settings, so the pack has 20 entries. The
+  the ordinary font processor with the default 32/4/2 MSDF settings; the M8 SSAO shader variants and
+  blue-noise texture bring the pack to 37 entries. The
   bundled JetBrains Mono face's default named instance is Regular (weight 400); that is the instance
   the runtime renders. Fira Sans and JetBrains Mono are licensed under the SIL Open Font License 1.1
   and cover Latin, Cyrillic, and Greek, which is the coverage the samples exercise.
@@ -1252,9 +1253,12 @@ effect. The extensible camera post-process core ships: `PostProcessStack`, `Post
 `ShaderPostProcessEffect`, the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float`
 chains over the engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader
 contract, and camera-viewport store-back on the scene target and on render targets, with the
-post-processed output included in a later target sample and both readback methods. Built-in SSAO and
-bloom effects and the RenderTarget and split-screen samples remain later M8 tasks; M8 is not
-complete.
+post-processed output included in a later target sample and both readback methods. Built-in SSAO ships
+on the same core: `SsaoEffect`/`SsaoQuality` use the N8AO 2.1.0 full-resolution SSAO path with
+depth-reconstructed normals, a golden-angle kernel, blue-noise rotation, two bilateral denoise
+iterations, a tinted composite, baked 8/16/64 AO and 4/8/16 denoise variants, and an engine-owned
+128x128 blue-noise texture. Castle and PrimitiveGallery enable it by default and toggle it with `A`.
+Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 work; M8 is not complete.
 
 **Scope.**
 
@@ -1280,7 +1284,11 @@ complete.
   a camera-viewport store-back into the target's MSAA or single-sample color image. The chain runs
   after the camera's geometry and resolve pass, works on the scene target and on `RenderTexture`
   targets, includes the post-processed output in readback, and leaves depth unchanged. Shipped.
-- Built-in SSAO and bloom effects on the same core. Later M8 tasks.
+- Built-in SSAO: N8AO 2.1.0 full-resolution SSAO with depth-reconstructed normals, a golden-angle
+  kernel, blue-noise rotation, two bilateral denoise iterations, `SsaoEffect`/`SsaoQuality`, baked
+  quality variants, the engine-owned blue-noise texture, and on-by-default Castle/PrimitiveGallery
+  toggles. Shipped.
+- Built-in bloom effect on the same core. Later M8 task.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
   simple post-process shader, and present. Later M8 task.
 - Split-screen sample pass: two cameras, two viewports. Later M8 task.
@@ -1297,6 +1305,10 @@ complete.
   post-process unit and GPU tests for the scene target and render target, including effect order,
   user uniforms, the source depth binding, viewport store-back, disabled semantics, retained
   materials, target resize, and device recovery; the standalone RenderTarget sample is later.
+- Built-in SSAO runs every baked quality variant over perspective and orthographic probes, darkens a
+  known cube contact while a flat wall stays near-white, honors world/screen-space radius,
+  intensity, and denoise changes, rejects a depth-less target, preserves the original scene color in
+  the composite, and reads back with SSAO included. Met by the SSAO unit and GPU tests.
 - Split-screen renders two independent camera views into the HDR scene target in one frame, and each
   camera's clear stays inside its clamped viewport. Met.
 - A later camera with `ClearMode.None` keeps the earlier pass' color and depth; `ClearMode.Depth`

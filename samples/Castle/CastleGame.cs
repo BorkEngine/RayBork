@@ -38,6 +38,8 @@ internal sealed class CastleGame : IGame {
 
     private readonly int _frameLimit;
     private readonly StatusOverlay _overlay = new();
+    private readonly PostProcessStack _postProcess = new();
+    private readonly SsaoEffect _ssao = new();
 
     private Model? _model;
     private Texture? _texture;
@@ -81,6 +83,10 @@ internal sealed class CastleGame : IGame {
         // world-space bounds. Model.Bounds is the union of the part bounds, and each part bound is
         // its mesh bounds after the part's local transform.
         _worldBounds = _model.Bounds;
+
+        // The SSAO effect is app-lifetime and enabled by default at Medium quality. The stack is
+        // snapshotted for the scene camera only; the later HUD camera keeps no stack.
+        _postProcess.Add(_ssao);
     }
 
     /// <inheritdoc/>
@@ -94,6 +100,11 @@ internal sealed class CastleGame : IGame {
             _projection = _projection == CameraProjection.Perspective
                 ? CameraProjection.Orthographic
                 : CameraProjection.Perspective;
+        }
+
+        // A toggles the built-in SSAO effect. The change applies to cameras created after this tick.
+        if (context.Input.IsKeyPressed(Key.A)) {
+            _ssao.Enabled = !_ssao.Enabled;
         }
 
         UpdateOrbit(context.Input);
@@ -110,7 +121,12 @@ internal sealed class CastleGame : IGame {
 
         // The scene pass clears color and depth and draws every depth-tested scene draw. The status
         // line is not part of it.
-        using (Camera scene = CreatePass(context, cameraTransform, ClearMode.ColorAndDepth, Color.WhiteSmoke)) {
+        using (Camera scene = CreatePass(
+            context,
+            cameraTransform,
+            ClearMode.ColorAndDepth,
+            Color.WhiteSmoke,
+            _postProcess)) {
             scene.DrawModel(_model!, Transform.Identity, Color.White);
 
             // raylib's reference grid: 20 slices 10 units apart, centered on the origin where the
@@ -142,7 +158,8 @@ internal sealed class CastleGame : IGame {
         EngineContext context,
         Transform transform,
         ClearMode clearMode,
-        Color? clearColor) {
+        Color? clearColor,
+        PostProcessStack? postProcess = null) {
         // The orthographic height reproduces the perspective framing at the current orbit distance,
         // so the orbit, wheel zoom, and window resize behave the same in both modes. A finite far
         // plane is enough: the orthographic pass only needs to cover the scene.
@@ -159,7 +176,8 @@ internal sealed class CastleGame : IGame {
             clearMode: clearMode,
             clearColor: clearColor,
             near: NEAR_PLANE,
-            far: orthographic ? ORTHO_FAR : float.PositiveInfinity);
+            far: orthographic ? ORTHO_FAR : float.PositiveInfinity,
+            postProcess: postProcess);
     }
 
     /// <summary>
@@ -217,7 +235,9 @@ internal sealed class CastleGame : IGame {
             new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
             OVERLAY_DISTANCE);
         string projectionName = _projection == CameraProjection.Perspective ? "perspective" : "ortho";
-        string statusText = $"{_overlay.Build(context)}\nprojection {projectionName}";
+        string ssaoState = _ssao.Enabled ? "on" : "off";
+        string statusText =
+            $"{_overlay.Build(context)}\nprojection {projectionName}   ssao {ssaoState}";
 
         camera.DrawText(
             context.Defaults.DefaultMonoFont,

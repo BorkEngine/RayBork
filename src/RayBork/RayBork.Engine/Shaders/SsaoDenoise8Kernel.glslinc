@@ -1,0 +1,12 @@
+// N8AO 2.x generateDenoiseSamples(8, 11), baked as a constant array.
+// Generated for the compile-time DENOISE_SAMPLE_COUNT variant; do not make the count dynamic.
+
+const vec2 DENOISE_KERNEL[8] = vec2[8](
+    vec2(0.21022410, 0.00000000),
+    vec2(-0.25000000, 0.25000000),
+    vec2(-0.00000000, -0.47920733),
+    vec2(0.42044821, 0.42044821),
+    vec2(-0.70292666, 0.00000000),
+    vec2(0.56987676, -0.56987676),
+    vec2(0.00000000, 0.90470302),
+    vec2(-0.70710678, -0.70710678));

@@ -1,0 +1,95 @@
+#include "SsaoAbi.glslinc"
+
+// AO_KERNEL and AO_SAMPLE_COUNT are supplied by the variant's kernel include before this file. The
+// kernel is N8AO's generateHemisphereSamples(n), so 8, 16, and 64 have the same lateral coverage at
+// their own compile-time sample count instead of being subsets of the 64-sample kernel.
+
+layout(location = 0) in vec2 vUv;
+layout(location = 0) out vec4 oColor;
+
+void main() {
+    ivec2 size = ivec2(ssaoResolution());
+    ivec2 pixel = clamp(ivec2(gl_FragCoord.xy), ivec2(0), size - ivec2(1));
+    float depth = texelFetch(sceneDepth, pixel, 0).x;
+    if (depth <= 0.0) {
+        oColor = vec4(1.0, 0.5, 0.5, 1.0);
+        return;
+    }
+
+    vec3 viewPosition = ssaoViewPosition(depth, vUv);
+    vec3 normal = ssaoDepthNormal(viewPosition, vUv);
+    vec4 noise = texture(blueNoise, gl_FragCoord.xy / 128.0);
+
+    // N8AO's per-frame golden-ratio rotation breaks the static-noise pattern. Time.z is the frame
+    // index, so the sequence is deterministic per frame and does not need a wall-clock value.
+    vec2 rotatedNoise = fract(
+        noise.rg + (vec2(1.618033988749895, 1.324717957244746) * rbFrame.Time.z));
+
+    vec3 helper = vec3(0.0, 1.0, 0.0);
+    if (dot(helper, normal) > 0.99) {
+        helper = vec3(1.0, 0.0, 0.0);
+    }
+
+    vec3 tangent = normalize(cross(helper, normal));
+    vec3 bitangent = cross(normal, tangent);
+    float rotation = rotatedNoise.x * 6.28318530718;
+    float c = cos(rotation);
+    float s = sin(rotation);
+    mat3 tbn = mat3(
+        (tangent * c) + (bitangent * s),
+        (-tangent * s) + (bitangent * c),
+        normal);
+
+    float radius = ssaoPixelRadius(viewPosition, depth, vUv, uRadius);
+    float falloff = max(ssaoFalloffDistance(radius), 1e-4);
+    float biasHeuristic = (min(0.1, falloff * 0.1) / max(uNear, 1e-4))
+        * fwidth(length(viewPosition))
+        / max(radius, 1e-4);
+    float bias = uBiasOffset + (uBiasMultiplier * biasHeuristic);
+
+    float offsetMove = rotatedNoise.y;
+    float offsetStep = 1.0 / float(AO_SAMPLE_COUNT);
+    float occluded = 0.0;
+    float totalWeight = 0.0;
+
+    for (int index = 0; index < AO_SAMPLE_COUNT; index++) {
+        float move = fract(offsetMove);
+        offsetMove += offsetStep;
+        vec3 samplePosition = viewPosition + (radius * move * (tbn * AO_KERNEL[index]));
+        vec4 projected = rbFrame.Projection * vec4(samplePosition, 1.0);
+        projected.xyz /= projected.w;
+        projected.xy = (projected.xy * 0.5) + 0.5;
+
+        bool inside = projected.w > 0.0
+            && all(greaterThan(projected.xyz * (1.0 - projected.xyz), vec3(0.0)));
+        if (!inside) {
+            continue;
+        }
+
+        totalWeight += 1.0;
+        vec2 sampleUv = clamp(projected.xy, 0.0, 1.0);
+        float sampleDepth = texture(sceneDepth, sampleUv).x;
+        if (sampleDepth <= 0.0) {
+            continue;
+        }
+
+        vec3 sampleViewPosition = ssaoViewPosition(sampleDepth, sampleUv);
+        float sampleDistance = -sampleViewPosition.z;
+        float worldDistance = -samplePosition.z;
+        float range = smoothstep(
+            0.0,
+            1.0,
+            falloff / max(abs(sampleDistance - worldDistance), 1e-5));
+        vec2 diff = gl_FragCoord.xy - floor(projected.xy * ssaoResolution());
+        bool contributes = sampleDepth != depth
+            && sampleDistance != worldDistance
+            && dot(diff, diff) >= 1.0
+            && sampleDistance + bias < worldDistance;
+        if (contributes) {
+            occluded += range;
+        }
+    }
+
+    float ao = clamp(1.0 - (occluded / max(totalWeight, 1.0)), 0.0, 1.0);
+    oColor = vec4(ao, (normal * 0.5) + 0.5);
+}

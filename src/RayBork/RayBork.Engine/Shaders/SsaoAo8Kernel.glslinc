@@ -1,0 +1,12 @@
+// N8AO 2.x generateHemisphereSamples(8), baked as a constant array.
+// Generated for the compile-time AO_SAMPLE_COUNT variant; do not make the count dynamic.
+
+const vec3 AO_KERNEL[8] = vec3[8](
+    vec3(0.25000000, 0.00000000, 0.96824584),
+    vec3(-0.31929002, 0.29249595, 0.90138782),
+    vec3(0.04887221, -0.55687656, 0.82915620),
+    vec3(0.40244484, 0.52491728, 0.75000000),
+    vec3(-0.73853523, -0.13063578, 0.66143783),
+    vec3(0.69960442, -0.44503219, 0.55901699),
+    vec3(-0.23400296, 0.87048413, 0.43301270),
+    vec3(-0.44627269, -0.85926753, 0.25000000));

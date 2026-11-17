@@ -26,10 +26,11 @@ namespace RayBork.Internal;
 /// stack, the camera snapshot path, or the processor.
 /// </para>
 /// <para>
-/// The per-extent pool holds two targets per extent, so a built-in can have two intermediate targets of
-/// one size before it completes or reuses one; a different size gets its own pair. A target rented at a
-/// different extent must be completed with <see cref="CompleteAuxiliaryTarget"/>; a chain's final target
-/// must be the camera target's size.
+/// The per-extent pool holds three targets per extent and the rent skips the current chain source, so a
+/// prior effect's completed target is preserved. A custom chain uses two of the three as its ping-pong
+/// pair; a built-in four-pass effect can use the two non-source targets while the source stays intact. A
+/// target rented at a different extent must be completed with <see cref="CompleteAuxiliaryTarget"/>; a
+/// chain's final target must be the camera target's size.
 /// </para>
 /// <para>
 /// Render-thread only. The context is valid for exactly one camera pass and is reset before the next.

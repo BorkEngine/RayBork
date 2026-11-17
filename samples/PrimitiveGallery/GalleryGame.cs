@@ -43,6 +43,8 @@ internal sealed class GalleryGame : IGame {
     private readonly Vector3 _galleryRight;
     private readonly Vector3 _galleryView;
     private readonly StatusOverlay _overlay = new();
+    private readonly PostProcessStack _postProcess = new();
+    private readonly SsaoEffect _ssao = new();
 
     private Texture? _texture;
     private Shader? _meshShader;
@@ -123,12 +125,21 @@ internal sealed class GalleryGame : IGame {
         // One caller-owned material over the built-in mesh program draws the whole row; each draw
         // supplies its own tint. The unbound mainTexture samples the renderer's white fallback.
         _meshShader = context.Defaults.CreateMeshShader();
+
+        // SSAO is on by default at Medium quality. The scene camera snapshots this stack; the later
+        // HUD camera keeps no stack.
+        _postProcess.Add(_ssao);
     }
 
     /// <inheritdoc/>
     public void Tick(EngineContext context) {
         if (context.Input.IsKeyPressed(Key.Escape)) {
             context.RequestExit();
+        }
+
+        // A toggles the built-in SSAO effect. The change applies to cameras created after this tick.
+        if (context.Input.IsKeyPressed(Key.A)) {
+            _ssao.Enabled = !_ssao.Enabled;
         }
 
         UpdateOrbit(context.Input);
@@ -151,7 +162,8 @@ internal sealed class GalleryGame : IGame {
             clearMode: ClearMode.ColorAndDepth,
             clearColor: Color.Gray3,
             near: NEAR_PLANE,
-            far: float.PositiveInfinity)) {
+            far: float.PositiveInfinity,
+            postProcess: _postProcess)) {
             DrawGallery(scene);
         }
 
@@ -375,9 +387,10 @@ internal sealed class GalleryGame : IGame {
             new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
             OVERLAY_DISTANCE);
 
+        string ssaoState = _ssao.Enabled ? "on" : "off";
         camera.DrawText(
             context.Defaults.DefaultMonoFont,
-            _overlay.Build(context),
+            $"{_overlay.Build(context)}\nssao {ssaoState}",
             overlay,
             OVERLAY_PIXEL_HEIGHT,
             Color.White);

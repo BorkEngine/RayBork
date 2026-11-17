@@ -352,15 +352,17 @@ inside an otherwise valid pack is an `AssetLoadException` for that path.
 
 ### 6.6 Pack mounting and built-in assets
 
-- The engine's built-in pack is mounted first, below every user pack. It has 20 entries and contains
+- The engine's built-in pack is mounted first, below every user pack. It has 37 entries and contains
   the white and error textures, the present shader pair, the built-in mesh draw shader program at
   `/shaders/mesh`, the primitive program at `/shaders/primitive`, the MSDF text program at
-  `/shaders/msdf`, and the built-in default and monospaced fonts at `/fonts/fira-sans` (Fira Sans
-  Regular) and `/fonts/jetbrains-mono` (the JetBrains Mono variable face, default instance Regular)
-  with their face payloads, produced by
+  `/shaders/msdf`, the seven SSAO shader variants at `/shaders/ssao/*` with the shared fullscreen
+  vertex payload, the `/textures/blue-noise` CC0 blue-noise texture, and the built-in default and
+  monospaced fonts at `/fonts/fira-sans` (Fira Sans Regular) and `/fonts/jetbrains-mono` (the
+  JetBrains Mono variable face, default instance Regular) with their face payloads, produced by
   the same `IAssetProcessor` pipeline as game content. The app preloads the mesh program, the two
-  textures, and both fonts into `EngineContext.Defaults` before `IGame.Setup`; the primitive and MSDF
-  programs and the primitive meshes are built into the engine's primitive assets. The bake
+  textures, both fonts, the SSAO shader assets, and the blue-noise texture before `IGame.Setup`; the
+  primitive and MSDF programs and the primitive meshes are built into the engine's primitive assets.
+  The bake
   writes `shaders/mesh` when a model part has no authored `[model] shader`, and the model loader
   requires every part to carry a canonical shader path. The primitive meshes are procedural assets
   built at startup, not pack entries.

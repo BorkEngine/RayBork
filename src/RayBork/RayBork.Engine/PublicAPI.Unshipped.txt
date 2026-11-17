@@ -1332,3 +1332,29 @@ RayBork.PostProcessStack.Remove(RayBork.PostProcessEffect! effect) -> bool
 RayBork.ShaderPostProcessEffect
 RayBork.ShaderPostProcessEffect.Shader.get -> RayBork.Shader!
 RayBork.ShaderPostProcessEffect.ShaderPostProcessEffect(RayBork.Shader! shader) -> void
+RayBork.SsaoEffect
+RayBork.SsaoEffect.BiasMultiplier.get -> float
+RayBork.SsaoEffect.BiasMultiplier.set -> void
+RayBork.SsaoEffect.BiasOffset.get -> float
+RayBork.SsaoEffect.BiasOffset.set -> void
+RayBork.SsaoEffect.Color.get -> RayBork.Color
+RayBork.SsaoEffect.Color.set -> void
+RayBork.SsaoEffect.DenoiseRadius.get -> int
+RayBork.SsaoEffect.DenoiseRadius.set -> void
+RayBork.SsaoEffect.DistanceFalloff.get -> float
+RayBork.SsaoEffect.DistanceFalloff.set -> void
+RayBork.SsaoEffect.Intensity.get -> float
+RayBork.SsaoEffect.Intensity.set -> void
+RayBork.SsaoEffect.Quality.get -> RayBork.SsaoQuality
+RayBork.SsaoEffect.Quality.set -> void
+RayBork.SsaoEffect.Radius.get -> float
+RayBork.SsaoEffect.Radius.set -> void
+RayBork.SsaoEffect.ScreenSpaceRadius.get -> bool
+RayBork.SsaoEffect.ScreenSpaceRadius.set -> void
+RayBork.SsaoEffect.SsaoEffect() -> void
+RayBork.SsaoQuality
+RayBork.SsaoQuality.High = 3 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Low = 1 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Medium = 2 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Performance = 0 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Ultra = 4 -> RayBork.SsaoQuality

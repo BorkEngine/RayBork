@@ -15,8 +15,8 @@ internal static class Program {
         Castle - an orbitable castle scene
 
         A castle model and its diffuse texture, drawn solid with the built-in mesh material and an
-        orbital perspective camera. Hovering the castle outlines its bounds and marks the nearest
-        surface point under the pointer.
+        orbital perspective camera with built-in SSAO. Hovering the castle outlines its bounds and
+        marks the nearest surface point under the pointer.
 
         Usage:
           Castle [options]
@@ -32,6 +32,7 @@ internal static class Program {
           Mouse wheel       Zoom the camera.
           Mouse hover       Outline the castle and mark the surface point under the pointer.
           O                 Toggle the camera between perspective and orthographic.
+          A                 Toggle ambient occlusion.
           Escape            Exit.
         """;
 
