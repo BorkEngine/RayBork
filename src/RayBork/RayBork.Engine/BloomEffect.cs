@@ -59,8 +59,11 @@ public sealed class BloomEffect : PostProcessEffect {
     /// Gets or sets the scene-linear brightness the bloom starts from. The default is <c>1</c>.
     /// </summary>
     /// <remarks>
-    /// Only pixels brighter than the threshold contribute. <c>0</c> keeps every lit pixel; a typical HDR
-    /// flash uses a value above <c>1</c> so only the flash blooms. The setter is tick-thread only.
+    /// The effective knee width is <c>Threshold * SoftKnee</c>, capped at <see cref="Threshold"/>, so
+    /// the bloom ramps from <c>Threshold - knee</c> to <c>Threshold + knee</c>. With the default
+    /// <c>SoftKnee</c> of <c>0.5</c>, a pixel at the threshold already contributes a small amount.
+    /// <c>0</c> keeps every lit pixel and leaves black black. A typical HDR flash uses a threshold above
+    /// the ordinary scene brightness so only the flash blooms. The setter is tick-thread only.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
@@ -85,7 +88,9 @@ public sealed class BloomEffect : PostProcessEffect {
     /// </summary>
     /// <remarks>
     /// A positive knee blends the brightness ramp in smoothly instead of cutting it off at the
-    /// threshold; <c>0</c> is a hard threshold. The setter is tick-thread only.
+    /// threshold; <c>0</c> is a hard threshold. The effective knee is capped at <see cref="Threshold"/>,
+    /// so a value above <c>1</c> behaves like <c>1</c>: the ramp never extends below zero and
+    /// near-black pixels are not bloomed. The setter is tick-thread only.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>

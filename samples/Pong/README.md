@@ -85,16 +85,18 @@ warm paddle texture, a pale gold ball, and a dimmed overlay.
 ## Bloom and collision flash
 
 The sample owns one app-lifetime `BloomEffect` and adds it to one `PostProcessStack` in `Setup`; only
-the scene camera receives the stack. The effect uses its approved defaults: threshold `1`, soft knee
-`0.5`, intensity `0.7`, scatter `0.7`, and a white tint. It runs the five-level fast dual-filter
-pyramid over the scene target and adds the result back into the scene before the HUD camera draws, so
-the scores, status line, and overlay keep their exact colors and are never bloomed. `B` toggles
-`BloomEffect.Enabled`; the change applies to cameras created after that tick.
+the scene camera receives the stack. The effect uses threshold `2`, soft knee `0.5`, intensity `0.7`,
+scatter `0.7`, and a white tint. The raised threshold keeps the ordinary palette, whose brightest base
+channel is `1`, out of the soft-knee ramp; only the HDR collision flash blooms. It runs the five-level
+fast dual-filter pyramid over the scene target and adds the result back into the scene before the HUD
+camera draws, so the scores, status line, and overlay keep their exact colors and are never bloomed.
+`B` toggles `BloomEffect.Enabled`; the toggle runs before the scene camera is created, so it applies to
+the scene camera created later in the same tick.
 
 Every collision starts a short flash that decays over `0.15` seconds. The ball flashes gold, the hit
 paddle flashes stronger warm white, and a top or bottom wall hit flashes the border amber. The flash
-colors are scene-linear values above `1` (for example `6, 5, 3` for a paddle), so they pass the bloom
-threshold and produce a halo; the ordinary playfield colors stay below it. There are no test-only
+colors are scene-linear values above `2` (for example `6, 5, 3` for a paddle), so they pass the raised
+bloom threshold and produce a halo; the ordinary playfield colors stay below it. There are no test-only
 diagnostics: the status line shows `bloom on` or `bloom off` with the rest of the controls.
 
 ## Gameplay

@@ -25,9 +25,10 @@ namespace RayBork.Internal;
 /// </para>
 /// <para>
 /// The snapshot reports its maximum ordered instance-record layout (prefilter, four downsamples, four
-/// upsamples, composite). A small target whose clamped extent stops shrinking runs fewer passes, so its
-/// actual records are a prefix of that layout and the frame buffer is never undersized. The snapshot is
-/// pooled by the effect and keeps its layout, level, and target arrays across cameras.
+/// upsamples, composite). A small target whose clamped extent stops shrinking runs fewer passes in the
+/// actual prefilter/downsample/upsample/composite order; the maximum layout is an upper bound, so the
+/// frame buffer is never undersized. The snapshot is pooled by the effect and keeps its layout, level,
+/// and target arrays across cameras.
 /// </para>
 /// </remarks>
 internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
@@ -164,15 +165,22 @@ internal sealed class BloomEffectSnapshot : PostProcessEffectSnapshot {
         Pipeline prefilterPipeline = context.GetOrCreateFullscreenPipeline(
             prefilterProgram,
             PostProcessContext.FullscreenRenderState);
-        Pipeline downsamplePipeline = context.GetOrCreateFullscreenPipeline(
-            downsampleProgram,
-            PostProcessContext.FullscreenRenderState);
-        Pipeline upsamplePipeline = context.GetOrCreateFullscreenPipeline(
-            upsampleProgram,
-            PostProcessContext.FullscreenRenderState);
         Pipeline compositePipeline = context.GetOrCreateFullscreenPipeline(
             compositeProgram,
             PostProcessContext.FullscreenRenderState);
+
+        // A one-level pyramid is only the prefilter and the composite; do not create the downsample and
+        // upsample pipelines when the target collapses to that case.
+        Pipeline downsamplePipeline = default;
+        Pipeline upsamplePipeline = default;
+        if (levelCount > 1) {
+            downsamplePipeline = context.GetOrCreateFullscreenPipeline(
+                downsampleProgram,
+                PostProcessContext.FullscreenRenderState);
+            upsamplePipeline = context.GetOrCreateFullscreenPipeline(
+                upsampleProgram,
+                PostProcessContext.FullscreenRenderState);
+        }
 
         VulkanPostTarget current = context.RentColorTarget(_levels[0]);
         RecordPrefilter(context, current, prefilterPipeline, sourceColorSlot);

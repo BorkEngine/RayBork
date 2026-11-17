@@ -56,7 +56,10 @@ public sealed class BloomEffectTests {
         var effect = new BloomEffect();
 
         Assert.Throws<InvalidOperationException>(() => effect.Threshold = 2f);
+        Assert.Throws<InvalidOperationException>(() => effect.SoftKnee = 1f);
         Assert.Throws<InvalidOperationException>(() => effect.Intensity = 1f);
+        Assert.Throws<InvalidOperationException>(() => effect.Scatter = 1f);
+        Assert.Throws<InvalidOperationException>(() => effect.Tint = Color.White);
     }
 
     [Fact]
@@ -100,6 +103,41 @@ public sealed class BloomEffectTests {
                 snapshot.Reset();
             });
         } finally {
+            assets.Dispose();
+        }
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public async Task TheCameraServiceCapturesABloomEffectOverTheAttachedAssets() {
+        using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
+        BloomAssets assets = await BloomAssets.LoadAsync(harness.Catalog);
+        using CameraTestHost host = new();
+        host.Service.AttachBloomAssets(assets);
+        host.BeginFrame();
+        try {
+            var effect = new BloomEffect {
+                Threshold = 3f,
+                SoftKnee = 0.25f,
+                Intensity = 1.5f,
+                Scatter = 0.2f,
+            };
+            PostProcessStack stack = new();
+            stack.Add(effect);
+            using (Camera camera = host.CreatePerspectiveCamera(postProcess: stack)) {
+                Assert.False(camera.IsDisposed);
+            }
+
+            CameraPass pass = host.Packet.Passes[0];
+            BloomEffectSnapshot snapshot = Assert.IsType<BloomEffectSnapshot>(pass.PostProcessEffects[0]);
+            Assert.True(snapshot.Enabled);
+            Assert.Equal(3f, snapshot.Threshold);
+            Assert.Equal(0.25f, snapshot.SoftKnee);
+            Assert.Equal(1.5f, snapshot.Intensity);
+            Assert.Equal(0.2f, snapshot.Scatter);
+            host.EndFrame();
+        } finally {
+            host.Service.DetachBloomAssets();
             assets.Dispose();
         }
     }

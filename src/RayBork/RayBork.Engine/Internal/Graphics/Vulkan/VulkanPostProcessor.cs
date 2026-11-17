@@ -879,6 +879,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     /// </remarks>
     private sealed class PostTargetSlot {
         private readonly Dictionary<(uint Width, uint Height), SetEntry> _sets = [];
+        private (uint Width, uint Height)[] _staleScratch = [];
         private long _previousFrameIndex = -1;
 
         internal void BeginFrame(long frameIndex) {
@@ -887,9 +888,14 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
                 return;
             }
 
-            Span<(uint Width, uint Height)> stale = _sets.Count <= 8
-                ? stackalloc (uint, uint)[_sets.Count]
-                : new (uint, uint)[_sets.Count];
+            // A frame can use more extents than the old fixed stack threshold (bloom alone can use six
+            // per target size), so the slot keeps a reusable scratch array. It grows only when the
+            // frame's extent count reaches a new maximum, never in steady state.
+            if (_staleScratch.Length < _sets.Count) {
+                _staleScratch = new (uint Width, uint Height)[_sets.Count];
+            }
+
+            Span<(uint Width, uint Height)> stale = _staleScratch.AsSpan(0, _sets.Count);
             int staleCount = 0;
             foreach (KeyValuePair<(uint Width, uint Height), SetEntry> set in _sets) {
                 if (set.Value.LastUsedFrameIndex != _previousFrameIndex) {

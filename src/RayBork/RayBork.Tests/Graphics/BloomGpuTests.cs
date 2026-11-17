@@ -319,6 +319,194 @@ public sealed class BloomGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void SsaoBeforeBloomSharesTheCameraTargetPostSetAndStillBlooms() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(TARGET_WIDTH, TARGET_HEIGHT, SampleCount: 1));
+        using BloomScene scene = new(harness, "bloom-ssao-chain");
+        SsaoAssets ssaoAssets = harness.LoadSsaoAssetsFromBuiltInPack();
+        BloomAssets bloomAssets = harness.LoadBloomAssetsFromBuiltInPack();
+        VulkanDrawTestHarness.DrawSpec bright = scene.Draw(
+            TARGET_WIDTH,
+            TARGET_HEIGHT,
+            new Vector2(64f, 48f),
+            new Vector2(20f, 20f),
+            _brightGold);
+
+        harness.Submit(harness.CreateFrameWithPasses(1, Pass(target, [bright], [])));
+        (float R, float G, float B) baselineHalo = harness.ReadRenderTargetColor(target, 64, 28);
+
+        var ssao = new SsaoEffect(ssaoAssets) {
+            Radius = 1f,
+            DistanceFalloff = 10f,
+            DenoiseRadius = 0,
+        };
+        PostProcessEffectSnapshot ssaoSnapshot = PostProcessSnapshots.Capture(
+            ssao,
+            targetHasDepth: true,
+            EFFECT_TARGET_DESCRIPTION,
+            ssaoAssets);
+        PostProcessEffectSnapshot bloomSnapshot = CaptureBloom(bloomAssets, intensity: 2f);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            Pass(target, [bright], [ssaoSnapshot, bloomSnapshot])));
+        (float R, float G, float B) halo = harness.ReadRenderTargetColor(target, 64, 28);
+
+        Assert.True(
+            halo.R > baselineHalo.R + 0.01f,
+            $"The bloom after SSAO did not add a halo: baseline {baselineHalo.R}, actual {halo.R}.");
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ThresholdZeroKeepsLitPixels() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(64, 64, SampleCount: 1));
+        BloomAssets assets = harness.LoadBloomAssetsFromBuiltInPack();
+        Color dim = new(0.25f, 0.25f, 0.25f, 1f);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            Pass(target, [], [], dim)));
+        (float R, float G, float B) baseline = harness.ReadRenderTargetColor(target, 32, 32);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            Pass(target, [], [CaptureBloom(assets, threshold: 0f, intensity: 2f)], dim)));
+        (float R, float G, float B) result = harness.ReadRenderTargetColor(target, 32, 32);
+
+        Assert.True(
+            result.R > baseline.R + 0.2f,
+            $"Threshold 0 did not bloom a lit pixel: baseline {baseline.R}, actual {result.R}.");
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void TintColorsTheAddedBloom() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(64, 64, SampleCount: 1));
+        BloomAssets assets = harness.LoadBloomAssetsFromBuiltInPack();
+        Color source = new(4f, 4f, 4f, 1f);
+        Color green = new(0f, 1f, 0f, 1f);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            Pass(target, [], [CaptureBloom(assets, intensity: 1f, tint: green)], source)));
+        (float R, float G, float B) result = harness.ReadRenderTargetColor(target, 32, 32);
+
+        Assert.True(
+            result.G > source.G + 0.2f,
+            $"The green tint did not add green bloom: source {source.G}, actual {result.G}.");
+        AssertColorNear((source.R, 0f, source.B), (result.R, 0f, result.B), 0.02f);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void SoftKneeAboveOneDoesNotBloomNearBlackPixels() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(32, 32, SampleCount: 1));
+        BloomAssets assets = harness.LoadBloomAssetsFromBuiltInPack();
+        Color nearBlack = new(0.02f, 0.02f, 0.02f, 1f);
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            Pass(
+                target,
+                [],
+                [CaptureBloom(assets, threshold: 1f, softKnee: 4f, intensity: 4f)],
+                nearBlack)));
+        (float R, float G, float B) result = harness.ReadRenderTargetColor(target, 16, 16);
+
+        AssertColorNear((nearBlack.R, nearBlack.G, nearBlack.B), result, 0.005f);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void ResizingTheTargetRecreatesTheBloomPyramidAndStillBlooms() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture target = host.CreateRenderTexture(
+            new RenderTextureDescription(64, 48, SampleCount: 1));
+        BloomAssets assets = harness.LoadBloomAssetsFromBuiltInPack();
+
+        harness.Submit(harness.CreateFrameWithPasses(
+            1,
+            Pass(target, [], [CaptureBloom(assets, intensity: 1f)], _uniformHdr)));
+        (float R, float G, float B) before = harness.ReadRenderTargetColor(target, 32, 24);
+        Assert.True(before.R > _uniformHdr.R + 0.5f);
+        int recreationBefore = host.Backend.PostTargetRecreationCountForTests;
+
+        host.ResizeRenderTexture(target, 96, 32);
+        harness.Submit(harness.CreateFrameWithPasses(
+            2,
+            Pass(target, [], [CaptureBloom(assets, intensity: 1f)], _uniformHdr)));
+        (float R, float G, float B) after = harness.ReadRenderTargetColor(target, 48, 16);
+
+        Assert.True(
+            after.R > _uniformHdr.R + 0.5f,
+            $"The resized target did not bloom: source {_uniformHdr.R}, actual {after.R}.");
+        Assert.True(host.Backend.PostTargetRecreationCountForTests > recreationBefore);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void MultipleTargetSizesReuseTheBloomPostTargets() {
+        using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
+        using VulkanDrawTestHarness harness = new(host);
+        using RenderTexture small = host.CreateRenderTexture(
+            new RenderTextureDescription(32, 24, SampleCount: 1));
+        using RenderTexture medium = host.CreateRenderTexture(
+            new RenderTextureDescription(64, 48, SampleCount: 1));
+        using RenderTexture wide = host.CreateRenderTexture(
+            new RenderTextureDescription(96, 32, SampleCount: 1));
+        BloomAssets assets = harness.LoadBloomAssetsFromBuiltInPack();
+
+        // Each size uses six extents; three sizes exceed the old stack threshold and exercise the
+        // slot's reusable stale-extent scratch array.
+        for (long frame = 1; frame <= 3; frame++) {
+            harness.Submit(CreateMultiTargetFrame(harness, frame, small, medium, wide, assets));
+        }
+
+        int recreationAfterWarmup = host.Backend.PostTargetRecreationCountForTests;
+        int texturesAfterWarmup = harness.TextureCount;
+        Assert.True(recreationAfterWarmup > 0);
+
+        for (long frame = 4; frame <= 6; frame++) {
+            harness.Submit(CreateMultiTargetFrame(harness, frame, small, medium, wide, assets));
+        }
+
+        Assert.Equal(recreationAfterWarmup, host.Backend.PostTargetRecreationCountForTests);
+        Assert.Equal(texturesAfterWarmup, harness.TextureCount);
+        Assert.Empty(host.Instance.ConsumeValidationErrors());
+    }
+
+    private static RenderFramePacket CreateMultiTargetFrame(
+        VulkanDrawTestHarness harness,
+        long frame,
+        RenderTexture small,
+        RenderTexture medium,
+        RenderTexture wide,
+        BloomAssets assets) => harness.CreateFrameWithPasses(
+        frame,
+        Pass(small, [], [CaptureBloom(assets, intensity: 1f)], _uniformHdr),
+        Pass(medium, [], [CaptureBloom(assets, intensity: 1f)], _uniformHdr),
+        Pass(wide, [], [CaptureBloom(assets, intensity: 1f)], _uniformHdr));
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
     public void ALaterHudCameraWithoutAStackKeepsItsColorsWhileTheSceneHaloBlooms() {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using VulkanDrawTestHarness harness = new(host);
@@ -403,6 +591,7 @@ public sealed class BloomGpuTests {
         float softKnee = 0.5f,
         float intensity = 2f,
         float scatter = 0.7f,
+        Color? tint = null,
         bool targetHasDepth = true,
         bool enabled = true) {
         var effect = new BloomEffect(assets) {
@@ -410,6 +599,7 @@ public sealed class BloomGpuTests {
             SoftKnee = softKnee,
             Intensity = intensity,
             Scatter = scatter,
+            Tint = tint ?? Color.White,
             Enabled = enabled,
         };
         return PostProcessSnapshots.Capture(

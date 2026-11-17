@@ -61,9 +61,11 @@ internal sealed class PongGame : IGame {
     private const float SERVE_SLOPE = 0.45f;
     private const float GAMEPAD_DEADZONE = 0.2f;
 
-    // Every collision starts a short scene-linear HDR flash. The bloom threshold is 1, so only the
-    // flash colors above 1 contribute a halo; the HUD camera has no stack and keeps its own colors.
+    // Every collision starts a short scene-linear HDR flash. The sample raises the bloom threshold to
+    // 2 so the ordinary palette near 1 stays out of the knee and only the flash colors (ball 3,
+    // paddle 6, wall 2.4) bloom; the HUD camera has no stack and keeps its own colors.
     private const float FLASH_DURATION = 0.15f;
+    private const float BLOOM_THRESHOLD = 2f;
 
     // The AI stops inside this design-pixel band around its target so a ball resting at the target Y
     // does not make the paddle oscillate between two adjacent substeps.
@@ -140,8 +142,10 @@ internal sealed class PongGame : IGame {
         // and never dispose it. The flat mono advance keeps the score and status lines steady.
         _monoFont = context.Defaults.DefaultMonoFont;
 
-        // Bloom is app-lifetime and enabled by default. The stack is snapshotted for the scene camera
+        // Bloom is app-lifetime and enabled by default. The threshold is raised above the ordinary
+        // palette so only the HDR collision flash blooms. The stack is snapshotted for the scene camera
         // only; the later HUD camera keeps no stack, so its scores and text are never bloomed.
+        _bloom.Threshold = BLOOM_THRESHOLD;
         _postProcess.Add(_bloom);
         ResetMatch();
     }

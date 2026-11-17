@@ -1262,8 +1262,10 @@ Built-in bloom ships on the same core: `BloomEffect` thresholds and soft-knees t
 half-resolution level, runs up to four more downsample levels (quarter through 1/32, each extent clamped
 to at least one pixel), tent-upsamples with `Scatter`, and adds a camera-target-sized composite. Its four
 programs and shared fullscreen vertex payload are engine-owned built-ins, and the effect needs no depth.
-`Pong` runs one app-lifetime bloom stack on its scene camera only, keeps its HUD camera stackless, and
-adds gold and warm-white HDR collision flashes that pass the bloom threshold and decay over a few frames.
+`Pong` runs one app-lifetime bloom stack on its scene camera only, keeps its HUD camera stackless, sets
+the bloom threshold to `2` so the ordinary `1`-brightness palette stays out of the knee, and adds gold
+and warm-white HDR collision flashes (ball `3`, paddle `6`, wall `2.4`) that bloom and decay over a few
+frames.
 The RenderTarget and split-screen sample tasks and the final milestone docs remain later M8 work; M8 is
 not complete.
 
@@ -1299,9 +1301,10 @@ not complete.
   resolution, up to four more downsample levels clamped to one pixel, tent upsample with `Scatter`, a
   camera-target-sized additive composite, engine-owned prefilter/downsample/upsample/composite programs,
   a depth-less target path, and pooled per-extent targets. Shipped.
-- Pong bloom integration: one app-lifetime scene-camera stack with the HUD camera stackless, gold and
-  warm-white HDR ball/paddle/wall collision flashes in scene-linear values above the bloom threshold, a
-  short decay, and a `B` toggle with HUD status. Shipped.
+- Pong bloom integration: one app-lifetime scene-camera stack with the HUD camera stackless, a raised
+  bloom threshold of `2` so the ordinary palette stays out of the knee, gold and warm-white HDR
+  ball/paddle/wall collision flashes (ball `3`, paddle `6`, wall `2.4`), a short decay, and a `B` toggle
+  with HUD status. Shipped.
 - RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
   simple post-process shader, and present. Later M8 task.
 - Split-screen sample pass: two cameras, two viewports. Later M8 task.

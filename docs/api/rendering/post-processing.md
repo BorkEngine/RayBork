@@ -185,11 +185,17 @@ clamped extent stops shrinking skips the repeated level and runs fewer passes.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `Threshold` | `1` | Scene-linear brightness the bloom starts from. Must be finite and non-negative; `0` keeps every lit pixel. |
-| `SoftKnee` | `0.5` | Knee width as a fraction of `Threshold`. Must be finite and non-negative; `0` is a hard threshold and a larger value blends the discarded range in smoothly. |
+| `Threshold` | `1` | Scene-linear brightness the bloom starts from. Must be finite and non-negative; `0` keeps every lit pixel and leaves black black. |
+| `SoftKnee` | `0.5` | Knee width as a fraction of `Threshold`, capped at `Threshold`. Must be finite and non-negative; `0` is a hard threshold, a positive value ramps the contribution from `Threshold - knee` to `Threshold + knee`, and a value above `1` behaves like `1`. |
 | `Intensity` | `0.7` | How much bloom is added to the chain input. Must be finite and non-negative; `0` leaves the scene unchanged. |
 | `Scatter` | `0.7` | Weight of each coarser level in the tent upsample. Must be finite and non-negative; `0` keeps only the half-resolution prefilter level and therefore a tight halo. |
 | `Tint` | `Color.White` | Color multiplied into the bloom before it is added. All components must be finite. |
+
+With the default `SoftKnee` of `0.5`, the prefilter ramps from `Threshold - 0.5 * Threshold` to
+`Threshold + 0.5 * Threshold`, so a pixel at the threshold already contributes a small amount. Above the
+upper edge the contribution is the standard `(brightness - Threshold) / brightness`. The effective knee
+is capped at `Threshold` and the contribution at one, so a large `SoftKnee` never blooms black pixels or
+overflows the near-black case; `Threshold` `0` keeps every lit pixel and leaves black black.
 
 The prefilter, downsample, upsample, and composite programs and their shared fullscreen vertex payload
 are engine-owned built-in assets preloaded from the built-in pack before `IGame.Setup`. The effect has
@@ -213,9 +219,10 @@ three targets for every extent the effect uses (five pyramid levels plus the com
 frame ring slot. Disabling the effect or the stack skips the whole chain and its target rental.
 
 `Pong` enables bloom on its scene camera only and toggles it with `B`; its HUD camera has no stack, so
-the scores and text are never bloomed. The sample flashes scene-linear HDR ball, paddle, and wall
-colors on collision; the values are above the default threshold, so the flash blooms and the ordinary
-playfield colors stay below it.
+the scores and text are never bloomed. The sample raises `Threshold` to `2` because its ordinary palette
+reaches `1`, which would otherwise sit inside the default `0.5` soft-knee ramp. The collision flash
+values (ball `3`, paddle `6`, wall `2.4`) exceed the threshold and bloom; the ordinary playfield colors
+stay out of the knee.
 
 **Custom shader contract.** A `ShaderPostProcessEffect` takes an ordinary baked engine shader with
 both the vertex and fragment stages. It is drawn once as a fullscreen pass through the engine's
