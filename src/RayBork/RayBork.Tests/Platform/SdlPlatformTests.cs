@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Internal;
 using SDL3;
@@ -7,6 +8,8 @@ namespace RayBork.Tests;
 [Collection("SDL")]
 public sealed class SdlPlatformTests
 {
+    private const string DUMMY_VIDEO_DRIVER = "dummy";
+
     private readonly ITestOutputHelper _output;
 
     public SdlPlatformTests(ITestOutputHelper output)
@@ -716,5 +719,361 @@ public sealed class SdlPlatformTests
 
         Assert.Equal(360, window.Width);
         Assert.Equal(240, window.Height);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CursorOnScreenFollowsMouseEnterAndLeaveEvents()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        SdlWindow window = host.Window;
+        DrainWindowEvents(host);
+
+        // The dummy driver shows the window through SDL's core fallback, which makes the window the
+        // mouse focus, so the snapshot starts true.
+        Assert.True(window.IsCursorOnScreen);
+        bool observedOnWorker = false;
+        Thread worker = new(() => observedOnWorker = window.IsCursorOnScreen);
+        worker.Start();
+        worker.Join();
+        Assert.True(observedOnWorker);
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowMouseLeave);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(window.IsCursorOnScreen);
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowMouseEnter);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(window.IsCursorOnScreen);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CursorOnScreenRefreshesFromThePlatformOnFocusChanges()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        SdlWindow window = host.Window;
+        IntPtr handle = GetHandle(host);
+        DrainWindowEvents(host);
+        if (SDL.GetMouseFocus() != handle)
+        {
+            Assert.Skip("The dummy video driver does not report mouse focus for a shown window.");
+        }
+
+        Assert.True(window.IsCursorOnScreen);
+
+        // A pushed leave clears the snapshot without changing the platform state. The focus gain
+        // must refresh it from the platform instead of preserving or assuming a value.
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowMouseLeave);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(window.IsCursorOnScreen);
+        Assert.Equal(handle, SDL.GetMouseFocus());
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowFocusGained);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(window.IsCursorOnScreen);
+
+        // Focus loss does not move the pointer: the refreshed value stays true instead of assuming
+        // the window lost the pointer.
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowFocusLost);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.Equal(handle, SDL.GetMouseFocus());
+        Assert.True(window.IsCursorOnScreen);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CursorOnScreenClearsForMinimizeAndHiddenEvents()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        SdlWindow window = host.Window;
+        IntPtr handle = GetHandle(host);
+        DrainWindowEvents(host);
+        Assert.True(window.IsCursorOnScreen);
+
+        // The dummy driver has no minimize implementation, so the event is pushed directly; the
+        // platform handler clears the snapshot and stops text input.
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowMinimized);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(window.IsCursorOnScreen);
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowRestored);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(window.IsCursorOnScreen);
+
+        Assert.True(SDL.HideWindow(handle));
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.Equal(WindowState.Hidden, window.State);
+        Assert.False(window.IsCursorOnScreen);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void CursorModeDoesNotChangeCursorOnScreen()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        IWindow window = host.Platform.Window;
+        DrainWindowEvents(host);
+        Assert.True(window.IsCursorOnScreen);
+
+        window.SetCursor(CursorMode.Hidden);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(window.IsCursorOnScreen);
+
+        window.SetCursor(CursorMode.Disabled);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(window.IsCursorOnScreen);
+
+        window.SetCursor(CursorMode.Normal);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(window.IsCursorOnScreen);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TextInputStopsOnFocusLossAndRestartsOnFocusGain()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        SdlWindow window = host.Window;
+        IntPtr handle = GetHandle(host);
+        DrainWindowEvents(host);
+        if (!SDL.TextInputActive(handle))
+        {
+            Assert.Skip("The dummy video driver did not activate text input.");
+        }
+
+        if (!window.IsFocused)
+        {
+            Assert.Skip("The dummy video driver does not report keyboard focus.");
+        }
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowFocusLost);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(SDL.TextInputActive(handle));
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowFocusGained);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(SDL.TextInputActive(handle));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TextInputStopsForMinimizeAndHideAndDoesNotRestartWhileHidden()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        SdlWindow window = host.Window;
+        IntPtr handle = GetHandle(host);
+        DrainWindowEvents(host);
+        if (!SDL.TextInputActive(handle))
+        {
+            Assert.Skip("The dummy video driver did not activate text input.");
+        }
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowMinimized);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(SDL.TextInputActive(handle));
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowRestored);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(SDL.TextInputActive(handle));
+
+        Assert.True(SDL.HideWindow(handle));
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(SDL.TextInputActive(handle));
+
+        // A hidden window must not restart text input, even when a focus event claims it is active.
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowFocusGained);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(SDL.TextInputActive(handle));
+
+        PushWindowEvent(window.WindowId, SDL.EventType.WindowRestored);
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.False(SDL.TextInputActive(handle));
+
+        Assert.True(SDL.ShowWindow(handle));
+        host.Platform.Pump(TimeSpan.Zero);
+        Assert.True(window.IsFocused);
+        Assert.True(SDL.TextInputActive(handle));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SetTextInputAreaQueuesRoundedWindowCoordinates()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        IWindow window = host.Platform.Window;
+        IntPtr handle = GetHandle(host);
+        DrainWindowEvents(host);
+        if (!SDL.GetTextInputArea(handle, out SDL.Rect initial, out int initialCursor))
+        {
+            Assert.Skip("The dummy video driver does not report the text input area.");
+        }
+
+        Assert.Equal(0, initial.W);
+        Assert.Equal(0, initial.H);
+        Assert.Equal(0, initialCursor);
+
+        window.SetTextInputArea(new Rect(12.4f, 20.6f, 100.4f, 30.6f), 7);
+
+        // The setter is queued: the native area changes only after the main thread applies it.
+        Assert.True(SDL.GetTextInputArea(handle, out SDL.Rect beforePump, out _));
+        Assert.Equal(0, beforePump.W);
+
+        host.Platform.Pump(TimeSpan.Zero);
+
+        Assert.True(SDL.GetTextInputArea(handle, out SDL.Rect area, out int cursor));
+        Assert.Equal(12, area.X);
+        Assert.Equal(21, area.Y);
+        Assert.Equal(100, area.W);
+        Assert.Equal(31, area.H);
+        Assert.Equal(7, cursor);
+    }
+
+    [Theory]
+    [InlineData(0f, 40f)]
+    [InlineData(100f, 0f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ZeroSizeTextInputAreaClearsThePlatformArea(float width, float height)
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        IWindow window = host.Platform.Window;
+        IntPtr handle = GetHandle(host);
+        DrainWindowEvents(host);
+        if (!SDL.GetTextInputArea(handle, out _, out _))
+        {
+            Assert.Skip("The dummy video driver does not report the text input area.");
+        }
+
+        window.SetTextInputArea(new Rect(10f, 12f, 120f, 44f), 8);
+        host.Platform.Pump(TimeSpan.Zero);
+
+        window.SetTextInputArea(new Rect(10f, 12f, width, height), 8);
+        host.Platform.Pump(TimeSpan.Zero);
+
+        Assert.True(SDL.GetTextInputArea(handle, out SDL.Rect cleared, out int cursor));
+        Assert.Equal(0, cleared.X);
+        Assert.Equal(0, cleared.Y);
+        Assert.Equal(0, cleared.W);
+        Assert.Equal(0, cleared.H);
+        Assert.Equal(0, cursor);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SetTextInputAreaIsAnyThreadAndValidatesOnTheCallerThread()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        IWindow window = host.Platform.Window;
+        IntPtr handle = GetHandle(host);
+        DrainWindowEvents(host);
+        if (!SDL.GetTextInputArea(handle, out _, out _))
+        {
+            Assert.Skip("The dummy video driver does not report the text input area.");
+        }
+
+        Assert.Throws<ArgumentException>(() =>
+            window.SetTextInputArea(new Rect(float.NaN, 0f, 10f, 10f), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            window.SetTextInputArea(new Rect(3e9f, 0f, 10f, 10f), 0)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            window.SetTextInputArea(new Rect(0f, 0f, -1f, 10f), 0)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            window.SetTextInputArea(new Rect(0f, 0f, 10f, 10f), -1)
+        );
+
+        Exception? failure = null;
+        Thread worker = new(() =>
+            failure = Record.Exception(() =>
+                window.SetTextInputArea(new Rect(8.6f, 9.4f, 64.2f, 32.8f), 5)
+            )
+        );
+        worker.Start();
+        worker.Join();
+        Assert.Null(failure);
+
+        host.Platform.Pump(TimeSpan.Zero);
+
+        Assert.True(SDL.GetTextInputArea(handle, out SDL.Rect area, out int cursor));
+        Assert.Equal(9, area.X);
+        Assert.Equal(9, area.Y);
+        Assert.Equal(64, area.W);
+        Assert.Equal(33, area.H);
+        Assert.Equal(5, cursor);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void DisposeStopsTextInputBeforeDestroyingTheWindow()
+    {
+        TrackingLoggerFactory loggerFactory = new();
+        SdlPlatform platform = new(loggerFactory, initializeGamepads: false);
+        try
+        {
+            try
+            {
+                platform.Initialize(
+                    new PlatformOptions
+                    {
+                        Title = "RayBork text input dispose test",
+                        Width = 320,
+                        Height = 200,
+                        Resizable = true,
+                        WindowState = WindowState.Normal,
+                        EnableVulkan = false,
+                    },
+                    () => { },
+                    DUMMY_VIDEO_DRIVER
+                );
+            }
+            catch (Exception exception) when (exception is PlatformException or WindowException)
+            {
+                Assert.Skip($"SDL dummy video driver initialization failed: {exception.Message}");
+            }
+
+            uint windowId = ((SdlWindow)platform.Window).WindowId;
+            IntPtr handle = SDL.GetWindowFromID(windowId);
+            Assert.NotEqual(IntPtr.Zero, handle);
+            Assert.True(SDL.TextInputActive(handle));
+
+            // SDL answers text input queries only for a live window, so the stop is observed through
+            // the platform lifecycle log; the window itself is destroyed immediately afterwards.
+            platform.Dispose();
+
+            Assert.Contains(loggerFactory.Entries, entry =>
+                entry.Level == LogLevel.Debug && entry.Message == "Text input stopped."
+            );
+            Assert.Equal(IntPtr.Zero, SDL.GetWindowFromID(windowId));
+        }
+        finally
+        {
+            platform.Dispose();
+        }
+    }
+
+    private static IntPtr GetHandle(SdlTestHost host)
+    {
+        IntPtr handle = SDL.GetWindowFromID(host.Window.WindowId);
+        Assert.NotEqual(IntPtr.Zero, handle);
+        return handle;
+    }
+
+    private static void DrainWindowEvents(SdlTestHost host)
+    {
+        host.Platform.Pump(TimeSpan.Zero);
+        host.Window.BeginTick();
+        host.Window.BeginTick();
+    }
+
+    private static void PushWindowEvent(uint windowId, SDL.EventType type)
+    {
+        SDL.Event sdlEvent = new()
+        {
+            Type = (uint)type,
+            Window = new SDL.WindowEvent { Type = type, WindowID = windowId },
+        };
+        Assert.True(SDL.PushEvent(ref sdlEvent));
     }
 }

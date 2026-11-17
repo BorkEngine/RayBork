@@ -67,6 +67,16 @@ public interface IWindow
     bool IsFocused { get; }
 
     /// <summary>
+    /// Gets whether the pointer is over the window's client area.
+    /// </summary>
+    /// <remarks>
+    /// Safe to read from any thread; the value is a snapshot. <see cref="CursorMode"/> does not
+    /// change it. The value is <see langword="false"/> while the window is minimized or hidden, and
+    /// a focus change refreshes it from the platform instead of assuming a value.
+    /// </remarks>
+    bool IsCursorOnScreen { get; }
+
+    /// <summary>
     /// Gets whether the window was resized since the previous tick. The value is <see langword="true"/>
     /// for exactly the first tick after a resize; the engine resets it.
     /// </summary>
@@ -169,6 +179,30 @@ public interface IWindow
     /// </summary>
     /// <param name="mode">The new cursor mode.</param>
     void SetCursor(CursorMode mode);
+
+    /// <summary>
+    /// Queues a request to set the area that native text input uses to place its candidate window,
+    /// in window coordinates. A zero-width or zero-height area clears the platform area.
+    /// </summary>
+    /// <param name="area">
+    /// The text input area in logical window coordinates, not render pixels. The value is rounded to
+    /// whole window units before it is applied.
+    /// </param>
+    /// <param name="cursorOffset">
+    /// The cursor offset relative to <see cref="Rect.X"/>, matching the SDL text input area contract.
+    /// </param>
+    /// <remarks>
+    /// Safe to call from any thread; the request is queued to the main thread and coalesced with an
+    /// earlier request. Native input methods use the area to place their candidates; this does not
+    /// add composition text, and committed text still arrives through <see cref="IInput.TextInput"/>.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// An area component is not finite or does not fit in a 32-bit integer.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The area width, area height, or cursor offset is negative.
+    /// </exception>
+    void SetTextInputArea(Rect area, int cursorOffset);
 
     /// <summary>
     /// Queues a request to replace the clipboard text.

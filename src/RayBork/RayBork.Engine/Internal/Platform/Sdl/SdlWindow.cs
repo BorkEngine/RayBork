@@ -32,6 +32,7 @@ internal sealed class SdlWindow : IPlatformWindow
     private bool _fullscreen;
     private bool _minimized;
     private bool _focused;
+    private bool _cursorOnScreen;
     private bool _wasResized;
     private bool _resizePending;
     private bool _closeRequested;
@@ -85,6 +86,7 @@ internal sealed class SdlWindow : IPlatformWindow
         _dpiScale = DEFAULT_DPI_SCALE;
         _bounds = new Rect(0f, 0f, width, height);
         _windowId = SDL.GetWindowID(handle);
+        _cursorOnScreen = SDL.GetMouseFocus() == handle;
     }
 
     /// <summary>
@@ -225,6 +227,18 @@ internal sealed class SdlWindow : IPlatformWindow
     }
 
     /// <inheritdoc />
+    public bool IsCursorOnScreen
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _cursorOnScreen;
+            }
+        }
+    }
+
+    /// <inheritdoc />
     public bool WasResized
     {
         get
@@ -339,6 +353,10 @@ internal sealed class SdlWindow : IPlatformWindow
     public void SetCursor(CursorMode mode) => _commands.EnqueueSetCursor(mode);
 
     /// <inheritdoc />
+    public void SetTextInputArea(Rect area, int cursorOffset) =>
+        _commands.EnqueueSetTextInputArea(area, cursorOffset);
+
+    /// <inheritdoc />
     public void SetClipboardText(string text) => _commands.EnqueueClipboardWrite(text);
 
     /// <inheritdoc />
@@ -410,6 +428,32 @@ internal sealed class SdlWindow : IPlatformWindow
     /// Handles a window state, focus, or visibility event on the main thread.
     /// </summary>
     internal void HandleStateEvent() => RefreshSnapshot();
+
+    /// <summary>
+    /// Stores the Any-thread cursor-on-screen snapshot. Runs on the main thread.
+    /// </summary>
+    internal void SetCursorOnScreen(bool onScreen)
+    {
+        lock (_gate)
+        {
+            _cursorOnScreen = onScreen;
+        }
+    }
+
+    /// <summary>
+    /// Refreshes the cursor-on-screen snapshot from the platform instead of assuming a value. Runs on
+    /// the main thread.
+    /// </summary>
+    /// <remarks>
+    /// The pointer is only on screen when SDL reports this window as the mouse focus and the native
+    /// window is neither minimized nor hidden. A focus change must not preserve a stale value.
+    /// </remarks>
+    internal void RefreshCursorOnScreen()
+    {
+        SDL.WindowFlags flags = SDL.GetWindowFlags(_handle);
+        bool unavailable = (flags & (SDL.WindowFlags.Minimized | SDL.WindowFlags.Hidden)) != 0;
+        SetCursorOnScreen(!unavailable && SDL.GetMouseFocus() == _handle);
+    }
 
     /// <summary>
     /// Cancels a pending engine fullscreen entry after SDL reports that the window left fullscreen,
@@ -668,6 +712,15 @@ internal sealed class SdlWindow : IPlatformWindow
             case SetCursorCommand cursor:
                 ApplyCursor(cursor.Mode);
                 break;
+            case SetTextInputAreaCommand textInputArea:
+                ApplyTextInputArea(
+                    textInputArea.X,
+                    textInputArea.Y,
+                    textInputArea.Width,
+                    textInputArea.Height,
+                    textInputArea.CursorOffset
+                );
+                break;
             case MinimizeCommand:
                 ApplyMinimize();
                 RefreshSnapshot();
@@ -878,6 +931,31 @@ internal sealed class SdlWindow : IPlatformWindow
                 mode,
                 SDL.GetError()
             );
+        }
+    }
+
+    private void ApplyTextInputArea(int x, int y, int width, int height, int cursorOffset)
+    {
+        bool applied;
+        if (width > 0 && height > 0)
+        {
+            SDL.Rect area = new()
+            {
+                X = x,
+                Y = y,
+                W = width,
+                H = height,
+            };
+            applied = SDL.SetTextInputArea(_handle, in area, cursorOffset);
+        }
+        else
+        {
+            applied = SDL.SetTextInputArea(_handle, IntPtr.Zero, 0);
+        }
+
+        if (!applied)
+        {
+            _logger.LogWarning("SDL failed to set the text input area: {Error}", SDL.GetError());
         }
     }
 
