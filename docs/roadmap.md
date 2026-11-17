@@ -114,9 +114,8 @@ the AOT publish, the style policy, or the dependency rules.
 - Add `samples/HelloInterop`, a `net11.0` console host that loads SDL3, opens no window, and exits;
   publish it with `PublishAot` on Windows and Linux.
 - Add `.github/workflows/ci.yml`: `build-test` on `windows-latest` and `ubuntu-latest` (restore,
-  Debug and Release builds, test, `dotnet csharpier check .`), a `format` job running
-  `dotnet tool restore` and `dotnet csharpier check .`, and a `docs` job running
-  `scripts/check-docs.ps1`.
+  Debug and Release builds, test), a `format` job running `dotnet tool restore` and
+  `dotnet csharpier check .`, and a `docs` job running `scripts/check-docs.ps1`.
 - Add `.github/workflows/pr-title.yml` to enforce the PR title convention.
 - Add `.github/pull_request_template.md` and the PR rules in `AGENTS.md`.
 - Add `.editorconfig` with CSharpier's Allman layout, `SCREAMING_SNAKE_CASE` constants, and
