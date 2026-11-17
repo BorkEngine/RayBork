@@ -274,9 +274,12 @@ public sealed class RayBorkApp : IDisposable {
         AssetCatalog? assetCatalog = null;
         EngineDefaults? engineDefaults = null;
         PrimitiveAssets? primitiveAssets = null;
+        SsaoAssets? ssaoAssets = null;
+        BloomAssets? bloomAssets = null;
         CameraService? cameraService = null;
         TickRunner? tickRunner = null;
         RenderLoop? renderLoop = null;
+        RenderTextureService? renderTextures = null;
         bool tickStarted = false;
         bool renderStarted = false;
         Exception? failure = null;
@@ -312,7 +315,14 @@ public sealed class RayBorkApp : IDisposable {
 
             frameRing = new FrameRing();
             GpuAssetBridge gpuAssetBridge = new();
-            renderLoop = new RenderLoop(frameRing, _rendererBackendFactory, backendOptions, _renderStatus, gpuAssetBridge);
+            renderTextures = new RenderTextureService();
+            renderLoop = new RenderLoop(
+                frameRing,
+                _rendererBackendFactory,
+                backendOptions,
+                _renderStatus,
+                gpuAssetBridge,
+                renderTextures);
             _renderLoop = renderLoop;
             renderLoop.Start();
             renderStarted = true;
@@ -340,6 +350,17 @@ public sealed class RayBorkApp : IDisposable {
             primitiveAssets = LoadPrimitiveAssets(assetCatalog);
             cameraService.AttachPrimitives(primitiveAssets);
 
+            // The built-in SSAO shader variants and blue-noise texture are engine-owned, so the app
+            // loads them before Setup and attaches them to the camera service. The effect snapshot only
+            // ever reads these preloaded assets on the tick thread.
+            ssaoAssets = LoadSsaoAssets(assetCatalog);
+            cameraService.AttachSsaoAssets(ssaoAssets);
+
+            // The built-in bloom pyramid shaders are engine-owned too; the app preloads them before
+            // Setup so a BloomEffect capture never loads an asset on the render thread.
+            bloomAssets = LoadBloomAssets(assetCatalog);
+            cameraService.AttachBloomAssets(bloomAssets);
+
             EngineContext context = new(
                 platform,
                 loggerFactory,
@@ -351,7 +372,8 @@ public sealed class RayBorkApp : IDisposable {
                 () => clock.Time,
                 _renderStatus,
                 cameraService,
-                tonemapping);
+                tonemapping,
+                renderTextures);
 
             tickRunner = new TickRunner(
                 platform,
@@ -409,9 +431,12 @@ public sealed class RayBorkApp : IDisposable {
             assetCatalog,
             engineDefaults,
             primitiveAssets,
+            ssaoAssets,
+            bloomAssets,
             cameraService,
             tickRunner,
             renderLoop,
+            renderTextures,
             tickStarted,
             renderStarted,
             teardownQueue,
@@ -529,6 +554,37 @@ public sealed class RayBorkApp : IDisposable {
     private static PrimitiveAssets LoadPrimitiveAssets(IAssetCatalog assets)
         => PrimitiveAssets.LoadAsync(assets).GetAwaiter().GetResult();
 
+    /// <summary>
+    /// Loads the engine-owned SSAO shader variants and blue-noise texture before <see cref="IGame.Setup"/>
+    /// runs.
+    /// </summary>
+    /// <remarks>
+    /// The tick thread has not started yet, so blocking on the loads is safe: the loader and render
+    /// thread service the reads and uploads. A missing or corrupt built-in is reported as an
+    /// <see cref="AssetLoadException"/> by <see cref="SsaoAssets.LoadAsync"/>.
+    /// </remarks>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The returned SsaoAssets is stored by RunCore and disposed by the cleanup path that owns it.")]
+    private static SsaoAssets LoadSsaoAssets(IAssetCatalog assets)
+        => SsaoAssets.LoadAsync(assets).GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Loads the engine-owned bloom pyramid shader programs before <see cref="IGame.Setup"/> runs.
+    /// </summary>
+    /// <remarks>
+    /// The tick thread has not started yet, so blocking on the loads is safe: the loader and render
+    /// thread service the reads and uploads. A missing or corrupt built-in is reported as an
+    /// <see cref="AssetLoadException"/> by <see cref="BloomAssets.LoadAsync"/>.
+    /// </remarks>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000",
+        Justification = "The returned BloomAssets is stored by RunCore and disposed by the cleanup path that owns it.")]
+    private static BloomAssets LoadBloomAssets(IAssetCatalog assets)
+        => BloomAssets.LoadAsync(assets).GetAwaiter().GetResult();
+
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -541,9 +597,12 @@ public sealed class RayBorkApp : IDisposable {
         AssetCatalog? assetCatalog,
         EngineDefaults? engineDefaults,
         PrimitiveAssets? primitiveAssets,
+        SsaoAssets? ssaoAssets,
+        BloomAssets? bloomAssets,
         CameraService? cameraService,
         TickRunner? tickRunner,
         RenderLoop? renderLoop,
+        RenderTextureService? renderTextures,
         bool tickStarted,
         bool renderStarted,
         MainThreadTeardownQueue teardownQueue,
@@ -580,6 +639,17 @@ public sealed class RayBorkApp : IDisposable {
             }
         }
 
+        // Shutdown already ran on the tick thread, so the game can no longer request a render texture.
+        // Stop rejects later requests and fails the queued ones; the render thread still services the
+        // target destructions until it joins.
+        if (renderTextures is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "stopping the render texture service",
+                failure,
+                renderTextures.Stop);
+        }
+
         // Shutdown already ran on the tick thread, so the game can no longer use the defaults. Release
         // the engine's owner references before the catalog force-disposes whatever a leaked game
         // reference still holds.
@@ -589,6 +659,32 @@ public sealed class RayBorkApp : IDisposable {
                 "releasing the engine default assets",
                 failure,
                 engineDefaults.Dispose);
+        }
+
+        // The SSAO assets are engine-owned built-ins. Detach them before releasing their owner
+        // references so a later camera cannot capture an effect over disposed shader programs.
+        if (ssaoAssets is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "releasing the engine SSAO assets",
+                failure,
+                () => {
+                    cameraService?.DetachSsaoAssets();
+                    ssaoAssets.Dispose();
+                });
+        }
+
+        // The bloom assets are engine-owned built-ins too. Detach them before releasing their owner
+        // references so a later camera cannot capture a BloomEffect over disposed programs.
+        if (bloomAssets is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "releasing the engine bloom assets",
+                failure,
+                () => {
+                    cameraService?.DetachBloomAssets();
+                    bloomAssets.Dispose();
+                });
         }
 
         // The primitive assets are engine-owned and required built-ins. Detach them from the camera
@@ -632,6 +728,16 @@ public sealed class RayBorkApp : IDisposable {
 
         if (surfaceChannel is not null) {
             failure = RunCleanupStep(logger, "closing the surface channel", failure, surfaceChannel.Close);
+        }
+
+        // The render thread has stopped, so no request can be serviced. The wait handle is released
+        // after the loop that waited on it joined.
+        if (renderTextures is not null) {
+            failure = RunCleanupStep(
+                logger,
+                "disposing the render texture service",
+                failure,
+                renderTextures.Dispose);
         }
 
         // The render thread has stopped, so the deferred teardown can run on this thread now. It must

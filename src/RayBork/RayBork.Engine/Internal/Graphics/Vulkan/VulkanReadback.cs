@@ -4,19 +4,20 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 namespace RayBork.Internal;
 
 /// <summary>
-/// Single-pixel readback probes for the scene target and the presented swapchain image, used by GPU
-/// tests to assert clear and resolve values numerically.
+/// Single-pixel readback probes and the full-image render-target color copy used by GPU tests and the
+/// public render texture readback.
 /// </summary>
 /// <remarks>
 /// <para>
-/// These probes are diagnostics, not a renderer path: each call creates its own command pool, staging
-/// buffer, and fence, submits one copy, and waits for the GPU. The call stalls the render thread and
-/// must never be used per frame. Every temporary object is destroyed in a <c>finally</c> block so a
+/// The single-pixel probes are diagnostics, not a renderer path: each call creates its own command pool,
+/// staging buffer, and fence, submits one copy, and waits for the GPU. The full-image color read uses the
+/// same temporary objects for one copy of the target's resolved color image. Both stall the render thread
+/// and must never be used per frame. Every temporary object is destroyed in a <c>finally</c> block so a
 /// failed probe cannot leak.
 /// </para>
 /// <para>
-/// The caller passes a device and scene target or swapchain from a single backend and runs on that
-/// backend's render thread. Nothing here is thread-safe.
+/// The caller passes a device and scene target, swapchain, or runtime target from a single backend and
+/// runs on that backend's render thread. Nothing here is thread-safe.
 /// </para>
 /// </remarks>
 internal static unsafe class VulkanReadback {
@@ -25,7 +26,6 @@ internal static unsafe class VulkanReadback {
     private const uint DEPTH_PIXEL_BYTES = 4;
     private const uint PRESENTED_FLOAT_PIXEL_BYTES = 8;
     private const uint PRESENTED_BYTE_PIXEL_BYTES = 4;
-    private const float SRGB_ENCODED_CUTOFF = 0.04045f;
 
     /// <summary>
     /// Reads one resolved linear scene color pixel.
@@ -45,7 +45,7 @@ internal static unsafe class VulkanReadback {
     /// </exception>
     internal static void ReadSceneColorPixel(
         VulkanDevice device,
-        VulkanSceneTarget target,
+        VulkanRenderTarget target,
         uint x,
         uint y,
         out float r,
@@ -69,16 +69,20 @@ internal static unsafe class VulkanReadback {
     }
 
     /// <summary>
-    /// Reads one reverse-Z scene depth pixel.
+    /// Reads one reverse-Z scene depth pixel from the resolved depth image.
     /// </summary>
+    /// <remarks>
+    /// A multisampled scene target resolves its depth attachment into the single-sample depth image the
+    /// probe reads; a single-sample target uses its depth attachment directly. The probe transitions
+    /// the image out of the layout the renderer recorded and back, so the caller runs it after the frame
+    /// completed.
+    /// </remarks>
     /// <param name="device">The device that owns the scene target.</param>
-    /// <param name="target">The single-sample scene target to read.</param>
+    /// <param name="target">The scene target to read.</param>
     /// <param name="x">The pixel column, in pixels from the left edge.</param>
     /// <param name="y">The pixel row, in pixels from the top edge.</param>
     /// <param name="depth">The stored depth value.</param>
-    /// <exception cref="InvalidOperationException">
-    /// The target is multisampled and has no single-sample depth attachment.
-    /// </exception>
+    /// <exception cref="InvalidOperationException">The target has no depth attachment.</exception>
     /// <exception cref="ArgumentOutOfRangeException">
     /// The pixel lies outside the target extent.
     /// </exception>
@@ -87,27 +91,163 @@ internal static unsafe class VulkanReadback {
     /// </exception>
     internal static void ReadSceneDepthPixel(
         VulkanDevice device,
-        VulkanSceneTarget target,
+        VulkanRenderTarget target,
         uint x,
         uint y,
         out float depth) {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(target);
-        if (target.SampleCount != 1) {
+        if (!target.HasDepth) {
             throw new InvalidOperationException(
-                $"The scene target is multisampled with {target.SampleCount} samples and has no single-sample depth attachment to read.");
+                "The render target has no depth attachment to read.");
         }
 
         ValidatePixel(target, x, y);
         byte[] pixel = ReadPixel(
             device,
-            target.DepthImage,
-            ImageAspectFlags.DepthBit,
-            ImageLayout.DepthStencilAttachmentOptimal,
+            target.ResolvedDepthImage,
+            CreateDepthBarrier(target.ResolvedDepthLayout, target.IsMultisampled),
             DEPTH_PIXEL_BYTES,
             x,
             y);
         depth = BitConverter.ToSingle(pixel, 0);
+    }
+
+    /// <summary>
+    /// Reads one resolved linear color pixel from a runtime render target.
+    /// </summary>
+    /// <remarks>
+    /// The probe transitions the resolved color image out of its current layout and back, so the caller
+    /// runs it after the frame completed. An sRGB target returns the linear value the sampling shader
+    /// sees; the raw stored bytes are decoded with the sRGB transfer function.
+    /// </remarks>
+    /// <param name="device">The device that owns the target.</param>
+    /// <param name="target">The render target to read.</param>
+    /// <param name="x">The pixel column, in pixels from the left edge.</param>
+    /// <param name="y">The pixel row, in pixels from the top edge.</param>
+    /// <param name="r">The linear red component.</param>
+    /// <param name="g">The linear green component.</param>
+    /// <param name="b">The linear blue component.</param>
+    /// <exception cref="NotSupportedException">
+    /// The target color format is not one of the supported render-target color formats.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">The pixel lies outside the target extent.</exception>
+    /// <exception cref="GraphicsException">
+    /// A Vulkan object could not be created or the copy failed. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    internal static void ReadRenderTargetColorPixel(
+        VulkanDevice device,
+        VulkanRenderTarget target,
+        uint x,
+        uint y,
+        out float r,
+        out float g,
+        out float b) {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(target);
+        ValidatePixel(target, x, y);
+
+        uint pixelBytes = target.ColorFormat switch {
+            Format.R16G16B16A16Sfloat => COLOR_PIXEL_BYTES,
+            Format.R8G8B8A8Unorm or Format.R8G8B8A8Srgb => PRESENTED_BYTE_PIXEL_BYTES,
+            _ => throw new NotSupportedException(
+                $"The render target color format {VulkanFormatInfo.Describe(target.ColorFormat)} is not "
+                    + "a supported color probe format."),
+        };
+        byte[] pixel = ReadPixel(
+            device,
+            target.ResolvedColorImage,
+            CreateAttachmentBarrier(ImageAspectFlags.ColorBit, target.ResolvedColorLayout),
+            pixelBytes,
+            x,
+            y);
+        if (target.ColorFormat == Format.R16G16B16A16Sfloat) {
+            r = (float)BitConverter.ToHalf(pixel, 0);
+            g = (float)BitConverter.ToHalf(pixel, 2);
+            b = (float)BitConverter.ToHalf(pixel, 4);
+            return;
+        }
+
+        if (target.ColorFormat == Format.R8G8B8A8Srgb) {
+            r = SrgbDecode(pixel[0]);
+            g = SrgbDecode(pixel[1]);
+            b = SrgbDecode(pixel[2]);
+            return;
+        }
+
+        r = pixel[0] / 255f;
+        g = pixel[1] / 255f;
+        b = pixel[2] / 255f;
+    }
+
+    /// <summary>
+    /// Copies a runtime render target's full resolved color image to a tightly packed top-left staging
+    /// buffer and returns its raw bytes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The copy uses a dedicated transient command pool, command buffer, staging buffer, and fence. It
+    /// transitions the resolved color image from the layout the target tracker recorded to
+    /// <c>TRANSFER_SRC_OPTIMAL</c>, copies the full extent with tightly packed rows, and transitions the
+    /// image back to the same layout in the same submission. The tracker state is unchanged, so a later
+    /// frame samples or writes the target exactly as before.
+    /// </para>
+    /// <para>
+    /// The caller waits for the target's last-use frame fence before it calls this method. The returned
+    /// bytes are decoded by <see cref="RenderTextureReadbackConverter"/>; this helper performs no
+    /// format conversion, tone mapping, or origin flip.
+    /// </para>
+    /// </remarks>
+    /// <param name="device">The device that owns the target.</param>
+    /// <param name="target">The render target whose resolved color image is read.</param>
+    /// <returns>The tightly packed staging bytes in top-left row order.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The target has no defined resolved color layout. A never-written target has no content to copy,
+    /// and Vulkan cannot restore the undefined layout after a transition; the backend returns its
+    /// opaque-black default instead.
+    /// </exception>
+    /// <exception cref="NotSupportedException">
+    /// The target color format is not one of the supported render-target color formats.
+    /// </exception>
+    /// <exception cref="GraphicsException">
+    /// A Vulkan object could not be created, the copy failed, or the image is too large for one host
+    /// buffer. The diagnostic code is <c>RB3001</c>.
+    /// </exception>
+    internal static byte[] ReadRenderTargetColorImage(VulkanDevice device, VulkanRenderTarget target) {
+        ArgumentNullException.ThrowIfNull(device);
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.ResolvedColorLayout == ImageLayout.Undefined) {
+            throw new InvalidOperationException(
+                "The render target's resolved color image has no defined layout; it was never written, "
+                    + "so the backend returns the opaque-black default instead of copying it.");
+        }
+
+        uint pixelBytes = target.ColorFormat switch {
+            Format.R16G16B16A16Sfloat => COLOR_PIXEL_BYTES,
+            Format.R8G8B8A8Unorm or Format.R8G8B8A8Srgb => PRESENTED_BYTE_PIXEL_BYTES,
+            _ => throw new NotSupportedException(
+                $"The render target color format {VulkanFormatInfo.Describe(target.ColorFormat)} is not "
+                    + "a supported color readback format."),
+        };
+        uint width = target.Extent.Width;
+        uint height = target.Extent.Height;
+        ulong byteCount = (ulong)width * height * pixelBytes;
+        if (byteCount > int.MaxValue) {
+            throw new GraphicsException(
+                $"The {width}x{height} render target needs {byteCount} byte(s) for readback, which "
+                    + "exceeds the host staging buffer limit.",
+                DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                null);
+        }
+
+        return ReadImage(
+            device,
+            target.ResolvedColorImage,
+            CreateColorReadBarrier(target.ResolvedColorLayout),
+            checked((uint)byteCount),
+            new Offset3D { X = 0, Y = 0, Z = 0 },
+            new Extent3D { Width = width, Height = height, Depth = 1 });
     }
 
     /// <summary>
@@ -229,7 +369,21 @@ internal static unsafe class VulkanReadback {
         PixelCopyBarrier barrierInfo,
         uint byteCount,
         uint x,
-        uint y) {
+        uint y) => ReadImage(
+            device,
+            image,
+            barrierInfo,
+            byteCount,
+            new Offset3D { X = (int)x, Y = (int)y, Z = 0 },
+            new Extent3D { Width = 1, Height = 1, Depth = 1 });
+
+    private static byte[] ReadImage(
+        VulkanDevice device,
+        Image image,
+        PixelCopyBarrier barrierInfo,
+        uint byteCount,
+        Offset3D imageOffset,
+        Extent3D imageExtent) {
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
         CommandPool commandPool = default;
@@ -280,7 +434,7 @@ internal static unsafe class VulkanReadback {
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
             ThrowIfFailed(vulkan.BeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
-            RecordCopy(vulkan, commandBuffer, image, barrierInfo, stagingBuffer, x, y);
+            RecordCopy(vulkan, commandBuffer, image, barrierInfo, stagingBuffer, imageOffset, imageExtent);
             ThrowIfFailed(vulkan.EndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
             FenceCreateInfo fenceInfo = new() { SType = StructureType.FenceCreateInfo };
@@ -329,8 +483,8 @@ internal static unsafe class VulkanReadback {
         Image image,
         PixelCopyBarrier barrierInfo,
         Buffer stagingBuffer,
-        uint x,
-        uint y) {
+        Offset3D imageOffset,
+        Extent3D imageExtent) {
         ImageMemoryBarrier barrier = new() {
             SType = StructureType.ImageMemoryBarrier,
             SrcAccessMask = barrierInfo.Access,
@@ -369,8 +523,8 @@ internal static unsafe class VulkanReadback {
                 BaseArrayLayer = 0,
                 LayerCount = 1,
             },
-            ImageOffset = new Offset3D { X = (int)x, Y = (int)y, Z = 0 },
-            ImageExtent = new Extent3D { Width = 1, Height = 1, Depth = 1 },
+            ImageOffset = imageOffset,
+            ImageExtent = imageExtent,
         };
         vulkan.CmdCopyImageToBuffer(
             commandBuffer,
@@ -409,6 +563,59 @@ internal static unsafe class VulkanReadback {
             ? AccessFlags.DepthStencilAttachmentWriteBit
             : AccessFlags.ColorAttachmentWriteBit | AccessFlags.ShaderReadBit;
         return new PixelCopyBarrier(aspect, originalLayout, stage, access);
+    }
+
+    private static PixelCopyBarrier CreateColorReadBarrier(ImageLayout originalLayout) {
+        PipelineStageFlags stage;
+        AccessFlags access;
+        switch (originalLayout) {
+            case ImageLayout.ShaderReadOnlyOptimal:
+                stage = PipelineStageFlags.FragmentShaderBit;
+                access = AccessFlags.ShaderReadBit;
+                break;
+            case ImageLayout.ColorAttachmentOptimal:
+                stage = PipelineStageFlags.ColorAttachmentOutputBit;
+                access = AccessFlags.ColorAttachmentWriteBit;
+                break;
+            default:
+                // Defensive fallback for a defined layout this helper does not expect: order the copy
+                // after all earlier work and restore the same layout.
+                stage = PipelineStageFlags.AllCommandsBit;
+                access = AccessFlags.None;
+                break;
+        }
+
+        return new PixelCopyBarrier(ImageAspectFlags.ColorBit, originalLayout, stage, access);
+    }
+
+    private static PixelCopyBarrier CreateDepthBarrier(ImageLayout originalLayout, bool multisampledResolve) {
+        PipelineStageFlags stage;
+        AccessFlags access;
+        switch (originalLayout) {
+            case ImageLayout.ShaderReadOnlyOptimal:
+                stage = PipelineStageFlags.FragmentShaderBit;
+                access = AccessFlags.ShaderReadBit;
+                break;
+            case ImageLayout.DepthStencilAttachmentOptimal:
+                // Vulkan performs a multisampled depth resolve in the color-attachment output stage with
+                // color-attachment write access, even though the image is a depth image. A single-sample
+                // depth image has no resolve and is written by the depth test in late fragment tests.
+                if (multisampledResolve) {
+                    stage = PipelineStageFlags.ColorAttachmentOutputBit;
+                    access = AccessFlags.ColorAttachmentWriteBit;
+                } else {
+                    stage = PipelineStageFlags.LateFragmentTestsBit;
+                    access = AccessFlags.DepthStencilAttachmentWriteBit;
+                }
+
+                break;
+            default:
+                stage = PipelineStageFlags.AllCommandsBit;
+                access = AccessFlags.None;
+                break;
+        }
+
+        return new PixelCopyBarrier(ImageAspectFlags.DepthBit, originalLayout, stage, access);
     }
 
     private static uint PresentedColorPixelBytes(Format format, out bool halfFloat) {
@@ -454,12 +661,7 @@ internal static unsafe class VulkanReadback {
         b = SrgbDecode(pixel[blueIndex]);
     }
 
-    private static float SrgbDecode(byte encoded) {
-        float channel = encoded / 255f;
-        return channel <= SRGB_ENCODED_CUTOFF
-            ? channel / 12.92f
-            : MathF.Pow((channel + 0.055f) / 1.055f, 2.4f);
-    }
+    private static float SrgbDecode(byte encoded) => AgxToneMap.SrgbDecodeChannel(encoded);
 
     private readonly record struct PixelCopyBarrier(
         ImageAspectFlags Aspect,
@@ -485,7 +687,7 @@ internal static unsafe class VulkanReadback {
             null);
     }
 
-    private static void ValidatePixel(VulkanSceneTarget target, uint x, uint y) {
+    private static void ValidatePixel(VulkanRenderTarget target, uint x, uint y) {
         if (x >= target.Extent.Width || y >= target.Extent.Height) {
             throw new ArgumentOutOfRangeException(
                 nameof(x),

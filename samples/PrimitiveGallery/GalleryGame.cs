@@ -5,8 +5,9 @@ namespace PrimitiveGallery;
 
 /// <summary>
 /// A small orbitable gallery that draws every M5 primitive helper and the procedural mesh path in one
-/// camera pass: a reference grid, two rows of solid, wire, line, and textured shapes, a middle row of
-/// generated meshes, and the family pairs that show the completed M5 overloads.
+/// scene camera pass: a reference grid, two rows of solid, wire, line, and textured shapes, a middle
+/// row of generated meshes, and the family pairs that show the completed M5 overloads. A later HUD
+/// camera draws the status line over the scene.
 /// </summary>
 /// <remarks>
 /// The world helpers run along the initial view's horizontal axis, so the three rows read left to
@@ -29,8 +30,8 @@ internal sealed class GalleryGame : IGame {
     private const int TEXTURE_SIZE = 128;
     private const int CHECKER_SIZE = 16;
 
-    // The status line is same-pass, screen-aligned text drawn on a plane this far in front of the
-    // camera. The screen transform's scale makes the text size below render pixels.
+    // The status line is screen-aligned text drawn on a plane this far in front of the HUD camera.
+    // The screen transform's scale makes the text size below render pixels.
     private const float OVERLAY_DISTANCE = 1f;
     private const float OVERLAY_PIXEL_HEIGHT = 18f;
     private const float OVERLAY_MARGIN_PIXELS = 8f;
@@ -42,6 +43,8 @@ internal sealed class GalleryGame : IGame {
     private readonly Vector3 _galleryRight;
     private readonly Vector3 _galleryView;
     private readonly StatusOverlay _overlay = new();
+    private readonly PostProcessStack _postProcess = new();
+    private readonly SsaoEffect _ssao = new();
 
     private Texture? _texture;
     private Shader? _meshShader;
@@ -122,12 +125,21 @@ internal sealed class GalleryGame : IGame {
         // One caller-owned material over the built-in mesh program draws the whole row; each draw
         // supplies its own tint. The unbound mainTexture samples the renderer's white fallback.
         _meshShader = context.Defaults.CreateMeshShader();
+
+        // SSAO is on by default at Medium quality. The scene camera snapshots this stack; the later
+        // HUD camera keeps no stack.
+        _postProcess.Add(_ssao);
     }
 
     /// <inheritdoc/>
     public void Tick(EngineContext context) {
         if (context.Input.IsKeyPressed(Key.Escape)) {
             context.RequestExit();
+        }
+
+        // A toggles the built-in SSAO effect. The change applies to cameras created after this tick.
+        if (context.Input.IsKeyPressed(Key.A)) {
+            _ssao.Enabled = !_ssao.Enabled;
         }
 
         UpdateOrbit(context.Input);
@@ -142,20 +154,30 @@ internal sealed class GalleryGame : IGame {
             Vector3.One);
         Transform cameraTransform = new Transform(new Vector3(0f, 0f, _distance)).WithParent(orbit);
 
-        using Camera camera = context.CreateCamera(
+        // The scene pass clears color and depth and draws the whole gallery.
+        using (Camera scene = context.CreateCamera(
             cameraTransform,
             projection: CameraProjection.Perspective,
             fieldOfView: FIELD_OF_VIEW_DEGREES,
             clearMode: ClearMode.ColorAndDepth,
             clearColor: Color.Gray3,
             near: NEAR_PLANE,
+            far: float.PositiveInfinity,
+            postProcess: _postProcess)) {
+            DrawGallery(scene);
+        }
+
+        // The status line is an ordinary later HUD camera. ClearMode.Depth loads the scene color and
+        // clears depth, so gallery geometry cannot occlude the text, and there is no overlay pass. The
+        // shared transform, field of view, and viewport keep the text size and screen anchoring.
+        using Camera hud = context.CreateCamera(
+            cameraTransform,
+            projection: CameraProjection.Perspective,
+            fieldOfView: FIELD_OF_VIEW_DEGREES,
+            clearMode: ClearMode.Depth,
+            near: NEAR_PLANE,
             far: float.PositiveInfinity);
-
-        DrawGallery(camera);
-
-        // A small presented-FPS and render-statistics line at the top-left of the view. It is
-        // recorded last in the same pass as the scene.
-        DrawStatusOverlay(camera, context);
+        DrawStatusOverlay(hud, context);
 
         _frameCount++;
         if (_frameLimit > 0 && _frameCount >= _frameLimit) {
@@ -353,9 +375,9 @@ internal sealed class GalleryGame : IGame {
     /// of the view.
     /// </summary>
     /// <remarks>
-    /// The line is same-pass, screen-aligned text: it is drawn on a plane
-    /// <see cref="OVERLAY_DISTANCE"/> world unit in front of the camera. It is alpha-blended and
-    /// writes no depth, so geometry closer than that plane can still occlude it.
+    /// The line is screen-aligned and drawn on a plane <see cref="OVERLAY_DISTANCE"/> world unit in
+    /// front of the HUD camera. That camera clears depth after the scene pass, so gallery geometry
+    /// cannot occlude the line.
     /// </remarks>
     private void DrawStatusOverlay(Camera camera, EngineContext context) {
         // The returned transform's scale is world units per render pixel, so an em height of 18 local
@@ -365,9 +387,10 @@ internal sealed class GalleryGame : IGame {
             new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
             OVERLAY_DISTANCE);
 
+        string ssaoState = _ssao.Enabled ? "on" : "off";
         camera.DrawText(
             context.Defaults.DefaultMonoFont,
-            _overlay.Build(context),
+            $"{_overlay.Build(context)}\nssao {ssaoState}",
             overlay,
             OVERLAY_PIXEL_HEIGHT,
             Color.White);

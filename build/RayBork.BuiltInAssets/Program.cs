@@ -125,7 +125,10 @@ internal static class Program {
             .WithPack(PACK_FILE_NAME, ASSETS_DIRECTORY_NAME)
             .UseDefaultProcessors()
             .AddProcessor(new BuiltInTextureProcessor())
+            .AddProcessor(new BuiltInBlueNoiseProcessor())
             .AddProcessor(new BuiltInPresentProcessor(engineShaders))
+            .AddProcessor(new BuiltInSsaoProcessor(engineShaders))
+            .AddProcessor(new BuiltInBloomProcessor(engineShaders))
             .Build();
 
         string[] arguments =

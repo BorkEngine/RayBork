@@ -392,6 +392,13 @@ public sealed class AssetCatalogLifetimeTests {
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => pending);
         Assert.False(harness.Catalog.LoaderThread.IsAlive);
+
+        // Stop completes the pending load before the pump thread has necessarily serviced the
+        // completed upload's destruction request, so wait for the bridge to drain instead of
+        // asserting the count at a scheduling-dependent instant.
+        AssetCatalogLoadTests.WaitUntil(
+            () => harness.Bridge.LiveResourceCount == 0,
+            "The stopped catalog must destroy the uploaded resource.");
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
         Assert.Throws<ObjectDisposedException>(() => harness.Catalog.Exists("/meshes/quad"));
         Assert.Throws<ObjectDisposedException>(

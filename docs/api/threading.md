@@ -12,7 +12,7 @@
 | `Camera` | Tick thread | Create, draw, dispose inside one `Tick` |
 | `Shader` uniform cursor | Tick thread | `SetUniform`/`ResetUniforms` |
 | `Font` glyph cache | `RayBork.Font` thread (inserts and evicts) | The draw path calls `BeginFrame`, `Acquire`, and `GetMetrics`; the public read-only `TryGetGlyph` and `CachedGlyphCount` peek the cache through `TryGetTexture` and the cache count. The tick thread updates use stamps and waiter state. `BeginFrame` runs once per camera and font. A miss enqueues and returns no texture; `Acquire` adds the texture's frame hold before it returns, so a draw never blocks. Eviction may dispose the wrapper; the frame hold keeps its GPU resource alive through the frame. |
-| `RenderTexture` handle | Tick thread | Create/dispose/resize; GPU work is deferred |
+| `RenderTexture` handle | Tick thread | Create and dispose queue GPU work; `Resize` queues a recreation and blocks until the render thread finished it, then reports the new size |
 | `EngineContext.Tonemapping` | Tick thread | Read/write during `Setup`, `Tick`, or `Shutdown`; the values are sealed into each frame |
 | `Collision`/`RayCollision` | Any thread | Pure CPU queries; no locks; a mesh must not be disposed while a `GetRayMesh` query reads it |
 | `IInput` | Tick thread | Read the current snapshot |

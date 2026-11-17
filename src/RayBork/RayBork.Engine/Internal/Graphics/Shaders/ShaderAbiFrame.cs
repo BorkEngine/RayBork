@@ -1,13 +1,16 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// The std140 layout of the frame uniform block at descriptor set 0, binding 0.
+/// The std430 layout of one frame block record in the descriptor set 0, binding 0 frame storage
+/// buffer.
 /// </summary>
 /// <remarks>
 /// The block is exactly 256 bytes. The renderer writes these offsets and the generated GLSL declares
-/// the matching <c>RayBorkFrame</c> struct; the two must change together. <c>CameraPosition.w</c> is
-/// always 1, <c>Time</c> packs seconds, delta seconds, the frame index, and zero, and
-/// <c>ScreenSize</c> packs the target width, height, exposure multiplier, and zero.
+/// the matching <c>RayBorkFrame</c> struct array; the two must change together. Every member is a
+/// <c>mat4</c> or a <c>vec4</c>, so the std430 alignment and offsets equal the std140 ones and one
+/// array element is a 256-byte stride. <c>CameraPosition.w</c> is always 1, <c>Time</c> packs seconds,
+/// delta seconds, the frame index, and zero, and <c>ScreenSize</c> packs the target width, height,
+/// exposure multiplier, and zero.
 /// </remarks>
 internal static class ShaderAbiFrame {
     /// <summary>The complete frame block size in bytes.</summary>

@@ -72,6 +72,28 @@ internal interface IRendererBackend : IDisposable {
     void Resize(int renderWidth, int renderHeight);
 
     /// <summary>
+    /// Services queued render texture creation, resize, readback, and destruction requests. Runs on the
+    /// render thread before the loop acquires the next frame.
+    /// </summary>
+    /// <remarks>
+    /// The implementation creates each queued target's images on the current device, reserves its
+    /// bindless color view slot and, when the target has depth, its bindless depth view slot, and
+    /// completes the request with a public <see cref="RenderTexture"/>. A resize recreates the target's
+    /// images, render pass, framebuffer, bindless views, and pipeline cache at the new size, updates its
+    /// retained description, and completes the request only when no recorded or in-flight frame holds the
+    /// target. A readback waits for the target's last-use fence; when a completed frame wrote content it
+    /// copies the resolved color image through a dedicated command buffer and staging buffer, restores
+    /// the image layout, and completes with raw scene-linear colors or display-referred pixels; otherwise
+    /// it completes with the defined opaque-black default without copying or transitioning. A released
+    /// target's images and
+    /// slots are destroyed only after the frame that last used it completed. A failed creation, resize,
+    /// or readback completes its request with the failure and never stops the render loop.
+    /// </remarks>
+    /// <param name="service">The app-lifetime request queue.</param>
+    /// <exception cref="GraphicsException">A target's GPU objects could not be created or recreated.</exception>
+    void ProcessRenderTextureRequests(RenderTextureService service);
+
+    /// <summary>
     /// Consumes one sealed frame: waits for a frame slot, acquires the presentation image, records
     /// and submits the passes, and tracks the frame fence.
     /// </summary>

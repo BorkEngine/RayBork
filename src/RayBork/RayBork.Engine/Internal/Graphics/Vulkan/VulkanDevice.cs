@@ -22,7 +22,10 @@ namespace RayBork.Internal;
 /// enabled when the selected device advertises them, because the asset path samples BC-compressed
 /// textures and may request anisotropic filtering, and <see cref="Camera.DrawWireModel"/> needs
 /// <c>fillModeNonSolid</c> to create its polygon-mode-line pipeline. Update-after-bind stays disabled
-/// for uniform and storage buffers, and variable descriptor counts are never used.
+/// for uniform and storage buffers, and variable descriptor counts are never used. A physical device
+/// must also advertise the Vulkan 1.2 sample-zero depth resolve mode, because every multisampled
+/// depth-bearing render target resolves its depth attachment into a sampled depth image with
+/// <c>VK_RESOLVE_MODE_SAMPLE_ZERO_BIT</c>.
 /// </para>
 /// <para>
 /// Every member is render-thread only. Dispose the device before the surface and the instance.
@@ -161,6 +164,10 @@ internal sealed class VulkanDevice : IDisposable {
             IReadOnlyList<string> missingBindlessFeatures = VulkanBindlessFeatures.GetMissingFeatures(
                 VulkanBindlessFeatures.Query(vulkan, physicalDevice));
             uint bindlessTextureCapacity = VulkanBindlessFeatures.QueryTextureCapacity(vulkan, physicalDevice);
+            PhysicalDeviceDepthStencilResolveProperties resolveProperties = VulkanDepthStencilResolve.Query(
+                vulkan,
+                physicalDevice);
+            ResolveModeFlags supportedDepthResolveModes = resolveProperties.SupportedDepthResolveModes;
             VulkanPhysicalDeviceCandidate candidate = new(
                 index,
                 name,
@@ -170,11 +177,12 @@ internal sealed class VulkanDevice : IDisposable {
                 supportsPresent,
                 hasSwapchain,
                 bindlessTextureCapacity,
-                string.Join(", ", missingBindlessFeatures));
+                string.Join(", ", missingBindlessFeatures),
+                supportedDepthResolveModes);
             candidates.Add(candidate);
             queueFamiliesByDevice.Add(queueFamilies);
             logger.LogDebug(
-                "Vulkan physical device [{Index}] {Name}: API {ApiVersion}, type {DeviceType}, graphics {Graphics}, present {Present}, swapchain {Swapchain}, bindless descriptor indexing {Bindless}, update-after-bind sampled-image capacity {BindlessCapacity}.",
+                "Vulkan physical device [{Index}] {Name}: API {ApiVersion}, type {DeviceType}, graphics {Graphics}, present {Present}, swapchain {Swapchain}, bindless descriptor indexing {Bindless}, update-after-bind sampled-image capacity {BindlessCapacity}, depth resolve {DepthResolve}.",
                 index,
                 name,
                 VulkanVersion.Format(properties.ApiVersion),
@@ -183,7 +191,8 @@ internal sealed class VulkanDevice : IDisposable {
                 supportsPresent,
                 hasSwapchain,
                 missingBindlessFeatures.Count == 0 ? "supported" : "missing " + candidate.MissingBindlessFeatures,
-                bindlessTextureCapacity);
+                bindlessTextureCapacity,
+                VulkanDepthStencilResolve.Describe(supportedDepthResolveModes));
         }
 
         int selectedIndex = VulkanPhysicalDeviceSelector.Select(candidates);

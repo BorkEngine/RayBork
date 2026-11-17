@@ -5,8 +5,8 @@ namespace Castle;
 
 /// <summary>
 /// A small orbitable castle scene: load a model and its texture, bind the texture to the model's
-/// materials, draw the model solid with a camera that orbits a fixed point, and outline and hit-test
-/// the castle under the mouse.
+/// materials, draw the model solid with a camera that orbits a fixed point, outline and hit-test the
+/// castle under the mouse, and draw the status line from a later HUD camera.
 /// </summary>
 internal sealed class CastleGame : IGame {
     private const string MODEL_PATH = "/models/obj/castle";
@@ -25,8 +25,8 @@ internal sealed class CastleGame : IGame {
     private const float GRID_SPACING = 10f;
     private const float HIT_POINT_RADIUS = 0.2f;
 
-    // The status line is same-pass, screen-aligned text drawn on a plane this far in front of the
-    // camera. The screen transform's scale makes the text size below render pixels in either mode.
+    // The status line is screen-aligned text drawn on a plane this far in front of the HUD camera.
+    // The screen transform's scale makes the text size below render pixels in either mode.
     private const float OVERLAY_DISTANCE = 1f;
     private const float OVERLAY_PIXEL_HEIGHT = 18f;
     private const float OVERLAY_MARGIN_PIXELS = 8f;
@@ -38,6 +38,8 @@ internal sealed class CastleGame : IGame {
 
     private readonly int _frameLimit;
     private readonly StatusOverlay _overlay = new();
+    private readonly PostProcessStack _postProcess = new();
+    private readonly SsaoEffect _ssao = new();
 
     private Model? _model;
     private Texture? _texture;
@@ -81,6 +83,10 @@ internal sealed class CastleGame : IGame {
         // world-space bounds. Model.Bounds is the union of the part bounds, and each part bound is
         // its mesh bounds after the part's local transform.
         _worldBounds = _model.Bounds;
+
+        // The SSAO effect is app-lifetime and enabled by default at Medium quality. The stack is
+        // snapshotted for the scene camera only; the later HUD camera keeps no stack.
+        _postProcess.Add(_ssao);
     }
 
     /// <inheritdoc/>
@@ -89,11 +95,16 @@ internal sealed class CastleGame : IGame {
             context.RequestExit();
         }
 
-        // O swaps the projection before the camera is created; perspective remains the default.
+        // O swaps the projection before either camera is created; perspective remains the default.
         if (context.Input.IsKeyPressed(Key.O)) {
             _projection = _projection == CameraProjection.Perspective
                 ? CameraProjection.Orthographic
                 : CameraProjection.Perspective;
+        }
+
+        // A toggles the built-in SSAO effect. The change applies to cameras created after this tick.
+        if (context.Input.IsKeyPressed(Key.A)) {
+            _ssao.Enabled = !_ssao.Enabled;
         }
 
         UpdateOrbit(context.Input);
@@ -108,6 +119,47 @@ internal sealed class CastleGame : IGame {
             Vector3.One);
         Transform cameraTransform = new Transform(new Vector3(0f, 0f, _distance)).WithParent(orbit);
 
+        // The scene pass clears color and depth and draws every depth-tested scene draw. The status
+        // line is not part of it.
+        using (Camera scene = CreatePass(
+            context,
+            cameraTransform,
+            ClearMode.ColorAndDepth,
+            Color.WhiteSmoke,
+            _postProcess)) {
+            scene.DrawModel(_model!, Transform.Identity, Color.White);
+
+            // raylib's reference grid: 20 slices 10 units apart, centered on the origin where the
+            // castle stands, drawn after the model in the same opaque, depth-tested pass.
+            scene.DrawGrid(GRID_SLICES, GRID_SPACING, Color.Gray);
+
+            DrawHoverOverlay(scene, context);
+        }
+
+        // The DrawFPS-style overlay is an ordinary later HUD camera: presented FPS over a one-second
+        // window, the tick rate, the render CPU time, the last completed frame's draw and instance
+        // counts, and the current projection. ClearMode.Depth loads the scene color and clears depth,
+        // so the scene cannot occlude the text, and there is no overlay pass. The shared transform and
+        // projection keep the text size and screen anchoring.
+        using Camera hud = CreatePass(context, cameraTransform, ClearMode.Depth, clearColor: null);
+        DrawStatusOverlay(hud, context);
+
+        _frameCount++;
+        if (_frameLimit > 0 && _frameCount >= _frameLimit) {
+            context.RequestExit();
+        }
+    }
+
+    /// <summary>
+    /// Creates one camera pass with the current orbit transform and projection. Both passes share the
+    /// transform, projection, viewport, and clip planes, so the screen transform is identical.
+    /// </summary>
+    private Camera CreatePass(
+        EngineContext context,
+        Transform transform,
+        ClearMode clearMode,
+        Color? clearColor,
+        PostProcessStack? postProcess = null) {
         // The orthographic height reproduces the perspective framing at the current orbit distance,
         // so the orbit, wheel zoom, and window resize behave the same in both modes. A finite far
         // plane is enough: the orthographic pass only needs to cover the scene.
@@ -116,33 +168,16 @@ internal sealed class CastleGame : IGame {
             ? 2f * _distance * MathF.Tan(FIELD_OF_VIEW_DEGREES * (MathF.PI / 180f) * 0.5f)
             : 0f;
 
-        using Camera camera = context.CreateCamera(
-            cameraTransform,
+        return context.CreateCamera(
+            transform,
             projection: _projection,
             fieldOfView: orthographic ? 0f : FIELD_OF_VIEW_DEGREES,
             orthographicHeight: orthographicHeight,
-            clearMode: ClearMode.ColorAndDepth,
-            clearColor: Color.WhiteSmoke,
+            clearMode: clearMode,
+            clearColor: clearColor,
             near: NEAR_PLANE,
-            far: orthographic ? ORTHO_FAR : float.PositiveInfinity);
-
-        camera.DrawModel(_model!, Transform.Identity, Color.White);
-
-        // raylib's reference grid: 20 slices 10 units apart, centered on the origin where the castle
-        // stands, drawn after the model in the same opaque, depth-tested pass.
-        camera.DrawGrid(GRID_SLICES, GRID_SPACING, Color.Gray);
-
-        DrawHoverOverlay(camera, context);
-
-        // The DrawFPS-style overlay: presented FPS over a one-second window, the tick rate, the
-        // render CPU time, the last completed frame's draw and instance counts, and the current
-        // projection. It is recorded last in the same pass as the scene.
-        DrawStatusOverlay(camera, context);
-
-        _frameCount++;
-        if (_frameLimit > 0 && _frameCount >= _frameLimit) {
-            context.RequestExit();
-        }
+            far: orthographic ? ORTHO_FAR : float.PositiveInfinity,
+            postProcess: postProcess);
     }
 
     /// <summary>
@@ -187,9 +222,9 @@ internal sealed class CastleGame : IGame {
     /// current projection at the top-left of the view.
     /// </summary>
     /// <remarks>
-    /// The text is same-pass, screen-aligned text: it is drawn on a plane
-    /// <see cref="OVERLAY_DISTANCE"/> world unit in front of the camera. It is alpha-blended and
-    /// writes no depth, so geometry closer than that plane can still occlude it.
+    /// The text is screen-aligned and drawn on a plane <see cref="OVERLAY_DISTANCE"/> world unit in
+    /// front of the HUD camera. That camera clears depth after the scene pass, so scene geometry cannot
+    /// occlude the line.
     /// </remarks>
     private void DrawStatusOverlay(Camera camera, EngineContext context) {
         // The returned transform's scale is world units per render pixel, so an em height of 18 local
@@ -200,7 +235,9 @@ internal sealed class CastleGame : IGame {
             new Vector2(OVERLAY_MARGIN_PIXELS, OVERLAY_MARGIN_PIXELS),
             OVERLAY_DISTANCE);
         string projectionName = _projection == CameraProjection.Perspective ? "perspective" : "ortho";
-        string statusText = $"{_overlay.Build(context)}\nprojection {projectionName}";
+        string ssaoState = _ssao.Enabled ? "on" : "off";
+        string statusText =
+            $"{_overlay.Build(context)}\nprojection {projectionName}   ssao {ssaoState}";
 
         camera.DrawText(
             context.Defaults.DefaultMonoFont,

@@ -61,9 +61,20 @@ public sealed class VulkanDeviceTests {
         Assert.NotEmpty(capabilities.Swapchain.PresentModes);
         Assert.True(capabilities.Swapchain.IsUsable);
         Assert.Contains(1, capabilities.SupportedSampleCounts);
+        Assert.Equal(ResolveModeFlags.SampleZeroBit, capabilities.DepthResolveMode);
         Assert.True(capabilities.MaxFramebufferWidth > 0);
         Assert.True(capabilities.MaxFramebufferHeight > 0);
         Assert.False(string.IsNullOrEmpty(capabilities.DeviceName));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
+    public void CapabilitiesReportTheRequiredDepthResolveMode() {
+        using GpuTestHost host = GpuTestHost.CreateOrSkip();
+
+        ResolveModeFlags mode = host.Device.Capabilities.DepthResolveMode;
+
+        Assert.Equal(ResolveModeFlags.SampleZeroBit, mode);
     }
 
     [Fact]

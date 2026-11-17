@@ -9,13 +9,15 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Set 0 binding 0 is the frame uniform block, binding 1 is the fixed-size bindless
-/// combined-image-sampler array, and binding 2 is the per-instance storage buffer. The array binding
-/// has exactly <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/> descriptors to match
-/// <c>RayBorkTextures[2048]</c> in every geometry shader; it is partially bound and update-after-bind,
-/// so the renderer can write a newly allocated slot while frames are in flight. The uniform and
-/// storage-buffer bindings are ordinary descriptors. The set layout and pool carry the
-/// update-after-bind flags the array binding requires. No push constants are declared.
+/// Set 0 binding 0 is the frame storage buffer that holds one 256-byte <c>RayBorkFrame</c> element per
+/// camera pass, binding 1 is the fixed-size bindless combined-image-sampler array, and binding 2 is
+/// the per-instance storage buffer. The array binding has exactly
+/// <see cref="ShaderAbiNames.TEXTURE_CAPACITY"/> descriptors to match <c>RayBorkTextures[2048]</c> in
+/// every geometry shader; it is partially bound and update-after-bind, so the renderer can write a
+/// newly allocated slot while frames are in flight. The frame and instance storage-buffer bindings are
+/// ordinary descriptors. The set layout and pool carry the update-after-bind flags the array binding
+/// requires. The pipeline layout declares one 4-byte push-constant range, the shader ABI's per-pass
+/// frame index, visible to the vertex and fragment stages.
 /// </para>
 /// <para>
 /// The state is created on the render thread with the logical device and destroyed before the device.
@@ -28,7 +30,7 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     /// <summary>The descriptor set index of the geometry path.</summary>
     internal const uint GEOMETRY_SET = 0;
 
-    /// <summary>The binding index of the frame uniform block.</summary>
+    /// <summary>The binding index of the frame storage buffer.</summary>
     internal const uint FRAME_BINDING = 0;
 
     /// <summary>The binding index of the bindless texture array.</summary>
@@ -36,6 +38,16 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
 
     /// <summary>The binding index of the instance storage buffer.</summary>
     internal const uint INSTANCE_BINDING = 2;
+
+    /// <summary>The byte offset of the push-constant pass index: <c>0</c>.</summary>
+    internal const uint PASS_INDEX_PUSH_CONSTANT_OFFSET = 0;
+
+    /// <summary>The byte size of the push-constant pass index: <c>4</c>.</summary>
+    internal const uint PASS_INDEX_PUSH_CONSTANT_SIZE = 4;
+
+    /// <summary>The stages that can read the pass-index push constant: vertex and fragment.</summary>
+    internal const ShaderStageFlags PUSH_CONSTANT_STAGES =
+        ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit;
 
     private readonly Vk _vulkan;
     private readonly Device _device;
@@ -53,7 +65,8 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     internal DescriptorSetLayout SetLayout => _resources.SetLayout;
 
     /// <summary>
-    /// Gets the pipeline layout with the single geometry set layout and no push constants.
+    /// Gets the pipeline layout with the single geometry set layout and the 4-byte pass-index push
+    /// constant.
     /// </summary>
     internal PipelineLayout PipelineLayout => _resources.PipelineLayout;
 
@@ -132,16 +145,16 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     }
 
     /// <summary>
-    /// Writes the frame uniform-buffer descriptor of one frame set.
+    /// Writes the frame storage-buffer descriptor of one frame set.
     /// </summary>
     /// <param name="set">The frame set to update.</param>
-    /// <param name="buffer">The host-visible frame uniform buffer.</param>
-    /// <param name="blockSize">The byte size of the frame block.</param>
-    internal void WriteFrameUniformBuffer(DescriptorSet set, Buffer buffer, ulong blockSize) {
+    /// <param name="buffer">The host-visible frame storage buffer.</param>
+    /// <param name="size">The buffer size in bytes.</param>
+    internal void WriteFrameStorageBuffer(DescriptorSet set, Buffer buffer, ulong size) {
         DescriptorBufferInfo bufferInfo = new() {
             Buffer = buffer,
             Offset = 0,
-            Range = blockSize,
+            Range = size,
         };
         WriteDescriptorSet write = new() {
             SType = StructureType.WriteDescriptorSet,
@@ -149,7 +162,7 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
             DstBinding = FRAME_BINDING,
             DstArrayElement = 0,
             DescriptorCount = 1,
-            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorType = DescriptorType.StorageBuffer,
             PBufferInfo = &bufferInfo,
         };
         _vulkan.UpdateDescriptorSets(_device, 1, &write, 0, null);
@@ -244,7 +257,7 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
         DescriptorSetLayoutBinding* bindings = stackalloc DescriptorSetLayoutBinding[3];
         bindings[FRAME_BINDING] = new DescriptorSetLayoutBinding {
             Binding = FRAME_BINDING,
-            DescriptorType = DescriptorType.UniformBuffer,
+            DescriptorType = DescriptorType.StorageBuffer,
             DescriptorCount = 1,
             StageFlags = ShaderStageFlags.VertexBit | ShaderStageFlags.FragmentBit,
         };
@@ -289,24 +302,21 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     }
 
     private static DescriptorPool CreatePool(Vk vulkan, Device device, uint bindlessCapacity, uint maxSets) {
-        DescriptorPoolSize* poolSizes = stackalloc DescriptorPoolSize[3];
+        DescriptorPoolSize* poolSizes = stackalloc DescriptorPoolSize[2];
+        // The frame buffer and the instance buffer are both storage buffers, one descriptor each.
         poolSizes[0] = new DescriptorPoolSize {
-            Type = DescriptorType.UniformBuffer,
-            DescriptorCount = maxSets,
+            Type = DescriptorType.StorageBuffer,
+            DescriptorCount = checked(maxSets * 2),
         };
         poolSizes[1] = new DescriptorPoolSize {
             Type = DescriptorType.CombinedImageSampler,
             DescriptorCount = checked(bindlessCapacity * maxSets),
         };
-        poolSizes[2] = new DescriptorPoolSize {
-            Type = DescriptorType.StorageBuffer,
-            DescriptorCount = maxSets,
-        };
         DescriptorPoolCreateInfo createInfo = new() {
             SType = StructureType.DescriptorPoolCreateInfo,
             Flags = DescriptorPoolCreateFlags.UpdateAfterBindBit,
             MaxSets = maxSets,
-            PoolSizeCount = 3,
+            PoolSizeCount = 2,
             PPoolSizes = poolSizes,
         };
         Result result = vulkan.CreateDescriptorPool(device, &createInfo, null, out DescriptorPool pool);
@@ -321,12 +331,17 @@ internal sealed unsafe class VulkanDescriptorState : IDisposable {
     }
 
     private static PipelineLayout CreatePipelineLayout(Vk vulkan, Device device, DescriptorSetLayout setLayout) {
+        PushConstantRange passIndexRange = new() {
+            StageFlags = PUSH_CONSTANT_STAGES,
+            Offset = PASS_INDEX_PUSH_CONSTANT_OFFSET,
+            Size = PASS_INDEX_PUSH_CONSTANT_SIZE,
+        };
         PipelineLayoutCreateInfo createInfo = new() {
             SType = StructureType.PipelineLayoutCreateInfo,
             SetLayoutCount = 1,
             PSetLayouts = &setLayout,
-            PushConstantRangeCount = 0,
-            PPushConstantRanges = null,
+            PushConstantRangeCount = 1,
+            PPushConstantRanges = &passIndexRange,
         };
         Result result = vulkan.CreatePipelineLayout(device, &createInfo, null, out PipelineLayout pipelineLayout);
         if (result != Result.Success || pipelineLayout.Handle == 0) {

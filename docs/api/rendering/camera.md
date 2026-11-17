@@ -233,8 +233,14 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
   view-projection matrices, and the camera position. Every recorded frame retains the mesh, internal
   shader program, and bound textures it recorded until the render thread releases the frame slot; a
   model or material object is not an engine asset and adds no hold.
-- MSAA is a property of the target. The swapchain uses the builder's `WithMSAA` sample count. There
-  is no `RenderTexture` yet: every camera records into the app's linear HDR scene target.
+- Each camera pass is its own render pass. The renderer uses the clamped viewport as the render area,
+  loads the previous pass' stored color and depth, clears that rectangle when the camera asks, and
+  resolves the color and depth for that rectangle only. Several cameras in one tick therefore render
+  split-screen views and layered HUD passes into the same scene target correctly.
+- MSAA is a property of the target. The app scene target uses the builder's `WithMSAA` sample count; a
+  `RenderTexture` created by `CreateRenderTextureAsync` uses its own `SampleCount` and effective
+  count. A camera records into the target passed to `CreateCamera`, or into the app's linear HDR
+  scene target when `target` is `null`.
 
 > **M5, M6, and M7 surface.** `Camera` ships the raylib-style helper surface: the line, point, and triangle
 > helpers (`DrawLine`, `DrawLines`, `DrawPoint`, `DrawTriangle`), the twelve shape helpers (`DrawCube`,
@@ -249,9 +255,19 @@ A camera is a **frame-scoped recorder**, not a GPU object and not a reusable sce
 > `ScreenToWorldTransform`, the three `DrawQuad` overloads, `DrawDisc`, and
 > `DrawGrid(Transform, ...)`; they are specified under **Screen transform and 2D primitives** below.
 > There is no `DrawTexture`, no 2D destination-rectangle draw, and no `DrawText(Vector2)` overload.
-> The `Target` property and the `target` parameter arrive with `RenderTexture` in M8.
-> The camera always records into the app's linear HDR scene target, and the present pass
-> applies AgX after all cameras finish.
+> M8 adds `Camera.Target` and the `target` parameter: a camera records into a runtime
+> `RenderTexture` instead of the app's linear HDR scene target. The present pass applies AgX after
+> all cameras finish; a render texture reaches the screen through a later camera that samples its
+> `ColorTexture`, and a later camera can sample its resolved `DepthTexture` for depth-driven effects.
+> A camera-written target can also be read back with `RenderTexture.ReadColorsAsync` (raw scene-linear
+> `[y, x]` colors) or `RenderTexture.ReadPixelsAsync` (display-referred RGBA8 for a screenshot); the
+> readback is a `RenderTexture` member, not a camera member, and never reads depth. M8 also adds the
+> `postProcess` parameter and the `PostProcessStack`/`PostProcessEffect`/`ShaderPostProcessEffect`
+> surface: a camera's stack runs after its geometry pass and before the next camera or the present
+> pass, on the scene target or a render texture target, and its post-processed output is what a later
+> sample and both readback methods observe. The built-in `SsaoEffect` is available on the same stack
+> and requires a target with depth; the built-in `BloomEffect` is available on the same stack and has
+> no depth requirement. `Pong` runs bloom on its scene camera only; its HUD camera has no stack.
 
 Properties:
 
@@ -263,6 +279,7 @@ Properties:
 | `Near`, `Far` | Clip distances. `Far` may be `+infinity` for perspective, never for orthographic. |
 | `ClearMode` | Which buffers this pass clears. |
 | `ClearColor` | Linear color used when `ClearMode.Color` is set. |
+| `Target` | The render texture this pass writes, or `null` for the app's linear HDR scene target. |
 | `Viewport` | Pixel rectangle in the target, clamped when the camera was created. Defaults to the full target. |
 | `ViewMatrix` | Inverse of `Transform.ToMatrix()`. |
 | `ProjectionMatrix` | Reverse-Z `[0, 1]` projection with the Vulkan Y-flip already applied. |
@@ -281,7 +298,9 @@ public Camera CreateCamera(
     Color? clearColor = null,
     float near = 0.01f,
     float far = 1000f,
-    Rect? viewport = null);
+    Rect? viewport = null,
+    RenderTexture? target = null,
+    PostProcessStack? postProcess = null);
 ```
 
 It sets the aspect ratio from the clamped viewport. A perspective camera uses `fieldOfView` and
@@ -289,7 +308,46 @@ rejects a nonzero `orthographicHeight`; an orthographic camera uses `orthographi
 a nonzero `fieldOfView`. The projection is built with
 reverse-Z; the `ProjectionMatrix` already contains Vulkan's Y-flip. Custom code that builds its own
 projection must preserve both conventions if it wants to match the engine's depth and screen-space
-helpers.
+helpers. `target` selects the pass' render target: `null` is the app's linear HDR scene target, and a
+`RenderTexture` routes the pass into that target. The viewport defaults to the full target and is
+clamped to the target size, and the aspect ratio uses the clamped viewport. A disposed target is
+`ObjectDisposedException`.
+
+`postProcess` selects an app-lifetime, caller-owned `PostProcessStack` for this camera. The stack is
+snapshotted at creation: the effect order, each effect's `Enabled` value, and each custom effect's
+shader cursor and texture bindings are frozen, so later changes affect later cameras only. The chain
+runs after this camera's geometry and resolve pass and before the next camera or the present pass, on
+the app scene target or on a `RenderTexture` target. A camera with a color clear processes the new
+content; a camera with `ClearMode.None` processes the earlier target content plus its own draws. The
+chain is target-sized and stores its result back only for the camera viewport, so pixels outside the
+viewport are untouched; because the source is the full target, a viewport camera's effect can sample
+content outside its viewport (documented M8 cross-viewport behavior). A disabled stack or effect is
+skipped. A custom effect must be a `ShaderPostProcessEffect` over a baked shader whose
+sidecar declares the reserved `sourceColor` binding; `sourceDepth` is optional and is rejected on a
+depth-less target. A missing `sourceColor`, a shader without both stages, or `sourceDepth` on a
+depth-less target is `InvalidOperationException` from `CreateCamera`; a disposed effect shader or bound
+texture is `ObjectDisposedException`. The built-in `SsaoEffect` is snapshotted the same way: its
+`Quality` and every setting are frozen, it requires a target with depth, and a depth-less target is
+`InvalidOperationException` from `CreateCamera`. The built-in `BloomEffect` is also snapshotted the
+same way and needs no depth. See [Post-processing](post-processing.md). `samples/RenderTarget` uses
+the same `target` and `postProcess` parameters: an offscreen camera writes a `RenderTexture`, the
+single scene camera samples its `ColorTexture` and runs the custom vignette effect, two split-screen
+cameras replace the single scene camera when `S` is on, and a later HUD camera loads the scene color
+and clears depth.
+
+A later camera in the same tick can sample the target's `ColorTexture` or
+`DepthTexture`; sampling either view in the camera pass that writes the target is rejected with
+`InvalidOperationException` from the draw call. A target declared `Depth: false` has no depth attachment:
+depth-tested and depth-writing draws are not rejected, but their depth test and write are no-ops for
+that target, and `ClearMode.Depth` is a no-op. After a target resize, a camera created with that target
+uses the new target size, and a later camera pass that samples the target's views sees their new
+`Width` and `Height`. The views keep their identity and are owned by the `RenderTexture`; dispose the
+render texture, not a view. A later camera or the game can sample the views, and the game can call
+`RenderTexture.ReadColorsAsync`/`ReadPixelsAsync` after a completed frame to read the resolved color
+image without changing the camera routing or the target's state. The readback returns the content of
+the last completed frame that wrote or sampled the target. A target no camera has written has undefined
+GPU content; rather than reading undefined memory, the readback returns the defined opaque-black
+default (`Color.Black` and RGBA8 `(0, 0, 0, 255)`), including when a frame only sampled the target.
 
 `clearColor: null` means linear **opaque black** (`Color.Black`). HDR components above `1` are
 allowed; a non-finite component is `ArgumentException`. `near` must be positive and finite, `far`
@@ -340,8 +398,10 @@ game fits its design space into render pixels, calls `ScreenToWorldTransform` fo
 draws the world-space `DrawQuad` (solid, full texture, or source rectangle), `DrawDisc`, or
 `DrawText` with a pixel-sized `size` on the returned transform. A textured `DrawQuad` or
 `DrawBillboard(faceCamera: false)` covers a sprite. `samples/Pong` uses this pattern for its whole
-match: one orthographic camera whose visible height is the render height, so the plane at distance
-`1` has a scale of exactly one, and every draw is anchored with `ScreenToWorldTransform`.
+match: two sequential orthographic cameras whose visible height is the render height, so the plane at
+distance `1` has a scale of exactly one; the scene camera clears color and depth and runs bloom, the
+later HUD camera loads the scene color and clears depth, and every draw is anchored with
+`ScreenToWorldTransform`.
 
 ```csharp
 Transform screen = camera.ScreenToWorldTransform(
@@ -352,8 +412,13 @@ camera.DrawText(font, "HUD", screen, 18f, Color.White);
 ```
 
 The HUD text is same-pass, screen-aligned text: it is alpha-blended with no depth write, so geometry
-closer than the overlay plane can still occlude it. The separate multi-camera overlay pass and
-per-pass frame data are deferred to M8; the M4 one-frame-block limitation is unchanged.
+closer than the overlay plane can still occlude it. To place a HUD over the scene without depth
+occlusion, record an ordinary later camera after the scene cameras with `ClearMode.Depth`: it loads
+the scene color and clears depth, so the HUD is not occluded by scene depth. `ClearMode.None` loads
+both the scene color and depth when the HUD should still be depth-tested. There is no separate overlay
+or layer pass; a HUD is an ordinary later camera and behaves like every other camera pass. Shader ABI
+v2 gives every camera pass its own 256-byte frame block, so passes with different views read their own
+frame data.
 
 **2D quad, disc, and grid primitives.** The `DrawQuad` overloads draw one instance of the engine
 quad in the transform's local `XY` plane, centered, with local `+Z` as the front and the instance
@@ -622,16 +687,27 @@ public sealed class TonemappingSettings {
 }
 ```
 
-- Default camera clear is `ClearMode.ColorAndDepth`. A 3D frame that uses only `ClearMode.Color`
-  will reuse the previous frame's depth buffer and must be treated as an overlay pass.
+- Default camera clear is `ClearMode.ColorAndDepth`.
 - Clears are scoped to the camera viewport, not the whole target. The renderer clears the clamped
-  viewport rectangle with the camera's clear state; a pass with a smaller viewport leaves the pixels
-  outside it untouched.
+  viewport rectangle with the camera's clear state. A later pass with a smaller viewport leaves the
+  pixels outside it untouched; for the first pass those pixels are undefined because the frame start
+  discards the target before any camera runs.
 - Depth clears to `0.0`. Color clears to `ClearColor`. `ClearMode.Stencil` is a no-op because the
   scene target has no stencil attachment; the flag is accepted and does not fail.
-- The scene target's render pass starts with undefined color and depth content. A first camera that
-  wants defined content must clear; a first camera with `ClearMode.None` leaves undefined content,
-  and later cameras see the previous pass' pixels.
+- The scene target starts every frame with undefined color and depth content: the renderer discards
+  the previous frame's contents before the first camera pass. A first camera that wants defined
+  content must clear; a first camera with `ClearMode.None` leaves undefined content.
+- Later cameras load the previous camera pass' stored content for their own viewport. `ClearMode.None`
+  keeps the earlier color and depth, `ClearMode.Color` clears color and keeps depth, and
+  `ClearMode.Depth` clears depth and keeps color. The load is part of the camera's own render pass, so
+  a camera that draws over only part of the target keeps the earlier pixels everywhere else. A
+  depth-bearing `RenderTexture` applies the same rules; `ClearMode.Depth` clears its depth attachment,
+  and a later camera can then sample the resolved `DepthTexture`. A depthless target treats
+  `ClearMode.Depth` as a no-op.
+- Multiple cameras render to the scene target in one frame: each pass is its own render pass with the
+  clamped viewport as the render area, and each pass resolves its own render area. That makes
+  split-screen to the scene target correct, including passes with different views, projections, and
+  clear modes. There is no separate multi-camera overlay or layer pass.
 - The depth test defaults to `GreaterOrEqual`; depth writes are on for opaque draws.
 - Perspective supports an infinite far plane. The projection maps the near plane to `1.0` and
   infinity to `0.0`. The perspective `far` defaults to `1000`; pass `float.PositiveInfinity`
@@ -641,19 +717,24 @@ public sealed class TonemappingSettings {
   `samples/Castle` toggles its one camera between the two projections with `O`.
 - The viewport is in pixels, top-left origin, and is clamped to the target. An invalid or empty
   viewport throws `ArgumentException`.
-- Multiple cameras can clear different passes sequentially in one tick. The first camera usually
-  clears; later cameras choose `ClearMode.None` or `ClearMode.Depth` for overlays. The engine shares
-  one frame uniform block per frame slot across every camera pass: a frame with more than one camera
-  pass submits the same `rbFrame` values (the last recorded pass') to every pass. Split-screen
-  cameras in one frame are therefore a known limitation rather than a supported layout.
-- A camera that targets a `RenderTexture` and a later camera that samples that texture in the same
-  tick are ordered by creation order; the renderer inserts the required image barrier. Sampling a
-  target inside the same pass that writes it is invalid and is reported as a validation error. This
-  applies from M8; the current renderer has no render target.
+- Multiple cameras can render sequentially in one tick. The first camera usually clears; later
+  cameras choose `ClearMode.None`, `ClearMode.Color`, or `ClearMode.Depth` for overlays. A HUD is an
+  ordinary later camera: `ClearMode.Depth` loads the scene color and clears depth when the HUD must
+  not be occluded, and `ClearMode.None` keeps both when the HUD should remain depth-tested. The shader
+  ABI v2 gives every camera pass its own 256-byte frame block, selected by a push-constant pass index,
+  so a frame with several camera passes submits each pass' own matrices, camera position, and
+  viewport to its draws.
+- A camera that targets a `RenderTexture` and a later camera that samples that texture's `ColorTexture`
+  or `DepthTexture` in the same tick are ordered by creation order; the renderer inserts the required
+  image and layout barriers. Sampling either view inside the same pass that writes the target is invalid
+  and throws `InvalidOperationException` from the draw call before the frame is published. A target is
+  reused only after the frame that last used it completed. `Camera.Target` reports the target and a
+  disposed target is `ObjectDisposedException` when the camera is created.
 
 There is no builder-level clear color: `WithClearColor` is removed and each camera's `ClearColor` is
-the scene clear control for its pass. A camera that does not clear color leaves the previous pass'
-color in place, which is the documented overlay behavior.
+the scene clear control for its pass. A later camera that does not clear color leaves the earlier
+pass' color in place for its viewport, which is how a later HUD or overlay camera keeps the scene
+visible.
 
 **Projection math.** The engine is right-handed and Y-up and the camera looks down local `-Z`.
 `ViewMatrix` is the inverse of `Transform.ToMatrix()`. `ProjectionMatrix` uses Vulkan's `[0, 1]`
@@ -790,9 +871,14 @@ public void Tick(EngineContext ctx) {
 highest device-supported count that does not exceed the request, or `1` when none is supported, and
 a fallback logs a warning. The scene target color and depth attachments use the effective count;
 the swapchain images are single-sample. Scene color is resolved into a single-sample sampled image
-before the present pass. Depth is cleared to `0.0` and the reverse-Z state is defined; multisampled
-depth is not resolved because nothing samples depth until M8. A `RenderTexture` uses its
-own `SampleCount` (M8).
+before the present pass, and each camera pass resolves only its own render area. The multisampled
+color and depth attachments are stored between camera passes so a later camera can load them. Depth is
+cleared to `0.0` and the reverse-Z state is defined. Scene depth is also resolved into a single-sample
+internal depth image with the Vulkan 1.2 depth/stencil resolve path; it is the input `SsaoEffect`
+samples, and there is no public scene-target depth view. A `RenderTexture`
+uses its own `SampleCount` and its own render pass, resolved single-sample color and depth images, and
+geometry pipeline cache; the app scene target is unaffected. The public `DepthTexture` is the resolved
+multisampled depth image, or the depth attachment itself for a single-sample target.
 
 **Present mode.** The default is `Mailbox`, with automatic fallback to `Fifo` when the surface does
 not advertise it; a requested `Fifo` falls back to `Mailbox` when FIFO is unavailable. `Immediate` is

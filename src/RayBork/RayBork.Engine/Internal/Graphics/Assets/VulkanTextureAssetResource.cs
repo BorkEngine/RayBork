@@ -17,7 +17,7 @@ namespace RayBork.Internal;
 /// is described by its <see cref="ProceduralTextureGpuUpload"/>. The public texture metadata is the
 /// descriptor's; the copies here are the validated values the upload used.
 /// </remarks>
-internal sealed class VulkanTextureAssetResource : VulkanAssetResource {
+internal sealed class VulkanTextureAssetResource : VulkanAssetResource, ITextureBindingResource {
     /// <summary>
     /// Initializes a texture resource.
     /// </summary>
@@ -74,6 +74,9 @@ internal sealed class VulkanTextureAssetResource : VulkanAssetResource {
     /// yet. Slot 0 is the renderer's white fallback, so zero also means "no slot".
     /// </summary>
     internal uint BindlessSlot { get; private set; }
+
+    /// <inheritdoc/>
+    uint ITextureBindingResource.BindlessSlot => BindlessSlot;
 
     /// <summary>
     /// Stores the bindless slot reserved for the completed upload.

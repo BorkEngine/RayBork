@@ -1,7 +1,7 @@
 namespace RayBork.Internal;
 
 /// <summary>
-/// Provides the SPIR-V modules for the engine's built-in present pass.
+/// Provides the SPIR-V modules for the engine's built-in present and post-process store-back passes.
 /// </summary>
 /// <remarks>
 /// The modules are compiled ahead of time from the GLSL sources in <c>Shaders/</c> by
@@ -17,6 +17,12 @@ internal static class ShaderAssets {
     /// <summary>The fragment entry point name compiled into <c>Present.frag.spv</c>.</summary>
     internal const string PRESENT_FRAGMENT_ENTRY_POINT = "main";
 
+    /// <summary>The vertex entry point name compiled into <c>PostStore.vert.spv</c>.</summary>
+    internal const string POST_STORE_VERTEX_ENTRY_POINT = "main";
+
+    /// <summary>The fragment entry point name compiled into <c>PostStore.frag.spv</c>.</summary>
+    internal const string POST_STORE_FRAGMENT_ENTRY_POINT = "main";
+
     /// <summary>
     /// The logical resource name of <c>Shaders/Present.vert.spv</c>. The name is fixed by the
     /// <c>EmbeddedResource</c> item in <c>RayBork.Engine.csproj</c>.
@@ -29,8 +35,22 @@ internal static class ShaderAssets {
     /// </summary>
     private const string PRESENT_FRAGMENT_RESOURCE_NAME = "RayBork.Shaders.Present.frag.spv";
 
+    /// <summary>
+    /// The logical resource name of <c>Shaders/PostStore.vert.spv</c>. The name is fixed by the
+    /// <c>EmbeddedResource</c> item in <c>RayBork.Engine.csproj</c>.
+    /// </summary>
+    private const string POST_STORE_VERTEX_RESOURCE_NAME = "RayBork.Shaders.PostStore.vert.spv";
+
+    /// <summary>
+    /// The logical resource name of <c>Shaders/PostStore.frag.spv</c>. The name is fixed by the
+    /// <c>EmbeddedResource</c> item in <c>RayBork.Engine.csproj</c>.
+    /// </summary>
+    private const string POST_STORE_FRAGMENT_RESOURCE_NAME = "RayBork.Shaders.PostStore.frag.spv";
+
     private static readonly byte[] _presentVertex = Load(PRESENT_VERTEX_RESOURCE_NAME);
     private static readonly byte[] _presentFragment = Load(PRESENT_FRAGMENT_RESOURCE_NAME);
+    private static readonly byte[] _postStoreVertex = Load(POST_STORE_VERTEX_RESOURCE_NAME);
+    private static readonly byte[] _postStoreFragment = Load(POST_STORE_FRAGMENT_RESOURCE_NAME);
 
     /// <summary>
     /// Gets the SPIR-V module for the fullscreen present vertex shader. The returned span is backed
@@ -44,6 +64,21 @@ internal static class ShaderAssets {
     /// loaded assembly resource and is valid for the process lifetime.
     /// </summary>
     internal static ReadOnlySpan<byte> PresentFragment => _presentFragment;
+
+    /// <summary>
+    /// Gets the SPIR-V module for the post-process store-back vertex shader, which generates a
+    /// fullscreen triangle from <c>gl_VertexIndex</c>. The returned span is backed by the loaded
+    /// assembly resource and is valid for the process lifetime.
+    /// </summary>
+    internal static ReadOnlySpan<byte> PostStoreVertex => _postStoreVertex;
+
+    /// <summary>
+    /// Gets the SPIR-V module for the post-process store-back fragment shader, which samples the final
+    /// single-sample post target and writes its scene-linear color into the camera target's color
+    /// attachment. The returned span is backed by the loaded assembly resource and is valid for the
+    /// process lifetime.
+    /// </summary>
+    internal static ReadOnlySpan<byte> PostStoreFragment => _postStoreFragment;
 
     /// <summary>
     /// Loads one embedded SPIR-V module by its fixed logical resource name.

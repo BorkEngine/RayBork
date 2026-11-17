@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Bake.Shaders;
 using RayBork.Internal;
 using RayBork.Tests.Graphics.Assets;
@@ -56,6 +57,10 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
 
     private readonly BackendTestHost _host;
     private readonly AssetGpuUploadHarness _uploads;
+    private AssetCatalog? _catalog;
+    private SsaoAssets? _ssaoAssets;
+    private AssetCatalog? _bloomCatalog;
+    private BloomAssets? _bloomAssets;
     private bool _disposed;
 
     /// <summary>
@@ -197,6 +202,7 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
             SpirvExecutionModel.Fragment,
             path + ".frag");
         ShaderAssetDescriptor descriptor = new() {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
             VertexEntry = ShaderAbiNames.VERTEX_ENTRY_POINT,
@@ -291,21 +297,70 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         CameraView camera,
         params DrawSpec[] draws) {
         AssertNotDisposed();
+        return CreateFrameWithPasses(
+            frameIndex,
+            new PassSpec(
+                camera,
+                0,
+                0,
+                camera.Width,
+                camera.Height,
+                ClearMode.ColorAndDepth,
+                clearColor,
+                draws));
+    }
+
+    /// <summary>
+    /// Builds one sealed frame from explicit camera passes, each with its own viewport, clear state,
+    /// and draw records.
+    /// </summary>
+    /// <param name="frameIndex">The frame index.</param>
+    /// <param name="passes">The camera passes in recording order.</param>
+    /// <returns>The sealed packet.</returns>
+    internal RenderFramePacket CreateFrameWithPasses(long frameIndex, params PassSpec[] passes) {
+        AssertNotDisposed();
+        ArgumentNullException.ThrowIfNull(passes);
         RenderFramePacket packet = new(frameIndex);
         packet.BeginRecording(0.0, 0.0);
-        CameraPass pass = packet.BeginPass();
-        pass.Begin(
-            index: 0,
-            camera.View,
-            camera.Projection,
-            camera.ViewProjection,
-            camera.Position,
-            viewportX: 0,
-            viewportY: 0,
-            viewportWidth: camera.Width,
-            viewportHeight: camera.Height,
-            ClearMode.ColorAndDepth,
-            clearColor);
+        for (int index = 0; index < passes.Length; index++) {
+            PassSpec spec = passes[index];
+            CameraPass pass = packet.BeginPass();
+            pass.Begin(
+                index,
+                spec.Camera.View,
+                spec.Camera.Projection,
+                spec.Camera.ViewProjection,
+                spec.Camera.Position,
+                spec.ViewportX,
+                spec.ViewportY,
+                spec.ViewportWidth,
+                spec.ViewportHeight,
+                spec.ClearMode,
+                spec.ClearColor,
+                spec.TargetId);
+            AddDraws(packet, pass, spec.Draws);
+            AddPostProcessEffects(packet, pass, spec.PostProcessEffects);
+        }
+
+        packet.Seal();
+        return packet;
+    }
+
+    private static void AddPostProcessEffects(
+        RenderFramePacket packet,
+        CameraPass pass,
+        PostProcessEffectSnapshot[]? effects) {
+        if (effects is null) {
+            return;
+        }
+
+        foreach (PostProcessEffectSnapshot effect in effects) {
+            pass.AddPostProcessEffect(effect);
+            effect.Retain(packet.Retention);
+        }
+    }
+
+    private static void AddDraws(RenderFramePacket packet, CameraPass pass, DrawSpec[] draws) {
         foreach (DrawSpec draw in draws) {
             RenderDrawRecord record = packet.RentDrawRecord();
             record.Begin(
@@ -323,9 +378,6 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
             draw.WorldMatrices.AsSpan().CopyTo(worlds);
             pass.Add(record);
         }
-
-        packet.Seal();
-        return packet;
     }
 
     /// <summary>
@@ -354,12 +406,101 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     }
 
     /// <summary>
+    /// Loads the engine-owned SSAO assets from the built-in pack through this harness's bridge, so a
+    /// test can build a custom-effect-plus-SSAO chain without a camera service.
+    /// </summary>
+    /// <returns>The loaded assets, owned by the harness.</returns>
+    internal SsaoAssets LoadSsaoAssetsFromBuiltInPack() {
+        AssertNotDisposed();
+        if (_ssaoAssets is not null) {
+            return _ssaoAssets;
+        }
+
+        AssetCatalog catalog = new(
+            NullLoggerFactory.Instance,
+            _uploads.Bridge,
+            BuiltInAssetPack.Bytes,
+            [],
+            []);
+        catalog.Start();
+        try {
+            Task<SsaoAssets> load = SsaoAssets.LoadAsync(catalog);
+            bool completed = SpinWait.SpinUntil(
+                () => {
+                    _uploads.Pump();
+                    return load.IsCompleted;
+                },
+                AssetGpuUploadHarness.Timeout);
+            Assert.True(completed, "The built-in SSAO assets did not finish loading.");
+            _ssaoAssets = load.GetAwaiter().GetResult();
+            _catalog = catalog;
+            return _ssaoAssets;
+        } catch {
+            catalog.Stop();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Loads the engine-owned bloom assets from the built-in pack through this harness's bridge, so a
+    /// test can build a custom-effect-plus-bloom chain without a camera service.
+    /// </summary>
+    /// <returns>The loaded assets, owned by the harness.</returns>
+    internal BloomAssets LoadBloomAssetsFromBuiltInPack() {
+        AssertNotDisposed();
+        if (_bloomAssets is not null) {
+            return _bloomAssets;
+        }
+
+        AssetCatalog catalog = new(
+            NullLoggerFactory.Instance,
+            _uploads.Bridge,
+            BuiltInAssetPack.Bytes,
+            [],
+            []);
+        catalog.Start();
+        try {
+            Task<BloomAssets> load = BloomAssets.LoadAsync(catalog);
+            bool completed = SpinWait.SpinUntil(
+                () => {
+                    _uploads.Pump();
+                    return load.IsCompleted;
+                },
+                AssetGpuUploadHarness.Timeout);
+            Assert.True(completed, "The built-in bloom assets did not finish loading.");
+            _bloomAssets = load.GetAwaiter().GetResult();
+            _bloomCatalog = catalog;
+            return _bloomAssets;
+        } catch {
+            catalog.Stop();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Recreates every live GPU asset from its retained upload, as the render loop does after a device
     /// recovery.
     /// </summary>
     internal void RestoreAssets() {
         AssertNotDisposed();
         _uploads.Restore();
+    }
+
+    /// <summary>
+    /// Reads one resolved linear color pixel from a runtime render target.
+    /// </summary>
+    /// <param name="target">The render texture to read.</param>
+    /// <param name="x">The pixel column.</param>
+    /// <param name="y">The pixel row.</param>
+    /// <returns>The linear RGB values.</returns>
+    internal (float R, float G, float B) ReadRenderTargetColor(RenderTexture target, uint x, uint y) {
+        ArgumentNullException.ThrowIfNull(target);
+        if (!_host.Backend.TryGetRenderTarget(target.TargetId, out VulkanRenderTarget? renderTarget) || renderTarget is null) {
+            throw new InvalidOperationException($"The render target {target.TargetId} is not live.");
+        }
+
+        VulkanReadback.ReadRenderTargetColorPixel(_host.Device, renderTarget, x, y, out float r, out float g, out float b);
+        return (r, g, b);
     }
 
     /// <summary>
@@ -374,7 +515,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     }
 
     /// <summary>
-    /// Reads one reverse-Z scene depth pixel from a single-sample target.
+    /// Reads one reverse-Z scene depth pixel from the resolved depth image. A multisampled scene target
+    /// reads its resolved depth image; a single-sample target reads its depth attachment.
     /// </summary>
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>
@@ -393,6 +535,10 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         _disposed = true;
         try {
             _host.Backend.WaitForFrameResourcesIdle();
+            _ssaoAssets?.Dispose();
+            _catalog?.Stop();
+            _bloomAssets?.Dispose();
+            _bloomCatalog?.Stop();
             _uploads.Dispose();
         } finally {
             TickThread.Detach();
@@ -542,6 +688,35 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         Vector3 Position,
         int Width,
         int Height);
+
+    /// <summary>
+    /// One camera pass for <see cref="CreateFrameWithPasses"/>.
+    /// </summary>
+    /// <param name="Camera">The camera value snapshot.</param>
+    /// <param name="ViewportX">The viewport left edge in target pixels.</param>
+    /// <param name="ViewportY">The viewport top edge in target pixels.</param>
+    /// <param name="ViewportWidth">The viewport width in target pixels.</param>
+    /// <param name="ViewportHeight">The viewport height in target pixels.</param>
+    /// <param name="ClearMode">The buffers the pass clears before it draws.</param>
+    /// <param name="ClearColor">The linear color written when color is cleared.</param>
+    /// <param name="Draws">The draw records in recording order.</param>
+    /// <param name="TargetId">The runtime render target id, or <c>0</c> for the scene target.</param>
+    /// <param name="PostProcessEffects">
+    /// The already captured post-process effect snapshots to run after the pass, or <c>null</c> for no
+    /// post-processing. The harness records them in order and adds their engine-asset holds to the
+    /// frame's retention set, exactly like the camera service.
+    /// </param>
+    internal sealed record PassSpec(
+        CameraView Camera,
+        int ViewportX,
+        int ViewportY,
+        int ViewportWidth,
+        int ViewportHeight,
+        ClearMode ClearMode,
+        Color ClearColor,
+        DrawSpec[] Draws,
+        long TargetId = 0,
+        PostProcessEffectSnapshot[]? PostProcessEffects = null);
 
     /// <summary>
     /// One draw record for <see cref="CreateFrame"/>.

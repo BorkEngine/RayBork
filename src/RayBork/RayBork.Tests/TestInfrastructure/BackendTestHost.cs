@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Internal;
 using Silk.NET.Core.Loader;
@@ -23,6 +24,8 @@ namespace RayBork.Tests;
 /// </para>
 /// </remarks>
 internal sealed class BackendTestHost : IDisposable {
+    private const int SERVICE_TIMEOUT_MILLISECONDS = 30_000;
+
     private readonly SdlTestHost _sdlHost;
     private readonly RenderSettings _settings;
     private readonly IReadOnlyList<string> _instanceExtensions;
@@ -74,7 +77,117 @@ internal sealed class BackendTestHost : IDisposable {
     /// <summary>
     /// Gets the backend's current scene target for readback probes.
     /// </summary>
-    internal VulkanSceneTarget SceneTarget => _backend.SceneTarget;
+    internal VulkanRenderTarget SceneTarget => _backend.SceneTarget;
+
+    /// <summary>
+    /// Gets the render texture request service the host services on its render thread.
+    /// </summary>
+    internal RenderTextureService RenderTextures { get; } = new();
+
+    /// <summary>
+    /// Creates one runtime render texture through the real service handoff and render-thread allocation.
+    /// </summary>
+    /// <param name="description">The target description.</param>
+    /// <returns>The created render texture.</returns>
+    internal RenderTexture CreateRenderTexture(RenderTextureDescription description) {
+        Task<RenderTexture> request = RenderTextures.CreateAsync(description, CancellationToken.None);
+        _backend.ProcessRenderTextureRequests(RenderTextures);
+        return request.GetAwaiter().GetResult();
+    }
+
+    /// <summary>
+    /// Services one pending render texture request or destruction round.
+    /// </summary>
+    internal void ProcessRenderTextures() => _backend.ProcessRenderTextureRequests(RenderTextures);
+
+    /// <summary>
+    /// Queues a color readback and services it on this thread, which plays the render thread.
+    /// </summary>
+    /// <param name="target">The render texture to read.</param>
+    /// <returns>The raw scene-linear colors.</returns>
+    internal Task<Color[,]> ReadColorsAsync(RenderTexture target) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        Task<Color[,]> request = target.ReadColorsAsync();
+        ProcessRenderTextures();
+        return request;
+    }
+
+    /// <summary>
+    /// Queues a display-referred pixel readback and services it on this thread, which plays the render
+    /// thread.
+    /// </summary>
+    /// <param name="target">The render texture to read.</param>
+    /// <returns>The display-referred RGBA8 pixels.</returns>
+    internal Task<byte[]> ReadPixelsAsync(RenderTexture target) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        Task<byte[]> request = target.ReadPixelsAsync();
+        ProcessRenderTextures();
+        return request;
+    }
+
+    /// <summary>
+    /// Runs <see cref="RenderTexture.Resize"/> on a second thread while this thread plays the render
+    /// thread and services the real request queue, so the blocking public call is exercised without a
+    /// render loop.
+    /// </summary>
+    /// <param name="target">The render texture to resize.</param>
+    /// <param name="width">The new width in pixels.</param>
+    /// <param name="height">The new height in pixels.</param>
+    /// <exception cref="TimeoutException">The resize neither queued nor completed in time.</exception>
+    internal void ResizeRenderTexture(RenderTexture target, int width, int height) {
+        ArgumentNullException.ThrowIfNull(target);
+
+        // Drain earlier queued work and its wakeup so the signal below belongs to this resize.
+        ProcessRenderTextures();
+        while (RenderTextures.Signal.WaitOne(0)) {
+            // A create or destroy already woke the loop; the resize needs its own wakeup.
+        }
+
+        Exception? failure = null;
+        using ManualResetEventSlim completed = new(false);
+        Thread tick = new(() => {
+            try {
+                target.Resize(width, height);
+            } catch (Exception exception) {
+                failure = exception;
+            } finally {
+                try {
+                    completed.Set();
+                } catch (ObjectDisposedException) {
+                    // A timeout on this thread disposes the event while a blocked resize is still unwinding.
+                }
+            }
+        }) {
+            IsBackground = true,
+            Name = "RayBork.Test.RenderTextureResize",
+        };
+        tick.Start();
+
+        int signaled = WaitHandle.WaitAny(
+            [RenderTextures.Signal, completed.WaitHandle],
+            SERVICE_TIMEOUT_MILLISECONDS);
+        if (signaled == WaitHandle.WaitTimeout) {
+            throw new TimeoutException(
+                $"The resize of render texture {target.TargetId} neither queued nor completed within "
+                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms.");
+        }
+
+        if (signaled == 0) {
+            ProcessRenderTextures();
+        }
+
+        if (!tick.Join(SERVICE_TIMEOUT_MILLISECONDS)) {
+            throw new TimeoutException(
+                $"The blocking resize of render texture {target.TargetId} did not return within "
+                    + $"{SERVICE_TIMEOUT_MILLISECONDS} ms.");
+        }
+
+        if (failure is not null) {
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+    }
 
     /// <summary>
     /// Gets the direct surface provider the backend creates and destroys the native surface through.
@@ -109,12 +222,14 @@ internal sealed class BackendTestHost : IDisposable {
     /// <param name="sampleCount">The requested MSAA sample count.</param>
     /// <param name="presentMode">The requested present mode.</param>
     /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
+    /// <param name="tonemapping">The startup tone-mapping mode.</param>
     /// <returns>The created and initialized host.</returns>
     internal static BackendTestHost CreateOrSkip(
         int sampleCount = 4,
         PresentMode presentMode = PresentMode.Mailbox,
-        WindowHdrState? hdr = null) {
-        if (!TryCreate(out BackendTestHost? host, out string skipReason, sampleCount, presentMode, hdr)) {
+        WindowHdrState? hdr = null,
+        TonemappingMode tonemapping = TonemappingMode.AgX) {
+        if (!TryCreate(out BackendTestHost? host, out string skipReason, sampleCount, presentMode, hdr, tonemapping)) {
             Assert.Skip(skipReason);
         }
 
@@ -129,13 +244,15 @@ internal sealed class BackendTestHost : IDisposable {
     /// <param name="sampleCount">The requested MSAA sample count.</param>
     /// <param name="presentMode">The requested present mode.</param>
     /// <param name="hdr">The HDR state override, or <see langword="null"/> for the platform's state.</param>
+    /// <param name="tonemapping">The startup tone-mapping mode.</param>
     /// <returns><see langword="true"/> when the host was created.</returns>
     internal static bool TryCreate(
         out BackendTestHost? host,
         out string skipReason,
         int sampleCount = 4,
         PresentMode presentMode = PresentMode.Mailbox,
-        WindowHdrState? hdr = null) {
+        WindowHdrState? hdr = null,
+        TonemappingMode tonemapping = TonemappingMode.AgX) {
         host = null;
         skipReason = string.Empty;
         if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? sdlHost, out skipReason, minimalTestMode: true)) {
@@ -159,7 +276,7 @@ internal sealed class BackendTestHost : IDisposable {
                 sdlHost.Platform.Window.IsMinimized,
                 sdlHost.Platform.Window.IsFocused,
                 hdr ?? sdlHost.Platform.WindowHdrState);
-            RenderSettings settings = CreateSettings(sampleCount, presentMode);
+            RenderSettings settings = CreateSettings(sampleCount, presentMode, tonemapping);
             candidate = new BackendTestHost(sdlHost, settings, extensions, initialState);
             try {
                 candidate.Initialize();
@@ -205,7 +322,9 @@ internal sealed class BackendTestHost : IDisposable {
         }
 
         _disposed = true;
+        RenderTextures.Close(null);
         _backend.Dispose();
+        RenderTextures.Dispose();
         _teardownQueue.RunPending(NullLogger.Instance);
         _sdlHost.Dispose();
     }
@@ -224,13 +343,18 @@ internal sealed class BackendTestHost : IDisposable {
 
     private WindowSurfaceState GetSurfaceState() => _state;
 
-    private static RenderSettings CreateSettings(int sampleCount, PresentMode presentMode) => new() {
-        PresentMode = presentMode,
-        SampleCount = sampleCount,
-        Tonemapping = TonemappingMode.AgX,
-        Exposure = 0f,
-        ValidationEnabled = true,
-    };
+    private static RenderSettings CreateSettings(
+        int sampleCount,
+        PresentMode presentMode,
+        TonemappingMode tonemapping) {
+        return new RenderSettings {
+            PresentMode = presentMode,
+            SampleCount = sampleCount,
+            Tonemapping = tonemapping,
+            Exposure = 0f,
+            ValidationEnabled = true,
+        };
+    }
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>
         exception.InnerException is DllNotFoundException or SymbolLoadingException or TypeInitializationException or PlatformException

@@ -1,6 +1,6 @@
 # RayBork API Reference
 
-Status: **v0.1 M7**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
+Status: **v0.1 M8**. M0 ships `EngineVersion`; M1 ships the app host, dedicated tick thread, SDL3
 window/input/gamepads, time/pacing, and logging surface listed in §1.6. M2 ships the renderer
 foundation: `EngineInfo`, `PresentMode`, `RenderStats`, `TonemappingMode`, the renderer builder
 options, the graphics exceptions, and `EngineContext.Info`/`Stats`, backed by the Vulkan 1.2
@@ -34,8 +34,14 @@ orthographicHeight, ...)` entry point, `Camera.ScreenToWorldTransform`, the worl
 `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`,
 and `Camera.DrawGrid(Transform, ...)` primitives, and the ninth primitive mesh, the unit disc.
 `DrawTexture` is not shipped, there is no 2D or screen-space draw overload, and `DrawText` remains
-world-space. The M7 Native AOT gate is `samples/Pong`, an orthographic player-vs-AI match drawn
-through `ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. The rest of the API
+world-space. The M7 Native AOT gate was `samples/Pong`, an orthographic player-vs-AI match drawn
+through `ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. M8 ships render targets
+and multiple camera passes, the camera post-process stack with built-in SSAO and bloom, and the
+RenderTarget sample and Native AOT gate; the shipped surface is listed in
+[§1.6](#16-milestone-availability), the render target and camera-pass contract in
+[§7.11](api/rendering/render-targets.md#711-render-targets-and-multiple-cameras), and the
+post-process surface in
+[§7.13](api/rendering/post-processing.md#713-camera-post-processing). The rest of the API
 reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,
@@ -62,6 +68,7 @@ below. Section numbers are stable, so a `§7.3` reference names the same section
 | [Rendering: draws](api/rendering/draws.md) | §7.8-7.9 draw calls, batching, primitives, lines, and billboards. |
 | [Rendering: text](api/rendering/text.md) | §7.10 fonts and text. |
 | [Rendering: render targets](api/rendering/render-targets.md) | §7.11-7.12 render targets, multiple cameras, and render statistics. |
+| [Rendering: post-processing](api/rendering/post-processing.md) | §7.13 camera post-process stacks, built-in SSAO, custom post shaders, target-sized chains, and viewport store-back. |
 | [Window](api/window.md) | §8 `IWindow`, `WindowState`, `CursorMode`, `Monitor`, and `PresentMode`. |
 | [Input](api/input.md) | §9 keyboard and text, mouse, and gamepads. |
 | [Diagnostics](api/diagnostics.md) | §10 logging, `EngineVersion`, `EngineInfo`, exceptions, and assertions. |
@@ -167,9 +174,44 @@ the core 3D renderer, camera draws, and shader ABI; M5 ships the primitive, bill
 collision surface plus the HDR AgX rework; M6 ships the managed font parser, on-demand MSDF glyph
 pipeline, layout, built-in default and monospaced fonts, and world-space text draws; M7 ships the
 unified camera entry point, `Camera.ScreenToWorldTransform`, the world-space quad, disc, and
-transformable-grid primitives, the ninth primitive mesh, and the Pong sample. The remaining
-rows name the milestone that owns the deferred surface; the full code blocks in the section pages stay
-the 1.0 contract.
+transformable-grid primitives, the ninth primitive mesh, and the Pong sample. M8 ships shader ABI v2
+(one frame block per camera pass), one render pass per camera pass on the scene target, and the color
+and depth paths of public render textures: `RenderTexture` creation, `Camera.Target` routing, MSAA color
+and depth resolve, the sampled `ColorTexture` and `DepthTexture` views, same-tick sampling, lifetime,
+`RenderTexture.Resize`, and render-target color readback through `RenderTexture.ReadPixelsAsync`
+(display-referred RGBA8 for screenshots) and `RenderTexture.ReadColorsAsync` (raw scene-linear HDR
+colors). The scene target's resolved depth image is internal. M8 also ships the extensible camera
+post-process core: `PostProcessStack`, `PostProcessEffect`, `SsaoEffect`, `SsaoQuality`,
+`ShaderPostProcessEffect`, the `CreateCamera` `postProcess` parameter, target-sized chains over the
+engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader contract, built-in
+N8AO-derived SSAO with baked quality variants and blue noise, the built-in fast dual-filter
+`BloomEffect` with its half-resolution prefilter, five-level HDR pyramid, scatter and tint settings,
+and a camera-target-sized composite, and viewport store-back on the scene target and on a
+`RenderTexture` target; the post-processed output is what the RenderTarget sample and both readback
+methods observe. The RenderTarget sample ships as the M8 sample and Native AOT gate: it renders a
+procedural scene into a `640x360` `Rgba16Float` render texture, samples it on a monitor in a later
+camera, toggles a two-camera split-screen view with `S`, applies a baked custom vignette/tint post
+shader with `E`, and reads the offscreen target back to a 24-bit uncompressed BMP screenshot with `F2`.
+The remaining rows name the milestone that owns the deferred surface; the full code blocks in the
+section pages stay the 1.0 contract.
+
+**M8 readback contract.** `RenderTexture.ReadColorsAsync` returns raw scene-linear `Color[y, x]` values
+(top-left origin, first dimension height, alpha included, HDR preserved) and never applies AgX or sRGB
+encoding. `RenderTexture.ReadPixelsAsync` returns display-referred RGBA8 in row-major top-left order
+with length `width * height * 4`, after the exposure, AgX white, and AgX contrast of the last completed
+frame that wrote the target, the app's startup `TonemappingMode`, AgX, and the sRGB encode; alpha is
+`255` and is not premultiplied. Both read the resolved single-sample color image, not depth, after the
+last completed frame that wrote or sampled the target. A target that no frame wrote has undefined GPU
+content; rather than reading undefined memory, both methods return the defined opaque-black default
+(raw `Color.Black` and RGBA8 `(0, 0, 0, 255)`) with the default tone settings on the pixels path. This
+includes a target that a frame only sampled, because sampling moves its image out of the undefined
+layout without writing it. Both are legal from `Setup` and `Tick` and
+stall the render thread while they wait for the target's last-use fence and copy the image, so they are
+for screenshots and tests, not per-frame work; a `Tick` caller blocks on the returned task. Cancellation
+before the render thread completes the call is `OperationCanceledException`; cancellation after the
+request is queued is best effort and never corrupts the target. A disposed target, a stopped app, or a
+stopped render texture service throws `ObjectDisposedException`. Raw linear HDR color readback is part
+of the public API; it is not deferred to post-1.0.
 
 | Surface | Milestone |
 | --- | --- |
@@ -197,7 +239,8 @@ the 1.0 contract.
 | Unified `EngineContext.CreateCamera(Transform, CameraProjection, fieldOfView, orthographicHeight, ...)` with `CameraProjection.Perspective`/`CameraProjection.Orthographic` | M7 |
 | `Camera.ScreenToWorldTransform(Vector2, float)` | M7 |
 | `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
-| `RenderTexture` and `RenderTextureDescription` | M8 |
+| `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ReadColorsAsync`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color, depth, resize, and readback paths) | M8 |
+| `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`, `SsaoQuality`, `BloomEffect`, the `CreateCamera` `postProcess` parameter, the reserved `sourceColor`/`sourceDepth` custom post shader contract, built-in SSAO with baked quality variants and blue noise, the built-in fast dual-filter bloom, target-sized chains, and viewport store-back | M8 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
 current asset surface after M4; see §6.
@@ -238,7 +281,7 @@ orthographic projection into it with the `orthographicHeight` parameter describe
 `Model` is a caller-owned composition of parts and meshes, not an
 engine asset; each part owns a `Shader` material instance, and `Shader.SetUniform`/`ResetUniforms`
 write that material's cursor. `Load<Shader>` returns a new independent material over a cached
-internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` arrives in M8),
+internal program. M4 has no `Camera.Target` or `target` parameter (`RenderTexture` ships in M8),
 no `Font`, and no text draw helpers; the font asset and `DrawText`/`DrawTextBillboard` ship in M6. The
 primitive, line, billboard, and wireframe-model helpers ship in M5. Clear
 control is per camera:
@@ -315,7 +358,9 @@ public Camera CreateCamera(
     Color? clearColor = null,
     float near = 0.01f,
     float far = 1000f,
-    Rect? viewport = null);
+    Rect? viewport = null,
+    RenderTexture? target = null,
+    PostProcessStack? postProcess = null);
 ```
 
 A perspective camera uses `fieldOfView` and rejects a nonzero `orthographicHeight`; an orthographic
@@ -324,7 +369,10 @@ camera uses `orthographicHeight` and rejects a nonzero `fieldOfView`. A perspect
 camera is `1000` (M4's default was infinity), so a caller that needs an infinite far plane passes
 `float.PositiveInfinity` explicitly. `CreateOrthographicCamera` is removed; its `height` argument is
 the unified `orthographicHeight`. The rest of the camera contract, including the `Camera` properties,
-is unchanged, and every camera still records into the app's linear HDR scene target.
+is unchanged. `target` is `null` for the app's linear HDR scene target and a `RenderTexture` for a
+runtime target; `postProcess` optionally snapshots an app-lifetime `PostProcessStack` for the camera.
+See [Render targets §7.11](api/rendering/render-targets.md#711-render-targets-and-multiple-cameras)
+and [Post-processing §7.13](api/rendering/post-processing.md#713-camera-post-processing).
 
 `Camera.ScreenToWorldTransform(Vector2 point, float distance)` returns a `Transform` for a
 viewport-relative render-pixel point (`(0, 0)` is the viewport's top-left corner) on the view-depth
@@ -374,12 +422,47 @@ primitive meshes or their materials. `BoundingFrustum.Intersects` accepts a smal
 (`1e-4`) so a full-viewport or boundary-aligned quad is not culled by plane-extraction drift;
 `Contains` keeps its exact non-negative test.
 
-The screen-space HUD is same-pass text, not a separate overlay pass: `ScreenToWorldTransform(point,
-1f)` plus `DrawText(..., 18f, ...)` draws screen-aligned text that is alpha-blended with no depth
-write, so geometry closer than the overlay plane can still occlude it. A separate multi-camera
-overlay pass and per-pass frame data are deferred to M8; the M4 one-frame-block limitation is
-unchanged. `samples/Pong` is the M7 sample and Native AOT gate, and `samples/Castle` and
-`samples/PrimitiveGallery` draw their status lines through the same screen transform.
+The screen-space HUD is same-pass text: `ScreenToWorldTransform(point, 1f)` plus
+`DrawText(..., 18f, ...)` draws screen-aligned text that is alpha-blended with no depth write, so
+geometry closer than the overlay plane can still occlude it. A HUD that must not be occluded is an
+ordinary later camera that loads the scene color and clears depth (`ClearMode.Depth`), or keeps both
+buffers (`ClearMode.None`) when the HUD should remain depth-tested; there is no separate overlay or
+layer pass. Multiple cameras and viewport
+rectangles are supported: each camera pass is its own render pass with the clamped viewport as the
+render area, so split-screen views, viewport-scoped clears, and layered HUD cameras are correct in
+one frame. The shader ABI v2 provides per-pass frame data: every camera pass in a frame writes its own
+256-byte frame block and a push-constant pass index selects it, so multiple cameras with different
+views read their own matrices, camera position, and viewport. `samples/Pong` is the M7 sample,
+`samples/RenderTarget` is the M8 sample and Native AOT gate, and `samples/Castle` and
+`samples/PrimitiveGallery` draw their status lines through
+the same screen transform.
+
+**M8 subset.** `EngineContext.CreateRenderTextureAsync` creates a runtime `RenderTexture` from a
+`RenderTextureDescription` (`Width`, `Height`, `ColorFormat` `Rgba16Float` by default or
+`Rgba8Unorm`/`Rgba8Srgb`, `Depth` default `true`, and `SampleCount` default `4`) after the render
+thread allocated the images. `Camera.Target` and the `CreateCamera` `target` parameter route a camera
+pass into the target; the target's viewport defaults to its size and clamps to it. `ColorTexture` and
+`DepthTexture` are sampled `Texture` views over the resolved single-sample images, and a later camera
+in the same tick can sample either view with `Shader.SetUniform`, `DrawQuad`, or `DrawMesh`; sampling
+either view inside the pass that writes the target is `InvalidOperationException` from the draw call.
+`Depth: false` targets have no depth view and treat depth tests, depth writes, and `ClearMode.Depth` as
+no-ops. `RenderTexture.Resize(width, height)` is tick-thread only, blocks on the render-thread
+recreation, keeps the public views and their bindless slots/samplers, and rejects a target a recorded
+or in-flight frame holds with `InvalidOperationException`. `ReadColorsAsync` returns raw scene-linear
+`Color[y, x]` values and `ReadPixelsAsync` returns display-referred RGBA8 from the resolved color
+image; a target no frame wrote returns opaque black, and neither method reads depth. See
+[Render targets §7.11](api/rendering/render-targets.md#711-render-targets-and-multiple-cameras).
+
+`PostProcessStack` is app-lifetime, caller-owned tick-thread state; `CreateCamera` snapshots it (order,
+each `Enabled`, and each custom effect's shader cursor and texture bindings) when the camera is
+created. `PostProcessEffect` is the abstract base, `ShaderPostProcessEffect` wraps an ordinary baked
+`Shader` with both stages, and `SsaoEffect`/`SsaoQuality` and `BloomEffect` are the built-in effects.
+A custom post shader must declare the reserved `sourceColor` texture binding and may declare
+`sourceDepth`; the engine overrides both. The chain is target-sized, uses a pool of three
+single-sample `Rgba16Float` targets per target extent per frame ring slot, rotates around its current
+source, and stores its result back into the camera target for the camera viewport only, leaving depth
+unchanged; both readback methods and a later camera sample see the result. See
+[Post-processing §7.13](api/rendering/post-processing.md#713-camera-post-processing).
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
@@ -397,7 +480,14 @@ zero for the draw counters. Textures allocate a bindless slot when their GPU upl
 0 is always the built-in white fallback, and a full table fails the upload with
 `AssetLoadException` `RB1010`. The bindless table has exactly 2048 slots matching the shader ABI's
 `RayBorkTextures[2048]` array; a device whose update-after-bind sampled-image limits are below 2048
-is rejected during device selection, and the capacity is never reduced.
+is rejected during device selection, and the capacity is never reduced. A depth-bearing render target
+also consumes a second bindless slot for its resolved depth view; the app scene target owns two
+internal slots for its resolved color and depth, and a post-process chain holds a bindless slot per
+target-sized post target (three per target extent per frame ring slot while the extent is in
+use). Device selection additionally requires
+the Vulkan 1.2 `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT` depth resolve mode, because every multisampled
+depth-bearing target and the scene target resolve depth with that mode; a device without it is rejected
+instead of falling back to a min/max resolve or an unsampleable depth view.
 
 `samples/PrimitiveGallery` was the M5 AOT gate. It is one project in its own solution,
 `samples/PrimitiveGallery/PrimitiveGallery.slnx`, outside `src/RayBork/RayBork.slnx`. It has no
@@ -419,11 +509,12 @@ orbit/zoom controls and the `--frames` and `--help` options.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; the engine default remains Mailbox for games that want the decoupled path. The published
 `win-x64` and `linux-x64` M6 hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
-Windows hardware driver and on the conformant lavapipe software driver. The current
-suite is 2,695 tests, 114 of them GPU integration tests, and every sample solution builds. The Text
+Windows hardware driver and on the conformant lavapipe software driver. The suite is 2,977 tests,
+239 of them GPU integration tests, and every sample solution builds. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
 
-`samples/Pong` is the M7 AOT gate. It is a two-project solution, `samples/Pong/Pong.slnx`, outside
+`samples/Pong` was the M7 AOT gate and remains a buildable and publishable sample. It is a two-project
+solution, `samples/Pong/Pong.slnx`, outside
 `src/RayBork/RayBork.slnx`: the sample and a JIT `Pong.Assets` executable that bakes `pong.pck`
 during the solution build and copies it beside the sample executable and into the publish directory,
 so the sample has no `--assets` argument. `PongSettings` lives only in the sample project;
@@ -438,11 +529,14 @@ paddle speed), and `/textures/paddle`, a 32x128 original opaque paddle PNG baked
 texture processor with its KTX2 raw payload. The match is player vs AI: the human moves the left
 paddle and a deterministic AI moves the right paddle at `AiPaddleSpeed` (`400` design pixels per
 second), tracking the ball while it approaches and returning to center otherwise with a `5`
-design-pixel deadzone. The match records one orthographic camera per tick, fits a `1280x720` 16:9
+design-pixel deadzone. The match records a scene camera and a later stackless HUD camera per tick,
+fits a `1280x720` 16:9
 design space into the current render pixels, and anchors every draw with `ScreenToWorldTransform`.
 `DrawQuad` draws the playfield, border, net, score panels, and textured paddles; `DrawDisc` draws
-the ball; `DrawText` draws the scores, status line, and pause/winner overlay. The simulation uses a
-fixed opening serve, fixed `1/120` second substeps, top and bottom bounces,
+the ball; `DrawText` draws the scores, status line, and pause/winner overlay. The scene camera runs
+the built-in `BloomEffect` with the raised threshold `2`, and ball, paddle, and wall collisions flash
+scene-linear HDR colors that bloom and decay over a few frames; `B` toggles bloom. The simulation uses
+a fixed opening serve, fixed `1/120` second substeps, top and bottom bounces,
 `Collision.CheckBoxSphere` paddle collisions, a paddle-hit speed-up of `BallSpeedupPerHit` (`24`) up
 to `MaxBallSpeed` (`900`) with the serve restoring `BallSpeed` (`420`), scoring with the serve going
 to the loser, a max-score win, and pause/restart. The left-paddle controls are W/S, Up/Down, and
@@ -452,17 +546,41 @@ contains `pong.pck` beside `Pong.exe` with no bake tooling; the published Window
 `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
 warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the published host ran
 `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
-`B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The Windows suite is
-2,695 tests with no skips (114 GPU); the lavapipe run is 2,688 passed with 7 skipped HDR/
-scRGB-present tests, because lavapipe exposes only SDR. The sample is a plain user-facing example
-and contains no test-only draw assertion.
+`B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The sample is a plain
+user-facing example and contains no test-only draw assertion.
+
+`samples/RenderTarget` is the M8 sample and Native AOT gate. It is a two-project solution,
+`samples/RenderTarget/RenderTarget.slnx`, outside `src/RayBork/RayBork.slnx`: the sample and a JIT
+`RenderTarget.Assets` executable that bakes `rendertarget.pck` from the sample's vignette post-process
+shader and copies it beside the sample executable and into the publish directory, so the sample has no
+`--assets` argument. Every tick records up to four camera passes: a `640x360` `Rgba16Float`
+render texture with depth and 4x MSAA drawn by an offscreen perspective camera; the single scene camera
+or two split-screen cameras that draw the main procedural scene and sample the offscreen target on a
+monitor; and a later orthographic HUD camera that loads the scene color and clears depth. `S` toggles
+split-screen (two half-width viewports with distinct clear colors), and the split cameras do not
+receive the post-process stack because an M8 viewport effect's source is the full target. `E` toggles
+the app-lifetime `PostProcessStack` with one `ShaderPostProcessEffect`; the baked shader declares
+`sourceColor` and `uTint`/`uVignette`, and the engine overrides the reserved binding. `F2` calls
+`ReadColorsAsync` and `ReadPixelsAsync`, prints the center colors, and writes
+`rendertarget-readback.bmp` beside the executable. The file is a standard 24-bit uncompressed BMP:
+bottom-up BGR rows with zero padding, alpha dropped, and no image codec or package involved. `R`
+resets the procedural rotation, the sample accepts `--frames` and `--help`, and it loads the adjacent
+pack automatically. The Windows `win-x64` publish finished with zero AOT/trim warnings and contains
+`rendertarget.pck` beside `RenderTarget.exe` with no bake tooling; the published Windows host ran
+`--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
+warnings, contains `rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published host
+ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver. The Windows suite is
+2,977 tests with no skips (239 GPU); the lavapipe run is 2,970 passed with 7 skipped HDR/
+scRGB-present tests, because lavapipe exposes only SDR. The sample is a plain user-facing example and
+contains no test-only draw assertion.
 
 `samples/Castle` remains a buildable and publishable sample: its solution builds the `Castle.Assets`
 executable out of process, bakes `/models/obj/castle` and `/models/obj/castle_diffuse` into
 `castle.pck`, and copies the pack beside the sample executable, so the published hosts load it
 without a manual bake or an `--assets` argument. The model parts use the built-in mesh material, the
-pass draws the castle and `DrawGrid(20, 10f, Color.Gray)`, and `O` toggles the one camera between
-perspective and orthographic. The orthographic height reproduces the perspective framing at the
+pass draws the castle and `DrawGrid(20, 10f, Color.Gray)`, `O` toggles the one camera between
+perspective and orthographic, and `A` toggles the built-in SSAO effect that the scene camera runs by
+default. The orthographic height reproduces the perspective framing at the
 current orbit distance (`2 * distance * tan(fieldOfView / 2)`), and its finite far plane is derived
 from the maximum orbit distance. Castle draws its presented-FPS and render-statistics status line
 through `ScreenToWorldTransform` at an 18-pixel em height, and appends the current projection to the

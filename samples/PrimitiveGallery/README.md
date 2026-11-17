@@ -1,13 +1,14 @@
 # Primitive Gallery
 
-`Primitive Gallery` is a small RayBork sample that draws the M5 primitive helper families in one perspective
-camera pass: the solid shapes (cube, sphere, cylinder and cone, capsule, plane, triangle, triangle
-strip, point), the wire shapes (wire cube, wire sphere, wire cylinder, wire capsule, bounding box),
-the line and curve helpers (line, polyline, ray, circle), a reference grid, two billboards, and a row
-of meshes generated with `MeshBuilder.Generate*` and drawn with the built-in mesh shader. It builds
-its texture and its generated meshes at runtime, so it needs no asset pack, no manual bake, and no
-`--assets` argument. It also draws a small presented-FPS and render-statistics line at the top-left
-of the view.
+`Primitive Gallery` is a small RayBork sample that draws the M5 primitive helper families in one
+perspective scene camera pass: the solid shapes (cube, sphere, cylinder and cone, capsule, plane,
+triangle, triangle strip, point), the wire shapes (wire cube, wire sphere, wire cylinder, wire capsule,
+bounding box), the line and curve helpers (line, polyline, ray, circle), a reference grid, two
+billboards, and a row of meshes generated with `MeshBuilder.Generate*` and drawn with the built-in mesh
+shader. The scene camera runs the built-in SSAO effect at Medium quality; `A` toggles it. It builds its
+texture and its generated meshes at runtime, so it needs no asset pack, no manual bake, and no
+`--assets` argument. A later HUD camera draws a small presented-FPS and render-statistics line at the
+top-left of the view.
 
 The sample was the M5 Native AOT gate and remains buildable and publishable; it contains no test-only
 logic: it opens a window, draws the gallery, and exits cleanly. Build and run it from the repository
@@ -26,6 +27,11 @@ material. The reference grid lies on the ground plane, and the shapes are arrang
 above it. The rows run along the initial camera's horizontal axis, so the composition reads left to
 right before the first orbit. Every draw uses a named `Color` preset, and each preset is the
 Bork2d/Unity sRGB color converted to linear.
+
+Each tick records two sequential cameras. The scene camera clears color and depth and draws the whole
+gallery. After it is disposed, a later HUD camera with the same perspective transform, field of view,
+and full viewport uses `ClearMode.Depth` to load the scene color and clear depth, then draws the
+status line; there is no overlay pass.
 
 The lower row is six stations above the grid. The first five pair a helper with the M5 form of
 the same family: the scalar solid and wire cube, the fixed and tessellated sphere, the equal-radius
@@ -106,22 +112,46 @@ disposed in `Shutdown`, together with the generated meshes and the mesh material
 
 ## Status overlay
 
-`DrawStatusOverlay` records one more same-pass draw: an `18`-pixel line in the built-in JetBrains
-Mono font showing presented frames per second, the tick rate, the render CPU time, draw calls, and
-instances. The monospaced face keeps the changing counters from shifting the text around them.
+`DrawStatusOverlay` records a later HUD camera pass after the scene pass is disposed: an `18`-pixel
+line in the built-in JetBrains Mono font showing presented frames per second, the tick rate, the
+render CPU time, draw calls, instances, and whether SSAO is on. The monospaced face keeps the changing
+counters from shifting the text around them.
 The presented rate is a one-second delta of `ctx.Stats.PresentedFrames`, which counts successful
 presentations since startup; the tick rate is `ctx.Fps` and is labelled `tick`. The render time is
 `ctx.Stats.CpuFrameMilliseconds`, which measures only the render thread's planning, recording, and
 submission and excludes the fence, acquire, and present waits.
 
-The line is anchored with `Camera.ScreenToWorldTransform(new Vector2(8f, 8f), 1f)`. The returned
-transform's scale is world units per render pixel, so an em height of `18` local units is `18` render
-pixels. The transform places the layout origin at the top-left corner, inset by an 8-pixel margin,
-and its rotation keeps the block screen-aligned, so the line stays upright and fixed to the view as
-the camera orbits or the window resizes. It
-is `Color.White` against the `Color.Gray3` background. Because this is same-pass,
-alpha-blended text with no depth write, geometry closer than the overlay plane can still occlude it;
-a separate overlay pass and per-pass frame data are deferred to M8.
+The line is anchored with `Camera.ScreenToWorldTransform(new Vector2(8f, 8f), 1f)` on the HUD camera.
+The HUD camera shares the scene camera's transform, field of view, viewport, and clip planes, so the
+returned transform's scale is still world units per render pixel and an em height of `18` local units
+is `18` render pixels. The transform places the layout origin at the top-left corner, inset by an
+8-pixel margin, and its rotation keeps the block screen-aligned, so the line stays upright and fixed
+to the view as the camera orbits or the window resizes. It is `Color.White` against the `Color.Gray3`
+background. The HUD camera uses `ClearMode.Depth`, so it loads the scene color and clears depth: the
+line is not occluded by gallery geometry, and the sample has no separate overlay pass.
+
+## Ambient occlusion
+
+The sample owns one app-lifetime `SsaoEffect` and one `PostProcessStack`, adds the effect in `Setup`,
+and passes the stack only to the scene camera:
+
+```csharp
+private readonly PostProcessStack _postProcess = new();
+private readonly SsaoEffect _ssao = new();
+
+// Setup
+_postProcess.Add(_ssao);
+
+// Tick
+if (context.Input.IsKeyPressed(Key.A)) {
+    _ssao.Enabled = !_ssao.Enabled;
+}
+```
+
+The effect is enabled by default at `SsaoQuality.Medium` with the public defaults. The `A` toggle is
+snapshotted by cameras created after the tick. The HUD status line reports `ssao on` or `ssao off`.
+The HUD camera keeps no stack, so the text and statistics are not post-processed. SSAO works with the
+scene camera's perspective projection and would follow a projection switch without changes.
 
 ## Options
 
@@ -140,12 +170,14 @@ paces the tick thread. An unknown option prints the usage text and exits `2`.
 | --- | --- |
 | Left mouse drag | Orbit the camera around the scene. Pitch is clamped to ±80 degrees. |
 | Mouse wheel | Zoom the orbit distance, clamped to 6–60. |
+| `A` | Toggle the built-in SSAO effect. |
 | Escape | Request exit. |
 
 The camera starts at `(8, 6.2, 12.5)`, looks at `(0, 2.4, 0)`, and uses a 45 degree vertical field of
 view with a `0.05` near plane and an infinite far plane. The background is `Color.Gray3` (sRGB
 `#4D4D4D`, stored linear as `0.073239`) and the grid is `Color.Gray5` (sRGB `#808080`, stored linear
-as `0.214041`). The camera pass draws the whole scene.
+as `0.214041`). The scene camera draws the whole gallery, and the later HUD camera uses the same
+projection and viewport for the status line.
 
 ## Build and run
 

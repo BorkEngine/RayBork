@@ -21,6 +21,7 @@ public sealed class EngineContext {
     private readonly RenderStatus _renderStatus;
     private readonly CameraService _cameras;
     private readonly ProceduralAssetService _proceduralAssets;
+    private readonly RenderTextureService _renderTextures;
     private bool _hasFrame;
     private double _time;
 
@@ -35,7 +36,8 @@ public sealed class EngineContext {
         Func<double> elapsedTime,
         RenderStatus renderStatus,
         CameraService cameras,
-        TonemappingSettings tonemapping) {
+        TonemappingSettings tonemapping,
+        RenderTextureService renderTextures) {
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(loggerFactory);
         ArgumentNullException.ThrowIfNull(assets);
@@ -46,6 +48,7 @@ public sealed class EngineContext {
         ArgumentNullException.ThrowIfNull(renderStatus);
         ArgumentNullException.ThrowIfNull(cameras);
         ArgumentNullException.ThrowIfNull(tonemapping);
+        ArgumentNullException.ThrowIfNull(renderTextures);
         if (assets is not IProceduralAssetProvider proceduralProvider) {
             throw new InvalidOperationException(
                 "The asset catalog does not provide the procedural asset service; the engine wired the wrong catalog.");
@@ -57,6 +60,7 @@ public sealed class EngineContext {
         _renderStatus = renderStatus;
         _cameras = cameras;
         _proceduralAssets = proceduralProvider.ProceduralAssets;
+        _renderTextures = renderTextures;
         Assets = assets;
         Defaults = defaults;
         Input = initialInput;
@@ -178,8 +182,20 @@ public sealed class EngineContext {
     /// <c>1000</c>; pass <see cref="float.PositiveInfinity"/> for an infinite perspective far plane.
     /// </param>
     /// <param name="viewport">
-    /// The pixel viewport, or <see langword="null"/> for the full window render size. The rectangle is
+    /// The pixel viewport, or <see langword="null"/> for the full target render size. The rectangle is
     /// clamped to the target and must not clamp to an empty region.
+    /// </param>
+    /// <param name="target">
+    /// The render texture the pass writes, or <see langword="null"/> for the app's linear HDR scene
+    /// target. The viewport defaults to the target's full size and is clamped to it; the aspect ratio
+    /// uses the clamped viewport.
+    /// </param>
+    /// <param name="postProcess">
+    /// The caller-owned post-process stack to snapshot for this camera, or <see langword="null"/> for no
+    /// post-processing. The stack runs after the camera's geometry pass and before the next camera or
+    /// the present pass. The stack, each effect's enabled value, and each custom effect's shader cursor
+    /// and texture bindings are frozen when the camera is created, so later changes apply to later
+    /// cameras only. Effects work on the scene target and on a <see cref="RenderTexture"/> target.
     /// </param>
     /// <returns>The camera. Dispose it before <see cref="IGame.Tick"/> returns.</returns>
     /// <exception cref="ArgumentException">
@@ -190,9 +206,15 @@ public sealed class EngineContext {
     /// <paramref name="projection"/> is not defined, <paramref name="clearMode"/> contains bits outside
     /// <see cref="ClearMode.All"/>, or a selected projection or clip-plane parameter is outside its range.
     /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera's <paramref name="target"/> or a post-process effect's shader, bound texture, or
+    /// sampled render target is disposed.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
-    /// transform is singular.
+    /// The caller is not the tick thread, no frame is recording, another camera is active, the camera
+    /// transform is singular, or a post-process effect violates the custom shader contract. A custom
+    /// effect whose shader does not declare the required <c>sourceColor</c> binding, or that declares
+    /// <c>sourceDepth</c> for a target without depth, is rejected here with a message naming the shader.
     /// </exception>
     /// <remarks>
     /// Legal only during <see cref="IGame.Tick"/>. Cameras are sequential: dispose one before creating
@@ -208,7 +230,9 @@ public sealed class EngineContext {
         Color? clearColor = null,
         float near = 0.01f,
         float far = 1000f,
-        Rect? viewport = null)
+        Rect? viewport = null,
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null)
         => _cameras.CreateCamera(
             transform,
             projection,
@@ -218,7 +242,57 @@ public sealed class EngineContext {
             clearColor,
             near,
             far,
-            viewport);
+            viewport,
+            target,
+            postProcess);
+
+    /// <summary>
+    /// Creates one runtime render texture and returns it after the render thread allocated its images.
+    /// </summary>
+    /// <param name="description">
+    /// The target size, color format, depth-attachment flag, and requested MSAA sample count.
+    /// </param>
+    /// <param name="cancellationToken">The caller's cancellation token.</param>
+    /// <returns>
+    /// The created render texture. Dispose it when it is no longer used; a camera targeting it must be
+    /// disposed before the target is disposed.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// A dimension is not positive or exceeds <c>16384</c>, or the sample count is not <c>1</c>, <c>2</c>,
+    /// <c>4</c>, or <c>8</c>.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// The color format is not <see cref="TextureFormat.Rgba16Float"/>,
+    /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.Rgba8Srgb"/>.
+    /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// <paramref name="cancellationToken"/> was canceled before the render thread created the target.
+    /// </exception>
+    /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The creation queue is full (256 pending requests) because the render thread is not draining it.
+    /// </exception>
+    /// <exception cref="GraphicsException">The renderer could not create the target's images.</exception>
+    /// <remarks>
+    /// <para>
+    /// The call is legal from <see cref="IGame.Setup"/> and <see cref="IGame.Tick"/>. It returns after the
+    /// render thread allocated the target's images; the render thread services the request independently
+    /// of the tick thread, so the tick thread never deadlocks. <see cref="IGame.Setup"/> can
+    /// <c>await</c> the call directly. <see cref="IGame.Tick"/> is <c>void</c>, so a target created in a
+    /// tick uses the blocking form <c>GetAwaiter().GetResult()</c> and stalls that tick until the
+    /// allocation finished; creating the target in <c>Setup</c> is the preferred pattern.
+    /// </para>
+    /// <para>
+    /// The returned target's contents are undefined until a camera writes them. The effective MSAA count
+    /// is the highest device-supported count not exceeding the request, or <c>1</c>; a fallback logs a
+    /// warning. <see cref="RenderTexture.SampleCount"/> reports the effective count; a device recovery
+    /// re-selects it from the recreated device and updates the property.
+    /// </para>
+    /// </remarks>
+    public async Task<RenderTexture> CreateRenderTextureAsync(
+        RenderTextureDescription description,
+        CancellationToken cancellationToken = default)
+        => await _renderTextures.CreateAsync(description, cancellationToken).ConfigureAwait(false);
 
     /// <summary>
     /// Gets the input snapshot for the current tick. Read it on the tick thread.

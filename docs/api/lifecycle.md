@@ -156,11 +156,26 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > `DrawDisc` and `DrawGrid` are opaque. The engine builds a ninth primitive mesh, the unit disc.
 > There is no `DrawTexture`, no 2D draw overload, and no `DrawText(Vector2)` overload: a sprite is a
 > textured `DrawQuad` or `DrawBillboard(faceCamera: false)`, and screen-space text uses
-> `ScreenToWorldTransform` with the world-space `DrawText` overload. The screen-space HUD is
-> same-pass text and can be occluded by geometry closer than its plane; a separate overlay pass and
-> per-pass frame data are deferred to M8. `BoundingFrustum.Intersects` accepts a `1e-4` plane
-> tolerance so full-viewport quads are not culled. `samples/Pong` is the M7 sample and Native AOT
-> gate, and the current suite is 2,695 tests, 114 of them GPU integration tests.
+> `ScreenToWorldTransform` with the world-space `DrawText` overload. A HUD drawn in a scene camera is
+> same-pass text and can be occluded by geometry closer than its plane; a HUD that must not be
+> occluded is an ordinary later camera that loads the scene color and clears depth. There is no
+> separate overlay or layer pass. Each camera pass has its own frame block, so multiple cameras and
+> split-screen viewports in one frame are correct. `BoundingFrustum.Intersects` accepts a `1e-4` plane
+> tolerance so full-viewport quads are not culled. `samples/Pong` was the M7 sample and Native AOT
+> gate, and `samples/RenderTarget` is the M8 sample and gate.
+
+> **M8 subset.** `EngineContext.CreateRenderTextureAsync` creates a runtime `RenderTexture` from a
+> `RenderTextureDescription`; the call is legal in `Setup` and `Tick`, completes after the render
+> thread allocated the images, and reports `OperationCanceledException` before completion and
+> `ObjectDisposedException` after shutdown. `Camera.Target` and the `CreateCamera` `target` parameter
+> route a pass into a target, and `CreateCamera`'s `postProcess` parameter snapshots an app-lifetime
+> `PostProcessStack`. `RenderTexture` exposes `ColorTexture` and `DepthTexture` (a `Texture` view each,
+> or `null` depth when `Depth` is `false`), `Resize`, `ReadColorsAsync`, and `ReadPixelsAsync`.
+> `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`, `SsaoQuality`, and
+> `BloomEffect` are tick-thread state owned by the caller; the engine snapshots them at camera
+> creation and never disposes them. The final suite is 2,977 tests, 239 of them GPU integration
+> tests, with no skips on Windows; the lavapipe Linux run reports 2,970 passed with 7 HDR/scRGB
+> skips.
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.
@@ -235,10 +250,13 @@ public sealed class EngineContext {
         Color? clearColor = null,
         float near = 0.01f,
         float far = 1000f,
+        Rect? viewport = null,
         RenderTexture? target = null,
-        Rect? viewport = null);
+        PostProcessStack? postProcess = null);
 
-    public Task<RenderTexture> CreateRenderTextureAsync(RenderTextureDescription description);
+    public Task<RenderTexture> CreateRenderTextureAsync(
+        RenderTextureDescription description,
+        CancellationToken cancellationToken = default);
 
     public MeshBuilder CreateMeshBuilder(
         PrimitiveTopology topology = PrimitiveTopology.TriangleList);
@@ -279,7 +297,7 @@ public sealed class EngineContext {
 | `MaxDeltaTime` | Tick | The configured clamp, in seconds. |
 | `Stats` | Any | Last completed frame's render statistics. Valid from `Setup`; a read may be stale by one tick. `PresentedFrames` is cumulative and monotonic; `CpuFrameMilliseconds` excludes the fence, acquire, and present waits. |
 | `Tonemapping` | Tick | App-lifetime runtime tone-mapping settings, initialized from the builder defaults. Read or write them on the tick thread. A write during `Tick` applies to the frame that tick records. |
-| `CreateCamera` | Tick | The one camera entry point. Pass `CameraProjection.Perspective` with `fieldOfView` or `CameraProjection.Orthographic` with `orthographicHeight`; the size argument that does not belong to the projection is `ArgumentException`. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
+| `CreateCamera` | Tick | The one camera entry point. Pass `CameraProjection.Perspective` with `fieldOfView` or `CameraProjection.Orthographic` with `orthographicHeight`; the size argument that does not belong to the projection is `ArgumentException`. `target` routes the pass into a render texture and `postProcess` snapshots a post-process stack for the camera. Legal only during `Tick`; creating one while another is active is `InvalidOperationException`. |
 | `CreateRenderTextureAsync` | Tick | Creates an offscreen target and completes when the render thread has allocated it. Legal in `Setup` and `Tick`. |
 | `CreateMeshBuilder` | Any | Creates a procedural mesh builder. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |
 | `CreateTextureBuilder` | Any | Creates a procedural texture builder for an uncompressed format. The builder is not thread-safe; use one per thread. After shutdown the factory and its builders throw `ObjectDisposedException`. |

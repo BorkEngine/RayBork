@@ -10,7 +10,6 @@
 *.ico binary
 *.bmp binary
 *.tga binary
-*.ppm binary
 *.ttf binary
 *.otf binary
 *.wav binary
@@ -21,6 +20,8 @@
 *.7z binary
 *.gz binary
 *.pck binary
+*.spv binary
+*.rgba8 binary
 *.dll binary
 *.exe binary
 *.pdb binary

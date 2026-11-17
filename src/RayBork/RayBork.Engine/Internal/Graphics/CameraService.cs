@@ -25,9 +25,12 @@ internal sealed class CameraService {
     private readonly IWindow _window;
     private readonly TextLayoutBuffer _textLayout = new();
     private readonly HashSet<Font> _textFontsStarted = [];
+    private readonly List<PostProcessEffectSnapshot> _postProcessScratch = [];
     private RenderFramePacket? _packet;
     private Camera? _activeCamera;
     private PrimitiveAssets? _primitives;
+    private SsaoAssets? _ssaoAssets;
+    private BloomAssets? _bloomAssets;
     private TonemappingSettings? _tonemapping;
     private Matrix4x4[] _textGlyphMatrices = [];
     private Texture?[] _textGlyphTextures = [];
@@ -74,6 +77,40 @@ internal sealed class CameraService {
     /// tick thread joined.
     /// </summary>
     internal void DetachPrimitives() => _primitives = null;
+
+    /// <summary>
+    /// Attaches the app-lifetime preloaded SSAO assets used by <see cref="SsaoEffect"/> captures.
+    /// </summary>
+    /// <param name="assets">The loaded engine-owned SSAO assets.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
+    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    internal void AttachSsaoAssets(SsaoAssets assets) {
+        ArgumentNullException.ThrowIfNull(assets);
+        _ssaoAssets = assets;
+    }
+
+    /// <summary>
+    /// Detaches the SSAO assets before the app disposes them. Called on the main thread after the tick
+    /// thread joined.
+    /// </summary>
+    internal void DetachSsaoAssets() => _ssaoAssets = null;
+
+    /// <summary>
+    /// Attaches the app-lifetime preloaded bloom assets used by <see cref="BloomEffect"/> captures.
+    /// </summary>
+    /// <param name="assets">The loaded engine-owned bloom assets.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
+    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    internal void AttachBloomAssets(BloomAssets assets) {
+        ArgumentNullException.ThrowIfNull(assets);
+        _bloomAssets = assets;
+    }
+
+    /// <summary>
+    /// Detaches the bloom assets before the app disposes them. Called on the main thread after the tick
+    /// thread joined.
+    /// </summary>
+    internal void DetachBloomAssets() => _bloomAssets = null;
 
     /// <summary>
     /// Attaches the app-lifetime runtime tone-mapping settings whose values every sealed frame
@@ -243,6 +280,16 @@ internal sealed class CameraService {
     /// <param name="near">The near clip distance.</param>
     /// <param name="far">The far clip distance.</param>
     /// <param name="viewport">The requested pixel viewport, or <see langword="null"/> for the full target.</param>
+    /// <param name="target">
+    /// The render texture the pass writes, or <see langword="null"/> for the app's linear HDR scene
+    /// target. The viewport defaults to the target's full size and is clamped to it; the aspect ratio
+    /// uses the clamped viewport.
+    /// </param>
+    /// <param name="postProcess">
+    /// The caller-owned post-process stack to snapshot for this camera, or <see langword="null"/> for no
+    /// post-processing. The stack, every entry's enabled value, and each custom effect's shader cursor
+    /// and texture bindings are frozen here; later changes apply to later cameras only.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// The size argument that does not belong to <paramref name="projection"/> is nonzero, the resolved
     /// viewport is invalid or empty, or the clear color has a non-finite component.
@@ -251,9 +298,13 @@ internal sealed class CameraService {
     /// <paramref name="projection"/> is not defined, the clear mode has unknown bits, or a selected
     /// projection or clip-plane parameter is outside its range.
     /// </exception>
+    /// <exception cref="ObjectDisposedException">
+    /// The camera's <paramref name="target"/> is disposed, or a post-process effect's shader or a texture
+    /// its material binds is disposed.
+    /// </exception>
     /// <exception cref="InvalidOperationException">
-    /// The caller is not the tick thread, no frame is recording, another camera is active, or the camera
-    /// transform is singular.
+    /// The caller is not the tick thread, no frame is recording, another camera is active, the camera
+    /// transform is singular, or a post-process effect violates the custom shader contract.
     /// </exception>
     internal Camera CreateCamera(
         Transform transform,
@@ -264,8 +315,14 @@ internal sealed class CameraService {
         Color? clearColor,
         float near,
         float far,
-        Rect? viewport) {
+        Rect? viewport,
+        RenderTexture? target = null,
+        PostProcessStack? postProcess = null) {
         ValidateRecordingState(nameof(EngineContext.CreateCamera));
+        if (target is not null) {
+            ObjectDisposedException.ThrowIf(target.IsDisposed, target);
+        }
+
         CameraMath.ValidateProjection(projection, fieldOfView, orthographicHeight, near, far);
         if ((clearMode & ~ClearMode.All) != 0) {
             throw new ArgumentOutOfRangeException(
@@ -274,10 +331,12 @@ internal sealed class CameraService {
                 "The clear mode contains bits outside ClearMode.All.");
         }
 
+        int targetWidth = target?.Width ?? _window.RenderWidth;
+        int targetHeight = target?.Height ?? _window.RenderHeight;
         Rect clampedViewport = CameraMath.ResolveViewport(
             viewport,
-            _window.RenderWidth,
-            _window.RenderHeight,
+            targetWidth,
+            targetHeight,
             nameof(viewport));
         Color resolvedClearColor = CameraMath.ResolveClearColor(clearColor, nameof(clearColor));
         Matrix4x4 view = CameraMath.CreateViewMatrix(transform);
@@ -288,6 +347,7 @@ internal sealed class CameraService {
         Matrix4x4 viewProjection = view * projectionMatrix;
 
         RenderFramePacket packet = _packet!;
+        CapturePostProcessEffects(postProcess, target);
         CameraPass pass = packet.BeginPass();
         pass.Begin(
             _nextCameraNumber - 1,
@@ -300,7 +360,23 @@ internal sealed class CameraService {
             (int)clampedViewport.Width,
             (int)clampedViewport.Height,
             clearMode,
-            resolvedClearColor);
+            resolvedClearColor,
+            target?.TargetId ?? 0);
+
+        try {
+            foreach (PostProcessEffectSnapshot effect in _postProcessScratch) {
+                pass.AddPostProcessEffect(effect);
+                effect.Retain(packet.Retention);
+            }
+        } finally {
+            _postProcessScratch.Clear();
+        }
+
+        if (target is not null) {
+            // The recorded frame keeps the target alive until the render thread released its slot, so a
+            // RenderTexture disposed before then is not destroyed under the frame.
+            packet.Retention.Add(target.Lifetime);
+        }
 
         // Font frame clocks are begun once per camera and font, so a new camera starts a fresh set.
         _textFontsStarted.Clear();
@@ -320,7 +396,8 @@ internal sealed class CameraService {
             clampedViewport,
             view,
             projectionMatrix,
-            viewProjection);
+            viewProjection,
+            target);
         _nextCameraNumber++;
         _activeCamera = camera;
         return camera;
@@ -350,6 +427,48 @@ internal sealed class CameraService {
             throw new InvalidOperationException(
                 $"Camera {active.Number} is still active. Cameras cannot be nested; dispose it before "
                     + "creating another camera.");
+        }
+    }
+
+    /// <summary>
+    /// Captures the stack entries into the scratch snapshots the pending pass records.
+    /// </summary>
+    /// <remarks>
+    /// The capture runs before the pass is appended, so a rejected effect leaves the frame packet
+    /// unchanged. The scratch list is reused for the app lifetime, so a camera with a stack allocates
+    /// only the snapshots themselves.
+    /// </remarks>
+    /// <param name="postProcess">The stack to snapshot, or <see langword="null"/> for none.</param>
+    /// <param name="target">The camera's target, or <see langword="null"/> for the scene target.</param>
+    private void CapturePostProcessEffects(PostProcessStack? postProcess, RenderTexture? target) {
+        _postProcessScratch.Clear();
+        if (postProcess is null || !postProcess.Enabled) {
+            return;
+        }
+
+        bool targetHasDepth = target is null || target.DepthTexture is not null;
+        string targetDescription = target is null
+            ? "the app scene target"
+            : $"render texture {target.TargetId}";
+        try {
+            foreach (PostProcessEffect effect in postProcess.Effects) {
+                _postProcessScratch.Add(
+                    PostProcessSnapshots.Capture(
+                        effect,
+                        targetHasDepth,
+                        targetDescription,
+                        _ssaoAssets,
+                        _bloomAssets));
+            }
+        } catch {
+            // A rejected effect leaves no snapshot behind; the already captured ones release the program
+            // and texture references they would otherwise keep until the next camera.
+            foreach (PostProcessEffectSnapshot snapshot in _postProcessScratch) {
+                snapshot.Reset();
+            }
+
+            _postProcessScratch.Clear();
+            throw;
         }
     }
 }

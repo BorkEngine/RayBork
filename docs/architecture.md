@@ -1,7 +1,9 @@
 # RayBork Architecture
 
-Status: M7 as-built for the orthographic and screen-space surface, on top of the M6 font and text
-runtime, the M5 primitive and collision surface,
+Status: M8 as-built through the render texture color, depth, resize, and readback paths, the camera
+post-process core, built-in SSAO and bloom, and the RenderTarget sample, on top of the
+M7 orthographic and
+screen-space surface, the M6 font and text runtime, the M5 primitive and collision surface,
 the M4 core 3D renderer, the M3 asset pipeline, the M2 renderer foundation, and the M1 host,
 platform, threads, frame handoff, HDR presentation, recovery, and time. M0 established the build,
 dependency, and AOT guardrails. M1
@@ -32,7 +34,24 @@ M7 adds the unified `EngineContext.CreateCamera` with a `CameraProjection` and o
 the ninth internal primitive mesh (the unit disc), the `BoundingFrustum.Intersects` plane tolerance,
 the Pong sample and Native AOT gate, and the removal of the M1-M3 `samples/HelloInterop` host. There
 is no `DrawTexture`, no 2D or screen-space draw API, and no separate screen-space renderer:
-screen-space content is world-space geometry on a screen-aligned transform. `RenderTexture` is M8.
+screen-space content is world-space geometry on a screen-aligned transform. M8 adds shader ABI v2 (one
+frame block per camera pass), one render pass per camera pass on the scene target, and the color and
+depth paths of runtime render textures: `RenderTexture` creation, `Camera.Target` routing, a per-target
+render pass and geometry pipeline cache, the multisampled color and depth attachments with their
+single-sample resolved images, Vulkan 1.2 depth/stencil resolve, and the resolved color and depth images
+sampled as normal bindless `Texture` views. `RenderTexture.Resize` recreates the target's images, render
+pass, framebuffer, bindless views, and pipeline cache in place while keeping the public view identity.
+`RenderTexture.ReadColorsAsync` copies the resolved color image into a top-left staging buffer and
+decodes raw scene-linear HDR colors; `RenderTexture.ReadPixelsAsync` applies the frame's tone snapshot
+and the SDR AgX/sRGB CPU reference to produce display-referred RGBA8. Both wait for the target's
+last-use fence and restore its resolved layout. Camera post-process stacks build on those resolved
+images: a target-sized `Rgba16Float` chain with a camera-viewport store-back, on the scene target and
+on a `RenderTexture` target (see [Post-process execution](#post-process-execution)), plus the built-in
+`SsaoEffect` and `BloomEffect` on the same hooks. The RenderTarget
+sample ships as the M8 sample and Native AOT gate: it draws a procedural scene into a `640x360`
+`Rgba16Float` render texture, samples the target on a monitor in a later camera pass, toggles a
+two-camera split-screen view, runs a baked custom vignette post shader, and reads the target back to a
+24-bit uncompressed BMP screenshot (bottom-up BGR, alpha dropped).
 
 ## Goals
 
@@ -64,8 +83,10 @@ RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, St
                       BCnEncoder.Net, Silk.NET.Shaderc(+.Native), SharpGLTF.Core,
                       System.IO.Hashing (JIT)
 build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
-samples/Pong -> RayBork.Engine (M7 sample and Native AOT gate)
+samples/Pong -> RayBork.Engine (M7 sample, was the M7 Native AOT gate)
 samples/Pong/Pong.Assets -> RayBork.Bake, samples/Pong (M7 assets executable, JIT)
+samples/RenderTarget -> RayBork.Engine (M8 sample and Native AOT gate)
+samples/RenderTarget/RenderTarget.Assets -> RayBork.Bake (M8 assets executable, JIT)
 samples/Text -> RayBork.Engine (M6 sample, was the M6 Native AOT gate)
 samples/Text/Text.Assets -> RayBork.Bake (M6 assets executable, JIT)
 samples/PrimitiveGallery -> RayBork.Engine (M5 sample, was the M5 Native AOT gate)
@@ -80,14 +101,16 @@ Samples (M11) -> RayBork.Engine
 | `RayBork.Bake` | JIT build library and assets-executable host: source discovery, TOML binding, processors, MessagePack shapes, KTX2/BC encoding, GLSL compilation, pack writer, incremental manifest. Not referenced by a runtime project. |
 | `build/RayBork.BuiltInAssets` | JIT build-only generator: runs the ordinary bake over the checked-in built-in sources and emits a C# byte array compiled into `RayBork.Engine`. Not referenced by a runtime project. |
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
-| `samples/Pong` | M7 sample and Native AOT gate: a player-vs-AI match in one orthographic screen-space pass. It mounts the adjacent `pong.pck` produced by `Pong.Assets`, fits a `1280x720` design space into the render pixels, anchors every draw with `ScreenToWorldTransform`, draws the playfield, border, net, panels, textured paddles, and shaded overlay with `DrawQuad`, the ball with `DrawDisc`, and the scores, status line, and pause/winner overlay with `DrawText` in the built-in mono face. The left paddle is the human; the right paddle is a deterministic AI that tracks the ball while it approaches and returns to center otherwise, moving at `AiPaddleSpeed` inside the fixed substeps. Every paddle hit adds `BallSpeedupPerHit` to the ball speed up to `MaxBallSpeed`. It simulates with fixed `1/120` substeps and `Collision.CheckBoxSphere` paddle collisions, accepts W/S, Up/Down, and gamepad 0 left stick or d-pad for the left paddle, and exits on Escape or `--frames`. |
+| `samples/Pong` | M7 sample, was the M7 Native AOT gate: a player-vs-AI match in two orthographic screen-space passes (a scene pass with the bloom stack and a later stackless HUD pass). It mounts the adjacent `pong.pck` produced by `Pong.Assets`, fits a `1280x720` design space into the render pixels, anchors every draw with `ScreenToWorldTransform`, draws the playfield, border, net, panels, textured paddles, and shaded overlay with `DrawQuad`, the ball with `DrawDisc`, and the scores, status line, and pause/winner overlay with `DrawText` in the built-in mono face. The left paddle is the human; the right paddle is a deterministic AI that tracks the ball while it approaches and returns to center otherwise, moving at `AiPaddleSpeed` inside the fixed substeps. Every paddle hit adds `BallSpeedupPerHit` to the ball speed up to `MaxBallSpeed`, and ball, paddle, and wall hits flash HDR colors above the raised bloom threshold. It simulates with fixed `1/120` substeps and `Collision.CheckBoxSphere` paddle collisions, accepts W/S, Up/Down, and gamepad 0 left stick or d-pad for the left paddle, and exits on Escape or `--frames`. |
 | `samples/Pong/Pong.Assets` | M7 assets executable: references `RayBork.Bake` and the `samples/Pong` project (so `PongSettings` has one definition), bakes `pong.pck` from the checked-in original paddle PNG and the `Pong.PongSettings` TOML data at sample build time, and copies it beside the sample executable. JIT only. |
-| `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It also draws a presented-FPS/render-statistics status line in the built-in mono face, anchored with `ScreenToWorldTransform`. |
+| `samples/RenderTarget` | M8 sample and Native AOT gate: up to four camera passes per tick. An offscreen perspective camera draws a procedural scene into a `640x360` `Rgba16Float` render texture with depth and 4x MSAA; the single scene camera (or two half-width split-screen cameras, `S`) draws the main procedural scene and samples the target's `ColorTexture` on a monitor; a later orthographic HUD camera loads the scene color and clears depth. The single scene camera runs an app-lifetime `PostProcessStack` with one baked custom vignette/tint `ShaderPostProcessEffect` (`E`), and `F2` reads both readback methods and writes a 24-bit uncompressed BMP screenshot. The split cameras stay stackless because an M8 viewport effect's source is the full target. It mounts its adjacent `rendertarget.pck` and exits on Escape or `--frames`. |
+| `samples/RenderTarget/RenderTarget.Assets` | M8 assets executable: references `RayBork.Bake`, bakes `rendertarget.pck` from the checked-in vignette shader sources at sample build time, and copies it beside the sample executable. JIT only. |
+| `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It also draws a presented-FPS/render-statistics status line in the built-in mono face, anchored with `ScreenToWorldTransform`, and runs the built-in SSAO effect by default with an `A` toggle. |
 | `samples/Text` | M6 sample, was the M6 Native AOT gate: a world-space text scene in one perspective pass with the built-in Fira Sans and JetBrains Mono faces and a baked custom Lora face, the same paragraph at three sizes, alignments, wrapping modes, and rotations, Latin and Cyrillic paragraphs in both proportional faces, a camera-facing billboard, a lazily generated Greek line, a mono status line, and orbit/zoom controls. It mounts the adjacent `text.pck` produced by `Text.Assets` and exits on Escape or `--frames`. |
 | `samples/Text/Text.Assets` | M6 assets executable: bakes `text.pck` from the checked-in Lora face at sample build time. JIT only. |
-| `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, and toggles the one camera between perspective and orthographic with `O`; its orthographic height is derived from the orbit distance and its status line, anchored with `ScreenToWorldTransform`, shows the projection. When the pointer ray hits the model bounds, it adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
+| `samples/Castle` | M4 sample, still buildable and publishable but not the AOT gate: an orbitable castle scene that mounts the adjacent `castle.pck`, loads `/models/obj/castle` and `/models/obj/castle_diffuse`, binds the texture to the loaded parts' built-in mesh materials, records an orbital castle pass plus `DrawGrid(20, 10f, Color.Gray)` every tick, runs the built-in SSAO effect by default with an `A` toggle, and toggles its one camera between perspective and orthographic with `O`; its orthographic height is derived from the orbit distance and its status line, anchored with `ScreenToWorldTransform`, shows the projection. When the pointer ray hits the model bounds, it adds `Camera.DrawBoundingBox` and a small sphere at the nearest `Collision.GetRayMesh` hit; it exits on Escape or `--frames`. |
 | `samples/Castle/Castle.Assets` | M4 assets executable: bakes `castle.pck` from the checked-in OBJ, TOML, GLSL, and PNG sources at sample build time. JIT only. |
-| `samples/` | Instancing and RenderTarget (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
+| `samples/` | Instancing (M11). Each sample owns a solution; a sample with bakeable sources also owns an assets executable with a build-time bake, and every sample has a Native AOT publish target. |
 
 Rules:
 
@@ -116,14 +139,14 @@ policy.
 
 | Package | Version | Purpose | AOT status |
 | --- | --- | --- | --- |
-| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, events, window HDR state, and Vulkan surfaces | Exercised end to end by the M7 `samples/Pong` AOT gate on `win-x64` and `linux-x64`; earlier M1-M6 hosts used the same bindings. |
+| `SDL3-CS` | 3.4.20 | Managed SDL3 bindings for windowing, input, events, window HDR state, and Vulkan surfaces | Exercised end to end by the M8 `samples/RenderTarget` AOT gate on `win-x64` and `linux-x64`; earlier M1-M7 hosts used the same bindings. |
 | `SDL3-CS.Native` | 3.4.2 | Per-RID native SDL3 binaries | Loaded and run by the same hosts on both RIDs. |
-| `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the backend | Exercised end to end by the M7 AOT gate: the published host creates the instance, device, swapchain, scene target, present pass, and the orthographic screen-space draw path. |
-| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by every AOT gate; the M7 gate decodes the built-in texture and shader descriptors plus the sample's baked `Pong.PongSettings` data and texture descriptors through compiled shapes. |
-| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the gates that mount a user pack (M4 `samples/Castle`, M6 `samples/Text`, and M7 `samples/Pong`, including the Pong settings data). |
+| `Silk.NET.Vulkan` | 2.23.0 | Vulkan 1.2 bindings for the backend | Exercised end to end by the M8 AOT gate: the published host creates the instance, device, swapchain, scene target, present pass, the offscreen `RenderTexture`, the multi-pass scene, and the custom post-process chain. |
+| `PolyType` | 1.4.1 | Compiled shapes for custom TOML data and pack descriptors | Exercised end to end by every AOT gate; the M8 gate decodes the built-in texture and shader descriptors and the sample's baked vignette shader descriptor through compiled shapes. |
+| `Nerdbank.MessagePack` | 1.4.104 | MessagePack serialization for custom data and pack descriptors | Exercised end to end by the built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the gates that mount a user pack (M4 `samples/Castle`, M6 `samples/Text`, M7 `samples/Pong`, and M8 `samples/RenderTarget`). |
 | `System.IO.Hashing` | 11.0.0 | XXH32/XXH3-64 pack integrity hashes | Exercised end to end by the built-in pack read in every AOT gate, and by a sample-pack read in the gates that mount a user pack; no reflection or dynamic code. |
-| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M7 AOT gate on both RIDs. |
-| `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M7 AOT gate on both RIDs. |
+| `Microsoft.Extensions.Logging` | 11.0.0 | Logging abstraction exposed by `EngineContext` | Exercised end to end by the M8 AOT gate on both RIDs. |
+| `ZLogger` | 2.6.1 | Default console logging provider | Exercised end to end by the M8 AOT gate on both RIDs. |
 | `System.IO.Compression.Zstandard*` | in-box `net11.0` | Zstandard pack payload compression | Part of the .NET 11 shared framework; no package and no separate AOT gate. |
 
 **Test and tooling dependencies** (JIT only; outside the runtime publish graph):
@@ -148,9 +171,12 @@ upload, a mesh upload, a shader-module upload, and a MessagePack custom-data loa
 the castle model with the built-in mesh material; the M5 gate drew the primitive helpers from the
 built-in pack; the M6 gate loaded the built-in Fira Sans and JetBrains Mono faces and the baked Lora
 face from its own `text.pck`, generated glyph textures on demand, and drew the text scene; the M7
-gate is `samples/Pong`, which loads the baked `Pong.PongSettings` data and paddle texture from its
-own `pong.pck`, plays the player-vs-AI match through `DrawQuad`/`DrawDisc`/`DrawText` on
-`ScreenToWorldTransform`, and exits. Both publishes must finish with zero AOT/trim warnings. The
+gate was `samples/Pong`, which loaded the baked `Pong.PongSettings` data and paddle texture from its
+own `pong.pck`, played the player-vs-AI match through `DrawQuad`/`DrawDisc`/`DrawText` on
+`ScreenToWorldTransform`, and exited; the M8 gate is `samples/RenderTarget`, which loads its baked
+vignette shader from `rendertarget.pck`, creates the offscreen `RenderTexture`, records the
+offscreen/scene/split/HUD passes, runs the custom post-process chain, and exits. Both publishes must
+finish with zero AOT/trim warnings. The
 sample solutions are outside the engine solution, and a sample build bakes its pack beside the
 sample executable when it has one, so the JIT bake tool and its packages stay out of the sample's
 AOT publish graph. The Vulkan loader is a system/GPU-driver component, not a NuGet dependency. The
@@ -241,10 +267,11 @@ The backend owns:
 | --- | --- | --- |
 | `Initialize` | Render | Creates the instance, requests the native surface through `RendererBackendOptions.SurfaceProvider`, then creates the device, queues, swapchain, scene target, present pipeline, and frame resources. Failure is fatal (`RB3001`; a platform surface failure surfaces as `RB2003` on the main thread and is wrapped as `RB3001` on the render thread). |
 | `Resize` | Render | Recreates the swapchain, scene target, present pipeline framebuffers, and per-image semaphores when the selected extent changes. A zero width or height marks the surface as having no drawable extent and keeps the presentation path. It is idempotent for an unchanged extent. |
-| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, clears the multisampled scene target per camera pass, resolves color, records the present pass, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
+| `ProcessRenderTextureRequests` | Render | Drains the render texture request queue before the frame wait: it creates a target's color and depth images, resolved images, samplers, bindless color and depth views, and public `RenderTexture` for a queued creation, recreates those resources at a new size for a queued resize after the target is idle, copies a target's resolved color image for a queued readback after the target's last-use fence and completes it with raw linear colors or display-referred pixels, and destroys a released target's GPU objects and bindless slots after the frame that last used it completed. A creation, resize, or readback failure completes its request with the failure and never stops the loop. A device recovery recreates the images, samplers, slots, and the bindless view resources behind the unchanged public views from the retained description. |
+| `Submit` | Render | Consumes one sealed `RenderFramePacket` with its camera passes, plans and draws the geometry, waits for a frame slot, acquires a swapchain image, records one render pass per camera pass with the clamped viewport as the render area and the camera's target as the framebuffer, loads/stores the scene attachments between passes, resolves each pass' render area for color and depth, runs a camera pass' post-process chain and stores it back, transitions the resolved color and depth images for the present pass and for a later camera's sample, records it, submits, and tracks the fence. It does not present. A minimized or zero-extent surface skips the frame without acquiring an image. |
 | `Present` | Render | Presents the newest submitted frame. It idles without presenting when the surface is minimized, has no extent, or no frame was submitted. |
 | `Recover` | Render | Handles one recoverable failure: swaps in a recreated presentation path, surface, or device, drops the failed frame, increments `RecoveryCount`, refreshes `Info`, and returns recovered or fatal. The call is bounded to three consecutive recoveries without a completed frame. |
-| `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
+| `Dispose` | Render | Waits for the device to idle, drops the pending present, destroys the present pipeline, every live render target and its pipeline cache, the scene target, frame resources, swapchain, and device on the render thread, and destroys the native surface through the provider. It hands the instance and loader teardown to the app's main-thread teardown queue, which runs that teardown after the render thread has joined. It is idempotent and safe after a failed recovery. |
 
 `Submit` takes a **sealed frame packet**, not a live game object or a draw command. The packet
 carries the frame index, the camera passes, the frame's tone-mapping snapshot, and the recorded draws
@@ -253,7 +280,8 @@ The backend reads the snapshot for the present push constants and the scene shad
 the live `EngineContext.Tonemapping` settings object. `Resize` and the frame call are the only inputs.
 There is no `Draw`, `SetUniform`, or per-object method on the seam, so a backend cannot add a virtual
 call per draw. The backend plans the batches, culls and sorts the instances, looks up pipelines and
-descriptors, writes the frame block and instance storage buffer, and records the draw commands
+descriptors, writes each camera pass's frame block and the instance storage buffer, pushes the pass
+index, and records the draw commands
 behind the frame boundary. The plan itself is produced inside `Submit`; the tick thread only records
 immutable draw records.
 
@@ -273,6 +301,15 @@ immutable draw records.
   platform failure is captured and rethrown on the render thread as `GraphicsException`.
 - The tick thread records into the frame ring and never calls the backend. The render thread never
   calls user code: there are no callbacks or virtual methods from the backend into the game.
+- The app-lifetime `RenderTextureService` is the render-texture handoff, not a second backend. The tick
+  thread queues a validated creation, resize, or readback request and awaits it (creation/readback) or
+  blocks on it (resize); the render loop's render thread creates the images, recreates them at the new
+  size, or copies the resolved color image and completes the task before it acquires the next frame.
+  The service owns no GPU object: the backend owns the target registry and maps the recorded target id
+  to the target resource. A public `RenderTexture` holds one owner reference on its target lifetime; a
+  recorded frame adds a frame hold through the frame's retention set, and the target is destroyed only
+  after both are gone. A readback does not add an owner or frame hold; it is serialized with the frame
+  loop by the request queue and fails cleanly if the target was disposed before it ran.
 - `EngineInfo` is projected from backend capabilities at startup and after a recovery that changes
   the device or presentation path. It is an immutable public value; no backend type, native handle,
   or live capability query crosses the seam.
@@ -296,7 +333,7 @@ Recoverable failures are handled on the render thread without calling user code:
 | Swapchain out of date | Resize, restore, or display change | Wait for the device to idle, drop the pending present, recreate the swapchain, scene target, present pipeline framebuffers, and per-image semaphores at a frame boundary. |
 | Swapchain suboptimal | Driver hint on acquire or present | Finish the present, then recreate the presentation path at the next frame boundary; presentation continues meanwhile. |
 | Surface lost | Window or display topology change | Destroy the old native surface through the provider, have the main thread create a replacement inside the recovery, then recreate the presentation path. A failure is fatal. |
-| Recoverable device loss | Driver reset or timeout where a new device succeeds | Recreate the logical device, re-probe capabilities, rebuild the swapchain, scene target, present pipeline, and frame resources from the retained settings. |
+| Recoverable device loss | Driver reset or timeout where a new device succeeds | Recreate the logical device, re-probe capabilities, rebuild the swapchain, scene target, present pipeline, and frame resources from the retained settings, and recreate every live render texture's images, sampler, bindless view, and pipeline cache from its retained description (including a resized extent). |
 | Minimized / zero extent | Window state | Do not acquire or present; report a zero-draw frame and idle the renderer while the 30 FPS tick cap continues. |
 
 A recovery waits for the device to idle, drops the frame that was waiting for presentation,
@@ -313,11 +350,12 @@ a recoverable presentation status throws `GraphicsException` with `RB3003`, and 
 is fatal with `RB3001`. The tick loop stops, `Shutdown` runs, and `Run` rethrows; no partial frame
 is presented, and disposal remains safe after a failed recovery.
 
-The backend also exposes internal GPU-test accessors (`Instance`, `Device`, `SceneTarget`), fault
-injection for the recovery tests, and the `VulkanReadback` single-pixel probes. These are
-diagnostics, not seam members: a readback creates its own command pool, staging buffer, and fence
-and stalls the GPU, so it is never used by the frame path. The scene color is resolved to a
-single-sample image the present pass samples; multisampled depth is not resolved.
+The backend also exposes internal GPU-test accessors (`Instance`, `Device`, `SceneTarget`,
+`TryGetRenderTarget`), fault injection for the recovery tests, and the `VulkanReadback` single-pixel
+probes. These are diagnostics, not seam members: a readback creates its own command pool, staging
+buffer, and fence and stalls the GPU, so it is never used by the frame path. Each camera pass resolves
+its own render area to the single-sample image the present pass samples; multisampled depth is not
+resolved.
 
 M3 adds the `GpuAssetBridge` as an internal companion to the backend, not a new seam operation. The
 render loop drains upload and destroy requests before frame waits and recreates live asset resources
@@ -510,8 +548,10 @@ wait for the render loop to finish with it   wait for newest ready
 - Frames carry the camera passes and the recorded draw records: mesh, internal shader program,
   effective render state, instance matrices, per-instance uniform bytes, and bindless texture
   references. Primitive helpers record the same kind of draw record with an engine mesh. A tick with
-  no camera pass still clears the linear HDR target; the present pass always
-  draws one fullscreen triangle, which is not counted in `RenderStats.DrawCalls`.
+  no camera pass records no camera render pass: the target content is undefined for that frame, the
+  present pass still draws one fullscreen triangle, and the frame reports zero scene draw statistics.
+  A game that needs a defined blank frame records a clearing camera. The present triangle is not
+  counted in `RenderStats.DrawCalls`.
 - A frame also carries the tone-mapping snapshot: exposure in stops, AgX white, and AgX contrast,
   copied from `EngineContext.Tonemapping` when the tick seals the frame. The present push constants
   and the scene shader's frame block read the snapshot, so the render thread never reads the live
@@ -523,6 +563,77 @@ wait for the render loop to finish with it   wait for newest ready
   draw stays alive until the consuming frame completes. A model and a material are not engine assets
   and add no hold; materials are value snapshots in the record, and a model draw retains the internal
   program of each part material.
+- A camera pass carries the render target id its camera was created with (`0` is the app scene
+  target). A runtime target is not an engine asset: its color and depth views are `Texture` objects with
+  empty `Path` values owned by the `RenderTexture`, and the frame's retention set holds the target
+  lifetime, not a catalog entry. `RenderTexture.Dispose` queues the target for destruction, but the
+  renderer destroys it only after every recorded frame that wrote or sampled it completed.
+- The render loop services the render texture queue at each loop turn before it acquires the next
+  frame, so `CreateRenderTextureAsync` completes after the render thread allocated the images and a
+  render target created in `Setup` exists before the first tick. Cancellation, a shutdown, or a render
+  loop failure completes the request without leaking a target. The queue carries creation, resize,
+  readback, and destruction requests, and `HasPendingWork`/the service signal include all four so the
+  loop wakes for a readback even when no frame is being published.
+- A render target records the layout of its color and depth images. The first write of a frame
+  transitions the single-sample resolved color and resolved depth from their previous read layouts to
+  their attachment layouts, and the pass transitions them back to shader reads so a later camera in the
+  same tick samples them. A multisampled depth-bearing target also tracks the layout of its multisampled
+  depth attachment. The render thread waits for the frame that last used a target before it records a
+  new use, so a render target is never overwritten or sampled while the previous frame that used it is
+  in flight. The app scene target keeps its pre-existing cross-frame behavior: its single set of images
+  is reused by up to three in-flight frames, so a frame can overwrite content an earlier submitted frame
+  still reads. That hazard is unchanged in M8 and is a follow-up, not part of the render texture path.
+- `RenderTexture.Resize` is a render texture request. The tick thread queues it with the target
+  lifetime and the new size and blocks on the completion; the render loop drains the resize queue after
+  creations and before readbacks and destructions, so every request of a loop turn is serviced in one
+  pass. The public
+  `Resize` validates the public size limit and rejects a target that a recorded or in-flight frame holds
+  with `InvalidOperationException` before it queues; the renderer re-checks the frame hold and then waits
+  for the last-use fence, so it never waits on a hold the blocked tick thread would have to release and
+  never replaces images an in-flight frame reads. It creates a new `VulkanRenderTarget` (color, optional
+  depth, resolved images, render pass, framebuffer), keeps the target's samplers, reuses its bindless
+  slots and rewrites their descriptors to the new views, updates both `RenderTextureViewLifetime`
+  resources behind the unchanged public `Texture` objects, updates their dimensions together with the
+  lifetime description on the render thread before it completes the request, and then disposes the old
+  pipeline cache (which references the old render pass) and the old target. A failure before the swap
+  leaves the old target live and releases the partial new resources. The view lifetime owns the current
+  view dimensions, so `Texture.Width`/`Height` and `RenderTexture.Width`/`Height` become authoritative at
+  the same point, and a later device recovery recreates the resized target from the updated description.
+- `RenderTexture.ReadColorsAsync` and `ReadPixelsAsync` are readback requests. The tick thread queues the
+  target lifetime, the request kind, the caller's cancellation token, and one completion task; the render
+  loop drains the readback queue after resizes and before destructions. A target disposed before its
+  request runs fails with `ObjectDisposedException`, and a lifetime whose id is no longer registered
+  fails with `InvalidOperationException` before any GPU work. The render thread waits for the target's
+  last-use frame fence with the same bounded per-target wait the resize path uses, never
+  `vkDeviceWaitIdle`; the pending frame that is not submitted yet is not part of that content, so a
+  readback observes the last completed frame and does not race the recording of the next one. When a
+  completed frame has written the target, the render thread then uses a dedicated transient command pool,
+  command buffer, fence, and host-visible staging buffer: it transitions the target's resolved color
+  image from the tracker's current layout to `TRANSFER_SRC_OPTIMAL`, copies the full tightly packed image
+  in top-left row order, and transitions it back to the same layout in one submission. The tracker state,
+  bindless slots, descriptors, sampler, views, and lifetime are unchanged.
+  `VulkanReadback.ReadRenderTargetColorImage` performs the copy; `RenderTextureReadbackConverter` decodes
+  `Rgba16Float` half floats, `Rgba8Unorm` bytes, and `Rgba8Srgb` sRGB bytes to raw scene-linear
+  `Color[y, x]`, and `ReadPixelsAsync` then reuses `AgxToneMap.Present` with the SDR `ManualSrgb`
+  encoding and `WindowHdrState.Sdr` to apply the tone snapshot of the last frame that wrote the target
+  and the startup `TonemappingMode`. The render-target entry stores that snapshot and a written flag when
+  one of its passes writes color (a color clear or at least one surviving draw batch), and the startup
+  mode at creation, so the render thread never reads the live `EngineContext.Tonemapping`. A
+  never-written target reports `TonemappingSnapshot.Default` and the startup mode and returns opaque black
+  without copying or transitioning the image, because it has no resolved content even when a sampled-only
+  frame moved it out of the undefined layout; the written flag is cleared on resize and device recovery,
+  and a later frame still writes the target normally. Cancellation before the request runs completes it as
+  canceled; cancellation during the copy is best effort, the copy still restores the layout, and only the
+  result is discarded.
+- A multisampled depth-bearing target resolves its depth attachment through Vulkan 1.2
+  `VkSubpassDescriptionDepthStencilResolve` in a `vkCreateRenderPass2` render pass. Device selection
+  requires `VK_RESOLVE_MODE_SAMPLE_ZERO_BIT`, so the sampled depth value is the stored reverse-Z value
+  rather than a min/max resolve. The resolved depth image carries a sampled view for the public
+  `DepthTexture` (runtime targets) or stays internal (the app scene target); the scene target's resolved
+  depth is the input the SSAO effect samples. `VulkanReadback.ReadSceneDepthPixel` reads that resolved
+  image for both single-sample and multisampled scene targets. The scene target resolves depth on every
+  camera pass even though a pass without a post stack only exposes it to the diagnostic probe; that is
+  a known bandwidth cost recorded for the post-process core rather than a hidden regression.
 - The render thread services the GPU upload/destroy bridge at each loop turn and while it waits for
   a frame. Uploads are submitted without a fence wait and polled on later turns, so a load that
   starts in `Setup` completes without waiting for the first tick and does not stall frame
@@ -539,6 +650,126 @@ wait for the render loop to finish with it   wait for newest ready
 - When the window is minimized or unfocused, the tick loop continues at a **30 FPS cap**. The M2
   renderer skips image acquisition and presentation while the surface has no extent and keeps the
   last presentation path for the restore.
+
+## Post-process execution
+
+A camera's `PostProcessStack` is tick-thread state, so the camera service snapshots it into the
+`CameraPass` when the camera is created: the stack entry order, each entry's `Enabled` value, and a
+custom effect's internal shader program, captured uniform bytes, texture bindings, and reserved
+`sourceColor`/`sourceDepth` binding indices. The capture runs before the pass is appended, so a
+rejected effect leaves the frame packet unchanged, and the frame's retention set acquires the
+program's and every bound texture's frame hold at the same time. The reserved binding values are never
+validated, retained, or registered as sampled targets because the engine overrides them at record time.
+The `CameraPass` resets its effect array with the draw records, so a pooled slot never keeps an old
+effect alive. Snapshots are pooled per effect: the pass reset releases a snapshot's program and texture
+references and returns it to its effect, so a later camera reuses the snapshot object, uniform buffer,
+and texture array instead of allocating them again.
+
+The render thread runs a pass' effects after its camera render pass ended and its resolved color and
+depth images were transitioned to a shader read, and before the next camera pass or the present pass.
+The chain is target-sized whichever target the camera writes:
+
+- The app scene target owns two internal bindless slots for its resolved color and depth views. The
+  backend allocates them with the scene target after the bindless table exists, recreates them with
+  every presentation-path recreation (window resize, HDR change, surface or device recovery), and
+  releases their samplers and slots during teardown. A runtime render target already exposes those
+  images through its public `ColorTexture`/`DepthTexture` view slots.
+- The post processor owns three target-sized single-sample `Rgba16Float` color targets per frame ring
+  slot and per target extent. Each has a color-only render pass framebuffer, a bindless slot for an
+  effect to sample it through the shader ABI, and a dedicated descriptor set for the engine store-back
+  pass' own single-sampler layout. A frame can chain effects on the scene target and on render targets
+  of different sizes, so the extents are pooled instead of one set per slot: when a frame starts,
+  after its slot's fence signaled, the processor keeps the extents the previous frame on that slot used
+  and destroys the rest. A target resize therefore reallocates that target's post targets, an unchanged
+  extent reuses them with no per-frame allocation, and a device recovery destroys the whole pool with
+  the processor. The same per-extent pool serves a built-in effect's intermediate targets, so a bloom
+  downsample can rent a half- or quarter-sized set. Each set holds three targets and the rent rotates
+  through them while skipping the current chain source, so a prior effect's completed image survives
+  and a chain of any length keeps rotating rather than alternating between a fixed pair; when SSAO is
+  first its four passes rotate through all three targets, and in a chain they alternate between the
+  two non-source targets.
+- A custom effect records one fullscreen pass: the geometry pipeline layout, the shared frame
+  descriptor set and instance buffer, the backend-owned fullscreen quad, and a post pipeline cached
+  against the post render pass with a forced opaque/no-cull/no-depth state. The instance record's
+  `sourceColor` and `sourceDepth` texture index slots are overridden with the current chain source and
+  the target's depth slot; every other texture index comes from the captured material bindings. Each
+  effect rents a target that is not the current source, so a custom chain rotates through the three
+  targets and remains genuinely multi-pass.
+- The engine store-back pass samples the final post target through the built-in `PostStore` shader
+  pair (embedded SPIR-V, compiled by `scripts/compile-shaders.ps1`) into a color-only render pass on
+  the camera target with the camera viewport as the render area: the MSAA color attachment plus the
+  resolved color image, or the single-sample resolved color image. The fragment shader receives the
+  normalized sub-rectangle of the target-sized post image that the viewport covers, so a viewport
+  store-back samples the matching target pixels. The target's depth images are not part of this pass
+  and keep their content.
+- After the store-back the target's resolved color returns to `ShaderReadOnlyOptimal` for the next
+  camera, the present pass, or a readback, and the backend marks the runtime target as color-written
+  with the frame's tone snapshot. The app scene target's depth stays resolved and readable for a later
+  SSAO-style consumer.
+
+The barriers follow the target path's rules. Before the store-back the resolved color image moves from
+its shader-read layout to `ColorAttachmentOptimal` with a source scope that covers the post effect's
+fragment reads and the camera pass' resolve write; a multisampled target also gets a same-layout
+barrier that orders the MSAA color attachment's camera-pass write before the store-back load. The
+store-back's resolve writes the single-sample color image at the color-attachment stage, so the
+following transition back to a shader read uses `ColorAttachmentOutput`/`ColorAttachmentWrite`.
+Depth resolves keep the T3b color-attachment stage and access rules, and the depth images are never
+transitioned by the store-back. Every camera pass that targets a runtime render texture transitions
+its resolved images back to a shader read for a later camera or a readback. A scene-target pass makes
+those transitions only when it runs a post chain; a scene pass with no stack is immediately followed by
+either another scene pass that transitions the attachments for its own write or the frame-final scene
+transition that serves the present pass and the diagnostic depth probe, so split-screen frames without
+effects do not pay two extra layout transitions per pass. A later camera pass that writes the target
+uses the general resolved-attachment transition, which handles a resolved color that a post chain left
+in a shader read. A pass with no stack keeps the same behavior, so the chain adds no render graph and
+no pass dependency analysis.
+
+The core is extensible rather than custom-shader-specific. A built-in effect is engine code with an
+approved public effect type over an internal snapshot; it is not a custom-shader effect. SSAO adds
+`SsaoEffect` and an internal `SsaoEffectSnapshot : PostProcessEffectSnapshot` whose `Run` uses the
+per-pass `PostProcessContext`; bloom adds `BloomEffect` and `BloomEffectSnapshot` on the same hooks.
+The context gives a
+built-in the Vulkan device, the color-only post render pass, the engine pipeline layout and forced
+post render state, the shared frame descriptor set, and the engine fullscreen quad. It also provides
+`RentColorTarget()` for a camera-target-sized target and `RentColorTarget(Extent2D)` for an
+intermediate from the per-extent pool (rejecting a zero or device-limit-exceeding extent before image
+creation); `GetOrCreateFullscreenPipeline` against the post render pass with the forced
+opaque/no-cull/no-depth state (any other state is rejected); `ReserveInstanceRecord` and
+`GetInstanceRecordSpan` for one shader-ABI instance record per pass; `RecordFullscreenPass` for a pass
+that binds the frame set, the engine quad, and the custom pipeline; and `CompleteAuxiliaryTarget` or
+`CompleteColorTarget` to release an intermediate or make a camera-target-sized result the chain source.
+The snapshot reports its ordered instance-record layout (per-pass stride and count), so the frame's
+instance storage buffer is sized for every built-in pass, including passes with different shaders and
+uniform sizes.
+
+SSAO records AO, two denoise iterations, and a composite over its chain input through the
+three-target per-extent set, skipping the current chain source. The AO and denoise shaders are selected
+by the frozen `SsaoQuality`, and the snapshot captures the four strides and uniform offsets when the
+camera is created. The camera service receives the app's preloaded `SsaoAssets` (seven
+committed-SPIR-V shader programs and the N8AO 2.1.0 blue-noise texture) from the app before
+`IGame.Setup`; the snapshot only reads those engine-owned assets. The capture rejects a target without
+depth before it records anything. The SSAO shaders carry the shader ABI inline in `SsaoAbi.glslinc`,
+are compiled by `scripts/compile-shaders.ps1` into committed SPIR-V, and are packaged into the built-in
+pack by `BuiltInSsaoProcessor`; the blue-noise RGBA8 source is baked by `BuiltInBlueNoiseProcessor`.
+No runtime shader compile or render-thread asset load is added. The built-in adds a public effect type
+and an internal snapshot; it extends the post-target pool to three targets and carries the preloaded
+asset set through the camera capture context, while leaving the public custom-shader contract and the
+store-back unchanged.
+
+Bloom records a fast dual-filter pyramid over its chain input: a threshold and soft-knee prefilter into
+the half-resolution level, up to four downsamples (quarter, eighth, 1/16, and 1/32, each clamped to at
+least one pixel), tent upsamples back to half resolution with the frozen `Scatter` weight, and a
+camera-target-sized composite that adds the pyramid to the input. A small target whose next halving no
+longer shrinks the extent stops the pyramid there, so the effect runs fewer passes and never rents more
+than the per-extent three-target set. Each upsample reads the coarse and finer levels and writes the
+explicit read-add result into a separate target, so the forced post pipeline state stays opaque and the
+color-only post render pass keeps its load-op-free write. The prefilter and pyramid levels are auxiliary
+targets; the composite is the chain source and the engine store-back runs once. The camera service
+receives the app's preloaded
+`BloomAssets` (four committed-SPIR-V programs with one shared fullscreen vertex payload) before
+`IGame.Setup`; the four programs are packaged by `BuiltInBloomProcessor` and carry the shader ABI inline
+in `BloomAbi.glslinc`. Bloom has no depth requirement. `Pong` enables it on the scene camera only and
+toggles it with `B`; its HUD camera keeps no stack.
 
 ## Time
 
@@ -573,7 +804,16 @@ wait for the render loop to finish with it   wait for newest ready
 - The scene target uses `R16G16B16A16_SFLOAT` color and `D32_SFLOAT` depth. The present pass
   samples the resolved color and applies exposure, `TonemappingMode`, and the output encoding.
 - MSAA defaults to 4x; scene color is resolved to a single-sample image before presentation, and
-  the swapchain images are single-sample. The HDR and SDR paths share the resolve.
+  the swapchain images are single-sample. The HDR and SDR paths share the resolve. Each camera pass
+  resolves its own render area, and the multisampled color and depth attachments are stored between
+  camera passes so a later camera can load them. Scene depth is also resolved into a single-sample
+  internal depth image with Vulkan 1.2 depth/stencil resolve; it is the input a later internal consumer
+  such as the SSAO effect samples, and there is no public scene-target depth view. A runtime depth-bearing
+  target resolves its depth attachment into the image behind `RenderTexture.DepthTexture`.
+- A render target's color and depth views are separate bindless textures over separate single-sample
+  images. The render-target entry owns one `RenderTextureViewLifetime`, `RenderTextureViewResource`,
+  sampler, and bindless slot per view; a device recovery replaces their GPU handles and slots while the
+  public `Texture` objects stay the same.
 - Projection is built for Vulkan's `[0,1]` depth range and reverse-Z:
   - near plane maps to depth `1.0`;
   - infinity maps to `0.0`;
@@ -602,12 +842,19 @@ local `+Z` faces the camera; the camera transform must have unit scale. `DrawQua
 texture, or normalized source rectangle), `DrawDisc`, and `DrawGrid(Transform, ...)` are ordinary
 world-space draws on that plane, and the text and billboard paths use it unchanged. A game that
 wants a pixel-authored 2D layout maps its design space to render pixels, calls
-`ScreenToWorldTransform` for each position, and draws. `samples/Pong` is the reference: one
-orthographic camera per tick, a `1280x720` design playfield fitted into the render pixels, and every
-draw anchored with the screen transform. Castle uses the same screen transform for its status line
+`ScreenToWorldTransform` for each position, and draws. `samples/Pong` is the reference: two sequential
+orthographic cameras (a scene pass with the bloom stack and a later stackless HUD pass), a `1280x720`
+design playfield fitted into the render pixels, and every draw anchored with the screen transform.
+Castle uses the same screen transform for its status line
 and toggles its one camera between perspective and orthographic. The HUD is same-pass, screen-aligned
-alpha text; it is not a separate overlay pass, and geometry closer than its plane can occlude it. A
-multi-camera overlay pass and per-pass frame data are M8.
+alpha text; it is not a separate overlay pass, and geometry closer than its plane can occlude it.
+Multiple cameras and viewport rectangles are supported: each camera pass is its own render pass with
+the clamped viewport as the render area, so a game can render split-screen views and layered HUD
+passes into the HDR scene target in one tick. A HUD that must not be occluded is an ordinary later
+camera that loads the scene color and clears depth (`ClearMode.Depth`), or keeps both
+(`ClearMode.None`) when the HUD should remain depth-tested; there is no separate overlay or layer
+pass. Shader ABI v2 gives every camera pass
+its own frame data.
 
 **HDR selection.** The cached `WindowHdrState` drives the swapchain choice. When the window has HDR
 enabled, the renderer selects `R16G16B16A16_SFLOAT` with
@@ -649,17 +896,24 @@ offsets 28, 32, and 36 (`tonemapping`, `encoding`, `reserved`). `exposureMultipl
 for linear clamp, `1` for manual sRGB encode, and `2` for scRGB HDR (scaled by the SDR white level,
 not clamped). The `awp*` fields are the CPU-derived allenwp curve parameters; the shader has no
 separate HDR highlight stage, no AgX white-point constant, and no log-range clamp. Scene clear
-control belongs to the camera pass: each camera clears its clamped viewport with its own `ClearMode`
-and `ClearColor`, and there is no builder-level clear color. The present triangle is not a scene draw
-and is not counted in `RenderStats.DrawCalls`.
+control belongs to the camera pass: each camera pass is its own render pass with the clamped viewport
+as the render area, clears that rectangle with its own `ClearMode` and `ClearColor`, and there is no
+builder-level clear color. The color and depth attachments load the previous camera pass' stored
+content and store their own, so `ClearMode.None` keeps the earlier color and depth, `ClearMode.Color`
+keeps depth, and `ClearMode.Depth` keeps color. The present triangle is not a scene draw and is not
+counted in `RenderStats.DrawCalls`.
 
 **MSAA and depth.** The requested sample count comes from `WithMSAA` (default 4); the effective
 count is the highest device-supported count that does not exceed the request, or `1` when none is
 supported, and a mismatch logs a warning. The scene target color and depth attachments use the
-effective count; the color attachment is resolved to a single-sample sampled image. Depth is
-cleared to `0.0` per camera pass and the reverse-Z comparison state is defined, but multisampled
-depth is not resolved because nothing samples depth until M8. The present triangle is not
-depth-tested; the geometry pipelines consume the reverse-Z state.
+effective count; the color attachment is resolved to a single-sample sampled image once per camera
+render area. Depth is cleared to `0.0` per camera pass and the reverse-Z comparison state is defined;
+the multisampled color and depth attachments are stored between camera passes so a later pass can
+load them. The depth attachment is also resolved into a single-sample image per camera render area
+with Vulkan 1.2 depth/stencil resolve; the scene target's resolved depth stays internal for a later
+internal consumer such as the SSAO effect, while a runtime target exposes its resolved depth as
+`RenderTexture.DepthTexture`. The present triangle is not depth-tested; the geometry pipelines consume
+the reverse-Z state.
 
 The reverse-Z perspective projection used by the engine is, for row vectors:
 
@@ -701,6 +955,29 @@ src/RayBork/RayBork.Engine/Shaders/Present.frag.spv    committed SPIR-V build in
 - The fragment shader owns the encoding branch and the AgX transform. The numeric `encoding`
   values are the shader ABI: changing one requires recompiling the committed blob in the same
   change.
+
+The post-process store-back pass is the engine's second built-in fullscreen shader pair:
+
+```text
+src/RayBork/RayBork.Engine/Shaders/PostStore.vert.glsl   committed source
+src/RayBork/RayBork.Engine/Shaders/PostStore.vert.spv    committed SPIR-V build input
+src/RayBork/RayBork.Engine/Shaders/PostStore.frag.glsl   committed source
+src/RayBork/RayBork.Engine/Shaders/PostStore.frag.spv    committed SPIR-V build input
+```
+
+- The vertex stage generates the same fullscreen triangle as the present pass from
+  `gl_VertexIndex`, so the store-back needs no vertex or index buffer.
+- The fragment stage samples the final single-sample `Rgba16Float` post target through one combined
+  image sampler and a 16-byte fragment push constant: the normalized post-target origin in `x`/`y` and
+  size in `z`/`w` that the camera viewport covers, so a viewport store-back samples the matching
+  target region. The render pass owns the target color format: an `Rgba8Unorm` target stores the same
+  linear values, and an `Rgba8Srgb` target applies the fixed-function sRGB encode in the write path
+  (the readback decodes it again). There is no tone mapping in this stage; the chain is scene-linear
+  HDR and the present pass applies display conversion later.
+- `RayBork.Engine.csproj` embeds the `.spv` files under the same logical resource pattern as the
+  present pair. `ShaderAssets` loads them once, and the backend's post-process store-back pipeline
+  caches render passes and pipelines per target color format and sample count. The runtime never
+  compiles shaders and never invokes `glslc`.
 
 The AgX curve has two implementations that must stay in step: the GLSL in `Present.frag.glsl`, and
 the CPU reference `AgxToneMap` with `AgxCurveParameters`. The renderer never calls the CPU reference
@@ -750,7 +1027,7 @@ Regular (SIL Open Font License 1.1; see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-
 monospaced font at `/fonts/jetbrains-mono` is the JetBrains Mono variable face, rendered at its
 default Regular instance (SIL Open Font License 1.1; see the same file). Both are baked by the
 ordinary font processor with the default 32/4/2 MSDF settings and a sibling raw face payload
-(`/fonts/fira-sans-face` and `/fonts/jetbrains-mono-face`), so the built-in pack has 20 entries. The
+(`/fonts/fira-sans-face` and `/fonts/jetbrains-mono-face`), so the built-in pack has 46 entries including the SSAO and bloom shader assets, their payloads, and the blue-noise texture. The
 runtime exposes the faces as `EngineContext.Defaults.DefaultFont` and
 `EngineContext.Defaults.DefaultMonoFont`. Each font descriptor and face payload is an ordinary entry;
 the pack format is unchanged and the runtime generates glyph textures on demand.
@@ -846,21 +1123,25 @@ calls merge into one instanced draw, while a different mesh, program, or effecti
 new batch.
 
 The shader ABI is generated by the bake so custom GLSL does not have to declare the plumbing: a
-256-byte frame uniform buffer in descriptor set 0 binding 0, a fixed-size bindless
-combined-image-sampler array in binding 1, and a per-instance storage buffer in binding 2 containing
-the transform, the tint, the normalized UV rectangle `UvRect`, one bindless index per texture binding,
-and the reflected user uniforms. `UvRect` is `(x, y, width, height)` in normalized texture space; the
-built-in `/shaders/mesh` vertex stage computes `vUv = UvRect.xy + uv * UvRect.zw`, so `(0, 0, 1, 1)`
-passes the authored mesh UVs through unchanged. The billboard and textured-quad source forms set a
-sub-rectangle; every other draw, including the line, point, triangle, and wireframe-model records,
-keeps `(0, 0, 1, 1)`. The rectangle is per-instance data and never joins or splits a batch. The array
-binding is `RayBorkTextures[2048]` in the shader and 2048 descriptors in the
-layout. v1 has one fixed
+frame storage buffer in descriptor set 0 binding 0 holding one 256-byte `RayBorkFrame` element per
+camera pass, a fixed-size bindless combined-image-sampler array in binding 1, and a per-instance
+storage buffer in binding 2 containing the transform, the tint, the normalized UV rectangle `UvRect`,
+one bindless index per texture binding, and the reflected user uniforms. A 4-byte vertex+fragment
+push constant carries the current camera pass's index, and `rbFrame` expands to
+`rbFrameBlock.frames[rbPushConstants.passIndex]`, so every pass in a frame reads its own frame data.
+`UvRect` is `(x, y, width, height)` in normalized texture space; the built-in `/shaders/mesh` vertex
+stage computes `vUv = UvRect.xy + uv * UvRect.zw`, so `(0, 0, 1, 1)` passes the authored mesh UVs
+through unchanged. The billboard and textured-quad source forms set a sub-rectangle; every other
+draw, including the line, point, triangle, and wireframe-model records, keeps `(0, 0, 1, 1)`. The
+rectangle is per-instance data and never joins or splits a batch. The array binding is
+`RayBorkTextures[2048]` in the shader and 2048 descriptors in the layout. v1 has one fixed
 vertex input layout: position, normal, uv, uv1, uv2, uv3, color, tangent. The geometry pipeline
 declares the full layout, so unconsumed attributes are ignored by the shader (the validation layer
 reports them as performance warnings). Vertex and fragment entry points are `main_vertex` and
 `main_fragment`. The full ABI is in the
-[API reference](api/rendering/shaders.md#74-shader-abi).
+[API reference](api/rendering/shaders.md#74-shader-abi). The bake writes the shader ABI version
+(`2`) into the packed shader descriptor; loading a descriptor with a missing or older version fails
+with `AssetLoadException` naming the shader path and instructing the user to rebake the pack.
 
 The bindless texture table has exactly 2048 slots, matching the `RayBorkTextures[2048]` array the
 shader ABI declares and the descriptor set layout creates; the descriptor-indexing subset is
@@ -887,12 +1168,16 @@ engine has no CPU line-geometry fallback. `RenderStats.Triangles` still counts t
 primitives,
 because the polygon mode changes rasterization, not the record's topology or index count.
 
-The render path writes **one 256-byte frame uniform block per frame slot**. All camera passes
-recorded in the same tick write that block, so a frame with more than one camera pass submits the
-last recorded pass' view-projection, view, projection, camera position, and viewport to every pass.
-Single-camera frames are correct. Split-screen and multiple cameras with different views need
-per-pass frame data, which is M8 work with the multiple-camera gate; the limitation is documented in
-the as-built notes in the roadmap.
+The render path writes **one 256-byte frame block per camera pass** into the frame slot's storage
+buffer and pushes that pass's index before its draws. A frame with more than one camera pass
+therefore submits each pass's own view-projection, view, projection, camera position, and viewport,
+so multiple cameras with different views are correct instead of sharing the last pass's values. The
+descriptor set stays bound once per frame; the frame buffer grows when a frame records more passes
+and the slot fence has already signaled. Each camera pass is its own render pass with the clamped
+viewport as the render area, so a later camera loads the earlier pass' stored color and depth. A HUD
+that must not be occluded is an ordinary later camera that loads the scene color and clears depth
+(`ClearMode.Depth`), or keeps both (`ClearMode.None`) when it should remain depth-tested; there is no
+separate overlay or layer pass.
 
 Vulkan instancing consumes one vertex/index buffer, so different meshes with the same shader are
 still separate draws in v1. Multi-draw indirect is post-1.0.
@@ -1129,7 +1414,7 @@ JetBrains Mono variable face from `/fonts/jetbrains-mono` after the built-in pac
 `EngineContext.Defaults.DefaultMonoFont` are available to `Setup` without adding a startup GPU upload.
 The pack carries each face and its sibling raw payload (`/fonts/fira-sans-face` and
 `/fonts/jetbrains-mono-face`), baked by the ordinary font processor with the default 32/4/2 MSDF
-settings, so the built-in pack has 20 entries. Fira Sans Regular is version 4.203 and JetBrains Mono
+settings, so the built-in pack has 46 entries including the SSAO and bloom shader assets, their payloads, and the blue-noise texture. Fira Sans Regular is version 4.203 and JetBrains Mono
 is version 2.211; both are licensed under the SIL Open Font License 1.1 and cover Latin, Cyrillic, and
 Greek. The bundled JetBrains Mono variable face's default named instance is Regular (weight 400),
 which is the instance the runtime renders. The samples use the mono face for their
@@ -1176,8 +1461,10 @@ out-of-range layout arguments are `ArgumentException`/`ArgumentOutOfRangeExcepti
 transform scale or empty text records nothing. Text is world-space geometry. M7 adds the
 screen-space pattern: `ScreenToWorldTransform(point, distance)` returns a camera-rotation transform
 with a world-units-per-render-pixel scale, and passing it to `DrawText` anchors a pixel-sized block
-to a screen pixel. There is still no screen-space draw API, no `DrawText(Vector2)` overload, and no
-separate overlay pass; a multi-camera overlay pass with per-pass frame data is M8.
+to a screen pixel. There is still no screen-space draw API and no `DrawText(Vector2)` overload.
+Text drawn in a scene camera is alpha-blended and can be occluded by closer geometry; a HUD that
+must not be occluded is an ordinary later camera that loads the scene color and clears depth, not a
+separate overlay or layer pass.
 
 
 ### GPU upload bridge and frame retention
@@ -1317,6 +1604,12 @@ directory and emits a C# byte array. An MSBuild target imported by `RayBork.Engi
 and runs the generator before `CoreCompile` and adds the generated file to the compilation. The
 generated file lives under the intermediate output, is never committed, and is not published as a
 loose pack; the generator and its packages do not enter the engine's output or AOT publish graph.
+The SSAO and bloom entries use tool-only processors: `BuiltInSsaoProcessor` packages the committed
+`Ssao*.spv` modules and their descriptor metadata, `BuiltInBloomProcessor` packages the
+`Bloom*.spv` modules and their descriptor metadata, and `BuiltInBlueNoiseProcessor` bakes the raw
+128x128 RGBA8 source into a KTX2 linear texture. `scripts/compile-shaders.ps1` compiles the eight
+SSAO GLSL sources and the five bloom GLSL sources into the committed SPIR-V, and the engine build
+regenerates the embedded pack when either the GLSL or SPIR-V inputs change.
 
 The pack format, bake application builder, processors, sidecars, validation, and incremental
 manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-rayborkbake).
@@ -1343,7 +1636,7 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   JetBrains Mono faces and the custom Lora face, generated glyph textures on demand, drew the text
   scene, and shut down. The M6 published `win-x64` and `linux-x64` hosts finished with zero AOT/trim
   warnings, contained `text.pck` but no bake tooling, and ran `--frames 30` to exit `0` on the Windows
-  hardware driver and on the conformant lavapipe software driver. M7 moves the gate to
+  hardware driver and on the conformant lavapipe software driver. M7 moved the gate to
   `samples/Pong`: it bakes `pong.pck` from the original paddle PNG and the `Pong.PongSettings` data,
   loads the settings and texture, records the player-vs-AI orthographic screen-space match with
   `DrawQuad`/`DrawDisc`/`DrawText` on `ScreenToWorldTransform`, and shuts down. `PongSettings` lives
@@ -1356,18 +1649,30 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `0` on the hardware driver. The `linux-x64` publish also finished with zero warnings, contains
   `pong.pck` beside `Pong` and no bake tooling, and the published host ran `--frames 30` to exit `0`
   on the conformant lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO
-  presentation, 4x MSAA, and a 1280x720 window. The suite is 2,695 tests, 114 of them GPU
-  integration tests, and every sample solution builds. `samples/Text`, `samples/Castle`, and
-  `samples/PrimitiveGallery` remain buildable and publishable
-  samples but are not the M7 gate. The M1-M3 diagnostic host was removed in M7.
+  presentation, 4x MSAA, and a 1280x720 window. At M7 the suite was 2,695 tests, 114 of them GPU
+  integration tests. M8 moves the gate to
+  `samples/RenderTarget`: the Release solution build bakes `rendertarget.pck` from the sample's
+  vignette shader sources, and the publish copies it beside the host. The published host creates the
+  `640x360` `Rgba16Float` render texture, records the offscreen, scene (or split-screen), and HUD
+  passes, runs the custom post-process chain, samples the target's `ColorTexture`, and exits `0`. The
+  Windows `win-x64` publish finished with zero AOT/trim warnings: its publish directory contains
+  `rendertarget.pck` beside `RenderTarget.exe` and no bake tooling, and the published host ran
+  `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
+  warnings, contains `rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published
+  host ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
+  `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The final suite is
+  2,977 tests, 239 of them GPU integration tests, and every sample solution builds; the lavapipe
+  Linux run reports 2,970 passed with 7 skipped HDR/scRGB-present tests. `samples/Text`,
+  `samples/Pong`, `samples/Castle`, and `samples/PrimitiveGallery` remain buildable and publishable
+  samples but are not the M8 gate. The M1-M3 diagnostic host was removed in M7.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the
-  gates that mount a user pack (M4 `samples/Castle`, M6 `samples/Text`, and M7 `samples/Pong`); the
-  pack reader and descriptor decoding contain no reflection resolver. The M7 Pong gate decodes the
-  built-in texture and shader descriptors, the sample's baked `Pong.PongSettings` data, and its
-  texture descriptor, so the custom-data and texture paths are covered end to end; the M6 Text gate
-  covered the font entry type, and the M4 Castle gate covered the packed
-  model, mesh, shader, and texture descriptors.
+  gates that mount a user pack (M4 `samples/Castle`, M6 `samples/Text`, M7 `samples/Pong`, and M8
+  `samples/RenderTarget`); the pack reader and descriptor decoding contain no reflection resolver. The
+  M8 RenderTarget gate decodes the built-in texture and shader descriptors and the sample's baked
+  vignette shader descriptor, so the shader and texture paths are covered end to end; the M7 Pong gate
+  covered `Pong.PongSettings` custom data and its texture, the M6 Text gate covered the font entry
+  type, and the M4 Castle gate covered the packed model, mesh, shader, and texture descriptors.
 - The Vulkan loader is loaded through `NativeLibrary` with a custom `INativeContext` instead of
   Silk.NET's path resolution, so the published host does not depend on a per-RID Silk.NET loader
   asset. The loader itself is a system/GPU-driver component and is not redistributed with the
@@ -1449,18 +1754,87 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   an alpha quad (including the mesh-program textured alpha path), a disc interior, text and sprites
   in one frame, a full-viewport quad that survives frustum culling, and 3D orthographic cube
   geometry. `PrimitiveDrawTests` covers the new draw records, validation, zero-extent behavior,
-  disposed assets, retention, and batching; `CameraTests` covers `ScreenToWorldTransform`. The
-  Windows hardware run is 2,695
-  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed
-  and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes only SDR,
-  and the GPU-filtered run is 107 passed with the same 7 skips.
-- There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer; it is
-  a diagnostic that stalls the GPU and is never used by the frame path.
+  disposed assets, retention, and batching; `CameraTests` covers `ScreenToWorldTransform`. At M7 the
+  Windows hardware run was 2,695
+  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run skips the seven
+  existing HDR/scRGB-present tests because lavapipe exposes only SDR; the remaining full-suite and
+  GPU-filtered tests pass.
+- M8 adds the per-camera render-pass suite (`CameraRenderPassGpuTests`): two camera passes in one
+  frame render split-screen views with two viewport rectangles and different projections, a later
+  camera with `ClearMode.None` loads the earlier pass' color, a later camera with `ClearMode.Depth`
+  replaces the earlier depth while `ClearMode.None` keeps it (on both the single-sample and
+  multisampled targets), two cameras that clear their own viewports keep their own color, a first
+  camera with `ClearMode.None` records validation-clean undefined content, a negative and oversized
+  viewport clamps to the target, and a frame with no camera pass presents with zero scene
+  statistics. The suite asserts draw/instance/triangle statistics, single-pixel resolved-color
+  probes, and resolved depth probes with explicit tolerances, and every test requires a
+  validation-clean submission. The host validates core Vulkan usage, not synchronization, so the
+  suite does not prove the access masks against the validation layer's synchronization model.
+  `PerPassFrameGpuTests` keeps covering the shader ABI v2 per-pass frame block.
+- M8 adds the render texture suite (`RenderTextureGpuTests`): a 64x64 HDR target drawn by
+  a camera and sampled by a later scene camera, write-then-sample-then-write-then-sample in one tick,
+  the same-pass self-sample rejection (including the `DepthTexture` view), the three color formats at
+  1x and 4x (including the sRGB sampling decode), a smaller camera viewport updating only its target
+  region, two targets in one frame without cross-talk, `ColorTexture.Path` and `DepthTexture.Path`
+  staying empty with the views retained by a recorded frame and released with the target, target reuse
+  across frames, a real `Camera`/`CameraService` route that targets the render texture and is sampled
+  by a later real camera, a live target and its depth view across a simulated device loss, and shutdown
+  disposal. The depth tests draw known reverse-Z geometry into 1x/2x/4x/8x depth-bearing targets and
+  sample `DepthTexture` through a later camera, assert the resolved value against the view-projection
+  matrix with a tolerance, prove the depth resolve is independent of the three color formats, read the
+  resolved depth of a multisampled scene target with `VulkanReadback.ReadSceneDepthPixel`, exercise
+  write→sample→write→sample, a later-frame sample without a rewrite, viewport-scoped depth resolve,
+  two depth targets in one frame, `ClearMode.None`/`ClearMode.Depth` loads and clears, and assert the
+  depth view's format, nearest clamp sampler, empty path, and ownership. M8 also covers resize: an idle
+  64x64 target resized to 96x48 recreates the target, render pass, framebuffer, and views while the two
+  `Texture` objects keep their identity and their bindless slots and report the new dimensions; the
+  resized target renders and samples color and depth; an unchanged size recreates nothing; resize while a
+  camera targets the target or a sealed frame holds it throws `InvalidOperationException` without
+  corrupting the frame, and works after the frame completes and the last-use fence is waited on; a resize
+  succeeds while every spare bindless slot is allocated; the render-thread re-check rejects a resize whose
+  frame hold appeared after queueing and leaves the target usable; a resize after a device recovery
+  recreates the recovered target; the device-limit rejection is exercised through a test-only limit
+  override and keeps the old target; depthless, `Rgba16Float`/`Rgba8Unorm`/`Rgba8Srgb`, and 1x/2x/4x
+  targets keep their format, depth, and sample count; and a device recovery recreates the resized target
+  from the updated description. `RenderTextureDescriptionTests` and `RenderTextureServiceTests` cover
+  validation, the sample-count fallback, depth-view nullability and ownership, cancellation, the shutdown
+  failure, the target lifetime, the resize request handoff and completion, the render-thread hold
+  re-check, the idempotent same-size no-op, the invalid and disposed resize failures, the public resize
+  after `Stop`, and the queued create/resize/destroy round without a GPU; `RenderTextureAppTests` covers
+  creation in `Setup` and `Tick`, a blocking resize with in-place view dimensions, the in-use rejection,
+  and the post-shutdown stopped-service `ObjectDisposedException`. `VulkanDepthStencilResolveTests`
+  covers the required sample-zero selection, the rejection of min/max-only modes, and the missing-mode
+  diagnostic without a GPU.
+- M8 readback coverage: the GPU suite clears a target with known linear and HDR colors and a
+  top-half/bottom-half split, reads `ReadColorsAsync` with `[height, width]`, top-left rows, alpha, and
+  HDR values, and asserts `ReadPixelsAsync` length, row order (including the first and last pixel row),
+  and every byte against the CPU AgX/sRGB reference within one byte. It exercises all three color formats
+  at 1x and 4x, plus the HDR format at 8x where supported, the sRGB decode, the `Rgba8Unorm` raw and
+  display paths, the frame's tone snapshot and the startup `TonemappingMode.None`, readback before the
+  first write (opaque-black default and the target remains usable), a target only sampled before any
+  write (still the opaque-black default and the sample layout is untouched), a target pass with no color
+  clear and no surviving draws (no content and no tone claimed), a later no-write target pass keeping the
+  earlier frame's tone snapshot, a readback while a recorded
+  frame waits unsubmitted (last completed content), readback of a target only sampled in a later frame,
+  and readback after resize and a simulated device recovery. `RenderTextureReadbackConverterTests` pins
+  the half-float, `Rgba8Unorm`, and sRGB decodes, the top-left `[y, x]` layout, independently computed
+  display bytes, clamping, and opaque alpha. `RenderTextureServiceTests` covers readback handoff,
+  cancellation before queue/processing and after dequeue, late cancellation registration during
+  shutdown, close/stop, disposed and unknown targets including a target disposed after queueing, failure
+  without target mutation, and target state preservation; `RenderTextureAppTests` covers an awaited
+  `Setup` readback, a blocking `Tick` readback, and the post-shutdown `ObjectDisposedException` without
+  a deadlock. The final suite is 2,977 tests, 239 of them GPU integration tests, with no skips on the
+  Windows hardware path; the lavapipe Linux run reports 2,970 passed with the same 7 HDR/scRGB-present
+  skips, and its GPU-filtered run passes 232 with those 7 skips.
+- There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer for the
+  diagnostic probes and the full resolved color image for the public readback; the full-image path
+  waits for the target's last-use fence, restores the layout, and is a screenshot/diagnostic path that
+  is never used by the frame path.
 - A GPU test that cannot run on the host calls `Assert.Skip` with the reason: no Vulkan loader, no
   physical device, or SDL cannot create a Vulkan window or surface. Programming errors and
   capability failures throw and fail the test; they are never silently skipped. On the lavapipe
   Linux host the seven HDR/scRGB-present tests skip with the reason that the driver exposes only SDR
-  `B8G8R8A8_SRGB`; the other 107 GPU tests pass.
+  `B8G8R8A8_SRGB`; the remaining GPU tests pass.
 - CI has a `gpu` job on `ubuntu-latest`. It installs `libvulkan1`, `mesa-vulkan-drivers`,
   `vulkan-validationlayers`, and `xvfb`, resolves the lavapipe ICD
   (`/usr/share/vulkan/icd.d/lvp_icd*.json`), and runs the GPU-filtered tests under `xvfb-run` with
@@ -1482,18 +1856,21 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 5. The render thread consumes the newest completed tick, never a stale queue.
 6. Public API never exposes a native handle or a backend type.
 7. A game assembly published with `PublishAot=true` must start, load the assets it needs (a pack,
-   procedural assets, or both), draw where the milestone has a draw path, and shut down. The M7 gate
-   sample bakes and loads `pong.pck`, draws the orthographic screen-space match through
-   `ScreenToWorldTransform`, and exits.
+   procedural assets, or both), draw where the milestone has a draw path, and shut down. The M8 gate
+   sample bakes and loads `rendertarget.pck`, creates an offscreen render texture, records the
+   offscreen, scene, and HUD passes (or the two split-screen passes), runs a custom post-process
+   chain, and exits.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
-10. The engine's built-in pack is always mounted first; it has 20 entries and supplies the present
+10. The engine's built-in pack is always mounted first; it has 46 entries and supplies the present
     shader pair, the built-in mesh draw shader program at `/shaders/mesh`, the primitive program at
-    `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, the white/error textures, and the
-    default and monospaced fonts at `/fonts/fira-sans` and `/fonts/jetbrains-mono`. The app preloads
-    the mesh program, both textures, and both fonts into `EngineContext.Defaults`
-    and builds the primitive assets, including their three engine materials, before `IGame.Setup`, and
-    releases them during shutdown. The font loads are CPU-only and add no startup GPU upload.
+    `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, the white/error textures, the
+    default and monospaced fonts at `/fonts/fira-sans` and `/fonts/jetbrains-mono`, the SSAO shader
+    variants and blue-noise texture, and the bloom pyramid shaders. The app preloads the mesh program,
+    both textures, and both fonts into `EngineContext.Defaults`, builds the primitive assets including
+    their three engine materials, and loads `SsaoAssets` and `BloomAssets` and attaches them to
+    `CameraService` before `IGame.Setup`, then releases all of them during shutdown. The font loads are
+    CPU-only and add no startup GPU upload.
 11. Only one RayBork app runs per process in v1.
 12. A GPU resource is created, re-created after a device recovery, and destroyed only on the render
     thread, and only after every frame that references it has completed.
@@ -1504,9 +1881,24 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
     generation runs on the app-lifetime `RayBork.Font` thread, and the tick thread never waits for
     it. The per-font glyph texture cache is hard-capped and its eviction is coordinated with frame
     holds.
+15. A runtime render target is not an engine asset: its color and depth views report empty `Path`
+    values, are owned by their `RenderTexture`, and are never mounted, cached, or disposed by the game.
+    A frame that writes or samples a target holds its lifetime until the frame completes, and the
+    renderer waits for the frame that last used a target before it records a new use. A readback copies
+    the resolved color image after that wait and restores its layout without changing the target's
+    views, bindless slots, or lifetime. The pre-existing scene-target cross-frame overwrite hazard is
+    unchanged.
+16. A camera post-process stack is snapshotted on the tick thread and never read live by the render
+    thread; a recorded frame holds the effect's shader program and textures until it completes. A
+    snapshot is pooled per effect and reused only after the recorded frame releases the pass that held
+    it, and the reserved `sourceColor`/`sourceDepth` material values are never validated, retained, or
+    sampled. The target-sized chain writes only through its own `Rgba16Float` post targets and the
+    camera-viewport store-back, leaves the target's depth unchanged, and returns the resolved color to a
+    shader read with the target's written flag and tone snapshot updated.
 
 Invariants 1, 5, 6, and 11 are M1; 8 and 12 are M2/M3; 2-4, 7, and 10 are exercised end to end by
-the camera and draw path, and 7 and 10 by the M7 `samples/Pong` AOT gate; 13 is enforced by the
+the camera and draw path, and 7 and 10 by the M8 `samples/RenderTarget` AOT gate; 13 is enforced by the
 collision unit tests and the loader tests for the baked payload; 14 is enforced by the glyph
-pipeline, font asset, and text draw tests. M3 enforced the asset and frame-retention parts of 3, 7,
-and 10 before the draw recorder existed.
+pipeline, font asset, and text draw tests; 15 is enforced by the render texture unit and GPU tests;
+16 is enforced by the post-process unit and GPU tests and the validation layer.
+M3 enforced the asset and frame-retention parts of 3, 7, and 10 before the draw recorder existed.

@@ -1,12 +1,16 @@
 # Pong
 
-`Pong` is the M7 sample and Native AOT gate: a player-vs-AI match drawn as one screen-space
-orthographic pass. A 1280x720 design playfield is letterboxed into the current render pixels, and the
-background, border, net, score panels, textured paddles, ball, scores, status line, and pause/winner
-overlay are all recorded with `Camera.DrawQuad`, `Camera.DrawDisc`, and `Camera.DrawText` through
-`Camera.ScreenToWorldTransform`. The left paddle is the human; the right paddle is a deterministic AI
-opponent. The paddle texture and the design values come from the sample's own baked `pong.pck`, so the
-sample also exercises the texture and TOML data asset paths end to end.
+`Pong` was the M7 sample and Native AOT gate; `samples/RenderTarget` is the M8 sample and gate. A
+player-vs-AI match is drawn with two ordinary screen-space
+orthographic cameras. A 1280x720 design playfield is letterboxed into the current render pixels; a
+scene camera draws the background, border, net, textured paddles, and ball through the built-in
+fast dual-filter bloom effect, and a later HUD camera draws the score panels, scores, status line, and
+pause/winner overlay with `Camera.DrawQuad`, `Camera.DrawDisc`, and `Camera.DrawText` through
+`Camera.ScreenToWorldTransform` without a post-process stack. Ball, paddle, and wall collisions flash
+scene-linear HDR colors above the bloom threshold and decay over a few frames. The left paddle is the
+human; the right paddle is a deterministic AI opponent. The paddle texture and the design values
+come from the sample's own baked `pong.pck`, so the sample also exercises the texture and TOML data
+asset paths end to end.
 
 The sample contains no test-only logic: it opens a window, plays the match, and exits cleanly. Build
 and run it from the repository root:
@@ -18,39 +22,83 @@ dotnet run --project samples/Pong/Pong.csproj -c Debug -- --frames 30
 
 ## Scene
 
-Every tick records exactly one camera pass with an orthographic camera at `(0, 0, 1)` looking down
-`-Z`. The camera's visible height is `Window.RenderHeight`, so the screen plane at distance `1` has a
-world-units-per-pixel scale of exactly one:
+Every tick records two sequential camera passes, both with an orthographic camera at `(0, 0, 1)`
+looking down `-Z`. The camera's visible height is `Window.RenderHeight`, so the screen plane at
+distance `1` has a world-units-per-pixel scale of exactly one:
 
 ```csharp
-using Camera camera = context.CreateCamera(
-    new Transform(new Vector3(0f, 0f, 1f)),
+Transform cameraTransform = new(new Vector3(0f, 0f, SCREEN_PLANE_DISTANCE));
+```
+
+The scene camera clears color and depth with `ClearMode.ColorAndDepth` and the letterbox color, and it
+runs the app-lifetime bloom stack. After it is disposed, the HUD camera uses `ClearMode.Depth` to load
+the scene color and clear depth and has no stack:
+
+```csharp
+using (Camera scene = context.CreateCamera(
+    cameraTransform,
     projection: CameraProjection.Orthographic,
     orthographicHeight: context.Window.RenderHeight,
     clearMode: ClearMode.ColorAndDepth,
-    clearColor: letterboxColor,
-    near: 0.01f,
-    far: 100f);
+    clearColor: _letterboxColor,
+    near: CAMERA_NEAR,
+    far: CAMERA_FAR,
+    postProcess: _postProcess)) {
+    DrawScene(scene);
+}
+
+using Camera hud = context.CreateCamera(
+    cameraTransform,
+    projection: CameraProjection.Orthographic,
+    orthographicHeight: context.Window.RenderHeight,
+    clearMode: ClearMode.Depth,
+    near: CAMERA_NEAR,
+    far: CAMERA_FAR);
+DrawHud(hud);
 ```
 
 The 16:9 design playfield is fitted into the current render pixels and centered; the remainder is the
-camera's clear color, which reads as the letterbox bars. `scale = playfieldWidth / 1280` maps design
-pixels to render pixels, and every size passed to a draw is already in render pixels:
+scene camera's clear color, which reads as the letterbox bars. `scale = playfieldWidth / 1280` maps
+design pixels to render pixels, and every size passed to a draw is already in render pixels:
 
 ```csharp
 Vector2 pixel = new(playfieldLeft + (design.X * scale), playfieldTop + (design.Y * scale));
 Transform screen = camera.ScreenToWorldTransform(pixel, 1f);
 ```
 
-The pass draws the playfield, the inset border, the dashed net, the two score panels, the two textured
-paddles, and the ball disc. It then draws the scores and the status line in the built-in mono face;
-when paused or finished it records an alpha-blended shade before that text and draws the pause/winner
-title and hint on top. The shade uses `RenderState.AlphaBlend`; every other quad/disc draw uses the
-default opaque state, and `DrawText` records the engine's alpha text state. The paddles and the ball
-are `DrawQuad` and `DrawDisc` with the screen transform, and all text is `DrawText` with pixel sizes.
+Cameras are sequential: the scene pass is disposed before the HUD camera is created. Both cameras use
+the same projection, full viewport, and screen-plane distance, so the returned transform is identical
+in both passes and every HUD position is unchanged. `ClearMode.Depth` loads the scene color and clears
+depth, so HUD text is not occluded by scene depth; there is no separate overlay pass, and the HUD
+camera has no post-process stack.
+
+The scene pass draws the playfield, the inset border, the dashed net, the two textured paddles, and
+the ball disc. The HUD pass draws the two score panels, the scores, and the status line in the
+built-in mono face; when paused or finished it records an alpha-blended shade before that text and
+draws the pause/winner title and hint on top. The shade uses `RenderState.AlphaBlend`; every other
+quad/disc draw uses the default opaque state, and `DrawText` records the engine's alpha text state.
+The paddles and the ball are `DrawQuad` and `DrawDisc` with the screen transform, and all text is
+`DrawText` with pixel sizes.
 
 The palette is authored with `Color.FromSrgbBytes`: a dark navy playfield, a warm border and net, a
 warm paddle texture, a pale gold ball, and a dimmed overlay.
+
+## Bloom and collision flash
+
+The sample owns one app-lifetime `BloomEffect` and adds it to one `PostProcessStack` in `Setup`; only
+the scene camera receives the stack. The effect uses threshold `2`, soft knee `0.5`, intensity `0.7`,
+scatter `0.7`, and a white tint. The raised threshold keeps the ordinary palette, whose brightest base
+channel is `1`, out of the soft-knee ramp; only the HDR collision flash blooms. It runs the five-level
+fast dual-filter pyramid over the scene target and adds the result back into the scene before the HUD
+camera draws, so the scores, status line, and overlay keep their exact colors and are never bloomed.
+`B` toggles `BloomEffect.Enabled`; the toggle runs before the scene camera is created, so it applies to
+the scene camera created later in the same tick.
+
+Every collision starts a short flash that decays over `0.15` seconds. The ball flashes gold, the hit
+paddle flashes stronger warm white, and a top or bottom wall hit flashes the border amber. The flash
+colors are scene-linear values above `2` (for example `6, 5, 3` for a paddle), so they pass the raised
+bloom threshold and produce a halo; the ordinary playfield colors stay below it. There are no test-only
+diagnostics: the status line shows `bloom on` or `bloom off` with the rest of the controls.
 
 ## Gameplay
 
@@ -87,6 +135,7 @@ Controls:
 | Gamepad 0 d-pad up / down | Move the left paddle. |
 | `Space` / gamepad Start | Pause or resume. |
 | `R` / gamepad Back | Restart the match. |
+| `B` | Toggle bloom for the scene camera. |
 | `Escape` | Request exit. |
 
 The sample applies a `0.2` stick deadzone because the engine applies none. A missing gamepad is
@@ -179,7 +228,8 @@ and fails with a clear error when it is missing.
 
 ## Native AOT
 
-`Pong` is the M7 Native AOT gate. Build the solution in Release first so `Pong.Assets` bakes and
+`Pong` was the M7 Native AOT gate and remains a buildable and publishable sample; the M8 gate is
+`samples/RenderTarget`. Build the solution in Release first so `Pong.Assets` bakes and
 copies `pong.pck`, then publish and run the Windows host from the repository root:
 
 ```powershell

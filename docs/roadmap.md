@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M7 as-built**, 2026-11-16. M0-M7 are shipped. Milestones are ordered by
+Status: **v0.1 M8 as-built**, 2026-11-17. M0-M8 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -74,7 +74,7 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M5 | Primitives and collision | Raylib-style 3D shapes, lines, billboards, wireframe models, mesh generators, collision queries, HDR AgX rework, restored linearized Bork2d color presets | M4 |
 | M6 | Text and MSDF | Managed TTF/OTF parsing, deterministic on-demand MSDF, layout, built-in font, world-space text | M4 |
 | M7 | 2D and orthographic rendering | Orthographic cameras, screen transform, quad/disc/grid primitives, Pong | M4 |
-| M8 | Render targets and multiple cameras | HDR/MSAA targets, readback, split-screen | M4 |
+| M8 | Render targets and multiple cameras | HDR/MSAA targets, depth, resize, readback, split-screen, camera post-process, SSAO, bloom, and the RenderTarget sample | M4 |
 | M9 | Input and window polish | IME, clipboard, fullscreen, gamepad hotplug/rumble | M1 |
 | M10 | Performance and hardening | Pacing, caches, stress, validation CI, recovery hardening | M4-M8 |
 | M11 | Samples, docs, packaging | Five samples, template, NuGet, docs, MIT license | M10 |
@@ -432,12 +432,14 @@ automatic instancing, and per-instance textures/uniforms.
   dzn) is not a target and is not part of the gate; the Linux gate uses the conformant lavapipe ICD.
   The fixed `RayBorkTextures[2048]` array is the shader ABI and table capacity, not a
   driver-specific workaround.
-- **M4 limitation: one frame block per frame slot.** The renderer writes one 256-byte `rbFrame`
-  block per frame slot. A frame that records more than one camera pass overwrites that block for
-  each pass, so every pass in that frame sees the last recorded pass' view-projection, view,
-  projection, camera position, and viewport. Single-camera frames are correct; split-screen
-  cameras and multiple cameras with different views need per-pass frame data, which lands with the
-  M8 multiple-camera work. This is the honest M4 limitation, not an M8 feature already shipped.
+- **M4 frame-block limitation, resolved by the M8 shader ABI v2.** M4 wrote one 256-byte `rbFrame`
+  block per frame slot, so a frame that recorded more than one camera pass gave every pass the last
+  recorded pass' view-projection, view, projection, camera position, and viewport. The M8 shader ABI
+  v2 writes one frame block per camera pass into a storage-buffer array and selects it with a
+  push-constant pass index, so multiple cameras with different views are correct. The M8 camera-pass
+  work records one render pass per camera pass on the HDR scene target, with the clamped viewport as
+  the render area, so split-screen views and viewport-scoped clears are correct. There is no separate
+  multi-camera overlay pass: a HUD is an ordinary later camera.
 
 **Risks.** This is the largest milestone. The shader ABI and per-instance layout can force changes
 in the bake, the renderer, and the sample at the same time. Prototype the ABI on two shaders before
@@ -742,10 +744,11 @@ color helpers, and the restored Bork2d/Unity color preset set:
   hover overlay: it tests the pointer ray against the model bounds with `Collision.GetRayBox`, draws
   the bounds on a hit, and marks the nearest `Collision.GetRayMesh` hit. It still does not implement
   click selection. M6 adds the presented-FPS/render-statistics status overlay the sample deferred in
-  M4, and M7 draws it through `ScreenToWorldTransform` so it stays screen-aligned. Castle remains a
-  buildable and publishable sample; the M6 AOT gate was `samples/Text` and the M7 gate is
-  `samples/Pong`. The M4
-  limitation of one `rbFrame` block per frame slot is unchanged by M5-M7.
+  M4, and M7 draws it through `ScreenToWorldTransform` so it stays screen-aligned, with M8 adding the
+  `A` SSAO toggle and a later HUD camera. Castle remains a
+  buildable and publishable sample; the M6 AOT gate was `samples/Text`, the M7 gate was
+  `samples/Pong`, and the M8 gate is `samples/RenderTarget`. The M4
+  limitation of one `rbFrame` block per frame slot is resolved by the M8 shader ABI v2.
 
 **Risks.**
 
@@ -897,7 +900,8 @@ blocking glyph generation.
 - **Built-in fonts.** The built-in pack carries Fira Sans Regular version 4.203 at
   `/fonts/fira-sans` with its `/fonts/fira-sans-face` payload and the JetBrains Mono variable face
   version 2.211 at `/fonts/jetbrains-mono` with its `/fonts/jetbrains-mono-face` payload, produced by
-  the ordinary font processor with the default 32/4/2 MSDF settings, so the pack has 20 entries. The
+  the ordinary font processor with the default 32/4/2 MSDF settings; the M8 SSAO and bloom shader
+  variants, the blue-noise texture, and their payloads bring the pack to 46 entries. The
   bundled JetBrains Mono face's default named instance is Regular (weight 400); that is the instance
   the runtime renders. Fira Sans and JetBrains Mono are licensed under the SIL Open Font License 1.1
   and cover Latin, Cyrillic, and Greek, which is the coverage the samples exercise.
@@ -968,8 +972,9 @@ blocking glyph generation.
   1-2 ms, and the GPU is not the bottleneck. These are measured observations, not targets. The
   per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
   milestone.
-- **Tests.** At the M6 milestone the suite was 2,625 tests, 106 of them GPU integration tests; the
-  current suite, including the M7 screen-space suites, is 2,695 tests, 114 GPU integration tests.
+- **Tests.** At the M6 milestone the suite was 2,625 tests, 106 of them GPU integration tests; it
+  grew to 2,695 tests, 114 GPU integration tests by M7. The final M8 suite is 2,977 tests, 239 GPU
+  integration tests.
   M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
   colouring suites; the glyph pipeline cache, generation service, settings, and font asset suites;
@@ -987,8 +992,9 @@ blocking glyph generation.
   through `ScreenToWorldTransform` and the world-space `DrawText` overload, not a screen-space draw
   API. MSDF sharp
   corners are not extended, so a small artifact can appear at very large sizes. A status overlay on
-  a screen-aligned plane can still be occluded by geometry closer than that plane, and the separate
-  overlay pass is M8. M6 ships text as
+  a screen-aligned plane can still be occluded by geometry closer than that plane; a HUD that must
+  not be occluded is an ordinary later camera that loads the scene color and clears depth. M6 ships
+  text as
   alpha-blended (derivative antialiasing, transparent batch, no depth writes); M10 makes the
   alpha-to-coverage cutout the default so text needs no sorting and resolves overlapping glyphs by
   depth, keeping the alpha path for translucent text.
@@ -1012,8 +1018,8 @@ blocking glyph generation.
   or wait for post-1.0 work; the samples state the per-face boundary honestly.
 - **World-space text.** M7 adds `ScreenToWorldTransform` so a text block can be anchored to a screen
   pixel on a camera-facing plane, but the draw is still world-space geometry. The sample overlays
-  are alpha text on that plane, so geometry closer than it can occlude them; a separate overlay pass
-  is M8 work, not an M7 feature already shipped.
+  are alpha text on that plane, so geometry closer than it can occlude them. M8 does not add a
+  separate overlay pass either: a HUD that must not be occluded is an ordinary later camera.
 
 ### M7 — Orthographic rendering and the screen-space surface
 
@@ -1048,8 +1054,10 @@ blocking glyph generation.
   keyboard/gamepad input, pause, restart; a two-project solution with a build-time bake, and the M7
   Native AOT gate.
 - Remove the M1-M3 `samples/HelloInterop` diagnostic host.
-- **Deferred to M8, not shipped in M7:** a separate multi-camera overlay pass and per-pass frame
-  data. The M7 HUD is same-pass text on a screen-aligned plane.
+- **Deferred to M8, not shipped in M7:** per-pass frame data and multiple cameras to the scene
+  target. M8 ships one frame block per camera pass and one render pass per camera; the M7 HUD stays
+  same-pass text on a screen-aligned plane, and a HUD that must not be occluded becomes an ordinary
+  later camera rather than a separate overlay pass.
 
 **Exit criteria.**
 
@@ -1127,7 +1135,8 @@ details:
   per-instance UV/color path, not a second renderer.
 - **Orthographic 3D.** The same orthographic camera renders 3D models and primitives with an
   orthographic projection; it is not a separate 2D renderer. `samples/Castle` has an `O` toggle
-  between perspective and orthographic, records one camera per tick, and derives the orthographic
+  between perspective and orthographic, records a scene pass and a later HUD pass per tick, and
+  derives the orthographic
   height from the orbit distance (`2 * orbitDistance * tan(fieldOfView / 2)`) so the framing matches
   the perspective view at that distance. Its orthographic far plane is derived from
   `MAX_DISTANCE * 2`, and the status line shows the current projection. The same `Camera` batching,
@@ -1136,9 +1145,10 @@ details:
   `ScreenToWorldTransform(new Vector2(margin, margin), 1f)` and
   `DrawText(..., 18f, ...)`. The returned scale keeps 18 local units at 18 render pixels in either
   projection. This is same-pass, screen-aligned text: it is alpha-blended with no depth write, so
-  geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass,
-  and per-pass frame data is still absent, so the M4 one-frame-block limitation is unchanged. A
-  dedicated multi-camera overlay pass and per-pass frame data are deferred to M8.
+  geometry closer than the overlay plane can still occlude it. It is not a separate overlay pass.
+  Shader ABI v2 provides per-pass frame data, so the M4 one-frame-block limitation no longer applies,
+  and M8 records one render pass per camera pass, so a HUD that must not be occluded is an ordinary
+  later camera that loads the scene color and clears depth.
 - **Nine primitive meshes.** The engine builds one more internal primitive mesh, the unit disc,
   alongside cube, sphere, plane, quad, triangle, line, wire cube, and wire sphere. The disc is one
   center vertex plus 36 rim vertices and 36 triangles, built once before `IGame.Setup` through the
@@ -1148,7 +1158,8 @@ details:
   plane so a full-viewport quad or boundary-aligned geometry is not culled by floating-point drift
   in the extracted planes. `Contains` keeps its exact non-negative test, and the tolerance applies
   only to the `Intersects` positive-vertex test.
-- **Pong sample and AOT gate.** `samples/Pong` is the M7 sample and Native AOT gate. It is a
+- **Pong sample (M7 gate).** `samples/Pong` is the M7 sample; it was the M7 Native AOT gate and M8
+  moved the gate to `samples/RenderTarget`. It is a
   two-project solution, `samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, containing
   the sample and the JIT `Pong.Assets` executable. The solution builds `Pong` once and then
   `Pong.Assets`; the assets project runs the bake executable out of process over the checked-in
@@ -1161,10 +1172,12 @@ details:
   speed), and `/textures/paddle`, a 32x128 original opaque paddle PNG with its KTX2 raw payload.
   `PongSettings` lives only in the sample project; `Pong.Assets` references `Pong.csproj` directly
   instead of linking the settings file, and the assets project also references `RayBork.Bake`.
-  Every tick records one orthographic camera at `(0, 0, 1)` looking down `-Z` with
+  Every tick records a scene camera and a later HUD camera at `(0, 0, 1)` looking down `-Z`; at M7
+  the scene pass ran without a post stack, and M8 adds the scene-camera bloom stack while the HUD
+  camera stays stackless. Both cameras use
   `orthographicHeight = Window.RenderHeight`, so the plane at distance `1` has a
   world-units-per-pixel scale of exactly one. The `1280x720` 16:9 design playfield is fitted into
-  the current render pixels, letterboxed with the camera clear color, and every draw uses
+  the current render pixels, letterboxed with the scene camera clear color, and every draw uses
   `ScreenToWorldTransform`. `DrawQuad` draws the playfield, border, net, score panels, shaded
   overlay, and textured paddles; `DrawDisc` draws the ball; `DrawText` draws the scores, status
   line, and pause/winner overlay. The left paddle is the human and the right paddle is a
@@ -1191,17 +1204,18 @@ details:
   full-viewport frustum tolerance, and 3D orthographic cube rendering. `Rendering/PrimitiveDrawTests`
   gains the `DrawQuad`, `DrawDisc`, and `DrawGrid(Transform)` record, validation, zero-extent,
   disposed-asset, and batching coverage; `Rendering/CameraTests` covers `ScreenToWorldTransform`.
-  The Windows hardware run is 2,695
-  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run is 2,688 passed,
+  At M7 the Windows hardware run was 2,695
+  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run was 2,688 passed,
   0 failed, and 7 skipped: the seven existing HDR/scRGB-present tests skip because lavapipe exposes
-  only SDR, and the GPU-filtered run is 107 passed with the same 7 skips. Every sample solution
+  only SDR, and the GPU-filtered run was 107 passed with the same 7 skips. Every sample solution
   builds. There is no golden-image suite.
 - **HelloInterop removed.** The M1-M3 `samples/HelloInterop` diagnostic host is gone; the Pong,
   Text, Castle, and PrimitiveGallery samples and the test suite cover the host, input, time,
   logging, renderer, and asset-loading surface it exercised.
-- **Overlay pass deferred.** The M7 scope listed a screen-space overlay pass; the shipped HUD is
-  same-pass text, and the separate multi-camera overlay pass with per-pass frame data is M8 work.
-  M7 does not claim it as shipped.
+- **No separate overlay pass.** The M7 scope listed a screen-space overlay pass; the shipped HUD is
+  same-pass text. M8 does not add a separate overlay or layer pass either: a HUD that must not be
+  occluded is an ordinary later camera that loads the scene color and clears depth. M7 does not claim
+  an overlay pass as shipped, and M8 does not reintroduce one.
 
 **Risks.**
 
@@ -1210,9 +1224,10 @@ details:
   pixel scale stays unscaled, so the member documents the requirement and does not support a scaled
   camera; the samples keep the camera transform at unit scale.
 - **Same-pass HUD occlusion.** The M7 HUD is depth-tested alpha text on a screen-aligned plane, so
-  geometry closer than the overlay plane can occlude it, and the one-frame-block limitation still
-  prevents different per-pass views in one frame. A dedicated overlay pass with per-pass frame data
-  is M8; the current behavior is documented rather than hidden.
+  geometry closer than the overlay plane can occlude it. Shader ABI v2 provides per-pass frame data,
+  and M8 records one render pass per camera pass, so a HUD that must not be occluded is an ordinary
+  later camera that loads the scene color and clears depth. The same-pass occlusion behavior stays
+  documented rather than hidden.
 - **No 2D draw API.** Games porting a raylib-style 2D renderer must draw through
   `ScreenToWorldTransform` and the world-space primitives instead of screen-coordinate overloads.
   This is a deliberate design choice: one draw path, one batch key, and no duplicate 2D renderer.
@@ -1224,40 +1239,138 @@ details:
   scaling of the window; the screen transform is exact for the clamped viewport, while a game that
   wants a fixed design space must fit it itself, as Pong does.
 - **AOT gate moved to Pong.** `samples/Text`, `samples/Castle`, and `samples/PrimitiveGallery` remain
-  buildable and publishable but are no longer the gate. The M7 gate is Pong on both RIDs, and a
+  buildable and publishable but are no longer the gate. The M7 gate was Pong on both RIDs, and a
   failure there is a milestone failure.
 
 ### M8 — Render targets, multiple cameras, and readback
 
 **Goal.** Offscreen rendering, post-processing building blocks, split-screen, and screenshots.
 
+**As built.** The per-pass frame data (shader ABI v2), one render pass per camera pass on the HDR
+scene target, and the color, depth, resize, and readback paths of public render targets ship:
+`RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`,
+`RenderTexture.Resize`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ReadColorsAsync`,
+`Camera.Target`, and the `CreateCamera` `target` parameter, with a per-target render pass, MSAA color
+resolve, Vulkan 1.2 depth/stencil resolve, the sampled `ColorTexture` and `DepthTexture` views,
+same-tick sampling, multiple targets in one frame, target lifetime, in-place target recreation at a new
+size, and top-left color readback (raw scene-linear HDR colors and display-referred RGBA8). `Depth:
+false` targets have no depth view. The scene target's resolved depth image is internal for the SSAO
+effect. The extensible camera post-process core ships: `PostProcessStack`, `PostProcessEffect`,
+`ShaderPostProcessEffect`, the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float`
+chains over the engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader
+contract, and camera-viewport store-back on the scene target and on render targets, with the
+post-processed output included in the RenderTarget sample and both readback methods. Built-in SSAO ships
+on the same core: `SsaoEffect`/`SsaoQuality` use the N8AO 2.1.0 full-resolution SSAO path with
+depth-reconstructed normals, a golden-angle kernel, blue-noise rotation, two bilateral denoise
+iterations, a tinted composite, baked 8/16/64 AO and 4/8/16 denoise variants, and an engine-owned
+128x128 blue-noise texture. Castle and PrimitiveGallery enable it by default and toggle it with `A`.
+Built-in bloom ships on the same core: `BloomEffect` thresholds and soft-knees the chain input into a
+half-resolution level, runs up to four more downsample levels (quarter through 1/32, each extent clamped
+to at least one pixel), tent-upsamples with `Scatter`, and adds a camera-target-sized composite. Its four
+programs and shared fullscreen vertex payload are engine-owned built-ins, and the effect needs no depth.
+`Pong` runs one app-lifetime bloom stack on its scene camera only, keeps its HUD camera stackless, sets
+the bloom threshold to `2` so the ordinary `1`-brightness palette stays out of the knee, and adds gold
+and warm-white HDR collision flashes (ball `3`, paddle `6`, wall `2.4`) that bloom and decay over a few
+frames.
+`RenderTarget` ships as the M8 sample and Native AOT gate: it draws a procedural scene into a
+`640x360` `Rgba16Float` render texture, samples the target on a monitor in a later camera pass,
+toggles a two-camera split-screen view with `S`, runs a baked custom vignette/tint post shader on the
+single scene camera with `E`, and reads the target back to a 24-bit uncompressed BMP screenshot with
+`F2`. The Windows `win-x64` and `linux-x64` publishes finished with zero AOT/trim warnings, contained
+`rendertarget.pck` beside the host and no bake tooling, and ran `--frames 30` to exit `0` on the
+Windows hardware driver and on the conformant lavapipe/llvmpipe software driver. The final suite is
+2,977 tests, 239 of them GPU integration tests, with no skips on the Windows hardware path; the
+lavapipe Linux run is 2,970 passed with the same 7 HDR/scRGB-present skips, and its GPU-filtered run
+is 232 passed with those 7 skips. M8 is complete.
+
 **Scope.**
 
-- `RenderTexture` creation with `Rgba16Float` default, color/depth attachments, MSAA resolve,
-  resize, sampling, and lifetime.
-- Camera target routing and viewport rectangles.
-- Image and resolve barriers between passes; write-after-read validation.
-- Multiple cameras to the HDR scene target and to offscreen targets.
-- Per-pass frame data: one frame uniform block per camera pass, so multiple cameras with different
-  views are correct instead of sharing the last pass' values.
-- A separate multi-camera overlay pass for HUD text and sprites that must not be occluded by scene
-  depth; the M7 HUD is same-pass and is the deferred input to this work.
-- `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots; raw HDR readback is post-1.0.
-- RenderTarget sample: render the castle to a target, sample it in a fullscreen triangle with a
-  simple post-process shader, and present.
-- Split-screen sample pass: two cameras, two viewports.
-- Target format/sRGB rules; depth texture sampling.
+- `RenderTexture` creation with `Rgba16Float` default, color/depth attachments, MSAA color and depth
+  resolve, resize, sampling, and lifetime. The color, depth, and resize paths are shipped.
+- Camera target routing and viewport rectangles. Shipped.
+- Image and resolve barriers between passes; write-after-read validation. The color and depth paths are
+  shipped; a same-camera write-and-sample of either view is rejected on the tick thread.
+- Multiple cameras to the HDR scene target and to offscreen targets. Shipped for the color and depth
+  paths.
+- One render pass per camera pass on the HDR scene target, with the clamped viewport as the render
+  area, viewport-scoped clears, and load/store between passes. Each pass carries its own frame block,
+  so split-screen views and layered HUD cameras are correct. A HUD is an ordinary later camera, not a
+  separate overlay or layer pass. Shipped.
+- Per-pass frame data: one frame block per camera pass, so multiple cameras with different
+  views are correct instead of sharing the last pass' values. Shipped.
+- `ReadPixelsAsync` display-referred RGBA8 after AgX for screenshots, and `ReadColorsAsync` raw
+  scene-linear HDR colors for tests and tooling. Both are top-left, wait for the target's last-use
+  fence, and leave the target state unchanged. Shipped.
+- Camera post-process core: an app-lifetime, caller-owned effect stack snapshotted at camera
+  creation, a custom-shader effect over the engine fullscreen quad with the reserved
+  `sourceColor`/`sourceDepth` bindings, a target-sized single-sample `Rgba16Float` chain drawn from a
+  pool of three targets per target extent per frame ring slot that rotates around its current source,
+  and
+  a camera-viewport store-back into the target's MSAA or single-sample color image. The chain runs
+  after the camera's geometry and resolve pass, works on the scene target and on `RenderTexture`
+  targets, includes the post-processed output in readback, and leaves depth unchanged. Shipped.
+- Built-in SSAO: N8AO 2.1.0 full-resolution SSAO with depth-reconstructed normals, a golden-angle
+  kernel, blue-noise rotation, two bilateral denoise iterations, `SsaoEffect`/`SsaoQuality`, baked
+  quality variants, the engine-owned blue-noise texture, and on-by-default Castle/PrimitiveGallery
+  toggles. Shipped.
+- Built-in bloom on the same core: `BloomEffect` with a threshold/soft-knee prefilter to half
+  resolution, up to four more downsample levels clamped to one pixel, tent upsample with `Scatter`, a
+  camera-target-sized additive composite, engine-owned prefilter/downsample/upsample/composite programs,
+  a depth-less target path, and pooled per-extent targets. Shipped.
+- Pong bloom integration: one app-lifetime scene-camera stack with the HUD camera stackless, a raised
+  bloom threshold of `2` so the ordinary palette stays out of the knee, gold and warm-white HDR
+  ball/paddle/wall collision flashes (ball `3`, paddle `6`, wall `2.4`), a short decay, and a `B` toggle
+  with HUD status. Shipped.
+- RenderTarget sample: a procedural scene rendered into a `640x360` `Rgba16Float` target, sampled on
+  a monitor in a later camera pass, with a baked custom vignette/tint post shader, a two-camera
+  split-screen toggle, both readback methods, and a 24-bit uncompressed BMP screenshot. It is the M8
+  sample and Native AOT gate, and it does not render the Castle model. Shipped.
+- Split-screen: two cameras with two viewport rectangles in one frame, each its own render pass with
+  its own frame block, clear, and resolve; the sample's `S` toggle exercises it. Shipped.
+- Target format/sRGB rules; depth texture sampling. The three color formats, the sRGB sampling decode,
+  and the resolved `DepthTexture` over a Vulkan 1.2 depth resolve ship. The scene target's resolved
+  depth image is an internal post-process source for the built-in SSAO effect and the reserved
+  `sourceDepth` custom-shader binding.
 
 **Exit criteria.**
 
-- Render-to-texture produces the same visible image as the direct path (within tolerance).
-- A post-process shader samples the color target without validation errors.
-- Split-screen renders two independent views in one frame.
-- `ReadPixelsAsync` returns the expected top-left display-referred RGBA8 image and completes
-  without stalling the next tick indefinitely.
+- Render-to-texture produces the same visible image as the direct path (within tolerance). Met for
+  the shipped color path and the sampled depth path by the GPU tests.
+- A post-process shader samples the color target without validation errors, and a camera's effect
+  chain writes the post-processed result back into the target and into both readback paths. Met by the
+  post-process unit and GPU tests for the scene target and render target, including effect order,
+  user uniforms, the source depth binding, viewport store-back, disabled semantics, retained
+  materials, target resize, and device recovery; the RenderTarget sample runs the same chain through
+  a real camera and the app host.
+- Built-in SSAO runs every baked quality variant over perspective and orthographic probes, darkens a
+  known cube contact while a flat wall stays near-white, honors world/screen-space radius,
+  intensity, and denoise changes, rejects a depth-less target, preserves its chain input in
+  the composite, and reads back with SSAO included. Met by the SSAO unit and GPU tests.
+- Built-in bloom produces a measurable halo from an HDR source against a no-bloom baseline, honors
+  threshold, soft knee, intensity, and scatter changes, skips a disabled effect, collapses the pyramid
+  on small targets, preserves a custom effect's output in a custom-plus-bloom chain and with bloom
+  twice, runs on a `RenderTexture` and a depth-less target, includes its output in readback, and keeps
+  its per-extent targets in steady state. Met by the bloom unit and GPU tests.
+- Pong runs the scene-camera bloom stack with a stackless HUD camera, and the collision flash blooms
+  while the HUD colors are unchanged. Met by the Pong sample run and the engine's two-camera GPU
+  coverage.
+- Split-screen renders two independent camera views into the HDR scene target in one frame, and each
+  camera's clear stays inside its clamped viewport. Met.
+- A later camera with `ClearMode.None` keeps the earlier pass' color and depth; `ClearMode.Depth`
+  clears depth only, and the frame passes validation with both the multisampled and single-sample
+  scene targets. Met.
+- A HUD that must not be occluded renders as an ordinary later camera; there is no separate overlay
+  or layer pass. Met.
+- `ReadPixelsAsync` returns the expected top-left display-referred RGBA8 image and `ReadColorsAsync`
+  returns the raw scene-linear top-left colors, both after the last completed frame and without leaving
+  the target in a different layout. Met by the render texture GPU, service, and app tests.
 - Resizing a target while it is not in use works; resizing while in use fails with a clear error.
-- MSAA 4x offscreen color/depth resolves correctly; 1x and 8x are supported or fall back.
-- Native AOT publish runs the RenderTarget sample on Windows and Linux.
+  Met by the render texture GPU, service, and app tests.
+- MSAA 4x offscreen color/depth resolves correctly; 1x and 8x are supported or fall back. Met for
+  color and the sampled depth view.
+- Native AOT publish runs the RenderTarget sample on Windows and Linux. Met: both publishes finished
+  with zero AOT/trim warnings, contained `rendertarget.pck` and no bake tooling, and both hosts ran
+  `--frames 30` to exit `0` (Windows hardware and Linux lavapipe).
 
 ### M9 — Input and window polish
 
@@ -1343,12 +1456,14 @@ with Native AOT without reading the engine source.
 
 **Scope.**
 
-- Samples: Castle (3D textured/custom shader/HDR plus the perspective/orthographic toggle; the
-  sample and its assets executable ship in M4, and M11 polishes them), Pong
-  (orthographic/screen-space match, input, and text; the sample and its AOT gate ship in M7, and M11
-  polishes them), Text (MSDF/layout; the sample and its AOT gate ship in
-  M6, and M11 polishes them), Instancing (batching/stats), RenderTarget
-  (offscreen/MSAA/post-process).
+- Samples: Castle (3D textured/custom shader/HDR plus the perspective/orthographic toggle and SSAO;
+  the sample and its assets executable ship in M4, and M11 polishes them), Pong
+  (orthographic/screen-space match, input, text, and bloom; the sample and its AOT gate shipped in
+  M7, and M11 polishes them), Text (MSDF/layout; the sample and its AOT gate shipped in
+  M6, and M11 polishes them), PrimitiveGallery (primitive helpers and SSAO; it shipped with M5),
+  Instancing (batching/stats; M11), and RenderTarget
+  (offscreen/MSAA/post-process/split-screen; it shipped as the M8 sample and AOT gate, and M11
+  polishes it).
 - `dotnet new raybork` template with a game project, assets executable, and AOT publish profile.
 - NuGet packages: `RayBork.Engine` and the bake tool; package validation and symbol packages.
 - XML docs for every public member; the API reference synchronized with the implementation.
@@ -1432,7 +1547,7 @@ The matrix is the scope contract.
 | Screen-space helpers | Covered | M4, M7 | `ScreenToWorldRay`, `WorldToScreen`, `ScreenToWorldTransform`, orthographic cameras, and screen-aligned HUD text; no 2D draw overloads. |
 | Timing | Covered | M1 | `Stopwatch`; double seconds; no fixed step in v1. |
 | Random | Not engine | — | Use `System.Random`; no global RNG. |
-| Misc (screenshot, OpenURL) | Partial | M8/M9 | Display-referred readback screenshot; `OpenURL` out. |
+| Misc (screenshot, OpenURL) | Partial | M8/M9 | Display-referred readback screenshot and raw linear HDR color readback; `OpenURL` out. |
 | Logging | Covered | M1 | `Microsoft.Extensions.Logging` + ZLogger; custom providers supported. |
 | Memory allocators | Not public | — | Engine-internal pools; no `MemAlloc` API. |
 | File system | Partial | M3 | Pack reads; user-data file API post-1.0. |
@@ -1530,9 +1645,10 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   and split only by render state, the disc interior, text and sprites in one frame, full-viewport
   frustum tolerance, and 3D orthographic cube rendering. `PrimitiveDrawTests` covers the
   `DrawQuad`, `DrawDisc`, and `DrawGrid(Transform)` records, zero-extent behavior, validation,
-  disposed assets, retention, and batching, and `CameraTests` covers `ScreenToWorldTransform`. The
-  suite is 2,695 tests, 114 of
-  them GPU integration tests, and every sample solution builds.
+  disposed assets, retention, and batching, and `CameraTests` covers `ScreenToWorldTransform`. At M7
+  the suite was 2,695 tests, 114 of
+  them GPU integration tests, and every sample solution builds. The final M8 suite is 2,977 tests,
+  239 GPU integration tests.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
   the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,
@@ -1628,7 +1744,7 @@ Audio defines `ctx.Audio`, `AudioClip`, `AudioSource`, `AudioListener`, and the 
 ### Other post-1.0 work
 
 - Skeletal and morph animation; animation asset pipeline; model animation playback.
-- Built-in forward lighting, PBR, shadow maps, skybox, fog, and a post-processing stack.
+- Built-in forward lighting, PBR, shadow maps, skybox, fog, and built-in post-processing effects.
 - Rigid-body physics and a collision world; v1 only has queries.
 - UI toolkit (retained or immediate mode) built on orthographic cameras and text.
 - Custom vertex/instance layouts; compute shaders; GPU-driven culling.

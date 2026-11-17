@@ -140,7 +140,7 @@ RayBork.EngineContext
 RayBork.EngineContext.Assets.get -> RayBork.IAssetCatalog!
 RayBork.EngineContext.Defaults.get -> RayBork.EngineDefaults!
 RayBork.EngineContext.CreateMeshBuilder(RayBork.PrimitiveTopology topology = RayBork.PrimitiveTopology.TriangleList) -> RayBork.MeshBuilder!
-RayBork.EngineContext.CreateCamera(RayBork.Transform transform, RayBork.CameraProjection projection, float fieldOfView = 0, float orthographicHeight = 0, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = 1000, RayBork.Rect? viewport = null) -> RayBork.Camera!
+RayBork.EngineContext.CreateCamera(RayBork.Transform transform, RayBork.CameraProjection projection, float fieldOfView = 0, float orthographicHeight = 0, RayBork.ClearMode clearMode = RayBork.ClearMode.ColorAndDepth, RayBork.Color? clearColor = null, float near = 0.01, float far = 1000, RayBork.Rect? viewport = null, RayBork.RenderTexture? target = null, RayBork.PostProcessStack? postProcess = null) -> RayBork.Camera!
 RayBork.EngineContext.CreateTextureBuilder(int width, int height, RayBork.TextureFormat format = RayBork.TextureFormat.Rgba8Srgb, bool generateMips = true, RayBork.SamplerState? sampler = null) -> RayBork.TextureBuilder!
 RayBork.EngineContext.DeltaTime.get -> double
 RayBork.EngineContext.Fps.get -> double
@@ -1284,3 +1284,89 @@ RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 siz
 RayBork.Camera.DrawQuad(RayBork.Transform transform, System.Numerics.Vector2 size, RayBork.Texture! texture, RayBork.Rect source, RayBork.Color? tint = null, RayBork.RenderState? renderState = null) -> void
 RayBork.Camera.DrawDisc(RayBork.Transform transform, float radius, RayBork.Color color) -> void
 RayBork.Camera.DrawGrid(RayBork.Transform transform, int slices, float spacing, RayBork.Color color) -> void
+RayBork.Camera.Target.get -> RayBork.RenderTexture?
+RayBork.EngineContext.CreateRenderTextureAsync(RayBork.RenderTextureDescription description, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<RayBork.RenderTexture!>!
+RayBork.RenderTexture
+RayBork.RenderTexture.ColorTexture.get -> RayBork.Texture!
+RayBork.RenderTexture.DepthTexture.get -> RayBork.Texture?
+RayBork.RenderTexture.Dispose() -> void
+RayBork.RenderTexture.Height.get -> int
+RayBork.RenderTexture.IsDisposed.get -> bool
+RayBork.RenderTexture.IsHdr.get -> bool
+RayBork.RenderTexture.ReadColorsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<RayBork.Color[,]!>!
+RayBork.RenderTexture.ReadPixelsAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<byte[]!>!
+RayBork.RenderTexture.Resize(int width, int height) -> void
+RayBork.RenderTexture.SampleCount.get -> int
+RayBork.RenderTexture.Width.get -> int
+RayBork.RenderTextureDescription
+RayBork.RenderTextureDescription.ColorFormat.get -> RayBork.TextureFormat
+RayBork.RenderTextureDescription.ColorFormat.init -> void
+RayBork.RenderTextureDescription.Deconstruct(out int Width, out int Height, out RayBork.TextureFormat ColorFormat, out bool Depth, out int SampleCount) -> void
+RayBork.RenderTextureDescription.Depth.get -> bool
+RayBork.RenderTextureDescription.Depth.init -> void
+RayBork.RenderTextureDescription.Equals(RayBork.RenderTextureDescription other) -> bool
+RayBork.RenderTextureDescription.Height.get -> int
+RayBork.RenderTextureDescription.Height.init -> void
+RayBork.RenderTextureDescription.RenderTextureDescription() -> void
+RayBork.RenderTextureDescription.RenderTextureDescription(int Width, int Height, RayBork.TextureFormat ColorFormat = RayBork.TextureFormat.Rgba16Float, bool Depth = true, int SampleCount = 4) -> void
+RayBork.RenderTextureDescription.SampleCount.get -> int
+RayBork.RenderTextureDescription.SampleCount.init -> void
+RayBork.RenderTextureDescription.Width.get -> int
+RayBork.RenderTextureDescription.Width.init -> void
+~override RayBork.RenderTextureDescription.Equals(object obj) -> bool
+~override RayBork.RenderTextureDescription.ToString() -> string
+override RayBork.RenderTextureDescription.GetHashCode() -> int
+static RayBork.RenderTextureDescription.operator !=(RayBork.RenderTextureDescription left, RayBork.RenderTextureDescription right) -> bool
+static RayBork.RenderTextureDescription.operator ==(RayBork.RenderTextureDescription left, RayBork.RenderTextureDescription right) -> bool
+RayBork.PostProcessEffect
+RayBork.PostProcessEffect.Enabled.get -> bool
+RayBork.PostProcessEffect.Enabled.set -> void
+RayBork.PostProcessStack
+RayBork.PostProcessStack.Clear() -> void
+RayBork.PostProcessStack.Effects.get -> System.Collections.Generic.IReadOnlyList<RayBork.PostProcessEffect!>!
+RayBork.PostProcessStack.Enabled.get -> bool
+RayBork.PostProcessStack.Enabled.set -> void
+RayBork.PostProcessStack.PostProcessStack() -> void
+RayBork.PostProcessStack.Add(RayBork.PostProcessEffect! effect) -> void
+RayBork.PostProcessStack.Remove(RayBork.PostProcessEffect! effect) -> bool
+RayBork.ShaderPostProcessEffect
+RayBork.ShaderPostProcessEffect.Shader.get -> RayBork.Shader!
+RayBork.ShaderPostProcessEffect.ShaderPostProcessEffect(RayBork.Shader! shader) -> void
+RayBork.SsaoEffect
+RayBork.SsaoEffect.BiasMultiplier.get -> float
+RayBork.SsaoEffect.BiasMultiplier.set -> void
+RayBork.SsaoEffect.BiasOffset.get -> float
+RayBork.SsaoEffect.BiasOffset.set -> void
+RayBork.SsaoEffect.Color.get -> RayBork.Color
+RayBork.SsaoEffect.Color.set -> void
+RayBork.SsaoEffect.DenoiseRadius.get -> int
+RayBork.SsaoEffect.DenoiseRadius.set -> void
+RayBork.SsaoEffect.DistanceFalloff.get -> float
+RayBork.SsaoEffect.DistanceFalloff.set -> void
+RayBork.SsaoEffect.Intensity.get -> float
+RayBork.SsaoEffect.Intensity.set -> void
+RayBork.SsaoEffect.Quality.get -> RayBork.SsaoQuality
+RayBork.SsaoEffect.Quality.set -> void
+RayBork.SsaoEffect.Radius.get -> float
+RayBork.SsaoEffect.Radius.set -> void
+RayBork.SsaoEffect.ScreenSpaceRadius.get -> bool
+RayBork.SsaoEffect.ScreenSpaceRadius.set -> void
+RayBork.SsaoEffect.SsaoEffect() -> void
+RayBork.SsaoQuality
+RayBork.SsaoQuality.High = 3 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Low = 1 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Medium = 2 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Performance = 0 -> RayBork.SsaoQuality
+RayBork.SsaoQuality.Ultra = 4 -> RayBork.SsaoQuality
+RayBork.BloomEffect
+RayBork.BloomEffect.BloomEffect() -> void
+RayBork.BloomEffect.Intensity.get -> float
+RayBork.BloomEffect.Intensity.set -> void
+RayBork.BloomEffect.Scatter.get -> float
+RayBork.BloomEffect.Scatter.set -> void
+RayBork.BloomEffect.SoftKnee.get -> float
+RayBork.BloomEffect.SoftKnee.set -> void
+RayBork.BloomEffect.Threshold.get -> float
+RayBork.BloomEffect.Threshold.set -> void
+RayBork.BloomEffect.Tint.get -> RayBork.Color
+RayBork.BloomEffect.Tint.set -> void

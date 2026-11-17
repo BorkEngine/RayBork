@@ -19,6 +19,7 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
 
     private readonly Lock _gate = new();
     private readonly List<long> _submitFrames = [];
+    private readonly Dictionary<long, FakeRenderTarget> _renderTargets = [];
 
     private RendererBackendOptions? _options;
     private IntPtr _surfaceHandle;
@@ -94,6 +95,12 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// Gets or sets an optional hook invoked at the end of <see cref="Submit"/>.
     /// </summary>
     internal Action<RenderFramePacket>? OnSubmit { get; set; }
+
+    /// <summary>
+    /// Gets or sets the exception that a queued readback request publishes. The default is
+    /// <see langword="null"/>, which returns a deterministic fake image.
+    /// </summary>
+    internal Exception? ReadbackException { get; set; }
 
     /// <summary>
     /// Gets or sets an optional hook invoked at the end of <see cref="Present"/>.
@@ -299,6 +306,223 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
     /// <inheritdoc />
     public IAssetGpuWorker CreateAssetGpuWorker() => AssetGpuWorker;
 
+    /// <summary>
+    /// Gets the number of live fake render textures. Diagnostic, for app and service tests.
+    /// </summary>
+    internal int LiveRenderTextureCount {
+        get {
+            lock (_gate) {
+                return _renderTargets.Count;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Gets whether a target id is still live in the fake registry. Diagnostic, for service tests.
+    /// </summary>
+    /// <param name="targetId">The target id to check.</param>
+    /// <returns><see langword="true"/> when a target with the id is registered.</returns>
+    internal bool IsRenderTargetLive(long targetId) {
+        lock (_gate) {
+            return _renderTargets.ContainsKey(targetId);
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The fake has no GPU, so it completes each request with a public <see cref="RenderTexture"/> over
+    /// fake lifetimes and destroys the target entry when the request's lifetime is released. The public
+    /// API, the request handoff, and the shutdown behavior are exercised without a device.
+    /// </remarks>
+    public void ProcessRenderTextureRequests(RenderTextureService service) {
+        ArgumentNullException.ThrowIfNull(service);
+
+        foreach (RenderTextureService.CreateRequest request in service.DrainCreates()) {
+            if (request.Completion.Task.IsCompleted) {
+                request.DisposeRegistration();
+                continue;
+            }
+
+            long targetId = service.NextTargetId();
+            RenderTextureDescription description = request.Description;
+            int sampleCount = RenderTextureValidation.SelectSampleCount(
+                description.SampleCount,
+                [1, 2, 4, 8]);
+            RenderTextureTargetLifetime lifetime = new(targetId, description, sampleCount, service.QueueDestruction);
+            RenderTextureViewResource viewResource = new(default, default) {
+                BindlessSlot = 1,
+            };
+            RenderTextureViewLifetime viewLifetime = new(
+                lifetime,
+                viewResource,
+                description.Width,
+                description.Height);
+            TextureAssetDescriptor descriptor = new() {
+                Payload = string.Empty,
+                Width = checked((uint)description.Width),
+                Height = checked((uint)description.Height),
+                MipLevels = 1,
+                Format = description.ColorFormat,
+                IsSrgb = description.ColorFormat == TextureFormat.Rgba8Srgb,
+                Filter = TextureFilter.Linear,
+                Wrap = TextureWrap.Clamp,
+                MaxAnisotropy = 1f,
+            };
+            Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
+            Texture? depthTexture = null;
+            RenderTextureViewLifetime? depthLifetime = null;
+            if (description.Depth) {
+                RenderTextureViewResource depthResource = new(default, default) {
+                    BindlessSlot = 2,
+                };
+                depthLifetime = new RenderTextureViewLifetime(
+                    lifetime,
+                    depthResource,
+                    description.Width,
+                    description.Height);
+                TextureAssetDescriptor depthDescriptor = new() {
+                    Payload = string.Empty,
+                    Width = checked((uint)description.Width),
+                    Height = checked((uint)description.Height),
+                    MipLevels = 1,
+                    Format = TextureFormat.Depth32Float,
+                    IsSrgb = false,
+                    Filter = TextureFilter.Nearest,
+                    Wrap = TextureWrap.Clamp,
+                    MaxAnisotropy = 1f,
+                };
+                depthTexture = new Texture(depthLifetime, depthDescriptor, isProcedural: false, isRenderTargetView: true);
+            }
+
+            RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture, service);
+            lock (_gate) {
+                _renderTargets[targetId] = new FakeRenderTarget(lifetime, viewLifetime, depthLifetime);
+            }
+
+            request.DisposeRegistration();
+            if (!request.Completion.TrySetResult(renderTexture)) {
+                lock (_gate) {
+                    _renderTargets.Remove(targetId);
+                }
+            }
+        }
+
+        foreach (RenderTextureService.ResizeRequest request in service.DrainResizes()) {
+            FakeRenderTarget? target;
+            lock (_gate) {
+                _renderTargets.TryGetValue(request.TargetId, out target);
+            }
+
+            if (target is null) {
+                request.Completion.TrySetException(new InvalidOperationException(
+                    $"The fake render target {request.TargetId} is no longer alive."));
+                continue;
+            }
+
+            if (target.Lifetime.IsDisposed) {
+                request.Completion.TrySetException(new ObjectDisposedException(nameof(RenderTexture)));
+                continue;
+            }
+
+            if (target.Lifetime.IsInUse) {
+                request.Completion.TrySetException(new InvalidOperationException(
+                    $"The fake render target {request.TargetId} is in use by a recorded or in-flight frame."));
+                continue;
+            }
+
+            RenderTextureDescription description = target.Lifetime.Description;
+            target.Lifetime.UpdateDescription(description with {
+                Width = request.Width,
+                Height = request.Height,
+            });
+            target.ColorView.SetDimensions(request.Width, request.Height);
+            target.DepthView?.SetDimensions(request.Width, request.Height);
+            request.Completion.TrySetResult();
+        }
+
+        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks()) {
+            try {
+                CompleteReadback(request);
+            } finally {
+                request.DisposeRegistration();
+            }
+        }
+
+        foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {
+            lock (_gate) {
+                _renderTargets.Remove(lifetime.TargetId);
+            }
+        }
+    }
+
+    private void CompleteReadback(RenderTextureService.ReadbackRequest request) {
+        if (request.IsCompleted) {
+            return;
+        }
+
+        FakeRenderTarget? target;
+        lock (_gate) {
+            _renderTargets.TryGetValue(request.TargetId, out target);
+        }
+
+        if (target is null) {
+            request.TrySetException(new InvalidOperationException(
+                $"The fake readback addresses render target {request.TargetId}, which is no longer alive."));
+            return;
+        }
+
+        if (target.Lifetime.IsDisposed) {
+            request.TrySetException(new ObjectDisposedException(nameof(RenderTexture)));
+            return;
+        }
+
+        if (ReadbackException is not null) {
+            request.TrySetException(ReadbackException);
+            return;
+        }
+
+        int width = target.Lifetime.Description.Width;
+        int height = target.Lifetime.Description.Height;
+        switch (request) {
+            case RenderTextureService.ReadbackRequest<byte[]> pixels:
+                pixels.Completion.TrySetResult(FakeReadbackPixels(width, height));
+                break;
+            case RenderTextureService.ReadbackRequest<Color[,]> colors:
+                colors.Completion.TrySetResult(FakeReadbackColors(width, height));
+                break;
+            default:
+                request.TrySetException(new InvalidOperationException(
+                    "The fake readback request has an unsupported completion value."));
+                break;
+        }
+    }
+
+    private static Color[,] FakeReadbackColors(int width, int height) {
+        Color[,] colors = new Color[height, width];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                colors[y, x] = new Color(x / (float)width, y / (float)height, 0.5f, 1f);
+            }
+        }
+
+        return colors;
+    }
+
+    private static byte[] FakeReadbackPixels(int width, int height) {
+        byte[] pixels = new byte[checked(width * height * 4)];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int offset = ((y * width) + x) * 4;
+                pixels[offset] = (byte)(x & 0xFF);
+                pixels[offset + 1] = (byte)(y & 0xFF);
+                pixels[offset + 2] = 128;
+                pixels[offset + 3] = byte.MaxValue;
+            }
+        }
+
+        return pixels;
+    }
+
     /// <inheritdoc />
     public void Dispose() {
         RendererBackendOptions? options;
@@ -343,4 +567,15 @@ internal sealed class FakeRendererBackend : IRendererBackend, IAssetGpuWorkerPro
             _lastWindowState = state;
         }
     }
+
+    /// <summary>
+    /// One fake render target: the lifetime and the view lifetimes whose dimensions follow a resize.
+    /// </summary>
+    /// <param name="Lifetime">The target lifetime.</param>
+    /// <param name="ColorView">The color view lifetime.</param>
+    /// <param name="DepthView">The depth view lifetime, or <see langword="null"/> for a depthless target.</param>
+    private sealed record FakeRenderTarget(
+        RenderTextureTargetLifetime Lifetime,
+        RenderTextureViewLifetime ColorView,
+        RenderTextureViewLifetime? DepthView);
 }

@@ -124,8 +124,10 @@ Limitations:
   that call while the `RayBork.Font` thread generates its texture.
 - Text is world-space geometry. Screen-space text uses `Camera.ScreenToWorldTransform` and the
   `Transform` `DrawText` overload with a pixel-sized `size`; there is no `DrawText(Vector2)` overload
-  and no 2D text draw. The HUD is same-pass, screen-aligned, alpha/no-depth-write text, so geometry
-  closer than the overlay plane can occlude it, and a separate overlay pass is M8.
+  and no 2D text draw. A HUD drawn in a scene camera is same-pass, screen-aligned,
+  alpha/no-depth-write text, so geometry closer than the overlay plane can occlude it; a HUD that
+  must not be occluded is an ordinary later camera that loads the scene color and clears depth.
+  There is no separate overlay or layer pass.
 - One texture per glyph means a font's glyph cache consumes bindless slots: 512 cached per font, and
   the fixed bindless texture table is table-wide 2048 slots.
 - MSDF sharp corners are not extended, so a small artifact can appear at very large sizes.
@@ -167,5 +169,10 @@ camera.DrawText(font, "HUD", hud, 18f, Color.White);
 This is same-pass geometry, not a separate overlay pass. The text render state is alpha blending,
 no culling, `greater_equal`, and no depth write, so the glyphs do not disturb 3D depth, but geometry
 closer than the overlay plane can still occlude them. Castle and PrimitiveGallery use this pattern
-for their status lines, and Pong uses it for its scores, status, and overlays. A dedicated
-multi-camera overlay pass with per-pass frame data is M8.
+for their status lines, and Pong uses it for its scores, status, and overlays. A HUD that must not be
+occluded is an ordinary later camera: draw the scene cameras first, then record a later camera with
+`ClearMode.Depth` so it loads the scene color and clears depth, and draw the HUD text in that camera
+(`ClearMode.None` keeps both buffers when the HUD should remain depth-tested). The renderer records
+one render pass per camera pass,
+so the later camera's clear only affects its viewport and the earlier scene stays visible. Each
+camera pass has its own frame block from shader ABI v2, so the camera's view and viewport are correct.
