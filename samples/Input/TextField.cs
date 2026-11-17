@@ -122,7 +122,8 @@ internal sealed class TextField
     }
 
     /// <summary>
-    /// Replaces control characters and line breaks with spaces for the single-line field.
+    /// Replaces control characters and line breaks with spaces for the single-line field. A CRLF
+    /// pair becomes one space instead of two.
     /// </summary>
     /// <param name="text">The text to sanitize.</param>
     /// <returns>
@@ -141,16 +142,23 @@ internal sealed class TextField
             return text;
         }
 
+        // Rewrite in place from the first control character; write can never pass read, so the
+        // unread characters are still intact when they are copied.
         char[] characters = text.ToCharArray();
-        for (; index < characters.Length; index++)
+        int write = index;
+        for (int read = index; read < characters.Length; read++)
         {
-            if (char.IsControl(characters[index]))
+            char character = characters[read];
+            if (character == '\r' && read + 1 < characters.Length && characters[read + 1] == '\n')
             {
-                characters[index] = ' ';
+                continue;
             }
+
+            characters[write] = char.IsControl(character) ? ' ' : character;
+            write++;
         }
 
-        return new string(characters);
+        return new string(characters, 0, write);
     }
 
     /// <summary>
