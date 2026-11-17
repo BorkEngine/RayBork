@@ -9,7 +9,7 @@ namespace RayBork.Internal;
 /// The app owns one instance for its lifetime and attaches it to <see cref="CameraService"/> so a
 /// camera can snapshot an <see cref="SsaoEffect"/> without loading an asset on the render thread. The
 /// seven shader programs are the three AO variants, the three denoise variants, and the single
-/// composite shader; the texture is the N8AO 128x128 RGBA8 blue-noise image.
+/// composite shader; the texture is the N8AO 2.1.0 128x128 RGBA8 blue-noise image.
 /// </para>
 /// <para>
 /// <see cref="Dispose"/> releases the owner reference for every loaded asset. A snapshot that retained

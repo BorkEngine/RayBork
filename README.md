@@ -334,7 +334,7 @@ the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float` chains ov
 fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader contract, and camera-viewport
 store-back on the scene target and render targets, with the post-processed output included in a later
 sample and both readback methods. Built-in SSAO also ships: `SsaoEffect`/`SsaoQuality` use the N8AO
-2.0 full-resolution GTAO path with baked 8/16/64 AO and 4/8/16 denoise variants and an engine-owned
+2.1.0 full-resolution SSAO path with baked 8/16/64 AO and 4/8/16 denoise variants and an engine-owned
 128x128 blue-noise texture; Castle and PrimitiveGallery enable it by default and toggle it with `A`.
 Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 work. Multiple cameras and
 split-screen viewports render to the HDR scene target, and a HUD is an ordinary later camera rather

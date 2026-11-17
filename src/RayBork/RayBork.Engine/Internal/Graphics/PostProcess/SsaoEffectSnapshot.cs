@@ -9,11 +9,12 @@ namespace RayBork.Internal;
 /// <remarks>
 /// <para>
 /// The snapshot fixes the public settings and the quality variant, then records four fullscreen
-/// passes: AO into the first camera-sized target, two bilateral denoise iterations through the same
-/// two-target pair, and the composite from the original scene color. The AO and denoise targets are
-/// released with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>; the final composite target is
-/// completed with <see cref="PostProcessContext.CompleteColorTarget"/> so the engine store-back runs
-/// once.
+/// passes: AO into the first camera-sized target, two bilateral denoise iterations through the
+/// three-target per-extent set, and the composite from the chain input captured before the first
+/// completion. The rent skips the current chain source, so a prior effect's output survives. The AO
+/// and denoise targets are released with <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>;
+/// the final composite target is completed with
+/// <see cref="PostProcessContext.CompleteColorTarget"/> so the engine store-back runs once.
 /// </para>
 /// <para>
 /// Every pass writes one shader-ABI instance record. The ordered layout has four entries, with the AO,
@@ -37,6 +38,7 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
     private int _aoProjectionOffset;
     private int _aoRadiusOffset;
     private int _aoFalloffOffset;
+    private int _aoNearOffset;
     private int _aoBiasOffset;
     private int _aoBiasMultiplierOffset;
     private int _aoScreenSpaceOffset;
@@ -128,6 +130,7 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         _aoProjectionOffset = 0;
         _aoRadiusOffset = 0;
         _aoFalloffOffset = 0;
+        _aoNearOffset = 0;
         _aoBiasOffset = 0;
         _aoBiasMultiplierOffset = 0;
         _aoScreenSpaceOffset = 0;
@@ -161,14 +164,17 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
                     + "no depth slot.");
         }
 
-        // Capture the original scene color before the first CompleteColorTarget. The composite pass
-        // samples this slot, while the AO and denoise passes use the chain's own intermediates.
+        // Capture the chain input before the first CompleteColorTarget. The composite pass
+        // samples this slot, while the AO and denoise passes use the chain's own intermediates. The
+        // slot is the original scene color when SSAO is first; otherwise it is the prior effect.
         uint sourceColorSlot = context.SourceColorSlot;
         uint blueNoiseSlot = PostProcessContext.ResolveTextureSlot(blueNoise);
         if (!Matrix4x4.Invert(context.Pass.Projection, out Matrix4x4 projectionInverse)) {
             throw new InvalidOperationException(
                 "The SSAO effect could not invert the camera projection matrix.");
         }
+
+        float near = NearFromProjection(context.Pass.Projection);
 
         Pipeline aoPipeline = context.GetOrCreateFullscreenPipeline(
             aoProgram,
@@ -181,7 +187,7 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
             PostProcessContext.FullscreenRenderState);
 
         VulkanPostTarget ao = context.RentColorTarget();
-        RecordAo(context, ao, aoPipeline, depthSlot, blueNoiseSlot, projectionInverse);
+        RecordAo(context, ao, aoPipeline, depthSlot, blueNoiseSlot, projectionInverse, near);
         context.CompleteAuxiliaryTarget(ao);
 
         VulkanPostTarget firstDenoise = context.RentColorTarget();
@@ -236,6 +242,7 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         _aoProjectionOffset = UniformOffset(ao, "uProjectionInverse");
         _aoRadiusOffset = UniformOffset(ao, "uRadius");
         _aoFalloffOffset = UniformOffset(ao, "uDistanceFalloff");
+        _aoNearOffset = UniformOffset(ao, "uNear");
         _aoBiasOffset = UniformOffset(ao, "uBiasOffset");
         _aoBiasMultiplierOffset = UniformOffset(ao, "uBiasMultiplier");
         _aoScreenSpaceOffset = UniformOffset(ao, "uScreenSpaceRadius");
@@ -260,13 +267,15 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
         Pipeline pipeline,
         uint depthSlot,
         uint blueNoiseSlot,
-        Matrix4x4 projectionInverse) {
+        Matrix4x4 projectionInverse,
+        float near) {
         ulong offset = context.ReserveInstanceRecord(_aoStride);
         Span<byte> record = context.GetInstanceRecordSpan(offset, _aoStride);
         WriteHeader(record);
         WriteMatrix(record, _aoProjectionOffset, projectionInverse);
         WriteSingle(record, _aoRadiusOffset, _settings.Radius);
         WriteSingle(record, _aoFalloffOffset, _settings.DistanceFalloff);
+        WriteSingle(record, _aoNearOffset, near);
         WriteSingle(record, _aoBiasOffset, _settings.BiasOffset);
         WriteSingle(record, _aoBiasMultiplierOffset, _settings.BiasMultiplier);
         WriteUInt32(record, _aoScreenSpaceOffset, _settings.ScreenSpaceRadius ? 1u : 0u);
@@ -325,6 +334,23 @@ internal sealed class SsaoEffectSnapshot : PostProcessEffectSnapshot {
             ShaderAbiLayout.TEXTURE_INDEX_START + ShaderAbiLayout.TEXTURE_INDEX_SIZE,
             aoSlot);
         context.RecordFullscreenPass(destination, pipeline, offset, _compositeStride);
+    }
+
+    private static float NearFromProjection(in Matrix4x4 projection) {
+        const float minNear = 1e-4f;
+        float near;
+        if (projection.M44 == 1f) {
+            // Orthographic reverse-Z: M33 = 1/(far-near), M43 = far/(far-near).
+            near = (projection.M43 - 1f) / projection.M33;
+        } else {
+            // Perspective reverse-Z: M33 = near/(far-near), M43 = near*far/(far-near). The infinite
+            // far variant has M33 = 0 and M43 = near.
+            near = projection.M33 == 0f
+                ? projection.M43
+                : projection.M43 / (projection.M33 + 1f);
+        }
+
+        return float.IsFinite(near) && near > 0f ? near : minNear;
     }
 
     private static int UniformOffset(ShaderProgram program, string name) {

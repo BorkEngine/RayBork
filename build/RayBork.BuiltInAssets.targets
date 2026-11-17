@@ -118,6 +118,7 @@
             <!-- Every file under the built-in source tree invalidates the generated pack. -->
             <_RayBorkBuiltInAssetsInputs Include="$(_RayBorkBuiltInAssetsSourceRoot)\Assets\**\*" />
             <_RayBorkBuiltInAssetsInputs Include="$(_RayBorkBuiltInAssetsEngineShaders)\**\*.glsl" />
+            <_RayBorkBuiltInAssetsInputs Include="$(_RayBorkBuiltInAssetsEngineShaders)\**\*.glslinc" />
             <_RayBorkBuiltInAssetsInputs Include="$(_RayBorkBuiltInAssetsEngineShaders)\**\*.spv" />
             <_RayBorkBuiltInAssetsToolInputs Include="$(_RayBorkBuiltInAssetsToolDirectory)\**\*"
                                              Exclude="$(_RayBorkBuiltInAssetsToolDirectory)\bin\**;$(_RayBorkBuiltInAssetsToolDirectory)\obj\**" />

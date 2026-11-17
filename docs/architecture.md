@@ -662,23 +662,25 @@ The chain is target-sized whichever target the camera writes:
   every presentation-path recreation (window resize, HDR change, surface or device recovery), and
   releases their samplers and slots during teardown. A runtime render target already exposes those
   images through its public `ColorTexture`/`DepthTexture` view slots.
-- The post processor owns two target-sized single-sample `Rgba16Float` color targets per frame ring
+- The post processor owns three target-sized single-sample `Rgba16Float` color targets per frame ring
   slot and per target extent. Each has a color-only render pass framebuffer, a bindless slot for an
   effect to sample it through the shader ABI, and a dedicated descriptor set for the engine store-back
   pass' own single-sampler layout. A frame can chain effects on the scene target and on render targets
-  of different sizes, so the extents are pooled instead of one pair per slot: when a frame starts,
+  of different sizes, so the extents are pooled instead of one set per slot: when a frame starts,
   after its slot's fence signaled, the processor keeps the extents the previous frame on that slot used
   and destroys the rest. A target resize therefore reallocates that target's post targets, an unchanged
   extent reuses them with no per-frame allocation, and a device recovery destroys the whole pool with
   the processor. The same per-extent pool serves a built-in effect's intermediate targets, so a bloom
-  downsample can rent a half- or quarter-sized pair; the pair alternates its two targets, so one extent
-  supports two live images before an effect completes or reuses one.
+  downsample can rent a half- or quarter-sized set. Each set holds three targets and the rent skips the
+  current chain source, so a prior effect's completed image survives; a custom chain uses two of the
+  three targets as its ping-pong pair and SSAO uses the two non-source targets.
 - A custom effect records one fullscreen pass: the geometry pipeline layout, the shared frame
   descriptor set and instance buffer, the backend-owned fullscreen quad, and a post pipeline cached
   against the post render pass with a forced opaque/no-cull/no-depth state. The instance record's
   `sourceColor` and `sourceDepth` texture index slots are overridden with the current chain source and
-  the target's depth slot; every other texture index comes from the captured material bindings. Two
-  effects ping-pong between the two targets, so the chain is genuinely multi-pass.
+  the target's depth slot; every other texture index comes from the captured material bindings. Each
+  effect rents a target that is not the current source, so a custom chain uses two of the three targets
+  as a ping-pong pair and remains genuinely multi-pass.
 - The engine store-back pass samples the final post target through the built-in `PostStore` shader
   pair (embedded SPIR-V, compiled by `scripts/compile-shaders.ps1`) into a color-only render pass on
   the camera target with the camera viewport as the render area: the MSAA color attachment plus the
@@ -725,17 +727,19 @@ The snapshot reports its ordered instance-record layout (per-pass stride and cou
 instance storage buffer is sized for every built-in pass, including passes with different shaders and
 uniform sizes.
 
-SSAO records AO, two denoise iterations, and a composite over the original scene color through the
-post-target pair. The AO and denoise shaders are selected by the frozen `SsaoQuality`, and the snapshot
-captures the four strides and uniform offsets when the camera is created. The camera service receives
-the app's preloaded `SsaoAssets` (seven committed-SPIR-V shader programs and the N8AO blue-noise
-texture) from the app before `IGame.Setup`; the snapshot only reads those engine-owned assets. The
-capture rejects a target without depth before it records anything. The SSAO shaders carry the shader
-ABI inline in `SsaoAbi.glslinc`, are compiled by `scripts/compile-shaders.ps1` into committed SPIR-V,
-and are packaged into the built-in pack by `BuiltInSsaoProcessor`; the blue-noise RGBA8 source is baked
-by `BuiltInBlueNoiseProcessor`. No runtime shader compile or render-thread asset load is added. The
-built-in supplies its own shaders, effect type, and pass scheduling; it does not change the public
-stack, the camera snapshot path, the store-back, or the processor.
+SSAO records AO, two denoise iterations, and a composite over its chain input through the
+three-target per-extent set, skipping the current chain source. The AO and denoise shaders are selected
+by the frozen `SsaoQuality`, and the snapshot captures the four strides and uniform offsets when the
+camera is created. The camera service receives the app's preloaded `SsaoAssets` (seven
+committed-SPIR-V shader programs and the N8AO 2.1.0 blue-noise texture) from the app before
+`IGame.Setup`; the snapshot only reads those engine-owned assets. The capture rejects a target without
+depth before it records anything. The SSAO shaders carry the shader ABI inline in `SsaoAbi.glslinc`,
+are compiled by `scripts/compile-shaders.ps1` into committed SPIR-V, and are packaged into the built-in
+pack by `BuiltInSsaoProcessor`; the blue-noise RGBA8 source is baked by `BuiltInBlueNoiseProcessor`.
+No runtime shader compile or render-thread asset load is added. The built-in adds a public effect type
+and an internal snapshot; it extends the post-target pool to three targets and carries the preloaded
+asset set through the camera capture context, while leaving the public custom-shader contract and the
+store-back unchanged.
 
 ## Time
 

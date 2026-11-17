@@ -201,7 +201,7 @@ public sealed class BuiltInPackTests {
         Assert.Equal("main", ao.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, ao.Stages);
         Assert.Equal(RenderState.Opaque, ao.DefaultRenderState);
-        Assert.Equal(["uProjectionInverse", "uRadius", "uDistanceFalloff", "uBiasOffset", "uBiasMultiplier", "uScreenSpaceRadius"], ao.Uniforms.Select(static uniform => uniform.Name));
+        Assert.Equal(["uProjectionInverse", "uRadius", "uDistanceFalloff", "uNear", "uBiasOffset", "uBiasMultiplier", "uScreenSpaceRadius"], ao.Uniforms.Select(static uniform => uniform.Name));
         Assert.Equal(["sceneDepth", "blueNoise"], ao.Textures);
         AssertSpirvPayload(archive, ao.VertexPayload);
         AssertSpirvPayload(archive, ao.FragmentPayload);

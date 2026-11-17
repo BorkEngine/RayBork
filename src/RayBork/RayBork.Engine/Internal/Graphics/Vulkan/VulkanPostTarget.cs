@@ -8,8 +8,9 @@ namespace RayBork.Internal;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The post chain ping-pongs through two of these per frame slot, so an effect samples the previous
-/// pass' output and writes the next one. Every effect pass covers the whole extent, so the render pass
+/// The post chain rotates through three of these per extent and frame slot, so an effect samples the
+/// previous pass' output, writes a target that is not the current chain source, and a prior effect's
+/// output remains intact. Every effect pass covers the whole extent, so the render pass
 /// uses <c>DontCare</c> load and stores the result; the tracked layout starts <c>Undefined</c>, moves to
 /// <c>ColorAttachmentOptimal</c> for a write, and returns to <c>ShaderReadOnlyOptimal</c> so the next
 /// effect or the store-back samples it.

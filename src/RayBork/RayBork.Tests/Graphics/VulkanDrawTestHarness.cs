@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Bake.Shaders;
 using RayBork.Internal;
 using RayBork.Tests.Graphics.Assets;
@@ -56,6 +57,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
 
     private readonly BackendTestHost _host;
     private readonly AssetGpuUploadHarness _uploads;
+    private AssetCatalog? _catalog;
+    private SsaoAssets? _ssaoAssets;
     private bool _disposed;
 
     /// <summary>
@@ -401,6 +404,42 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
     }
 
     /// <summary>
+    /// Loads the engine-owned SSAO assets from the built-in pack through this harness's bridge, so a
+    /// test can build a custom-effect-plus-SSAO chain without a camera service.
+    /// </summary>
+    /// <returns>The loaded assets, owned by the harness.</returns>
+    internal SsaoAssets LoadSsaoAssetsFromBuiltInPack() {
+        AssertNotDisposed();
+        if (_ssaoAssets is not null) {
+            return _ssaoAssets;
+        }
+
+        AssetCatalog catalog = new(
+            NullLoggerFactory.Instance,
+            _uploads.Bridge,
+            BuiltInAssetPack.Bytes,
+            [],
+            []);
+        catalog.Start();
+        try {
+            Task<SsaoAssets> load = SsaoAssets.LoadAsync(catalog);
+            bool completed = SpinWait.SpinUntil(
+                () => {
+                    _uploads.Pump();
+                    return load.IsCompleted;
+                },
+                AssetGpuUploadHarness.Timeout);
+            Assert.True(completed, "The built-in SSAO assets did not finish loading.");
+            _ssaoAssets = load.GetAwaiter().GetResult();
+            _catalog = catalog;
+            return _ssaoAssets;
+        } catch {
+            catalog.Stop();
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Recreates every live GPU asset from its retained upload, as the render loop does after a device
     /// recovery.
     /// </summary>
@@ -458,6 +497,8 @@ internal sealed class VulkanDrawTestHarness : IDisposable {
         _disposed = true;
         try {
             _host.Backend.WaitForFrameResourcesIdle();
+            _ssaoAssets?.Dispose();
+            _catalog?.Stop();
             _uploads.Dispose();
         } finally {
             TickThread.Detach();

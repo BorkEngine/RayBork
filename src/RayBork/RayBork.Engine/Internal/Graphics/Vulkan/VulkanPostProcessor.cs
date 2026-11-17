@@ -91,7 +91,7 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     }
 
     /// <summary>
-    /// Gets the number of times a frame slot's target-sized post-target pair was created, for GPU tests.
+    /// Gets the number of times a frame slot's target-sized post-target set was created, for GPU tests.
     /// Test-only; it is not part of the renderer seam.
     /// </summary>
     internal int TargetRecreationCount { get; private set; }
@@ -327,9 +327,10 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     /// Rents a post target of any extent from the per-extent pool and transitions it for writing.
     /// </summary>
     /// <remarks>
-    /// The rent alternates within the extent's two-target pair, so consecutive passes never overwrite the
-    /// previous pass' image. A built-in effect uses this for an intermediate pass at a different
-    /// resolution, such as a bloom downsample, and releases it with
+    /// The rent rotates through the extent's three-target set and skips the current chain source, so a
+    /// prior effect's completed output is preserved while consecutive passes do not overwrite the image
+    /// they just sampled. A built-in effect uses this for an intermediate pass at a different resolution,
+    /// such as a bloom downsample, and releases it with
     /// <see cref="PostProcessContext.CompleteAuxiliaryTarget"/>.
     /// </remarks>
     /// <param name="context">The current camera pass context.</param>
@@ -358,8 +359,8 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
 
         PostTargetSlot slot = _activeSlot ?? throw new InvalidOperationException(
             "A post-process target can be rented only while the renderer runs a camera pass' effect chain.");
-        PostTargetPair pair = GetTargetPair(slot, extent, context.Frame.FrameIndex);
-        VulkanPostTarget target = pair.Rent();
+        PostTargetSet set = GetTargetSet(slot, extent, context.Frame.FrameIndex);
+        VulkanPostTarget target = set.Rent(context.CurrentColorTarget);
         target.TransitionToColorAttachment(context.Vulkan, context.CommandBuffer);
         return target;
     }
@@ -711,10 +712,11 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The created pair owns both post targets; the catch disposes the partial pair and the caller owns it on success.")]
-    private PostTargetPair CreatePair(Extent2D extent) {
+        Justification = "The created set owns all three post targets; the catch disposes the partial set and the caller owns it on success.")]
+    private PostTargetSet CreateSet(Extent2D extent) {
         VulkanPostTarget? first = null;
         VulkanPostTarget? second = null;
+        VulkanPostTarget? third = null;
         try {
             first = VulkanPostTarget.Create(
                 _device,
@@ -728,31 +730,38 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
                 _postRenderPass,
                 _bindless,
                 _storeBack!);
-            return new PostTargetPair(first, second);
+            third = VulkanPostTarget.Create(
+                _device,
+                extent,
+                _postRenderPass,
+                _bindless,
+                _storeBack!);
+            return new PostTargetSet(first, second, third);
         } catch {
             first?.Dispose();
             second?.Dispose();
+            third?.Dispose();
             throw;
         }
     }
 
     /// <summary>
-    /// Gets or creates the post-target pair for one extent in a frame slot and marks it used by this
+    /// Gets or creates the post-target set for one extent in a frame slot and marks it used by this
     /// frame.
     /// </summary>
     /// <param name="slot">The frame slot's pool.</param>
     /// <param name="extent">The positive target extent.</param>
     /// <param name="frameIndex">The recording frame's index.</param>
-    /// <returns>The pair to ping-pong through.</returns>
-    private PostTargetPair GetTargetPair(PostTargetSlot slot, Extent2D extent, long frameIndex) {
-        if (slot.TryGet(extent, frameIndex, out PostTargetPair? pair)) {
-            return pair;
+    /// <returns>The set to ping-pong through.</returns>
+    private PostTargetSet GetTargetSet(PostTargetSlot slot, Extent2D extent, long frameIndex) {
+        if (slot.TryGet(extent, frameIndex, out PostTargetSet? set)) {
+            return set;
         }
 
-        pair = CreatePair(extent);
-        slot.Add(extent, pair, frameIndex);
+        set = CreateSet(extent);
+        slot.Add(extent, set, frameIndex);
         TargetRecreationCount++;
-        return pair;
+        return set;
     }
 
     private TargetStoreBack GetStoreBack(VulkanRenderTarget target) {
@@ -814,29 +823,46 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     private readonly record struct TargetStoreBack(RenderPass RenderPass, Framebuffer Framebuffer);
 
     /// <summary>
-    /// One post-target pair the renderer ping-pongs through for one extent. The pair owns its two
-    /// target-sized images; <see cref="Rent"/> alternates between them so consecutive passes never
-    /// overwrite the previous pass' image.
+    /// One post-target set the renderer ping-pongs through for one extent. The set owns three
+    /// target-sized images; <see cref="Rent"/> rotates through them and skips the current chain source,
+    /// so a prior effect's completed output survives and consecutive passes do not overwrite the image
+    /// they just sampled.
     /// </summary>
-    private sealed class PostTargetPair(VulkanPostTarget first, VulkanPostTarget second) {
-        private VulkanPostTarget? _lastRented;
+    private sealed class PostTargetSet(
+        VulkanPostTarget first,
+        VulkanPostTarget second,
+        VulkanPostTarget third) {
+        private readonly VulkanPostTarget[] _targets = [first, second, third];
+        private int _nextIndex;
 
-        internal VulkanPostTarget First { get; } = first;
+        /// <summary>
+        /// Gets the next target to write, skipping <paramref name="source"/> so the chain's current
+        /// source image is preserved.
+        /// </summary>
+        /// <param name="source">The current chain source, or <see langword="null"/> before an effect.</param>
+        /// <returns>The target to write.</returns>
+        /// <exception cref="InvalidOperationException">Every target is the current source.</exception>
+        internal VulkanPostTarget Rent(VulkanPostTarget? source) {
+            for (int offset = 0; offset < _targets.Length; offset++) {
+                int index = (_nextIndex + offset) % _targets.Length;
+                VulkanPostTarget target = _targets[index];
+                if (ReferenceEquals(target, source)) {
+                    continue;
+                }
 
-        internal VulkanPostTarget Second { get; } = second;
+                _nextIndex = (index + 1) % _targets.Length;
+                return target;
+            }
 
-        /// <summary>Gets the next target to write: the one not written by the previous pass.</summary>
-        /// <returns>The alternating target.</returns>
-        internal VulkanPostTarget Rent() {
-            VulkanPostTarget target = ReferenceEquals(_lastRented, First) ? Second : First;
-            _lastRented = target;
-            return target;
+            throw new InvalidOperationException(
+                "The post-target set has no target that is not the current chain source.");
         }
 
         internal void DisposeTargets() {
-            _lastRented = null;
-            First.Dispose();
-            Second.Dispose();
+            _nextIndex = 0;
+            foreach (VulkanPostTarget target in _targets) {
+                target.Dispose();
+            }
         }
     }
 
@@ -846,34 +872,34 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
     /// </summary>
     /// <remarks>
     /// A frame can run effects on the scene target and on several render targets of different sizes, so a
-    /// single pair per slot would destroy images a recorded pass still references. The slot therefore
-    /// keeps one pair per extent and releases the extents the previous frame on the slot did not use; the
+    /// single set per slot would destroy images a recorded pass still references. The slot therefore
+    /// keeps one set per extent and releases the extents the previous frame on the slot did not use; the
     /// caller invokes <see cref="BeginFrame"/> only after the slot's fence signaled, so those images are
     /// no longer in flight.
     /// </remarks>
     private sealed class PostTargetSlot {
-        private readonly Dictionary<(uint Width, uint Height), PairEntry> _pairs = [];
+        private readonly Dictionary<(uint Width, uint Height), SetEntry> _sets = [];
         private long _previousFrameIndex = -1;
 
         internal void BeginFrame(long frameIndex) {
-            if (_pairs.Count == 0) {
+            if (_sets.Count == 0) {
                 _previousFrameIndex = frameIndex;
                 return;
             }
 
-            Span<(uint Width, uint Height)> stale = _pairs.Count <= 8
-                ? stackalloc (uint, uint)[_pairs.Count]
-                : new (uint, uint)[_pairs.Count];
+            Span<(uint Width, uint Height)> stale = _sets.Count <= 8
+                ? stackalloc (uint, uint)[_sets.Count]
+                : new (uint, uint)[_sets.Count];
             int staleCount = 0;
-            foreach (KeyValuePair<(uint Width, uint Height), PairEntry> pair in _pairs) {
-                if (pair.Value.LastUsedFrameIndex != _previousFrameIndex) {
-                    stale[staleCount++] = pair.Key;
+            foreach (KeyValuePair<(uint Width, uint Height), SetEntry> set in _sets) {
+                if (set.Value.LastUsedFrameIndex != _previousFrameIndex) {
+                    stale[staleCount++] = set.Key;
                 }
             }
 
             for (int index = 0; index < staleCount; index++) {
-                _pairs[stale[index]].Pair.DisposeTargets();
-                _pairs.Remove(stale[index]);
+                _sets[stale[index]].Set.DisposeTargets();
+                _sets.Remove(stale[index]);
             }
 
             _previousFrameIndex = frameIndex;
@@ -882,34 +908,34 @@ internal sealed unsafe class VulkanPostProcessor : IDisposable {
         internal bool TryGet(
             Extent2D extent,
             long frameIndex,
-            [NotNullWhen(true)] out PostTargetPair? pair) {
-            if (_pairs.TryGetValue((extent.Width, extent.Height), out PairEntry? entry)) {
+            [NotNullWhen(true)] out PostTargetSet? set) {
+            if (_sets.TryGetValue((extent.Width, extent.Height), out SetEntry? entry)) {
                 entry.LastUsedFrameIndex = frameIndex;
-                pair = entry.Pair;
+                set = entry.Set;
                 return true;
             }
 
-            pair = null;
+            set = null;
             return false;
         }
 
-        internal void Add(Extent2D extent, PostTargetPair pair, long frameIndex) {
-            _pairs.Add(
+        internal void Add(Extent2D extent, PostTargetSet set, long frameIndex) {
+            _sets.Add(
                 (extent.Width, extent.Height),
-                new PairEntry(pair) { LastUsedFrameIndex = frameIndex });
+                new SetEntry(set) { LastUsedFrameIndex = frameIndex });
         }
 
         internal void DisposeTargets() {
-            foreach (PairEntry entry in _pairs.Values) {
-                entry.Pair.DisposeTargets();
+            foreach (SetEntry entry in _sets.Values) {
+                entry.Set.DisposeTargets();
             }
 
-            _pairs.Clear();
+            _sets.Clear();
             _previousFrameIndex = -1;
         }
 
-        private sealed class PairEntry(PostTargetPair pair) {
-            internal PostTargetPair Pair { get; } = pair;
+        private sealed class SetEntry(PostTargetSet set) {
+            internal PostTargetSet Set { get; } = set;
 
             internal long LastUsedFrameIndex { get; set; } = -1;
         }

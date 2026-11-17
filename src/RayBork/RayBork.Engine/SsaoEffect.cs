@@ -3,14 +3,16 @@ using RayBork.Internal;
 namespace RayBork;
 
 /// <summary>
-/// A built-in screen-space ambient-occlusion effect using the N8AO 2.0 full-resolution GTAO core.
+/// A built-in screen-space ambient-occlusion effect derived from N8AO 2.1.0's full-resolution SSAO path.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The effect reconstructs view-space normals from the camera target's reverse-Z depth, samples a
 /// golden-angle hemisphere kernel with blue-noise rotation, runs two bilateral denoise iterations, and
-/// composites the resulting AO over the original scene color. It supports perspective and orthographic
-/// cameras, world-space or screen-space radius, distance falloff, bias, and an AO tint. The public
+/// composites the resulting AO over its chain input. The input is the original scene color only when
+/// SSAO is the first enabled effect; otherwise it is the previous effect's output. It supports
+/// perspective and orthographic cameras, world-space or screen-space radius, distance falloff, bias,
+/// and an AO tint. The public
 /// <see cref="PostProcessEffect.Enabled"/> value and every setting are snapshotted when a camera is
 /// created; later changes apply to later cameras only.
 /// </para>

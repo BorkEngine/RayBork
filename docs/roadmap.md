@@ -1254,7 +1254,7 @@ effect. The extensible camera post-process core ships: `PostProcessStack`, `Post
 chains over the engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader
 contract, and camera-viewport store-back on the scene target and on render targets, with the
 post-processed output included in a later target sample and both readback methods. Built-in SSAO ships
-on the same core: `SsaoEffect`/`SsaoQuality` use the N8AO 2.0 full-resolution GTAO path with
+on the same core: `SsaoEffect`/`SsaoQuality` use the N8AO 2.1.0 full-resolution SSAO path with
 depth-reconstructed normals, a golden-angle kernel, blue-noise rotation, two bilateral denoise
 iterations, a tinted composite, baked 8/16/64 AO and 4/8/16 denoise variants, and an engine-owned
 128x128 blue-noise texture. Castle and PrimitiveGallery enable it by default and toggle it with `A`.
@@ -1284,7 +1284,7 @@ Bloom, Pong, and the RenderTarget and split-screen sample tasks remain later M8 
   a camera-viewport store-back into the target's MSAA or single-sample color image. The chain runs
   after the camera's geometry and resolve pass, works on the scene target and on `RenderTexture`
   targets, includes the post-processed output in readback, and leaves depth unchanged. Shipped.
-- Built-in SSAO: N8AO 2.0 full-resolution GTAO with depth-reconstructed normals, a golden-angle
+- Built-in SSAO: N8AO 2.1.0 full-resolution SSAO with depth-reconstructed normals, a golden-angle
   kernel, blue-noise rotation, two bilateral denoise iterations, `SsaoEffect`/`SsaoQuality`, baked
   quality variants, the engine-owned blue-noise texture, and on-by-default Castle/PrimitiveGallery
   toggles. Shipped.

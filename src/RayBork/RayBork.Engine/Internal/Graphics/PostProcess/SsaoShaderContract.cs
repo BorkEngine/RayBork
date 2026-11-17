@@ -40,6 +40,7 @@ internal static class SsaoShaderContract {
         Uniform("uProjectionInverse", ShaderUniformType.Matrix4x4),
         Uniform("uRadius", ShaderUniformType.Float),
         Uniform("uDistanceFalloff", ShaderUniformType.Float),
+        Uniform("uNear", ShaderUniformType.Float),
         Uniform("uBiasOffset", ShaderUniformType.Float),
         Uniform("uBiasMultiplier", ShaderUniformType.Float),
         Uniform("uScreenSpaceRadius", ShaderUniformType.Bool),

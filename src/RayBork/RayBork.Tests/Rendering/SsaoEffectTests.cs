@@ -205,7 +205,7 @@ public sealed class SsaoEffectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DisabledAndDuplicateStackEntriesKeepTheirCapturedOrder() {
+    public async Task DuplicateAndDisabledStackEntriesAreCapturedForRendering() {
         using CatalogTestHarness harness = new(builtInPack: BuiltInAssetPack.Bytes.ToArray());
         SsaoAssets assets = await SsaoAssets.LoadAsync(harness.Catalog);
         using CameraTestHost host = new();
@@ -222,13 +222,20 @@ public sealed class SsaoEffectTests {
                 Assert.True(camera.IsDisposed == false);
             }
 
+            // The actual duplicate-effect render is covered by
+            // SsaoGpuTests.SsaoTwiceKeepsTheChainSource; this capture test proves both duplicate entries
+            // carry a full four-pass layout and the disabled entry keeps its position.
             CameraPass pass = host.Packet.Passes[0];
             Assert.Equal(3, pass.PostProcessEffectCount);
             Assert.Equal(2, pass.PostProcessEffects.ToArray().Count(static snapshot => snapshot.Enabled));
             Assert.False(pass.PostProcessEffects[1].Enabled);
-            Assert.IsType<SsaoEffectSnapshot>(pass.PostProcessEffects[0]);
+            SsaoEffectSnapshot firstSnapshot = Assert.IsType<SsaoEffectSnapshot>(pass.PostProcessEffects[0]);
             Assert.IsType<DisabledPostProcessEffectSnapshot>(pass.PostProcessEffects[1]);
-            Assert.IsType<SsaoEffectSnapshot>(pass.PostProcessEffects[2]);
+            SsaoEffectSnapshot secondSnapshot = Assert.IsType<SsaoEffectSnapshot>(pass.PostProcessEffects[2]);
+            Assert.Equal(4, firstSnapshot.InstanceLayout.Length);
+            Assert.Equal(4, secondSnapshot.InstanceLayout.Length);
+            Assert.True(firstSnapshot.InstanceLayout[0].Stride > 0);
+            Assert.True(secondSnapshot.InstanceLayout[0].Stride > 0);
         } finally {
             host.EndFrame();
             host.Service.DetachSsaoAssets();

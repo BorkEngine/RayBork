@@ -971,7 +971,7 @@ public sealed class PostProcessGpuTests {
             PostProcessEffects: [Capture(invert)]);
 
         // Two effect passes of different extents in one frame must not destroy each other's post
-        // targets while the recorded command buffer still references them: the processor keeps one pair
+        // targets while the recorded command buffer still references them: the processor keeps one target set
         // per extent per frame ring slot.
         harness.Submit(harness.CreateFrameWithPasses(1, targetPass, scenePass));
         Assert.Equal(2, host.Backend.PostTargetRecreationCountForTests);
@@ -983,8 +983,8 @@ public sealed class PostProcessGpuTests {
         harness.Submit(harness.CreateFrameWithPasses(3, targetPass, scenePass));
         Assert.Equal(6, host.Backend.PostTargetRecreationCountForTests);
 
-        // The fourth frame reuses frame slot 0, whose pairs the third frame did not touch: the previous
-        // frame on that slot used both extents, so both pairs must survive and be reused.
+        // The fourth frame reuses frame slot 0, whose sets the third frame did not touch: the previous
+        // frame on that slot used both extents, so both sets must survive and be reused.
         harness.Submit(harness.CreateFrameWithPasses(4, targetPass, scenePass));
         Assert.Equal(6, host.Backend.PostTargetRecreationCountForTests);
         AssertColorNear(Invert(targetClear), harness.ReadRenderTargetColor(target, 8, 8), HDR_TOLERANCE);

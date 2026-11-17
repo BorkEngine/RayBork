@@ -95,14 +95,6 @@ internal sealed class PrimitiveDrawGpuHarness : IDisposable {
         }
     }
 
-    /// <summary>Gets the loaded built-in SSAO assets attached to the camera service.</summary>
-    internal SsaoAssets SsaoAssets {
-        get {
-            AssertNotDisposed();
-            return _ssaoAssets;
-        }
-    }
-
     /// <summary>
     /// Creates the backend and loads the real primitive assets, or skips the test when the GPU host is
     /// environmentally unavailable.

@@ -35,6 +35,7 @@ struct RayBorkInstance {
     mat4 uProjectionInverse;
     float uRadius;
     float uDistanceFalloff;
+    float uNear;
     float uBiasOffset;
     float uBiasMultiplier;
     bool uScreenSpaceRadius;
@@ -82,6 +83,7 @@ layout(location = 15) flat in uint rbInstanceIndex;
 #define uProjectionInverse rbInstance.uProjectionInverse
 #define uRadius rbInstance.uRadius
 #define uDistanceFalloff rbInstance.uDistanceFalloff
+#define uNear rbInstance.uNear
 #define uBiasOffset rbInstance.uBiasOffset
 #define uBiasMultiplier rbInstance.uBiasMultiplier
 #define uScreenSpaceRadius rbInstance.uScreenSpaceRadius

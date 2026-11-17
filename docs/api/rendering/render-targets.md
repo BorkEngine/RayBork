@@ -196,8 +196,9 @@ their documented camera-viewport behavior. A camera targeting a disposed target 
 
 **Post-process effects on a target.** A camera's `postProcess` stack runs after the camera's geometry
 and resolve pass and before the next camera or the present pass. The chain is target-sized: it samples
-the target's resolved color and depth, ping-pongs one fullscreen pass per enabled custom effect through
-two target-sized single-sample `Rgba16Float` post targets, and stores the final result back into the
+the target's resolved color and depth, rents from three target-sized single-sample `Rgba16Float` post
+targets while skipping the current chain source (a custom chain uses two of the three as its ping-pong
+pair), and stores the final result back into the
 target's color attachment for the camera viewport only. A multisampled target is written through its
 MSAA color attachment and resolved into the single-sample color image; a single-sample target is
 written directly. Pixels outside the camera viewport are untouched, and the target's depth is
@@ -255,19 +256,19 @@ recovery the same public `Texture` object remains valid; only its GPU image and 
 replaced. `DepthTexture` is `null` for a `Depth: false` target.
 
 The app scene target also owns a resolved depth image, but it is internal: there is no public scene-target
-depth view. It is the input an internal consumer such as the SSAO effect samples. The scene target discards
-its attachments, including the resolved depth image, at the start of every frame, and
+depth view. It is the input the built-in `SsaoEffect` samples. The scene target discards its
+attachments, including the resolved depth image, at the start of every frame, and
 `VulkanReadback.ReadSceneDepthPixel` reads the resolved depth image for both single-sample and
-multisampled scene targets. Resolving scene depth costs bandwidth on every camera pass; the SSAO
-effect and the built-in `SsaoEffect` are the internal consumers; SSAO also samples it for every frame
-with a depth-bearing post-process stack. That cost is a known property of the depth path, not a hidden
-regression; a built-in effect can decide whether a pass needs the resolve.
+multisampled scene targets. Resolving scene depth costs bandwidth on every camera pass; SSAO samples it
+for every frame with a depth-bearing post-process stack. That cost is a known property of the depth
+path, not a hidden regression; a built-in effect can decide whether a pass needs the resolve.
 
 **Remaining M8 work.** The extensible camera post-process core, the custom-shader effect, and the
 built-in SSAO effect ship: the stack API, the target-sized chain, viewport store-back, the reserved
-`sourceColor`/`sourceDepth` contract, the scene-target and render-target source slots, and SSAO with
-the app/Castle/PrimitiveGallery toggles. Bloom and the RenderTarget and split-screen samples remain
-later M8 tasks. This section covers the color path, the depth view, resize, and color readback:
+`sourceColor`/`sourceDepth` contract, the scene-target and render-target source slots, and SSAO, which
+Castle and PrimitiveGallery enable by default and toggle with `A`. Bloom, Pong, and the RenderTarget and
+split-screen sample tasks remain later M8 work. This section covers the color path, the depth view,
+resize, and color readback:
 creation, camera routing, MSAA color and depth resolve, same-tick sampling of both views, resize,
 lifetime, raw linear color readback, display-referred pixel readback, and camera post-processing.
 

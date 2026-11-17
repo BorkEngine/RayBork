@@ -1304,7 +1304,7 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     }
 
     /// <summary>
-    /// Gets the number of times the post-processor created a target-sized post-target pair for a frame
+    /// Gets the number of times the post-processor created a target-sized post-target set for a frame
     /// slot, for GPU tests. Test-only; it is not part of the renderer seam. A target extent change or a
     /// device recovery increments it when the next effect frame runs.
     /// </summary>

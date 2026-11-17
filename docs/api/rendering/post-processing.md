@@ -109,11 +109,12 @@ corrupt the recorded frame. Snapshots are pooled per effect and reused after the
 released, so steady-state camera creation does not allocate a new snapshot, uniform buffer, or texture
 array.
 
-**Built-in SSAO.** `SsaoEffect` is the engine's N8AO 2.0-derived, full-resolution GTAO effect. It
+**Built-in SSAO.** `SsaoEffect` is the engine's N8AO 2.1.0-derived, full-resolution SSAO effect. It
 reconstructs view-space positions and normals from the camera target's resolved reverse-Z depth (no
 normal buffer), rotates a golden-angle hemisphere kernel with the N8AO blue-noise texture, applies a
-range check and bias, runs two bilateral denoise iterations, and composites the AO over the original
-scene color. Perspective and orthographic cameras use the same path; `near`/`far` and the projection
+range check and bias, runs two bilateral denoise iterations, and composites the AO over its chain
+input. That input is the original scene color when SSAO is first and the previous effect's output
+otherwise. Perspective and orthographic cameras use the same path; `near`/`far` and the projection
 kind come from the camera's projection matrix.
 
 | Setting | Default | Meaning |
@@ -127,6 +128,10 @@ kind come from the camera's projection matrix.
 | `ScreenSpaceRadius` | `false` | Treats `Radius` as pixels and reconstructs its world size from the center depth. |
 | `BiasOffset` | `0` | Constant bias added to the depth comparison. Must be finite. |
 | `BiasMultiplier` | `1` | Multiplier on the normal-derivative bias heuristic. Must be finite. |
+
+`DenoiseRadius` is independent of `Quality` and keeps the approved default `12`. N8AO's own High and
+Ultra presets also switch the denoise radius to `6`; RayBork does not apply that preset value, so the
+public setting remains the single source of truth.
 
 `Quality` maps to compile-time shader variants, never a runtime sample loop:
 
@@ -154,7 +159,9 @@ can still sample it; the AO, denoise, and composite passes rent two camera-targe
 
 SSAO is several fullscreen passes over the full target, so its cost scales with target pixels:
 `Ultra` does 64 AO samples and two 16-tap denoise iterations per pixel. Prefer `Performance` or `Low`
-on integrated GPUs and `Medium` as the balanced default. The effect is on by default in the Castle
+on integrated GPUs and `Medium` as the balanced default. Shader modules are compiled ahead of time,
+but the engine creates an SSAO or denoise graphics pipeline lazily on the render thread the first time
+a quality variant runs; the pipeline cache then retains it. The effect is on by default in the Castle
 and PrimitiveGallery samples; `A` toggles `SsaoEffect.Enabled` and the status line reports the state.
 The HUD camera in each sample has no post-process stack. Disabling the effect or the stack skips the
 whole chain and renders the geometry result unchanged.
@@ -246,8 +253,10 @@ including the earlier scene and the HUD draw, and stores the result back for its
 size of the camera target, not the size of the camera viewport:
 
 1. The camera target's resolved color and depth are the source.
-2. Each enabled custom effect ping-pongs through two target-sized, single-sample `Rgba16Float` post
-   color targets with a fullscreen pass.
+2. Each enabled effect rents a target from the three-target, single-sample `Rgba16Float` post set for
+   the target extent, skipping the current chain source. A custom chain therefore ping-pongs through
+   two of the three targets with one fullscreen pass per effect; a four-pass built-in can use the two
+   non-source targets while the prior output stays intact.
 3. The final result is stored back into the target's color attachment for the camera viewport only: the
    target's MSAA color image plus its resolve, or the single-sample color image. The store-back samples
    the matching sub-rectangle of the final post target, so a viewport camera's result is aligned with
@@ -265,7 +274,7 @@ not rejected; only the store-back is viewport-scoped.
 
 **Targets and readback.** Effects work identically on the app scene target and on a
 `RenderTexture` target. The chain is sized to the target the camera writes, and one frame can run
-chains on targets of different sizes: the post-target pool keeps a pair per target extent, so a camera
+chains on targets of different sizes: the post-target pool keeps a target set per target extent, so a camera
 targeting the scene target and another targeting a render texture in the same frame each process their
 own content. A render texture written by a camera with a stack can be sampled by a later
 camera through its `ColorTexture`, and `ReadColorsAsync`/`ReadPixelsAsync` read the post-processed
@@ -285,7 +294,8 @@ same hooks. The shipped core gives SSAO everything a multi-pass effect needs wit
 touching the public stack, the camera snapshot path, or the store-back:
 
 - `RentColorTarget()` for a camera-target-sized target and `RentColorTarget(Extent2D)` for an
-  intermediate from the same per-extent pool (two targets per extent, alternating);
+  intermediate from the same per-extent pool (three targets per extent, rotating and skipping the
+  current chain source);
 - the Vulkan device, the color-only post render pass, the engine pipeline layout, the forced post render
   state, the shared frame descriptor set, the engine fullscreen quad, and
   `GetOrCreateFullscreenPipeline` for a built-in shader;
@@ -294,13 +304,16 @@ touching the public stack, the camera snapshot path, or the store-back:
 - `CompleteAuxiliaryTarget` to release an intermediate and `CompleteColorTarget` to make a
   camera-target-sized result the chain source, after which the engine runs the same store-back.
 
-SSAO records four passes into the two-target pair: AO into the first target, denoise into the second,
-the second denoise into the first, and the composite into the second. The AO and denoise targets are
-auxiliary and become readable before the next pass samples them; the composite target is completed as
-the chain source and the engine's single store-back writes it to the camera viewport. The original
-scene color slot is captured before the first completion so the composite samples the unmodified
-scene. SSAO reports four ordered instance-record entries (AO, denoise, denoise, composite) so the
-frame's instance buffer is sized for every pass even though the denoise entry repeats.
+SSAO records four passes through the three-target per-extent set, skipping the current chain source:
+AO into a non-source target, denoise into the next, the second denoise back into the first target,
+and the composite into the last target. The two non-source targets alternate, so the prior effect's
+completed image is never overwritten. The AO and denoise targets are auxiliary and become readable
+before the next pass samples them; the composite target is completed as the chain source and the
+engine's single store-back writes it to the camera viewport. The chain-input color slot is captured
+before the first completion, so the composite samples the previous effect's output (or the original
+scene color when SSAO is first). SSAO reports four ordered instance-record entries (AO, denoise,
+denoise, composite) so the frame's instance buffer is sized for every pass even though the denoise
+entry repeats.
 
 The effect snapshot reports its ordered instance-record layout (per-pass stride and count), so a
 built-in can append passes with different shaders and uniform sizes and the frame's instance buffer is

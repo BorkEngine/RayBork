@@ -4,9 +4,11 @@ namespace RayBork.Internal;
 /// The fixed sample counts and built-in shader paths of each <see cref="SsaoQuality"/> variant.
 /// </summary>
 /// <remarks>
-/// The mapping is the N8AO 2.0 standard-denoise preset table. The shader path selects a committed
-/// SPIR-V module with a compile-time sample count, so no quality setting creates a dynamic loop or a
-/// runtime shader variant.
+/// The mapping is the N8AO 2.1.0 standard-denoise sample-count table. N8AO also changes its denoise
+/// radius to 6 for High and Ultra; RayBork keeps <see cref="SsaoEffect.DenoiseRadius"/> independent and
+/// defaults it to 12, matching the approved public contract. The shader path selects a committed SPIR-V
+/// module with a compile-time sample count, so no quality setting creates a dynamic loop or a runtime
+/// shader variant.
 /// </remarks>
 internal static class SsaoQualityInfo {
     internal static int AoSampleCount(SsaoQuality quality) => quality switch {
