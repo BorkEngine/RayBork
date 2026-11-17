@@ -1275,8 +1275,8 @@ frames.
 `RenderTarget` ships as the M8 sample and Native AOT gate: it draws a procedural scene into a
 `640x360` `Rgba16Float` render texture, samples the target on a monitor in a later camera pass,
 toggles a two-camera split-screen view with `S`, runs a baked custom vignette/tint post shader on the
-single scene camera with `E`, and reads the target back to a PPM screenshot with `F2`. The Windows
-`win-x64` and `linux-x64` publishes finished with zero AOT/trim warnings, contained
+single scene camera with `E`, and reads the target back to a 24-bit uncompressed BMP screenshot with
+`F2`. The Windows `win-x64` and `linux-x64` publishes finished with zero AOT/trim warnings, contained
 `rendertarget.pck` beside the host and no bake tooling, and ran `--frames 30` to exit `0` on the
 Windows hardware driver and on the conformant lavapipe/llvmpipe software driver. The final suite is
 2,977 tests, 239 of them GPU integration tests, with no skips on the Windows hardware path; the
@@ -1323,8 +1323,8 @@ is 232 passed with those 7 skips. M8 is complete.
   with HUD status. Shipped.
 - RenderTarget sample: a procedural scene rendered into a `640x360` `Rgba16Float` target, sampled on
   a monitor in a later camera pass, with a baked custom vignette/tint post shader, a two-camera
-  split-screen toggle, both readback methods, and a PPM screenshot. It is the M8 sample and Native
-  AOT gate, and it does not render the Castle model. Shipped.
+  split-screen toggle, both readback methods, and a 24-bit uncompressed BMP screenshot. It is the M8
+  sample and Native AOT gate, and it does not render the Castle model. Shipped.
 - Split-screen: two cameras with two viewport rectangles in one frame, each its own render pass with
   its own frame block, clear, and resolve; the sample's `S` toggle exercises it. Shipped.
 - Target format/sRGB rules; depth texture sampling. The three color formats, the sRGB sampling decode,

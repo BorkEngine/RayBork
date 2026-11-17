@@ -69,11 +69,12 @@ render texture with depth and 4x MSAA; the single scene camera, or two half-widt
 cameras when `S` is on, drawing a procedural scene and sampling the target's `ColorTexture` on a
 monitor; and a later orthographic HUD camera with `ClearMode.Depth`. The single scene camera runs an
 app-lifetime `PostProcessStack` with one baked `ShaderPostProcessEffect` (`E` toggles the stack). The
-interactive sample calls `ReadColorsAsync` and `ReadPixelsAsync` on `F2` and writes a PPM screenshot;
-`--frames` and `--help` are the only options. The published `--frames 30` gate exercises the
-render-texture creation, camera target routing, same-tick target sampling, the custom post-process
-chain, and the store-back. The two readback methods are covered by the RenderTexture GPU tests and the
-sample's interactive `F2` path, which a `--frames` run does not press.
+interactive sample calls `ReadColorsAsync` and `ReadPixelsAsync` on `F2` and writes a 24-bit
+uncompressed bottom-up BMP screenshot with the readback's opaque alpha dropped; `--frames` and
+`--help` are the only options. The published `--frames 30` gate exercises the render-texture creation,
+camera target routing, same-tick target sampling, the custom post-process chain, and the store-back.
+The two readback methods are covered by the RenderTexture GPU tests and the sample's interactive `F2`
+path, which a `--frames` run does not press.
 
 The publish does not build `RenderTarget.Assets`; the Release solution build above produces
 `rendertarget.pck` beside the sample executable, and the publish target copies it into the publish

@@ -18,7 +18,7 @@ internal static class Program {
         second scene into a 640x360 HDR render texture, and a later scene camera samples that texture on
         the monitor. S splits the scene into two independent cameras with distinct clear colors; E
         toggles the warm vignette post-process on the single scene camera; F2 reads the offscreen target
-        back, reports its center color, and saves rendertarget-readback.ppm.
+        back, reports its center color, and saves rendertarget-readback.bmp.
 
         Usage:
           RenderTarget [options]

@@ -56,7 +56,7 @@ manual bake and no `--assets` argument are required.
 - [ ] `linux-x64` publish from the repository root in WSL after the Release solution build: `dotnet publish samples/RenderTarget/RenderTarget.csproj -c Release -r linux-x64 -p:PublishAot=true`; the publish directory contains `rendertarget.pck` beside the executable and no bake tooling
 - [ ] Linux host run under lavapipe: `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/RenderTarget/bin/Release/net11.0/linux-x64/publish/RenderTarget --frames 30` exits `0`
 - [ ] Both RenderTarget AOT publishes finish with zero AOT/trim warnings; `samples/Castle`, `samples/Pong`, `samples/Text`, and `samples/PrimitiveGallery` remain buildable and publishable but are not the AOT gate
-- [ ] M8 manual checks: Castle and PrimitiveGallery `A` toggles SSAO and the HUD reports the state; Pong `B` toggles scene-camera bloom while the HUD colors stay unchanged and collision flashes bloom; RenderTarget `S` toggles split-screen, `E` toggles the vignette stack, and `F2` writes `rendertarget-readback.ppm` (the `--frames` AOT run does not press `F2`; readback is covered by the GPU tests and this interactive path)
+- [ ] M8 manual checks: Castle and PrimitiveGallery `A` toggles SSAO and the HUD reports the state; Pong `B` toggles scene-camera bloom while the HUD colors stay unchanged and collision flashes bloom; RenderTarget `S` toggles split-screen, `E` toggles the vignette stack, and `F2` writes a 24-bit uncompressed BMP `rendertarget-readback.bmp` (the `--frames` AOT run does not press `F2`; readback is covered by the GPU tests and this interactive path)
 
 ## Docs
 

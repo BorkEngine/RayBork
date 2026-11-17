@@ -10,7 +10,6 @@
 *.ico binary
 *.bmp binary
 *.tga binary
-*.ppm binary
 *.ttf binary
 *.otf binary
 *.wav binary
