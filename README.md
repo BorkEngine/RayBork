@@ -169,6 +169,9 @@ The rest of the API reference remains the 1.0 contract and is delivered by the m
 - `Microsoft.Extensions.Logging` with ZLogger; `EngineContext` exposes `ILoggerFactory`.
 - One runtime assembly, `RayBork.Engine`; JIT-only build tooling in `RayBork.Bake`.
 - xUnit v3 and Moq for tests; no golden-image suite.
+- CSharpier 1.4.0 is the pinned local formatter for C# and project XML, run with
+  `dotnet tool restore` and `dotnet csharpier format .`, and enforced by the CI `format` job with
+  `dotnet csharpier check .`.
 - MIT license; see [LICENSE](LICENSE).
 
 ## Design snapshot
@@ -290,9 +293,11 @@ samples/Castle/               castle scene sample (orbitable model, texture, gri
   Castle.Assets/              JIT assets executable (bakes castle.pck at sample build time)
 samples/                      Instancing (M11)
 docs/                         API reference (overview + section pages), roadmap, architecture
+.config/                      pinned local dotnet tools (CSharpier 1.4.0)
+.editorconfig                 naming, accessibility, qualification, and analyzer policy
 .github/                      GitHub Actions CI and PR template
 scripts/                      docs checks and shader compilation
-AGENTS.md                     agent workflow and code style
+AGENTS.md                     agent workflow and CSharpier code style
 THIRD-PARTY-NOTICES.md        dependency licenses and runtime/test/tooling policy
 LICENSE                       MIT
 ```
@@ -300,6 +305,11 @@ LICENSE                       MIT
 The samples are outside `src/RayBork/RayBork.slnx`: each sample owns its own solution, and a sample
 that needs assets owns an assets executable too. The engine solution builds only the engine, bake,
 and test projects.
+
+CSharpier is the formatter. Run `dotnet tool restore` once, then `dotnet csharpier format .` from
+the repository root; the CI `format` job runs `dotnet csharpier check .` over the whole repository,
+including every sample solution. CSharpier owns whitespace layout for C# and project XML, while
+[.editorconfig](.editorconfig) keeps naming, accessibility, qualification, and analyzer policy.
 
 Run the samples from the repository root with a Vulkan 1.2 device and a real window system. On WSL,
 use the WSLg display with the lavapipe ICD; WSLg's hardware Vulkan path is not a target. The Pong

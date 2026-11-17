@@ -110,8 +110,11 @@ Types are PascalCase, methods are PascalCase, parameters and locals are camelCas
 `IGame.Shutdown` are the deliberate exception because they are lifecycle hooks, not general-purpose
 async APIs.
 
-Source style uses K&R braces: the opening brace stays on the declaration line, and `else`, `catch`,
-and `finally` stay on the closing-brace line.
+Source layout is CSharpier 1.4.0's Allman style with a 100-column print width: the opening brace
+goes on its own line, and `else`, `catch`, and `finally` start a new line after the closing brace.
+CSharpier is the pinned local tool in `.config/dotnet-tools.json`, installed with
+`dotnet tool restore`; `dotnet csharpier format .` writes the layout. CI's `format` job runs
+`dotnet csharpier check .` over the repository, so hand-formatting is never the source of truth.
 
 ### 1.3 Units and space
 

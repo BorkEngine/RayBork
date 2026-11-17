@@ -113,13 +113,13 @@ the AOT publish, the style policy, or the dependency rules.
   references from runtime projects, no `Material` type.
 - Add `samples/HelloInterop`, a `net11.0` console host that loads SDL3, opens no window, and exits;
   publish it with `PublishAot` on Windows and Linux.
-- Add `.github/workflows/ci.yml`: `build-test` on `windows-latest` and `ubuntu-latest`
-  (restore, Debug and Release builds, test, `dotnet format`) and a `docs` job running
-  `scripts/check-docs.ps1`.
+- Add `.github/workflows/ci.yml`: `build-test` on `windows-latest` and `ubuntu-latest` (restore,
+  Debug and Release builds, test), a `format` job running `dotnet tool restore` and
+  `dotnet csharpier check .`, and a `docs` job running `scripts/check-docs.ps1`.
 - Add `.github/workflows/pr-title.yml` to enforce the PR title convention.
 - Add `.github/pull_request_template.md` and the PR rules in `AGENTS.md`.
-- Add `.editorconfig` K&R braces, `SCREAMING_SNAKE_CASE` constants, and `AGENTS.md`; add the MIT
-  `LICENSE`.
+- Add `.editorconfig` with CSharpier's Allman layout, `SCREAMING_SNAKE_CASE` constants, and
+  `AGENTS.md`; add the MIT `LICENSE`.
 - Add `docs/` and the initial API/architecture/roadmap set, plus `THIRD-PARTY-NOTICES.md`. There is
   no decision log.
 - Design the internal `IRendererBackend` seam and its lifecycle in [architecture.md](architecture.md);
@@ -133,9 +133,10 @@ the AOT publish, the style policy, or the dependency rules.
 - The public API analyzer is active, `EngineVersion.Current` is the only public member added in M0,
   and the architecture tests fail on a deliberate violation.
 - The dependency matrix documents every runtime, test, and tooling package and its AOT status.
-- `dotnet format --verify-no-changes` passes with K&R braces and `SCREAMING_SNAKE_CASE` constants.
-- GitHub Actions passes on a PR to `develop`: `build-test` on Windows and Ubuntu, `docs`, and
-  `pr-title`.
+- `dotnet csharpier check .` passes with CSharpier's Allman layout and `SCREAMING_SNAKE_CASE`
+  constants.
+- GitHub Actions passes on a PR to `develop`: `build-test` on Windows and Ubuntu, `format`, `docs`,
+  and `pr-title`.
 - The API reference, architecture, and roadmap are linked from the repository README.
 - The MIT `LICENSE` and [third-party notices](../THIRD-PARTY-NOTICES.md) are present.
 
@@ -1659,6 +1660,11 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   rule, and the absence of a public `Material`.
 - CI runs on Windows and Ubuntu. Linux GPU tests use lavapipe under Xvfb; WSLg hardware Vulkan is
   not a target.
+- Formatting is CSharpier 1.4.0 through the pinned local tool manifest in
+  `.config/dotnet-tools.json`. Developers run `dotnet tool restore` and
+  `dotnet csharpier format .`; CI runs a `format` job with `dotnet tool restore` and
+  `dotnet csharpier check .`. `.editorconfig` retains naming, accessibility, qualification, and
+  analyzer policy, and IDE0055 is disabled because CSharpier owns layout.
 - HDR/SDR fallback, MSAA sample counts, and device-loss recovery each have an explicit test path;
   a host that cannot exercise them reports a skip with a reason.
 
