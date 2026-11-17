@@ -19,7 +19,11 @@ public sealed class InputMappingTests
                 Enum.IsDefined(scancode),
                 $"Key.{key} ({value}) has no matching SDL scancode."
             );
-            Assert.Equal(key, InputMappings.ToKey(scancode));
+            Assert.True(
+                InputMappings.TryGetKey(scancode, out Key mapped),
+                $"Key.{key} ({value}) did not map back to a key."
+            );
+            Assert.Equal(key, mapped);
         }
     }
 
@@ -36,7 +40,20 @@ public sealed class InputMappingTests
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void RepresentativeScancodesMapToTheirKeys(Key expected, SDL.Scancode scancode)
     {
-        Assert.Equal(expected, InputMappings.ToKey(scancode));
+        Assert.True(InputMappings.TryGetKey(scancode, out Key key));
+        Assert.Equal(expected, key);
+    }
+
+    [Theory]
+    [InlineData(InputMappings.KEY_COUNT)]
+    [InlineData(InputMappings.KEY_COUNT + 1)]
+    [InlineData(-1)]
+    [InlineData(int.MaxValue)]
+    [InlineData(int.MinValue)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ScancodesOutsideTheKeyRangeAreRejected(int scancode)
+    {
+        Assert.False(InputMappings.TryGetKey((SDL.Scancode)scancode, out _));
     }
 
     [Theory]
@@ -138,6 +155,8 @@ public sealed class InputMappingTests
         Assert.Equal(-1f, InputMappings.NormalizeStickAxis(short.MinValue));
         Assert.Equal(0.5f, InputMappings.NormalizeStickAxis(16384), 3);
         Assert.Equal(-0.5f, InputMappings.NormalizeStickAxis(-16384), 3);
+        Assert.Equal(1234f / 32767f, InputMappings.NormalizeStickAxis(1234), 6);
+        Assert.Equal(-1234f / 32767f, InputMappings.NormalizeStickAxis(-1234), 6);
     }
 
     [Fact]
@@ -148,6 +167,8 @@ public sealed class InputMappingTests
         Assert.Equal(0f, InputMappings.NormalizeTrigger(short.MinValue));
         Assert.Equal(1f, InputMappings.NormalizeTrigger(short.MaxValue));
         Assert.Equal(0.5f, InputMappings.NormalizeTrigger(16384), 3);
+        Assert.Equal(1234f / 32767f, InputMappings.NormalizeTrigger(1234), 6);
+        Assert.Equal(0f, InputMappings.NormalizeTrigger(-1234));
     }
 
     [Fact]

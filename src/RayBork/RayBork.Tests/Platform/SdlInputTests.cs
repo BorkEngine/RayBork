@@ -35,23 +35,151 @@ public sealed class SdlInputTests
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TextInputEventsAppendUtf16InOrder()
+    public void OutOfRangeScancodesAreIgnoredWithoutThrowing()
+    {
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
+
+        input.HandleEvent(
+            KeyboardEvent((SDL.Scancode)InputMappings.KEY_COUNT, down: true, repeat: false)
+        );
+        input.HandleEvent(
+            KeyboardEvent((SDL.Scancode)(InputMappings.KEY_COUNT + 1), down: true, repeat: true)
+        );
+        input.HandleEvent(KeyboardEvent((SDL.Scancode)(-1), down: false, repeat: false));
+        input.HandleEvent(KeyboardEvent((SDL.Scancode)int.MaxValue, down: true, repeat: false));
+
+        IInput snapshot = input.Capture();
+        foreach (Key key in Enum.GetValues<Key>())
+        {
+            Assert.True(snapshot.IsKeyUp(key), $"Key.{key} must stay up.");
+            Assert.False(snapshot.IsKeyPressed(key), $"Key.{key} must have no press edge.");
+            Assert.False(snapshot.IsKeyPressedRepeat(key), $"Key.{key} must have no repeat edge.");
+            Assert.False(snapshot.IsKeyReleased(key), $"Key.{key} must have no release edge.");
+        }
+
+        // A rejected scancode must not break later translation in the same pump.
+        input.HandleEvent(KeyboardEvent(SDL.Scancode.W, down: true, repeat: false));
+        IInput afterValidKey = input.Capture();
+        Assert.True(afterValidKey.IsKeyDown(Key.W));
+        Assert.True(afterValidKey.IsKeyPressed(Key.W));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TextInputEventsAppendUtf16InOrderWithinOneTick()
     {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         IntPtr first = Marshal.StringToCoTaskMemUTF8("hé");
         IntPtr second = Marshal.StringToCoTaskMemUTF8("llo");
+        IntPtr third = Marshal.StringToCoTaskMemUTF8(" 世界😀");
         try
         {
             input.HandleEvent(TextEvent(first));
             input.HandleEvent(TextEvent(second));
+            input.HandleEvent(TextEvent(third));
         }
         finally
         {
             Marshal.FreeCoTaskMem(first);
             Marshal.FreeCoTaskMem(second);
+            Marshal.FreeCoTaskMem(third);
         }
 
-        Assert.Equal("héllo", input.Capture().TextInput);
+        Assert.Equal("héllo 世界😀", input.Capture().TextInput);
+        Assert.Equal(string.Empty, input.Capture().TextInput);
+    }
+
+    [Theory]
+    [InlineData("Grüße")]
+    [InlineData("日本語テキスト")]
+    [InlineData("😀")]
+    [InlineData("RayBork 🎮 input")]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TextInputPreservesNonAsciiUtf16AndClearsAfterCapture(string text)
+    {
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
+        IntPtr pointer = Marshal.StringToCoTaskMemUTF8(text);
+        try
+        {
+            input.HandleEvent(TextEvent(pointer));
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(pointer);
+        }
+
+        IInput snapshot = input.Capture();
+        Assert.Equal(text, snapshot.TextInput);
+        Assert.Equal(string.Empty, input.Capture().TextInput);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void EmptyAndNullTextInputPointersAreIgnored()
+    {
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
+        IntPtr empty = Marshal.StringToCoTaskMemUTF8(string.Empty);
+        IntPtr text = Marshal.StringToCoTaskMemUTF8("Ray");
+        try
+        {
+            input.HandleEvent(TextEvent(IntPtr.Zero));
+            input.HandleEvent(TextEvent(empty));
+            input.HandleEvent(TextEvent(text));
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(empty);
+            Marshal.FreeCoTaskMem(text);
+        }
+
+        IInput snapshot = input.Capture();
+        Assert.Equal("Ray", snapshot.TextInput);
+        Assert.Equal(string.Empty, input.Capture().TextInput);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TextEditingAndCandidatesEventsAreIgnored()
+    {
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
+        IntPtr composition = Marshal.StringToCoTaskMemUTF8("にほん");
+        try
+        {
+            input.HandleEvent(TextEditingEvent(composition));
+            input.HandleEvent(TextEditingCandidatesEvent());
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(composition);
+        }
+
+        Assert.Equal(string.Empty, input.Capture().TextInput);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TextEditingDoesNotBlockOrReorderCommittedText()
+    {
+        SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
+        IntPtr before = Marshal.StringToCoTaskMemUTF8("A");
+        IntPtr composition = Marshal.StringToCoTaskMemUTF8("B");
+        IntPtr after = Marshal.StringToCoTaskMemUTF8("C");
+        try
+        {
+            input.HandleEvent(TextEvent(before));
+            input.HandleEvent(TextEditingEvent(composition));
+            input.HandleEvent(TextEditingCandidatesEvent());
+            input.HandleEvent(TextEvent(after));
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(before);
+            Marshal.FreeCoTaskMem(composition);
+            Marshal.FreeCoTaskMem(after);
+        }
+
+        Assert.Equal("AC", input.Capture().TextInput);
+        Assert.Equal(string.Empty, input.Capture().TextInput);
     }
 
     [Fact]
@@ -243,6 +371,37 @@ public sealed class SdlInputTests
         {
             Type = (uint)SDL.EventType.TextInput,
             Text = new SDL.TextInputEvent { Type = SDL.EventType.TextInput, Text = text },
+        };
+    }
+
+    private static SDL.Event TextEditingEvent(IntPtr text)
+    {
+        return new SDL.Event
+        {
+            Type = (uint)SDL.EventType.TextEditing,
+            Edit = new SDL.TextEditingEvent
+            {
+                Type = SDL.EventType.TextEditing,
+                Text = text,
+                Start = 0,
+                Length = 1,
+            },
+        };
+    }
+
+    private static SDL.Event TextEditingCandidatesEvent()
+    {
+        return new SDL.Event
+        {
+            Type = (uint)SDL.EventType.TextEditingCandidates,
+            EditCandidates = new SDL.TextEditingCandidatesEvent
+            {
+                Type = SDL.EventType.TextEditingCandidates,
+                Candidates = IntPtr.Zero,
+                NumCandidates = 0,
+                SelectedCandidate = 0,
+                Horizontal = false,
+            },
         };
     }
 

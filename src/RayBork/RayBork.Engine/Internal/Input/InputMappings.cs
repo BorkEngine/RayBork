@@ -18,9 +18,25 @@ internal static class InputMappings
     private const float AXIS_SCALE = 32767f;
 
     /// <summary>
-    /// Converts an SDL3 scancode to a RayBork key. The two enums share numeric values.
+    /// Converts an SDL3 scancode to a RayBork key when the scancode has a key storage slot. A
+    /// scancode outside the key array range has no slot and is rejected instead of producing an
+    /// invalid key index.
     /// </summary>
-    internal static Key ToKey(SDL.Scancode scancode) => (Key)(int)scancode;
+    /// <param name="scancode">The SDL3 scancode from a keyboard event.</param>
+    /// <param name="key">The mapped key when the scancode is in range.</param>
+    /// <returns><see langword="true"/> when the scancode is in range.</returns>
+    internal static bool TryGetKey(SDL.Scancode scancode, out Key key)
+    {
+        int value = (int)scancode;
+        if (value >= 0 && value < KEY_COUNT)
+        {
+            key = (Key)value;
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
 
     /// <summary>
     /// Maps the one-based SDL3 mouse button number to the zero-based <see cref="MouseButton"/>.

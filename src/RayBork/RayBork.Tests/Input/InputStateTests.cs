@@ -266,6 +266,7 @@ public sealed class InputStateTests
         state.HandleGamepadStickAxis(GAMEPAD_INSTANCE_ID, GamepadAxis.LeftY, 5f);
         state.HandleGamepadStickAxis(GAMEPAD_INSTANCE_ID, GamepadAxis.RightY, -5f);
         state.HandleGamepadTrigger(GAMEPAD_INSTANCE_ID, GamepadTrigger.Right, 5f);
+        state.HandleGamepadTrigger(GAMEPAD_INSTANCE_ID, GamepadTrigger.Left, -5f);
 
         IGamepad pad = Assert.Single(state.Capture().Gamepads);
         Assert.Equal(1f, pad.GetAxis(GamepadAxis.LeftY));
