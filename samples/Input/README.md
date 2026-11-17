@@ -8,9 +8,9 @@ committed IME text, shows a blinking caret, copies and pastes text through the s
 places the native text-input candidate area over the field.
 
 The sample is a plain example, not a test fixture. It has no assertions, no test-only logging, no
-hidden command-line options, and no `--text` or other injection flag. It uses no assets executable,
-no asset pack, no bake step, and no `--assets` argument: the engine's built-in pack supplies the
-primitive and text shaders, and the field text and HUD use the engine-owned
+hidden or test-only command-line options, and no `--text` or other injection flag. It uses no assets
+executable, no asset pack, no bake step, and no `--assets` argument: the engine's built-in pack
+supplies the primitive and text shaders, and the field text and HUD use the engine-owned
 `EngineDefaults.DefaultFont` (Fira Sans) and `EngineDefaults.DefaultMonoFont` (JetBrains Mono). The
 sample never disposes those engine defaults.
 
@@ -57,12 +57,14 @@ calls `IWindow.SetMinSize(640, 360)` in `Setup`.
 
 ## Layout
 
-Each tick records one orthographic HUD camera at `(0, 0, 1)` with its visible height equal to
+Each drawn tick records one orthographic HUD camera at `(0, 0, 1)` with its visible height equal to
 `Window.RenderHeight`, `ClearMode.ColorAndDepth`, a dark clear color, a `0.01` near plane, and a `100`
 far plane. Every draw anchors a screen-space plane with
 `Camera.ScreenToWorldTransform(pixel, 1f)`, so one local unit is one render pixel, and the sample
 draws only with `Camera.DrawQuad` and `Camera.DrawText`. It keeps no scene geometry, render target,
-asset pack, or post-process stack, and creates and disposes exactly one camera per drawn tick.
+asset pack, or post-process stack, and creates and disposes exactly one camera per drawn tick. A tick
+with a zero render extent (for example while the window is minimized) draws no HUD: it records no
+camera and makes no `SetTextInputArea` call.
 
 The layout is, from top to bottom:
 
@@ -79,11 +81,14 @@ colors are `Color.FromSrgbBytes` dark-UI values with high-contrast text.
 
 The HUD is laid out in render pixels. Only `IWindow.SetTextInputArea` converts to logical window
 coordinates, using `Window.Width / RenderWidth` and `Window.Height / RenderHeight` when the render
-extents are positive; if the render extents are unusable, the call is skipped for that tick. Below a
-render height of `480` the layout uses compact spacing and hides the description. Panel and event-log
-rows are clamped to whole rows, so a window at the `640x360` minimum never draws a negative or
-inverted rectangle: the event log shows its newest rows (the buffer still keeps ten), and a panel
-whose content no longer fits ends with `... +N more`.
+extents are positive; a tick with an unusable render extent draws no HUD, so the call is skipped with
+it. Below a render height of `480` or a render width of `800`, the layout uses compact spacing and
+hides the description. Every single-line row (the title, description, field label and hint, status,
+and controls hint) is measured with `Font.Measure` and ends with `...` when the full text does not
+fit, so a narrow window keeps the row inside the content width and still shows the full text where it
+fits. Panel and event-log rows are clamped to whole rows, so a window at the `640x360` minimum never
+draws a negative or inverted rectangle: the event log shows its newest rows (the buffer still keeps
+ten), and a panel whose content no longer fits ends with `... +N more`.
 
 ## Text field
 
@@ -102,7 +107,7 @@ calls `IWindow.GetClipboardText` once to queue the main-thread read, waits one t
 snapshot can refresh, then calls it again, appends the text, and logs it. Nothing blocks, sleeps, or
 polls in a loop.
 
-Every tick also calls `IWindow.SetTextInputArea` with the field rectangle in logical window
+Every drawn tick also calls `IWindow.SetTextInputArea` with the field rectangle in logical window
 coordinates and the caret offset in window units, so native IME candidates follow the field. The
 sample draws no composition preview or candidate list of its own.
 
@@ -114,10 +119,11 @@ built-in faces cover Latin, Cyrillic, and Greek, and the engine has no font fall
 face's cmap does not map draws as that face's `.notdef` box (see
 [Text rendering](../../docs/api/rendering/text.md)). The sample ships no font of its own and cannot
 substitute one, so a committed CJK string is stored, copied, and counted but draws as `.notdef`
-boxes, and an emoji is stored as two UTF-16 code units but decodes as one rune, so the field and the
-log each draw one `.notdef` box. The status line's `chars` value is the field length in UTF-16 code
-units, so an unmapped commit is still verifiable through `chars` and the event log's `text "..."`
-line.
+boxes. A non-BMP single-codepoint emoji such as U+1F600 is one surrogate pair, so it is stored as two
+UTF-16 code units and decodes as one rune, and the field and the log each draw one `.notdef` box; a
+BMP emoji is one code unit, and a multi-rune emoji sequence has more code units and draws more boxes.
+The status line's `chars` value is the field length in UTF-16 code units, so an unmapped commit is
+still verifiable through `chars` and the event log's `text "..."` line.
 
 ## Window and monitor panel
 
@@ -180,16 +186,25 @@ dotnet publish samples/Input/Input.csproj -c Release -r win-x64 -p:PublishAot=tr
 samples/Input/bin/Release/net11.0/win-x64/publish/Input.exe --frames 30
 ```
 
-Publish the Linux host on a Linux machine (or from WSL) and run it on a desktop session or, on WSL,
-the WSLg display with the conformant lavapipe ICD:
+Publish the Linux host on a Linux desktop machine and run it with its hardware driver:
 
 ```bash
 dotnet publish samples/Input/Input.csproj -c Release -r linux-x64 -p:PublishAot=true
 samples/Input/bin/Release/net11.0/linux-x64/publish/Input --frames 30
 ```
 
-On WSL, prefix the run command with
-`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir`.
+Inside WSL, publish from the WSL clone (the repository copy under `$HOME`, for example
+`$HOME/raybork`, never `/mnt/d`) with the WSL .NET, then run it on the WSLg display with the
+conformant lavapipe ICD:
+
+```bash
+cd "$HOME/raybork"
+$HOME/.dotnet/dotnet publish samples/Input/Input.csproj -c Release -r linux-x64 -p:PublishAot=true
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
+DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
+  samples/Input/bin/Release/net11.0/linux-x64/publish/Input --frames 30
+```
+
 WSLg's hardware Vulkan path (Mesa dzn) is not a target.
 
 Both publishes must finish with zero AOT and trim warnings. The publish directory must not contain
@@ -199,37 +214,44 @@ gate; the sample's build and `--frames` run are the local checks.
 
 ## Manual verification
 
-These are steps for you to run on a machine with a display; the automated `--frames 30` run only
-proves startup, HUD recording, and a clean exit. Run the Windows checks on the hardware driver and
-the WSL checks under WSLg with the lavapipe ICD and the environment above.
+These are steps for you to run on a machine with a display. The automated `--frames 30` run proves
+only that the sample starts, runs its tick loop, and exits cleanly; it does not verify anything drawn
+on screen, so use these steps for the visual checks. Run the Windows checks on the hardware driver
+and the WSL checks under WSLg with the lavapipe ICD and the environment above; the Monitors and DPI
+section states which host covers each monitor check.
 
 ### Committed IME text and the text-input area
 
 The built-in faces cover Latin, Cyrillic, and Greek only, and there is no fallback (see "Faces and
-glyph coverage"). Check the visible-glyph path with a layout in that coverage; a CJK IME still
-exercises the commit path, but its glyphs draw as `.notdef` boxes in the field and the log.
+glyph coverage"). A keyboard layout in that coverage proves the visible-glyph commit path; the
+native candidate-window placement check needs a real IME, because a keyboard layout has no candidate
+window.
 
 Windows:
 
-1. Enable a Latin, Cyrillic, or Greek keyboard layout or IME in Windows (for example Russian or
-   Greek), and run the sample.
-2. Type a word and start composition. The native candidate window should follow the field, not the
-   top-left corner of the window.
-3. Commit the composition. The committed characters appear at the end of the field and the caret
-   moves past them. For an IME whose output the built-in faces do not cover, the same commit draws
-   as `.notdef` boxes in the field and the log; verify it through the status line's `chars` count,
-   which grows by the committed UTF-16 length, and the event log's `text "..."` line.
-4. Resize the window or move it to another monitor and repeat. The candidate window should still
-   follow the field rectangle after the resize.
+1. Enable a Latin, Cyrillic, or Greek keyboard layout (for example Russian or Greek), run the
+   sample, and type a word. The committed characters appear at the end of the field, the caret
+   moves past them, and the event log records the `text "..."` line.
+2. Add and switch to a real IME such as Microsoft Japanese IME, then start composition. The native
+   candidate window should follow the field rectangle, not the top-left corner of the window.
+3. Commit the composition. The built-in faces do not cover Japanese, so the committed text draws as
+   `.notdef` boxes in the field and the log; verify the commit through the status line's `chars`
+   count, which grows by the committed UTF-16 length, and the event log's `text "..."` line.
+4. Resize the window or move it to another monitor and repeat the composition. The candidate window
+   should still follow the field rectangle after the resize.
 
 WSL/lavapipe:
 
-1. Start the sample under WSLg with lavapipe and a host IME that WSLg exposes to the session.
-2. Repeat the compose and commit steps with a Latin, Cyrillic, or Greek method when the host exposes
-   one, and confirm the commit through the field text, the status `chars` count, and the event log.
-   A CJK commit verifies the same path but draws as `.notdef` boxes. If the session has no IME
-   bridge, typed ASCII still commits through `TextInput`; that is a session limitation rather than
-   a sample path, because the sample draws no composition text of its own.
+1. Start the sample under WSLg with lavapipe. The WSLg session receives the host keyboard, but it may
+   expose only a keyboard layout and no IME bridge.
+2. With a Latin, Cyrillic, or Greek layout, type a word and confirm the visible glyphs in the field,
+   the growing `chars` count, and the `text "..."` event-log line.
+3. If the session exposes a real IME to the WSLg window, start composition and confirm the candidate
+   window follows the field. A committed CJK string draws as `.notdef` boxes but is verifiable
+   through `chars` and the event log, exactly as on Windows.
+4. If the session has no IME bridge, typed ASCII still commits through `TextInput`; that is a
+   session limitation rather than a sample path, because the sample draws no composition text of its
+   own.
 
 ### Clipboard and caret
 
@@ -237,24 +259,43 @@ WSL/lavapipe:
 2. Press `Ctrl+C`; the event log records the copy. Open another application and paste to confirm the
    clipboard text.
 3. Press `Ctrl+X`; the field empties and the log records the cut.
-4. Press `Ctrl+V`; the text is appended on the next tick and logged. Paste a multi-line string; each
-   line break becomes a space and the field stays one line.
-5. Paste an emoji, which is one surrogate pair. The status `chars` count grows by two and the field
-   draws one `.notdef` box, because the pair decodes as one rune and the built-in face maps no emoji
-   glyph. Press Backspace once: the box disappears and `chars` drops by two, so the pair was removed
-   as one text element. Press Delete; the field clears.
+4. Press `Ctrl+V`; the text is appended on the next tick and logged. Paste a two-line string such as
+   `one\r\ntwo`: the field becomes `one two`, because the CRLF pair folds to one space, and it stays
+   one line. A lone `\n` or `\r` also becomes one space.
+5. Paste a non-BMP single-codepoint emoji such as U+1F600. It is one surrogate pair, so the status
+   `chars` count grows by two and the field draws one `.notdef` box, because the pair decodes as one
+   rune and the built-in face maps no emoji glyph. A BMP emoji is one code unit and draws one box; a
+   multi-rune emoji sequence is longer and draws more boxes, so the +2 and one-box expectation
+   applies to that concrete example. Press Backspace once: the box disappears and `chars` drops by
+   two, so the pair was removed as one text element. Press Delete; the field clears.
 6. Paste or type a 200-character field; the field stays the same size, shows a leading ellipsis once
    the tail no longer fits, and keeps the caret at the end.
 
 ### Fullscreen and borderless
 
-1. Press `Alt+Enter`. The window enters fullscreen and the panel and event log report the change.
-2. Press `Alt+Enter` again. The window returns to its previous size and position.
-3. Press `B`. The window loses its border while the panel reports `borderless yes`. Resize and move
-   the borderless window, then press `B` again to restore the border. Confirm that fullscreen and
-   borderless are independent.
+1. Press `Alt+Enter`. The window enters fullscreen, the panel reports `fullscreen yes`, and the event
+   log records `fullscreen requested on`.
+2. Press `Alt+Enter` again. The window returns to its previous size and position, the panel reports
+   `fullscreen no`, and the log records `fullscreen requested off`.
+3. Press `B`. The border disappears and the panel reports `borderless yes`; the event log records
+   `borderless requested on`. The sample draws no custom drag or resize region, and a borderless
+   window may have no native affordance for either, so do not try to resize or move it. Press `B`
+   again to restore the border and confirm the panel reports `borderless no`.
+4. Toggle fullscreen while borderless and borderless while fullscreen. Each panel line and log entry
+   reflects only its own toggle: `Alt+Enter` changes the `fullscreen` line, and `B` changes the
+   local `borderless` line, without changing the other.
 
 ### Monitors and DPI
+
+Monitor hotplug, per-monitor bounds and work area, and per-monitor DPI changes are verified on the
+Windows hardware driver: those checks need a multi-monitor, changeable-scale desktop host. WSLg
+normally exposes one virtual display, so it cannot exercise multi-monitor behavior; do not report a
+WSLg run as multi-monitor coverage. Under WSLg, verify only the one-monitor path: the panel lists the
+one display with its bounds and work area, and the panel's `render` and `dpi` values and the event log
+update if the session can change the WSLg display scale. The HUD and, when the session exposes an IME,
+the native candidate area must remain valid for that display.
+
+Windows hardware driver:
 
 1. On a machine with two or more monitors, press `M` repeatedly. The window moves to the next
    monitor in stable-index order, the panel updates `current monitor`, and the monitor list marks the
@@ -264,8 +305,12 @@ WSL/lavapipe:
 3. Put the monitors at different display scales, or change the scale of the current monitor. The
    panel's `dpi` and `render` values change, the event log records the changes, and the HUD stays
    aligned with the window. The native IME candidate area should still follow the field.
-4. Resize the window down to its `640x360` minimum. No panel or row may be drawn inside out; the
-   event log keeps its newest rows and panels may end with `... +N more`.
+
+Any host, including WSLg:
+
+1. Resize the window down to its `640x360` minimum. No panel or row may be drawn inside out; the
+   event log keeps its newest rows, panels may end with `... +N more`, and the status and controls
+   rows stay inside the window, with `...` where the full text no longer fits (see "Layout").
 
 ### Focus loss and the 30 FPS cap
 
@@ -302,7 +347,8 @@ WSL/lavapipe:
 - Touch, window icon, window opacity, and drag-and-drop: all are post-1.0 platform work.
 - Clipboard images, multiple windows, and accessibility.
 - Screenshots and capture tooling. The sample contains no golden images or capture hooks.
-- Test-only assertions, logging, or command-line flags of any kind.
+- Test-only assertions and logging, and hidden or test-only command-line flags: the only arguments
+  are `--frames` and `--help`.
 
 ## Related documentation
 
