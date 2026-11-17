@@ -713,7 +713,8 @@ no pass dependency analysis.
 The core is extensible rather than custom-shader-specific. A built-in effect is engine code with an
 approved public effect type over an internal snapshot; it is not a custom-shader effect. SSAO adds
 `SsaoEffect` and an internal `SsaoEffectSnapshot : PostProcessEffectSnapshot` whose `Run` uses the
-per-pass `PostProcessContext`; bloom will use the same hooks. The context gives a
+per-pass `PostProcessContext`; bloom adds `BloomEffect` and `BloomEffectSnapshot` on the same hooks.
+The context gives a
 built-in the Vulkan device, the color-only post render pass, the engine pipeline layout and forced
 post render state, the shared frame descriptor set, and the engine fullscreen quad. It also provides
 `RentColorTarget()` for a camera-target-sized target and `RentColorTarget(Extent2D)` for an
@@ -740,6 +741,21 @@ No runtime shader compile or render-thread asset load is added. The built-in add
 and an internal snapshot; it extends the post-target pool to three targets and carries the preloaded
 asset set through the camera capture context, while leaving the public custom-shader contract and the
 store-back unchanged.
+
+Bloom records a fast dual-filter pyramid over its chain input: a threshold and soft-knee prefilter into
+the half-resolution level, up to four downsamples (quarter, eighth, 1/16, and 1/32, each clamped to at
+least one pixel), tent upsamples back to half resolution with the frozen `Scatter` weight, and a
+camera-target-sized composite that adds the pyramid to the input. A small target whose next halving no
+longer shrinks the extent stops the pyramid there, so the effect runs fewer passes and never rents more
+than the per-extent three-target set. Each upsample reads the coarse and finer levels and writes the
+explicit read-add result into a separate target, so the forced post pipeline state stays opaque and the
+color-only post render pass keeps its load-op-free write. The prefilter and pyramid levels are auxiliary
+targets; the composite is the chain source and the engine store-back runs once. The camera service
+receives the app's preloaded
+`BloomAssets` (four committed-SPIR-V programs with one shared fullscreen vertex payload) before
+`IGame.Setup`; the four programs are packaged by `BuiltInBloomProcessor` and carry the shader ABI inline
+in `BloomAbi.glslinc`. Bloom has no depth requirement. `Pong` enables it on the scene camera only and
+toggles it with `B`; its HUD camera keeps no stack.
 
 ## Time
 
@@ -996,7 +1012,7 @@ Regular (SIL Open Font License 1.1; see [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-
 monospaced font at `/fonts/jetbrains-mono` is the JetBrains Mono variable face, rendered at its
 default Regular instance (SIL Open Font License 1.1; see the same file). Both are baked by the
 ordinary font processor with the default 32/4/2 MSDF settings and a sibling raw face payload
-(`/fonts/fira-sans-face` and `/fonts/jetbrains-mono-face`), so the built-in pack has 37 entries including the seven SSAO shader assets, their payloads, and the blue-noise texture. The
+(`/fonts/fira-sans-face` and `/fonts/jetbrains-mono-face`), so the built-in pack has 46 entries including the SSAO and bloom shader assets, their payloads, and the blue-noise texture. The
 runtime exposes the faces as `EngineContext.Defaults.DefaultFont` and
 `EngineContext.Defaults.DefaultMonoFont`. Each font descriptor and face payload is an ordinary entry;
 the pack format is unchanged and the runtime generates glyph textures on demand.
@@ -1383,7 +1399,7 @@ JetBrains Mono variable face from `/fonts/jetbrains-mono` after the built-in pac
 `EngineContext.Defaults.DefaultMonoFont` are available to `Setup` without adding a startup GPU upload.
 The pack carries each face and its sibling raw payload (`/fonts/fira-sans-face` and
 `/fonts/jetbrains-mono-face`), baked by the ordinary font processor with the default 32/4/2 MSDF
-settings, so the built-in pack has 37 entries including the seven SSAO shader assets, their payloads, and the blue-noise texture. Fira Sans Regular is version 4.203 and JetBrains Mono
+settings, so the built-in pack has 46 entries including the SSAO and bloom shader assets, their payloads, and the blue-noise texture. Fira Sans Regular is version 4.203 and JetBrains Mono
 is version 2.211; both are licensed under the SIL Open Font License 1.1 and cover Latin, Cyrillic, and
 Greek. The bundled JetBrains Mono variable face's default named instance is Regular (weight 400),
 which is the instance the runtime renders. The samples use the mono face for their
@@ -1573,11 +1589,12 @@ directory and emits a C# byte array. An MSBuild target imported by `RayBork.Engi
 and runs the generator before `CoreCompile` and adds the generated file to the compilation. The
 generated file lives under the intermediate output, is never committed, and is not published as a
 loose pack; the generator and its packages do not enter the engine's output or AOT publish graph.
-The SSAO entries use two tool-only processors: `BuiltInSsaoProcessor` packages the committed
-`Ssao*.spv` modules and their descriptor metadata, and `BuiltInBlueNoiseProcessor` bakes the raw
+The SSAO and bloom entries use tool-only processors: `BuiltInSsaoProcessor` packages the committed
+`Ssao*.spv` modules and their descriptor metadata, `BuiltInBloomProcessor` packages the
+`Bloom*.spv` modules and their descriptor metadata, and `BuiltInBlueNoiseProcessor` bakes the raw
 128x128 RGBA8 source into a KTX2 linear texture. `scripts/compile-shaders.ps1` compiles the eight
-SSAO GLSL sources into the committed SPIR-V, and the engine build regenerates the embedded pack when
-either the GLSL or SPIR-V inputs change.
+SSAO GLSL sources and the five bloom GLSL sources into the committed SPIR-V, and the engine build
+regenerates the embedded pack when either the GLSL or SPIR-V inputs change.
 
 The pack format, bake application builder, processors, sidecars, validation, and incremental
 manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-rayborkbake).
@@ -1815,14 +1832,15 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
    `ScreenToWorldTransform`, and exits.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
-10. The engine's built-in pack is always mounted first; it has 37 entries and supplies the present
+10. The engine's built-in pack is always mounted first; it has 46 entries and supplies the present
     shader pair, the built-in mesh draw shader program at `/shaders/mesh`, the primitive program at
     `/shaders/primitive`, the MSDF text program at `/shaders/msdf`, the white/error textures, the
-    default and monospaced fonts at `/fonts/fira-sans` and `/fonts/jetbrains-mono`, and the SSAO shader
-    variants and blue-noise texture. The app preloads the mesh program, both textures, and both fonts
-    into `EngineContext.Defaults`, builds the primitive assets including their three engine materials,
-    and loads `SsaoAssets` and attaches it to `CameraService` before `IGame.Setup`, then releases all of
-    them during shutdown. The font loads are CPU-only and add no startup GPU upload.
+    default and monospaced fonts at `/fonts/fira-sans` and `/fonts/jetbrains-mono`, the SSAO shader
+    variants and blue-noise texture, and the bloom pyramid shaders. The app preloads the mesh program,
+    both textures, and both fonts into `EngineContext.Defaults`, builds the primitive assets including
+    their three engine materials, and loads `SsaoAssets` and `BloomAssets` and attaches them to
+    `CameraService` before `IGame.Setup`, then releases all of them during shutdown. The font loads are
+    CPU-only and add no startup GPU upload.
 11. Only one RayBork app runs per process in v1.
 12. A GPU resource is created, re-created after a device recovery, and destroyed only on the render
     thread, and only after every frame that references it has completed.

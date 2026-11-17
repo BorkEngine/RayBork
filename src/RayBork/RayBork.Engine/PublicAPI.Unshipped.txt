@@ -1358,3 +1358,15 @@ RayBork.SsaoQuality.Low = 1 -> RayBork.SsaoQuality
 RayBork.SsaoQuality.Medium = 2 -> RayBork.SsaoQuality
 RayBork.SsaoQuality.Performance = 0 -> RayBork.SsaoQuality
 RayBork.SsaoQuality.Ultra = 4 -> RayBork.SsaoQuality
+RayBork.BloomEffect
+RayBork.BloomEffect.BloomEffect() -> void
+RayBork.BloomEffect.Intensity.get -> float
+RayBork.BloomEffect.Intensity.set -> void
+RayBork.BloomEffect.Scatter.get -> float
+RayBork.BloomEffect.Scatter.set -> void
+RayBork.BloomEffect.SoftKnee.get -> float
+RayBork.BloomEffect.SoftKnee.set -> void
+RayBork.BloomEffect.Threshold.get -> float
+RayBork.BloomEffect.Threshold.set -> void
+RayBork.BloomEffect.Tint.get -> RayBork.Color
+RayBork.BloomEffect.Tint.set -> void

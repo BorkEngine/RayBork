@@ -178,9 +178,11 @@ colors). The scene target's resolved depth image is internal. M8 also ships the 
 post-process core: `PostProcessStack`, `PostProcessEffect`, `SsaoEffect`, `SsaoQuality`,
 `ShaderPostProcessEffect`, the `CreateCamera` `postProcess` parameter, target-sized chains over the
 engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader contract, built-in
-N8AO-derived SSAO with baked quality variants and blue noise, and viewport store-back on the scene
-target and on a `RenderTexture` target; the post-processed output is what a later sample and both
-readback methods observe. Bloom, Pong, and the render-target/split-screen sample tasks remain later M8 work.
+N8AO-derived SSAO with baked quality variants and blue noise, the built-in fast dual-filter
+`BloomEffect` with its half-resolution prefilter, five-level HDR pyramid, scatter and tint settings,
+and a camera-target-sized composite, and viewport store-back on the scene target and on a
+`RenderTexture` target; the post-processed output is what a later sample and both readback methods
+observe. The RenderTarget and split-screen sample tasks remain later M8 work.
 The remaining rows name the milestone that owns the deferred surface; the full code blocks in the
 section pages stay the 1.0 contract.
 
@@ -229,7 +231,7 @@ of the public API; it is not deferred to post-1.0.
 | `Camera.ScreenToWorldTransform(Vector2, float)` | M7 |
 | `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`, and `Camera.DrawGrid(Transform, int, float, Color)` | M7 |
 | `RenderTexture`, `RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ReadColorsAsync`, `Camera.Target`, the `CreateCamera` `target` parameter, and the sampled `ColorTexture`/`DepthTexture` views (color, depth, resize, and readback paths) | M8 |
-| `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`, `SsaoQuality`, the `CreateCamera` `postProcess` parameter, the reserved `sourceColor`/`sourceDepth` custom post shader contract, built-in SSAO with baked quality variants and blue noise, target-sized chains, and viewport store-back (bloom is a later M8 task) | M8 |
+| `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`, `SsaoQuality`, `BloomEffect`, the `CreateCamera` `postProcess` parameter, the reserved `sourceColor`/`sourceDepth` custom post shader contract, built-in SSAO with baked quality variants and blue noise, the built-in fast dual-filter bloom, target-sized chains, and viewport store-back | M8 |
 
 `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and `WithAssetLoader<T>` extend the
 current asset surface after M4; see §6.

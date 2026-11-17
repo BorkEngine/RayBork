@@ -128,6 +128,7 @@ internal static class Program {
             .AddProcessor(new BuiltInBlueNoiseProcessor())
             .AddProcessor(new BuiltInPresentProcessor(engineShaders))
             .AddProcessor(new BuiltInSsaoProcessor(engineShaders))
+            .AddProcessor(new BuiltInBloomProcessor(engineShaders))
             .Build();
 
         string[] arguments =

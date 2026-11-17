@@ -516,5 +516,7 @@ The fragment stage writes scene-linear HDR color. The engine does not apply expo
 the chain; the present pass owns display conversion, and intermediate post targets are `Rgba16Float`
 so values above `1` survive. The shader's baked default render state is ignored: the post pass forces
 opaque blending, no culling, and no depth test or depth write. Chaining effects in a stack gives
-multi-pass processing. `SsaoEffect` is the built-in multi-pass effect on the same core through internal
-engine hooks; bloom remains a later M8 task. See [Post-processing](post-processing.md).
+multi-pass processing. `SsaoEffect` and `BloomEffect` are the built-in multi-pass effects on the same
+core through internal engine hooks; a built-in effect declares its own shader-ABI uniforms and texture
+bindings and is packaged from committed SPIR-V, never compiled at runtime. See
+[Post-processing](post-processing.md).

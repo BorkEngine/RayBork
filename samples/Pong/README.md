@@ -2,10 +2,12 @@
 
 `Pong` is the M7 sample and Native AOT gate: a player-vs-AI match drawn with two ordinary screen-space
 orthographic cameras. A 1280x720 design playfield is letterboxed into the current render pixels; a
-scene camera draws the background, border, net, textured paddles, and ball, and a later HUD camera
-draws the score panels, scores, status line, and pause/winner overlay with `Camera.DrawQuad`,
-`Camera.DrawDisc`, and `Camera.DrawText` through `Camera.ScreenToWorldTransform`. The left paddle is
-the human; the right paddle is a deterministic AI opponent. The paddle texture and the design values
+scene camera draws the background, border, net, textured paddles, and ball through the built-in
+fast dual-filter bloom effect, and a later HUD camera draws the score panels, scores, status line, and
+pause/winner overlay with `Camera.DrawQuad`, `Camera.DrawDisc`, and `Camera.DrawText` through
+`Camera.ScreenToWorldTransform` without a post-process stack. Ball, paddle, and wall collisions flash
+scene-linear HDR colors above the bloom threshold and decay over a few frames. The left paddle is the
+human; the right paddle is a deterministic AI opponent. The paddle texture and the design values
 come from the sample's own baked `pong.pck`, so the sample also exercises the texture and TOML data
 asset paths end to end.
 
@@ -27,8 +29,9 @@ distance `1` has a world-units-per-pixel scale of exactly one:
 Transform cameraTransform = new(new Vector3(0f, 0f, SCREEN_PLANE_DISTANCE));
 ```
 
-The scene camera clears color and depth with `ClearMode.ColorAndDepth` and the letterbox color. After
-it is disposed, the HUD camera uses `ClearMode.Depth` to load the scene color and clear depth:
+The scene camera clears color and depth with `ClearMode.ColorAndDepth` and the letterbox color, and it
+runs the app-lifetime bloom stack. After it is disposed, the HUD camera uses `ClearMode.Depth` to load
+the scene color and clear depth and has no stack:
 
 ```csharp
 using (Camera scene = context.CreateCamera(
@@ -38,7 +41,8 @@ using (Camera scene = context.CreateCamera(
     clearMode: ClearMode.ColorAndDepth,
     clearColor: _letterboxColor,
     near: CAMERA_NEAR,
-    far: CAMERA_FAR)) {
+    far: CAMERA_FAR,
+    postProcess: _postProcess)) {
     DrawScene(scene);
 }
 
@@ -78,6 +82,23 @@ The paddles and the ball are `DrawQuad` and `DrawDisc` with the screen transform
 The palette is authored with `Color.FromSrgbBytes`: a dark navy playfield, a warm border and net, a
 warm paddle texture, a pale gold ball, and a dimmed overlay.
 
+## Bloom and collision flash
+
+The sample owns one app-lifetime `BloomEffect` and adds it to one `PostProcessStack` in `Setup`; only
+the scene camera receives the stack. The effect uses threshold `2`, soft knee `0.5`, intensity `0.7`,
+scatter `0.7`, and a white tint. The raised threshold keeps the ordinary palette, whose brightest base
+channel is `1`, out of the soft-knee ramp; only the HDR collision flash blooms. It runs the five-level
+fast dual-filter pyramid over the scene target and adds the result back into the scene before the HUD
+camera draws, so the scores, status line, and overlay keep their exact colors and are never bloomed.
+`B` toggles `BloomEffect.Enabled`; the toggle runs before the scene camera is created, so it applies to
+the scene camera created later in the same tick.
+
+Every collision starts a short flash that decays over `0.15` seconds. The ball flashes gold, the hit
+paddle flashes stronger warm white, and a top or bottom wall hit flashes the border amber. The flash
+colors are scene-linear values above `2` (for example `6, 5, 3` for a paddle), so they pass the raised
+bloom threshold and produce a halo; the ordinary playfield colors stay below it. There are no test-only
+diagnostics: the status line shows `bloom on` or `bloom off` with the rest of the controls.
+
 ## Gameplay
 
 The match runs in design space: the playfield is `1280x720` with its origin at the top-left and `+Y`
@@ -113,6 +134,7 @@ Controls:
 | Gamepad 0 d-pad up / down | Move the left paddle. |
 | `Space` / gamepad Start | Pause or resume. |
 | `R` / gamepad Back | Restart the match. |
+| `B` | Toggle bloom for the scene camera. |
 | `Escape` | Request exit. |
 
 The sample applies a `0.2` stick deadzone because the engine applies none. A missing gamepad is

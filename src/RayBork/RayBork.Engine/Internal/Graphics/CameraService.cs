@@ -30,6 +30,7 @@ internal sealed class CameraService {
     private Camera? _activeCamera;
     private PrimitiveAssets? _primitives;
     private SsaoAssets? _ssaoAssets;
+    private BloomAssets? _bloomAssets;
     private TonemappingSettings? _tonemapping;
     private Matrix4x4[] _textGlyphMatrices = [];
     private Texture?[] _textGlyphTextures = [];
@@ -93,6 +94,23 @@ internal sealed class CameraService {
     /// thread joined.
     /// </summary>
     internal void DetachSsaoAssets() => _ssaoAssets = null;
+
+    /// <summary>
+    /// Attaches the app-lifetime preloaded bloom assets used by <see cref="BloomEffect"/> captures.
+    /// </summary>
+    /// <param name="assets">The loaded engine-owned bloom assets.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <c>null</c>.</exception>
+    /// <remarks>Called by the app on the main thread before the tick thread starts.</remarks>
+    internal void AttachBloomAssets(BloomAssets assets) {
+        ArgumentNullException.ThrowIfNull(assets);
+        _bloomAssets = assets;
+    }
+
+    /// <summary>
+    /// Detaches the bloom assets before the app disposes them. Called on the main thread after the tick
+    /// thread joined.
+    /// </summary>
+    internal void DetachBloomAssets() => _bloomAssets = null;
 
     /// <summary>
     /// Attaches the app-lifetime runtime tone-mapping settings whose values every sealed frame
@@ -435,7 +453,12 @@ internal sealed class CameraService {
         try {
             foreach (PostProcessEffect effect in postProcess.Effects) {
                 _postProcessScratch.Add(
-                    PostProcessSnapshots.Capture(effect, targetHasDepth, targetDescription, _ssaoAssets));
+                    PostProcessSnapshots.Capture(
+                        effect,
+                        targetHasDepth,
+                        targetDescription,
+                        _ssaoAssets,
+                        _bloomAssets));
             }
         } catch {
             // A rejected effect leaves no snapshot behind; the already captured ones release the program

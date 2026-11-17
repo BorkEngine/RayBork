@@ -1,0 +1,91 @@
+#extension GL_EXT_nonuniform_qualifier : require
+
+// The engine shader-ABI prologue for the built-in bloom stages. These shaders are compiled to
+// committed SPIR-V by scripts/compile-shaders.ps1 rather than by the bake, so each stage source owns
+// the declarations the bake would otherwise generate. The instance struct must match
+// ShaderAbiLayout and the uniform and texture declaration order in BloomShaderContract.
+struct RayBorkFrame {
+    mat4 ViewProjection;
+    mat4 View;
+    mat4 Projection;
+    vec4 CameraPosition;
+    vec4 Viewport;
+    vec4 Time;
+    vec4 ScreenSize;
+};
+
+layout(std430, set = 0, binding = 0) readonly buffer RayBorkFrameBuffer {
+    RayBorkFrame frames[];
+} rbFrameBlock;
+
+layout(push_constant) uniform RayBorkPushConstants {
+    uint passIndex;
+} rbPushConstants;
+
+#define rbFrame rbFrameBlock.frames[rbPushConstants.passIndex]
+
+layout(set = 0, binding = 1) uniform sampler2D RayBorkTextures[2048];
+
+#if defined(BLOOM_PASS_PREFILTER)
+struct RayBorkInstance {
+    mat4 Transform;
+    vec4 Color;
+    vec4 UvRect;
+    uint bloomSourceIndex;
+    float uThreshold;
+    float uSoftKnee;
+};
+#elif defined(BLOOM_PASS_DOWNSAMPLE)
+struct RayBorkInstance {
+    mat4 Transform;
+    vec4 Color;
+    vec4 UvRect;
+    uint bloomSourceIndex;
+};
+#elif defined(BLOOM_PASS_UPSAMPLE)
+struct RayBorkInstance {
+    mat4 Transform;
+    vec4 Color;
+    vec4 UvRect;
+    uint bloomCoarseIndex;
+    uint bloomFineIndex;
+    float uScatter;
+};
+#elif defined(BLOOM_PASS_COMPOSITE)
+struct RayBorkInstance {
+    mat4 Transform;
+    vec4 Color;
+    vec4 UvRect;
+    uint sourceColorIndex;
+    uint bloomTextureIndex;
+    vec4 uTint;
+    float uIntensity;
+};
+#else
+#error "BloomAbi.glslinc requires BLOOM_PASS_PREFILTER, BLOOM_PASS_DOWNSAMPLE, BLOOM_PASS_UPSAMPLE, or BLOOM_PASS_COMPOSITE."
+#endif
+
+layout(set = 0, binding = 2, std430) readonly buffer RayBorkInstanceBuffer {
+    RayBorkInstance instances[];
+} RayBorkInstances;
+
+layout(location = 15) flat in uint rbInstanceIndex;
+
+#define rbInstance RayBorkInstances.instances[rbInstanceIndex]
+
+#if defined(BLOOM_PASS_PREFILTER)
+#define bloomSource RayBorkTextures[nonuniformEXT(rbInstance.bloomSourceIndex)]
+#define uThreshold rbInstance.uThreshold
+#define uSoftKnee rbInstance.uSoftKnee
+#elif defined(BLOOM_PASS_DOWNSAMPLE)
+#define bloomSource RayBorkTextures[nonuniformEXT(rbInstance.bloomSourceIndex)]
+#elif defined(BLOOM_PASS_UPSAMPLE)
+#define bloomCoarse RayBorkTextures[nonuniformEXT(rbInstance.bloomCoarseIndex)]
+#define bloomFine RayBorkTextures[nonuniformEXT(rbInstance.bloomFineIndex)]
+#define uScatter rbInstance.uScatter
+#elif defined(BLOOM_PASS_COMPOSITE)
+#define sourceColor RayBorkTextures[nonuniformEXT(rbInstance.sourceColorIndex)]
+#define bloomTexture RayBorkTextures[nonuniformEXT(rbInstance.bloomTextureIndex)]
+#define uTint rbInstance.uTint
+#define uIntensity rbInstance.uIntensity
+#endif
