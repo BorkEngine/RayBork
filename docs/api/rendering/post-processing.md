@@ -162,8 +162,12 @@ cameras only.
 The effect **requires a camera target with a depth attachment**. A `RenderTexture` created with
 `Depth: false` is rejected from `CreateCamera` with `InvalidOperationException` before the pass is
 recorded. The app scene target always has depth. SSAO preserves the depth image, so a later camera
-can still sample it; the AO, denoise, and composite passes rent two camera-target-sized
-`Rgba16Float` post targets and release them through the engine post-target pool.
+can still sample it; the AO, denoise, and composite passes rent camera-target-sized `Rgba16Float`
+post targets from the three-target per-extent set and release them through the engine post-target
+pool. The rent rotates through the set and skips the current chain source: when SSAO is first the
+source is the camera target's image, so all three post targets are available; in a chain the
+previous effect's output occupies one of the three, so the passes alternate between the two
+non-source targets without overwriting that image.
 
 SSAO is several fullscreen passes over the full target, so its cost scales with target pixels:
 `Ultra` does 64 AO samples and two 16-tap denoise iterations per pixel. Prefer `Performance` or `Low`
@@ -382,16 +386,18 @@ the store-back:
 - `CompleteAuxiliaryTarget` to release an intermediate and `CompleteColorTarget` to make a
   camera-target-sized result the chain source, after which the engine runs the same store-back.
 
-SSAO records four passes through the three-target per-extent set, skipping the current chain source:
-AO into a non-source target, denoise into the next, the second denoise back into the first target,
-and the composite into the last target. The two non-source targets alternate, so the prior effect's
+SSAO records four passes through the three-target per-extent set, rotating through it and skipping
+the current chain source. When SSAO is first, the source is the camera target's image, so all three
+post targets are available: AO into the first, denoise into the second, the second denoise back into
+the first, and the composite into the third. In a chain, the previous effect's output occupies one
+target, so the four passes alternate between the two non-source targets and the prior effect's
 completed image is never overwritten. The AO and denoise targets are auxiliary and become readable
 before the next pass samples them; the composite target is completed as the chain source and the
 engine's single store-back writes it to the camera viewport. The chain-input color slot is captured
-before the first completion, so the composite samples the previous effect's output (or the original
-scene color when SSAO is first). SSAO reports four ordered instance-record entries (AO, denoise,
-denoise, composite) so the frame's instance buffer is sized for every pass even though the denoise
-entry repeats.
+before the first completion, so the composite samples the previous effect's output (or the camera
+target's resolved color when SSAO is first). SSAO reports four ordered instance-record entries (AO,
+denoise, denoise, composite) so the frame's instance buffer is sized for every pass even though the
+denoise entry repeats.
 
 The effect snapshot reports its ordered instance-record layout (per-pass stride and count), so a
 built-in can append passes with different shaders and uniform sizes and the frame's instance buffer is

@@ -34,8 +34,14 @@ orthographicHeight, ...)` entry point, `Camera.ScreenToWorldTransform`, the worl
 `Camera.DrawQuad` (solid color, full texture, and normalized source rectangle), `Camera.DrawDisc`,
 and `Camera.DrawGrid(Transform, ...)` primitives, and the ninth primitive mesh, the unit disc.
 `DrawTexture` is not shipped, there is no 2D or screen-space draw overload, and `DrawText` remains
-world-space. The M7 Native AOT gate is `samples/Pong`, an orthographic player-vs-AI match drawn
-through `ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. The rest of the API
+world-space. The M7 Native AOT gate was `samples/Pong`, an orthographic player-vs-AI match drawn
+through `ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. M8 ships render targets
+and multiple camera passes, the camera post-process stack with built-in SSAO and bloom, and the
+RenderTarget sample and Native AOT gate; the shipped surface is listed in
+[§1.6](#16-milestone-availability), the render target and camera-pass contract in
+[§7.11](api/rendering/render-targets.md#711-render-targets-and-multiple-cameras), and the
+post-process surface in
+[§7.13](api/rendering/post-processing.md#713-camera-post-processing). The rest of the API
 reference remains the 1.0 contract, not a description of shipped behavior.
 
 The API is intentionally raylib-shaped: a small set of concrete types, a frame-scoped draw API,

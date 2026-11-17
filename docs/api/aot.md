@@ -68,11 +68,12 @@ records up to four camera passes: an offscreen perspective camera into a `640x36
 render texture with depth and 4x MSAA; the single scene camera, or two half-width split-screen
 cameras when `S` is on, drawing a procedural scene and sampling the target's `ColorTexture` on a
 monitor; and a later orthographic HUD camera with `ClearMode.Depth`. The single scene camera runs an
-app-lifetime `PostProcessStack` with one baked `ShaderPostProcessEffect` (`E` toggles the stack), and
-`F2` calls `ReadColorsAsync` and `ReadPixelsAsync` and writes a PPM screenshot. `--frames` and
-`--help` are the only options. The gate exercises the render-texture creation, camera target routing,
-same-tick target sampling, the custom post-process chain, the store-back, and both readback methods
-on the AOT publish path.
+app-lifetime `PostProcessStack` with one baked `ShaderPostProcessEffect` (`E` toggles the stack). The
+interactive sample calls `ReadColorsAsync` and `ReadPixelsAsync` on `F2` and writes a PPM screenshot;
+`--frames` and `--help` are the only options. The published `--frames 30` gate exercises the
+render-texture creation, camera target routing, same-tick target sampling, the custom post-process
+chain, and the store-back. The two readback methods are covered by the RenderTexture GPU tests and the
+sample's interactive `F2` path, which a `--frames` run does not press.
 
 The publish does not build `RenderTarget.Assets`; the Release solution build above produces
 `rendertarget.pck` beside the sample executable, and the publish target copies it into the publish
@@ -82,7 +83,7 @@ host, and must not contain `RenderTarget.Assets.dll`, `RayBork.Bake.dll`, Tomlyn
 BCnEncoder, the shaderc native libraries, or the glTF packages.
 
 Both M8 publishes started, created the offscreen target, recorded the scene and HUD passes, ran the
-custom post-process chain, read the target back, and shut down. The Windows `win-x64` publish
+custom post-process chain, and shut down. The Windows `win-x64` publish
 finished with zero AOT/trim warnings: its publish directory contains `rendertarget.pck` beside
 `RenderTarget.exe` and no bake tooling, and the published host ran `--frames 30` to exit `0` on the
 hardware driver. The `linux-x64` publish also finished with zero warnings, contains
@@ -115,10 +116,12 @@ texture at runtime.
 AOT publish is a per-milestone gate, not a release-only check. The M8 gate is `samples/RenderTarget`:
 the published hosts open a window, create the offscreen render texture, load the built-in texture,
 shader, and font assets and the baked vignette shader, record the offscreen/scene/split/HUD passes,
-run the custom post-process chain, sample the target's `ColorTexture`, read the target back, and exit
+run the custom post-process chain, sample the target's `ColorTexture`, and exit
 `0`. The gate path exercises the render-texture descriptor decode and allocation, the render-target
 bindless views, the post-process snapshot and store-back, the custom shader's texture and uniform
-bindings, and the same batch planner as the 3D draws. The sample is a plain user-facing example and
+bindings, and the same batch planner as the 3D draws. The readback methods are not part of the
+`--frames` gate; the RenderTexture GPU tests and the interactive `F2` path cover them. The sample is a
+plain user-facing example and
 contains no test-only draw assertion. The Windows suite is 2,977 tests with no skips (239 GPU); the
 lavapipe Linux run is 2,970 passed with 7 skipped HDR/
 scRGB-present tests because the driver exposes only SDR.

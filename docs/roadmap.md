@@ -1239,7 +1239,7 @@ details:
   scaling of the window; the screen transform is exact for the clamped viewport, while a game that
   wants a fixed design space must fit it itself, as Pong does.
 - **AOT gate moved to Pong.** `samples/Text`, `samples/Castle`, and `samples/PrimitiveGallery` remain
-  buildable and publishable but are no longer the gate. The M7 gate is Pong on both RIDs, and a
+  buildable and publishable but are no longer the gate. The M7 gate was Pong on both RIDs, and a
   failure there is a milestone failure.
 
 ### M8 — Render targets, multiple cameras, and readback

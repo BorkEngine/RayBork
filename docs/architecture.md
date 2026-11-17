@@ -685,8 +685,9 @@ The chain is target-sized whichever target the camera writes:
   the processor. The same per-extent pool serves a built-in effect's intermediate targets, so a bloom
   downsample can rent a half- or quarter-sized set. Each set holds three targets and the rent rotates
   through them while skipping the current chain source, so a prior effect's completed image survives
-  and a chain of any length keeps rotating rather than alternating between a fixed pair; SSAO's four
-  passes use all three targets.
+  and a chain of any length keeps rotating rather than alternating between a fixed pair; when SSAO is
+  first its four passes rotate through all three targets, and in a chain they alternate between the
+  two non-source targets.
 - A custom effect records one fullscreen pass: the geometry pipeline layout, the shared frame
   descriptor set and instance buffer, the backend-owned fullscreen quad, and a post pipeline cached
   against the post render pass with a forced opaque/no-cull/no-depth state. The instance record's
@@ -1754,8 +1755,8 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   in one frame, a full-viewport quad that survives frustum culling, and 3D orthographic cube
   geometry. `PrimitiveDrawTests` covers the new draw records, validation, zero-extent behavior,
   disposed assets, retention, and batching; `CameraTests` covers `ScreenToWorldTransform`. At M7 the
-  Windows hardware run was 2,778
-  tests, 142 of them GPU integration tests, with no skips. The lavapipe Linux run skips the seven
+  Windows hardware run was 2,695
+  tests, 114 of them GPU integration tests, with no skips. The lavapipe Linux run skips the seven
   existing HDR/scRGB-present tests because lavapipe exposes only SDR; the remaining full-suite and
   GPU-filtered tests pass.
 - M8 adds the per-camera render-pass suite (`CameraRenderPassGpuTests`): two camera passes in one

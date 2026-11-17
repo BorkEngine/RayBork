@@ -103,7 +103,7 @@ ball, paddle, and wall hits flash scene-linear HDR colors that bloom and decay o
 paddle hit adds `BallSpeedupPerHit` (`24`) to the ball speed up to `MaxBallSpeed` (`900`), and a
 serve restores `BallSpeed`.
 M8 adds render targets, multiple camera passes, and the post-process surface. The shader ABI v2
-prints one 256-byte frame block per camera pass and a push-constant pass index selects it, and the
+writes one 256-byte frame block per camera pass and a push-constant pass index selects it, and the
 renderer records one render pass per camera pass with the clamped viewport as the render area, so
 split-screen views, multiple cameras, and a HUD that is an ordinary later camera are correct.
 `RenderTexture`/`RenderTextureDescription` and `EngineContext.CreateRenderTextureAsync` create
@@ -119,7 +119,7 @@ for a target no frame wrote.
 The M8 post-process core adds `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, and
 the `CreateCamera` `postProcess` parameter. A stack is snapshotted at camera creation and runs one
 fullscreen pass per enabled effect over a target-sized, single-sample `Rgba16Float` chain drawn from a
-pool of three targets per target extent per frame slot; the chain skips its current source, stores the
+pool of three targets per target extent per frame ring slot; the chain skips its current source, stores the
 result back into the camera viewport only, and leaves the target's depth unchanged. Custom post
 shaders declare the reserved `sourceColor` binding and may declare `sourceDepth`; the engine overrides
 both. Built-in SSAO (`SsaoEffect`/`SsaoQuality`) ports the N8AO 2.1.0 full-resolution path with baked

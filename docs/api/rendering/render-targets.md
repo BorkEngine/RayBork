@@ -234,8 +234,8 @@ single-sample resolved color image, and `DepthTexture` is a `Texture` view over 
 resolved depth image when the target has depth. Both are owned by the `RenderTexture`. They report an
 empty `Path` because they are not pack assets, they sample and batch like any texture, and the recorded
 frame retains the target until the renderer released the frame slot. A resize keeps both view objects and
-updates their `Width` and `Height` in place; only the GPU image and bindless slot behind them are
-replaced. Disposing a view directly throws `InvalidOperationException`; dispose the `RenderTexture`
+updates their `Width` and `Height` in place; the GPU image behind them is replaced and the bindless
+descriptor is rewritten at the same retained slot. Disposing a view directly throws `InvalidOperationException`; dispose the `RenderTexture`
 instead. Disposing the render texture retires both views and releases the target; `Dispose` is idempotent,
 and a target that is the destination or a sample source of a recorded in-flight frame is not destroyed
 until that frame completes. A target destroyed by the renderer at shutdown also reports
