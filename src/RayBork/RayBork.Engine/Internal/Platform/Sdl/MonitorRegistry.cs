@@ -122,6 +122,25 @@ internal sealed class MonitorRegistry
     }
 
     /// <summary>
+    /// Gets whether a monitor snapshot contains a stable monitor index. An index is absent when its
+    /// display was removed, and stable indices can have gaps, so the snapshot count is not a valid
+    /// upper bound for a monitor index.
+    /// </summary>
+    internal static bool ContainsMonitorIndex(IReadOnlyList<Monitor> monitors, int monitorIndex)
+    {
+        ArgumentNullException.ThrowIfNull(monitors);
+        for (int i = 0; i < monitors.Count; i++)
+        {
+            if (monitors[i].Index == monitorIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Looks up the SDL3 display id for a stable monitor index.
     /// </summary>
     internal bool TryGetDisplayId(int monitorIndex, out uint displayId)

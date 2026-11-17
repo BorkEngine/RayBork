@@ -692,9 +692,11 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
             case SDL.EventType.WindowShown:
             case SDL.EventType.WindowHidden:
             case SDL.EventType.WindowEnterFullscreen:
-            case SDL.EventType.WindowLeaveFullscreen:
             case SDL.EventType.WindowFocusGained:
                 _window!.HandleStateEvent();
+                break;
+            case SDL.EventType.WindowLeaveFullscreen:
+                _window!.HandleFullscreenLeave();
                 break;
             case SDL.EventType.WindowFocusLost:
                 _input.ResetLevels();

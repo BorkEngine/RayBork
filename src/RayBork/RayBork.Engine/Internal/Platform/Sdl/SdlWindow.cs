@@ -41,6 +41,11 @@ internal sealed class SdlWindow : IPlatformWindow
     private string _clipboardText = string.Empty;
     private FullscreenKind _fullscreenKind;
 
+    // True between a successful engine fullscreen entry request and SDL reporting the native
+    // Fullscreen flag. Some video drivers complete the transition asynchronously and only set the
+    // flag when the compositor confirms; the dummy test driver confirms synchronously.
+    private bool _fullscreenEntryPending;
+
     private int _windowedWidth;
     private int _windowedHeight;
     private int _windowedX;
@@ -297,18 +302,18 @@ internal sealed class SdlWindow : IPlatformWindow
     /// <inheritdoc />
     public void SetMonitor(int monitorIndex)
     {
-        int monitorCount;
+        bool found;
         lock (_gate)
         {
-            monitorCount = _monitorSnapshot.Length;
+            found = MonitorRegistry.ContainsMonitorIndex(_monitorSnapshot, monitorIndex);
         }
 
-        if (monitorIndex < 0 || monitorIndex >= monitorCount)
+        if (!found)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(monitorIndex),
                 monitorIndex,
-                "The monitor index is outside the current monitor snapshot."
+                "The monitor index is not present in the current monitor snapshot."
             );
         }
 
@@ -405,6 +410,25 @@ internal sealed class SdlWindow : IPlatformWindow
     /// Handles a window state, focus, or visibility event on the main thread.
     /// </summary>
     internal void HandleStateEvent() => RefreshSnapshot();
+
+    /// <summary>
+    /// Cancels a pending engine fullscreen entry after SDL reports that the window left fullscreen,
+    /// then refreshes the snapshot. Runs on the main thread.
+    /// </summary>
+    /// <remarks>
+    /// The window manager can abandon an engine-requested entry before the compositor confirms it.
+    /// The leave event is the only notification that the transition will not complete, so the
+    /// engine must not wait for a confirmation that will never arrive. The cached kind is not
+    /// cleared here: SDL queues the leave event, so this handler can run after a newer entry has
+    /// already been confirmed in the same command drain. The trailing refresh keeps the kind for a
+    /// native fullscreen state and clears it for a windowed state with no pending entry, including
+    /// the abandoned entry this method cancels.
+    /// </remarks>
+    internal void HandleFullscreenLeave()
+    {
+        _fullscreenEntryPending = false;
+        RefreshSnapshot();
+    }
 
     /// <summary>
     /// Marks the window close requested and invokes the exit callback once. Runs on the main thread.
@@ -516,6 +540,21 @@ internal sealed class SdlWindow : IPlatformWindow
         }
 
         SDL.WindowFlags flags = SDL.GetWindowFlags(_handle);
+        bool nativeFullscreen = (flags & SDL.WindowFlags.Fullscreen) != 0;
+
+        // A native Fullscreen flag confirms an engine entry. Otherwise the kind is cleared only when
+        // the native window is windowed and no engine entry is pending: that clears an OS-initiated
+        // leave and stale state without discarding the remembered kind during an asynchronous entry.
+        if (ShouldClearFullscreenKind(nativeFullscreen, _fullscreenEntryPending))
+        {
+            _fullscreenKind = FullscreenKind.None;
+        }
+
+        if (nativeFullscreen)
+        {
+            _fullscreenEntryPending = false;
+        }
+
         Monitor[] monitors = [.. _monitors.Monitors];
         Monitor currentMonitor = _monitors.GetCurrent(SDL.GetDisplayForWindow(_handle));
         WindowState state = ComputeState(flags);
@@ -529,13 +568,46 @@ internal sealed class SdlWindow : IPlatformWindow
             _dpiScale = dpiScale;
             _bounds = bounds;
             _resizable = (flags & SDL.WindowFlags.Resizable) != 0;
-            _fullscreen = (flags & SDL.WindowFlags.Fullscreen) != 0;
+            _fullscreen = nativeFullscreen;
             _minimized = (flags & SDL.WindowFlags.Minimized) != 0;
             _focused = (flags & SDL.WindowFlags.InputFocus) != 0;
             _state = state;
             _monitorSnapshot = monitors;
             _currentMonitor = currentMonitor;
         }
+    }
+
+    /// <summary>
+    /// Gets whether the cached fullscreen kind must be cleared after a snapshot. The kind survives a
+    /// native fullscreen confirmation and an engine entry that is still pending, and is cleared for a
+    /// windowed native state with no pending entry.
+    /// </summary>
+    internal static bool ShouldClearFullscreenKind(bool nativeFullscreen, bool entryPending)
+    {
+        return !nativeFullscreen && !entryPending;
+    }
+
+    /// <summary>
+    /// Gets whether the window is fullscreen, the live native Fullscreen flag is set, or an
+    /// engine-requested entry is still pending. Runs on the main thread.
+    /// </summary>
+    /// <remarks>
+    /// Some video drivers complete fullscreen transitions asynchronously, so a successful
+    /// SDL_SetWindowFullscreen(true) can leave the native flag unset until the compositor confirms.
+    /// The dummy test driver confirms synchronously. While an entry is pending, size and monitor
+    /// commands must be remembered for the windowed restore instead of being applied.
+    /// </remarks>
+    internal bool IsFullscreenActive()
+    {
+        bool snapshotFullscreen;
+        lock (_gate)
+        {
+            snapshotFullscreen = _fullscreen;
+        }
+
+        return snapshotFullscreen
+            || _fullscreenEntryPending
+            || (SDL.GetWindowFlags(_handle) & SDL.WindowFlags.Fullscreen) != 0;
     }
 
     private WindowState ComputeState(SDL.WindowFlags flags)
@@ -635,7 +707,7 @@ internal sealed class SdlWindow : IPlatformWindow
 
     private void ApplySize(int width, int height)
     {
-        if (_fullscreenKind != FullscreenKind.None)
+        if (IsFullscreenActive())
         {
             _windowedWidth = width;
             _windowedHeight = height;
@@ -688,7 +760,7 @@ internal sealed class SdlWindow : IPlatformWindow
         Monitor monitor = _monitors.GetCurrent(displayId);
         int x = (int)MathF.Round(monitor.WorkArea.X + ((monitor.WorkArea.Width - _width) / 2f));
         int y = (int)MathF.Round(monitor.WorkArea.Y + ((monitor.WorkArea.Height - _height) / 2f));
-        if (_fullscreenKind != FullscreenKind.None)
+        if (IsFullscreenActive())
         {
             _windowedX = x;
             _windowedY = y;
@@ -735,7 +807,7 @@ internal sealed class SdlWindow : IPlatformWindow
     {
         if (fullscreen)
         {
-            if (_fullscreenKind != FullscreenKind.None || _fullscreen)
+            if (IsFullscreenActive())
             {
                 return;
             }
@@ -756,7 +828,7 @@ internal sealed class SdlWindow : IPlatformWindow
         }
         else
         {
-            if (_fullscreenKind == FullscreenKind.None && !_fullscreen)
+            if (!IsFullscreenActive())
             {
                 return;
             }
@@ -767,6 +839,7 @@ internal sealed class SdlWindow : IPlatformWindow
                 return;
             }
 
+            _fullscreenEntryPending = false;
             _fullscreenKind = FullscreenKind.None;
             ReapplyWindowedPlacement();
         }
@@ -827,7 +900,7 @@ internal sealed class SdlWindow : IPlatformWindow
     private void ApplyRestore()
     {
         SDL.WindowFlags flags = SDL.GetWindowFlags(_handle);
-        if ((flags & SDL.WindowFlags.Fullscreen) != 0)
+        if ((flags & SDL.WindowFlags.Fullscreen) != 0 || _fullscreenEntryPending)
         {
             if (!SDL.SetWindowFullscreen(_handle, false))
             {
@@ -835,6 +908,7 @@ internal sealed class SdlWindow : IPlatformWindow
             }
             else
             {
+                _fullscreenEntryPending = false;
                 _fullscreenKind = FullscreenKind.None;
             }
         }
@@ -926,6 +1000,7 @@ internal sealed class SdlWindow : IPlatformWindow
         }
 
         _fullscreenKind = exclusive ? FullscreenKind.Exclusive : FullscreenKind.Borderless;
+        _fullscreenEntryPending = true;
     }
 
     private bool TryEnterBorderlessFullscreen()
@@ -945,6 +1020,7 @@ internal sealed class SdlWindow : IPlatformWindow
         }
 
         _fullscreenKind = FullscreenKind.Borderless;
+        _fullscreenEntryPending = true;
         return true;
     }
 
@@ -972,6 +1048,7 @@ internal sealed class SdlWindow : IPlatformWindow
         }
 
         _fullscreenKind = FullscreenKind.Exclusive;
+        _fullscreenEntryPending = true;
         return true;
     }
 
