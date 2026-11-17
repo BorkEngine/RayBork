@@ -274,10 +274,9 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
             onExitRequested
         );
         _windowOwners[_window.WindowId] = this;
-        _textInputStarted = !_minimalTestMode && SDL.StartTextInput(_windowHandle);
-        if (!_minimalTestMode && !_textInputStarted)
+        if (!_minimalTestMode)
         {
-            _windowLogger.LogWarning("SDL failed to start text input: {Error}", SDL.GetError());
+            StartTextInput();
         }
 
         if (!_minimalTestMode)
@@ -586,12 +585,7 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
 
             if (_windowHandle != IntPtr.Zero)
             {
-                if (_textInputStarted)
-                {
-                    SDL.StopTextInput(_windowHandle);
-                    _textInputStarted = false;
-                }
-
+                StopTextInput();
                 SDL.DestroyWindow(_windowHandle);
                 _windowHandle = IntPtr.Zero;
             }
@@ -686,14 +680,28 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
             case SDL.EventType.WindowHDRStateChanged:
                 RefreshWindowHdrState();
                 break;
+            case SDL.EventType.WindowMouseEnter:
+                _window!.SetCursorOnScreen(true);
+                break;
+            case SDL.EventType.WindowMouseLeave:
+                _window!.SetCursorOnScreen(false);
+                break;
             case SDL.EventType.WindowMinimized:
+            case SDL.EventType.WindowHidden:
+                _window!.HandleStateEvent();
+                _window.SetCursorOnScreen(false);
+                StopTextInput();
+                break;
             case SDL.EventType.WindowMaximized:
+            case SDL.EventType.WindowEnterFullscreen:
+                _window!.HandleStateEvent();
+                break;
             case SDL.EventType.WindowRestored:
             case SDL.EventType.WindowShown:
-            case SDL.EventType.WindowHidden:
-            case SDL.EventType.WindowEnterFullscreen:
             case SDL.EventType.WindowFocusGained:
                 _window!.HandleStateEvent();
+                _window.RefreshCursorOnScreen();
+                TryStartTextInput();
                 break;
             case SDL.EventType.WindowLeaveFullscreen:
                 _window!.HandleFullscreenLeave();
@@ -701,6 +709,8 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
             case SDL.EventType.WindowFocusLost:
                 _input.ResetLevels();
                 _window!.HandleStateEvent();
+                _window.RefreshCursorOnScreen();
+                StopTextInput();
                 break;
             case SDL.EventType.WindowCloseRequested:
             case SDL.EventType.Quit:
@@ -759,6 +769,8 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
             or SDL.EventType.WindowLeaveFullscreen
             or SDL.EventType.WindowFocusGained
             or SDL.EventType.WindowFocusLost
+            or SDL.EventType.WindowMouseEnter
+            or SDL.EventType.WindowMouseLeave
             or SDL.EventType.WindowCloseRequested => true,
             _ => false,
         };
@@ -775,6 +787,73 @@ internal sealed class SdlPlatform : IEnginePlatform, IGamepadVibrationSink
             SDL.EventType.MouseWheel => sdlEvent.Wheel.WindowID,
             _ => sdlEvent.Window.WindowID,
         };
+
+    /// <summary>
+    /// Starts text input on the main thread and tracks that it is active. A failure is logged and
+    /// never throws into the event pump.
+    /// </summary>
+    private void StartTextInput()
+    {
+        if (_minimalTestMode || _windowHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (!SDL.StartTextInput(_windowHandle))
+        {
+            _windowLogger.LogWarning("SDL failed to start text input: {Error}", SDL.GetError());
+            return;
+        }
+
+        _textInputStarted = true;
+        _windowLogger.LogDebug("Text input started.");
+    }
+
+    /// <summary>
+    /// Stops text input on the main thread when it is active. A failure is logged and never throws
+    /// into the event pump.
+    /// </summary>
+    private void StopTextInput()
+    {
+        if (_minimalTestMode || !_textInputStarted || _windowHandle == IntPtr.Zero)
+        {
+            return;
+        }
+
+        if (!SDL.StopTextInput(_windowHandle))
+        {
+            _windowLogger.LogWarning("SDL failed to stop text input: {Error}", SDL.GetError());
+            return;
+        }
+
+        _textInputStarted = false;
+        _windowLogger.LogDebug("Text input stopped.");
+    }
+
+    /// <summary>
+    /// Restarts text input after the window becomes available again, but only when it is focused and
+    /// neither minimized nor hidden. Runs on the main thread.
+    /// </summary>
+    private void TryStartTextInput()
+    {
+        if (_minimalTestMode || _textInputStarted)
+        {
+            return;
+        }
+
+        SdlWindow? window = _window;
+        if (
+            window is null
+            || !window.IsFocused
+            || window.IsMinimized
+            || window.State == WindowState.Hidden
+        )
+        {
+            return;
+        }
+
+        StartTextInput();
+    }
 
     private void RefreshWindowHdrState()
     {

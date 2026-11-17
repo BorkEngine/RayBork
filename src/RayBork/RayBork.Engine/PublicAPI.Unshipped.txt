@@ -298,6 +298,7 @@ RayBork.IWindow.CurrentMonitor.get -> RayBork.Monitor
 RayBork.IWindow.DpiScale.get -> float
 RayBork.IWindow.GetClipboardText() -> string!
 RayBork.IWindow.Height.get -> int
+RayBork.IWindow.IsCursorOnScreen.get -> bool
 RayBork.IWindow.IsFocused.get -> bool
 RayBork.IWindow.IsFullscreen.get -> bool
 RayBork.IWindow.IsMinimized.get -> bool
@@ -317,6 +318,7 @@ RayBork.IWindow.SetMinSize(int width, int height) -> void
 RayBork.IWindow.SetMonitor(int monitorIndex) -> void
 RayBork.IWindow.SetPosition(int x, int y) -> void
 RayBork.IWindow.SetSize(int width, int height) -> void
+RayBork.IWindow.SetTextInputArea(RayBork.Rect area, int cursorOffset) -> void
 RayBork.IWindow.SetTitle(string! title) -> void
 RayBork.IWindow.State.get -> RayBork.WindowState
 RayBork.IWindow.Title.get -> string!

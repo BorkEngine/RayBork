@@ -135,4 +135,86 @@ public sealed class WindowCommandQueueTests
         Assert.Equal(0, maximum.Width);
         Assert.Equal(0, maximum.Height);
     }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void RepeatedTextInputAreaCallsCoalesceIntoOneCommand()
+    {
+        WindowCommandQueue queue = new();
+        queue.EnqueueSetTextInputArea(new Rect(1.2f, 2.6f, 100.4f, 40.6f), 3);
+        queue.EnqueueMinimize();
+        queue.EnqueueSetTextInputArea(new Rect(10.4f, 20.6f, 300.49f, 50.51f), 7);
+
+        IReadOnlyList<WindowCommand> pending = queue.PendingCommands;
+
+        Assert.Equal(2, pending.Count);
+        SetTextInputAreaCommand area = Assert.IsType<SetTextInputAreaCommand>(pending[0]);
+        Assert.Equal(10, area.X);
+        Assert.Equal(21, area.Y);
+        Assert.Equal(300, area.Width);
+        Assert.Equal(51, area.Height);
+        Assert.Equal(7, area.CursorOffset);
+        Assert.IsType<MinimizeCommand>(pending[1]);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void TextInputAreaValidationRunsBeforeTheCommandEntersTheQueue()
+    {
+        WindowCommandQueue queue = new();
+
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(float.NaN, 0f, 10f, 10f), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, float.PositiveInfinity, 10f, 10f), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, 0f, float.NaN, 10f), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, 0f, 10f, float.NegativeInfinity), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(3e9f, 0f, 10f, 10f), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, -3e9f, 10f, 10f), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, 0f, 3e9f, 10f), 0)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, 0f, 10f, 3e9f), 0)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, 0f, -1f, 10f), 0)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, 0f, 10f, -1f), 0)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            queue.EnqueueSetTextInputArea(new Rect(0f, 0f, 10f, 10f), -1)
+        );
+
+        Assert.Empty(queue.PendingCommands);
+    }
+
+    [Theory]
+    [InlineData(0f, 40f)]
+    [InlineData(100f, 0f)]
+    [InlineData(0.4f, 40f)]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ZeroTextInputAreaExtentIsAValidClear(float width, float height)
+    {
+        WindowCommandQueue queue = new();
+        queue.EnqueueSetTextInputArea(new Rect(5f, 6f, width, height), 0);
+
+        SetTextInputAreaCommand area = Assert.IsType<SetTextInputAreaCommand>(
+            Assert.Single(queue.PendingCommands)
+        );
+        Assert.Equal(5, area.X);
+        Assert.Equal(6, area.Y);
+        Assert.True(area.Width == 0 || area.Height == 0);
+    }
 }

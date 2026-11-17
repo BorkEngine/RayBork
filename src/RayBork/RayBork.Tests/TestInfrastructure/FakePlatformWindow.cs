@@ -40,6 +40,8 @@ internal sealed class FakePlatformWindow : IPlatformWindow
 
     public bool IsFocused { get; set; } = true;
 
+    public bool IsCursorOnScreen { get; set; } = true;
+
     public bool WasResized { get; set; }
 
     public bool CloseRequested { get; private set; }
@@ -65,6 +67,10 @@ internal sealed class FakePlatformWindow : IPlatformWindow
     public (int Width, int Height)? MinSize { get; private set; }
 
     public (int Width, int Height)? MaxSize { get; private set; }
+
+    public Rect TextInputArea { get; private set; }
+
+    public int TextInputCursorOffset { get; private set; }
 
     public int RequestedMonitorIndex { get; private set; }
 
@@ -123,6 +129,12 @@ internal sealed class FakePlatformWindow : IPlatformWindow
     }
 
     public void SetCursor(CursorMode mode) => Cursor = mode;
+
+    public void SetTextInputArea(Rect area, int cursorOffset)
+    {
+        TextInputArea = area;
+        TextInputCursorOffset = cursorOffset;
+    }
 
     public void SetClipboardText(string text) => _clipboardText = text;
 
