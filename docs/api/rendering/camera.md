@@ -329,7 +329,11 @@ depth-less target is `InvalidOperationException` from `CreateCamera`; a disposed
 texture is `ObjectDisposedException`. The built-in `SsaoEffect` is snapshotted the same way: its
 `Quality` and every setting are frozen, it requires a target with depth, and a depth-less target is
 `InvalidOperationException` from `CreateCamera`. The built-in `BloomEffect` is also snapshotted the
-same way and needs no depth. See [Post-processing](post-processing.md).
+same way and needs no depth. See [Post-processing](post-processing.md). `samples/RenderTarget` uses
+the same `target` and `postProcess` parameters: an offscreen camera writes a `RenderTexture`, the
+single scene camera samples its `ColorTexture` and runs the custom vignette effect, two split-screen
+cameras replace the single scene camera when `S` is on, and a later HUD camera loads the scene color
+and clears depth.
 
 A later camera in the same tick can sample the target's `ColorTexture` or
 `DepthTexture`; sampling either view in the camera pass that writes the target is rejected with
@@ -394,8 +398,10 @@ game fits its design space into render pixels, calls `ScreenToWorldTransform` fo
 draws the world-space `DrawQuad` (solid, full texture, or source rectangle), `DrawDisc`, or
 `DrawText` with a pixel-sized `size` on the returned transform. A textured `DrawQuad` or
 `DrawBillboard(faceCamera: false)` covers a sprite. `samples/Pong` uses this pattern for its whole
-match: one orthographic camera whose visible height is the render height, so the plane at distance
-`1` has a scale of exactly one, and every draw is anchored with `ScreenToWorldTransform`.
+match: two sequential orthographic cameras whose visible height is the render height, so the plane at
+distance `1` has a scale of exactly one; the scene camera clears color and depth and runs bloom, the
+later HUD camera loads the scene color and clears depth, and every draw is anchored with
+`ScreenToWorldTransform`.
 
 ```csharp
 Transform screen = camera.ScreenToWorldTransform(

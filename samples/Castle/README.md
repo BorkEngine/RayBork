@@ -10,7 +10,7 @@ of the view. `A` toggles SSAO, which is on by default at Medium quality; the HUD
 post-process stack. The source is kept small and commented so the scene can be read and adapted as a
 starting point.
 
-`samples/Pong` is the M7 Native AOT gate. This sample remains a buildable and publishable
+`samples/RenderTarget` is the M8 Native AOT gate. This sample remains a buildable and publishable
 example, and it contains no test-only logic: it opens the window, draws the scene, and exits cleanly.
 Build and run it from the repository root:
 

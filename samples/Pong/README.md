@@ -1,6 +1,7 @@
 # Pong
 
-`Pong` is the M7 sample and Native AOT gate: a player-vs-AI match drawn with two ordinary screen-space
+`Pong` was the M7 sample and Native AOT gate; `samples/RenderTarget` is the M8 sample and gate. A
+player-vs-AI match is drawn with two ordinary screen-space
 orthographic cameras. A 1280x720 design playfield is letterboxed into the current render pixels; a
 scene camera draws the background, border, net, textured paddles, and ball through the built-in
 fast dual-filter bloom effect, and a later HUD camera draws the score panels, scores, status line, and
@@ -227,7 +228,8 @@ and fails with a clear error when it is missing.
 
 ## Native AOT
 
-`Pong` is the M7 Native AOT gate. Build the solution in Release first so `Pong.Assets` bakes and
+`Pong` was the M7 Native AOT gate and remains a buildable and publishable sample; the M8 gate is
+`samples/RenderTarget`. Build the solution in Release first so `Pong.Assets` bakes and
 copies `pong.pck`, then publish and run the Windows host from the repository root:
 
 ```powershell

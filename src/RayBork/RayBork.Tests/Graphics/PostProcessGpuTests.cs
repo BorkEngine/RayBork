@@ -1136,6 +1136,7 @@ public sealed class PostProcessGpuTests {
         cameraHost.EndFrame();
         host.Backend.Submit(cameraHost.Packet);
         host.Backend.Present();
+        cameraHost.Packet.Retention.Release();
 
         // The whole tick path runs: the camera service snapshots the caller's stack, the packet carries
         // the frozen effect, and the renderer records the chain from that snapshot.

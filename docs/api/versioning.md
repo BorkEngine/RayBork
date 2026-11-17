@@ -156,6 +156,22 @@ correct. These are 0.x preview changes
 and this paragraph is their migration note; after 1.0
 a breaking change to this surface would need the obsolete/migration cycle above.
 
+The M8 render target and post-process surface is additive: `RenderTexture`,
+`RenderTextureDescription`, `EngineContext.CreateRenderTextureAsync`, `RenderTexture.Resize`,
+`RenderTexture.ReadColorsAsync`, `RenderTexture.ReadPixelsAsync`, `RenderTexture.ColorTexture`,
+`RenderTexture.DepthTexture`, `Camera.Target`, the `CreateCamera` `target` and `postProcess`
+parameters, `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`,
+`SsaoQuality`, and `BloomEffect` are new members. Existing camera, draw, and asset calls keep their
+meaning; a camera with `target` `null` and `postProcess` `null` records exactly as it did in M7.
+Shader ABI v2 (one frame block per camera pass plus a push-constant pass index) replaces the M4-M7
+one-block-per-frame layout, so a shader baked by an older bake is rejected at load with a rebake
+message; the shader ABI version is recorded in the shader descriptor. The built-in pack grows to
+46 entries with the SSAO and bloom shader assets, their shared vertex payloads, and the CC0
+blue-noise texture, and the SSAO/bloom programs add no NuGet dependency. `Collision`, `Model`,
+`Shader`, and `Mesh` are unchanged. These are 0.x preview additions and this paragraph is their
+migration note; after 1.0 a breaking change to this surface would need the obsolete/migration cycle
+above.
+
 Mouse input now uses render pixels instead of logical window coordinates. `Input.MousePosition` and
 `Input.MouseDelta` are physical framebuffer pixels with a top-left origin and fractional values, so a
 game passes `MousePosition` directly to `Camera.ScreenToWorldRay` and compares `WorldToScreen` output
@@ -263,7 +279,7 @@ disposed first.
 | `Font`, `Glyph`, `TextAlignment`, `TextWrapping` | §7.10 |
 | `RenderTexture`, `RenderTextureDescription` | §7.11 |
 | `RenderStats` | §7.12 |
-| `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect` | §7.13 |
+| `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`, `SsaoQuality`, `BloomEffect` | §7.13 |
 | `IWindow`, `WindowState`, `CursorMode`, `Monitor`, `PresentMode` | §8 |
 | `IInput`, `Key`, `MouseButton`, `IGamepad`, `GamepadButton`, `GamepadAxis`, `GamepadTrigger` | §9 |
 | `ILoggerFactory` | §10.1 |

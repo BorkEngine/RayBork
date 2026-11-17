@@ -47,56 +47,62 @@ is visible.
 </Project>
 ```
 
-Publish commands used by the M7 gate:
+Publish commands used by the M8 gate:
 
 ```text
-dotnet build samples/Pong/Pong.slnx -c Release
-dotnet publish samples/Pong/Pong.csproj -c Release -r win-x64   -p:PublishAot=true
-dotnet publish samples/Pong/Pong.csproj -c Release -r linux-x64 -p:PublishAot=true
-samples/Pong/bin/Release/net11.0/win-x64/publish/Pong.exe --frames 30
+dotnet build samples/RenderTarget/RenderTarget.slnx -c Release
+dotnet publish samples/RenderTarget/RenderTarget.csproj -c Release -r win-x64   -p:PublishAot=true
+dotnet publish samples/RenderTarget/RenderTarget.csproj -c Release -r linux-x64 -p:PublishAot=true
+samples/RenderTarget/bin/Release/net11.0/win-x64/publish/RenderTarget.exe --frames 30
 # WSL, from the repository root, on the WSLg display with the conformant lavapipe ICD:
-# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Pong/bin/Release/net11.0/linux-x64/publish/Pong --frames 30
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/RenderTarget/bin/Release/net11.0/linux-x64/publish/RenderTarget --frames 30
 ```
 
-`samples/Pong` is the M7 sample and Native AOT gate. It is its own solution,
-`samples/Pong/Pong.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample and the JIT
-`Pong.Assets` executable. The solution builds `Pong` once and then `Pong.Assets`; the assets
-project runs the bake executable out of process, bakes `pong.pck` from the original 32x128 opaque
-paddle PNG and the `Pong.PongSettings` TOML data, and copies it beside the sample executable. The
-sample loads it automatically and has no `--assets` argument. `PongSettings` lives only in the
-sample project and `Pong.Assets` references that project directly; `Pong` does not reference the
-assets project, so the graph has no cycle. Every tick records one orthographic camera at
-`(0, 0, 1)` with `orthographicHeight = Window.RenderHeight`, fits the `1280x720` design playfield
-into the render pixels, and anchors every draw with `Camera.ScreenToWorldTransform`. `DrawQuad`
-draws the playfield, border, net, score panels, shaded overlay, and textured paddles; `DrawDisc`
-draws the ball; `DrawText` draws the scores, status line, and pause/winner overlay. The match is
-player vs AI: the human moves the left paddle with W/S, Up/Down, or gamepad 0 left stick/d-pad, and
-a deterministic AI moves the right paddle at `AiPaddleSpeed` while tracking the ball. The match uses
-a fixed opening serve, fixed `1/120` second substeps, `Collision.CheckBoxSphere` paddle collisions,
-a paddle-hit speed-up of `BallSpeedupPerHit` up to `MaxBallSpeed`, scoring with the serve going to
-the loser, a max-score win, and pause/restart. `--frames` and `--help` are the only options.
+`samples/RenderTarget` is the M8 sample and Native AOT gate. It is its own solution,
+`samples/RenderTarget/RenderTarget.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample
+and the JIT `RenderTarget.Assets` executable. The solution builds `RenderTarget` once and then
+`RenderTarget.Assets`; the assets project runs the bake executable out of process, bakes
+`rendertarget.pck` from the checked-in vignette post-process shader sources, and copies it beside the
+sample executable. The sample loads it automatically and has no `--assets` argument. Every tick
+records up to four camera passes: an offscreen perspective camera into a `640x360` `Rgba16Float`
+render texture with depth and 4x MSAA; the single scene camera, or two half-width split-screen
+cameras when `S` is on, drawing a procedural scene and sampling the target's `ColorTexture` on a
+monitor; and a later orthographic HUD camera with `ClearMode.Depth`. The single scene camera runs an
+app-lifetime `PostProcessStack` with one baked `ShaderPostProcessEffect` (`E` toggles the stack), and
+`F2` calls `ReadColorsAsync` and `ReadPixelsAsync` and writes a PPM screenshot. `--frames` and
+`--help` are the only options. The gate exercises the render-texture creation, camera target routing,
+same-tick target sampling, the custom post-process chain, the store-back, and both readback methods
+on the AOT publish path.
 
-The publish does not build `Pong.Assets`; the Release solution build above produces `pong.pck`
-beside the sample executable, and `PongCopyPackToPublish` copies it into the publish directory. A
-missing pack fails the publish with a clear error that names the Release solution build. The publish
-directory must contain the host, its native libraries, and `pong.pck` beside the host, and must not
-contain `Pong.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native
-libraries, or the glTF packages.
+The publish does not build `RenderTarget.Assets`; the Release solution build above produces
+`rendertarget.pck` beside the sample executable, and the publish target copies it into the publish
+directory. A missing pack fails the publish with a clear error that names the Release solution build.
+The publish directory must contain the host, its native libraries, and `rendertarget.pck` beside the
+host, and must not contain `RenderTarget.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp,
+BCnEncoder, the shaderc native libraries, or the glTF packages.
 
-Both M7 publishes started, loaded the baked settings and paddle texture, played the player-vs-AI
-match, and shut down. The Windows `win-x64` publish finished with zero AOT/trim warnings: its
-publish directory contains `pong.pck` beside `Pong.exe` and no bake tooling, and the published host
-ran `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with
-zero warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the published host ran
+Both M8 publishes started, created the offscreen target, recorded the scene and HUD passes, ran the
+custom post-process chain, read the target back, and shut down. The Windows `win-x64` publish
+finished with zero AOT/trim warnings: its publish directory contains `rendertarget.pck` beside
+`RenderTarget.exe` and no bake tooling, and the published host ran `--frames 30` to exit `0` on the
+hardware driver. The `linux-x64` publish also finished with zero warnings, contains
+`rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published host ran
 `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
 `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware
 Vulkan path (Mesa dzn) is not a target.
 
+`samples/Pong` was the M7 sample and Native AOT gate, and it remains a buildable and publishable
+sample. Its solution is `samples/Pong/Pong.slnx`; it bakes `pong.pck` from the original paddle PNG
+and the `Pong.PongSettings` TOML data, and draws the player-vs-AI match through `DrawQuad`/`DrawDisc`/
+`DrawText` on `ScreenToWorldTransform`, with the scene-camera bloom stack and the stackless HUD
+camera added in M8. The earlier M7 publishes finished with zero AOT/trim warnings and ran
+`--frames 30` to exit `0` on the same two drivers.
+
 `samples/Text` was the M6 sample and Native AOT gate, and it remains a buildable and publishable
 sample. Its solution is `samples/Text/Text.slnx`; it bakes `text.pck` from the checked-in Lora face
 and draws the world-space text scene with the built-in Fira Sans and JetBrains Mono faces. It is no
-longer the gate. `samples/Castle` remains a buildable and publishable sample, but it is not the M7
-gate. Its build
+longer the gate. `samples/Castle` remains a buildable and publishable sample, but it is not the gate.
+Its build
 invokes the JIT assets executable out of process with the sample's configuration but without its
 publish settings, bakes `castle.pck`, and copies the pack beside the sample executable; `dotnet
 publish` copies the same pack into the publish directory, so the published hosts load the adjacent
@@ -106,14 +112,15 @@ the shaderc native libraries, or the glTF packages. `samples/PrimitiveGallery` r
 and publishable single-project sample with no assets executable and no pack; it builds its only
 texture at runtime.
 
-AOT publish is a per-milestone gate, not a release-only check. The M7 gate is `samples/Pong`: the
-published hosts open a window, load the baked `Pong.PongSettings` data and texture and the built-in
-texture, shader, and font assets, record the player-vs-AI orthographic screen-space pass through
-`ScreenToWorldTransform`, and exit `0`. The gate path exercises the custom-data descriptor decode,
-the texture upload and sampler path, the orthographic projection, `DrawQuad`/`DrawDisc`, the
-`DrawText` HUD path with glyph generation, and the same batch planner as the 3D draws. The sample is
-a plain user-facing example and contains no test-only draw assertion. The Windows suite is 2,695
-tests with no skips (114 GPU); the lavapipe Linux run is 2,688 passed with 7 skipped HDR/
+AOT publish is a per-milestone gate, not a release-only check. The M8 gate is `samples/RenderTarget`:
+the published hosts open a window, create the offscreen render texture, load the built-in texture,
+shader, and font assets and the baked vignette shader, record the offscreen/scene/split/HUD passes,
+run the custom post-process chain, sample the target's `ColorTexture`, read the target back, and exit
+`0`. The gate path exercises the render-texture descriptor decode and allocation, the render-target
+bindless views, the post-process snapshot and store-back, the custom shader's texture and uniform
+bindings, and the same batch planner as the 3D draws. The sample is a plain user-facing example and
+contains no test-only draw assertion. The Windows suite is 2,977 tests with no skips (239 GPU); the
+lavapipe Linux run is 2,970 passed with 7 skipped HDR/
 scRGB-present tests because the driver exposes only SDR.
 
 On WSL, run the Linux host with the conformant lavapipe ICD:

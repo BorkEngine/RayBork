@@ -518,5 +518,11 @@ so values above `1` survive. The shader's baked default render state is ignored:
 opaque blending, no culling, and no depth test or depth write. Chaining effects in a stack gives
 multi-pass processing. `SsaoEffect` and `BloomEffect` are the built-in multi-pass effects on the same
 core through internal engine hooks; a built-in effect declares its own shader-ABI uniforms and texture
-bindings and is packaged from committed SPIR-V, never compiled at runtime. See
+bindings and is packaged from committed SPIR-V, never compiled at runtime. The post pipeline declares
+the same fixed 88-byte mesh vertex layout as the geometry pipelines, so a custom post vertex stage
+that reads only position and UV leaves the other attributes unconsumed and the validation layer
+reports a performance warning, not an error; the prologue's location-15 instance-index interface can
+also be reported as an unconsumed varying when the fragment stage never reads `rbInstance`. The
+engine does not weaken validation or hide these messages; the RenderTarget sample's baked vignette
+shader is the worked example. See
 [Post-processing](post-processing.md).
