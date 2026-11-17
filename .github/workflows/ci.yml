@@ -47,8 +47,24 @@ jobs:
       - name: Test
         run: dotnet test src/RayBork/RayBork.slnx -c Debug --no-build --no-restore
 
-      - name: Format
-        run: dotnet format src/RayBork/RayBork.slnx --verify-no-changes --no-restore
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Check formatting
+        run: dotnet csharpier check .
 
   docs:
     name: docs
