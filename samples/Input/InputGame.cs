@@ -11,7 +11,7 @@ namespace Input;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Every tick records one orthographic HUD camera whose visible height is the current render
+/// Every drawn tick records one orthographic HUD camera whose visible height is the current render
 /// height, so a screen-space plane anchored with <see cref="Camera.ScreenToWorldTransform"/> has a
 /// scale of exactly one render pixel per local unit. Every draw is a <see cref="Camera.DrawQuad"/>
 /// or a <see cref="Camera.DrawText"/> on that plane; the sample has no scene geometry, no asset
@@ -20,9 +20,13 @@ namespace Input;
 /// <para>
 /// The text field is the sample's centerpiece. <see cref="IInput.TextInput"/> appends committed IME
 /// text in layout order, and <see cref="IWindow.SetTextInputArea"/> places the native candidate
-/// window over the field every tick in window coordinates. Clipboard reads are asynchronous in the
-/// engine, so a paste records one tick before it reads and appends the refreshed cache. The event
-/// log keeps a bounded view of what the user just did.
+/// window over the field every drawn tick in window coordinates. Clipboard reads are asynchronous
+/// in the engine, so a paste records one tick before it reads and appends the refreshed cache. The
+/// event log keeps a bounded view of what the user just did.
+/// </para>
+/// <para>
+/// A minimized or zero-extent tick draws no HUD, so it records no camera and makes no
+/// <see cref="IWindow.SetTextInputArea"/> call.
 /// </para>
 /// </remarks>
 internal sealed class InputGame : IGame
@@ -33,6 +37,12 @@ internal sealed class InputGame : IGame
     private const float PLANE_DISTANCE = 1f;
     private const float CAMERA_NEAR = 0.01f;
     private const float CAMERA_FAR = 100f;
+
+    // The full-size status and controls rows measure up to about 750 and 680 render pixels in the
+    // mono face, so a window narrower than this uses the compact text sizes instead of clipping
+    // them. The compact height is where the layout no longer has room for the description.
+    private const float COMPACT_RENDER_WIDTH = 800f;
+    private const float COMPACT_RENDER_HEIGHT = 480f;
 
     private const float CARET_BLINK_SECONDS = 0.5f;
     private const float CARET_WIDTH = 2f;
@@ -477,7 +487,7 @@ internal sealed class InputGame : IGame
     {
         Font monoFont = context.Defaults.DefaultMonoFont;
         Font fieldFont = context.Defaults.DefaultFont;
-        HudStyle style = CreateStyle(monoFont.LineHeight, renderHeight);
+        HudStyle style = CreateStyle(monoFont.LineHeight, renderWidth, renderHeight);
         HudLayout layout = ComputeLayout(
             renderWidth,
             renderHeight,
@@ -529,7 +539,7 @@ internal sealed class InputGame : IGame
 
         // The platform area follows the same field rectangle in logical window units. Render and
         // window extents differ on high-density displays; a minimized window may report zero render
-        // extents, and that case skipped the whole HUD above.
+        // extents, and that case skipped the whole HUD, including this call, above.
         UpdateTextInputArea(
             context.Window,
             layout.Field,
@@ -542,13 +552,20 @@ internal sealed class InputGame : IGame
     private static void DrawHeader(Camera camera, HudLayout layout, HudStyle style, Font font)
     {
         DrawQuad(camera, layout.TitleAccent, _fieldAccent);
-        DrawText(camera, font, "RayBork Input", layout.Title, style.TitleSize, _textColor);
+        DrawText(
+            camera,
+            font,
+            FitLine(font, "RayBork Input", style.TitleSize, layout.Title.Width),
+            layout.Title,
+            style.TitleSize,
+            _textColor
+        );
         if (style.ShowSubtitle)
         {
             DrawText(
                 camera,
                 font,
-                HEADER_SUBTITLE,
+                FitLine(font, HEADER_SUBTITLE, style.SubtitleSize, layout.Subtitle.Width),
                 layout.Subtitle,
                 style.SubtitleSize,
                 _mutedColor
@@ -572,7 +589,14 @@ internal sealed class InputGame : IGame
             new Rect(layout.Field.X, layout.Field.Y, ACCENT_WIDTH, layout.Field.Height),
             _fieldAccent
         );
-        DrawText(camera, monoFont, FIELD_LABEL, layout.FieldLabel, style.LabelSize, _mutedColor);
+        DrawText(
+            camera,
+            monoFont,
+            FitLine(monoFont, FIELD_LABEL, style.LabelSize, layout.FieldLabel.Width),
+            layout.FieldLabel,
+            style.LabelSize,
+            _mutedColor
+        );
 
         float textX = layout.Field.X + FIELD_TEXT_INSET;
         float lineHeight = fieldFont.LineHeight * style.FieldTextSize;
@@ -597,7 +621,14 @@ internal sealed class InputGame : IGame
             );
         }
 
-        DrawText(camera, monoFont, FIELD_HINT, layout.FieldHint, style.HintSize, _mutedColor);
+        DrawText(
+            camera,
+            monoFont,
+            FitLine(monoFont, FIELD_HINT, style.HintSize, layout.FieldHint.Width),
+            layout.FieldHint,
+            style.HintSize,
+            _mutedColor
+        );
     }
 
     private static void DrawPanel(
@@ -734,17 +765,31 @@ internal sealed class InputGame : IGame
             + $"  focus {YesNo(context.Window.IsFocused)}"
             + $"  cursor on-screen {YesNo(context.Window.IsCursorOnScreen)}"
             + $"  mode {_cursorMode}";
-        DrawText(camera, font, status, layout.Status, style.StatusSize, _mutedColor);
+        DrawText(
+            camera,
+            font,
+            FitLine(font, status, style.StatusSize, layout.Status.Width),
+            layout.Status,
+            style.StatusSize,
+            _mutedColor
+        );
     }
 
     private static void DrawControls(Camera camera, HudLayout layout, HudStyle style, Font font)
     {
-        DrawText(camera, font, CONTROLS_TEXT, layout.Controls, style.ControlsSize, _mutedColor);
+        DrawText(
+            camera,
+            font,
+            FitLine(font, CONTROLS_TEXT, style.ControlsSize, layout.Controls.Width),
+            layout.Controls,
+            style.ControlsSize,
+            _mutedColor
+        );
     }
 
-    private static HudStyle CreateStyle(float lineHeight, float renderHeight)
+    private static HudStyle CreateStyle(float lineHeight, float renderWidth, float renderHeight)
     {
-        bool compact = renderHeight < 480f;
+        bool compact = IsCompact(renderWidth, renderHeight);
         float titleSize = compact ? 18f : 22f;
         float subtitleSize = compact ? 11f : 12f;
         float bodySize = compact ? 11f : 13f;
@@ -780,6 +825,9 @@ internal sealed class InputGame : IGame
         );
     }
 
+    private static bool IsCompact(float width, float height) =>
+        height < COMPACT_RENDER_HEIGHT || width < COMPACT_RENDER_WIDTH;
+
     private static HudLayout ComputeLayout(
         float width,
         float height,
@@ -788,7 +836,7 @@ internal sealed class InputGame : IGame
         int gamepadLineCount
     )
     {
-        bool compact = height < 480f;
+        bool compact = IsCompact(width, height);
         float margin = compact ? 10f : 16f;
         float gap = compact ? 8f : 12f;
         float fieldHeight = compact ? 32f : 44f;
@@ -796,7 +844,12 @@ internal sealed class InputGame : IGame
 
         float y = margin;
         Rect titleAccent = new(margin, y + 2f, ACCENT_WIDTH, MathF.Max(0f, style.TitleRow - 4f));
-        Rect title = new(margin + ACCENT_WIDTH + 8f, y, contentWidth, style.TitleRow);
+        Rect title = new(
+            margin + ACCENT_WIDTH + 8f,
+            y,
+            MathF.Max(0f, contentWidth - ACCENT_WIDTH - 8f),
+            style.TitleRow
+        );
         y += style.TitleRow;
 
         Rect subtitle = default;
@@ -1042,7 +1095,7 @@ internal sealed class InputGame : IGame
 
     /// <summary>
     /// The text sizes and line rows for one frame, derived from the mono face metrics and whether
-    /// the window is at its compact height.
+    /// the window is at its compact size.
     /// </summary>
     private readonly record struct HudStyle(
         float TitleSize,
