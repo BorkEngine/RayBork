@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// and clear color). <see cref="Batches"/> is in submission order: opaque batches first in
 /// first-record order, then transparent batches sorted back-to-front.
 /// </remarks>
-internal sealed class PassPlan {
+internal sealed class PassPlan
+{
     private readonly List<PlannedBatch> _batches;
 
     /// <summary>
@@ -17,7 +18,8 @@ internal sealed class PassPlan {
     /// <param name="pass">The recorded pass the plan consumes.</param>
     /// <param name="batches">The batches in submission order.</param>
     /// <exception cref="ArgumentNullException">An argument is <c>null</c>.</exception>
-    internal PassPlan(CameraPass pass, List<PlannedBatch> batches) {
+    internal PassPlan(CameraPass pass, List<PlannedBatch> batches)
+    {
         ArgumentNullException.ThrowIfNull(pass);
         ArgumentNullException.ThrowIfNull(batches);
 

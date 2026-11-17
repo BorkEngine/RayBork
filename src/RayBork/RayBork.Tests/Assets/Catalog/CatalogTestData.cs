@@ -11,7 +11,8 @@ namespace RayBork.Tests.Assets.Catalog;
 /// <see cref="LoaderAssetTypeRegistration{T}"/>, exactly like the builder registers a game type.
 /// </summary>
 [GenerateShape]
-internal sealed partial class CatalogTestSettings {
+internal sealed partial class CatalogTestSettings
+{
     public required string Name { get; init; }
 
     public required int Difficulty { get; init; }
@@ -23,7 +24,8 @@ internal sealed partial class CatalogTestSettings {
 /// members are ignored.
 /// </summary>
 [GenerateShape]
-internal sealed partial class LegacyFontAssetDescriptor {
+internal sealed partial class LegacyFontAssetDescriptor
+{
     public required string FacePayload { get; init; }
 
     public required string Format { get; init; }
@@ -44,7 +46,8 @@ internal sealed partial class LegacyFontAssetDescriptor {
 /// pack baked before the shader ABI version existed serialized this shape.
 /// </summary>
 [GenerateShape]
-internal sealed partial class LegacyShaderAssetDescriptor {
+internal sealed partial class LegacyShaderAssetDescriptor
+{
     public required string VertexPayload { get; init; }
 
     public required string FragmentPayload { get; init; }
@@ -65,7 +68,8 @@ internal sealed partial class LegacyShaderAssetDescriptor {
 /// <summary>
 /// Deterministic descriptors and pack inputs shared by the catalog tests.
 /// </summary>
-internal static class CatalogTestData {
+internal static class CatalogTestData
+{
     internal const string CUSTOM_DATA_FAILURE_DESCRIPTION = "custom data could not be deserialized";
 
     internal const string MESH_PATH = "meshes/quad";
@@ -95,30 +99,42 @@ internal static class CatalogTestData {
     internal const uint MESH_VERTEX_COUNT = 3;
     internal const uint MESH_INDEX_COUNT = 3;
 
-    internal static MeshAssetDescriptor CreateMeshDescriptor() => new() {
-        Payload = MESH_PAYLOAD_PATH,
-        VertexCount = MESH_VERTEX_COUNT,
-        IndexCount = MESH_INDEX_COUNT,
-        Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
-        Topology = PrimitiveTopology.TriangleList,
-    };
+    internal static MeshAssetDescriptor CreateMeshDescriptor() =>
+        new()
+        {
+            Payload = MESH_PAYLOAD_PATH,
+            VertexCount = MESH_VERTEX_COUNT,
+            IndexCount = MESH_INDEX_COUNT,
+            Bounds = [-1f, -2f, -3f, 1f, 2f, 3f],
+            Topology = PrimitiveTopology.TriangleList,
+        };
 
-    internal static byte[] CreateMeshPayload()
-        => new byte[(MESH_VERTEX_COUNT * MeshAssetDescriptor.VERTEX_STRIDE) + (MESH_INDEX_COUNT * sizeof(uint))];
+    internal static byte[] CreateMeshPayload() =>
+        new byte[
+            (MESH_VERTEX_COUNT * MeshAssetDescriptor.VERTEX_STRIDE)
+                + (MESH_INDEX_COUNT * sizeof(uint))
+        ];
 
     /// <summary>
     /// Writes an independent little-endian mesh payload for the given vertices and indices. The
     /// writer mirrors the bake layout instead of reusing the runtime codec, so the round-trip test
     /// exercises the decoder against a second encoder.
     /// </summary>
-    internal static byte[] CreateMeshPayload(IReadOnlyList<Vertex> vertices, IReadOnlyList<uint> indices) {
+    internal static byte[] CreateMeshPayload(
+        IReadOnlyList<Vertex> vertices,
+        IReadOnlyList<uint> indices
+    )
+    {
         ArgumentNullException.ThrowIfNull(vertices);
         ArgumentNullException.ThrowIfNull(indices);
 
-        int byteCount = (vertices.Count * MeshAssetDescriptor.VERTEX_STRIDE) + (indices.Count * sizeof(uint));
+        int byteCount =
+            (vertices.Count * MeshAssetDescriptor.VERTEX_STRIDE) + (indices.Count * sizeof(uint));
         using MemoryStream stream = new(byteCount);
-        using (BinaryWriter writer = new(stream, System.Text.Encoding.UTF8, leaveOpen: true)) {
-            foreach (Vertex vertex in vertices) {
+        using (BinaryWriter writer = new(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            foreach (Vertex vertex in vertices)
+            {
                 WriteVector3(writer, vertex.Position);
                 WriteVector3(writer, vertex.Normal);
                 WriteVector2(writer, vertex.Uv);
@@ -129,7 +145,8 @@ internal static class CatalogTestData {
                 WriteVector4(writer, vertex.Tangent);
             }
 
-            foreach (uint index in indices) {
+            foreach (uint index in indices)
+            {
                 writer.Write(index);
             }
         }
@@ -137,46 +154,50 @@ internal static class CatalogTestData {
         return stream.ToArray();
     }
 
-    internal static TextureAssetDescriptor CreateTextureDescriptor() => new() {
-        Payload = TEXTURE_PAYLOAD_PATH,
-        Width = 4,
-        Height = 2,
-        MipLevels = 3,
-        Format = TextureFormat.Rgba8Srgb,
-        IsSrgb = true,
-        Filter = TextureFilter.Linear,
-        Wrap = TextureWrap.Repeat,
-        MaxAnisotropy = 1f,
-    };
+    internal static TextureAssetDescriptor CreateTextureDescriptor() =>
+        new()
+        {
+            Payload = TEXTURE_PAYLOAD_PATH,
+            Width = 4,
+            Height = 2,
+            MipLevels = 3,
+            Format = TextureFormat.Rgba8Srgb,
+            IsSrgb = true,
+            Filter = TextureFilter.Linear,
+            Wrap = TextureWrap.Repeat,
+            MaxAnisotropy = 1f,
+        };
 
     internal static byte[] CreateTexturePayload() => CreatePattern(128, 5);
 
-    internal static ShaderAssetDescriptor CreateShaderDescriptor() => new() {
-        AbiVersion = ShaderAbiNames.ABI_VERSION,
-        VertexPayload = SHADER_VERTEX_PAYLOAD_PATH,
-        FragmentPayload = SHADER_FRAGMENT_PAYLOAD_PATH,
-        VertexEntry = "main_vertex",
-        FragmentEntry = "main_fragment",
-        Stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
-        DefaultRenderState = RenderState.AlphaBlend,
-        Uniforms = [
-            new ShaderUniformAsset {
-                Name = "uTint",
-                Type = ShaderUniformType.Vector4,
-                Default = [1f, 1f, 1f, 1f],
-            },
-        ],
-        Textures = ["mainTexture"],
-    };
+    internal static ShaderAssetDescriptor CreateShaderDescriptor() =>
+        new()
+        {
+            AbiVersion = ShaderAbiNames.ABI_VERSION,
+            VertexPayload = SHADER_VERTEX_PAYLOAD_PATH,
+            FragmentPayload = SHADER_FRAGMENT_PAYLOAD_PATH,
+            VertexEntry = "main_vertex",
+            FragmentEntry = "main_fragment",
+            Stages = ShaderStageMask.Vertex | ShaderStageMask.Fragment,
+            DefaultRenderState = RenderState.AlphaBlend,
+            Uniforms =
+            [
+                new ShaderUniformAsset
+                {
+                    Name = "uTint",
+                    Type = ShaderUniformType.Vector4,
+                    Default = [1f, 1f, 1f, 1f],
+                },
+            ],
+            Textures = ["mainTexture"],
+        };
 
     internal static byte[] CreateShaderVertexPayload() => CreatePattern(32, 11);
 
     internal static byte[] CreateShaderFragmentPayload() => CreatePattern(48, 13);
 
-    internal static CatalogTestSettings CreateSettings() => new() {
-        Name = "catalog",
-        Difficulty = 7,
-    };
+    internal static CatalogTestSettings CreateSettings() =>
+        new() { Name = "catalog", Difficulty = 7 };
 
     internal static byte[] CreateDataPayload() => AssetSerialization.Serialize(CreateSettings());
 
@@ -185,7 +206,8 @@ internal static class CatalogTestData {
     /// descender, a <c>.notdef</c> triangle at glyph zero, and a mapped square <c>A</c> at glyph one
     /// with a 600-unit advance and one -100-unit kern pair for A followed by A.
     /// </summary>
-    internal static byte[] CreateFontFace() {
+    internal static byte[] CreateFontFace()
+    {
         SyntheticFontBuilder builder = SyntheticFontBuilder.Create();
         int glyphId = builder.AddSimple(
             600,
@@ -193,11 +215,9 @@ internal static class CatalogTestData {
             new SyntheticPoint(0, 0),
             new SyntheticPoint(500, 0),
             new SyntheticPoint(500, 500),
-            new SyntheticPoint(0, 500));
-        return builder
-            .WithCmap(4, (0x41, glyphId))
-            .WithKernPairs((glyphId, glyphId, -100))
-            .Build();
+            new SyntheticPoint(0, 500)
+        );
+        return builder.WithCmap(4, (0x41, glyphId)).WithKernPairs((glyphId, glyphId, -100)).Build();
     }
 
     internal static FontAssetDescriptor CreateFontDescriptor(
@@ -206,7 +226,10 @@ internal static class CatalogTestData {
         int msdfRange = 4,
         int msdfPadding = 2,
         uint? byteLength = null,
-        string facePayload = FONT_PAYLOAD_PATH) => new() {
+        string facePayload = FONT_PAYLOAD_PATH
+    ) =>
+        new()
+        {
             FacePayload = facePayload,
             Format = "ttf",
             ByteLength = byteLength ?? (uint)face.Length,
@@ -223,11 +246,14 @@ internal static class CatalogTestData {
         byte[]? face = null,
         FontAssetDescriptor? descriptor = null,
         string path = FONT_PATH,
-        string payloadPath = FONT_PAYLOAD_PATH) {
+        string payloadPath = FONT_PAYLOAD_PATH
+    )
+    {
         byte[] resolvedFace = face ?? CreateFontFace();
-        FontAssetDescriptor resolvedDescriptor =
-            descriptor ?? CreateFontDescriptor(resolvedFace, facePayload: payloadPath);
-        return [
+        FontAssetDescriptor resolvedDescriptor = descriptor
+            ?? CreateFontDescriptor(resolvedFace, facePayload: payloadPath);
+        return
+        [
             (path, AssetEntryType.Font, AssetSerialization.Serialize(resolvedDescriptor)),
             (payloadPath, AssetEntryType.Raw, resolvedFace),
         ];
@@ -235,100 +261,143 @@ internal static class CatalogTestData {
 
     /// <summary>Builds the synthetic mono font descriptor entry and its sibling face payload entry.</summary>
     internal static (string Path, AssetEntryType Type, byte[] Payload)[] CreateMonoFontEntries(
-        byte[]? face = null) {
+        byte[]? face = null
+    )
+    {
         byte[] resolvedFace = face ?? CreateFontFace();
         return CreateFontEntries(
             resolvedFace,
             CreateFontDescriptor(resolvedFace, facePayload: MONO_FONT_PAYLOAD_PATH),
             MONO_FONT_PATH,
-            MONO_FONT_PAYLOAD_PATH);
+            MONO_FONT_PAYLOAD_PATH
+        );
     }
 
     /// <summary>
     /// Serializes the pre-M6 font descriptor shape, including its removed <c>Ranges</c> member, for the
     /// legacy-pack regression test.
     /// </summary>
-    internal static byte[] CreateLegacyFontDescriptorPayload(byte[] face) {
+    internal static byte[] CreateLegacyFontDescriptorPayload(byte[] face)
+    {
         ArgumentNullException.ThrowIfNull(face);
 
-        return AssetSerialization.Serialize(new LegacyFontAssetDescriptor {
-            FacePayload = FONT_PAYLOAD_PATH,
-            Format = "ttf",
-            ByteLength = (uint)face.Length,
-            Ranges = ["U+0020-007E"],
-            MsdfPixelSize = 32,
-            MsdfRange = 4,
-            MsdfPadding = 2,
-        });
+        return AssetSerialization.Serialize(
+            new LegacyFontAssetDescriptor
+            {
+                FacePayload = FONT_PAYLOAD_PATH,
+                Format = "ttf",
+                ByteLength = (uint)face.Length,
+                Ranges = ["U+0020-007E"],
+                MsdfPixelSize = 32,
+                MsdfRange = 4,
+                MsdfPadding = 2,
+            }
+        );
     }
 
     /// <summary>Opens a pack archive over the standard synthetic font entries.</summary>
-    internal static PackArchive OpenFontArchive()
-        => PackArchive.Open(BuildPack(CreateFontEntries()), "font-format.pck");
+    internal static PackArchive OpenFontArchive() =>
+        PackArchive.Open(BuildPack(CreateFontEntries()), "font-format.pck");
 
-    internal static byte[] CreatePattern(int length, int seed) {
+    internal static byte[] CreatePattern(int length, int seed)
+    {
         byte[] payload = new byte[length];
         new Random(seed).NextBytes(payload);
         return payload;
     }
 
-    internal static PackBuilder CreateStandardBuilder(string displayPath = "catalog.pck") {
+    internal static PackBuilder CreateStandardBuilder(string displayPath = "catalog.pck")
+    {
         // Catalog behavior is independent of payload compression. The release policy pays a fixed
         // max-quality Zstandard cost per payload, which dominated this suite; PackArchiveTests keeps
         // the compressed-reader coverage.
         var builder = new PackBuilder(displayPath, PackCompressionPolicy.Debug);
-        builder.Add(MESH_PATH, AssetEntryType.Mesh, AssetSerialization.Serialize(CreateMeshDescriptor()), 1);
+        builder.Add(
+            MESH_PATH,
+            AssetEntryType.Mesh,
+            AssetSerialization.Serialize(CreateMeshDescriptor()),
+            1
+        );
         builder.Add(MESH_PAYLOAD_PATH, AssetEntryType.Raw, CreateMeshPayload(), 16);
-        builder.Add(TEXTURE_PATH, AssetEntryType.Texture, AssetSerialization.Serialize(CreateTextureDescriptor()), 1);
+        builder.Add(
+            TEXTURE_PATH,
+            AssetEntryType.Texture,
+            AssetSerialization.Serialize(CreateTextureDescriptor()),
+            1
+        );
         builder.Add(TEXTURE_PAYLOAD_PATH, AssetEntryType.Raw, CreateTexturePayload(), 64);
-        builder.Add(SHADER_PATH, AssetEntryType.Shader, AssetSerialization.Serialize(CreateShaderDescriptor()), 1);
-        builder.Add(SHADER_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, CreateShaderVertexPayload(), 16);
-        builder.Add(SHADER_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, CreateShaderFragmentPayload(), 16);
+        builder.Add(
+            SHADER_PATH,
+            AssetEntryType.Shader,
+            AssetSerialization.Serialize(CreateShaderDescriptor()),
+            1
+        );
+        builder.Add(
+            SHADER_VERTEX_PAYLOAD_PATH,
+            AssetEntryType.Raw,
+            CreateShaderVertexPayload(),
+            16
+        );
+        builder.Add(
+            SHADER_FRAGMENT_PAYLOAD_PATH,
+            AssetEntryType.Raw,
+            CreateShaderFragmentPayload(),
+            16
+        );
         builder.Add(DATA_PATH, AssetEntryType.Data, CreateDataPayload(), 1);
         return builder;
     }
 
     internal static byte[] BuildStandardPack() => CreateStandardBuilder().Build();
 
-    internal static byte[] BuildPack(params (string Path, AssetEntryType Type, byte[] Payload)[] entries)
-        => BuildPack(PackCompressionPolicy.Debug, entries);
+    internal static byte[] BuildPack(
+        params (string Path, AssetEntryType Type, byte[] Payload)[] entries
+    ) => BuildPack(PackCompressionPolicy.Debug, entries);
 
     internal static byte[] BuildPack(
         PackCompressionPolicy policy,
-        params (string Path, AssetEntryType Type, byte[] Payload)[] entries) {
+        params (string Path, AssetEntryType Type, byte[] Payload)[] entries
+    )
+    {
         // See CreateStandardBuilder: these fixtures exercise catalog semantics, not compression.
         var builder = new PackBuilder("test.pck", policy);
-        foreach ((string path, AssetEntryType type, byte[] payload) in entries) {
+        foreach ((string path, AssetEntryType type, byte[] payload) in entries)
+        {
             builder.Add(path, type, payload);
         }
 
         return builder.Build();
     }
 
-    internal static AssetTypeRegistration SettingsRegistration
-        => new LoaderAssetTypeRegistration<CatalogTestSettings>(
+    internal static AssetTypeRegistration SettingsRegistration =>
+        new LoaderAssetTypeRegistration<CatalogTestSettings>(
             new MessagePackAssetLoader<CatalogTestSettings>(),
-            CUSTOM_DATA_FAILURE_DESCRIPTION);
+            CUSTOM_DATA_FAILURE_DESCRIPTION
+        );
 
-    private static void WriteVector2(BinaryWriter writer, System.Numerics.Vector2 value) {
+    private static void WriteVector2(BinaryWriter writer, System.Numerics.Vector2 value)
+    {
         writer.Write(value.X);
         writer.Write(value.Y);
     }
 
-    private static void WriteVector3(BinaryWriter writer, System.Numerics.Vector3 value) {
+    private static void WriteVector3(BinaryWriter writer, System.Numerics.Vector3 value)
+    {
         writer.Write(value.X);
         writer.Write(value.Y);
         writer.Write(value.Z);
     }
 
-    private static void WriteVector4(BinaryWriter writer, System.Numerics.Vector4 value) {
+    private static void WriteVector4(BinaryWriter writer, System.Numerics.Vector4 value)
+    {
         writer.Write(value.X);
         writer.Write(value.Y);
         writer.Write(value.Z);
         writer.Write(value.W);
     }
 
-    private static void WriteColor(BinaryWriter writer, Color value) {
+    private static void WriteColor(BinaryWriter writer, Color value)
+    {
         writer.Write(value.R);
         writer.Write(value.G);
         writer.Write(value.B);
@@ -345,29 +414,30 @@ internal static class CatalogTestData {
 /// pump so every queued destruction is serviced. Tests synchronize through the fake worker's call
 /// records and explicit events.
 /// </remarks>
-internal sealed class CatalogTestHarness : IDisposable {
+internal sealed class CatalogTestHarness : IDisposable
+{
     private readonly TempPackDirectory _directory = new();
     private readonly List<string> _packPaths = [];
     private readonly ManualResetEventSlim _pumpStop = new(false);
     private readonly Thread _pumpThread;
 
-    internal CatalogTestHarness(
-        byte[]? builtInPack = null,
-        params byte[][] userPacks)
-        : this(builtInPack, userPacks, []) {
-    }
+    internal CatalogTestHarness(byte[]? builtInPack = null, params byte[][] userPacks)
+        : this(builtInPack, userPacks, []) { }
 
     internal CatalogTestHarness(
         byte[]? builtInPack,
         byte[][] userPacks,
-        AssetTypeRegistration[] assetTypes) {
+        AssetTypeRegistration[] assetTypes
+    )
+    {
         ArgumentNullException.ThrowIfNull(userPacks);
         ArgumentNullException.ThrowIfNull(assetTypes);
 
         Bridge = new GpuAssetBridge();
         Worker = new FakeAssetGpuWorker();
         Bridge.AttachWorker(Worker);
-        foreach (byte[] pack in userPacks) {
+        foreach (byte[] pack in userPacks)
+        {
             string path = _directory.GetPath($"user-{_packPaths.Count}.pck");
             File.WriteAllBytes(path, pack);
             _packPaths.Add(path);
@@ -378,9 +448,11 @@ internal sealed class CatalogTestHarness : IDisposable {
             Bridge,
             builtInPack ?? ReadOnlyMemory<byte>.Empty,
             _packPaths,
-            assetTypes);
+            assetTypes
+        );
         Catalog.Start();
-        _pumpThread = new Thread(PumpLoop) {
+        _pumpThread = new Thread(PumpLoop)
+        {
             IsBackground = true,
             Name = "RayBork.Tests.AssetGpuPump",
         };
@@ -393,7 +465,8 @@ internal sealed class CatalogTestHarness : IDisposable {
 
     internal FakeAssetGpuWorker Worker { get; }
 
-    public void Dispose() {
+    public void Dispose()
+    {
         Catalog.Stop();
         _pumpStop.Set();
         _pumpThread.Join();
@@ -402,11 +475,14 @@ internal sealed class CatalogTestHarness : IDisposable {
         _directory.Dispose();
     }
 
-    private void PumpLoop() {
+    private void PumpLoop()
+    {
         WaitHandle[] handles = [Bridge.Signal, _pumpStop.WaitHandle, Worker.Progress];
-        while (true) {
+        while (true)
+        {
             int index = WaitHandle.WaitAny(handles);
-            if (index == 1) {
+            if (index == 1)
+            {
                 return;
             }
 

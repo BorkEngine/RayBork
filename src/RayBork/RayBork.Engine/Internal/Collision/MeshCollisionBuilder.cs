@@ -22,13 +22,15 @@ namespace RayBork.Internal;
 /// spans and temporary arrays; the result is frozen into arrays before it is returned.
 /// </para>
 /// </remarks>
-internal static class MeshCollisionBuilder {
+internal static class MeshCollisionBuilder
+{
     private const int BIN_COUNT = 12;
     private const int LEAF_SIZE = 4;
 
     private static readonly BoundingBox _emptyBounds = new(
         new Vector3(float.PositiveInfinity),
-        new Vector3(float.NegativeInfinity));
+        new Vector3(float.NegativeInfinity)
+    );
 
     private static readonly CentroidComparer _centroidXComparer = new(0);
     private static readonly CentroidComparer _centroidYComparer = new(1);
@@ -49,55 +51,72 @@ internal static class MeshCollisionBuilder {
     internal static MeshCollisionData? Build(
         ReadOnlySpan<Vector3> positions,
         ReadOnlySpan<uint> indices,
-        PrimitiveTopology topology) {
-        if (topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip)) {
+        PrimitiveTopology topology
+    )
+    {
+        if (topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip))
+        {
             throw new ArgumentException(
                 $"Ray-mesh collision supports only triangle topologies; the collision topology is {topology}.",
-                nameof(topology));
+                nameof(topology)
+            );
         }
 
         int triangleCount = MeshCollisionData.GetTriangleCount(topology, indices.Length);
-        if (triangleCount == 0) {
+        if (triangleCount == 0)
+        {
             return null;
         }
 
         BuildTriangle[] triangles = new BuildTriangle[triangleCount];
         int triangleTotal = 0;
-        for (int triangleId = 0; triangleId < triangleCount; triangleId++) {
-            if (!MeshCollisionData.TryGetTriangleIndices(
+        for (int triangleId = 0; triangleId < triangleCount; triangleId++)
+        {
+            if (
+                !MeshCollisionData.TryGetTriangleIndices(
                     topology,
                     indices,
                     triangleId,
                     out uint index0,
                     out uint index1,
-                    out uint index2)) {
+                    out uint index2
+                )
+            )
+            {
                 continue;
             }
 
-            if (index0 >= (uint)positions.Length
+            if (
+                index0 >= (uint)positions.Length
                 || index1 >= (uint)positions.Length
-                || index2 >= (uint)positions.Length) {
+                || index2 >= (uint)positions.Length
+            )
+            {
                 throw new ArgumentException(
                     $"Triangle {triangleId} uses an index outside the {positions.Length} positions.",
-                    nameof(indices));
+                    nameof(indices)
+                );
             }
 
             Vector3 a = positions[(int)index0];
             Vector3 b = positions[(int)index1];
             Vector3 c = positions[(int)index2];
             Vector3 normal = Vector3.Cross(b - a, c - a);
-            if (!(normal.LengthSquared() > 0f)) {
+            if (!(normal.LengthSquared() > 0f))
+            {
                 continue;
             }
 
             triangles[triangleTotal++] = new BuildTriangle(triangleId, a, b, c);
         }
 
-        if (triangleTotal == 0) {
+        if (triangleTotal == 0)
+        {
             return null;
         }
 
-        if (triangleTotal < triangles.Length) {
+        if (triangleTotal < triangles.Length)
+        {
             Array.Resize(ref triangles, triangleTotal);
         }
 
@@ -108,7 +127,8 @@ internal static class MeshCollisionBuilder {
 
         MeshCollisionNode[] nodeArray = [.. nodes];
         int[] triangleIds = new int[triangleTotal];
-        for (int index = 0; index < triangleTotal; index++) {
+        for (int index = 0; index < triangleTotal; index++)
+        {
             triangleIds[index] = triangles[index].TriangleId;
         }
 
@@ -122,23 +142,38 @@ internal static class MeshCollisionBuilder {
         int count,
         int depth,
         int nodeIndex,
-        List<MeshCollisionNode> nodes) {
+        List<MeshCollisionNode> nodes
+    )
+    {
         BoundingBox bounds = triangles[start].Bounds;
         Vector3 centroidMin = triangles[start].Centroid;
         Vector3 centroidMax = centroidMin;
-        for (int index = start + 1; index < start + count; index++) {
+        for (int index = start + 1; index < start + count; index++)
+        {
             BuildTriangle triangle = triangles[index];
             bounds = Union(bounds, triangle.Bounds);
             centroidMin = Vector3.Min(centroidMin, triangle.Centroid);
             centroidMax = Vector3.Max(centroidMax, triangle.Centroid);
         }
 
-        if (count <= LEAF_SIZE || depth >= MeshCollisionData.MAX_DEPTH) {
+        if (count <= LEAF_SIZE || depth >= MeshCollisionData.MAX_DEPTH)
+        {
             nodes[nodeIndex] = new MeshCollisionNode(bounds, start, count);
             return;
         }
 
-        if (!TrySplitByBins(triangles, scratch, start, count, centroidMin, centroidMax, out int split)) {
+        if (
+            !TrySplitByBins(
+                triangles,
+                scratch,
+                start,
+                count,
+                centroidMin,
+                centroidMax,
+                out int split
+            )
+        )
+        {
             split = SplitByCentroid(triangles, start, count, centroidMin, centroidMax);
         }
 
@@ -146,7 +181,15 @@ internal static class MeshCollisionBuilder {
         nodes.Add(default);
         nodes.Add(default);
         BuildNode(triangles, scratch, start, split - start, depth + 1, leftIndex, nodes);
-        BuildNode(triangles, scratch, split, start + count - split, depth + 1, leftIndex + 1, nodes);
+        BuildNode(
+            triangles,
+            scratch,
+            split,
+            start + count - split,
+            depth + 1,
+            leftIndex + 1,
+            nodes
+        );
         nodes[nodeIndex] = new MeshCollisionNode(bounds, leftIndex, 0);
     }
 
@@ -157,14 +200,18 @@ internal static class MeshCollisionBuilder {
         int count,
         Vector3 centroidMin,
         Vector3 centroidMax,
-        out int split) {
+        out int split
+    )
+    {
         split = 0;
         int axis = GetLargestCentroidAxis(centroidMin, centroidMax, out float extent);
-        if (!(extent > 0f)) {
+        if (!(extent > 0f))
+        {
             return false;
         }
 
-        float axisMinimum = axis switch {
+        float axisMinimum = axis switch
+        {
             0 => centroidMin.X,
             1 => centroidMin.Y,
             _ => centroidMin.Z,
@@ -172,7 +219,8 @@ internal static class MeshCollisionBuilder {
         Span<int> binCounts = stackalloc int[BIN_COUNT];
         Span<BoundingBox> binBounds = stackalloc BoundingBox[BIN_COUNT];
         binBounds.Fill(_emptyBounds);
-        for (int index = start; index < start + count; index++) {
+        for (int index = start; index < start + count; index++)
+        {
             BuildTriangle triangle = triangles[index];
             int bin = GetBin(triangle.Centroid, axis, axisMinimum, extent);
             binCounts[bin]++;
@@ -183,7 +231,8 @@ internal static class MeshCollisionBuilder {
         Span<BoundingBox> rightBounds = stackalloc BoundingBox[BIN_COUNT];
         BoundingBox suffixBounds = _emptyBounds;
         int suffixCount = 0;
-        for (int bin = BIN_COUNT - 1; bin > 0; bin--) {
+        for (int bin = BIN_COUNT - 1; bin > 0; bin--)
+        {
             suffixBounds = Union(suffixBounds, binBounds[bin]);
             suffixCount += binCounts[bin];
             rightBounds[bin] = suffixBounds;
@@ -194,27 +243,41 @@ internal static class MeshCollisionBuilder {
         int prefixCount = 0;
         float bestCost = float.PositiveInfinity;
         int bestBin = -1;
-        for (int bin = 0; bin < BIN_COUNT - 1; bin++) {
+        for (int bin = 0; bin < BIN_COUNT - 1; bin++)
+        {
             prefixBounds = Union(prefixBounds, binBounds[bin]);
             prefixCount += binCounts[bin];
             int rightCount = rightCounts[bin + 1];
-            if (prefixCount == 0 || rightCount == 0) {
+            if (prefixCount == 0 || rightCount == 0)
+            {
                 continue;
             }
 
-            float cost = (SurfaceArea(prefixBounds) * prefixCount)
+            float cost =
+                (SurfaceArea(prefixBounds) * prefixCount)
                 + (SurfaceArea(rightBounds[bin + 1]) * rightCount);
-            if (cost < bestCost) {
+            if (cost < bestCost)
+            {
                 bestCost = cost;
                 bestBin = bin;
             }
         }
 
-        if (bestBin < 0) {
+        if (bestBin < 0)
+        {
             return false;
         }
 
-        split = PartitionByBin(triangles, scratch, start, count, axis, axisMinimum, extent, bestBin);
+        split = PartitionByBin(
+            triangles,
+            scratch,
+            start,
+            count,
+            axis,
+            axisMinimum,
+            extent,
+            bestBin
+        );
         return true;
     }
 
@@ -226,21 +289,29 @@ internal static class MeshCollisionBuilder {
         int axis,
         float axisMinimum,
         float extent,
-        int splitBin) {
+        int splitBin
+    )
+    {
         int leftCount = 0;
-        for (int index = start; index < start + count; index++) {
-            if (GetBin(triangles[index].Centroid, axis, axisMinimum, extent) <= splitBin) {
+        for (int index = start; index < start + count; index++)
+        {
+            if (GetBin(triangles[index].Centroid, axis, axisMinimum, extent) <= splitBin)
+            {
                 leftCount++;
             }
         }
 
         int left = 0;
         int right = leftCount;
-        for (int index = start; index < start + count; index++) {
+        for (int index = start; index < start + count; index++)
+        {
             BuildTriangle triangle = triangles[index];
-            if (GetBin(triangle.Centroid, axis, axisMinimum, extent) <= splitBin) {
+            if (GetBin(triangle.Centroid, axis, axisMinimum, extent) <= splitBin)
+            {
                 scratch[left++] = triangle;
-            } else {
+            }
+            else
+            {
                 scratch[right++] = triangle;
             }
         }
@@ -254,9 +325,12 @@ internal static class MeshCollisionBuilder {
         int start,
         int count,
         Vector3 centroidMin,
-        Vector3 centroidMax) {
+        Vector3 centroidMax
+    )
+    {
         int axis = GetLargestCentroidAxis(centroidMin, centroidMax, out _);
-        CentroidComparer comparer = axis switch {
+        CentroidComparer comparer = axis switch
+        {
             0 => _centroidXComparer,
             1 => _centroidYComparer,
             _ => _centroidZComparer,
@@ -265,12 +339,20 @@ internal static class MeshCollisionBuilder {
         return start + (count / 2);
     }
 
-    private static int GetLargestCentroidAxis(Vector3 centroidMin, Vector3 centroidMax, out float extent) {
+    private static int GetLargestCentroidAxis(
+        Vector3 centroidMin,
+        Vector3 centroidMax,
+        out float extent
+    )
+    {
         Vector3 size = centroidMax - centroidMin;
-        if (size.X >= size.Y && size.X >= size.Z) {
+        if (size.X >= size.Y && size.X >= size.Z)
+        {
             extent = size.X;
             return 0;
-        } else if (size.Y >= size.Z) {
+        }
+        else if (size.Y >= size.Z)
+        {
             extent = size.Y;
             return 1;
         }
@@ -279,8 +361,10 @@ internal static class MeshCollisionBuilder {
         return 2;
     }
 
-    private static int GetBin(Vector3 centroid, int axis, float axisMinimum, float extent) {
-        float value = axis switch {
+    private static int GetBin(Vector3 centroid, int axis, float axisMinimum, float extent)
+    {
+        float value = axis switch
+        {
             0 => centroid.X,
             1 => centroid.Y,
             _ => centroid.Z,
@@ -289,43 +373,51 @@ internal static class MeshCollisionBuilder {
         return Math.Clamp(bin, 0, BIN_COUNT - 1);
     }
 
-    private static float SurfaceArea(BoundingBox bounds) {
+    private static float SurfaceArea(BoundingBox bounds)
+    {
         Vector3 size = bounds.Max - bounds.Min;
         return 2f * ((size.X * size.Y) + (size.Y * size.Z) + (size.Z * size.X));
     }
 
-    private static BoundingBox Union(BoundingBox a, BoundingBox b) => new(
-        Vector3.Min(a.Min, b.Min),
-        Vector3.Max(a.Max, b.Max));
+    private static BoundingBox Union(BoundingBox a, BoundingBox b) =>
+        new(Vector3.Min(a.Min, b.Min), Vector3.Max(a.Max, b.Max));
 
-    private struct BuildTriangle {
+    private struct BuildTriangle
+    {
         internal int TriangleId;
         internal BoundingBox Bounds;
         internal Vector3 Centroid;
 
-        internal BuildTriangle(int triangleId, Vector3 a, Vector3 b, Vector3 c) {
+        internal BuildTriangle(int triangleId, Vector3 a, Vector3 b, Vector3 c)
+        {
             TriangleId = triangleId;
             Bounds = new BoundingBox(
                 Vector3.Min(a, Vector3.Min(b, c)),
-                Vector3.Max(a, Vector3.Max(b, c)));
+                Vector3.Max(a, Vector3.Max(b, c))
+            );
             Centroid = (a + b + c) / 3f;
         }
     }
 
-    private sealed class CentroidComparer : IComparer<BuildTriangle> {
+    private sealed class CentroidComparer : IComparer<BuildTriangle>
+    {
         private readonly int _axis;
 
-        internal CentroidComparer(int axis) {
+        internal CentroidComparer(int axis)
+        {
             _axis = axis;
         }
 
-        public int Compare(BuildTriangle x, BuildTriangle y) {
-            float left = _axis switch {
+        public int Compare(BuildTriangle x, BuildTriangle y)
+        {
+            float left = _axis switch
+            {
                 0 => x.Centroid.X,
                 1 => x.Centroid.Y,
                 _ => x.Centroid.Z,
             };
-            float right = _axis switch {
+            float right = _axis switch
+            {
                 0 => y.Centroid.X,
                 1 => y.Centroid.Y,
                 _ => y.Centroid.Z,

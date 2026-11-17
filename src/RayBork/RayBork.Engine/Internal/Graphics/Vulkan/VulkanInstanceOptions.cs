@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// The render thread captures this value once at startup. The platform supplies
 /// <see cref="SurfaceExtensions"/> on the main thread; the engine never guesses them.
 /// </remarks>
-internal sealed class VulkanInstanceOptions {
+internal sealed class VulkanInstanceOptions
+{
     /// <summary>
     /// Gets the application name reported to the Vulkan loader.
     /// </summary>

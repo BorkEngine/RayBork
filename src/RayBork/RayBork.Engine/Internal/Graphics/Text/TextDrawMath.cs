@@ -12,7 +12,8 @@ namespace RayBork.Internal;
 /// <see cref="TextGlyphInstance.Size"/>. These helpers build the local part of the mapping and stay
 /// free of camera, font, and GPU state so the mapping is testable in isolation.
 /// </remarks>
-internal static class TextDrawMath {
+internal static class TextDrawMath
+{
     /// <summary>
     /// Builds the local transform that maps the engine's unit quad onto one laid-out glyph quad.
     /// </summary>
@@ -29,7 +30,8 @@ internal static class TextDrawMath {
         * Matrix4x4.CreateTranslation(
             position.X + (size.X * 0.5f),
             position.Y + (size.Y * 0.5f),
-            0f);
+            0f
+        );
 
     /// <summary>
     /// Builds the local offset that moves a text block's bounds center to the local origin.
@@ -45,5 +47,6 @@ internal static class TextDrawMath {
         Matrix4x4.CreateTranslation(
             -(boundsMin.X + boundsMax.X) * 0.5f,
             -(boundsMin.Y + boundsMax.Y) * 0.5f,
-            0f);
+            0f
+        );
 }

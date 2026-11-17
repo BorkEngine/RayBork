@@ -9,12 +9,14 @@ using RayBork.Tests.Bake.TestInfrastructure;
 namespace RayBork.Tests.Bake.Models;
 
 /// <summary>Tests for the built-in model processor and its glTF/OBJ readers.</summary>
-public sealed class ModelProcessorTests {
+public sealed class ModelProcessorTests
+{
     private const float TOLERANCE = 1e-4f;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ObjGroupsBecomePartsWithTriangulatedFacesAndComputedNormals() {
+    public void ObjGroupsBecomePartsWithTriangulatedFacesAndComputedNormals()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/shapes.obj", ModelTestData.TWO_GROUP_OBJ);
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -56,14 +58,18 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScaleAndFrontCorrectionApplyBeforeBoundsAndPayloads() {
+    public void ScaleAndFrontCorrectionApplyBeforeBoundsAndPayloads()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/correction.obj", ModelTestData.SINGLE_TRIANGLE_OBJ);
-        workspace.WriteAsset("models/correction.toml", """
+        workspace.WriteAsset(
+            "models/correction.toml",
+            """
             [model]
             scale = 2.0
             front = "-x"
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -100,18 +106,26 @@ public sealed class ModelProcessorTests {
         float minimumZ,
         float maximumX,
         float maximumY,
-        float maximumZ) {
+        float maximumZ
+    )
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/axes.obj", """
+        workspace.WriteAsset(
+            "models/axes.obj",
+            """
             v 1 0 0
             v 0 1 0
             v 0 0 1
             f 1 2 3
-            """);
-        workspace.WriteAsset("models/axes.toml", $"""
+            """
+        );
+        workspace.WriteAsset(
+            "models/axes.toml",
+            $"""
             [model]
             front = "{front}"
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -124,9 +138,12 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicatePartNamesGetDeterministicNumericSuffixes() {
+    public void DuplicatePartNamesGetDeterministicNumericSuffixes()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/dupes.obj", """
+        workspace.WriteAsset(
+            "models/dupes.obj",
+            """
             o cube
             v 0 0 0
             v 1 0 0
@@ -137,7 +154,8 @@ public sealed class ModelProcessorTests {
             v 3 0 0
             v 2 1 0
             f 4 5 6
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -148,14 +166,20 @@ public sealed class ModelProcessorTests {
         Assert.Equal(new[] { "cube", "cube-2" }, model.Parts.Select(part => part.Name));
         Assert.Equal("models/dupes/cube", model.Parts[0].MeshPath);
         Assert.Equal("models/dupes/cube-2", model.Parts[1].MeshPath);
-        Assert.Equal("models/dupes/cube-2-mesh", ModelTestData.ReadMesh(archive, model.Parts[1].MeshPath).Payload);
+        Assert.Equal(
+            "models/dupes/cube-2-mesh",
+            ModelTestData.ReadMesh(archive, model.Parts[1].MeshPath).Payload
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void APartSlugCannotCollideWithAnotherPartPayload() {
+    public void APartSlugCannotCollideWithAnotherPartPayload()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/collision.obj", """
+        workspace.WriteAsset(
+            "models/collision.obj",
+            """
             o foo
             v 0 0 0
             v 1 0 0
@@ -166,7 +190,8 @@ public sealed class ModelProcessorTests {
             v 3 0 0
             v 2 1 0
             f 4 5 6
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -178,17 +203,22 @@ public sealed class ModelProcessorTests {
         Assert.Equal("models/collision/foo-mesh-2", model.Parts[1].MeshPath);
         Assert.Equal(
             "models/collision/foo-mesh",
-            ModelTestData.ReadMesh(archive, model.Parts[0].MeshPath).Payload);
+            ModelTestData.ReadMesh(archive, model.Parts[0].MeshPath).Payload
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ObjWithoutFacesIsAnError() {
+    public void ObjWithoutFacesIsAnError()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/empty.obj", """
+        workspace.WriteAsset(
+            "models/empty.obj",
+            """
             v 0 0 0
             v 1 0 0
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -201,9 +231,12 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ObjNegativeIndicesAndIgnoredMaterialLibraryAreSupported() {
+    public void ObjNegativeIndicesAndIgnoredMaterialLibraryAreSupported()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/negative.obj", """
+        workspace.WriteAsset(
+            "models/negative.obj",
+            """
             mtllib materials.mtl
             o negative
             vt 0 0
@@ -213,7 +246,8 @@ public sealed class ModelProcessorTests {
             v 1 0 0
             v 1 1 0
             f -3/-3 -2/-2 -1/-1
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -226,7 +260,8 @@ public sealed class ModelProcessorTests {
         Assert.Equal("negative", part.Name);
         byte[] payload = ModelTestData.ReadPayload(
             archive,
-            ModelTestData.ReadMesh(archive, part.MeshPath).Payload);
+            ModelTestData.ReadMesh(archive, part.MeshPath).Payload
+        );
         AssertVector(new Vector2(0f, 1f), ModelTestData.UvAt(payload, 0));
         AssertVector(new Vector2(1f, 1f), ModelTestData.UvAt(payload, 1));
         AssertVector(new Vector2(1f, 0f), ModelTestData.UvAt(payload, 2));
@@ -234,9 +269,12 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ObjQuadFlipsVToTheTopLeftUvOrigin() {
+    public void ObjQuadFlipsVToTheTopLeftUvOrigin()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/uvquad.obj", """
+        workspace.WriteAsset(
+            "models/uvquad.obj",
+            """
             o quad
             v 0 0 0
             v 0 1 0
@@ -248,7 +286,8 @@ public sealed class ModelProcessorTests {
             vt 1 0
             vn 0 0 1
             f 1/1/1 2/2/1 3/3/1 4/4/1
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -269,7 +308,8 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GltfTextureCoordinatesAreUsedAsAuthored() {
+    public void GltfTextureCoordinatesAreUsedAsAuthored()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/uvtri.gltf", ModelTestData.UvTriangleGltf());
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -282,7 +322,8 @@ public sealed class ModelProcessorTests {
         ModelPartAsset part = Assert.Single(model.Parts);
         byte[] payload = ModelTestData.ReadPayload(
             archive,
-            ModelTestData.ReadMesh(archive, part.MeshPath).Payload);
+            ModelTestData.ReadMesh(archive, part.MeshPath).Payload
+        );
         AssertVector(new Vector2(0.25f, 0.75f), ModelTestData.UvAt(payload, 0));
         AssertVector(new Vector2(0.5f, 0.5f), ModelTestData.UvAt(payload, 1));
         AssertVector(new Vector2(0.75f, 0.25f), ModelTestData.UvAt(payload, 2));
@@ -295,7 +336,8 @@ public sealed class ModelProcessorTests {
     [InlineData("[model]\nfront = \"up\"\n", "RB4009")]
     [InlineData("[model]\nbogus = 1\n", "RB4002")]
     [InlineData("[model]\nshader = \"/shaders/castle\"\n", "RB4009")]
-    public void InvalidSidecarValuesAreReported(string sidecar, string code) {
+    public void InvalidSidecarValuesAreReported(string sidecar, string code)
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/prop.obj", ModelTestData.SINGLE_TRIANGLE_OBJ);
         workspace.WriteAsset("models/prop.toml", sidecar);
@@ -310,7 +352,8 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PartWithoutASidecarShaderDefaultsToTheBuiltInShader() {
+    public void PartWithoutASidecarShaderDefaultsToTheBuiltInShader()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/plain.obj", ModelTestData.TWO_GROUP_OBJ);
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -325,13 +368,17 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ShaderPathIsStoredOnEveryPartAndMayReferenceAnotherPack() {
+    public void ShaderPathIsStoredOnEveryPartAndMayReferenceAnotherPack()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/armed.obj", ModelTestData.TWO_GROUP_OBJ);
-        workspace.WriteAsset("models/armed.toml", """
+        workspace.WriteAsset(
+            "models/armed.toml",
+            """
             [model]
             shader = "shaders/castle"
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -344,15 +391,19 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MixedCaseSourceAndPartNamesMapToCanonicalOutputPaths() {
+    public void MixedCaseSourceAndPartNamesMapToCanonicalOutputPaths()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("Models/Prop.OBJ", """
+        workspace.WriteAsset(
+            "Models/Prop.OBJ",
+            """
             o Wall Panel
             v 0 0 0
             v 1 0 0
             v 0 1 0
             f 1 2 3
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -363,12 +414,16 @@ public sealed class ModelProcessorTests {
         ModelPartAsset part = Assert.Single(model.Parts);
         Assert.Equal("wall-panel", part.Name);
         Assert.Equal("models/prop/wall-panel", part.MeshPath);
-        Assert.Equal("models/prop/wall-panel-mesh", ModelTestData.ReadMesh(archive, part.MeshPath).Payload);
+        Assert.Equal(
+            "models/prop/wall-panel-mesh",
+            ModelTestData.ReadMesh(archive, part.MeshPath).Payload
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmbeddedGltfBufferBakesOnePartWithItsNodeTransform() {
+    public void EmbeddedGltfBufferBakesOnePartWithItsNodeTransform()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/tri.gltf", ModelTestData.EmbeddedTriangleGltf());
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -400,11 +455,13 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GlbSourceIsReadFromItsBinaryChunk() {
+    public void GlbSourceIsReadFromItsBinaryChunk()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes(
             "models/tri.glb",
-            ModelTestData.BuildGlb(ModelTestData.GlbJson(), ModelTestData.TriangleBufferData()));
+            ModelTestData.BuildGlb(ModelTestData.GlbJson(), ModelTestData.TriangleBufferData())
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -419,7 +476,8 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NodeChainIsComposedIntoThePartTransform() {
+    public void NodeChainIsComposedIntoThePartTransform()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/chain.gltf", ModelTestData.NodeChainGltf());
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -436,12 +494,17 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ExternalGltfBufferIsATrackedInputAndAMissingBufferFails() {
+    public void ExternalGltfBufferIsATrackedInputAndAMissingBufferFails()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/external.gltf", ModelTestData.ExternalBufferGltf("triangle.bin"));
+        workspace.WriteAsset(
+            "models/external.gltf",
+            ModelTestData.ExternalBufferGltf("triangle.bin")
+        );
         string bufferPath = workspace.WriteAssetBytes(
             "models/triangle.bin",
-            ModelTestData.TriangleBufferData());
+            ModelTestData.TriangleBufferData()
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult first = workspace.Run(application);
@@ -449,8 +512,9 @@ public sealed class ModelProcessorTests {
         Assert.True(first.ExitCode == 0, first.Error + first.Output);
         BakeManifest? manifest = BakeManifestStore.TryRead(workspace.ManifestPath);
         Assert.NotNull(manifest);
-        BakeManifestSource source = Assert.Single(manifest.Packs[0].Sources,
-            source => source.Id == "models/external.gltf");
+        BakeManifestSource source = Assert.Single(manifest.Packs[0].Sources, source =>
+            source.Id == "models/external.gltf"
+        );
         Assert.Contains(source.Inputs, input => input.Path == "Assets/models/triangle.bin");
 
         File.Delete(bufferPath);
@@ -459,7 +523,8 @@ public sealed class ModelProcessorTests {
             "bake",
             "--output-root",
             workspace.OutputRoot,
-            "--force");
+            "--force"
+        );
 
         Assert.Equal(1, second.ExitCode);
         Assert.Contains("RB4009", second.Error);
@@ -468,7 +533,8 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultCollisionsBakeACollisionPayloadForEveryTrianglePart() {
+    public void DefaultCollisionsBakeACollisionPayloadForEveryTrianglePart()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/shapes.obj", ModelTestData.TWO_GROUP_OBJ);
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -480,7 +546,8 @@ public sealed class ModelProcessorTests {
         ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/shapes");
         Assert.Equal(2, model.Parts.Length);
         int[] expectedTriangles = [1, 2];
-        for (int index = 0; index < model.Parts.Length; index++) {
+        for (int index = 0; index < model.Parts.Length; index++)
+        {
             ModelPartAsset part = model.Parts[index];
             MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, part.MeshPath);
             Assert.Equal(part.MeshPath + "-collision", mesh.CollisionPayload);
@@ -489,10 +556,7 @@ public sealed class ModelProcessorTests {
             Assert.Equal(AssetEntryType.Raw, entry.Type);
             Assert.Equal(16u, entry.Alignment);
 
-            MeshCollisionData collision = ModelTestData.ReadCollision(
-                archive,
-                part.MeshPath,
-                mesh);
+            MeshCollisionData collision = ModelTestData.ReadCollision(archive, part.MeshPath, mesh);
             Assert.Equal(PrimitiveTopology.TriangleList, collision.Topology);
             Assert.Equal(expectedTriangles[index], collision.TriangleCount);
             Assert.Equal(expectedTriangles[index], collision.TriangleIds.Length);
@@ -501,13 +565,17 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CollisionsOptOutEmitsNoCollisionPayload() {
+    public void CollisionsOptOutEmitsNoCollisionPayload()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/plaincollision.obj", ModelTestData.SINGLE_TRIANGLE_OBJ);
-        workspace.WriteAsset("models/plaincollision.toml", """
+        workspace.WriteAsset(
+            "models/plaincollision.toml",
+            """
             [model]
             collisions = false
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -523,9 +591,12 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void APartNamedWithTheCollisionSuffixGetsAUniquePath() {
+    public void APartNamedWithTheCollisionSuffixGetsAUniquePath()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/reserved.obj", """
+        workspace.WriteAsset(
+            "models/reserved.obj",
+            """
             o foo
             v 0 0 0
             v 1 0 0
@@ -536,7 +607,8 @@ public sealed class ModelProcessorTests {
             v 3 0 0
             v 2 1 0
             f 4 5 6
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -550,7 +622,9 @@ public sealed class ModelProcessorTests {
 
         MeshAssetDescriptor first = ModelTestData.ReadMesh(archive, model.Parts[0].MeshPath);
         Assert.Equal("models/reserved/foo-collision", first.CollisionPayload);
-        Assert.True(archive.TryGetEntry("models/reserved/foo-collision", out PackEntry? collisionEntry));
+        Assert.True(
+            archive.TryGetEntry("models/reserved/foo-collision", out PackEntry? collisionEntry)
+        );
         Assert.NotNull(collisionEntry);
         Assert.Equal(AssetEntryType.Raw, collisionEntry.Type);
 
@@ -562,16 +636,20 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ADegenerateTrianglePartHasNoCollisionPayload() {
+    public void ADegenerateTrianglePartHasNoCollisionPayload()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("models/flat.obj", """
+        workspace.WriteAsset(
+            "models/flat.obj",
+            """
             o flat
             v 0 0 0
             v 1 0 0
             v 2 0 0
             vn 0 0 1
             f 1//1 2//1 3//1
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -587,7 +665,8 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ALinePartHasNoCollisionPayload() {
+    public void ALinePartHasNoCollisionPayload()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/line.gltf", ModelTestData.LineGltf());
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -606,14 +685,16 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ChangingTheCollisionsSidecarRebuildsTheCachedPart() {
+    public void ChangingTheCollisionsSidecarRebuildsTheCachedPart()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/toggled.obj", ModelTestData.SINGLE_TRIANGLE_OBJ);
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
         Assert.Equal(0, workspace.Run(application).ExitCode);
 
         string meshPath;
-        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath()))
+        {
             ModelAssetDescriptor model = ModelTestData.ReadModel(archive, "models/toggled");
             ModelPartAsset part = Assert.Single(model.Parts);
             meshPath = part.MeshPath;
@@ -621,27 +702,35 @@ public sealed class ModelProcessorTests {
             Assert.NotNull(mesh.CollisionPayload);
         }
 
-        workspace.WriteAsset("models/toggled.toml", """
+        workspace.WriteAsset(
+            "models/toggled.toml",
+            """
             [model]
             collisions = false
-            """);
+            """
+        );
         BakeRunResult optedOut = workspace.Run(application);
 
         Assert.True(optedOut.ExitCode == 0, optedOut.Error + optedOut.Output);
-        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath()))
+        {
             MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, meshPath);
             Assert.Null(mesh.CollisionPayload);
             Assert.False(archive.TryGetEntry(meshPath + "-collision", out _));
         }
 
-        workspace.WriteAsset("models/toggled.toml", """
+        workspace.WriteAsset(
+            "models/toggled.toml",
+            """
             [model]
             collisions = true
-            """);
+            """
+        );
         BakeRunResult optedIn = workspace.Run(application);
 
         Assert.True(optedIn.ExitCode == 0, optedIn.Error + optedIn.Output);
-        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath())) {
+        using (PackArchive archive = PackArchive.Open(workspace.GetPackPath()))
+        {
             MeshAssetDescriptor mesh = ModelTestData.ReadMesh(archive, meshPath);
             Assert.Equal(meshPath + "-collision", mesh.CollisionPayload);
         }
@@ -649,7 +738,8 @@ public sealed class ModelProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ALargeCollisionPayloadWarnsAboutTheSidecarOptOut() {
+    public void ALargeCollisionPayloadWarnsAboutTheSidecarOptOut()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAsset("models/big.obj", CreateGridObj(340));
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -669,80 +759,107 @@ public sealed class ModelProcessorTests {
         byte[] collisionPayload = ModelTestData.ReadPayload(archive, mesh.CollisionPayload!);
         Assert.True(
             collisionPayload.Length > ModelProcessor.COLLISION_PAYLOAD_WARNING_BYTES,
-            $"The collision payload is {collisionPayload.Length} bytes.");
+            $"The collision payload is {collisionPayload.Length} bytes."
+        );
         MeshCollisionData collision = ModelTestData.ReadCollision(archive, part.MeshPath, mesh);
         Assert.Equal(PrimitiveTopology.TriangleList, collision.Topology);
         Assert.Equal(2 * 340 * 340, collision.TriangleCount);
     }
 
-    private static string CreateGridObj(int size) {
+    private static string CreateGridObj(int size)
+    {
         var builder = new StringBuilder(16 * 1024 * 1024);
         builder.Append("o big\n");
-        for (int y = 0; y <= size; y++) {
-            for (int x = 0; x <= size; x++) {
+        for (int y = 0; y <= size; y++)
+        {
+            for (int x = 0; x <= size; x++)
+            {
                 builder.Append("v ").Append(x).Append(' ').Append(y).Append(" 0\n");
             }
         }
 
         builder.Append("vn 0 0 1\n");
-        for (int y = 0; y < size; y++) {
+        for (int y = 0; y < size; y++)
+        {
             int row = y * (size + 1);
             int nextRow = row + size + 1;
-            for (int x = 0; x < size; x++) {
+            for (int x = 0; x < size; x++)
+            {
                 int a = row + x + 1;
                 int b = a + 1;
                 int c = nextRow + x + 1;
                 int d = c + 1;
-                builder.Append("f ").Append(a).Append("//1 ").Append(b).Append("//1 ")
-                    .Append(c).Append("//1\n");
-                builder.Append("f ").Append(b).Append("//1 ").Append(d).Append("//1 ")
-                    .Append(c).Append("//1\n");
+                builder
+                    .Append("f ")
+                    .Append(a)
+                    .Append("//1 ")
+                    .Append(b)
+                    .Append("//1 ")
+                    .Append(c)
+                    .Append("//1\n");
+                builder
+                    .Append("f ")
+                    .Append(b)
+                    .Append("//1 ")
+                    .Append(d)
+                    .Append("//1 ")
+                    .Append(c)
+                    .Append("//1\n");
             }
         }
 
         return builder.ToString();
     }
 
-    private static void AssertIndices(uint[] expected, byte[] payload, int vertexCount) {
+    private static void AssertIndices(uint[] expected, byte[] payload, int vertexCount)
+    {
         var actual = new uint[expected.Length];
-        for (int index = 0; index < expected.Length; index++) {
+        for (int index = 0; index < expected.Length; index++)
+        {
             actual[index] = ModelTestData.IndexAt(payload, vertexCount, index);
         }
 
         Assert.Equal(expected, actual);
     }
 
-    private static void AssertBounds(float[] expected, float[] actual) {
+    private static void AssertBounds(float[] expected, float[] actual)
+    {
         Assert.Equal(expected.Length, actual.Length);
-        for (int index = 0; index < expected.Length; index++) {
+        for (int index = 0; index < expected.Length; index++)
+        {
             Assert.InRange(actual[index], expected[index] - TOLERANCE, expected[index] + TOLERANCE);
         }
     }
 
-    private static void AssertVector(Vector2 expected, Vector2 actual) {
+    private static void AssertVector(Vector2 expected, Vector2 actual)
+    {
         Assert.InRange(actual.X, expected.X - TOLERANCE, expected.X + TOLERANCE);
         Assert.InRange(actual.Y, expected.Y - TOLERANCE, expected.Y + TOLERANCE);
     }
 
-    private static void AssertVector(Vector3 expected, Vector3 actual) {
+    private static void AssertVector(Vector3 expected, Vector3 actual)
+    {
         Assert.InRange(actual.X, expected.X - TOLERANCE, expected.X + TOLERANCE);
         Assert.InRange(actual.Y, expected.Y - TOLERANCE, expected.Y + TOLERANCE);
         Assert.InRange(actual.Z, expected.Z - TOLERANCE, expected.Z + TOLERANCE);
     }
 
-    private static void AssertVector(Vector4 expected, Vector4 actual) {
+    private static void AssertVector(Vector4 expected, Vector4 actual)
+    {
         Assert.InRange(actual.X, expected.X - TOLERANCE, expected.X + TOLERANCE);
         Assert.InRange(actual.Y, expected.Y - TOLERANCE, expected.Y + TOLERANCE);
         Assert.InRange(actual.Z, expected.Z - TOLERANCE, expected.Z + TOLERANCE);
         Assert.InRange(actual.W, expected.W - TOLERANCE, expected.W + TOLERANCE);
     }
 
-    private static void AssertIdentityTransform(float[] actual)
-        => AssertTransform([0f, 0f, 0f, 0f, 0f, 0f, 1f, 1f, 1f, 1f], actual);
+    private static void AssertIdentityTransform(float[] actual) =>
+        AssertTransform([0f, 0f, 0f, 0f, 0f, 0f, 1f, 1f, 1f, 1f], actual);
 
-    private static void AssertTransform(float[] expected, float[] actual) {
+    private static void AssertTransform(float[] expected, float[] actual)
+    {
         Assert.Equal(expected.Length, actual.Length);
-        for (int index = 0; index < expected.Length; index++) {
+        for (int index = 0; index < expected.Length; index++)
+        {
             Assert.InRange(actual[index], expected[index] - TOLERANCE, expected[index] + TOLERANCE);
         }
     }

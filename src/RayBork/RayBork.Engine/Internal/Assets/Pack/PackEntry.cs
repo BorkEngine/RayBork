@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// only the instance that belongs to its own archive, so two archives can hold different entries at
 /// the same path.
 /// </remarks>
-internal sealed class PackEntry {
+internal sealed class PackEntry
+{
     /// <summary>
     /// Initializes an index entry from validated header and index fields.
     /// </summary>
@@ -28,7 +29,9 @@ internal sealed class PackEntry {
         uint storedLength,
         uint uncompressedSize,
         uint alignment,
-        ulong storedHash) {
+        ulong storedHash
+    )
+    {
         Path = path;
         Type = type;
         Flags = flags;

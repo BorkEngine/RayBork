@@ -6,12 +6,14 @@ using SDL3;
 namespace RayBork.Tests;
 
 [Collection("SDL")]
-public sealed class SdlInputTests {
+public sealed class SdlInputTests
+{
     private const uint GAMEPAD_INSTANCE_ID = 5;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KeyEventsTranslateDownRepeatAndUp() {
+    public void KeyEventsTranslateDownRepeatAndUp()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
 
         input.HandleEvent(KeyboardEvent(SDL.Scancode.W, down: true, repeat: false));
@@ -33,14 +35,18 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TextInputEventsAppendUtf16InOrder() {
+    public void TextInputEventsAppendUtf16InOrder()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         IntPtr first = Marshal.StringToCoTaskMemUTF8("hé");
         IntPtr second = Marshal.StringToCoTaskMemUTF8("llo");
-        try {
+        try
+        {
             input.HandleEvent(TextEvent(first));
             input.HandleEvent(TextEvent(second));
-        } finally {
+        }
+        finally
+        {
             Marshal.FreeCoTaskMem(first);
             Marshal.FreeCoTaskMem(second);
         }
@@ -50,19 +56,20 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MouseEventsTranslatePositionDeltaButtonsAndWheel() {
+    public void MouseEventsTranslatePositionDeltaButtonsAndWheel()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
 
         input.HandleEvent(MouseMotionEvent(10f, 20f, 1.5f, -2.5f));
         input.HandleEvent(MouseButtonEvent(1, down: true));
         input.HandleEvent(MouseButtonEvent(3, down: true));
-        input.HandleEvent(new SDL.Event {
-            Type = (uint)SDL.EventType.MouseWheel,
-            Wheel = new SDL.MouseWheelEvent {
-                Type = SDL.EventType.MouseWheel,
-                Y = 1.25f,
-            },
-        });
+        input.HandleEvent(
+            new SDL.Event
+            {
+                Type = (uint)SDL.EventType.MouseWheel,
+                Wheel = new SDL.MouseWheelEvent { Type = SDL.EventType.MouseWheel, Y = 1.25f },
+            }
+        );
 
         IInput snapshot = input.Capture();
         Assert.Equal(new Vector2(10f, 20f), snapshot.MousePosition);
@@ -76,7 +83,8 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MouseMotionScalesPositionAndDeltaToRenderPixels() {
+    public void MouseMotionScalesPositionAndDeltaToRenderPixels()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => new Vector2(1.5f, 2f));
 
         input.HandleEvent(MouseMotionEvent(10f, 20f, 1.5f, -2.5f));
@@ -96,18 +104,24 @@ public sealed class SdlInputTests {
     [InlineData(float.NaN, 100f)]
     [InlineData(float.PositiveInfinity, 100f)]
     [InlineData(100f, float.NaN)]
-    public void PixelScaleFallsBackToOneForInvalidRatios(float renderExtent, float windowExtent) {
-        Assert.Equal(Vector2.One, SdlInput.ComputePixelScale(renderExtent, renderExtent, windowExtent, windowExtent));
+    public void PixelScaleFallsBackToOneForInvalidRatios(float renderExtent, float windowExtent)
+    {
+        Assert.Equal(
+            Vector2.One,
+            SdlInput.ComputePixelScale(renderExtent, renderExtent, windowExtent, windowExtent)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PixelScaleUsesEachAxisRatioWithoutRounding() {
+    public void PixelScaleUsesEachAxisRatioWithoutRounding()
+    {
         Vector2 scale = SdlInput.ComputePixelScale(
             renderWidth: 1200f,
             renderHeight: 800f,
             windowWidth: 800f,
-            windowHeight: 600f);
+            windowHeight: 600f
+        );
 
         Assert.Equal(1.5f, scale.X);
         Assert.Equal(4f / 3f, scale.Y);
@@ -115,19 +129,22 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PixelScaleFallsBackPerAxis() {
+    public void PixelScaleFallsBackPerAxis()
+    {
         Vector2 scale = SdlInput.ComputePixelScale(
             renderWidth: 1600f,
             renderHeight: 0f,
             windowWidth: 800f,
-            windowHeight: 600f);
+            windowHeight: 600f
+        );
 
         Assert.Equal(new Vector2(2f, 1f), scale);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnsupportedMouseButtonsAreIgnored() {
+    public void UnsupportedMouseButtonsAreIgnored()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
 
         input.HandleEvent(MouseButtonEvent(6, down: true));
@@ -140,13 +157,15 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GamepadButtonAndAxisEventsTranslateToTheRawState() {
+    public void GamepadButtonAndAxisEventsTranslateToTheRawState()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         input.State.ConnectGamepad(
             GAMEPAD_INSTANCE_ID,
             "Pad",
             new bool[InputMappings.GAMEPAD_BUTTON_COUNT],
-            new float[InputMappings.GAMEPAD_AXIS_SLOT_COUNT]);
+            new float[InputMappings.GAMEPAD_AXIS_SLOT_COUNT]
+        );
 
         input.HandleEvent(GamepadButtonEvent((byte)SDL.GamepadButton.South, down: true));
         input.HandleEvent(GamepadAxisEvent(0, 32767));
@@ -166,24 +185,29 @@ public sealed class SdlInputTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnsupportedGamepadButtonsAreIgnored() {
+    public void UnsupportedGamepadButtonsAreIgnored()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         input.State.ConnectGamepad(
             GAMEPAD_INSTANCE_ID,
             "Pad",
             new bool[InputMappings.GAMEPAD_BUTTON_COUNT],
-            new float[InputMappings.GAMEPAD_AXIS_SLOT_COUNT]);
+            new float[InputMappings.GAMEPAD_AXIS_SLOT_COUNT]
+        );
 
         input.HandleEvent(GamepadButtonEvent((byte)SDL.GamepadButton.RightPaddle1, down: true));
         input.HandleEvent(GamepadButtonEvent((byte)SDL.GamepadButton.Misc6, down: true));
 
         IGamepad pad = Assert.Single(input.Capture().Gamepads);
-        Assert.All(Enum.GetValues<GamepadButton>(), button => Assert.False(pad.IsButtonDown(button)));
+        Assert.All(Enum.GetValues<GamepadButton>(), button =>
+            Assert.False(pad.IsButtonDown(button))
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CaptureClearsEdgesButKeepsLevels() {
+    public void CaptureClearsEdgesButKeepsLevels()
+    {
         SdlInput input = new(new TestGamepadVibrationSink(), static () => Vector2.One);
         input.HandleEvent(KeyboardEvent(SDL.Scancode.Space, down: true, repeat: false));
         input.HandleEvent(MouseButtonEvent(1, down: true));
@@ -197,11 +221,14 @@ public sealed class SdlInputTests {
         Assert.False(second.IsMouseButtonPressed(MouseButton.Left));
     }
 
-    private static SDL.Event KeyboardEvent(SDL.Scancode scancode, bool down, bool repeat) {
+    private static SDL.Event KeyboardEvent(SDL.Scancode scancode, bool down, bool repeat)
+    {
         SDL.EventType type = down ? SDL.EventType.KeyDown : SDL.EventType.KeyUp;
-        return new SDL.Event {
+        return new SDL.Event
+        {
             Type = (uint)type,
-            Key = new SDL.KeyboardEvent {
+            Key = new SDL.KeyboardEvent
+            {
                 Type = type,
                 Scancode = scancode,
                 Down = down,
@@ -210,20 +237,22 @@ public sealed class SdlInputTests {
         };
     }
 
-    private static SDL.Event TextEvent(IntPtr text) {
-        return new SDL.Event {
+    private static SDL.Event TextEvent(IntPtr text)
+    {
+        return new SDL.Event
+        {
             Type = (uint)SDL.EventType.TextInput,
-            Text = new SDL.TextInputEvent {
-                Type = SDL.EventType.TextInput,
-                Text = text,
-            },
+            Text = new SDL.TextInputEvent { Type = SDL.EventType.TextInput, Text = text },
         };
     }
 
-    private static SDL.Event MouseMotionEvent(float x, float y, float xRelative, float yRelative) {
-        return new SDL.Event {
+    private static SDL.Event MouseMotionEvent(float x, float y, float xRelative, float yRelative)
+    {
+        return new SDL.Event
+        {
             Type = (uint)SDL.EventType.MouseMotion,
-            Motion = new SDL.MouseMotionEvent {
+            Motion = new SDL.MouseMotionEvent
+            {
                 Type = SDL.EventType.MouseMotion,
                 X = x,
                 Y = y,
@@ -233,11 +262,14 @@ public sealed class SdlInputTests {
         };
     }
 
-    private static SDL.Event MouseButtonEvent(byte button, bool down) {
+    private static SDL.Event MouseButtonEvent(byte button, bool down)
+    {
         SDL.EventType type = down ? SDL.EventType.MouseButtonDown : SDL.EventType.MouseButtonUp;
-        return new SDL.Event {
+        return new SDL.Event
+        {
             Type = (uint)type,
-            Button = new SDL.MouseButtonEvent {
+            Button = new SDL.MouseButtonEvent
+            {
                 Type = type,
                 Button = button,
                 Down = down,
@@ -245,11 +277,14 @@ public sealed class SdlInputTests {
         };
     }
 
-    private static SDL.Event GamepadButtonEvent(byte button, bool down) {
+    private static SDL.Event GamepadButtonEvent(byte button, bool down)
+    {
         SDL.EventType type = down ? SDL.EventType.GamepadButtonDown : SDL.EventType.GamepadButtonUp;
-        return new SDL.Event {
+        return new SDL.Event
+        {
             Type = (uint)type,
-            GButton = new SDL.GamepadButtonEvent {
+            GButton = new SDL.GamepadButtonEvent
+            {
                 Type = type,
                 Which = GAMEPAD_INSTANCE_ID,
                 Button = button,
@@ -258,10 +293,13 @@ public sealed class SdlInputTests {
         };
     }
 
-    private static SDL.Event GamepadAxisEvent(byte axis, short value) {
-        return new SDL.Event {
+    private static SDL.Event GamepadAxisEvent(byte axis, short value)
+    {
+        return new SDL.Event
+        {
             Type = (uint)SDL.EventType.GamepadAxisMotion,
-            GAxis = new SDL.GamepadAxisEvent {
+            GAxis = new SDL.GamepadAxisEvent
+            {
                 Type = SDL.EventType.GamepadAxisMotion,
                 Which = GAMEPAD_INSTANCE_ID,
                 Axis = axis,

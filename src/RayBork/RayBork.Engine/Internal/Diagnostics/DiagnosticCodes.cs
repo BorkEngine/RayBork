@@ -3,7 +3,8 @@ namespace RayBork.Internal;
 /// <summary>
 /// Stable diagnostic codes for engine exceptions. Codes are stable within a major version.
 /// </summary>
-internal static class DiagnosticCodes {
+internal static class DiagnosticCodes
+{
     /// <summary>
     /// A game callback threw and the app stopped with <see cref="GameException"/>.
     /// </summary>

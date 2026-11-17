@@ -3,10 +3,12 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
-public sealed class VulkanDepthStateTests {
+public sealed class VulkanDepthStateTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstantsDescribeTheReverseZConvention() {
+    public void ConstantsDescribeTheReverseZConvention()
+    {
         Assert.Equal(0f, VulkanDepthState.CLEAR_DEPTH);
         Assert.Equal(CompareOp.GreaterOrEqual, VulkanDepthState.COMPARE_OPERATION);
         Assert.True(VulkanDepthState.DEPTH_TEST_ENABLE);
@@ -17,7 +19,8 @@ public sealed class VulkanDepthStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PipelineStateEnablesReverseZDepthAndDisablesStencil() {
+    public void PipelineStateEnablesReverseZDepthAndDisablesStencil()
+    {
         PipelineDepthStencilStateCreateInfo state = VulkanDepthState.CreatePipelineState();
 
         Assert.Equal(StructureType.PipelineDepthStencilStateCreateInfo, state.SType);
@@ -32,14 +35,16 @@ public sealed class VulkanDepthStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PipelineStateLeavesTheStencilStatesAtTheirDefaults() {
+    public void PipelineStateLeavesTheStencilStatesAtTheirDefaults()
+    {
         PipelineDepthStencilStateCreateInfo state = VulkanDepthState.CreatePipelineState();
 
         AssertStencilDisabled(state.Front);
         AssertStencilDisabled(state.Back);
     }
 
-    private static void AssertStencilDisabled(StencilOpState stencil) {
+    private static void AssertStencilDisabled(StencilOpState stencil)
+    {
         Assert.Equal(default, stencil.FailOp);
         Assert.Equal(default, stencil.PassOp);
         Assert.Equal(default, stencil.DepthFailOp);

@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// descriptor limits: 16384 instances and 1 MiB of instance-record bytes. A single instance larger than
 /// the byte limit is still submitted as its own batch, because splitting cannot make it smaller.
 /// </remarks>
-internal sealed class BatchPlanningOptions {
+internal sealed class BatchPlanningOptions
+{
     /// <summary>The default maximum number of instances in one batch.</summary>
     internal const int DEFAULT_MAX_INSTANCES_PER_BATCH = 16384;
 
@@ -19,8 +20,7 @@ internal sealed class BatchPlanningOptions {
     /// Initializes the default options.
     /// </summary>
     internal BatchPlanningOptions()
-        : this(DEFAULT_MAX_INSTANCES_PER_BATCH, DEFAULT_MAX_INSTANCE_BYTES_PER_BATCH) {
-    }
+        : this(DEFAULT_MAX_INSTANCES_PER_BATCH, DEFAULT_MAX_INSTANCE_BYTES_PER_BATCH) { }
 
     /// <summary>
     /// Initializes custom split limits.
@@ -31,7 +31,8 @@ internal sealed class BatchPlanningOptions {
     /// positive.
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">A limit is zero or negative.</exception>
-    internal BatchPlanningOptions(int maxInstancesPerBatch, int maxInstanceBytesPerBatch) {
+    internal BatchPlanningOptions(int maxInstancesPerBatch, int maxInstanceBytesPerBatch)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxInstancesPerBatch);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxInstanceBytesPerBatch);
         MaxInstancesPerBatch = maxInstancesPerBatch;

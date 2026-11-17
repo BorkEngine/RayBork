@@ -9,7 +9,8 @@ namespace RayBork.Tests.Graphics.Assets;
 /// The texture payloads come from <see cref="Ktx2TestWriter"/>; the shader modules are the committed
 /// present shaders, so the tests never need a shader compiler or a golden image.
 /// </remarks>
-internal static class AssetUploadTestData {
+internal static class AssetUploadTestData
+{
     internal const string TEXTURE_PATH = "textures/test";
     internal const string MESH_PATH = "meshes/triangle";
     internal const string SHADER_PATH = "shaders/test";
@@ -24,9 +25,12 @@ internal static class AssetUploadTestData {
         TextureFilter filter = TextureFilter.Linear,
         TextureWrap wrap = TextureWrap.Repeat,
         float maxAnisotropy = 1f,
-        string path = TEXTURE_PATH) {
+        string path = TEXTURE_PATH
+    )
+    {
         byte[] payload = Ktx2TestWriter.Write(format, width, height);
-        TextureAssetDescriptor descriptor = new() {
+        TextureAssetDescriptor descriptor = new()
+        {
             Payload = path + "-ktx2",
             Width = (uint)width,
             Height = (uint)height,
@@ -53,14 +57,22 @@ internal static class AssetUploadTestData {
         int vertexCount = 3,
         int indexCount = 3,
         int lengthDelta = 0,
-        string path = MESH_PATH) {
-        int length = checked((vertexCount * MeshAssetDescriptor.VERTEX_STRIDE) + (indexCount * sizeof(uint)) + lengthDelta);
+        string path = MESH_PATH
+    )
+    {
+        int length = checked(
+            (vertexCount * MeshAssetDescriptor.VERTEX_STRIDE)
+            + (indexCount * sizeof(uint))
+            + lengthDelta
+        );
         byte[] payload = new byte[length];
-        for (int index = 0; index < payload.Length; index++) {
+        for (int index = 0; index < payload.Length; index++)
+        {
             payload[index] = (byte)(index * 7);
         }
 
-        MeshAssetDescriptor descriptor = new() {
+        MeshAssetDescriptor descriptor = new()
+        {
             Payload = path + "-mesh",
             VertexCount = (uint)vertexCount,
             IndexCount = (uint)indexCount,
@@ -76,8 +88,11 @@ internal static class AssetUploadTestData {
     internal static ShaderGpuUpload Shader(
         ReadOnlyMemory<byte>? vertexSpirv = null,
         ReadOnlyMemory<byte>? fragmentSpirv = null,
-        string path = SHADER_PATH) {
-        ShaderAssetDescriptor descriptor = new() {
+        string path = SHADER_PATH
+    )
+    {
+        ShaderAssetDescriptor descriptor = new()
+        {
             AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = path + "-vert",
             FragmentPayload = path + "-frag",
@@ -92,6 +107,7 @@ internal static class AssetUploadTestData {
             path,
             descriptor,
             vertexSpirv ?? ShaderAssets.PresentVertex.ToArray(),
-            fragmentSpirv ?? ShaderAssets.PresentFragment.ToArray());
+            fragmentSpirv ?? ShaderAssets.PresentFragment.ToArray()
+        );
     }
 }

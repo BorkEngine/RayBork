@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// operations, the device creates one queue for both; otherwise it creates one queue in the lowest
 /// graphics family and one in the lowest presentation family.
 /// </remarks>
-internal static class VulkanQueueFamilySelection {
+internal static class VulkanQueueFamilySelection
+{
     /// <summary>
     /// Selects the graphics and presentation queue-family indices.
     /// </summary>
@@ -18,34 +19,47 @@ internal static class VulkanQueueFamilySelection {
     /// No family supports graphics or presentation. The message names the missing capability; the
     /// diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static (uint Graphics, uint Present) Select(IReadOnlyList<VulkanQueueFamilyInfo> families) {
+    internal static (uint Graphics, uint Present) Select(
+        IReadOnlyList<VulkanQueueFamilyInfo> families
+    )
+    {
         ArgumentNullException.ThrowIfNull(families);
 
         VulkanQueueFamilyInfo? combined = null;
         VulkanQueueFamilyInfo? graphics = null;
         VulkanQueueFamilyInfo? present = null;
-        foreach (VulkanQueueFamilyInfo family in families) {
-            if (family.SupportsGraphics && family.SupportsPresent) {
-                if (combined is null || family.Index < combined.Value.Index) {
+        foreach (VulkanQueueFamilyInfo family in families)
+        {
+            if (family.SupportsGraphics && family.SupportsPresent)
+            {
+                if (combined is null || family.Index < combined.Value.Index)
+                {
                     combined = family;
                 }
             }
 
-            if (family.SupportsGraphics && (graphics is null || family.Index < graphics.Value.Index)) {
+            if (
+                family.SupportsGraphics && (graphics is null || family.Index < graphics.Value.Index)
+            )
+            {
                 graphics = family;
             }
 
-            if (family.SupportsPresent && (present is null || family.Index < present.Value.Index)) {
+            if (family.SupportsPresent && (present is null || family.Index < present.Value.Index))
+            {
                 present = family;
             }
         }
 
-        if (combined is not null) {
+        if (combined is not null)
+        {
             return (combined.Value.Index, combined.Value.Index);
         }
 
-        if (graphics is null || present is null) {
-            string missing = (graphics is null, present is null) switch {
+        if (graphics is null || present is null)
+        {
+            string missing = (graphics is null, present is null) switch
+            {
                 (true, true) => "graphics and presentation queue families",
                 (true, false) => "graphics queue family",
                 _ => "presentation queue family",
@@ -53,7 +67,8 @@ internal static class VulkanQueueFamilySelection {
             throw new GraphicsException(
                 $"The Vulkan device has no {missing} for the window surface.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return (graphics.Value.Index, present.Value.Index);

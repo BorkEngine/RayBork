@@ -2,12 +2,14 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class InputStateTests {
+public sealed class InputStateTests
+{
     private const uint GAMEPAD_INSTANCE_ID = 42;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KeyPressAndReleaseProduceOneTickEdges() {
+    public void KeyPressAndReleaseProduceOneTickEdges()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleKeyDown(Key.W, repeat: false);
 
@@ -34,7 +36,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RepeatEventsDoNotProduceFirstPressEdges() {
+    public void RepeatEventsDoNotProduceFirstPressEdges()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleKeyDown(Key.A, repeat: false);
         state.Capture();
@@ -52,7 +55,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TextInputAppendsInEventOrderAndClearsEachTick() {
+    public void TextInputAppendsInEventOrderAndClearsEachTick()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.AppendText("Ray");
         state.AppendText("Bork");
@@ -63,7 +67,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MouseMotionSetsPositionAndAccumulatesRelativeDelta() {
+    public void MouseMotionSetsPositionAndAccumulatesRelativeDelta()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleMouseMotion(10f, 20f, 1.5f, -2.5f);
         state.HandleMouseMotion(12f, 18f, 0.5f, 0.5f);
@@ -79,7 +84,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MouseWheelSumsAndResetsEachTick() {
+    public void MouseWheelSumsAndResetsEachTick()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleMouseWheel(1.25f);
         state.HandleMouseWheel(-0.25f);
@@ -90,7 +96,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MouseButtonEdgesAndLevelsFollowTheButtonState() {
+    public void MouseButtonEdgesAndLevelsFollowTheButtonState()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleMouseButton(MouseButton.Right, down: true);
 
@@ -109,7 +116,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FocusLossClearsKeyboardAndMouseLevelsAndPendingEdges() {
+    public void FocusLossClearsKeyboardAndMouseLevelsAndPendingEdges()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleKeyDown(Key.Space, repeat: false);
         state.HandleMouseButton(MouseButton.Left, down: true);
@@ -130,7 +138,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidKeyboardAndMouseEnumsThrow() {
+    public void InvalidKeyboardAndMouseEnumsThrow()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         InputSnapshot snapshot = state.Capture();
 
@@ -139,15 +148,22 @@ public sealed class InputStateTests {
         Assert.Throws<ArgumentOutOfRangeException>(() => snapshot.IsKeyPressedRepeat((Key)512));
         Assert.Throws<ArgumentOutOfRangeException>(() => snapshot.IsKeyReleased((Key)512));
         Assert.Throws<ArgumentOutOfRangeException>(() => snapshot.IsKeyUp((Key)512));
-        Assert.Throws<ArgumentOutOfRangeException>(() => snapshot.IsMouseButtonDown((MouseButton)5));
-        Assert.Throws<ArgumentOutOfRangeException>(() => snapshot.IsMouseButtonPressed((MouseButton)(-1)));
-        Assert.Throws<ArgumentOutOfRangeException>(() => snapshot.IsMouseButtonReleased((MouseButton)5));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            snapshot.IsMouseButtonDown((MouseButton)5)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            snapshot.IsMouseButtonPressed((MouseButton)(-1))
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            snapshot.IsMouseButtonReleased((MouseButton)5)
+        );
         Assert.Throws<ArgumentOutOfRangeException>(() => snapshot.IsMouseButtonUp((MouseButton)5));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GamepadButtonsReportOneTickEdges() {
+    public void GamepadButtonsReportOneTickEdges()
+    {
         InputState state = CreateStateWithGamepad();
 
         state.HandleGamepadButton(GAMEPAD_INSTANCE_ID, GamepadButton.South, down: true);
@@ -169,7 +185,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InitialGamepadPollDoesNotReportPressedEdges() {
+    public void InitialGamepadPollDoesNotReportPressedEdges()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         bool[] buttons = new bool[InputMappings.GAMEPAD_BUTTON_COUNT];
         buttons[(int)GamepadButton.North] = true;
@@ -187,7 +204,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisconnectedGamepadKeepsItsStableHandle() {
+    public void DisconnectedGamepadKeepsItsStableHandle()
+    {
         InputState state = CreateStateWithGamepad();
         InputSnapshot first = state.Capture();
         IGamepad handle = Assert.Single(first.Gamepads);
@@ -212,7 +230,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GamepadIndicesFollowConnectedOrderAcrossHotplug() {
+    public void GamepadIndicesFollowConnectedOrderAcrossHotplug()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         bool[] buttons = new bool[InputMappings.GAMEPAD_BUTTON_COUNT];
         float[] axes = new float[InputMappings.GAMEPAD_AXIS_SLOT_COUNT];
@@ -241,7 +260,8 @@ public sealed class InputStateTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GamepadAxesAndTriggersClampAndValidate() {
+    public void GamepadAxesAndTriggersClampAndValidate()
+    {
         InputState state = CreateStateWithGamepad();
         state.HandleGamepadStickAxis(GAMEPAD_INSTANCE_ID, GamepadAxis.LeftY, 5f);
         state.HandleGamepadStickAxis(GAMEPAD_INSTANCE_ID, GamepadAxis.RightY, -5f);
@@ -256,12 +276,15 @@ public sealed class InputStateTests {
         Assert.Throws<ArgumentOutOfRangeException>(() => pad.GetAxis((GamepadAxis)4));
         Assert.Throws<ArgumentOutOfRangeException>(() => pad.GetTrigger((GamepadTrigger)2));
         Assert.Throws<ArgumentOutOfRangeException>(() => pad.IsButtonDown((GamepadButton)16));
-        Assert.Throws<ArgumentOutOfRangeException>(() => state.HandleGamepadButton(GAMEPAD_INSTANCE_ID, (GamepadButton)16, true));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            state.HandleGamepadButton(GAMEPAD_INSTANCE_ID, (GamepadButton)16, true)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GamepadEventsForUnknownDevicesAreIgnored() {
+    public void GamepadEventsForUnknownDevicesAreIgnored()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         state.HandleGamepadButton(GAMEPAD_INSTANCE_ID, GamepadButton.South, down: true);
         state.HandleGamepadStickAxis(GAMEPAD_INSTANCE_ID, GamepadAxis.LeftX, 1f);
@@ -269,7 +292,8 @@ public sealed class InputStateTests {
         Assert.Empty(state.Capture().Gamepads);
     }
 
-    private static InputState CreateStateWithGamepad() {
+    private static InputState CreateStateWithGamepad()
+    {
         InputState state = new(new TestGamepadVibrationSink());
         bool[] buttons = new bool[InputMappings.GAMEPAD_BUTTON_COUNT];
         float[] axes = new float[InputMappings.GAMEPAD_AXIS_SLOT_COUNT];

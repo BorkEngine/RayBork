@@ -12,16 +12,21 @@ namespace RayBork.Internal;
 /// transfer-source usage is still usable for presentation, but the diagnostic readback is unavailable
 /// and the GPU tests skip the probe with that reason.
 /// </remarks>
-internal static class VulkanSwapchainImageUsage {
+internal static class VulkanSwapchainImageUsage
+{
     /// <summary>
     /// Selects the requested usage flags and reports whether presented-pixel readback is available.
     /// </summary>
     /// <param name="supported">The surface's supported usage flags.</param>
     /// <returns>The usage flags to request and whether transfer-source readback is available.</returns>
-    internal static (ImageUsageFlags Usage, bool SupportsPresentReadback) Select(ImageUsageFlags supported) {
+    internal static (ImageUsageFlags Usage, bool SupportsPresentReadback) Select(
+        ImageUsageFlags supported
+    )
+    {
         bool supportsReadback = (supported & ImageUsageFlags.TransferSrcBit) != 0;
         ImageUsageFlags usage = ImageUsageFlags.ColorAttachmentBit;
-        if (supportsReadback) {
+        if (supportsReadback)
+        {
             usage |= ImageUsageFlags.TransferSrcBit;
         }
 

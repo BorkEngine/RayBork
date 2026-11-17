@@ -19,14 +19,16 @@ namespace RayBork.Bake;
 /// overlays whose entries shadow earlier packs at runtime.
 /// </para>
 /// </remarks>
-public sealed class BakeApplicationBuilder {
+public sealed class BakeApplicationBuilder
+{
     private readonly BakeProjectDefinition _definition = new();
 
     /// <summary>Sets the base for relative roots, pack paths, and diagnostic display paths.</summary>
     /// <param name="path">The project root directory.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is empty or whitespace.</exception>
-    public BakeApplicationBuilder WithProjectRoot(string path) {
+    public BakeApplicationBuilder WithProjectRoot(string path)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _definition.SetProjectRoot(path);
         return this;
@@ -37,7 +39,8 @@ public sealed class BakeApplicationBuilder {
     /// <param name="root">The project-root-relative asset root, for example <c>Assets</c>.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentException">An argument is empty or whitespace.</exception>
-    public BakeApplicationBuilder WithPack(string packPath, string root) {
+    public BakeApplicationBuilder WithPack(string packPath, string root)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(packPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
         _definition.AddPack(packPath, root);
@@ -53,7 +56,8 @@ public sealed class BakeApplicationBuilder {
     /// type, so the application still calls <see cref="RegisterAsset{T}()"/> for its own data types.
     /// </remarks>
     /// <returns>This builder.</returns>
-    public BakeApplicationBuilder UseDefaultAssets() {
+    public BakeApplicationBuilder UseDefaultAssets()
+    {
         _definition.UseDefaultAssets();
         return this;
     }
@@ -62,7 +66,8 @@ public sealed class BakeApplicationBuilder {
     /// <typeparam name="T">The type, which must carry a compiled <c>[GenerateShape]</c>.</typeparam>
     /// <returns>This builder.</returns>
     public BakeApplicationBuilder RegisterAsset<T>()
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         _definition.AddAsset<T>();
         return this;
     }
@@ -73,7 +78,8 @@ public sealed class BakeApplicationBuilder {
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="validator"/> is null.</exception>
     public BakeApplicationBuilder RegisterAsset<T>(IAssetValidator<T> validator)
-        where T : IShapeable<T> {
+        where T : IShapeable<T>
+    {
         ArgumentNullException.ThrowIfNull(validator);
         _definition.AddAssetValidator(validator);
         return this;
@@ -84,7 +90,8 @@ public sealed class BakeApplicationBuilder {
     /// model, shader, and font processor task extends the same built-in registration point.
     /// </summary>
     /// <returns>This builder.</returns>
-    public BakeApplicationBuilder UseDefaultProcessors() {
+    public BakeApplicationBuilder UseDefaultProcessors()
+    {
         _definition.RequestDefaultProcessors();
         return this;
     }
@@ -93,7 +100,8 @@ public sealed class BakeApplicationBuilder {
     /// <param name="filter">The default filter.</param>
     /// <param name="wrap">The default wrap mode.</param>
     /// <returns>This builder.</returns>
-    public BakeApplicationBuilder WithTextureDefaults(TextureFilter filter, TextureWrap wrap) {
+    public BakeApplicationBuilder WithTextureDefaults(TextureFilter filter, TextureWrap wrap)
+    {
         _definition.SetTextureDefaults(filter, wrap);
         return this;
     }
@@ -106,7 +114,8 @@ public sealed class BakeApplicationBuilder {
     /// <param name="processor">The processor instance.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="processor"/> is null.</exception>
-    public BakeApplicationBuilder AddProcessor(IAssetProcessor processor) {
+    public BakeApplicationBuilder AddProcessor(IAssetProcessor processor)
+    {
         ArgumentNullException.ThrowIfNull(processor);
         _definition.AddProcessor(processor);
         return this;
@@ -119,7 +128,8 @@ public sealed class BakeApplicationBuilder {
     /// <summary>Overrides the tool version for incremental invalidation tests.</summary>
     /// <param name="version">The version to record and compare.</param>
     /// <returns>This builder.</returns>
-    internal BakeApplicationBuilder WithToolVersionOverride(string version) {
+    internal BakeApplicationBuilder WithToolVersionOverride(string version)
+    {
         _definition.SetToolVersionOverride(version);
         return this;
     }

@@ -21,9 +21,11 @@ namespace RayBork.Internal;
 /// render-thread only.
 /// </para>
 /// </remarks>
-internal static class VulkanDepthStencilResolve {
+internal static class VulkanDepthStencilResolve
+{
     /// <summary>The property the renderer reads to select the depth resolve mode.</summary>
-    internal const string PROPERTY_NAME = "VkPhysicalDeviceDepthStencilResolveProperties.supportedDepthResolveModes";
+    internal const string PROPERTY_NAME =
+        "VkPhysicalDeviceDepthStencilResolveProperties.supportedDepthResolveModes";
 
     /// <summary>The depth resolve mode every conformant Vulkan 1.2 device advertises and the renderer requires.</summary>
     internal const string MODE_NAME = "VK_RESOLVE_MODE_SAMPLE_ZERO_BIT";
@@ -37,13 +39,17 @@ internal static class VulkanDepthStencilResolve {
     /// <exception cref="ArgumentNullException"><paramref name="vulkan"/> is <c>null</c>.</exception>
     internal static unsafe PhysicalDeviceDepthStencilResolveProperties Query(
         Vk vulkan,
-        PhysicalDevice physicalDevice) {
+        PhysicalDevice physicalDevice
+    )
+    {
         ArgumentNullException.ThrowIfNull(vulkan);
 
-        PhysicalDeviceDepthStencilResolveProperties properties = new() {
+        PhysicalDeviceDepthStencilResolveProperties properties = new()
+        {
             SType = StructureType.PhysicalDeviceDepthStencilResolveProperties,
         };
-        PhysicalDeviceProperties2 properties2 = new() {
+        PhysicalDeviceProperties2 properties2 = new()
+        {
             SType = StructureType.PhysicalDeviceProperties2,
             PNext = &properties,
         };
@@ -69,25 +75,31 @@ internal static class VulkanDepthStencilResolve {
     /// </summary>
     /// <param name="mode">The resolve-mode mask.</param>
     /// <returns>The Vulkan mode names, or <c>VK_RESOLVE_MODE_NONE</c>.</returns>
-    internal static string Describe(ResolveModeFlags mode) {
-        if (mode == ResolveModeFlags.None) {
+    internal static string Describe(ResolveModeFlags mode)
+    {
+        if (mode == ResolveModeFlags.None)
+        {
             return "VK_RESOLVE_MODE_NONE";
         }
 
         List<string> names = [];
-        if ((mode & ResolveModeFlags.SampleZeroBit) != 0) {
+        if ((mode & ResolveModeFlags.SampleZeroBit) != 0)
+        {
             names.Add("VK_RESOLVE_MODE_SAMPLE_ZERO_BIT");
         }
 
-        if ((mode & ResolveModeFlags.AverageBit) != 0) {
+        if ((mode & ResolveModeFlags.AverageBit) != 0)
+        {
             names.Add("VK_RESOLVE_MODE_AVERAGE_BIT");
         }
 
-        if ((mode & ResolveModeFlags.MinBit) != 0) {
+        if ((mode & ResolveModeFlags.MinBit) != 0)
+        {
             names.Add("VK_RESOLVE_MODE_MIN_BIT");
         }
 
-        if ((mode & ResolveModeFlags.MaxBit) != 0) {
+        if ((mode & ResolveModeFlags.MaxBit) != 0)
+        {
             names.Add("VK_RESOLVE_MODE_MAX_BIT");
         }
 
@@ -100,7 +112,10 @@ internal static class VulkanDepthStencilResolve {
     /// <param name="deviceName">The device name reported by Vulkan.</param>
     /// <param name="supported">The modes the device advertises for depth.</param>
     /// <returns>The diagnostic message.</returns>
-    internal static string CreateMissingModeMessage(string deviceName, ResolveModeFlags supported) =>
+    internal static string CreateMissingModeMessage(
+        string deviceName,
+        ResolveModeFlags supported
+    ) =>
         $"The Vulkan device '{deviceName}' supports no usable depth/stencil resolve mode: "
         + $"{PROPERTY_NAME} is {Describe(supported)} (0x{(uint)supported:X8}). A multisampled "
         + $"depth-bearing render target needs {MODE_NAME}; the renderer does not create an "

@@ -2,25 +2,31 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class FakeVulkanSurfaceTests {
+public sealed class FakeVulkanSurfaceTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DefaultExtensionsMatchTheHostPlatform() {
+    public void DefaultExtensionsMatchTheHostPlatform()
+    {
         FakeEnginePlatform platform = CreateInitializedPlatform();
 
         IReadOnlyList<string> extensions = platform.GetVulkanInstanceExtensions();
 
         Assert.Contains("VK_KHR_surface", extensions);
-        if (OperatingSystem.IsWindows()) {
+        if (OperatingSystem.IsWindows())
+        {
             Assert.Contains("VK_KHR_win32_surface", extensions);
-        } else {
+        }
+        else
+        {
             Assert.Contains("VK_KHR_xlib_surface", extensions);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConfiguredExtensionsAreReturned() {
+    public void ConfiguredExtensionsAreReturned()
+    {
         FakeEnginePlatform platform = CreateInitializedPlatform();
         string[] configured = ["VK_KHR_surface", "VK_KHR_wayland_surface"];
         platform.VulkanInstanceExtensions = configured;
@@ -30,7 +36,8 @@ public sealed class FakeVulkanSurfaceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateVulkanSurfaceReturnsTheConfiguredHandleAndRecordsTheCall() {
+    public void CreateVulkanSurfaceReturnsTheConfiguredHandleAndRecordsTheCall()
+    {
         FakeEnginePlatform platform = CreateInitializedPlatform();
         IntPtr instance = new(0xABC);
         IntPtr configuredSurface = new(0x1234);
@@ -46,12 +53,15 @@ public sealed class FakeVulkanSurfaceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateVulkanSurfaceThrowsTheConfiguredException() {
+    public void CreateVulkanSurfaceThrowsTheConfiguredException()
+    {
         FakeEnginePlatform platform = CreateInitializedPlatform();
         InvalidOperationException failure = new("Surface creation failed.");
         platform.SurfaceCreationException = failure;
 
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() => platform.CreateVulkanSurface(IntPtr.Zero));
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            platform.CreateVulkanSurface(IntPtr.Zero)
+        );
 
         Assert.Same(failure, thrown);
         Assert.Equal(1, platform.CreateSurfaceCallCount);
@@ -60,7 +70,8 @@ public sealed class FakeVulkanSurfaceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DestroyVulkanSurfaceRecordsTheHandle() {
+    public void DestroyVulkanSurfaceRecordsTheHandle()
+    {
         FakeEnginePlatform platform = CreateInitializedPlatform();
         IntPtr surface = new(0x4321);
 
@@ -73,7 +84,8 @@ public sealed class FakeVulkanSurfaceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SurfaceRequestsBeforeInitializeThrow() {
+    public void SurfaceRequestsBeforeInitializeThrow()
+    {
         FakeEnginePlatform platform = new();
 
         Assert.Throws<InvalidOperationException>(() => platform.CreateVulkanSurface(IntPtr.Zero));
@@ -83,7 +95,8 @@ public sealed class FakeVulkanSurfaceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SurfaceRequestsAfterDisposeThrow() {
+    public void SurfaceRequestsAfterDisposeThrow()
+    {
         FakeEnginePlatform platform = CreateInitializedPlatform();
         platform.Dispose();
 
@@ -92,17 +105,20 @@ public sealed class FakeVulkanSurfaceTests {
         Assert.Equal(0, platform.CreateSurfaceCallCount);
     }
 
-    private static FakeEnginePlatform CreateInitializedPlatform() {
+    private static FakeEnginePlatform CreateInitializedPlatform()
+    {
         FakeEnginePlatform platform = new();
         platform.Initialize(
-            new PlatformOptions {
+            new PlatformOptions
+            {
                 Title = "RayBork Fake",
                 Width = 1280,
                 Height = 720,
                 Resizable = true,
                 WindowState = WindowState.Normal,
             },
-            () => { });
+            () => { }
+        );
         return platform;
     }
 }

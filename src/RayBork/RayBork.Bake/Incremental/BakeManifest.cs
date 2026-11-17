@@ -6,13 +6,13 @@ using RayBork.Bake.Baking;
 namespace RayBork.Bake.Incremental;
 
 /// <summary>The schema-1 incremental manifest data model.</summary>
-internal sealed class BakeManifest {
+internal sealed class BakeManifest
+{
     /// <summary>The manifest schema written and read by this tool.</summary>
     internal const int CURRENT_VERSION = 1;
 
     /// <summary>Initializes an empty manifest for JSON deserialization.</summary>
-    public BakeManifest() {
-    }
+    public BakeManifest() { }
 
     /// <summary>Gets or sets the schema version.</summary>
     public int Schema { get; set; } = CURRENT_VERSION;
@@ -31,10 +31,10 @@ internal sealed class BakeManifest {
 }
 
 /// <summary>One pack's incremental state.</summary>
-internal sealed class BakeManifestPack {
+internal sealed class BakeManifestPack
+{
     /// <summary>Initializes an empty pack record for JSON deserialization.</summary>
-    public BakeManifestPack() {
-    }
+    public BakeManifestPack() { }
 
     /// <summary>Gets or sets the output-root-relative pack path.</summary>
     public string PackPath { get; set; } = string.Empty;
@@ -53,10 +53,10 @@ internal sealed class BakeManifestPack {
 }
 
 /// <summary>One source's incremental state.</summary>
-internal sealed class BakeManifestSource {
+internal sealed class BakeManifestSource
+{
     /// <summary>Initializes an empty source record for JSON deserialization.</summary>
-    public BakeManifestSource() {
-    }
+    public BakeManifestSource() { }
 
     /// <summary>Gets or sets the stable source identifier.</summary>
     public string Id { get; set; } = string.Empty;
@@ -75,10 +75,10 @@ internal sealed class BakeManifestSource {
 }
 
 /// <summary>One tracked input path and content hash.</summary>
-internal sealed class BakeManifestInput {
+internal sealed class BakeManifestInput
+{
     /// <summary>Initializes an empty input record for JSON deserialization.</summary>
-    public BakeManifestInput() {
-    }
+    public BakeManifestInput() { }
 
     /// <summary>Gets or sets the project-relative path with <c>/</c> separators.</summary>
     public string Path { get; set; } = string.Empty;
@@ -88,10 +88,10 @@ internal sealed class BakeManifestInput {
 }
 
 /// <summary>One output entry's path, type, alignment, and payload hash.</summary>
-internal sealed class BakeManifestOutput {
+internal sealed class BakeManifestOutput
+{
     /// <summary>Initializes an empty output record for JSON deserialization.</summary>
-    public BakeManifestOutput() {
-    }
+    public BakeManifestOutput() { }
 
     /// <summary>Gets or sets the canonical path.</summary>
     public string Path { get; set; } = string.Empty;
@@ -107,29 +107,41 @@ internal sealed class BakeManifestOutput {
 }
 
 /// <summary>Computes the pack logical-layout hash.</summary>
-internal static class BakeLayoutHash {
+internal static class BakeLayoutHash
+{
     /// <summary>
     /// Hashes the ordinal entry set by path, type, alignment, and payload hash. Compression and
     /// physical offsets are deliberately excluded.
     /// </summary>
     /// <param name="entries">The entries in any order.</param>
     /// <returns>The 64-character digest.</returns>
-    internal static string Compute(IReadOnlyList<BakedEntry> entries) {
+    internal static string Compute(IReadOnlyList<BakedEntry> entries)
+    {
         ArgumentNullException.ThrowIfNull(entries);
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         Span<byte> length = stackalloc byte[sizeof(long)];
-        foreach (BakedEntry entry in entries.OrderBy(entry => entry.Path, StringComparer.Ordinal)) {
+        foreach (BakedEntry entry in entries.OrderBy(entry => entry.Path, StringComparer.Ordinal))
+        {
             Append(hash, length, entry.Path);
-            Append(hash, length, ((ushort)entry.Type).ToString(System.Globalization.CultureInfo.InvariantCulture));
-            Append(hash, length, entry.Alignment.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            Append(
+                hash,
+                length,
+                ((ushort)entry.Type).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            );
+            Append(
+                hash,
+                length,
+                entry.Alignment.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            );
             Append(hash, length, BakeHash.HashBytes(entry.Payload));
         }
 
         return Convert.ToHexString(hash.GetHashAndReset());
     }
 
-    private static void Append(IncrementalHash hash, Span<byte> length, string value) {
+    private static void Append(IncrementalHash hash, Span<byte> length, string value)
+    {
         byte[] bytes = Encoding.UTF8.GetBytes(value);
         BinaryPrimitives.WriteInt64LittleEndian(length, bytes.Length);
         hash.AppendData(length);

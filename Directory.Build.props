@@ -1,5 +1,4 @@
 <Project>
-
     <PropertyGroup>
         <TargetFramework>net11.0</TargetFramework>
         <Version>0.1.0</Version>
@@ -18,5 +17,4 @@
              was set, and it can be re-added if those extra warnings are wanted. -->
         <AnalysisLevel>latest-all</AnalysisLevel>
     </PropertyGroup>
-
 </Project>

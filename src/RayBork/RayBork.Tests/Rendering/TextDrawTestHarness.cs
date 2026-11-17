@@ -15,7 +15,8 @@ namespace RayBork.Tests.Rendering;
 /// <see cref="Font"/> instances over synthetic faces with the fake glyph texture factory and the real
 /// generation service. Every created font is disposed before the glyph harness stops the service.
 /// </remarks>
-internal sealed class TextDrawTestHarness : IDisposable {
+internal sealed class TextDrawTestHarness : IDisposable
+{
     private const string FONT_PATH = "fonts/test-text";
 
     private readonly CameraTestHost _host;
@@ -29,7 +30,9 @@ internal sealed class TextDrawTestHarness : IDisposable {
         CameraTestHost host,
         CatalogTestHarness catalog,
         PrimitiveAssets primitives,
-        GlyphPipelineTestHarness glyphs) {
+        GlyphPipelineTestHarness glyphs
+    )
+    {
         _host = host;
         _catalog = catalog;
         _primitives = primitives;
@@ -52,17 +55,21 @@ internal sealed class TextDrawTestHarness : IDisposable {
     /// Creates the frame host and loads the engine primitive assets.
     /// </summary>
     /// <returns>The initialized harness.</returns>
-    internal static async Task<TextDrawTestHarness> CreateAsync() {
+    internal static async Task<TextDrawTestHarness> CreateAsync()
+    {
         CameraTestHost host = new();
         CatalogTestHarness? catalog = null;
         PrimitiveAssets? primitives = null;
         GlyphPipelineTestHarness? glyphs = null;
-        try {
+        try
+        {
             catalog = new CatalogTestHarness(builtInPack: BuiltInAssetPack.Bytes.ToArray());
             primitives = await PrimitiveAssets.LoadAsync(catalog.Catalog);
             glyphs = new GlyphPipelineTestHarness();
             return new TextDrawTestHarness(host, catalog, primitives, glyphs);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             glyphs?.Dispose();
             primitives?.Dispose();
             catalog?.Dispose();
@@ -76,7 +83,8 @@ internal sealed class TextDrawTestHarness : IDisposable {
     /// </summary>
     /// <param name="face">The parsed face.</param>
     /// <returns>The font, which the harness owns.</returns>
-    internal Font CreateFont(SfntFace face) {
+    internal Font CreateFont(SfntFace face)
+    {
         ArgumentNullException.ThrowIfNull(face);
         FontGlyphPipeline pipeline = _glyphs.CreatePipeline(face);
         EngineAsset asset = new(
@@ -84,7 +92,8 @@ internal sealed class TextDrawTestHarness : IDisposable {
             resource: null,
             static _ => { },
             static () => { },
-            pipeline.Dispose);
+            pipeline.Dispose
+        );
         asset.AddOwnerReference();
         Font font = new(asset, face, pipeline);
         _fonts.Add(font);
@@ -101,24 +110,33 @@ internal sealed class TextDrawTestHarness : IDisposable {
     /// A glyph that is already cached needs no wait; an empty glyph settles without a texture. The probe
     /// acquisition releases its frame hold before the wait, simulating a frame that already completed.
     /// </remarks>
-    internal static async Task SettleGlyphsAsync(Font font, string text, long frameIndex = 1) {
+    internal static async Task SettleGlyphsAsync(Font font, string text, long frameIndex = 1)
+    {
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(text);
 
         font.BeginFrame(frameIndex);
-        foreach (Rune rune in text.EnumerateRunes()) {
+        foreach (Rune rune in text.EnumerateRunes())
+        {
             font.TryGetGlyphId(rune, out int glyphId);
             FrameAssetRetention probe = new();
             Texture? texture;
-            try {
+            try
+            {
                 texture = font.AcquireGlyphTexture(glyphId, probe);
-            } finally {
+            }
+            finally
+            {
                 probe.Release();
             }
 
-            if (texture is null) {
+            if (texture is null)
+            {
                 await font.WhenGlyphSettledAsync(glyphId)
-                    .WaitAsync(GlyphPipelineTestHarness.TIMEOUT, TestContext.Current.CancellationToken);
+                    .WaitAsync(
+                        GlyphPipelineTestHarness.TIMEOUT,
+                        TestContext.Current.CancellationToken
+                    );
             }
         }
     }
@@ -129,13 +147,17 @@ internal sealed class TextDrawTestHarness : IDisposable {
     /// <param name="font">The font.</param>
     /// <param name="value">The character.</param>
     /// <returns>The cached texture, or <see langword="null"/> when the glyph is empty or not ready.</returns>
-    internal static Texture? GetGlyphTexture(Font font, char value) {
+    internal static Texture? GetGlyphTexture(Font font, char value)
+    {
         ArgumentNullException.ThrowIfNull(font);
         font.TryGetGlyphId(new Rune(value), out int glyphId);
         FrameAssetRetention probe = new();
-        try {
+        try
+        {
             return font.AcquireGlyphTexture(glyphId, probe);
-        } finally {
+        }
+        finally
+        {
             probe.Release();
         }
     }
@@ -146,23 +168,29 @@ internal sealed class TextDrawTestHarness : IDisposable {
     /// <param name="font">The font.</param>
     /// <param name="value">The character.</param>
     /// <returns>The glyph metrics.</returns>
-    internal static Glyph GetGlyph(Font font, char value) {
+    internal static Glyph GetGlyph(Font font, char value)
+    {
         ArgumentNullException.ThrowIfNull(font);
         Assert.True(
             font.TryGetGlyph(new Rune(value), out Glyph glyph),
-            $"The glyph '{value}' is not ready; generate it before asserting its layout.");
+            $"The glyph '{value}' is not ready; generate it before asserting its layout."
+        );
         return glyph;
     }
 
     /// <inheritdoc/>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        foreach (Font font in _fonts) {
-            if (!font.IsDisposed) {
+        foreach (Font font in _fonts)
+        {
+            if (!font.IsDisposed)
+            {
                 font.Dispose();
             }
         }

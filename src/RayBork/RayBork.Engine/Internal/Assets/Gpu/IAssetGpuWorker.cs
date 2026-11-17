@@ -25,7 +25,8 @@ namespace RayBork.Internal;
 /// treats destruction as best effort so a teardown cannot stall.
 /// </para>
 /// </remarks>
-internal interface IAssetGpuWorker {
+internal interface IAssetGpuWorker
+{
     /// <summary>
     /// Gets whether no submitted frame can still reference a GPU asset resource.
     /// </summary>
@@ -74,7 +75,8 @@ internal interface IAssetGpuWorker {
     bool TryComplete(
         GpuAssetUploadOperation operation,
         out GpuAssetResource? resource,
-        out Exception? error);
+        out Exception? error
+    );
 
     /// <summary>
     /// Abandons an in-flight upload and releases everything it created.

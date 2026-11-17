@@ -4,12 +4,14 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
-public sealed class VulkanDeviceTests {
+public sealed class VulkanDeviceTests
+{
     private const uint MINIMUM_VULKAN_API_VERSION = (1u << 22) | (2u << 12);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DeviceCreationProjectsEngineInfo() {
+    public void DeviceCreationProjectsEngineInfo()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 
         EngineInfo info = host.Device.CreateEngineInfo();
@@ -27,7 +29,8 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DeviceCreationIsValidationClean() {
+    public void DeviceCreationIsValidationClean()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 
         Assert.Empty(host.Instance.ConsumeValidationErrors());
@@ -39,11 +42,17 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DeviceDisposalIsRepeatable() {
+    public void DeviceDisposalIsRepeatable()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 
-        for (int index = 0; index < 3; index++) {
-            using VulkanDevice device = VulkanDevice.Create(host.Instance, host.Surface, NullLogger.Instance);
+        for (int index = 0; index < 3; index++)
+        {
+            using VulkanDevice device = VulkanDevice.Create(
+                host.Instance,
+                host.Surface,
+                NullLogger.Instance
+            );
             Assert.True(device.Device.Handle != 0);
         }
 
@@ -52,7 +61,8 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void CapabilitiesDescribeTheSurface() {
+    public void CapabilitiesDescribeTheSurface()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 
         VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
@@ -69,7 +79,8 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void CapabilitiesReportTheRequiredDepthResolveMode() {
+    public void CapabilitiesReportTheRequiredDepthResolveMode()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 
         ResolveModeFlags mode = host.Device.Capabilities.DepthResolveMode;
@@ -79,15 +90,25 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void CapabilitiesReportTheEnabledBindlessSubset() {
+    public void CapabilitiesReportTheEnabledBindlessSubset()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 
         VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
 
         Assert.True(capabilities.DescriptorIndexing);
-        Assert.Equal(VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY, capabilities.BindlessTextureCapacity);
-        Assert.True(capabilities.MaxPerStageDescriptorUpdateAfterBindSampledImages >= capabilities.BindlessTextureCapacity);
-        Assert.True(capabilities.MaxDescriptorSetUpdateAfterBindSampledImages >= capabilities.BindlessTextureCapacity);
+        Assert.Equal(
+            VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
+            capabilities.BindlessTextureCapacity
+        );
+        Assert.True(
+            capabilities.MaxPerStageDescriptorUpdateAfterBindSampledImages
+                >= capabilities.BindlessTextureCapacity
+        );
+        Assert.True(
+            capabilities.MaxDescriptorSetUpdateAfterBindSampledImages
+                >= capabilities.BindlessTextureCapacity
+        );
         Assert.True(capabilities.MaxPerStageDescriptorUpdateAfterBindSamplers >= 1);
         Assert.True(capabilities.MaxStorageBufferRange > 0);
         Assert.True(capabilities.MaxMemoryAllocationSize > 0);
@@ -95,7 +116,8 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SurfaceReportsSwapchainFormatPairs() {
+    public void SurfaceReportsSwapchainFormatPairs()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
 
         IReadOnlyList<VulkanSurfaceFormat> formats = host.Device.Capabilities.SurfaceFormats;
@@ -106,22 +128,28 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void HdrFloatFormatIsReportedWhenColorSpacesAreAvailable() {
+    public void HdrFloatFormatIsReportedWhenColorSpacesAreAvailable()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip();
         VulkanDeviceCapabilities capabilities = host.Device.Capabilities;
 
-        if (capabilities.SwapchainColorSpaceExtensionEnabled) {
-            if (!capabilities.SupportsHdrFloatFormat) {
+        if (capabilities.SwapchainColorSpaceExtensionEnabled)
+        {
+            if (!capabilities.SupportsHdrFloatFormat)
+            {
                 Assert.Skip("The driver reports no scRGB float surface pair.");
             }
-        } else {
+        }
+        else
+        {
             Assert.False(capabilities.SupportsExtendedSrgbLinear);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ValidationDisabledPath() {
+    public void ValidationDisabledPath()
+    {
         using GpuTestHost host = GpuTestHost.CreateOrSkip(requestValidation: false);
 
         Assert.False(host.Instance.ValidationLayersEnabled);
@@ -131,18 +159,25 @@ public sealed class VulkanDeviceTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void InstanceRejectsMissingSurfaceExtension() {
-        if (!GpuTestHost.IsVulkanLoaderAvailable()) {
+    public void InstanceRejectsMissingSurfaceExtension()
+    {
+        if (!GpuTestHost.IsVulkanLoaderAvailable())
+        {
             Assert.Skip("The Vulkan loader is not available on this host.");
         }
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanInstance.Create(new VulkanInstanceOptions {
-            ApplicationName = "RayBork GPU Test",
-            ApplicationVersion = EngineVersion.Current,
-            SurfaceExtensions = ["VK_KHR_surface", "VK_KHR_not_a_real_surface"],
-            RequestValidation = false,
-            Logger = NullLogger.Instance,
-        }));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanInstance.Create(
+                new VulkanInstanceOptions
+                {
+                    ApplicationName = "RayBork GPU Test",
+                    ApplicationVersion = EngineVersion.Current,
+                    SurfaceExtensions = ["VK_KHR_surface", "VK_KHR_not_a_real_surface"],
+                    RequestValidation = false,
+                    Logger = NullLogger.Instance,
+                }
+            )
+        );
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
         Assert.Contains("VK_KHR_not_a_real_surface", exception.Message, StringComparison.Ordinal);

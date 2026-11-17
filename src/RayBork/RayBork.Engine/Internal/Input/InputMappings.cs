@@ -6,7 +6,8 @@ namespace RayBork.Internal;
 /// Translates SDL3 input identifiers into the RayBork contracts and owns the shared array sizes and
 /// validation rules used by the raw input state and the tick snapshots.
 /// </summary>
-internal static class InputMappings {
+internal static class InputMappings
+{
     internal const int KEY_COUNT = 512;
     internal const int MOUSE_BUTTON_COUNT = 5;
     internal const int GAMEPAD_BUTTON_COUNT = 23;
@@ -24,8 +25,10 @@ internal static class InputMappings {
     /// <summary>
     /// Maps the one-based SDL3 mouse button number to the zero-based <see cref="MouseButton"/>.
     /// </summary>
-    internal static bool TryGetMouseButton(byte sdlButton, out MouseButton button) {
-        if (sdlButton >= 1 && sdlButton <= MOUSE_BUTTON_COUNT) {
+    internal static bool TryGetMouseButton(byte sdlButton, out MouseButton button)
+    {
+        if (sdlButton >= 1 && sdlButton <= MOUSE_BUTTON_COUNT)
+        {
             button = (MouseButton)(sdlButton - 1);
             return true;
         }
@@ -38,10 +41,14 @@ internal static class InputMappings {
     /// Maps an SDL3 gamepad button, rejecting paddle, Misc4, Misc5, and Misc6 buttons that have no
     /// RayBork name.
     /// </summary>
-    internal static bool TryGetGamepadButton(SDL.GamepadButton sdlButton, out GamepadButton button) {
+    internal static bool TryGetGamepadButton(SDL.GamepadButton sdlButton, out GamepadButton button)
+    {
         int value = (int)sdlButton;
-        if ((value >= (int)GamepadButton.South && value <= (int)GamepadButton.Misc1)
-            || (value >= (int)GamepadButton.Touchpad && value <= (int)GamepadButton.Misc3)) {
+        if (
+            (value >= (int)GamepadButton.South && value <= (int)GamepadButton.Misc1)
+            || (value >= (int)GamepadButton.Touchpad && value <= (int)GamepadButton.Misc3)
+        )
+        {
             button = (GamepadButton)value;
             return true;
         }
@@ -53,8 +60,10 @@ internal static class InputMappings {
     /// <summary>
     /// Maps an SDL3 stick axis index to a <see cref="GamepadAxis"/>.
     /// </summary>
-    internal static bool TryGetGamepadAxis(byte sdlAxis, out GamepadAxis axis) {
-        if (sdlAxis < GAMEPAD_AXIS_COUNT) {
+    internal static bool TryGetGamepadAxis(byte sdlAxis, out GamepadAxis axis)
+    {
+        if (sdlAxis < GAMEPAD_AXIS_COUNT)
+        {
             axis = (GamepadAxis)sdlAxis;
             return true;
         }
@@ -66,9 +75,11 @@ internal static class InputMappings {
     /// <summary>
     /// Maps SDL3 axis index 4 or 5 to a <see cref="GamepadTrigger"/>.
     /// </summary>
-    internal static bool TryGetGamepadTrigger(byte sdlAxis, out GamepadTrigger trigger) {
+    internal static bool TryGetGamepadTrigger(byte sdlAxis, out GamepadTrigger trigger)
+    {
         int value = sdlAxis - GAMEPAD_AXIS_COUNT;
-        if (value >= 0 && value < GAMEPAD_TRIGGER_COUNT) {
+        if (value >= 0 && value < GAMEPAD_TRIGGER_COUNT)
+        {
             trigger = (GamepadTrigger)value;
             return true;
         }
@@ -80,7 +91,8 @@ internal static class InputMappings {
     /// <summary>
     /// Scales a raw SDL3 stick value from <c>[-32768, 32767]</c> to <c>[-1, 1]</c>.
     /// </summary>
-    internal static float NormalizeStickAxis(short value) => Math.Clamp(value / AXIS_SCALE, -1f, 1f);
+    internal static float NormalizeStickAxis(short value) =>
+        Math.Clamp(value / AXIS_SCALE, -1f, 1f);
 
     /// <summary>
     /// Scales a raw SDL3 trigger value from <c>[-32768, 32767]</c> to <c>[0, 1]</c>.
@@ -97,44 +109,80 @@ internal static class InputMappings {
     /// </summary>
     internal static int TriggerSlot(GamepadTrigger trigger) => GAMEPAD_AXIS_COUNT + (int)trigger;
 
-    internal static void ValidateKey(Key key) {
+    internal static void ValidateKey(Key key)
+    {
         int value = (int)key;
-        if (value < 0 || value >= KEY_COUNT) {
-            throw new ArgumentOutOfRangeException(nameof(key), key, "The key is not a defined SDL3 scancode.");
+        if (value < 0 || value >= KEY_COUNT)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(key),
+                key,
+                "The key is not a defined SDL3 scancode."
+            );
         }
     }
 
-    internal static void ValidateMouseButton(MouseButton button) {
+    internal static void ValidateMouseButton(MouseButton button)
+    {
         int value = (int)button;
-        if (value < 0 || value >= MOUSE_BUTTON_COUNT) {
-            throw new ArgumentOutOfRangeException(nameof(button), button, "The mouse button is not defined.");
+        if (value < 0 || value >= MOUSE_BUTTON_COUNT)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(button),
+                button,
+                "The mouse button is not defined."
+            );
         }
     }
 
-    internal static void ValidateGamepadButton(GamepadButton button) {
-        if (!Enum.IsDefined(button)) {
-            throw new ArgumentOutOfRangeException(nameof(button), button, "The gamepad button is not defined.");
+    internal static void ValidateGamepadButton(GamepadButton button)
+    {
+        if (!Enum.IsDefined(button))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(button),
+                button,
+                "The gamepad button is not defined."
+            );
         }
     }
 
-    internal static void ValidateGamepadAxis(GamepadAxis axis) {
+    internal static void ValidateGamepadAxis(GamepadAxis axis)
+    {
         int value = (int)axis;
-        if (value < 0 || value >= GAMEPAD_AXIS_COUNT) {
-            throw new ArgumentOutOfRangeException(nameof(axis), axis, "The gamepad axis is not defined.");
+        if (value < 0 || value >= GAMEPAD_AXIS_COUNT)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(axis),
+                axis,
+                "The gamepad axis is not defined."
+            );
         }
     }
 
-    internal static void ValidateGamepadTrigger(GamepadTrigger trigger) {
+    internal static void ValidateGamepadTrigger(GamepadTrigger trigger)
+    {
         int value = (int)trigger;
-        if (value < 0 || value >= GAMEPAD_TRIGGER_COUNT) {
-            throw new ArgumentOutOfRangeException(nameof(trigger), trigger, "The gamepad trigger is not defined.");
+        if (value < 0 || value >= GAMEPAD_TRIGGER_COUNT)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(trigger),
+                trigger,
+                "The gamepad trigger is not defined."
+            );
         }
     }
 
-    internal static void ValidateCursorMode(CursorMode mode) {
+    internal static void ValidateCursorMode(CursorMode mode)
+    {
         int value = (int)mode;
-        if (value < 0 || value > (int)CursorMode.Disabled) {
-            throw new ArgumentOutOfRangeException(nameof(mode), mode, "The cursor mode is not defined.");
+        if (value < 0 || value > (int)CursorMode.Disabled)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                mode,
+                "The cursor mode is not defined."
+            );
         }
     }
 }

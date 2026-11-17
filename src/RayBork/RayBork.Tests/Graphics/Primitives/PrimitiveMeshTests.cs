@@ -7,14 +7,16 @@ namespace RayBork.Tests.Graphics.Primitives;
 /// Tests the deterministic CPU geometry of <see cref="PrimitiveMeshFactory"/>: counts, topology,
 /// bounds, winding, normals, UVs, and array independence. The factory needs no GPU or asset catalog.
 /// </summary>
-public sealed class PrimitiveMeshTests {
+public sealed class PrimitiveMeshTests
+{
     private const float TOLERANCE = 1e-5f;
     private const float CENTROID_TOLERANCE = 1e-4f;
     private const float CENTROID_GRID_SCALE = 10000f;
     private const float MINIMUM_AREA_SQUARED = 1e-12f;
     private const float MINIMUM_SEGMENT_LENGTH = 1e-5f;
 
-    private static readonly PrimitiveMeshCase[] _cases = [
+    private static readonly PrimitiveMeshCase[] _cases =
+    [
         new(
             "cube",
             PrimitiveMeshFactory.CreateCube,
@@ -24,7 +26,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(1f),
             new BoundingBox(new Vector3(-0.5f), new Vector3(0.5f)),
             IsCentered: true,
-            IsClosed: true),
+            IsClosed: true
+        ),
         new(
             "sphere",
             PrimitiveMeshFactory.CreateSphere,
@@ -34,7 +37,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(2f),
             new BoundingBox(new Vector3(-1f), new Vector3(1f)),
             IsCentered: true,
-            IsClosed: true),
+            IsClosed: true
+        ),
         new(
             "plane",
             PrimitiveMeshFactory.CreatePlane,
@@ -44,7 +48,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(1f, 0f, 1f),
             new BoundingBox(new Vector3(-0.5f, 0f, -0.5f), new Vector3(0.5f, 0f, 0.5f)),
             IsCentered: true,
-            IsClosed: false),
+            IsClosed: false
+        ),
         new(
             "quad",
             PrimitiveMeshFactory.CreateQuad,
@@ -54,7 +59,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(1f, 1f, 0f),
             new BoundingBox(new Vector3(-0.5f, -0.5f, 0f), new Vector3(0.5f, 0.5f, 0f)),
             IsCentered: true,
-            IsClosed: false),
+            IsClosed: false
+        ),
         new(
             "disc",
             PrimitiveMeshFactory.CreateDisc,
@@ -64,7 +70,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(2f, 2f, 0f),
             new BoundingBox(new Vector3(-1f, -1f, 0f), new Vector3(1f, 1f, 0f)),
             IsCentered: true,
-            IsClosed: false),
+            IsClosed: false
+        ),
         new(
             "triangle",
             PrimitiveMeshFactory.CreateTriangle,
@@ -74,7 +81,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(1f, 1f, 0f),
             new BoundingBox(Vector3.Zero, new Vector3(1f, 1f, 0f)),
             IsCentered: false,
-            IsClosed: false),
+            IsClosed: false
+        ),
         new(
             "line",
             PrimitiveMeshFactory.CreateLine,
@@ -84,7 +92,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(1f, 0f, 0f),
             new BoundingBox(Vector3.Zero, new Vector3(1f, 0f, 0f)),
             IsCentered: false,
-            IsClosed: false),
+            IsClosed: false
+        ),
         new(
             "wirecube",
             PrimitiveMeshFactory.CreateWireCube,
@@ -94,7 +103,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(1f),
             new BoundingBox(new Vector3(-0.5f), new Vector3(0.5f)),
             IsCentered: true,
-            IsClosed: false),
+            IsClosed: false
+        ),
         new(
             "wiresphere",
             PrimitiveMeshFactory.CreateWireSphere,
@@ -104,7 +114,8 @@ public sealed class PrimitiveMeshTests {
             new Vector3(2f),
             new BoundingBox(new Vector3(-1f), new Vector3(1f)),
             IsCentered: true,
-            IsClosed: false),
+            IsClosed: false
+        ),
     ];
 
     [Theory]
@@ -118,7 +129,8 @@ public sealed class PrimitiveMeshTests {
     [InlineData("wirecube")]
     [InlineData("wiresphere")]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryMeshMatchesItsDocumentedDefinition(string name) {
+    public void EveryMeshMatchesItsDocumentedDefinition(string name)
+    {
         PrimitiveMeshCase testCase = FindCase(name);
         PrimitiveMeshData mesh = testCase.Create();
 
@@ -128,20 +140,27 @@ public sealed class PrimitiveMeshTests {
         AssertVectorClose(testCase.Bounds.Min, mesh.Bounds.Min, $"{name} minimum bounds");
         AssertVectorClose(testCase.Bounds.Max, mesh.Bounds.Max, $"{name} maximum bounds");
         AssertVectorClose(testCase.Size, mesh.Bounds.Max - mesh.Bounds.Min, $"{name} size");
-        Assert.True(IsFinite(mesh.Bounds.Min) && IsFinite(mesh.Bounds.Max), $"{name} bounds are finite.");
+        Assert.True(
+            IsFinite(mesh.Bounds.Min) && IsFinite(mesh.Bounds.Max),
+            $"{name} bounds are finite."
+        );
         Assert.True(
             mesh.Bounds.Min.X <= mesh.Bounds.Max.X
                 && mesh.Bounds.Min.Y <= mesh.Bounds.Max.Y
                 && mesh.Bounds.Min.Z <= mesh.Bounds.Max.Z,
-            $"{name} bounds are ordered.");
+            $"{name} bounds are ordered."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryMeshHasFiniteAttributesAndWhiteVertexColors() {
-        foreach (PrimitiveMeshCase testCase in _cases) {
+    public void EveryMeshHasFiniteAttributesAndWhiteVertexColors()
+    {
+        foreach (PrimitiveMeshCase testCase in _cases)
+        {
             PrimitiveMeshData mesh = testCase.Create();
-            for (int index = 0; index < mesh.Vertices.Length; index++) {
+            for (int index = 0; index < mesh.Vertices.Length; index++)
+            {
                 Vertex vertex = mesh.Vertices[index];
                 string context = $"{testCase.Name} vertex {index}";
                 AssertFinite(vertex.Position, context + " position");
@@ -162,34 +181,47 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryMeshHasInRangeIndicesAndNoDegeneratePrimitives() {
-        foreach (PrimitiveMeshCase testCase in _cases) {
+    public void EveryMeshHasInRangeIndicesAndNoDegeneratePrimitives()
+    {
+        foreach (PrimitiveMeshCase testCase in _cases)
+        {
             PrimitiveMeshData mesh = testCase.Create();
-            foreach (uint index in mesh.Indices) {
+            foreach (uint index in mesh.Indices)
+            {
                 Assert.True(
                     index < (uint)mesh.Vertices.Length,
-                    $"{testCase.Name} index {index} is outside the {mesh.Vertices.Length} vertices.");
+                    $"{testCase.Name} index {index} is outside the {mesh.Vertices.Length} vertices."
+                );
             }
 
-            if (mesh.Topology == PrimitiveTopology.TriangleList) {
-                for (int triangle = 0; triangle < mesh.Indices.Length; triangle += 3) {
+            if (mesh.Topology == PrimitiveTopology.TriangleList)
+            {
+                for (int triangle = 0; triangle < mesh.Indices.Length; triangle += 3)
+                {
                     Vector3 face = Vector3.Cross(
                         mesh.Vertices[(int)mesh.Indices[triangle + 1]].Position
                             - mesh.Vertices[(int)mesh.Indices[triangle]].Position,
                         mesh.Vertices[(int)mesh.Indices[triangle + 2]].Position
-                            - mesh.Vertices[(int)mesh.Indices[triangle]].Position);
+                            - mesh.Vertices[(int)mesh.Indices[triangle]].Position
+                    );
                     Assert.True(
                         face.LengthSquared() > MINIMUM_AREA_SQUARED,
-                        $"{testCase.Name} triangle {triangle / 3} has zero area.");
+                        $"{testCase.Name} triangle {triangle / 3} has zero area."
+                    );
                 }
-            } else {
-                for (int segment = 0; segment < mesh.Indices.Length; segment += 2) {
+            }
+            else
+            {
+                for (int segment = 0; segment < mesh.Indices.Length; segment += 2)
+                {
                     float length = Vector3.Distance(
                         mesh.Vertices[(int)mesh.Indices[segment]].Position,
-                        mesh.Vertices[(int)mesh.Indices[segment + 1]].Position);
+                        mesh.Vertices[(int)mesh.Indices[segment + 1]].Position
+                    );
                     Assert.True(
                         length > MINIMUM_SEGMENT_LENGTH,
-                        $"{testCase.Name} line segment {segment / 2} has zero length.");
+                        $"{testCase.Name} line segment {segment / 2} has zero length."
+                    );
                 }
             }
         }
@@ -197,42 +229,57 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ClosedShapesUseOutwardNormals() {
-        foreach (PrimitiveMeshCase testCase in _cases) {
-            if (!testCase.IsClosed) {
+    public void ClosedShapesUseOutwardNormals()
+    {
+        foreach (PrimitiveMeshCase testCase in _cases)
+        {
+            if (!testCase.IsClosed)
+            {
                 continue;
             }
 
             PrimitiveMeshData mesh = testCase.Create();
-            for (int index = 0; index < mesh.Vertices.Length; index++) {
+            for (int index = 0; index < mesh.Vertices.Length; index++)
+            {
                 Vertex vertex = mesh.Vertices[index];
                 Assert.Equal(1f, vertex.Normal.Length(), 5);
                 Assert.True(
                     Vector3.Dot(vertex.Normal, vertex.Position) > 0f,
                     $"{testCase.Name} vertex {index} normal {vertex.Normal} does not face outward from "
-                        + $"position {vertex.Position}.");
+                        + $"position {vertex.Position}."
+                );
             }
 
-            for (int triangle = 0; triangle < mesh.Indices.Length; triangle += 3) {
+            for (int triangle = 0; triangle < mesh.Indices.Length; triangle += 3)
+            {
                 Vertex vertex0 = mesh.Vertices[(int)mesh.Indices[triangle]];
                 Vertex vertex1 = mesh.Vertices[(int)mesh.Indices[triangle + 1]];
                 Vertex vertex2 = mesh.Vertices[(int)mesh.Indices[triangle + 2]];
-                Vector3 face = Vector3.Normalize(Vector3.Cross(
-                    vertex1.Position - vertex0.Position,
-                    vertex2.Position - vertex0.Position));
-                Vector3 normal = Vector3.Normalize(vertex0.Normal + vertex1.Normal + vertex2.Normal);
+                Vector3 face = Vector3.Normalize(
+                    Vector3.Cross(
+                        vertex1.Position - vertex0.Position,
+                        vertex2.Position - vertex0.Position
+                    )
+                );
+                Vector3 normal = Vector3.Normalize(
+                    vertex0.Normal + vertex1.Normal + vertex2.Normal
+                );
                 Assert.True(
                     Vector3.Dot(face, normal) > 0f,
-                    $"{testCase.Name} triangle {triangle / 3} winds inward: face {face}, normal {normal}.");
+                    $"{testCase.Name} triangle {triangle / 3} winds inward: face {face}, normal {normal}."
+                );
             }
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CenteredShapesHaveTheirCentroidAtTheOrigin() {
-        foreach (PrimitiveMeshCase testCase in _cases) {
-            if (!testCase.IsCentered) {
+    public void CenteredShapesHaveTheirCentroidAtTheOrigin()
+    {
+        foreach (PrimitiveMeshCase testCase in _cases)
+        {
+            if (!testCase.IsCentered)
+            {
                 continue;
             }
 
@@ -241,12 +288,15 @@ public sealed class PrimitiveMeshTests {
             PrimitiveMeshData mesh = testCase.Create();
             HashSet<(int X, int Y, int Z)> keys = [];
             Vector3 sum = Vector3.Zero;
-            foreach (Vertex vertex in mesh.Vertices) {
+            foreach (Vertex vertex in mesh.Vertices)
+            {
                 (int X, int Y, int Z) key = (
                     (int)MathF.Round(vertex.Position.X * CENTROID_GRID_SCALE),
                     (int)MathF.Round(vertex.Position.Y * CENTROID_GRID_SCALE),
-                    (int)MathF.Round(vertex.Position.Z * CENTROID_GRID_SCALE));
-                if (keys.Add(key)) {
+                    (int)MathF.Round(vertex.Position.Z * CENTROID_GRID_SCALE)
+                );
+                if (keys.Add(key))
+                {
                     sum += vertex.Position;
                 }
             }
@@ -254,14 +304,17 @@ public sealed class PrimitiveMeshTests {
             Vector3 centroid = sum / keys.Count;
             Assert.True(
                 centroid.Length() <= CENTROID_TOLERANCE,
-                $"{testCase.Name} centroid is {centroid} instead of the origin.");
+                $"{testCase.Name} centroid is {centroid} instead of the origin."
+            );
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryBuildReturnsIndependentArrays() {
-        foreach (PrimitiveMeshCase testCase in _cases) {
+    public void EveryBuildReturnsIndependentArrays()
+    {
+        foreach (PrimitiveMeshCase testCase in _cases)
+        {
             PrimitiveMeshData first = testCase.Create();
             PrimitiveMeshData second = testCase.Create();
 
@@ -269,7 +322,8 @@ public sealed class PrimitiveMeshTests {
             Assert.NotSame(first.Indices, second.Indices);
             Assert.Equal(first.Vertices.Length, second.Vertices.Length);
             Assert.Equal(first.Indices, second.Indices);
-            for (int index = 0; index < first.Vertices.Length; index++) {
+            for (int index = 0; index < first.Vertices.Length; index++)
+            {
                 Assert.Equal(first.Vertices[index].Position, second.Vertices[index].Position);
                 Assert.Equal(first.Vertices[index].Normal, second.Vertices[index].Normal);
                 Assert.Equal(first.Vertices[index].Uv, second.Vertices[index].Uv);
@@ -285,51 +339,66 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CubeHasSixFlatOutwardFaces() {
+    public void CubeHasSixFlatOutwardFaces()
+    {
         PrimitiveMeshData cube = PrimitiveMeshFactory.CreateCube();
         Dictionary<Vector3, int> verticesPerNormal = [];
 
-        foreach (Vertex vertex in cube.Vertices) {
+        foreach (Vertex vertex in cube.Vertices)
+        {
             Assert.Equal(1f, vertex.Normal.Length(), 5);
             Assert.True(
                 MathF.Abs(Vector3.Dot(vertex.Normal, vertex.Position) - 0.5f) <= TOLERANCE,
-                $"Cube vertex at {vertex.Position} is not on the face for normal {vertex.Normal}.");
-            verticesPerNormal[vertex.Normal] = verticesPerNormal.GetValueOrDefault(vertex.Normal) + 1;
+                $"Cube vertex at {vertex.Position} is not on the face for normal {vertex.Normal}."
+            );
+            verticesPerNormal[vertex.Normal] =
+                verticesPerNormal.GetValueOrDefault(vertex.Normal) + 1;
         }
 
         Assert.Equal(6, verticesPerNormal.Count);
-        foreach (int count in verticesPerNormal.Values) {
+        foreach (int count in verticesPerNormal.Values)
+        {
             Assert.Equal(4, count);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SphereUsesSphericalUvsWithTheSeamAndPoles() {
+    public void SphereUsesSphericalUvsWithTheSeamAndPoles()
+    {
         PrimitiveMeshData sphere = PrimitiveMeshFactory.CreateSphere();
         int rowLength = PrimitiveMeshFactory.SPHERE_SLICES + 1;
 
         Assert.Equal(
             2 + ((PrimitiveMeshFactory.SPHERE_RINGS - 1) * rowLength),
-            sphere.Vertices.Length);
+            sphere.Vertices.Length
+        );
         Assert.Equal(new Vector2(0.5f, 0f), sphere.Vertices[0].Uv);
         Assert.Equal(new Vector2(0.5f, 1f), sphere.Vertices[^1].Uv);
         AssertVectorClose(new Vector3(0f, 1f, 0f), sphere.Vertices[0].Position, "sphere top pole");
-        AssertVectorClose(new Vector3(0f, -1f, 0f), sphere.Vertices[^1].Position, "sphere bottom pole");
+        AssertVectorClose(
+            new Vector3(0f, -1f, 0f),
+            sphere.Vertices[^1].Position,
+            "sphere bottom pole"
+        );
 
-        for (int ring = 0; ring < PrimitiveMeshFactory.SPHERE_RINGS - 1; ring++) {
+        for (int ring = 0; ring < PrimitiveMeshFactory.SPHERE_RINGS - 1; ring++)
+        {
             int first = 1 + (ring * rowLength);
             int last = first + PrimitiveMeshFactory.SPHERE_SLICES;
             AssertVectorClose(
                 sphere.Vertices[first].Position,
                 sphere.Vertices[last].Position,
-                $"sphere seam at ring {ring + 1}");
+                $"sphere seam at ring {ring + 1}"
+            );
         }
 
-        foreach (Vertex vertex in sphere.Vertices) {
+        foreach (Vertex vertex in sphere.Vertices)
+        {
             Assert.True(
                 vertex.Uv.X is >= 0f and <= 1f && vertex.Uv.Y is >= 0f and <= 1f,
-                $"Sphere UV {vertex.Uv} is outside 0..1.");
+                $"Sphere UV {vertex.Uv} is outside 0..1."
+            );
             Assert.Equal(1f, vertex.Position.Length(), 5);
             AssertVectorClose(vertex.Position, vertex.Normal, "sphere outward normal");
         }
@@ -337,15 +406,21 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PlaneIsCounterClockwiseFacingUpWithUvs() {
+    public void PlaneIsCounterClockwiseFacingUpWithUvs()
+    {
         PrimitiveMeshData plane = PrimitiveMeshFactory.CreatePlane();
 
-        foreach (Vertex vertex in plane.Vertices) {
+        foreach (Vertex vertex in plane.Vertices)
+        {
             Assert.Equal(Vector3.UnitY, vertex.Normal);
         }
 
         AssertFaceNormals(plane, Vector3.UnitY, "plane");
-        AssertVectorClose(new Vector3(-0.5f, 0f, -0.5f), plane.Vertices[0].Position, "plane origin corner");
+        AssertVectorClose(
+            new Vector3(-0.5f, 0f, -0.5f),
+            plane.Vertices[0].Position,
+            "plane origin corner"
+        );
         Assert.Equal(new Vector2(0f, 0f), plane.Vertices[0].Uv);
         Assert.Equal(new Vector2(0f, 1f), plane.Vertices[1].Uv);
         Assert.Equal(new Vector2(1f, 1f), plane.Vertices[2].Uv);
@@ -354,15 +429,21 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void QuadIsCounterClockwiseFacingForwardWithTopLeftUvOrigin() {
+    public void QuadIsCounterClockwiseFacingForwardWithTopLeftUvOrigin()
+    {
         PrimitiveMeshData quad = PrimitiveMeshFactory.CreateQuad();
 
-        foreach (Vertex vertex in quad.Vertices) {
+        foreach (Vertex vertex in quad.Vertices)
+        {
             Assert.Equal(Vector3.UnitZ, vertex.Normal);
         }
 
         AssertFaceNormals(quad, Vector3.UnitZ, "quad");
-        AssertVectorClose(new Vector3(-0.5f, 0.5f, 0f), quad.Vertices[0].Position, "quad top-left corner");
+        AssertVectorClose(
+            new Vector3(-0.5f, 0.5f, 0f),
+            quad.Vertices[0].Position,
+            "quad top-left corner"
+        );
         Assert.Equal(new Vector2(0f, 0f), quad.Vertices[0].Uv);
         Assert.Equal(new Vector2(0f, 1f), quad.Vertices[1].Uv);
         Assert.Equal(new Vector2(1f, 1f), quad.Vertices[2].Uv);
@@ -371,7 +452,8 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DiscHasOneCenterVertexAndThirtySixCounterClockwiseSegments() {
+    public void DiscHasOneCenterVertexAndThirtySixCounterClockwiseSegments()
+    {
         PrimitiveMeshData disc = PrimitiveMeshFactory.CreateDisc();
         int segments = PrimitiveMeshFactory.DISC_SEGMENTS;
 
@@ -383,7 +465,8 @@ public sealed class PrimitiveMeshTests {
         Assert.Equal(new Vector2(0.5f, 0.5f), disc.Vertices[0].Uv);
         AssertFaceNormals(disc, Vector3.UnitZ, "disc");
 
-        for (int segment = 0; segment < segments; segment++) {
+        for (int segment = 0; segment < segments; segment++)
+        {
             Vertex rim = disc.Vertices[segment + 1];
             Assert.Equal(1f, rim.Position.Length(), 5);
             Assert.Equal(0f, rim.Position.Z);
@@ -391,15 +474,14 @@ public sealed class PrimitiveMeshTests {
             Assert.Equal(Color.White, rim.Color);
             Assert.Equal(0u, disc.Indices[segment * 3]);
             Assert.Equal((uint)(segment + 1), disc.Indices[(segment * 3) + 1]);
-            Assert.Equal(
-                (uint)(((segment + 1) % segments) + 1),
-                disc.Indices[(segment * 3) + 2]);
+            Assert.Equal((uint)(((segment + 1) % segments) + 1), disc.Indices[(segment * 3) + 2]);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TriangleIsTheDocumentedUnitRightTriangle() {
+    public void TriangleIsTheDocumentedUnitRightTriangle()
+    {
         PrimitiveMeshData triangle = PrimitiveMeshFactory.CreateTriangle();
 
         AssertVectorClose(Vector3.Zero, triangle.Vertices[0].Position, "triangle vertex 0");
@@ -412,13 +494,16 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WireCubeIsTwelveUnitEdges() {
+    public void WireCubeIsTwelveUnitEdges()
+    {
         PrimitiveMeshData wireCube = PrimitiveMeshFactory.CreateWireCube();
         HashSet<(uint Start, uint End)> edges = [];
-        for (int index = 0; index < wireCube.Indices.Length; index += 2) {
+        for (int index = 0; index < wireCube.Indices.Length; index += 2)
+        {
             uint start = wireCube.Indices[index];
             uint end = wireCube.Indices[index + 1];
-            Vector3 difference = wireCube.Vertices[(int)end].Position - wireCube.Vertices[(int)start].Position;
+            Vector3 difference =
+                wireCube.Vertices[(int)end].Position - wireCube.Vertices[(int)start].Position;
             Assert.Equal(1f, difference.Length(), 5);
             Assert.Equal(1, CountNonZeroComponents(difference));
             edges.Add(start < end ? (start, end) : (end, start));
@@ -429,26 +514,41 @@ public sealed class PrimitiveMeshTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WireSphereIsThreeUnitGreatCircles() {
+    public void WireSphereIsThreeUnitGreatCircles()
+    {
         PrimitiveMeshData wireSphere = PrimitiveMeshFactory.CreateWireSphere();
         int segments = PrimitiveMeshFactory.WIRE_SPHERE_SEGMENTS;
 
-        Assert.Equal(PrimitiveMeshFactory.WIRE_SPHERE_CIRCLES * segments, wireSphere.Vertices.Length);
-        Assert.Equal(PrimitiveMeshFactory.WIRE_SPHERE_CIRCLES * segments * 2, wireSphere.Indices.Length);
-        for (int circle = 0; circle < PrimitiveMeshFactory.WIRE_SPHERE_CIRCLES; circle++) {
-            for (int segment = 0; segment < segments; segment++) {
+        Assert.Equal(
+            PrimitiveMeshFactory.WIRE_SPHERE_CIRCLES * segments,
+            wireSphere.Vertices.Length
+        );
+        Assert.Equal(
+            PrimitiveMeshFactory.WIRE_SPHERE_CIRCLES * segments * 2,
+            wireSphere.Indices.Length
+        );
+        for (int circle = 0; circle < PrimitiveMeshFactory.WIRE_SPHERE_CIRCLES; circle++)
+        {
+            for (int segment = 0; segment < segments; segment++)
+            {
                 Vector3 position = wireSphere.Vertices[(circle * segments) + segment].Position;
                 Assert.Equal(1f, position.Length(), 5);
-                if (circle == 0) {
+                if (circle == 0)
+                {
                     Assert.Equal(0f, position.Z);
-                } else if (circle == 1) {
+                }
+                else if (circle == 1)
+                {
                     Assert.Equal(0f, position.Y);
-                } else {
+                }
+                else
+                {
                     Assert.Equal(0f, position.X);
                 }
             }
 
-            for (int segment = 0; segment < segments; segment++) {
+            for (int segment = 0; segment < segments; segment++)
+            {
                 uint start = wireSphere.Indices[(circle * segments * 2) + (segment * 2)];
                 uint end = wireSphere.Indices[(circle * segments * 2) + (segment * 2) + 1];
                 Assert.Equal((uint)(circle * segments) + (uint)segment, start);
@@ -457,11 +557,13 @@ public sealed class PrimitiveMeshTests {
         }
     }
 
-    private static PrimitiveMeshCase FindCase(string name)
-        => _cases.Single(testCase => string.Equals(testCase.Name, name, StringComparison.Ordinal));
+    private static PrimitiveMeshCase FindCase(string name) =>
+        _cases.Single(testCase => string.Equals(testCase.Name, name, StringComparison.Ordinal));
 
-    private static void AssertFaceNormals(PrimitiveMeshData mesh, Vector3 expected, string context) {
-        for (int triangle = 0; triangle < mesh.Indices.Length; triangle += 3) {
+    private static void AssertFaceNormals(PrimitiveMeshData mesh, Vector3 expected, string context)
+    {
+        for (int triangle = 0; triangle < mesh.Indices.Length; triangle += 3)
+        {
             Vector3 vertex0 = mesh.Vertices[(int)mesh.Indices[triangle]].Position;
             Vector3 vertex1 = mesh.Vertices[(int)mesh.Indices[triangle + 1]].Position;
             Vector3 vertex2 = mesh.Vertices[(int)mesh.Indices[triangle + 2]].Position;
@@ -470,47 +572,56 @@ public sealed class PrimitiveMeshTests {
         }
     }
 
-    private static void AssertVectorClose(Vector3 expected, Vector3 actual, string context) {
+    private static void AssertVectorClose(Vector3 expected, Vector3 actual, string context)
+    {
         Assert.True(
             Vector3.Distance(expected, actual) <= TOLERANCE,
-            $"{context}: expected {expected}, actual {actual}.");
+            $"{context}: expected {expected}, actual {actual}."
+        );
     }
 
-    private static void AssertFinite(Vector2 value, string context) {
+    private static void AssertFinite(Vector2 value, string context)
+    {
         AssertFinite(value.X, context + ".x");
         AssertFinite(value.Y, context + ".y");
     }
 
-    private static void AssertFinite(Vector3 value, string context) {
+    private static void AssertFinite(Vector3 value, string context)
+    {
         AssertFinite(value.X, context + ".x");
         AssertFinite(value.Y, context + ".y");
         AssertFinite(value.Z, context + ".z");
     }
 
-    private static void AssertFinite(Vector4 value, string context) {
+    private static void AssertFinite(Vector4 value, string context)
+    {
         AssertFinite(value.X, context + ".x");
         AssertFinite(value.Y, context + ".y");
         AssertFinite(value.Z, context + ".z");
         AssertFinite(value.W, context + ".w");
     }
 
-    private static void AssertFinite(float value, string context)
-        => Assert.True(float.IsFinite(value), $"{context} is not finite.");
+    private static void AssertFinite(float value, string context) =>
+        Assert.True(float.IsFinite(value), $"{context} is not finite.");
 
-    private static bool IsFinite(Vector3 value)
-        => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+    private static bool IsFinite(Vector3 value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 
-    private static int CountNonZeroComponents(Vector3 value) {
+    private static int CountNonZeroComponents(Vector3 value)
+    {
         int count = 0;
-        if (MathF.Abs(value.X) > 0f) {
+        if (MathF.Abs(value.X) > 0f)
+        {
             count++;
         }
 
-        if (MathF.Abs(value.Y) > 0f) {
+        if (MathF.Abs(value.Y) > 0f)
+        {
             count++;
         }
 
-        if (MathF.Abs(value.Z) > 0f) {
+        if (MathF.Abs(value.Z) > 0f)
+        {
             count++;
         }
 
@@ -526,5 +637,6 @@ public sealed class PrimitiveMeshTests {
         Vector3 Size,
         BoundingBox Bounds,
         bool IsCentered,
-        bool IsClosed);
+        bool IsClosed
+    );
 }

@@ -11,12 +11,15 @@ namespace RayBork.Tests.Rendering;
 /// it in <see cref="Dispose"/>. Tests create cameras through <see cref="Service"/>, inspect the packet
 /// after <see cref="EndFrame"/>, and do not need the app harness unless they exercise the tick runner.
 /// </remarks>
-internal sealed class CameraTestHost : IDisposable {
+internal sealed class CameraTestHost : IDisposable
+{
     private bool _attached;
     private bool _ownsAttachment;
 
-    internal CameraTestHost(int renderWidth = 1280, int renderHeight = 720) {
-        Window = new FakePlatformWindow(static () => { }) {
+    internal CameraTestHost(int renderWidth = 1280, int renderHeight = 720)
+    {
+        Window = new FakePlatformWindow(static () => { })
+        {
             Width = renderWidth,
             Height = renderHeight,
         };
@@ -29,14 +32,22 @@ internal sealed class CameraTestHost : IDisposable {
 
     internal RenderFramePacket Packet { get; private set; } = null!;
 
-    internal void AttachTonemapping(TonemappingSettings tonemapping) => Service.AttachTonemapping(tonemapping);
+    internal void AttachTonemapping(TonemappingSettings tonemapping) =>
+        Service.AttachTonemapping(tonemapping);
 
-    internal RenderFramePacket BeginFrame(long frameIndex = 1, double time = 1.0, double deltaTime = 1.0 / 60.0) {
-        if (!_attached) {
+    internal RenderFramePacket BeginFrame(
+        long frameIndex = 1,
+        double time = 1.0,
+        double deltaTime = 1.0 / 60.0
+    )
+    {
+        if (!_attached)
+        {
             // Another test helper on this thread (for example the GPU draw harness) may already own the
             // tick-thread attachment; only detach in Dispose when this host attached.
             _ownsAttachment = !TickThread.IsCurrent;
-            if (_ownsAttachment) {
+            if (_ownsAttachment)
+            {
                 TickThread.Attach();
             }
 
@@ -57,8 +68,9 @@ internal sealed class CameraTestHost : IDisposable {
         float far = float.PositiveInfinity,
         Rect? viewport = null,
         RenderTexture? target = null,
-        PostProcessStack? postProcess = null)
-        => Service.CreateCamera(
+        PostProcessStack? postProcess = null
+    ) =>
+        Service.CreateCamera(
             transform ?? Transform.Identity,
             CameraProjection.Perspective,
             fieldOfView,
@@ -69,7 +81,8 @@ internal sealed class CameraTestHost : IDisposable {
             far,
             viewport,
             target,
-            postProcess);
+            postProcess
+        );
 
     internal Camera CreateOrthographicCamera(
         Transform? transform = null,
@@ -80,8 +93,9 @@ internal sealed class CameraTestHost : IDisposable {
         float far = 100f,
         Rect? viewport = null,
         RenderTexture? target = null,
-        PostProcessStack? postProcess = null)
-        => Service.CreateCamera(
+        PostProcessStack? postProcess = null
+    ) =>
+        Service.CreateCamera(
             transform ?? Transform.Identity,
             CameraProjection.Orthographic,
             fieldOfView: 0f,
@@ -92,20 +106,27 @@ internal sealed class CameraTestHost : IDisposable {
             far,
             viewport,
             target,
-            postProcess);
+            postProcess
+        );
 
     internal void EndFrame() => Service.EndFrame();
 
-    public void Dispose() {
-        if (!_attached) {
+    public void Dispose()
+    {
+        if (!_attached)
+        {
             return;
         }
 
-        try {
+        try
+        {
             Service.AbandonFrame();
-        } finally {
+        }
+        finally
+        {
             _attached = false;
-            if (_ownsAttachment) {
+            if (_ownsAttachment)
+            {
                 _ownsAttachment = false;
                 TickThread.Detach();
             }

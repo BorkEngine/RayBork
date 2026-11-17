@@ -9,17 +9,19 @@ namespace RayBork.Internal;
 /// Built-ins come first, so a user registration for one of these types fails the registry's
 /// duplicate-registration check in the catalog constructor.
 /// </remarks>
-internal static class BuiltInAssetLoaders {
+internal static class BuiltInAssetLoaders
+{
     /// <summary>
     /// Creates the built-in asset registrations in registration order.
     /// </summary>
     /// <returns>The built-in registrations.</returns>
-    internal static IReadOnlyList<AssetTypeRegistration> CreateDefault() => [
-        new EngineAssetTypeRegistration<Mesh>(MeshAssetFormat.Instance),
-        new EngineAssetTypeRegistration<Texture>(TextureAssetFormat.Instance),
-        new EngineAssetTypeRegistration<Font>(FontAssetFormat.Instance),
-        new EngineAssetTypeRegistration<ShaderProgram>(ShaderProgramAssetFormat.Instance),
-        new LoaderAssetTypeRegistration<Shader>(ShaderMaterialLoader.Instance),
-        new LoaderAssetTypeRegistration<Model>(ModelAssetLoader.Instance),
-    ];
+    internal static IReadOnlyList<AssetTypeRegistration> CreateDefault() =>
+        [
+            new EngineAssetTypeRegistration<Mesh>(MeshAssetFormat.Instance),
+            new EngineAssetTypeRegistration<Texture>(TextureAssetFormat.Instance),
+            new EngineAssetTypeRegistration<Font>(FontAssetFormat.Instance),
+            new EngineAssetTypeRegistration<ShaderProgram>(ShaderProgramAssetFormat.Instance),
+            new LoaderAssetTypeRegistration<Shader>(ShaderMaterialLoader.Instance),
+            new LoaderAssetTypeRegistration<Model>(ModelAssetLoader.Instance),
+        ];
 }

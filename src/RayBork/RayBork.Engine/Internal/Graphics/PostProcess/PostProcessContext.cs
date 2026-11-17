@@ -36,11 +36,13 @@ namespace RayBork.Internal;
 /// Render-thread only. The context is valid for exactly one camera pass and is reset before the next.
 /// </para>
 /// </remarks>
-internal sealed class PostProcessContext {
+internal sealed class PostProcessContext
+{
     private readonly VulkanPostProcessor _processor;
     private VulkanPostTarget? _currentColorTarget;
 
-    internal PostProcessContext(VulkanPostProcessor processor) {
+    internal PostProcessContext(VulkanPostProcessor processor)
+    {
         ArgumentNullException.ThrowIfNull(processor);
         _processor = processor;
     }
@@ -141,7 +143,8 @@ internal sealed class PostProcessContext {
     /// <param name="stride">The record's size in bytes, including the fixed instance header.</param>
     /// <returns>The record's byte offset, aligned to <paramref name="stride"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stride"/> is not positive.</exception>
-    internal ulong ReserveInstanceRecord(int stride) {
+    internal ulong ReserveInstanceRecord(int stride)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(stride);
         ulong byteOffset = VulkanInstanceRecordWriter.AlignUp(InstanceByteOffset, (ulong)stride);
         InstanceByteOffset = byteOffset + (ulong)stride;
@@ -184,7 +187,9 @@ internal sealed class PostProcessContext {
         Rect2D renderArea,
         uint targetColorSlot,
         uint targetDepthSlot,
-        ulong instanceByteOffset) {
+        ulong instanceByteOffset
+    )
+    {
         Vulkan = vulkan;
         CommandBuffer = commandBuffer;
         Frame = frame;
@@ -209,14 +214,16 @@ internal sealed class PostProcessContext {
     /// </summary>
     /// <param name="extent">The positive target extent.</param>
     /// <returns>The target to write.</returns>
-    internal VulkanPostTarget RentColorTarget(Extent2D extent) => _processor.RentColorTarget(this, extent);
+    internal VulkanPostTarget RentColorTarget(Extent2D extent) =>
+        _processor.RentColorTarget(this, extent);
 
     /// <summary>
     /// Transitions a rendered camera-target-sized target to a shader read and makes it the chain source
     /// for the next effect or the store-back.
     /// </summary>
     /// <param name="target">The target the effect rendered into.</param>
-    internal void CompleteColorTarget(VulkanPostTarget target) => _processor.CompleteColorTarget(this, target);
+    internal void CompleteColorTarget(VulkanPostTarget target) =>
+        _processor.CompleteColorTarget(this, target);
 
     /// <summary>
     /// Transitions an auxiliary target to a shader read without making it the chain source, so a later
@@ -239,7 +246,8 @@ internal sealed class PostProcessContext {
         VulkanPostTarget destination,
         Pipeline pipeline,
         ulong instanceByteOffset,
-        int stride) => _processor.RecordFullscreenPass(this, destination, pipeline, instanceByteOffset, stride);
+        int stride
+    ) => _processor.RecordFullscreenPass(this, destination, pipeline, instanceByteOffset, stride);
 
     /// <summary>
     /// Records one fullscreen custom-effect pass from the current source into
@@ -251,7 +259,8 @@ internal sealed class PostProcessContext {
     internal void RecordCustomShaderPass(
         VulkanPostTarget destination,
         ShaderPostProcessEffectSnapshot snapshot,
-        EngineAsset program) => _processor.RecordCustomShaderPass(this, destination, snapshot, program);
+        EngineAsset program
+    ) => _processor.RecordCustomShaderPass(this, destination, snapshot, program);
 
     /// <summary>
     /// Records the engine store-back pass from the final chain target into the camera target for the
@@ -262,11 +271,13 @@ internal sealed class PostProcessContext {
     /// <summary>Resolves one material texture binding to its bindless slot.</summary>
     /// <param name="texture">The texture, or <see langword="null"/> for the white fallback.</param>
     /// <returns>The bindless slot.</returns>
-    internal static uint ResolveTextureSlot(Texture? texture) => VulkanPostProcessor.ResolveTextureSlot(texture);
+    internal static uint ResolveTextureSlot(Texture? texture) =>
+        VulkanPostProcessor.ResolveTextureSlot(texture);
 
     /// <summary>Marks <paramref name="target"/> as the chain source. Called after a completed pass.</summary>
     /// <param name="target">The target that now holds the chain's current output.</param>
-    internal void SetCurrentColorTarget(VulkanPostTarget target) {
+    internal void SetCurrentColorTarget(VulkanPostTarget target)
+    {
         ArgumentNullException.ThrowIfNull(target);
         _currentColorTarget = target;
     }

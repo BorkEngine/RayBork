@@ -24,7 +24,8 @@ namespace RayBork.Tests;
 /// the template.
 /// </para>
 /// </remarks>
-public sealed class PerInstanceTextureRecordTests {
+public sealed class PerInstanceTextureRecordTests
+{
     /// <summary>
     /// The instance-template size a shader with one to four texture bindings and no uniforms gets from
     /// the shader ABI, which is enough for the two-slot cases below.
@@ -33,11 +34,13 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheSharedTexturePathIsUnchanged() {
+    public void TheSharedTexturePathIsUnchanged()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         ShaderProgram program = RenderingTestAssets.CreateProgram();
         Texture texture = RenderingTestAssets.CreateTexture("textures/shared");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, program);
             record.SetShaderState(program.DefaultInstanceData, [texture]);
@@ -50,7 +53,9 @@ public sealed class PerInstanceTextureRecordTests {
             Assert.Same(texture, record.GetTextureBindings()[0]);
             Assert.Equal(program.DefaultInstanceData.Length, record.InstanceTemplate.Length);
             Assert.Equal(2, record.InstanceCount);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
             RenderingTestAssets.ReleaseProgram(program);
         }
@@ -58,12 +63,14 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheMaterialOverloadStoresPerInstanceBindingsInstanceMajor() {
+    public void TheMaterialOverloadStoresPerInstanceBindingsInstanceMajor()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = CreateTwoTextureMaterial();
         Texture first = RenderingTestAssets.CreateTexture("textures/first");
         Texture second = RenderingTestAssets.CreateTexture("textures/second");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, material);
             record.SetPerInstanceShaderState(material);
@@ -86,7 +93,9 @@ public sealed class PerInstanceTextureRecordTests {
             Assert.Same(second, stored[1]);
             Assert.Same(second, stored[2]);
             Assert.Same(first, stored[3]);
-        } finally {
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
             material.Dispose();
@@ -95,12 +104,14 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OneBindingPerInstanceUsesOnlyThatInstancesTexture() {
+    public void OneBindingPerInstanceUsesOnlyThatInstancesTexture()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/one-texture");
         Texture first = RenderingTestAssets.CreateTexture("textures/first");
         Texture second = RenderingTestAssets.CreateTexture("textures/second");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, material);
             record.SetPerInstanceShaderState(material);
@@ -116,7 +127,9 @@ public sealed class PerInstanceTextureRecordTests {
             Assert.Same(first, stored[0]);
             Assert.Null(stored[1]);
             Assert.Same(second, stored[2]);
-        } finally {
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
             material.Dispose();
@@ -125,95 +138,133 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ATemplateTooSmallForTheDeclaredBindingsIsRejected() {
+    public void ATemplateTooSmallForTheDeclaredBindingsIsRejected()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         ShaderProgram program = RenderingTestAssets.CreateProgram();
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, program);
 
             // Five slots need 20 template bytes; the 16-byte template has room for four.
-            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-                () => record.SetPerInstanceShaderState(new byte[TEXTURE_TEMPLATE_SIZE], textureBindingCount: 5));
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+                record.SetPerInstanceShaderState(
+                    new byte[TEXTURE_TEMPLATE_SIZE],
+                    textureBindingCount: 5
+                )
+            );
 
-            Assert.Contains("5 declared texture index slot(s)", thrown.Message, StringComparison.Ordinal);
+            Assert.Contains(
+                "5 declared texture index slot(s)",
+                thrown.Message,
+                StringComparison.Ordinal
+            );
             Assert.Contains("16 byte(s)", thrown.Message, StringComparison.Ordinal);
             Assert.False(record.HasPerInstanceTextureBindings);
             Assert.Equal(0, record.TextureBindingCount);
             Assert.True(record.InstanceTemplate.IsEmpty);
-        } finally {
+        }
+        finally
+        {
             RenderingTestAssets.ReleaseProgram(program);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ANonPositiveBindingCountIsRejected() {
+    public void ANonPositiveBindingCountIsRejected()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         ShaderProgram program = RenderingTestAssets.CreateProgram();
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, program);
 
-            Assert.Throws<ArgumentOutOfRangeException>(
-                () => record.SetPerInstanceShaderState(new byte[TEXTURE_TEMPLATE_SIZE], textureBindingCount: 0));
-            Assert.Throws<ArgumentOutOfRangeException>(
-                () => record.SetPerInstanceShaderState(new byte[TEXTURE_TEMPLATE_SIZE], textureBindingCount: -1));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                record.SetPerInstanceShaderState(
+                    new byte[TEXTURE_TEMPLATE_SIZE],
+                    textureBindingCount: 0
+                )
+            );
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                record.SetPerInstanceShaderState(
+                    new byte[TEXTURE_TEMPLATE_SIZE],
+                    textureBindingCount: -1
+                )
+            );
             Assert.False(record.HasPerInstanceTextureBindings);
             Assert.True(record.InstanceTemplate.IsEmpty);
-        } finally {
+        }
+        finally
+        {
             RenderingTestAssets.ReleaseProgram(program);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ABindingCountThatWouldOverflowTheTemplateSizeIsRejected() {
+    public void ABindingCountThatWouldOverflowTheTemplateSizeIsRejected()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         ShaderProgram program = RenderingTestAssets.CreateProgram();
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, program);
 
             // No checked multiplication can see this count: it is rejected before the byte count.
-            Assert.Throws<ArgumentOutOfRangeException>(
-                () => record.SetPerInstanceShaderState(new byte[TEXTURE_TEMPLATE_SIZE], int.MaxValue));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                record.SetPerInstanceShaderState(new byte[TEXTURE_TEMPLATE_SIZE], int.MaxValue)
+            );
             Assert.False(record.HasPerInstanceTextureBindings);
             Assert.True(record.InstanceTemplate.IsEmpty);
-        } finally {
+        }
+        finally
+        {
             RenderingTestAssets.ReleaseProgram(program);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AMaterialWithoutTextureBindingsIsRejected() {
+    public void AMaterialWithoutTextureBindingsIsRejected()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         // The built-in /shaders/primitive program reflects no texture bindings.
         Shader material = RenderingTestAssets.CreateShader("shaders/no-textures", textures: []);
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, material);
 
-            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-                () => record.SetPerInstanceShaderState(material));
-            Assert.Contains("declares no texture bindings", thrown.Message, StringComparison.Ordinal);
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+                record.SetPerInstanceShaderState(material)
+            );
+            Assert.Contains(
+                "declares no texture bindings",
+                thrown.Message,
+                StringComparison.Ordinal
+            );
             Assert.False(record.HasPerInstanceTextureBindings);
-        } finally {
+        }
+        finally
+        {
             material.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ANullOrDisposedMaterialIsRejected() {
+    public void ANullOrDisposedMaterialIsRejected()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/disposed");
         RenderFramePacket packet = CreatePacket();
         RenderDrawRecord record = RentRecord(packet, mesh, material);
 
-        Assert.Throws<ArgumentNullException>(
-            () => record.SetPerInstanceShaderState((Shader)null!));
+        Assert.Throws<ArgumentNullException>(() => record.SetPerInstanceShaderState((Shader)null!));
         // Disposing the material is the act under test, so it is released exactly here.
         material.Dispose();
         Assert.Throws<ObjectDisposedException>(() => record.SetPerInstanceShaderState(material));
@@ -222,13 +273,15 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheMaterialMustBeOverTheRecordsProgram() {
+    public void TheMaterialMustBeOverTheRecordsProgram()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         ShaderProgram program = RenderingTestAssets.CreateProgram("shaders/guard");
         Shader recorded = program.CreateMaterial();
         Shader sameProgram = program.CreateMaterial();
         Shader otherProgram = RenderingTestAssets.CreateShader("shaders/guard-other");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
 
             RenderDrawRecord accepted = RentRecord(packet, mesh, recorded);
@@ -236,19 +289,25 @@ public sealed class PerInstanceTextureRecordTests {
             Assert.True(accepted.HasPerInstanceTextureBindings);
 
             RenderDrawRecord rejected = RentRecord(packet, mesh, recorded);
-            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-                () => rejected.SetPerInstanceShaderState(otherProgram));
+            InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+                rejected.SetPerInstanceShaderState(otherProgram)
+            );
             Assert.Contains(
                 "is not over the program the draw record began with",
                 thrown.Message,
-                StringComparison.Ordinal);
+                StringComparison.Ordinal
+            );
             Assert.False(rejected.HasPerInstanceTextureBindings);
             Assert.True(rejected.InstanceTemplate.IsEmpty);
 
             // A record that has not begun has no program to match.
             RenderDrawRecord unbegun = packet.RentDrawRecord();
-            Assert.Throws<InvalidOperationException>(() => unbegun.SetPerInstanceShaderState(recorded));
-        } finally {
+            Assert.Throws<InvalidOperationException>(() =>
+                unbegun.SetPerInstanceShaderState(recorded)
+            );
+        }
+        finally
+        {
             recorded.Dispose();
             sameProgram.Dispose();
             otherProgram.Dispose();
@@ -258,16 +317,20 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ASharedAndAPerInstanceTextureSetAreMutuallyExclusive() {
+    public void ASharedAndAPerInstanceTextureSetAreMutuallyExclusive()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/exclusive");
         Texture texture = RenderingTestAssets.CreateTexture("textures/exclusive");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
 
             RenderDrawRecord sharedFirst = RentRecord(packet, mesh, material);
             sharedFirst.SetShaderState(material.InstanceData, [texture]);
-            Assert.Throws<InvalidOperationException>(() => sharedFirst.SetPerInstanceShaderState(material));
+            Assert.Throws<InvalidOperationException>(() =>
+                sharedFirst.SetPerInstanceShaderState(material)
+            );
             Assert.Equal(1, sharedFirst.GetTextureBindings().Length);
             Assert.Same(texture, sharedFirst.GetTextureBindings()[0]);
             Assert.False(sharedFirst.HasPerInstanceTextureBindings);
@@ -275,21 +338,27 @@ public sealed class PerInstanceTextureRecordTests {
             // An empty shared declaration still declares the shared form, because it writes the template.
             RenderDrawRecord emptySharedFirst = RentRecord(packet, mesh, material);
             emptySharedFirst.SetShaderState(material.InstanceData, []);
-            Assert.Throws<InvalidOperationException>(() => emptySharedFirst.SetPerInstanceShaderState(material));
+            Assert.Throws<InvalidOperationException>(() =>
+                emptySharedFirst.SetPerInstanceShaderState(material)
+            );
             Assert.False(emptySharedFirst.HasPerInstanceTextureBindings);
 
             RenderDrawRecord perInstanceFirst = RentRecord(packet, mesh, material);
             perInstanceFirst.SetPerInstanceShaderState(material);
             perInstanceFirst.BeginInstances(1);
             perInstanceFirst.BeginInstanceTextureBindings()[0] = texture;
-            Assert.Throws<InvalidOperationException>(
-                () => perInstanceFirst.SetShaderState(material.InstanceData, [texture]));
-            Assert.Throws<InvalidOperationException>(
-                () => perInstanceFirst.SetShaderState(material.InstanceData, []));
+            Assert.Throws<InvalidOperationException>(() =>
+                perInstanceFirst.SetShaderState(material.InstanceData, [texture])
+            );
+            Assert.Throws<InvalidOperationException>(() =>
+                perInstanceFirst.SetShaderState(material.InstanceData, [])
+            );
             Assert.True(perInstanceFirst.GetTextureBindings().IsEmpty);
             Assert.True(perInstanceFirst.HasPerInstanceTextureBindings);
             Assert.Same(texture, perInstanceFirst.GetInstanceTextureBindings()[0]);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
             material.Dispose();
         }
@@ -297,11 +366,13 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ResetClearsTheSharedAndPerInstanceBindings() {
+    public void ResetClearsTheSharedAndPerInstanceBindings()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/reset");
         Texture texture = RenderingTestAssets.CreateTexture("textures/reset");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, material);
             record.SetPerInstanceShaderState(material);
@@ -318,7 +389,9 @@ public sealed class PerInstanceTextureRecordTests {
             Assert.True(record.GetTextureBindings().IsEmpty);
             Assert.Equal(0, record.InstanceCount);
             Assert.True(record.InstanceTemplate.IsEmpty);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
             material.Dispose();
         }
@@ -326,11 +399,13 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AReusedRecordDoesNotExposeStaleTextureBindings() {
+    public void AReusedRecordDoesNotExposeStaleTextureBindings()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/stale");
         Texture texture = RenderingTestAssets.CreateTexture("textures/stale");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, material);
             record.SetPerInstanceShaderState(material);
@@ -349,14 +424,17 @@ public sealed class PerInstanceTextureRecordTests {
                 mesh.IndexCount,
                 material.Program.Lifetime,
                 RenderState.Opaque,
-                Color.White);
+                Color.White
+            );
             reused.SetPerInstanceShaderState(material);
             reused.BeginInstances(1);
 
             Span<Texture?> refilled = reused.BeginInstanceTextureBindings();
             Assert.Equal(1, refilled.Length);
             Assert.True(refilled[0] is null);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
             material.Dispose();
         }
@@ -364,11 +442,13 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ASecondBeginInstancesClearsThePerInstanceBindings() {
+    public void ASecondBeginInstancesClearsThePerInstanceBindings()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/redeclare");
         Texture texture = RenderingTestAssets.CreateTexture("textures/redeclare");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             RenderDrawRecord record = RentRecord(packet, mesh, material);
             record.SetPerInstanceShaderState(material);
@@ -384,7 +464,9 @@ public sealed class PerInstanceTextureRecordTests {
             Assert.True(refilled[0] is null);
             Assert.True(refilled[1] is null);
             Assert.True(refilled[2] is null);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
             material.Dispose();
         }
@@ -392,10 +474,12 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FillRequiresAPerInstanceSetAndRecordedInstances() {
+    public void FillRequiresAPerInstanceSetAndRecordedInstances()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/fill");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
 
             RenderDrawRecord shared = RentRecord(packet, mesh, material);
@@ -405,23 +489,29 @@ public sealed class PerInstanceTextureRecordTests {
 
             RenderDrawRecord perInstance = RentRecord(packet, mesh, material);
             perInstance.SetPerInstanceShaderState(material);
-            Assert.Throws<InvalidOperationException>(() => perInstance.BeginInstanceTextureBindings());
+            Assert.Throws<InvalidOperationException>(() =>
+                perInstance.BeginInstanceTextureBindings()
+            );
 
             perInstance.BeginInstances(1);
             Assert.Equal(1, perInstance.BeginInstanceTextureBindings().Length);
-        } finally {
+        }
+        finally
+        {
             material.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerInstanceBindingsDoNotSplitOrJoinABatch() {
+    public void PerInstanceBindingsDoNotSplitOrJoinABatch()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/batched");
         Texture first = RenderingTestAssets.CreateTexture("textures/first");
         Texture second = RenderingTestAssets.CreateTexture("textures/second");
-        try {
+        try
+        {
             RenderFramePacket packet = CreatePacket();
             CameraPass pass = BeginPass(packet);
 
@@ -450,8 +540,12 @@ public sealed class PerInstanceTextureRecordTests {
             // of the record size, so mixing both forms keeps one batch and one stride.
             Assert.Equal(
                 ShaderAbiLayout.INSTANCE_HEADER_SIZE + material.InstanceData.Length,
-                ShaderAbiLayout.INSTANCE_HEADER_SIZE + batch.Instances[0].Record.InstanceTemplate.Length);
-        } finally {
+                ShaderAbiLayout.INSTANCE_HEADER_SIZE
+                    + batch.Instances[0].Record.InstanceTemplate.Length
+            );
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
             material.Dispose();
@@ -460,12 +554,14 @@ public sealed class PerInstanceTextureRecordTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheFrameRingReusesTheRecordWithEmptyBindings() {
+    public void TheFrameRingReusesTheRecordWithEmptyBindings()
+    {
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Shader material = RenderingTestAssets.CreateShader("shaders/ring");
         Texture texture = RenderingTestAssets.CreateTexture("textures/ring");
         FrameRing ring = new();
-        try {
+        try
+        {
             Assert.True(ring.TryAcquireWritable(out FrameLease lease));
             RenderFramePacket packet = Assert.IsType<RenderFramePacket>(lease.Packet);
             RenderDrawRecord record = RentRecord(packet, mesh, material);
@@ -483,23 +579,29 @@ public sealed class PerInstanceTextureRecordTests {
             Assert.True(record.GetInstanceTextureBindings().IsEmpty);
             Assert.True(record.GetTextureBindings().IsEmpty);
             ring.Abandon(reused);
-        } finally {
+        }
+        finally
+        {
             texture.Dispose();
             material.Dispose();
         }
     }
 
-    private static Shader CreateTwoTextureMaterial() => RenderingTestAssets.CreateShader(
-        "shaders/two-textures",
-        textures: [RenderingTestAssets.TEXTURE_BINDING, "detailTexture"]);
+    private static Shader CreateTwoTextureMaterial() =>
+        RenderingTestAssets.CreateShader(
+            "shaders/two-textures",
+            textures: [RenderingTestAssets.TEXTURE_BINDING, "detailTexture"]
+        );
 
-    private static RenderFramePacket CreatePacket() {
+    private static RenderFramePacket CreatePacket()
+    {
         RenderFramePacket packet = new(1);
         packet.BeginRecording(0.0, 0.0);
         return packet;
     }
 
-    private static CameraPass BeginPass(RenderFramePacket packet) {
+    private static CameraPass BeginPass(RenderFramePacket packet)
+    {
         Matrix4x4 view = CameraMath.CreateViewMatrix(Transform.Identity);
         Matrix4x4 projection = CameraMath.CreatePerspectiveProjection(60f, 16f / 9f, 0.1f, 1000f);
         CameraPass pass = packet.BeginPass();
@@ -514,11 +616,17 @@ public sealed class PerInstanceTextureRecordTests {
             1280,
             720,
             ClearMode.ColorAndDepth,
-            Color.Black);
+            Color.Black
+        );
         return pass;
     }
 
-    private static RenderDrawRecord RentRecord(RenderFramePacket packet, Mesh mesh, ShaderProgram program) {
+    private static RenderDrawRecord RentRecord(
+        RenderFramePacket packet,
+        Mesh mesh,
+        ShaderProgram program
+    )
+    {
         RenderDrawRecord record = packet.RentDrawRecord();
         record.Begin(
             mesh.Lifetime,
@@ -527,11 +635,13 @@ public sealed class PerInstanceTextureRecordTests {
             mesh.IndexCount,
             program.Lifetime,
             RenderState.Opaque,
-            Color.White);
+            Color.White
+        );
         return record;
     }
 
-    private static RenderDrawRecord RentRecord(RenderFramePacket packet, Mesh mesh, Shader material) {
+    private static RenderDrawRecord RentRecord(RenderFramePacket packet, Mesh mesh, Shader material)
+    {
         RenderDrawRecord record = packet.RentDrawRecord();
         record.Begin(
             mesh.Lifetime,
@@ -540,7 +650,8 @@ public sealed class PerInstanceTextureRecordTests {
             mesh.IndexCount,
             material.Program.Lifetime,
             RenderState.Opaque,
-            Color.White);
+            Color.White
+        );
         return record;
     }
 }

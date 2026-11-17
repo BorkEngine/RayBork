@@ -28,7 +28,8 @@ namespace RayBork;
 /// is not disposable.
 /// </para>
 /// </remarks>
-public sealed class SsaoEffect : PostProcessEffect {
+public sealed class SsaoEffect : PostProcessEffect
+{
     private const float DEFAULT_RADIUS = 1.5f;
     private const float DEFAULT_DISTANCE_FALLOFF = 1f;
     private const float DEFAULT_INTENSITY = 2f;
@@ -47,8 +48,7 @@ public sealed class SsaoEffect : PostProcessEffect {
     private float _biasMultiplier = DEFAULT_BIAS_MULTIPLIER;
 
     /// <summary>Initializes an SSAO effect with the approved defaults.</summary>
-    public SsaoEffect() {
-    }
+    public SsaoEffect() { }
 
     /// <summary>
     /// Initializes an effect over an explicit asset set. Used by tests; the app path resolves the
@@ -56,7 +56,8 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// </summary>
     /// <param name="assets">The loaded engine-owned SSAO assets.</param>
     /// <exception cref="ArgumentNullException"><paramref name="assets"/> is <see langword="null"/>.</exception>
-    internal SsaoEffect(SsaoAssets assets) {
+    internal SsaoEffect(SsaoAssets assets)
+    {
         ArgumentNullException.ThrowIfNull(assets);
         _assets = assets;
     }
@@ -67,15 +68,19 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// <remarks>The setter is tick-thread only.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not a defined quality.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public SsaoQuality Quality {
+    public SsaoQuality Quality
+    {
         get => _quality;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Quality));
-            if (!Enum.IsDefined(value)) {
+            if (!Enum.IsDefined(value))
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(Quality),
                     value,
-                    "The SSAO quality must be a defined SsaoQuality value.");
+                    "The SSAO quality must be a defined SsaoQuality value."
+                );
             }
 
             _quality = value;
@@ -91,15 +96,19 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is not positive.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float Radius {
+    public float Radius
+    {
         get => _radius;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Radius));
-            if (!float.IsFinite(value) || value <= 0f) {
+            if (!float.IsFinite(value) || value <= 0f)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(Radius),
                     value,
-                    "The SSAO radius must be finite and greater than zero.");
+                    "The SSAO radius must be finite and greater than zero."
+                );
             }
 
             _radius = value;
@@ -112,15 +121,19 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// <remarks>The setter is tick-thread only.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is not positive.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float DistanceFalloff {
+    public float DistanceFalloff
+    {
         get => _distanceFalloff;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(DistanceFalloff));
-            if (!float.IsFinite(value) || value <= 0f) {
+            if (!float.IsFinite(value) || value <= 0f)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(DistanceFalloff),
                     value,
-                    "The SSAO distance falloff must be finite and greater than zero.");
+                    "The SSAO distance falloff must be finite and greater than zero."
+                );
             }
 
             _distanceFalloff = value;
@@ -136,15 +149,19 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite or is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float Intensity {
+    public float Intensity
+    {
         get => _intensity;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Intensity));
-            if (!float.IsFinite(value) || value < 0f) {
+            if (!float.IsFinite(value) || value < 0f)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(Intensity),
                     value,
-                    "The SSAO intensity must be finite and non-negative.");
+                    "The SSAO intensity must be finite and non-negative."
+                );
             }
 
             _intensity = value;
@@ -161,17 +178,23 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentException">A color component is not finite.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public Color Color {
+    public Color Color
+    {
         get => _color;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(Color));
-            if (!float.IsFinite(value.R)
+            if (
+                !float.IsFinite(value.R)
                 || !float.IsFinite(value.G)
                 || !float.IsFinite(value.B)
-                || !float.IsFinite(value.A)) {
+                || !float.IsFinite(value.A)
+            )
+            {
                 throw new ArgumentException(
                     "The SSAO color must have finite components.",
-                    nameof(Color));
+                    nameof(Color)
+                );
             }
 
             _color = value;
@@ -187,15 +210,19 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public int DenoiseRadius {
+    public int DenoiseRadius
+    {
         get => _denoiseRadius;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(DenoiseRadius));
-            if (value < 0) {
+            if (value < 0)
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(DenoiseRadius),
                     value,
-                    "The SSAO denoise radius must be zero or positive.");
+                    "The SSAO denoise radius must be zero or positive."
+                );
             }
 
             _denoiseRadius = value;
@@ -212,9 +239,11 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// tick-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public bool ScreenSpaceRadius {
+    public bool ScreenSpaceRadius
+    {
         get => _screenSpaceRadius;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(ScreenSpaceRadius));
             _screenSpaceRadius = value;
         }
@@ -226,15 +255,19 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// <remarks>The setter is tick-thread only.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float BiasOffset {
+    public float BiasOffset
+    {
         get => _biasOffset;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(BiasOffset));
-            if (!float.IsFinite(value)) {
+            if (!float.IsFinite(value))
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(BiasOffset),
                     value,
-                    "The SSAO bias offset must be finite.");
+                    "The SSAO bias offset must be finite."
+                );
             }
 
             _biasOffset = value;
@@ -248,15 +281,19 @@ public sealed class SsaoEffect : PostProcessEffect {
     /// <remarks>The setter is tick-thread only.</remarks>
     /// <exception cref="ArgumentOutOfRangeException">The value is not finite.</exception>
     /// <exception cref="InvalidOperationException">The caller is not the tick thread.</exception>
-    public float BiasMultiplier {
+    public float BiasMultiplier
+    {
         get => _biasMultiplier;
-        set {
+        set
+        {
             TickThread.RequireCurrent(nameof(BiasMultiplier));
-            if (!float.IsFinite(value)) {
+            if (!float.IsFinite(value))
+            {
                 throw new ArgumentOutOfRangeException(
                     nameof(BiasMultiplier),
                     value,
-                    "The SSAO bias multiplier must be finite.");
+                    "The SSAO bias multiplier must be finite."
+                );
             }
 
             _biasMultiplier = value;
@@ -264,18 +301,24 @@ public sealed class SsaoEffect : PostProcessEffect {
     }
 
     /// <inheritdoc/>
-    internal override PostProcessEffectSnapshot Capture(PostProcessCaptureContext context) {
-        if (!context.TargetHasDepth) {
+    internal override PostProcessEffectSnapshot Capture(PostProcessCaptureContext context)
+    {
+        if (!context.TargetHasDepth)
+        {
             throw new InvalidOperationException(
                 $"The SSAO effect requires a camera target with a depth attachment, but "
                     + $"{context.TargetDescription} has no depth. Create the target with Depth: true; "
-                    + "the app scene target always has depth.");
+                    + "the app scene target always has depth."
+            );
         }
 
-        SsaoAssets assets = _assets ?? context.SsaoAssets ?? throw new InvalidOperationException(
-            "The SSAO effect requires the engine's built-in SSAO assets, but they are not attached "
-                + "to the camera service. The app preloads them before IGame.Setup; a test harness must "
-                + "attach the loaded SsaoAssets to CameraService.");
+        SsaoAssets assets = _assets
+            ?? context.SsaoAssets
+            ?? throw new InvalidOperationException(
+                "The SSAO effect requires the engine's built-in SSAO assets, but they are not attached "
+                    + "to the camera service. The app preloads them before IGame.Setup; a test harness must "
+                    + "attach the loaded SsaoAssets to CameraService."
+            );
         ObjectDisposedException.ThrowIf(assets.IsDisposed, assets);
 
         var settings = new SsaoSettings(
@@ -287,7 +330,8 @@ public sealed class SsaoEffect : PostProcessEffect {
             _denoiseRadius,
             _screenSpaceRadius,
             _biasOffset,
-            _biasMultiplier);
+            _biasMultiplier
+        );
         return SsaoEffectSnapshot.Rent(this, settings, assets);
     }
 }
@@ -313,4 +357,5 @@ internal readonly record struct SsaoSettings(
     int DenoiseRadius,
     bool ScreenSpaceRadius,
     float BiasOffset,
-    float BiasMultiplier);
+    float BiasMultiplier
+);

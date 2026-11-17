@@ -2,21 +2,26 @@ using RayBork.Internal;
 
 namespace RayBork.Tests.Assets.Catalog;
 
-public sealed class AssetTypeRegistryTests {
+public sealed class AssetTypeRegistryTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateAssetTypeRegistrationThrows() {
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-            () => new AssetTypeRegistry([CreateRegistration(), CreateRegistration()]));
+    public void DuplicateAssetTypeRegistrationThrows()
+    {
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            new AssetTypeRegistry([CreateRegistration(), CreateRegistration()])
+        );
 
         Assert.Equal(
             $"The asset type '{typeof(CatalogTestSettings).FullName}' is registered more than once.",
-            thrown.Message);
+            thrown.Message
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TryGetAndContainsReportTheRegisteredType() {
+    public void TryGetAndContainsReportTheRegisteredType()
+    {
         LoaderAssetTypeRegistration<CatalogTestSettings> registration = CreateRegistration();
         AssetTypeRegistry registry = new([registration]);
 
@@ -30,20 +35,27 @@ public sealed class AssetTypeRegistryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GetRejectsAnUnregisteredTypeWithTheCatalogMessage() {
+    public void GetRejectsAnUnregisteredTypeWithTheCatalogMessage()
+    {
         AssetTypeRegistry registry = new([]);
 
-        NotSupportedException thrown = Assert.Throws<NotSupportedException>(
-            () => registry.Get(typeof(CatalogTestSettings)));
+        NotSupportedException thrown = Assert.Throws<NotSupportedException>(() =>
+            registry.Get(typeof(CatalogTestSettings))
+        );
 
-        Assert.Contains(typeof(CatalogTestSettings).FullName!, thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            typeof(CatalogTestSettings).FullName!,
+            thrown.Message,
+            StringComparison.Ordinal
+        );
         Assert.Contains("WithAssetType<T>()", thrown.Message, StringComparison.Ordinal);
         Assert.Contains("WithAssetLoader<T>()", thrown.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LoaderRegistrationCarriesTheConfiguredFailureDescription() {
+    public void LoaderRegistrationCarriesTheConfiguredFailureDescription()
+    {
         MessagePackAssetLoader<CatalogTestSettings> loader = new();
 
         LoaderAssetTypeRegistration<CatalogTestSettings> defaulted = new(loader);
@@ -51,17 +63,24 @@ public sealed class AssetTypeRegistryTests {
 
         LoaderAssetTypeRegistration<CatalogTestSettings> customData = new(
             loader,
-            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION);
-        Assert.Equal(CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION, customData.FailureDescription);
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION
+        );
+        Assert.Equal(
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION,
+            customData.FailureDescription
+        );
 
-        Assert.Throws<ArgumentNullException>(
-            () => new LoaderAssetTypeRegistration<CatalogTestSettings>(loader, null!));
-        Assert.Throws<ArgumentException>(
-            () => new LoaderAssetTypeRegistration<CatalogTestSettings>(loader, " "));
+        Assert.Throws<ArgumentNullException>(() =>
+            new LoaderAssetTypeRegistration<CatalogTestSettings>(loader, null!)
+        );
+        Assert.Throws<ArgumentException>(() =>
+            new LoaderAssetTypeRegistration<CatalogTestSettings>(loader, " ")
+        );
     }
 
-    private static LoaderAssetTypeRegistration<CatalogTestSettings> CreateRegistration()
-        => new(
+    private static LoaderAssetTypeRegistration<CatalogTestSettings> CreateRegistration() =>
+        new(
             new MessagePackAssetLoader<CatalogTestSettings>(),
-            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION);
+            CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION
+        );
 }

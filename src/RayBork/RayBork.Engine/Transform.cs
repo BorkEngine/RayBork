@@ -9,7 +9,8 @@ namespace RayBork;
 /// Positions and directions use the right-handed, Y-up System.Numerics convention: forward is
 /// <c>-Z</c>. Matrices use the row-vector order <c>Scale * Rotation * Translation</c>.
 /// </remarks>
-public struct Transform {
+public struct Transform
+{
     private const float MINIMUM_SCALE_LENGTH = 1e-8f;
     private const float SHEAR_TOLERANCE = 1e-4f;
 
@@ -22,7 +23,8 @@ public struct Transform {
     /// <see cref="Quaternion.Identity"/>.
     /// </param>
     /// <param name="scale">The scale on each axis.</param>
-    public Transform(Vector3 position, Quaternion rotation, Vector3 scale) {
+    public Transform(Vector3 position, Quaternion rotation, Vector3 scale)
+    {
         Position = position;
         Rotation = NormalizeRotation(rotation);
         Scale = scale;
@@ -32,7 +34,8 @@ public struct Transform {
     /// Initializes a new transform at the given position with identity rotation and unit scale.
     /// </summary>
     /// <param name="position">The world-space position.</param>
-    public Transform(Vector3 position) {
+    public Transform(Vector3 position)
+    {
         Position = position;
         Rotation = Quaternion.Identity;
         Scale = Vector3.One;
@@ -80,7 +83,9 @@ public struct Transform {
     /// </summary>
     /// <returns>The composed transform matrix.</returns>
     public readonly Matrix4x4 ToMatrix() =>
-        Matrix4x4.CreateScale(Scale) * Matrix4x4.CreateFromQuaternion(Rotation) * Matrix4x4.CreateTranslation(Position);
+        Matrix4x4.CreateScale(Scale)
+        * Matrix4x4.CreateFromQuaternion(Rotation)
+        * Matrix4x4.CreateTranslation(Position);
 
     /// <summary>
     /// Treats this transform as local to a parent and returns the composed world transform.
@@ -94,12 +99,22 @@ public struct Transform {
     /// The composed matrix contains shear, which a translation, rotation, and scale cannot represent,
     /// or it is singular and cannot be decomposed.
     /// </exception>
-    public readonly Transform WithParent(Transform parent) {
+    public readonly Transform WithParent(Transform parent)
+    {
         Matrix4x4 world = ToMatrix() * parent.ToMatrix();
 
-        if (!TryDecompose(world, out Vector3 scale, out Quaternion rotation, out Vector3 translation)) {
+        if (
+            !TryDecompose(
+                world,
+                out Vector3 scale,
+                out Quaternion rotation,
+                out Vector3 translation
+            )
+        )
+        {
             throw new InvalidOperationException(
-                "The composed matrix contains shear or is singular and cannot be decomposed into a translation, rotation, and scale.");
+                "The composed matrix contains shear or is singular and cannot be decomposed into a translation, rotation, and scale."
+            );
         }
 
         return new Transform(translation, rotation, scale);
@@ -111,7 +126,12 @@ public struct Transform {
     /// <param name="position">The new world-space position.</param>
     /// <returns>The updated transform.</returns>
     public readonly Transform WithPosition(Vector3 position) =>
-        new() { Position = position, Rotation = Rotation, Scale = Scale };
+        new()
+        {
+            Position = position,
+            Rotation = Rotation,
+            Scale = Scale,
+        };
 
     /// <summary>
     /// Returns a copy of this transform with a different rotation.
@@ -129,7 +149,12 @@ public struct Transform {
     /// <param name="scale">The new scale on each axis.</param>
     /// <returns>The updated transform.</returns>
     public readonly Transform WithScale(Vector3 scale) =>
-        new() { Position = Position, Rotation = Rotation, Scale = scale };
+        new()
+        {
+            Position = Position,
+            Rotation = Rotation,
+            Scale = scale,
+        };
 
     /// <summary>
     /// Transforms a point by applying scale, then rotation, then translation.
@@ -144,7 +169,8 @@ public struct Transform {
     /// </summary>
     /// <param name="direction">The direction in local space.</param>
     /// <returns>The rotated direction in world space.</returns>
-    public readonly Vector3 TransformDirection(Vector3 direction) => Vector3.Transform(direction, Rotation);
+    public readonly Vector3 TransformDirection(Vector3 direction) =>
+        Vector3.Transform(direction, Rotation);
 
     /// <summary>
     /// Computes the inverse of this transform.
@@ -154,16 +180,29 @@ public struct Transform {
     /// The transform matrix is singular, or its inverse contains shear and cannot be represented as
     /// a translation, rotation, and scale.
     /// </exception>
-    public readonly Transform Inverse() {
+    public readonly Transform Inverse()
+    {
         Matrix4x4 matrix = ToMatrix();
 
-        if (!Matrix4x4.Invert(matrix, out Matrix4x4 inverse)) {
-            throw new InvalidOperationException("The transform matrix is singular and cannot be inverted.");
+        if (!Matrix4x4.Invert(matrix, out Matrix4x4 inverse))
+        {
+            throw new InvalidOperationException(
+                "The transform matrix is singular and cannot be inverted."
+            );
         }
 
-        if (!TryDecompose(inverse, out Vector3 scale, out Quaternion rotation, out Vector3 translation)) {
+        if (
+            !TryDecompose(
+                inverse,
+                out Vector3 scale,
+                out Quaternion rotation,
+                out Vector3 translation
+            )
+        )
+        {
             throw new InvalidOperationException(
-                "The inverse matrix contains shear and cannot be represented as a translation, rotation, and scale.");
+                "The inverse matrix contains shear and cannot be represented as a translation, rotation, and scale."
+            );
         }
 
         return new Transform(translation, rotation, scale);
@@ -176,13 +215,15 @@ public struct Transform {
     /// <param name="b">The transform at <paramref name="t"/> equal to one.</param>
     /// <param name="t">The interpolation factor, clamped to <c>[0, 1]</c>.</param>
     /// <returns>The interpolated transform.</returns>
-    public static Transform Lerp(Transform a, Transform b, float t) {
+    public static Transform Lerp(Transform a, Transform b, float t)
+    {
         t = Math.Clamp(t, 0f, 1f);
 
         return new Transform(
             Vector3.Lerp(a.Position, b.Position, t),
             Quaternion.Slerp(a.Rotation, b.Rotation, t),
-            Vector3.Lerp(a.Scale, b.Scale, t));
+            Vector3.Lerp(a.Scale, b.Scale, t)
+        );
     }
 
     private static Quaternion NormalizeRotation(Quaternion rotation) =>
@@ -192,7 +233,9 @@ public struct Transform {
         Matrix4x4 matrix,
         out Vector3 scale,
         out Quaternion rotation,
-        out Vector3 translation) {
+        out Vector3 translation
+    )
+    {
         Vector3 rowX = new(matrix.M11, matrix.M12, matrix.M13);
         Vector3 rowY = new(matrix.M21, matrix.M22, matrix.M23);
         Vector3 rowZ = new(matrix.M31, matrix.M32, matrix.M33);
@@ -205,7 +248,12 @@ public struct Transform {
         rotation = Quaternion.Identity;
         translation = new Vector3(matrix.M41, matrix.M42, matrix.M43);
 
-        if (scaleX < MINIMUM_SCALE_LENGTH || scaleY < MINIMUM_SCALE_LENGTH || scaleZ < MINIMUM_SCALE_LENGTH) {
+        if (
+            scaleX < MINIMUM_SCALE_LENGTH
+            || scaleY < MINIMUM_SCALE_LENGTH
+            || scaleZ < MINIMUM_SCALE_LENGTH
+        )
+        {
             return false;
         }
 
@@ -213,22 +261,39 @@ public struct Transform {
         rowY /= scaleY;
         rowZ /= scaleZ;
 
-        if (Vector3.Dot(rowX, Vector3.Cross(rowY, rowZ)) < 0f) {
+        if (Vector3.Dot(rowX, Vector3.Cross(rowY, rowZ)) < 0f)
+        {
             scaleX = -scaleX;
             rowX = -rowX;
         }
 
-        if (MathF.Abs(Vector3.Dot(rowX, rowY)) > SHEAR_TOLERANCE
+        if (
+            MathF.Abs(Vector3.Dot(rowX, rowY)) > SHEAR_TOLERANCE
             || MathF.Abs(Vector3.Dot(rowX, rowZ)) > SHEAR_TOLERANCE
-            || MathF.Abs(Vector3.Dot(rowY, rowZ)) > SHEAR_TOLERANCE) {
+            || MathF.Abs(Vector3.Dot(rowY, rowZ)) > SHEAR_TOLERANCE
+        )
+        {
             return false;
         }
 
         Matrix4x4 rotationMatrix = new(
-            rowX.X, rowX.Y, rowX.Z, 0f,
-            rowY.X, rowY.Y, rowY.Z, 0f,
-            rowZ.X, rowZ.Y, rowZ.Z, 0f,
-            0f, 0f, 0f, 1f);
+            rowX.X,
+            rowX.Y,
+            rowX.Z,
+            0f,
+            rowY.X,
+            rowY.Y,
+            rowY.Z,
+            0f,
+            rowZ.X,
+            rowZ.Y,
+            rowZ.Z,
+            0f,
+            0f,
+            0f,
+            0f,
+            1f
+        );
 
         scale = new Vector3(scaleX, scaleY, scaleZ);
         rotation = Quaternion.Normalize(Quaternion.CreateFromRotationMatrix(rotationMatrix));

@@ -47,7 +47,8 @@ namespace RayBork.Internal;
 /// recreation is handled by <see cref="IAssetGpuWorker.Restore"/> without replacing the worker.
 /// </para>
 /// </remarks>
-internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorkerProvider {
+internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorkerProvider
+{
     /// <summary>
     /// The number of consecutive recovery attempts without a completed frame after which recovery is
     /// fatal. The bound stops a recovery loop that can never make progress.
@@ -127,7 +128,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// This is diagnostic access, not part of the renderer seam. Render-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    internal VulkanDevice Device => _device ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
+    internal VulkanDevice Device =>
+        _device
+        ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
     /// Gets the current scene target, for GPU-test readback probes.
@@ -136,7 +139,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// This is diagnostic access, not part of the renderer seam. Render-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    internal VulkanRenderTarget SceneTarget => _sceneTarget ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
+    internal VulkanRenderTarget SceneTarget =>
+        _sceneTarget
+        ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
     /// Gets the current runtime render target, for GPU-test readback probes.
@@ -147,8 +152,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <param name="targetId">The render texture target id.</param>
     /// <param name="target">The live target, or <see langword="null"/> when the id is not live.</param>
     /// <returns><see langword="true"/> when the target is live.</returns>
-    internal bool TryGetRenderTarget(long targetId, out VulkanRenderTarget? target) {
-        if (_renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry)) {
+    internal bool TryGetRenderTarget(long targetId, out VulkanRenderTarget? target)
+    {
+        if (_renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry))
+        {
             target = entry.Target;
             return true;
         }
@@ -164,7 +171,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <param name="targetId">The render texture target id.</param>
     /// <returns><see langword="true"/> when the target's written flag is set.</returns>
     internal bool HasRenderTargetColorContentForTests(long targetId) =>
-        _renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry) && entry.HasResolvedColorContent;
+        _renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry)
+        && entry.HasResolvedColorContent;
 
     /// <summary>
     /// Gets the current swapchain, for GPU-test presented-pixel probes.
@@ -173,7 +181,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// This is diagnostic access, not part of the renderer seam. Render-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    internal VulkanSwapchain Swapchain => _swapchain ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
+    internal VulkanSwapchain Swapchain =>
+        _swapchain
+        ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
     /// Gets the swapchain image index of the most recent successful present, for GPU-test
@@ -205,7 +215,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// This is diagnostic access, not part of the renderer seam. Render-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    internal VulkanInstance Instance => _instance ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
+    internal VulkanInstance Instance =>
+        _instance
+        ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
     /// Gets the bindless texture table, for GPU-test slot and white-texture probes.
@@ -214,7 +226,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// This is diagnostic access, not part of the renderer seam. Render-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    internal VulkanBindlessTextureTable BindlessTextures => _bindlessTextures
+    internal VulkanBindlessTextureTable BindlessTextures =>
+        _bindlessTextures
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
@@ -224,7 +237,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// This is diagnostic access, not part of the renderer seam. Render-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    internal VulkanGeometryPipelineCache GeometryPipelines => _geometryPipelines
+    internal VulkanGeometryPipelineCache GeometryPipelines =>
+        _geometryPipelines
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
@@ -234,7 +248,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// This is diagnostic access, not part of the renderer seam. Render-thread only.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    internal VulkanFrameResources FrameResources => _frameResources
+    internal VulkanFrameResources FrameResources =>
+        _frameResources
         ?? throw new InvalidOperationException("The renderer backend has not been initialized.");
 
     /// <summary>
@@ -249,7 +264,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </remarks>
     /// <returns>The worker for the current device.</returns>
     /// <exception cref="InvalidOperationException">The backend has not been initialized.</exception>
-    public IAssetGpuWorker CreateAssetGpuWorker() {
+    public IAssetGpuWorker CreateAssetGpuWorker()
+    {
         EnsureInitialized();
         VulkanAssetWorker worker = new(
             () => Device,
@@ -257,7 +273,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             () => BindlessTextures,
             AreFrameResourcesIdle,
             WaitForFrameResourcesIdle,
-            _options!.Logger);
+            _options!.Logger
+        );
         _assetGpuWorker = worker;
         return worker;
     }
@@ -270,24 +287,34 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "A failed creation completes its request with the failure and keeps the render loop alive; a creation failure must never escape the render thread.")]
-    public void ProcessRenderTextureRequests(RenderTextureService service) {
+        Justification = "A failed creation completes its request with the failure and keeps the render loop alive; a creation failure must never escape the render thread."
+    )]
+    public void ProcessRenderTextureRequests(RenderTextureService service)
+    {
         EnsureInitialized();
         ArgumentNullException.ThrowIfNull(service);
 
-        foreach (RenderTextureService.CreateRequest request in service.DrainCreates()) {
-            try {
+        foreach (RenderTextureService.CreateRequest request in service.DrainCreates())
+        {
+            try
+            {
                 CreateRenderTextureTarget(service, request, request.Description);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 request.DisposeRegistration();
                 request.Completion.TrySetException(exception);
             }
         }
 
-        foreach (RenderTextureService.ResizeRequest request in service.DrainResizes()) {
-            try {
+        foreach (RenderTextureService.ResizeRequest request in service.DrainResizes())
+        {
+            try
+            {
                 ResizeRenderTextureTarget(request, request.Width, request.Height);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 request.Completion.TrySetException(exception);
             }
         }
@@ -295,22 +322,31 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         // Readbacks run before destructions in the same round: a target disposed while its request was
         // queued fails on the render thread with the disposed-target exception instead of disappearing
         // from the registry first. A target is only read after its last-use frame fence signaled.
-        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks()) {
-            try {
+        foreach (RenderTextureService.ReadbackRequest request in service.DrainReadbacks())
+        {
+            try
+            {
                 ProcessReadback(request);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 request.TrySetException(exception);
-            } finally {
+            }
+            finally
+            {
                 request.DisposeRegistration();
             }
         }
 
-        foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys()) {
-            if (!_renderTargets.TryGetValue(lifetime.TargetId, out RenderTargetEntry? entry)) {
+        foreach (RenderTextureTargetLifetime lifetime in service.DrainDestroys())
+        {
+            if (!_renderTargets.TryGetValue(lifetime.TargetId, out RenderTargetEntry? entry))
+            {
                 continue;
             }
 
-            if (!IsRenderTargetIdle(lifetime)) {
+            if (!IsRenderTargetIdle(lifetime))
+            {
                 service.RequeueDestruction(lifetime);
                 continue;
             }
@@ -323,84 +359,124 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "A failed request cleans up its partially created GPU objects and reports the failure through the request instead of escaping the render thread.")]
+        Justification = "A failed request cleans up its partially created GPU objects and reports the failure through the request instead of escaping the render thread."
+    )]
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The render texture and its target are published to the request's completion task or destroyed by the finally; the analyzer cannot model the transfer of ownership through the task source.")]
+        Justification = "The render texture and its target are published to the request's completion task or destroyed by the finally; the analyzer cannot model the transfer of ownership through the task source."
+    )]
     private void CreateRenderTextureTarget(
         RenderTextureService service,
         RenderTextureService.CreateRequest request,
-        RenderTextureDescription description) {
-        if (request.Completion.Task.IsCompleted) {
+        RenderTextureDescription description
+    )
+    {
+        if (request.Completion.Task.IsCompleted)
+        {
             request.DisposeRegistration();
             return;
         }
 
         VulkanDevice device = _device!;
         uint maxDimension = GetMaxImageDimension2D(device);
-        if (description.Width > maxDimension || description.Height > maxDimension) {
+        if (description.Width > maxDimension || description.Height > maxDimension)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(description),
                 description,
                 $"The {description.Width}x{description.Height} render texture exceeds the device's "
-                    + $"maximum 2D image dimension {maxDimension}.");
+                    + $"maximum 2D image dimension {maxDimension}."
+            );
         }
 
         int sampleCount = RenderTextureValidation.SelectSampleCount(
             description.SampleCount,
-            device.Capabilities.SupportedSampleCounts);
-        if (sampleCount != description.SampleCount) {
+            device.Capabilities.SupportedSampleCounts
+        );
+        if (sampleCount != description.SampleCount)
+        {
             _options!.Logger.LogWarning(
                 "The requested render texture MSAA sample count {Requested} is not supported by the device; using {Effective}.",
                 description.SampleCount,
-                sampleCount);
+                sampleCount
+            );
         }
 
         Format format = ToVulkanColorFormat(description.ColorFormat);
         VulkanRenderTarget target = VulkanRenderTarget.Create(
             device,
-            new Extent2D { Width = checked((uint)description.Width), Height = checked((uint)description.Height) },
+            new Extent2D
+            {
+                Width = checked((uint)description.Width),
+                Height = checked((uint)description.Height),
+            },
             sampleCount,
             format,
-            description.Depth);
+            description.Depth
+        );
         Sampler sampler;
         Sampler depthSampler;
         uint slot;
         uint depthSlot;
-        try {
-            CreateRenderTargetViewBindings(device, target, out sampler, out slot, out depthSampler, out depthSlot);
-        } catch {
+        try
+        {
+            CreateRenderTargetViewBindings(
+                device,
+                target,
+                out sampler,
+                out slot,
+                out depthSampler,
+                out depthSlot
+            );
+        }
+        catch
+        {
             target.Dispose();
             throw;
         }
 
         RenderTargetEntry? entry = null;
         bool success = false;
-        try {
+        try
+        {
             long targetId = service.NextTargetId();
-            RenderTextureTargetLifetime lifetime = new(targetId, description, sampleCount, service.QueueDestruction);
-            RenderTextureViewResource viewResource = new(target.ResolvedColorView, sampler) {
+            RenderTextureTargetLifetime lifetime = new(
+                targetId,
+                description,
+                sampleCount,
+                service.QueueDestruction
+            );
+            RenderTextureViewResource viewResource = new(target.ResolvedColorView, sampler)
+            {
                 BindlessSlot = slot,
             };
             RenderTextureViewLifetime viewLifetime = new(
                 lifetime,
                 viewResource,
                 description.Width,
-                description.Height);
+                description.Height
+            );
             RenderTextureViewResource? depthViewResource = null;
             RenderTextureViewLifetime? depthViewLifetime = null;
             Texture? depthTexture = null;
-            if (target.HasDepth) {
-                depthViewResource = new RenderTextureViewResource(target.ResolvedDepthView, depthSampler) {
+            if (target.HasDepth)
+            {
+                depthViewResource = new RenderTextureViewResource(
+                    target.ResolvedDepthView,
+                    depthSampler
+                )
+                {
                     BindlessSlot = depthSlot,
                 };
                 depthViewLifetime = new RenderTextureViewLifetime(
                     lifetime,
                     depthViewResource,
                     description.Width,
-                    description.Height);
-                TextureAssetDescriptor depthDescriptor = new() {
+                    description.Height
+                );
+                TextureAssetDescriptor depthDescriptor = new()
+                {
                     Payload = string.Empty,
                     Width = checked((uint)description.Width),
                     Height = checked((uint)description.Height),
@@ -411,10 +487,16 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     Wrap = TextureWrap.Clamp,
                     MaxAnisotropy = 1f,
                 };
-                depthTexture = new Texture(depthViewLifetime, depthDescriptor, isProcedural: false, isRenderTargetView: true);
+                depthTexture = new Texture(
+                    depthViewLifetime,
+                    depthDescriptor,
+                    isProcedural: false,
+                    isRenderTargetView: true
+                );
             }
 
-            TextureAssetDescriptor descriptor = new() {
+            TextureAssetDescriptor descriptor = new()
+            {
                 Payload = string.Empty,
                 Width = checked((uint)description.Width),
                 Height = checked((uint)description.Height),
@@ -425,7 +507,12 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 Wrap = TextureWrap.Clamp,
                 MaxAnisotropy = 1f,
             };
-            Texture colorTexture = new(viewLifetime, descriptor, isProcedural: false, isRenderTargetView: true);
+            Texture colorTexture = new(
+                viewLifetime,
+                descriptor,
+                isProcedural: false,
+                isRenderTargetView: true
+            );
             RenderTexture renderTexture = new(lifetime, colorTexture, depthTexture, service);
             entry = new RenderTargetEntry(
                 targetId,
@@ -438,18 +525,26 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 depthViewLifetime,
                 depthViewResource,
                 depthSampler,
-                _options!.Settings.Tonemapping);
+                _options!.Settings.Tonemapping
+            );
             _renderTargets.Add(targetId, entry);
             success = request.Completion.TrySetResult(renderTexture);
-            if (!success) {
+            if (!success)
+            {
                 _renderTargets.Remove(targetId);
             }
-        } finally {
+        }
+        finally
+        {
             request.DisposeRegistration();
-            if (!success) {
-                if (entry is not null) {
+            if (!success)
+            {
+                if (entry is not null)
+                {
                     DestroyRenderTarget(entry, retireView: true);
-                } else {
+                }
+                else
+                {
                     DestroyRenderTargetViewBindings(device, sampler, slot, depthSampler, depthSlot);
                     target.Dispose();
                 }
@@ -491,52 +586,68 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </exception>
     /// <exception cref="ObjectDisposedException">The render texture was disposed before the request ran.</exception>
     /// <exception cref="GraphicsException">The renderer could not recreate the target's GPU objects.</exception>
-    private void ResizeRenderTextureTarget(RenderTextureService.ResizeRequest request, int width, int height) {
+    private void ResizeRenderTextureTarget(
+        RenderTextureService.ResizeRequest request,
+        int width,
+        int height
+    )
+    {
         RenderTextureTargetLifetime lifetime = request.Lifetime;
-        if (lifetime.IsDisposed) {
+        if (lifetime.IsDisposed)
+        {
             throw new ObjectDisposedException(
                 nameof(RenderTexture),
-                "The render texture is disposed; it cannot be resized.");
+                "The render texture is disposed; it cannot be resized."
+            );
         }
 
-        if (!_renderTargets.TryGetValue(request.TargetId, out RenderTargetEntry? entry)) {
+        if (!_renderTargets.TryGetValue(request.TargetId, out RenderTargetEntry? entry))
+        {
             throw new InvalidOperationException(
                 $"The frame references render target {request.TargetId}, which is no longer alive. A resize "
-                    + "cannot recreate a target that was destroyed.");
+                    + "cannot recreate a target that was destroyed."
+            );
         }
 
-        if (lifetime.IsInUse) {
+        if (lifetime.IsInUse)
+        {
             throw new InvalidOperationException(
                 $"Render target {request.TargetId} is in use by a recorded or in-flight frame; the resize "
-                    + "was not applied. Resize the render texture only after the frame that uses it completed.");
+                    + "was not applied. Resize the render texture only after the frame that uses it completed."
+            );
         }
 
         // The public Resize no-ops an unchanged size before it queues; keep the render thread idempotent
         // in case a second request reaches it for the same size.
         RenderTextureDescription description = lifetime.Description;
-        if (description.Width == width && description.Height == height) {
+        if (description.Width == width && description.Height == height)
+        {
             request.Completion.TrySetResult();
             return;
         }
 
         VulkanDevice device = _device!;
         uint maxDimension = GetMaxImageDimension2D(device);
-        if (width > maxDimension) {
+        if (width > maxDimension)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(width),
                 width,
                 $"{nameof(RenderTexture.Resize)} cannot resize render target {request.TargetId} to "
                     + $"{width}x{height}: it exceeds the device's maximum 2D image dimension {maxDimension}. "
-                    + $"The target keeps its {description.Width}x{description.Height} images.");
+                    + $"The target keeps its {description.Width}x{description.Height} images."
+            );
         }
 
-        if (height > maxDimension) {
+        if (height > maxDimension)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(height),
                 height,
                 $"{nameof(RenderTexture.Resize)} cannot resize render target {request.TargetId} to "
                     + $"{width}x{height}: it exceeds the device's maximum 2D image dimension {maxDimension}. "
-                    + $"The target keeps its {description.Width}x{description.Height} images.");
+                    + $"The target keeps its {description.Width}x{description.Height} images."
+            );
         }
 
         WaitForRenderTargetIdle(lifetime);
@@ -546,7 +657,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             new Extent2D { Width = checked((uint)width), Height = checked((uint)height) },
             entry.SampleCount,
             ToVulkanColorFormat(description.ColorFormat),
-            description.Depth);
+            description.Depth
+        );
 
         // The new target has every image, view, render pass, and framebuffer it needs. The swap below
         // writes two bindless descriptors and assigns fields; the descriptor writes are the only calls
@@ -559,11 +671,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         entry.Target = target;
         entry.ViewResource.View = target.ResolvedColorView;
         entry.ViewLifetime.SetBindingResource(entry.ViewResource);
-        _bindlessTextures!.WriteTexture(entry.ViewResource.BindlessSlot, target.ResolvedColorView, entry.Sampler);
-        if (target.HasDepth && entry.DepthViewResource is not null) {
+        _bindlessTextures!.WriteTexture(
+            entry.ViewResource.BindlessSlot,
+            target.ResolvedColorView,
+            entry.Sampler
+        );
+        if (target.HasDepth && entry.DepthViewResource is not null)
+        {
             entry.DepthViewResource.View = target.ResolvedDepthView;
             entry.DepthViewLifetime!.SetBindingResource(entry.DepthViewResource);
-            _bindlessTextures.WriteTexture(entry.DepthViewResource.BindlessSlot, target.ResolvedDepthView, entry.DepthSampler);
+            _bindlessTextures.WriteTexture(
+                entry.DepthViewResource.BindlessSlot,
+                target.ResolvedDepthView,
+                entry.DepthSampler
+            );
         }
 
         entry.Pipelines = null;
@@ -599,21 +720,27 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <exception cref="ObjectDisposedException">The target was disposed before the request ran.</exception>
     /// <exception cref="InvalidOperationException">The target id is no longer live.</exception>
     /// <exception cref="GraphicsException">The color image could not be copied.</exception>
-    private void ProcessReadback(RenderTextureService.ReadbackRequest request) {
+    private void ProcessReadback(RenderTextureService.ReadbackRequest request)
+    {
         RenderTextureTargetLifetime lifetime = request.Lifetime;
-        if (lifetime.IsDisposed) {
+        if (lifetime.IsDisposed)
+        {
             throw new ObjectDisposedException(
                 nameof(RenderTexture),
-                "The render texture is disposed; it cannot be read back.");
+                "The render texture is disposed; it cannot be read back."
+            );
         }
 
-        if (!_renderTargets.TryGetValue(request.TargetId, out RenderTargetEntry? entry)) {
+        if (!_renderTargets.TryGetValue(request.TargetId, out RenderTargetEntry? entry))
+        {
             throw new InvalidOperationException(
                 $"The readback addresses render target {request.TargetId}, which is no longer alive. A "
-                    + "render texture must be alive when its readback is serviced.");
+                    + "render texture must be alive when its readback is serviced."
+            );
         }
 
-        if (request.IsCompleted) {
+        if (request.IsCompleted)
+        {
             return;
         }
 
@@ -622,16 +749,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         int width = checked((int)entry.Target.Extent.Width);
         int height = checked((int)entry.Target.Extent.Height);
         Color[,] colors;
-        if (!entry.HasResolvedColorContent) {
+        if (!entry.HasResolvedColorContent)
+        {
             // No completed frame wrote the target. Its GPU content is undefined, and a sampled-only
             // frame may have moved it to ShaderReadOnlyOptimal without writing it. Return the defined
             // opaque-black default instead of copying undefined GPU memory, and leave the image and its
             // tracked layout untouched.
             colors = RenderTextureReadbackConverter.CreateOpaqueBlackColors(width, height);
-        } else {
+        }
+        else
+        {
             ReadbackCopyCountForTests++;
             byte[] pixels = VulkanReadback.ReadRenderTargetColorImage(_device!, entry.Target);
-            if (request.IsCompleted) {
+            if (request.IsCompleted)
+            {
                 // A cancellation that arrived during the fence wait or the copy discards the result;
                 // the copy helper already restored the layout, so the target is unchanged.
                 return;
@@ -641,22 +772,28 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 pixels,
                 width,
                 height,
-                entry.Lifetime.Description.ColorFormat);
+                entry.Lifetime.Description.ColorFormat
+            );
         }
 
-        switch (request) {
+        switch (request)
+        {
             case RenderTextureService.ReadbackRequest<byte[]> pixelRequest:
-                pixelRequest.Completion.TrySetResult(RenderTextureReadbackConverter.EncodePixels(
-                    colors,
-                    entry.Tone,
-                    entry.StartupTonemappingMode));
+                pixelRequest.Completion.TrySetResult(
+                    RenderTextureReadbackConverter.EncodePixels(
+                        colors,
+                        entry.Tone,
+                        entry.StartupTonemappingMode
+                    )
+                );
                 break;
             case RenderTextureService.ReadbackRequest<Color[,]> colorRequest:
                 colorRequest.Completion.TrySetResult(colors);
                 break;
             default:
                 throw new InvalidOperationException(
-                    "The readback request has an unsupported completion value; only pixels and colors are queued.");
+                    "The readback request has an unsupported completion value; only pixels and colors are queued."
+                );
         }
     }
 
@@ -684,36 +821,46 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         out Sampler sampler,
         out uint slot,
         out Sampler depthSampler,
-        out uint depthSlot) {
+        out uint depthSlot
+    )
+    {
         sampler = default;
         slot = 0;
         depthSampler = default;
         depthSlot = 0;
-        try {
+        try
+        {
             sampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
-            if (!_bindlessTextures!.TryAllocate(out slot)) {
+            if (!_bindlessTextures!.TryAllocate(out slot))
+            {
                 throw new GraphicsException(
                     $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
                         + "the reserved white slot), so the render texture color view has no slot.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             _bindlessTextures.WriteTexture(slot, target.ResolvedColorView, sampler);
 
-            if (target.HasDepth) {
+            if (target.HasDepth)
+            {
                 depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
-                if (!_bindlessTextures.TryAllocate(out depthSlot)) {
+                if (!_bindlessTextures.TryAllocate(out depthSlot))
+                {
                     throw new GraphicsException(
                         $"The bindless texture table is full ({_bindlessTextures.Capacity} slots, including "
                             + "the reserved white slot), so the render texture depth view has no slot.",
                         DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                        null);
+                        null
+                    );
                 }
 
                 _bindlessTextures.WriteTexture(depthSlot, target.ResolvedDepthView, depthSampler);
             }
-        } catch {
+        }
+        catch
+        {
             DestroyRenderTargetViewBindings(device, sampler, slot, depthSampler, depthSlot);
             throw;
         }
@@ -732,12 +879,16 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Sampler sampler,
         uint slot,
         Sampler depthSampler,
-        uint depthSlot) {
-        if (slot != 0 && _bindlessTextures is not null) {
+        uint depthSlot
+    )
+    {
+        if (slot != 0 && _bindlessTextures is not null)
+        {
             _bindlessTextures.Release(slot);
         }
 
-        if (depthSlot != 0 && _bindlessTextures is not null) {
+        if (depthSlot != 0 && _bindlessTextures is not null)
+        {
             _bindlessTextures.Release(depthSlot);
         }
 
@@ -750,25 +901,32 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </summary>
     /// <param name="device">The device that owns the sampler.</param>
     /// <param name="sampler">The sampler to destroy.</param>
-    private static void DestroyRenderTargetSampler(VulkanDevice device, Sampler sampler) {
-        if (sampler.Handle != 0) {
+    private static void DestroyRenderTargetSampler(VulkanDevice device, Sampler sampler)
+    {
+        if (sampler.Handle != 0)
+        {
             device.Vulkan.DestroySampler(device.Device, sampler, null);
         }
     }
 
-    private static Format ToVulkanColorFormat(TextureFormat format) => format switch {
-        TextureFormat.Rgba16Float => Format.R16G16B16A16Sfloat,
-        TextureFormat.Rgba8Unorm => Format.R8G8B8A8Unorm,
-        TextureFormat.Rgba8Srgb => Format.R8G8B8A8Srgb,
-        _ => throw new ArgumentOutOfRangeException(
-            nameof(format),
-            format,
-            "The format is not a supported render texture color format."),
-    };
+    private static Format ToVulkanColorFormat(TextureFormat format) =>
+        format switch
+        {
+            TextureFormat.Rgba16Float => Format.R16G16B16A16Sfloat,
+            TextureFormat.Rgba8Unorm => Format.R8G8B8A8Unorm,
+            TextureFormat.Rgba8Srgb => Format.R8G8B8A8Srgb,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(format),
+                format,
+                "The format is not a supported render texture color format."
+            ),
+        };
 
-    private static Sampler CreateRenderTargetSampler(VulkanDevice device, TextureFilter filter) {
+    private static Sampler CreateRenderTargetSampler(VulkanDevice device, TextureFilter filter)
+    {
         bool nearest = filter == TextureFilter.Nearest;
-        SamplerCreateInfo createInfo = new() {
+        SamplerCreateInfo createInfo = new()
+        {
             SType = StructureType.SamplerCreateInfo,
             MagFilter = nearest ? Filter.Nearest : Filter.Linear,
             MinFilter = nearest ? Filter.Nearest : Filter.Linear,
@@ -786,13 +944,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             BorderColor = BorderColor.FloatOpaqueBlack,
             UnnormalizedCoordinates = false,
         };
-        Result result = device.Vulkan.CreateSampler(device.Device, &createInfo, null, out Sampler sampler);
+        Result result = device.Vulkan.CreateSampler(
+            device.Device,
+            &createInfo,
+            null,
+            out Sampler sampler
+        );
         ThrowIfFailed(result, "vkCreateSampler");
         return sampler;
     }
 
-    private RenderTargetEntry RequireRenderTarget(long targetId) {
-        if (_renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry)) {
+    private RenderTargetEntry RequireRenderTarget(long targetId)
+    {
+        if (_renderTargets.TryGetValue(targetId, out RenderTargetEntry? entry))
+        {
             return entry;
         }
 
@@ -800,7 +965,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             $"The frame references render target {targetId}, which is no longer alive. A render texture "
                 + "must stay alive until every recorded frame that writes or samples it completes.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
     /// <summary>
@@ -808,12 +974,16 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </summary>
     /// <param name="device">The current logical device.</param>
     /// <returns>The maximum accepted render target width or height.</returns>
-    private uint GetMaxImageDimension2D(VulkanDevice device) {
-        if (MaxImageDimension2DOverrideForTests is { } maxDimension) {
+    private uint GetMaxImageDimension2D(VulkanDevice device)
+    {
+        if (MaxImageDimension2DOverrideForTests is { } maxDimension)
+        {
             return maxDimension;
         }
 
-        return device.Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice).Limits.MaxImageDimension2D;
+        return device
+            .Vulkan.GetPhysicalDeviceProperties(device.PhysicalDevice)
+            .Limits.MaxImageDimension2D;
     }
 
     /// <summary>
@@ -822,13 +992,16 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </summary>
     /// <param name="lifetime">The target lifetime to check.</param>
     /// <returns><see langword="true"/> when the last-use fence signaled or the target was never used.</returns>
-    private bool IsRenderTargetIdle(RenderTextureTargetLifetime lifetime) {
-        if (_device is null || _fences.Length == 0) {
+    private bool IsRenderTargetIdle(RenderTextureTargetLifetime lifetime)
+    {
+        if (_device is null || _fences.Length == 0)
+        {
             return true;
         }
 
         int frameSlot = lifetime.LastUseFrameSlot;
-        if (frameSlot < 0 || frameSlot >= _fences.Length) {
+        if (frameSlot < 0 || frameSlot >= _fences.Length)
+        {
             return true;
         }
 
@@ -844,50 +1017,62 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// recorded but not yet rendered frame still references, which is the only case that could deadlock.
     /// </remarks>
     /// <param name="lifetime">The target lifetime to wait for.</param>
-    private void WaitForRenderTargetIdle(RenderTextureTargetLifetime lifetime) {
-        if (_device is null || _fences.Length == 0) {
+    private void WaitForRenderTargetIdle(RenderTextureTargetLifetime lifetime)
+    {
+        if (_device is null || _fences.Length == 0)
+        {
             return;
         }
 
         int frameSlot = lifetime.LastUseFrameSlot;
-        if (frameSlot < 0 || frameSlot >= _fences.Length) {
+        if (frameSlot < 0 || frameSlot >= _fences.Length)
+        {
             return;
         }
 
         Fence fence = _fences[frameSlot];
         ThrowIfFailed(
             _device.Vulkan.WaitForFences(_device.Device, 1, &fence, true, WAIT_TIMEOUT),
-            "vkWaitForFences");
+            "vkWaitForFences"
+        );
         RenderTargetFenceWaitCountForTests++;
     }
 
-    private void DestroyRenderTarget(RenderTargetEntry entry, bool retireView) {
+    private void DestroyRenderTarget(RenderTargetEntry entry, bool retireView)
+    {
         VulkanGeometryPipelineCache? pipelines = entry.Pipelines;
         entry.Pipelines = null;
         pipelines?.Dispose();
-        if (entry.ViewResource.BindlessSlot != 0 && _bindlessTextures is not null) {
+        if (entry.ViewResource.BindlessSlot != 0 && _bindlessTextures is not null)
+        {
             _bindlessTextures.Release(entry.ViewResource.BindlessSlot);
             entry.ViewResource.BindlessSlot = 0;
         }
 
-        if (entry.DepthViewResource is not null
+        if (
+            entry.DepthViewResource is not null
             && entry.DepthViewResource.BindlessSlot != 0
-            && _bindlessTextures is not null) {
+            && _bindlessTextures is not null
+        )
+        {
             _bindlessTextures.Release(entry.DepthViewResource.BindlessSlot);
             entry.DepthViewResource.BindlessSlot = 0;
         }
 
-        if (entry.Sampler.Handle != 0 && _device is not null) {
+        if (entry.Sampler.Handle != 0 && _device is not null)
+        {
             _device.Vulkan.DestroySampler(_device.Device, entry.Sampler, null);
             entry.Sampler = default;
         }
 
-        if (entry.DepthSampler.Handle != 0 && _device is not null) {
+        if (entry.DepthSampler.Handle != 0 && _device is not null)
+        {
             _device.Vulkan.DestroySampler(_device.Device, entry.DepthSampler, null);
             entry.DepthSampler = default;
         }
 
-        if (retireView) {
+        if (retireView)
+        {
             entry.ViewLifetime.Retire();
             entry.DepthViewLifetime?.Retire();
             // The backend retired the target without a public Dispose (shutdown, or a canceled
@@ -899,8 +1084,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         entry.Target.Dispose();
     }
 
-    private void DestroyRenderTargets() {
-        foreach (RenderTargetEntry entry in _renderTargets.Values) {
+    private void DestroyRenderTargets()
+    {
+        foreach (RenderTargetEntry entry in _renderTargets.Values)
+        {
             DestroyRenderTarget(entry, retireView: true);
         }
 
@@ -914,8 +1101,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// keeping its public view and lifetime so a device recreation can recreate the resources from the
     /// retained description.
     /// </summary>
-    private void DestroyRenderTargetGpuResources() {
-        foreach (RenderTargetEntry entry in _renderTargets.Values) {
+    private void DestroyRenderTargetGpuResources()
+    {
+        foreach (RenderTargetEntry entry in _renderTargets.Values)
+        {
             DestroyRenderTarget(entry, retireView: false);
         }
 
@@ -928,7 +1117,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The instance, device, surface, swapchain, or fixed render state could not be created. The
     /// diagnostic code is <c>RB3001</c>.
     /// </exception>
-    public void Initialize(RendererBackendOptions options) {
+    public void Initialize(RendererBackendOptions options)
+    {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(options.Settings);
         ArgumentNullException.ThrowIfNull(options.InstanceExtensions);
@@ -937,14 +1127,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         ArgumentNullException.ThrowIfNull(options.Logger);
         ArgumentNullException.ThrowIfNull(options.TeardownQueue);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_initialized) {
-            throw new InvalidOperationException("The renderer backend has already been initialized.");
+        if (_initialized)
+        {
+            throw new InvalidOperationException(
+                "The renderer backend has already been initialized."
+            );
         }
 
         _options = options;
-        try {
+        try
+        {
             InitializeCore(options);
-        } catch {
+        }
+        catch
+        {
             Dispose();
             throw;
         }
@@ -958,16 +1154,19 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// A recoverable presentation failure could not be recovered. The diagnostic code is
     /// <c>RB3002</c>.
     /// </exception>
-    public void Submit(RenderFramePacket frame) {
+    public void Submit(RenderFramePacket frame)
+    {
         EnsureInitialized();
         ArgumentNullException.ThrowIfNull(frame);
         int generationBeforeRecovery = _deviceGeneration;
         HandleSimulatedFailure();
-        if (_pendingPresent) {
+        if (_pendingPresent)
+        {
             PresentPending();
         }
 
-        if (_deviceGeneration != generationBeforeRecovery) {
+        if (_deviceGeneration != generationBeforeRecovery)
+        {
             // The device was recreated for this frame. The asset GPU resources still belong to the
             // destroyed device and the bridge has not recreated them yet, so drawing now would
             // reference stale handles and bindless slots. Drop the frame; the render loop restores
@@ -977,20 +1176,27 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
 
         WindowSurfaceState state = _options!.WindowStateProvider();
-        if (state.IsMinimized || state.RenderWidth <= 0 || state.RenderHeight <= 0) {
+        if (state.IsMinimized || state.RenderWidth <= 0 || state.RenderHeight <= 0)
+        {
             _stats = CreateZeroDrawStats(frame.FrameIndex);
             return;
         }
 
-        if (_swapchainOutOfDate) {
+        if (_swapchainOutOfDate)
+        {
             RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
         }
 
-        if (state.RenderWidth != (int)_swapchain!.Extent.Width || state.RenderHeight != (int)_swapchain.Extent.Height) {
+        if (
+            state.RenderWidth != (int)_swapchain!.Extent.Width
+            || state.RenderHeight != (int)_swapchain.Extent.Height
+        )
+        {
             Resize(state.RenderWidth, state.RenderHeight);
         }
 
-        if (HdrSelectionChanged(state.Hdr)) {
+        if (HdrSelectionChanged(state.Hdr))
+        {
             RecreatePresentation(state, LogLevel.Information, "a window HDR state change");
         }
 
@@ -998,27 +1204,38 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Fence fence = _fences[frameSlot];
         Vk vulkan = _device!.Vulkan;
         Device deviceHandle = _device.Device;
-        ThrowIfFailed(vulkan.WaitForFences(deviceHandle, 1, &fence, true, WAIT_TIMEOUT), "vkWaitForFences");
+        ThrowIfFailed(
+            vulkan.WaitForFences(deviceHandle, 1, &fence, true, WAIT_TIMEOUT),
+            "vkWaitForFences"
+        );
 
         Semaphore imageAvailable = _imageAvailableSemaphores[frameSlot];
         BeforeAcquireForTests?.Invoke();
-        SwapchainResult acquire = _swapchain.Acquire(frameSlot, imageAvailable, out uint imageIndex);
-        if (acquire == SwapchainResult.OutOfDate) {
+        SwapchainResult acquire = _swapchain.Acquire(
+            frameSlot,
+            imageAvailable,
+            out uint imageIndex
+        );
+        if (acquire == SwapchainResult.OutOfDate)
+        {
             RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
             _stats = CreateZeroDrawStats(frame.FrameIndex);
             return;
         }
 
-        if (acquire == SwapchainResult.SurfaceLost) {
+        if (acquire == SwapchainResult.SurfaceLost)
+        {
             RecoverOrThrow(RenderRecoveryReason.SurfaceLost);
             _stats = CreateZeroDrawStats(frame.FrameIndex);
             return;
         }
 
-        if (acquire == SwapchainResult.Suboptimal) {
+        if (acquire == SwapchainResult.Suboptimal)
+        {
             _suboptimalRecoveryPending = true;
             _options.Logger.LogDebug(
-                "The swapchain image acquisition was suboptimal; the presentation path is recreated after the present.");
+                "The swapchain image acquisition was suboptimal; the presentation path is recreated after the present."
+            );
         }
 
         // CPU frame time covers only planning, recording, and submission. It starts after the fence
@@ -1036,20 +1253,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         CommandBuffer commandBuffer = _commandBuffers[frameSlot];
         ThrowIfFailed(vulkan.ResetCommandBuffer(commandBuffer, 0), "vkResetCommandBuffer");
-        CommandBufferBeginInfo beginInfo = new() {
+        CommandBufferBeginInfo beginInfo = new()
+        {
             SType = StructureType.CommandBufferBeginInfo,
             Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
         };
         ThrowIfFailed(vulkan.BeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
 
         HashSet<ulong> pipelines = [];
-        RecordScenePass(
-            vulkan,
-            commandBuffer,
-            plan,
-            frame,
-            (int)frameSlot,
-            pipelines);
+        RecordScenePass(vulkan, commandBuffer, plan, frame, (int)frameSlot, pipelines);
 
         RenderSettings settings = _options.Settings;
 
@@ -1058,11 +1270,17 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         TonemappingSnapshot tonemapping = frame.Tonemapping;
         float paperWhite = state.Hdr.HdrEnabled ? state.Hdr.SdrWhiteLevel : 1f;
         PresentEncoding encoding = _swapchainFormat.Encoding;
-        float outputMax = encoding == PresentEncoding.ScRgbHdr && state.Hdr.HdrEnabled
-            ? state.Hdr.HdrHeadroom
-            : 1f;
-        AgxCurveParameters agx = AgxCurveParameters.Create(tonemapping.AgxWhite, tonemapping.AgxContrast, outputMax);
-        PresentPushConstants pushConstants = new() {
+        float outputMax =
+            encoding == PresentEncoding.ScRgbHdr && state.Hdr.HdrEnabled
+                ? state.Hdr.HdrHeadroom
+                : 1f;
+        AgxCurveParameters agx = AgxCurveParameters.Create(
+            tonemapping.AgxWhite,
+            tonemapping.AgxContrast,
+            outputMax
+        );
+        PresentPushConstants pushConstants = new()
+        {
             ExposureMultiplier = MathF.Pow(2f, tonemapping.Exposure),
             HdrWhiteScale = paperWhite,
             OutputMaxValue = (float)agx.OutputMax,
@@ -1079,7 +1297,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         Semaphore renderFinished = _renderFinishedSemaphores[imageIndex];
         PipelineStageFlags waitStage = PipelineStageFlags.ColorAttachmentOutputBit;
-        SubmitInfo submitInfo = new() {
+        SubmitInfo submitInfo = new()
+        {
             SType = StructureType.SubmitInfo,
             WaitSemaphoreCount = 1,
             PWaitSemaphores = &imageAvailable,
@@ -1090,14 +1309,18 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             PSignalSemaphores = &renderFinished,
         };
         ThrowIfFailed(vulkan.ResetFences(deviceHandle, 1, &fence), "vkResetFences");
-        ThrowIfFailed(vulkan.QueueSubmit(_device.GraphicsQueue, 1, &submitInfo, fence), "vkQueueSubmit");
+        ThrowIfFailed(
+            vulkan.QueueSubmit(_device.GraphicsQueue, 1, &submitInfo, fence),
+            "vkQueueSubmit"
+        );
 
         _pendingPresent = true;
         _pendingImageIndex = imageIndex;
         _pendingRenderFinished = renderFinished;
         _frameSlot = (frameSlot + 1) % FRAMES_IN_FLIGHT;
 
-        double cpuMilliseconds = (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / Stopwatch.Frequency;
+        double cpuMilliseconds =
+            (Stopwatch.GetTimestamp() - startTimestamp) * 1000.0 / Stopwatch.Frequency;
         _stats = new RenderStats(
             frame.FrameIndex,
             _presentedFrames,
@@ -1112,7 +1335,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             cpuMilliseconds,
             0,
             CountFramesInFlight(),
-            _recoveryCount);
+            _recoveryCount
+        );
         _instance!.ThrowIfValidationError("submitting a frame");
     }
 
@@ -1124,7 +1348,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// A recoverable presentation failure could not be recovered. The diagnostic code is
     /// <c>RB3002</c>.
     /// </exception>
-    public void Present() {
+    public void Present()
+    {
         EnsureInitialized();
         HandleSimulatedFailure();
         PresentPending();
@@ -1156,29 +1381,37 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Device recovery reports the failure through its return value and statistics instead of crashing the render thread.")]
-    public bool Recover(RenderRecoveryReason reason) {
+        Justification = "Device recovery reports the failure through its return value and statistics instead of crashing the render thread."
+    )]
+    public bool Recover(RenderRecoveryReason reason)
+    {
         EnsureInitialized();
-        if (_consecutiveRecoveries >= MAX_CONSECUTIVE_RECOVERIES) {
+        if (_consecutiveRecoveries >= MAX_CONSECUTIVE_RECOVERIES)
+        {
             _options!.Logger.LogError(
                 "The renderer already attempted {Limit} consecutive recoveries without completing a frame; the failure {Reason} is fatal.",
                 MAX_CONSECUTIVE_RECOVERIES,
-                reason);
+                reason
+            );
             return false;
         }
 
-        if (_unrecoverableFailureForTests) {
+        if (_unrecoverableFailureForTests)
+        {
             _unrecoverableFailureForTests = false;
             _options!.Logger.LogError(
                 "The renderer cannot recover from {Reason} because an unrecoverable failure was injected.",
-                reason);
+                reason
+            );
             return false;
         }
 
         _consecutiveRecoveries++;
-        try {
+        try
+        {
             WindowSurfaceState state = _options!.WindowStateProvider();
-            switch (reason) {
+            switch (reason)
+            {
                 case RenderRecoveryReason.SwapchainOutOfDate:
                     RecreatePresentation(state, LogLevel.Warning, "an out-of-date swapchain");
                     break;
@@ -1186,7 +1419,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     RecreatePresentation(state, LogLevel.Information, "a suboptimal swapchain");
                     break;
                 case RenderRecoveryReason.SurfaceLost:
-                    if (!RecreateSurface(state)) {
+                    if (!RecreateSurface(state))
+                    {
                         return false;
                     }
 
@@ -1195,17 +1429,27 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     RecreateDevice(state);
                     break;
                 default:
-                    _options.Logger.LogError("The renderer cannot recover from the unknown reason {Reason}.", reason);
+                    _options.Logger.LogError(
+                        "The renderer cannot recover from the unknown reason {Reason}.",
+                        reason
+                    );
                     return false;
             }
-        } catch (Exception exception) {
-            _options!.Logger.LogError(exception, "The renderer recovery from {Reason} failed.", reason);
+        }
+        catch (Exception exception)
+        {
+            _options!.Logger.LogError(
+                exception,
+                "The renderer recovery from {Reason} failed.",
+                reason
+            );
             return false;
         }
 
         _recoveryCount++;
         _stats = _stats with { RecoveryCount = _recoveryCount };
-        string operation = reason switch {
+        string operation = reason switch
+        {
             RenderRecoveryReason.SwapchainSuboptimal => "recovering the presentation path",
             RenderRecoveryReason.SurfaceLost => "recovering the surface",
             RenderRecoveryReason.DeviceLost => "recovering the device",
@@ -1223,7 +1467,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The request is consumed by the next frame call and routed through <see cref="Recover"/>, so a
     /// test exercises the same logic a driver-detected device loss uses.
     /// </remarks>
-    internal void SimulateDeviceLossForTests() => _simulatedFailure = RenderRecoveryReason.DeviceLost;
+    internal void SimulateDeviceLossForTests() =>
+        _simulatedFailure = RenderRecoveryReason.DeviceLost;
 
     /// <summary>
     /// Marks the surface as lost so the next <see cref="Submit"/> or <see cref="Present"/> runs the
@@ -1233,7 +1478,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The request is consumed by the next frame call and routed through <see cref="Recover"/>, so a
     /// test exercises the same logic a driver-detected surface loss uses.
     /// </remarks>
-    internal void SimulateSurfaceLossForTests() => _simulatedFailure = RenderRecoveryReason.SurfaceLost;
+    internal void SimulateSurfaceLossForTests() =>
+        _simulatedFailure = RenderRecoveryReason.SurfaceLost;
 
     /// <summary>
     /// Makes the next recovery return <see langword="false"/> without touching GPU state. Test-only;
@@ -1243,7 +1489,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// When no loss is pending, the next <see cref="Submit"/> or <see cref="Present"/> requests a
     /// device-loss recovery, so a test reaches the fatal path with one call.
     /// </remarks>
-    internal void SimulateUnrecoverableFailureForTests() {
+    internal void SimulateUnrecoverableFailureForTests()
+    {
         _unrecoverableFailureForTests = true;
         _simulatedFailure ??= RenderRecoveryReason.DeviceLost;
     }
@@ -1298,7 +1545,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </summary>
     /// <param name="frame">The sealed frame to simulate.</param>
     /// <returns>The instance-record bytes the frame needs, including per-record alignment.</returns>
-    internal static ulong ComputeInstanceBytesForTests(RenderFramePacket frame) {
+    internal static ulong ComputeInstanceBytesForTests(RenderFramePacket frame)
+    {
         ArgumentNullException.ThrowIfNull(frame);
         return ComputeInstanceBytes(new BatchPlanner().Plan(frame));
     }
@@ -1327,19 +1575,24 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// can proceed.
     /// </remarks>
     /// <returns><see langword="true"/> when every frame slot fence is signaled.</returns>
-    internal bool AreFrameResourcesIdle() {
-        if (_device is null || _fences.Length == 0) {
+    internal bool AreFrameResourcesIdle()
+    {
+        if (_device is null || _fences.Length == 0)
+        {
             return true;
         }
 
         Vk vulkan = _device.Vulkan;
-        foreach (Fence fence in _fences) {
+        foreach (Fence fence in _fences)
+        {
             Result result = vulkan.GetFenceStatus(_device.Device, fence);
-            if (result == Result.NotReady) {
+            if (result == Result.NotReady)
+            {
                 return false;
             }
 
-            if (result != Result.Success) {
+            if (result != Result.Success)
+            {
                 // A lost device cannot retire its fences. Reporting "not idle" keeps resources alive
                 // until the recovery path recreates the device and drops them with it.
                 return false;
@@ -1356,36 +1609,45 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The render loop calls the worker's wait before the bridge destroys live resources. A failure is
     /// logged and returns instead of throwing, because shutdown must still release what it can.
     /// </remarks>
-    internal void WaitForFrameResourcesIdle() {
-        if (_device is null || _fences.Length == 0) {
+    internal void WaitForFrameResourcesIdle()
+    {
+        if (_device is null || _fences.Length == 0)
+        {
             return;
         }
 
-        fixed (Fence* fences = _fences) {
+        fixed (Fence* fences = _fences)
+        {
             Result result = _device.Vulkan.WaitForFences(
                 _device.Device,
                 (uint)_fences.Length,
                 fences,
                 true,
-                WAIT_TIMEOUT);
-            if (result != Result.Success) {
+                WAIT_TIMEOUT
+            );
+            if (result != Result.Success)
+            {
                 _options?.Logger.LogWarning(
                     "The renderer could not wait for frame idleness before destroying GPU assets: {Result}.",
-                    result);
+                    result
+                );
             }
         }
     }
 
     /// <inheritdoc />
-    public void Resize(int renderWidth, int renderHeight) {
+    public void Resize(int renderWidth, int renderHeight)
+    {
         EnsureInitialized();
-        if (renderWidth <= 0 || renderHeight <= 0) {
+        if (renderWidth <= 0 || renderHeight <= 0)
+        {
             _options!.Logger.LogDebug(
                 "The presentation surface has no drawable extent ({Width}x{Height}); the presentation path is kept. The previous drawable request was {PreviousWidth}x{PreviousHeight}.",
                 renderWidth,
                 renderHeight,
                 _requestedWidth,
-                _requestedHeight);
+                _requestedHeight
+            );
             _requestedWidth = renderWidth;
             _requestedHeight = renderHeight;
             return;
@@ -1397,15 +1659,23 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         VulkanSwapchainSupport support = VulkanSwapchainSupport.Query(
             _device!.Vulkan,
             _device.PhysicalDevice,
-            _surface);
+            _surface
+        );
         Extent2D extent = SelectExtent(support.Capabilities, renderWidth, renderHeight);
         Extent2D currentExtent = _swapchain!.Extent;
-        if (extent.Width == currentExtent.Width && extent.Height == currentExtent.Height) {
+        if (extent.Width == currentExtent.Width && extent.Height == currentExtent.Height)
+        {
             return;
         }
 
         WindowSurfaceState current = _options!.WindowStateProvider();
-        WindowSurfaceState state = new(renderWidth, renderHeight, current.IsMinimized, current.IsFocused, current.Hdr);
+        WindowSurfaceState state = new(
+            renderWidth,
+            renderHeight,
+            current.IsMinimized,
+            current.IsFocused,
+            current.Hdr
+        );
         RecreatePresentation(state, LogLevel.Debug, "a window resize");
     }
 
@@ -1414,8 +1684,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// surface on the render thread, then queues the instance and loader for main-thread teardown.
     /// The call is idempotent.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -1444,14 +1716,23 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _swapchain = null;
         _device?.Dispose();
         _device = null;
-        if (_instance is not null && _surfaceHandle != IntPtr.Zero) {
-            try {
+        if (_instance is not null && _surfaceHandle != IntPtr.Zero)
+        {
+            try
+            {
                 _options?.SurfaceProvider.DestroySurface(_instance.Handle.Handle, _surfaceHandle);
-            } catch (GraphicsException exception) {
+            }
+            catch (GraphicsException exception)
+            {
                 // Disposal must still release the instance; the surface failure is reported but not
                 // rethrown, matching the device and instance disposal paths.
-                _options?.Logger.LogWarning("The native Vulkan surface could not be destroyed during disposal: {Message}", exception.Message);
-            } finally {
+                _options?.Logger.LogWarning(
+                    "The native Vulkan surface could not be destroyed during disposal: {Message}",
+                    exception.Message
+                );
+            }
+            finally
+            {
                 _surfaceHandle = IntPtr.Zero;
                 _surface = default;
             }
@@ -1459,9 +1740,11 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         VulkanInstance? instance = _instance;
         _instance = null;
-        if (instance is not null) {
+        if (instance is not null)
+        {
             instance.Dispose();
-            if (_options is not null) {
+            if (_options is not null)
+            {
                 _options.TeardownQueue.Enqueue(instance.DisposeFromMainThread);
             }
         }
@@ -1470,21 +1753,27 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _options?.Logger.LogDebug("Vulkan 1.2 renderer backend disposed.");
     }
 
-    private void InitializeCore(RendererBackendOptions options) {
+    private void InitializeCore(RendererBackendOptions options)
+    {
         ILogger logger = options.Logger;
-        _instance = VulkanInstance.Create(new VulkanInstanceOptions {
-            ApplicationName = APPLICATION_NAME,
-            ApplicationVersion = EngineVersion.Current,
-            SurfaceExtensions = options.InstanceExtensions,
-            RequestValidation = options.Settings.ValidationEnabled,
-            Logger = logger,
-        });
+        _instance = VulkanInstance.Create(
+            new VulkanInstanceOptions
+            {
+                ApplicationName = APPLICATION_NAME,
+                ApplicationVersion = EngineVersion.Current,
+                SurfaceExtensions = options.InstanceExtensions,
+                RequestValidation = options.Settings.ValidationEnabled,
+                Logger = logger,
+            }
+        );
         _surfaceHandle = options.SurfaceProvider.CreateSurface(_instance.Handle.Handle);
-        if (_surfaceHandle == IntPtr.Zero) {
+        if (_surfaceHandle == IntPtr.Zero)
+        {
             throw new GraphicsException(
                 "The surface provider returned a zero Vulkan surface handle.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         _surface = new SurfaceKHR { Handle = unchecked((ulong)_surfaceHandle.ToInt64()) };
@@ -1494,7 +1783,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         WindowSurfaceState state = options.WindowStateProvider();
         _requestedWidth = state.RenderWidth;
         _requestedHeight = state.RenderHeight;
-        _sampleCount = VulkanSampleCountSelection.Select(options.Settings.SampleCount, capabilities.SupportedSampleCounts);
+        _sampleCount = VulkanSampleCountSelection.Select(
+            options.Settings.SampleCount,
+            capabilities.SupportedSampleCounts
+        );
         CreatePresentationPath(state);
         CreateGeometryResources();
         CreateFrameResources(_swapchain!.ImageCount);
@@ -1515,34 +1807,48 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// the geometry and frame resources after this call. Render-thread only; the device must be idle.
     /// </remarks>
     /// <param name="state">The current window surface snapshot.</param>
-    private void CreatePresentationPath(WindowSurfaceState state) {
+    private void CreatePresentationPath(WindowSurfaceState state)
+    {
         VulkanDevice device = _device!;
         RendererBackendOptions options = _options!;
         VulkanDeviceCapabilities capabilities = device.Capabilities;
         _selectedHdrState = state.Hdr;
-        _swapchainFormat = VulkanSwapchainFormatSelection.Select(capabilities.SurfaceFormats, state.Hdr);
+        _swapchainFormat = VulkanSwapchainFormatSelection.Select(
+            capabilities.SurfaceFormats,
+            state.Hdr
+        );
         _presentMode = VulkanPresentModeSelection.Select(
             capabilities.Swapchain.PresentModes,
-            options.Settings.PresentMode);
+            options.Settings.PresentMode
+        );
         VulkanSwapchainSupport support = capabilities.Swapchain;
         Extent2D extent = SelectExtent(support.Capabilities, state.RenderWidth, state.RenderHeight);
         uint imageCount = VulkanSwapchainImageCount.Select(
             support.Capabilities.MinImageCount,
-            support.Capabilities.MaxImageCount);
+            support.Capabilities.MaxImageCount
+        );
         _swapchain = VulkanSwapchain.Create(
             device,
             _surface,
             _swapchainFormat,
             _presentMode.Native,
             (int)imageCount,
-            extent);
+            extent
+        );
         extent = _swapchain.Extent;
-        _sceneTarget = VulkanRenderTarget.Create(device, extent, _sampleCount, Format.R16G16B16A16Sfloat, depth: true);
+        _sceneTarget = VulkanRenderTarget.Create(
+            device,
+            extent,
+            _sampleCount,
+            Format.R16G16B16A16Sfloat,
+            depth: true
+        );
         _presentPipeline = VulkanPresentPipeline.Create(
             device,
             extent,
             _swapchainFormat.Format,
-            _sceneTarget.ResolvedColorView);
+            _sceneTarget.ResolvedColorView
+        );
         _presentPipeline.RecreateFramebuffers(extent, _swapchain.ImageViews);
         _swapchainOutOfDate = false;
         _suboptimalRecoveryPending = false;
@@ -1554,15 +1860,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// cache.
     /// </summary>
     /// <remarks>Render-thread only; the device must exist and the scene target must be created.</remarks>
-    private void CreateGeometryResources() {
+    private void CreateGeometryResources()
+    {
         VulkanDevice device = _device!;
         VulkanDeviceCapabilities capabilities = device.Capabilities;
         _descriptorState = VulkanDescriptorState.Create(
             device,
             capabilities.BindlessTextureCapacity,
-            FRAMES_IN_FLIGHT);
+            FRAMES_IN_FLIGHT
+        );
         _frameResources = VulkanFrameResources.Create(device, _descriptorState);
-        _bindlessTextures = new VulkanBindlessTextureTable(capabilities.BindlessTextureCapacity, _options!.Logger);
+        _bindlessTextures = new VulkanBindlessTextureTable(
+            capabilities.BindlessTextureCapacity,
+            _options!.Logger
+        );
         _bindlessTextures.Initialize(device, _descriptorState, _frameResources);
         CreateGeometryPipelines();
         CreatePostProcessor();
@@ -1573,7 +1884,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             capabilities.MaxPerStageDescriptorUpdateAfterBindSampledImages,
             capabilities.MaxDescriptorSetUpdateAfterBindSampledImages,
             capabilities.MaxPerStageDescriptorUpdateAfterBindSamplers,
-            _frameResources.MaxInstanceBytes);
+            _frameResources.MaxInstanceBytes
+        );
     }
 
     /// <summary>
@@ -1584,19 +1896,22 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// destroyed. The cache snapshots the device's <c>fillModeNonSolid</c> support for the wireframe
     /// model pipelines.
     /// </remarks>
-    private void CreateGeometryPipelines() {
+    private void CreateGeometryPipelines()
+    {
         _geometryPipelines = VulkanGeometryPipelineCache.Create(
             _device!,
             _sceneTarget!.RenderPass,
             _descriptorState!.PipelineLayout,
             _sampleCount,
-            _deviceGeneration);
+            _deviceGeneration
+        );
     }
 
     /// <summary>
     /// Destroys the geometry pipelines before the render pass they reference is destroyed.
     /// </summary>
-    private void DestroyGeometryPipelines() {
+    private void DestroyGeometryPipelines()
+    {
         VulkanGeometryPipelineCache? pipelines = _geometryPipelines;
         _geometryPipelines = null;
         pipelines?.Dispose();
@@ -1611,13 +1926,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// frame resources. The processor owns the target-sized post targets, the custom-effect pipeline
     /// cache, the store-back pipelines, and the backend-owned fullscreen quad.
     /// </remarks>
-    private void CreatePostProcessor() {
+    private void CreatePostProcessor()
+    {
         _postProcessor = VulkanPostProcessor.Create(
             _device!,
             _bindlessTextures!,
             _frameResources!,
             _descriptorState!.PipelineLayout,
-            _deviceGeneration);
+            _deviceGeneration
+        );
     }
 
     /// <summary>
@@ -1639,7 +1956,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <exception cref="GraphicsException">
     /// The bindless table is full. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    private void CreateSceneTargetSourceSlots() {
+    private void CreateSceneTargetSourceSlots()
+    {
         ReleaseSceneTargetSourceSlots();
         VulkanRenderTarget sceneTarget = _sceneTarget!;
         VulkanBindlessTextureTable bindless = _bindlessTextures!;
@@ -1648,24 +1966,29 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Sampler depthSampler = default;
         uint colorSlot = 0;
         uint depthSlot = 0;
-        try {
+        try
+        {
             colorSampler = CreateRenderTargetSampler(device, TextureFilter.Linear);
-            if (!bindless.TryAllocate(out colorSlot)) {
+            if (!bindless.TryAllocate(out colorSlot))
+            {
                 throw new GraphicsException(
                     $"The bindless texture table is full ({bindless.Capacity} slots, including the "
                         + "reserved white slot), so the scene target's resolved color view has no slot.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             bindless.WriteTexture(colorSlot, sceneTarget.ResolvedColorView, colorSampler);
             depthSampler = CreateRenderTargetSampler(device, TextureFilter.Nearest);
-            if (!bindless.TryAllocate(out depthSlot)) {
+            if (!bindless.TryAllocate(out depthSlot))
+            {
                 throw new GraphicsException(
                     $"The bindless texture table is full ({bindless.Capacity} slots, including the "
                         + "reserved white slot), so the scene target's resolved depth view has no slot.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             bindless.WriteTexture(depthSlot, sceneTarget.ResolvedDepthView, depthSampler);
@@ -1674,12 +1997,16 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             _sceneSourceColorSlot = colorSlot;
             _sceneSourceDepthSlot = depthSlot;
             _sceneSourceSlotAllocationCount++;
-        } catch {
-            if (colorSlot != 0) {
+        }
+        catch
+        {
+            if (colorSlot != 0)
+            {
                 bindless.Release(colorSlot);
             }
 
-            if (depthSlot != 0) {
+            if (depthSlot != 0)
+            {
                 bindless.Release(depthSlot);
             }
 
@@ -1694,18 +2021,23 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// they were never allocated. Render-thread only; the caller has made the device idle or is in
     /// teardown.
     /// </summary>
-    private void ReleaseSceneTargetSourceSlots() {
-        if (_bindlessTextures is not null) {
-            if (_sceneSourceColorSlot != 0) {
+    private void ReleaseSceneTargetSourceSlots()
+    {
+        if (_bindlessTextures is not null)
+        {
+            if (_sceneSourceColorSlot != 0)
+            {
                 _bindlessTextures.Release(_sceneSourceColorSlot);
             }
 
-            if (_sceneSourceDepthSlot != 0) {
+            if (_sceneSourceDepthSlot != 0)
+            {
                 _bindlessTextures.Release(_sceneSourceDepthSlot);
             }
         }
 
-        if (_device is not null) {
+        if (_device is not null)
+        {
             DestroyRenderTargetSampler(_device, _sceneSourceColorSampler);
             DestroyRenderTargetSampler(_device, _sceneSourceDepthSampler);
         }
@@ -1716,49 +2048,91 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _sceneSourceDepthSampler = default;
     }
 
-    private void RecreatePresentation(WindowSurfaceState state, LogLevel logLevel, string reason) {
+    private void RecreatePresentation(WindowSurfaceState state, LogLevel logLevel, string reason)
+    {
         VulkanDevice device = _device!;
         RendererBackendOptions options = _options!;
         DeviceWaitIdle();
         DropPendingPresent();
         // The scene render pass changes with the scene target, so every cached pipeline is invalid.
         DestroyGeometryPipelines();
-        VulkanSwapchainSupport support = VulkanSwapchainSupport.Query(device.Vulkan, device.PhysicalDevice, _surface);
-        VulkanSwapchainFormat format = VulkanSwapchainFormatSelection.Select(support.Formats, state.Hdr);
+        VulkanSwapchainSupport support = VulkanSwapchainSupport.Query(
+            device.Vulkan,
+            device.PhysicalDevice,
+            _surface
+        );
+        VulkanSwapchainFormat format = VulkanSwapchainFormatSelection.Select(
+            support.Formats,
+            state.Hdr
+        );
         VulkanPresentModeChoice presentMode = VulkanPresentModeSelection.Select(
             support.PresentModes,
-            options.Settings.PresentMode);
+            options.Settings.PresentMode
+        );
         Extent2D extent = SelectExtent(support.Capabilities, state.RenderWidth, state.RenderHeight);
         uint imageCount = VulkanSwapchainImageCount.Select(
             support.Capabilities.MinImageCount,
-            support.Capabilities.MaxImageCount);
+            support.Capabilities.MaxImageCount
+        );
         bool formatChanged = format != _swapchainFormat;
 
-        if (_swapchain is null) {
-            _swapchain = VulkanSwapchain.Create(device, _surface, format, presentMode.Native, (int)imageCount, extent);
-        } else {
-            _swapchain.Recreate(device, _surface, format, presentMode.Native, (int)imageCount, extent);
+        if (_swapchain is null)
+        {
+            _swapchain = VulkanSwapchain.Create(
+                device,
+                _surface,
+                format,
+                presentMode.Native,
+                (int)imageCount,
+                extent
+            );
+        }
+        else
+        {
+            _swapchain.Recreate(
+                device,
+                _surface,
+                format,
+                presentMode.Native,
+                (int)imageCount,
+                extent
+            );
         }
 
         extent = _swapchain.Extent;
 
         VulkanRenderTarget? sceneTarget = _sceneTarget;
         _sceneTarget = null;
-        if (sceneTarget is not null) {
+        if (sceneTarget is not null)
+        {
             _postProcessor?.DestroyStoreBack(sceneTarget);
         }
 
         ReleaseSceneTargetSourceSlots();
         sceneTarget?.Dispose();
-        _sceneTarget = VulkanRenderTarget.Create(device, extent, _sampleCount, Format.R16G16B16A16Sfloat, depth: true);
+        _sceneTarget = VulkanRenderTarget.Create(
+            device,
+            extent,
+            _sampleCount,
+            Format.R16G16B16A16Sfloat,
+            depth: true
+        );
         CreateSceneTargetSourceSlots();
         CreateGeometryPipelines();
         VulkanPresentPipeline? presentPipeline = _presentPipeline;
-        if (presentPipeline is null || formatChanged) {
+        if (presentPipeline is null || formatChanged)
+        {
             _presentPipeline = null;
             presentPipeline?.Dispose();
-            _presentPipeline = VulkanPresentPipeline.Create(device, extent, format.Format, _sceneTarget.ResolvedColorView);
-        } else {
+            _presentPipeline = VulkanPresentPipeline.Create(
+                device,
+                extent,
+                format.Format,
+                _sceneTarget.ResolvedColorView
+            );
+        }
+        else
+        {
             presentPipeline.WriteDescriptor(_sceneTarget.ResolvedColorView);
         }
 
@@ -1783,7 +2157,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             _sampleCount,
             _swapchain.ImageCount,
             extent.Width,
-            extent.Height);
+            extent.Height
+        );
     }
 
     /// <summary>
@@ -1798,7 +2173,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// </remarks>
     /// <param name="state">The current window surface snapshot.</param>
     /// <returns><see langword="true"/> when the surface and presentation path were recreated.</returns>
-    private bool RecreateSurface(WindowSurfaceState state) {
+    private bool RecreateSurface(WindowSurfaceState state)
+    {
         VulkanInstance instance = _instance!;
         RendererBackendOptions options = _options!;
         DeviceWaitIdle();
@@ -1806,32 +2182,43 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         DestroyGeometryPipelines();
         DestroyPresentationResources();
         IntPtr instanceHandle = instance.Handle.Handle;
-        if (_surfaceHandle != IntPtr.Zero) {
+        if (_surfaceHandle != IntPtr.Zero)
+        {
             IntPtr lostSurface = _surfaceHandle;
             _surfaceHandle = IntPtr.Zero;
             _surface = default;
-            try {
+            try
+            {
                 options.SurfaceProvider.DestroySurface(instanceHandle, lostSurface);
-            } catch (GraphicsException exception) {
+            }
+            catch (GraphicsException exception)
+            {
                 options.Logger.LogError(
                     exception,
-                    "The lost native Vulkan surface could not be destroyed; the renderer cannot recover.");
+                    "The lost native Vulkan surface could not be destroyed; the renderer cannot recover."
+                );
                 return false;
             }
         }
 
-        try {
+        try
+        {
             _surfaceHandle = options.SurfaceProvider.CreateSurface(instanceHandle);
-        } catch (GraphicsException exception) {
+        }
+        catch (GraphicsException exception)
+        {
             options.Logger.LogError(
                 exception,
-                "The native Vulkan surface could not be recreated after surface loss; the renderer cannot recover.");
+                "The native Vulkan surface could not be recreated after surface loss; the renderer cannot recover."
+            );
             return false;
         }
 
-        if (_surfaceHandle == IntPtr.Zero) {
+        if (_surfaceHandle == IntPtr.Zero)
+        {
             options.Logger.LogError(
-                "The native Vulkan surface could not be recreated after surface loss; the renderer cannot recover.");
+                "The native Vulkan surface could not be recreated after surface loss; the renderer cannot recover."
+            );
             return false;
         }
 
@@ -1853,7 +2240,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <see cref="Dispose"/> is safe even when creation of the new device fails. Render-thread only.
     /// </remarks>
     /// <param name="state">The current window surface snapshot.</param>
-    private void RecreateDevice(WindowSurfaceState state) {
+    private void RecreateDevice(WindowSurfaceState state)
+    {
         VulkanInstance instance = _instance!;
         RendererBackendOptions options = _options!;
         DeviceWaitIdle();
@@ -1880,7 +2268,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _deviceGeneration++;
         _sampleCount = VulkanSampleCountSelection.Select(
             options.Settings.SampleCount,
-            _device.Capabilities.SupportedSampleCounts);
+            _device.Capabilities.SupportedSampleCounts
+        );
         _requestedWidth = state.RenderWidth;
         _requestedHeight = state.RenderHeight;
         CreatePresentationPath(state);
@@ -1894,7 +2283,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             _device.Capabilities.DeviceName,
             VulkanVersion.Format(_device.Capabilities.ApiVersion),
             _presentMode.Public,
-            _sampleCount);
+            _sampleCount
+        );
     }
 
     /// <summary>
@@ -1911,58 +2301,84 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The recreated target is stored in the live entry or destroyed in the catch; the analyzer cannot model the field transfer.")]
-    private void RecreateRenderTargets() {
-        if (_renderTargets.Count == 0) {
+        Justification = "The recreated target is stored in the live entry or destroyed in the catch; the analyzer cannot model the field transfer."
+    )]
+    private void RecreateRenderTargets()
+    {
+        if (_renderTargets.Count == 0)
+        {
             return;
         }
 
         RenderTargetEntry[] entries = [.. _renderTargets.Values];
-        foreach (RenderTargetEntry entry in entries) {
-            if (!IsRenderTargetIdle(entry.Lifetime)) {
+        foreach (RenderTargetEntry entry in entries)
+        {
+            if (!IsRenderTargetIdle(entry.Lifetime))
+            {
                 // The device was recreated after a lost fence; no submitted frame can still reference
                 // the destroyed images, so the idle check is best-effort here.
                 _options!.Logger.LogDebug(
                     "Recreating render target {TargetId} while its previous frame fence did not signal.",
-                    entry.Id);
+                    entry.Id
+                );
             }
 
             VulkanDevice device = _device!;
             RenderTextureDescription description = entry.Lifetime.Description;
             uint maxDimension = GetMaxImageDimension2D(device);
-            if (description.Width > maxDimension || description.Height > maxDimension) {
+            if (description.Width > maxDimension || description.Height > maxDimension)
+            {
                 throw new GraphicsException(
                     $"Render target {entry.Id} cannot be recreated on the new device: its "
                         + $"{description.Width}x{description.Height} extent exceeds the device's maximum 2D "
                         + $"image dimension {maxDimension}. Dispose and recreate the "
                         + "render texture with a supported size.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
             }
 
             int sampleCount = RenderTextureValidation.SelectSampleCount(
                 description.SampleCount,
-                device.Capabilities.SupportedSampleCounts);
-            if (sampleCount != entry.SampleCount) {
+                device.Capabilities.SupportedSampleCounts
+            );
+            if (sampleCount != entry.SampleCount)
+            {
                 _options!.Logger.LogWarning(
                     "The render texture sample count changed from {Previous} to {Effective} after the device recreation.",
                     entry.SampleCount,
-                    sampleCount);
+                    sampleCount
+                );
             }
 
             VulkanRenderTarget target = VulkanRenderTarget.Create(
                 device,
-                new Extent2D { Width = checked((uint)description.Width), Height = checked((uint)description.Height) },
+                new Extent2D
+                {
+                    Width = checked((uint)description.Width),
+                    Height = checked((uint)description.Height),
+                },
                 sampleCount,
                 ToVulkanColorFormat(description.ColorFormat),
-                description.Depth);
+                description.Depth
+            );
             Sampler sampler;
             Sampler depthSampler;
             uint slot;
             uint depthSlot;
-            try {
-                CreateRenderTargetViewBindings(device, target, out sampler, out slot, out depthSampler, out depthSlot);
-            } catch {
+            try
+            {
+                CreateRenderTargetViewBindings(
+                    device,
+                    target,
+                    out sampler,
+                    out slot,
+                    out depthSampler,
+                    out depthSlot
+                );
+            }
+            catch
+            {
                 target.Dispose();
                 throw;
             }
@@ -1978,7 +2394,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             entry.ViewResource.Sampler = sampler;
             entry.ViewResource.BindlessSlot = slot;
             entry.ViewLifetime.SetBindingResource(entry.ViewResource);
-            if (target.HasDepth && entry.DepthViewResource is not null) {
+            if (target.HasDepth && entry.DepthViewResource is not null)
+            {
                 entry.DepthSampler = depthSampler;
                 entry.DepthViewResource.View = target.ResolvedDepthView;
                 entry.DepthViewResource.Sampler = depthSampler;
@@ -2000,13 +2417,15 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// Render-thread only; the caller has waited for the device to idle and already destroyed the
     /// geometry pipelines that reference the scene render pass.
     /// </remarks>
-    private void DestroyPresentationResources() {
+    private void DestroyPresentationResources()
+    {
         VulkanPresentPipeline? presentPipeline = _presentPipeline;
         _presentPipeline = null;
         presentPipeline?.Dispose();
         VulkanRenderTarget? sceneTarget = _sceneTarget;
         _sceneTarget = null;
-        if (sceneTarget is not null) {
+        if (sceneTarget is not null)
+        {
             _postProcessor?.DestroyStoreBack(sceneTarget);
         }
 
@@ -2024,7 +2443,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// The device has been idled, so the frame's fence is signaled and the swapchain image can be
     /// released without presenting a partial image.
     /// </remarks>
-    private void DropPendingPresent() {
+    private void DropPendingPresent()
+    {
         _pendingPresent = false;
         _pendingRenderFinished = default;
         _suboptimalRecoveryPending = false;
@@ -2038,23 +2458,28 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <exception cref="GraphicsDeviceLostException">
     /// The recovery returned <see langword="false"/>. The diagnostic code is <c>RB3002</c>.
     /// </exception>
-    private void RecoverOrThrow(RenderRecoveryReason reason) {
-        if (Recover(reason)) {
+    private void RecoverOrThrow(RenderRecoveryReason reason)
+    {
+        if (Recover(reason))
+        {
             return;
         }
 
         throw new GraphicsDeviceLostException(
             $"The Vulkan renderer could not recover from {reason}; the app stops.",
             DiagnosticCodes.GRAPHICS_DEVICE_LOST,
-            null);
+            null
+        );
     }
 
     /// <summary>
     /// Consumes a fault-injection request and routes it through the normal recovery path.
     /// </summary>
     /// <remarks>Test-only; the caller is the render thread.</remarks>
-    private void HandleSimulatedFailure() {
-        if (_simulatedFailure is not { } reason) {
+    private void HandleSimulatedFailure()
+    {
+        if (_simulatedFailure is not { } reason)
+        {
             return;
         }
 
@@ -2076,104 +2501,143 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Asset GPU teardown runs during backend shutdown, when the worker or the device may already be gone.")]
-    private void DestroyAssetGpuResources() {
+        Justification = "Asset GPU teardown runs during backend shutdown, when the worker or the device may already be gone."
+    )]
+    private void DestroyAssetGpuResources()
+    {
         VulkanAssetWorker? worker = _assetGpuWorker;
-        if (worker is null) {
+        if (worker is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             worker.DestroyAllResources();
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             _options?.Logger.LogError(
                 exception,
-                "The GPU asset resources could not be destroyed before the Vulkan device was destroyed.");
+                "The GPU asset resources could not be destroyed before the Vulkan device was destroyed."
+            );
         }
     }
 
-    private void CreateFrameResources(int imageCount) {
+    private void CreateFrameResources(int imageCount)
+    {
         VulkanDevice device = _device!;
         Vk vulkan = device.Vulkan;
-        CommandPoolCreateInfo poolInfo = new() {
+        CommandPoolCreateInfo poolInfo = new()
+        {
             SType = StructureType.CommandPoolCreateInfo,
             Flags = CommandPoolCreateFlags.ResetCommandBufferBit,
             QueueFamilyIndex = device.Capabilities.GraphicsQueueFamily,
         };
-        ThrowIfFailed(vulkan.CreateCommandPool(device.Device, &poolInfo, null, out _commandPool), "vkCreateCommandPool");
+        ThrowIfFailed(
+            vulkan.CreateCommandPool(device.Device, &poolInfo, null, out _commandPool),
+            "vkCreateCommandPool"
+        );
 
         CommandBuffer[] commandBuffers = new CommandBuffer[FRAMES_IN_FLIGHT];
-        CommandBufferAllocateInfo allocateInfo = new() {
+        CommandBufferAllocateInfo allocateInfo = new()
+        {
             SType = StructureType.CommandBufferAllocateInfo,
             CommandPool = _commandPool,
             Level = CommandBufferLevel.Primary,
             CommandBufferCount = FRAMES_IN_FLIGHT,
         };
-        fixed (CommandBuffer* commandBuffersPointer = commandBuffers) {
+        fixed (CommandBuffer* commandBuffersPointer = commandBuffers)
+        {
             ThrowIfFailed(
                 vulkan.AllocateCommandBuffers(device.Device, &allocateInfo, commandBuffersPointer),
-                "vkAllocateCommandBuffers");
+                "vkAllocateCommandBuffers"
+            );
         }
 
         _commandBuffers = commandBuffers;
         _imageAvailableSemaphores = CreateSemaphores(FRAMES_IN_FLIGHT);
-        _renderFinishedSemaphores = CreateSemaphores(Math.Max(imageCount, MIN_RENDER_FINISHED_SEMAPHORES));
+        _renderFinishedSemaphores = CreateSemaphores(
+            Math.Max(imageCount, MIN_RENDER_FINISHED_SEMAPHORES)
+        );
         _fences = CreateFences(FRAMES_IN_FLIGHT);
     }
 
-    private Semaphore[] CreateSemaphores(int count) {
+    private Semaphore[] CreateSemaphores(int count)
+    {
         VulkanDevice device = _device!;
         Vk vulkan = device.Vulkan;
         Semaphore[] semaphores = new Semaphore[count];
-        try {
-            for (int index = 0; index < count; index++) {
-                SemaphoreCreateInfo createInfo = new() { SType = StructureType.SemaphoreCreateInfo };
+        try
+        {
+            for (int index = 0; index < count; index++)
+            {
+                SemaphoreCreateInfo createInfo = new()
+                {
+                    SType = StructureType.SemaphoreCreateInfo,
+                };
                 ThrowIfFailed(
                     vulkan.CreateSemaphore(device.Device, &createInfo, null, out semaphores[index]),
-                    "vkCreateSemaphore");
+                    "vkCreateSemaphore"
+                );
             }
 
             return semaphores;
-        } catch {
+        }
+        catch
+        {
             DestroySemaphores(semaphores);
             throw;
         }
     }
 
-    private Fence[] CreateFences(int count) {
+    private Fence[] CreateFences(int count)
+    {
         VulkanDevice device = _device!;
         Vk vulkan = device.Vulkan;
         Fence[] fences = new Fence[count];
-        try {
-            for (int index = 0; index < count; index++) {
-                FenceCreateInfo createInfo = new() {
+        try
+        {
+            for (int index = 0; index < count; index++)
+            {
+                FenceCreateInfo createInfo = new()
+                {
                     SType = StructureType.FenceCreateInfo,
                     Flags = FenceCreateFlags.SignaledBit,
                 };
                 ThrowIfFailed(
                     vulkan.CreateFence(device.Device, &createInfo, null, out fences[index]),
-                    "vkCreateFence");
+                    "vkCreateFence"
+                );
             }
 
             return fences;
-        } catch {
+        }
+        catch
+        {
             DestroyFences(fences);
             throw;
         }
     }
 
-    private void RecreateRenderFinishedSemaphores(int imageCount) {
+    private void RecreateRenderFinishedSemaphores(int imageCount)
+    {
         DestroySemaphores(_renderFinishedSemaphores);
-        _renderFinishedSemaphores = CreateSemaphores(Math.Max(imageCount, MIN_RENDER_FINISHED_SEMAPHORES));
+        _renderFinishedSemaphores = CreateSemaphores(
+            Math.Max(imageCount, MIN_RENDER_FINISHED_SEMAPHORES)
+        );
     }
 
-    private void DestroyFrameResources() {
-        if (_device is not null) {
+    private void DestroyFrameResources()
+    {
+        if (_device is not null)
+        {
             Vk vulkan = _device.Vulkan;
             DestroySemaphores(_imageAvailableSemaphores);
             DestroySemaphores(_renderFinishedSemaphores);
             DestroyFences(_fences);
-            if (_commandPool.Handle != 0) {
+            if (_commandPool.Handle != 0)
+            {
                 vulkan.DestroyCommandPool(_device.Device, _commandPool, null);
                 _commandPool = default;
             }
@@ -2185,25 +2649,33 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         _fences = [];
     }
 
-    private void DestroySemaphores(Semaphore[] semaphores) {
-        if (_device is null) {
+    private void DestroySemaphores(Semaphore[] semaphores)
+    {
+        if (_device is null)
+        {
             return;
         }
 
-        foreach (Semaphore semaphore in semaphores) {
-            if (semaphore.Handle != 0) {
+        foreach (Semaphore semaphore in semaphores)
+        {
+            if (semaphore.Handle != 0)
+            {
                 _device.Vulkan.DestroySemaphore(_device.Device, semaphore, null);
             }
         }
     }
 
-    private void DestroyFences(Fence[] fences) {
-        if (_device is null) {
+    private void DestroyFences(Fence[] fences)
+    {
+        if (_device is null)
+        {
             return;
         }
 
-        foreach (Fence fence in fences) {
-            if (fence.Handle != 0) {
+        foreach (Fence fence in fences)
+        {
+            if (fence.Handle != 0)
+            {
                 _device.Vulkan.DestroyFence(_device.Device, fence, null);
             }
         }
@@ -2239,7 +2711,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         FramePlan plan,
         RenderFramePacket frame,
         int frameSlot,
-        HashSet<ulong> pipelines) {
+        HashSet<ulong> pipelines
+    )
+    {
         VulkanRenderTarget sceneTarget = _sceneTarget!;
         sceneTarget.DiscardContentAndTransitionToAttachments(vulkan, commandBuffer);
         PrepareFrameRenderTargets(vulkan, commandBuffer, frame, frameSlot);
@@ -2247,23 +2721,28 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         ulong instanceByteOffset = 0;
         bool renderedScenePass = false;
-        for (int passIndex = 0; passIndex < plan.Passes.Count; passIndex++) {
+        for (int passIndex = 0; passIndex < plan.Passes.Count; passIndex++)
+        {
             PassPlan passPlan = plan.Passes[passIndex];
             CameraPass pass = passPlan.Pass;
             long targetId = pass.TargetId;
             RenderTargetEntry? targetEntry = targetId == 0 ? null : RequireRenderTarget(targetId);
             VulkanRenderTarget target = targetEntry?.Target ?? sceneTarget;
-            if (!TryResolveViewport(pass, target.Extent, out Viewport viewport, out Rect2D scissor)) {
+            if (!TryResolveViewport(pass, target.Extent, out Viewport viewport, out Rect2D scissor))
+            {
                 continue;
             }
 
-            if (targetEntry is not null) {
+            if (targetEntry is not null)
+            {
                 // Only a pass that can write color marks the target as content-bearing and records its
                 // tone snapshot. ClearMode.None/Depth with no surviving draw batches leaves the color
                 // untouched, so a later readback must keep the earlier content and tone. A post-effect
                 // store-back also writes color and sets the same flag and snapshot below.
-                bool writesColor = (pass.ClearMode & ClearMode.Color) != 0 || passPlan.Batches.Count > 0;
-                if (writesColor) {
+                bool writesColor =
+                    (pass.ClearMode & ClearMode.Color) != 0 || passPlan.Batches.Count > 0;
+                if (writesColor)
+                {
                     targetEntry.HasResolvedColorContent = true;
                     targetEntry.Tone = frame.Tonemapping;
                 }
@@ -2272,13 +2751,17 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             // The first scene pass already transitioned the attachments from Undefined. Every later
             // scene pass may follow a post-process store-back that left the resolved color in a shader
             // read, so the general attachment transition handles both cases.
-            if (targetId != 0) {
+            if (targetId != 0)
+            {
                 target.TransitionForWrite(vulkan, commandBuffer);
-            } else if (renderedScenePass) {
+            }
+            else if (renderedScenePass)
+            {
                 sceneTarget.TransitionForWrite(vulkan, commandBuffer);
             }
 
-            RenderPassBeginInfo beginInfo = new() {
+            RenderPassBeginInfo beginInfo = new()
+            {
                 SType = StructureType.RenderPassBeginInfo,
                 RenderPass = target.RenderPass,
                 Framebuffer = target.Framebuffer,
@@ -2299,36 +2782,45 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 1,
                 &descriptorSet,
                 0,
-                null);
-            if ((pass.ClearMode & ClearMode.Color) != 0) {
+                null
+            );
+            if ((pass.ClearMode & ClearMode.Color) != 0)
+            {
                 ClearColorAttachment(vulkan, commandBuffer, pass.ClearColor, scissor);
             }
 
             // A depth-less render target accepts ClearMode.Depth as a documented no-op, exactly like the
             // stencil flag on the scene target.
-            if ((pass.ClearMode & ClearMode.Depth) != 0 && target.HasDepth) {
+            if ((pass.ClearMode & ClearMode.Depth) != 0 && target.HasDepth)
+            {
                 ClearDepthAttachment(vulkan, commandBuffer, scissor);
             }
 
             WriteFrameBlock(frameSlot, passIndex, pass, frame, target.Extent);
             PushPassIndex(vulkan, commandBuffer, passIndex);
-            if (passPlan.Batches.Count > 0) {
-                VulkanGeometryPipelineCache geometryPipelines = targetId == 0
-                    ? _geometryPipelines!
-                    : GetRenderTargetPipelines(targetEntry!);
-                foreach (PlannedBatch batch in passPlan.Batches) {
+            if (passPlan.Batches.Count > 0)
+            {
+                VulkanGeometryPipelineCache geometryPipelines =
+                    targetId == 0 ? _geometryPipelines! : GetRenderTargetPipelines(targetEntry!);
+                foreach (PlannedBatch batch in passPlan.Batches)
+                {
                     VulkanShaderAssetResource shader = RequireShaderResource(batch.Program);
                     VulkanMeshAssetResource mesh = RequireMeshResource(batch.Mesh);
                     Pipeline pipeline = geometryPipelines.GetOrCreate(
                         shader,
                         batch.RenderState,
                         batch.Topology,
-                        batch.Wireframe);
+                        batch.Wireframe
+                    );
                     pipelines.Add(pipeline.Handle);
 
                     RenderDrawRecord first = batch.Instances[0].Record;
-                    int stride = ShaderAbiLayout.INSTANCE_HEADER_SIZE + first.InstanceTemplate.Length;
-                    instanceByteOffset = VulkanInstanceRecordWriter.AlignUp(instanceByteOffset, (ulong)stride);
+                    int stride =
+                        ShaderAbiLayout.INSTANCE_HEADER_SIZE + first.InstanceTemplate.Length;
+                    instanceByteOffset = VulkanInstanceRecordWriter.AlignUp(
+                        instanceByteOffset,
+                        (ulong)stride
+                    );
                     uint firstInstance = checked((uint)(instanceByteOffset / (ulong)stride));
                     WriteInstanceRecords(frameSlot, instanceByteOffset, stride, batch);
                     instanceByteOffset += (ulong)(stride * batch.InstanceCount);
@@ -2344,12 +2836,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                         checked((uint)batch.InstanceCount),
                         0,
                         0,
-                        firstInstance);
+                        firstInstance
+                    );
                 }
             }
 
             vulkan.CmdEndRenderPass(commandBuffer);
-            if (targetId == 0) {
+            if (targetId == 0)
+            {
                 renderedScenePass = true;
             }
 
@@ -2358,19 +2852,23 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             // with no stack needs no readable intermediate state: the next scene pass transitions the
             // attachments for its own write, and the frame-final transition covers the present pass and
             // the diagnostic depth probe.
-            if (targetId != 0) {
+            if (targetId != 0)
+            {
                 target.TransitionResolvedToShaderRead(vulkan, commandBuffer);
-            } else if (pass.HasEnabledPostProcessEffects) {
+            }
+            else if (pass.HasEnabledPostProcessEffects)
+            {
                 sceneTarget.TransitionResolvedToShaderRead(vulkan, commandBuffer);
             }
 
-            if (pass.HasEnabledPostProcessEffects) {
-                uint sourceColorSlot = targetId == 0
-                    ? _sceneSourceColorSlot
-                    : targetEntry!.ViewResource.BindlessSlot;
-                uint sourceDepthSlot = targetId == 0
-                    ? _sceneSourceDepthSlot
-                    : targetEntry!.DepthViewResource?.BindlessSlot ?? 0;
+            if (pass.HasEnabledPostProcessEffects)
+            {
+                uint sourceColorSlot =
+                    targetId == 0 ? _sceneSourceColorSlot : targetEntry!.ViewResource.BindlessSlot;
+                uint sourceDepthSlot =
+                    targetId == 0
+                        ? _sceneSourceDepthSlot
+                        : targetEntry!.DepthViewResource?.BindlessSlot ?? 0;
                 _postProcessor!.Process(
                     vulkan,
                     commandBuffer,
@@ -2382,8 +2880,10 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                     sourceColorSlot,
                     sourceDepthSlot,
                     scissor,
-                    ref instanceByteOffset);
-                if (targetEntry is not null) {
+                    ref instanceByteOffset
+                );
+                if (targetEntry is not null)
+                {
                     // The store-back wrote the target's color for the camera viewport, so a readback
                     // must return the post-processed content and its frame's tone snapshot.
                     targetEntry.HasResolvedColorContent = true;
@@ -2409,15 +2909,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Vk vulkan,
         CommandBuffer commandBuffer,
         RenderFramePacket frame,
-        int frameSlot) {
+        int frameSlot
+    )
+    {
         _frameRenderTargets.Clear();
         _frameSampledRenderTargets.Clear();
-        foreach (CameraPass pass in frame.Passes) {
-            if (pass.TargetId != 0) {
+        foreach (CameraPass pass in frame.Passes)
+        {
+            if (pass.TargetId != 0)
+            {
                 _frameRenderTargets.Add(RequireRenderTarget(pass.TargetId));
             }
 
-            foreach (RenderDrawRecord draw in pass.Draws) {
+            foreach (RenderDrawRecord draw in pass.Draws)
+            {
                 AddSampledRenderTargets(draw.GetTextureBindings());
                 AddSampledRenderTargets(draw.GetInstanceTextureBindings());
             }
@@ -2425,50 +2930,63 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             // A post-process effect can sample render target views through its own material bindings,
             // so those targets must be readable before the chain runs too. The reserved source bindings
             // are overridden by the engine and are never sampled, so they are skipped.
-            foreach (PostProcessEffectSnapshot effect in pass.PostProcessEffects) {
+            foreach (PostProcessEffectSnapshot effect in pass.PostProcessEffects)
+            {
                 AddSampledPostProcessTextures(effect);
             }
         }
 
-        foreach (RenderTargetEntry entry in _frameRenderTargets) {
+        foreach (RenderTargetEntry entry in _frameRenderTargets)
+        {
             PrepareRenderTargetUse(entry, frameSlot);
         }
 
-        foreach (RenderTargetEntry entry in _frameSampledRenderTargets) {
+        foreach (RenderTargetEntry entry in _frameSampledRenderTargets)
+        {
             PrepareRenderTargetUse(entry, frameSlot);
             entry.Target.PrepareSampled(vulkan, commandBuffer);
         }
     }
 
-    private void AddSampledPostProcessTextures(PostProcessEffectSnapshot effect) {
+    private void AddSampledPostProcessTextures(PostProcessEffectSnapshot effect)
+    {
         ReadOnlySpan<Texture?> textures = effect.TextureValues;
-        for (int index = 0; index < textures.Length; index++) {
-            if (effect.IsReservedTextureBinding(index)) {
+        for (int index = 0; index < textures.Length; index++)
+        {
+            if (effect.IsReservedTextureBinding(index))
+            {
                 continue;
             }
 
             Texture? texture = textures[index];
-            if (texture is not null && texture.IsRenderTargetView) {
+            if (texture is not null && texture.IsRenderTargetView)
+            {
                 _frameSampledRenderTargets.Add(RequireRenderTarget(texture.RenderTargetId));
             }
         }
     }
 
-    private void AddSampledRenderTargets(ReadOnlySpan<Texture?> textures) {
-        foreach (Texture? texture in textures) {
-            if (texture is not null && texture.IsRenderTargetView) {
+    private void AddSampledRenderTargets(ReadOnlySpan<Texture?> textures)
+    {
+        foreach (Texture? texture in textures)
+        {
+            if (texture is not null && texture.IsRenderTargetView)
+            {
                 _frameSampledRenderTargets.Add(RequireRenderTarget(texture.RenderTargetId));
             }
         }
     }
 
-    private void PrepareRenderTargetUse(RenderTargetEntry entry, int frameSlot) {
+    private void PrepareRenderTargetUse(RenderTargetEntry entry, int frameSlot)
+    {
         int lastFrameSlot = entry.Lifetime.LastUseFrameSlot;
-        if (lastFrameSlot >= 0 && lastFrameSlot != frameSlot) {
+        if (lastFrameSlot >= 0 && lastFrameSlot != frameSlot)
+        {
             Fence fence = _fences[lastFrameSlot];
             ThrowIfFailed(
                 _device!.Vulkan.WaitForFences(_device.Device, 1, &fence, true, WAIT_TIMEOUT),
-                "vkWaitForFences");
+                "vkWaitForFences"
+            );
         }
 
         entry.Lifetime.SetLastUseFrameSlot(frameSlot);
@@ -2480,7 +2998,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             entry.Target.RenderPass,
             _descriptorState!.PipelineLayout,
             entry.Target.SampleCount,
-            _deviceGeneration);
+            _deviceGeneration
+        );
 
     /// <summary>
     /// Records the 4-byte push constant that selects one camera pass's frame block.
@@ -2490,7 +3009,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// and before the next pass's first draw. The descriptor set stays bound across passes because the
     /// frame storage buffer holds every pass's block.
     /// </remarks>
-    private void PushPassIndex(Vk vulkan, CommandBuffer commandBuffer, int passIndex) {
+    private void PushPassIndex(Vk vulkan, CommandBuffer commandBuffer, int passIndex)
+    {
         uint index = checked((uint)passIndex);
         vulkan.CmdPushConstants(
             commandBuffer,
@@ -2498,25 +3018,30 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             VulkanDescriptorState.PUSH_CONSTANT_STAGES,
             VulkanDescriptorState.PASS_INDEX_PUSH_CONSTANT_OFFSET,
             VulkanDescriptorState.PASS_INDEX_PUSH_CONSTANT_SIZE,
-            &index);
+            &index
+        );
     }
 
     private static bool TryResolveViewport(
         CameraPass pass,
         Extent2D extent,
         out Viewport viewport,
-        out Rect2D scissor) {
+        out Rect2D scissor
+    )
+    {
         int x = Math.Clamp(pass.ViewportX, 0, (int)extent.Width);
         int y = Math.Clamp(pass.ViewportY, 0, (int)extent.Height);
         int width = Math.Clamp(pass.ViewportWidth, 0, (int)extent.Width - x);
         int height = Math.Clamp(pass.ViewportHeight, 0, (int)extent.Height - y);
-        if (width <= 0 || height <= 0) {
+        if (width <= 0 || height <= 0)
+        {
             viewport = default;
             scissor = default;
             return false;
         }
 
-        viewport = new Viewport {
+        viewport = new Viewport
+        {
             X = x,
             Y = y,
             Width = width,
@@ -2524,7 +3049,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             MinDepth = VulkanDepthState.MIN_DEPTH,
             MaxDepth = VulkanDepthState.MAX_DEPTH,
         };
-        scissor = new Rect2D {
+        scissor = new Rect2D
+        {
             Offset = new Offset2D { X = x, Y = y },
             Extent = new Extent2D { Width = (uint)width, Height = (uint)height },
         };
@@ -2535,15 +3061,20 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         Vk vulkan,
         CommandBuffer commandBuffer,
         Color color,
-        Rect2D rect) {
-        ClearAttachment attachment = new() {
+        Rect2D rect
+    )
+    {
+        ClearAttachment attachment = new()
+        {
             AspectMask = ImageAspectFlags.ColorBit,
             ColorAttachment = 0,
-            ClearValue = new ClearValue {
+            ClearValue = new ClearValue
+            {
                 Color = new ClearColorValue(color.R, color.G, color.B, color.A),
             },
         };
-        ClearRect clearRect = new() {
+        ClearRect clearRect = new()
+        {
             Rect = rect,
             BaseArrayLayer = 0,
             LayerCount = 1,
@@ -2551,18 +3082,23 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         vulkan.CmdClearAttachments(commandBuffer, 1, &attachment, 1, &clearRect);
     }
 
-    private static void ClearDepthAttachment(Vk vulkan, CommandBuffer commandBuffer, Rect2D rect) {
-        ClearAttachment attachment = new() {
+    private static void ClearDepthAttachment(Vk vulkan, CommandBuffer commandBuffer, Rect2D rect)
+    {
+        ClearAttachment attachment = new()
+        {
             AspectMask = ImageAspectFlags.DepthBit,
             ColorAttachment = 0,
-            ClearValue = new ClearValue {
-                DepthStencil = new ClearDepthStencilValue {
+            ClearValue = new ClearValue
+            {
+                DepthStencil = new ClearDepthStencilValue
+                {
                     Depth = VulkanDepthState.CLEAR_DEPTH,
                     Stencil = 0,
                 },
             },
         };
-        ClearRect clearRect = new() {
+        ClearRect clearRect = new()
+        {
             Rect = rect,
             BaseArrayLayer = 0,
             LayerCount = 1,
@@ -2585,7 +3121,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         int passIndex,
         CameraPass pass,
         RenderFramePacket frame,
-        Extent2D targetExtent) {
+        Extent2D targetExtent
+    )
+    {
         Span<byte> block = _frameResources!.GetFrameBlockSpan(frameSlot, passIndex);
         WriteMatrix(block, ShaderAbiFrame.VIEW_PROJECTION_OFFSET, pass.ViewProjection);
         // The shader multiplies a column vector by the column-major matrix it reads; raw row-major
@@ -2595,19 +3133,18 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         WriteVector4(
             block,
             ShaderAbiFrame.CAMERA_POSITION_OFFSET,
-            new Vector4(pass.CameraPosition, 1f));
+            new Vector4(pass.CameraPosition, 1f)
+        );
         WriteVector4(
             block,
             ShaderAbiFrame.VIEWPORT_OFFSET,
-            new Vector4(
-                pass.ViewportX,
-                pass.ViewportY,
-                pass.ViewportWidth,
-                pass.ViewportHeight));
+            new Vector4(pass.ViewportX, pass.ViewportY, pass.ViewportWidth, pass.ViewportHeight)
+        );
         WriteVector4(
             block,
             ShaderAbiFrame.TIME_OFFSET,
-            new Vector4((float)frame.Time, (float)frame.DeltaTime, frame.FrameIndex, 0f));
+            new Vector4((float)frame.Time, (float)frame.DeltaTime, frame.FrameIndex, 0f)
+        );
         WriteVector4(
             block,
             ShaderAbiFrame.SCREEN_SIZE_OFFSET,
@@ -2616,7 +3153,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 targetExtent.Height,
                 // The scene shader and the present pass must apply the same frame exposure.
                 MathF.Pow(2f, frame.Tonemapping.Exposure),
-                0f));
+                0f
+            )
+        );
     }
 
     /// <summary>
@@ -2634,26 +3173,41 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         int frameSlot,
         ulong byteOffset,
         int stride,
-        PlannedBatch batch) {
+        PlannedBatch batch
+    )
+    {
         Span<byte> records = _frameResources!.GetInstanceSpan(
             frameSlot,
             byteOffset,
-            (ulong)(stride * batch.InstanceCount));
-        for (int index = 0; index < batch.InstanceCount; index++) {
+            (ulong)(stride * batch.InstanceCount)
+        );
+        for (int index = 0; index < batch.InstanceCount; index++)
+        {
             PlannedInstance instance = batch.Instances[index];
             RenderDrawRecord draw = instance.Record;
             Span<byte> record = records.Slice(index * stride, stride);
-            WriteMatrix(record, ShaderAbiLayout.TRANSFORM_OFFSET, draw.GetWorldMatrices()[instance.InstanceIndex]);
-            WriteVector4(record, ShaderAbiLayout.COLOR_OFFSET, new Vector4(draw.Tint.R, draw.Tint.G, draw.Tint.B, draw.Tint.A));
+            WriteMatrix(
+                record,
+                ShaderAbiLayout.TRANSFORM_OFFSET,
+                draw.GetWorldMatrices()[instance.InstanceIndex]
+            );
+            WriteVector4(
+                record,
+                ShaderAbiLayout.COLOR_OFFSET,
+                new Vector4(draw.Tint.R, draw.Tint.G, draw.Tint.B, draw.Tint.A)
+            );
             WriteVector4(record, ShaderAbiLayout.UV_RECT_OFFSET, draw.UvRect);
             draw.InstanceTemplate.CopyTo(record[ShaderAbiLayout.INSTANCE_HEADER_SIZE..]);
 
             ReadOnlySpan<Texture?> textures = GetInstanceTextureRun(draw, instance.InstanceIndex);
-            for (int textureIndex = 0; textureIndex < textures.Length; textureIndex++) {
+            for (int textureIndex = 0; textureIndex < textures.Length; textureIndex++)
+            {
                 WriteUInt32(
                     record,
-                    ShaderAbiLayout.TEXTURE_INDEX_START + (textureIndex * ShaderAbiLayout.TEXTURE_INDEX_SIZE),
-                    ResolveTextureSlot(textures[textureIndex]));
+                    ShaderAbiLayout.TEXTURE_INDEX_START
+                        + (textureIndex * ShaderAbiLayout.TEXTURE_INDEX_SIZE),
+                    ResolveTextureSlot(textures[textureIndex])
+                );
             }
         }
     }
@@ -2670,8 +3224,13 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// and the slice is a view over the record's pooled buffer; the read allocates nothing. The recorder
     /// retained each texture in the frame's retention set, so the resolved bindless slots are still live.
     /// </remarks>
-    private static ReadOnlySpan<Texture?> GetInstanceTextureRun(RenderDrawRecord draw, int instanceIndex) {
-        if (!draw.HasPerInstanceTextureBindings) {
+    private static ReadOnlySpan<Texture?> GetInstanceTextureRun(
+        RenderDrawRecord draw,
+        int instanceIndex
+    )
+    {
+        if (!draw.HasPerInstanceTextureBindings)
+        {
             return draw.GetTextureBindings();
         }
 
@@ -2684,7 +3243,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// exactly like a packed or procedural texture; the frame's retention set already kept its target
     /// alive.
     /// </summary>
-    private static uint ResolveTextureSlot(Texture? texture) => VulkanTextureBinding.ResolveSlot(texture);
+    private static uint ResolveTextureSlot(Texture? texture) =>
+        VulkanTextureBinding.ResolveSlot(texture);
 
     /// <summary>
     /// Requires a live Vulkan shader GPU resource behind one engine shader program asset.
@@ -2694,26 +3254,32 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// <exception cref="GraphicsException">
     /// The asset is not a Vulkan GPU shader. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static VulkanShaderAssetResource RequireShaderResource(EngineAsset shader) {
-        if (shader.Resource is VulkanShaderAssetResource resource) {
+    internal static VulkanShaderAssetResource RequireShaderResource(EngineAsset shader)
+    {
+        if (shader.Resource is VulkanShaderAssetResource resource)
+        {
             return resource;
         }
 
         throw new GraphicsException(
             $"The shader '{shader.Path}' is not a Vulkan GPU shader and cannot be used to create a pipeline.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
-    private static VulkanMeshAssetResource RequireMeshResource(EngineAsset mesh) {
-        if (mesh.Resource is VulkanMeshAssetResource resource) {
+    private static VulkanMeshAssetResource RequireMeshResource(EngineAsset mesh)
+    {
+        if (mesh.Resource is VulkanMeshAssetResource resource)
+        {
             return resource;
         }
 
         throw new GraphicsException(
             $"The mesh '{mesh.Path}' is not a Vulkan GPU mesh and cannot be drawn.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
     /// <summary>
@@ -2726,11 +3292,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// scene-only sum. An effect reports its ordered record layout, so a built-in multi-pass effect whose
     /// passes use different shaders and uniform sizes reserves each pass' stride in turn.
     /// </remarks>
-    private static ulong ComputeInstanceBytes(FramePlan plan) {
+    private static ulong ComputeInstanceBytes(FramePlan plan)
+    {
         ulong bytes = 0;
-        for (int passIndex = 0; passIndex < plan.Passes.Count; passIndex++) {
+        for (int passIndex = 0; passIndex < plan.Passes.Count; passIndex++)
+        {
             PassPlan pass = plan.Passes[passIndex];
-            foreach (PlannedBatch batch in pass.Batches) {
+            foreach (PlannedBatch batch in pass.Batches)
+            {
                 RenderDrawRecord first = batch.Instances[0].Record;
                 int stride = ShaderAbiLayout.INSTANCE_HEADER_SIZE + first.InstanceTemplate.Length;
                 bytes = VulkanInstanceRecordWriter.AlignUp(bytes, (ulong)stride);
@@ -2738,13 +3307,17 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             }
 
             ReadOnlySpan<PostProcessEffectSnapshot> effects = pass.Pass.PostProcessEffects;
-            foreach (PostProcessEffectSnapshot effect in effects) {
-                if (!effect.Enabled) {
+            foreach (PostProcessEffectSnapshot effect in effects)
+            {
+                if (!effect.Enabled)
+                {
                     continue;
                 }
 
-                foreach (PostProcessInstanceRecord record in effect.InstanceLayout) {
-                    if (record.Count <= 0 || record.Stride <= 0) {
+                foreach (PostProcessInstanceRecord record in effect.InstanceLayout)
+                {
+                    if (record.Count <= 0 || record.Stride <= 0)
+                    {
                         continue;
                     }
 
@@ -2765,14 +3338,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     /// as column-major, so it sees the transpose of what this method writes, which is the engine's
     /// row-vector matrix expressed in the shader's column-vector convention.
     /// </remarks>
-    private static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value)
-        => VulkanInstanceRecordWriter.WriteMatrix(destination, offset, value);
+    private static void WriteMatrix(Span<byte> destination, int offset, Matrix4x4 value) =>
+        VulkanInstanceRecordWriter.WriteMatrix(destination, offset, value);
 
-    private static void WriteVector4(Span<byte> destination, int offset, Vector4 value)
-        => VulkanInstanceRecordWriter.WriteVector4(destination, offset, value);
+    private static void WriteVector4(Span<byte> destination, int offset, Vector4 value) =>
+        VulkanInstanceRecordWriter.WriteVector4(destination, offset, value);
 
-    private static void WriteUInt32(Span<byte> destination, int offset, uint value)
-        => VulkanInstanceRecordWriter.WriteUInt32(destination, offset, value);
+    private static void WriteUInt32(Span<byte> destination, int offset, uint value) =>
+        VulkanInstanceRecordWriter.WriteUInt32(destination, offset, value);
 
     /// <summary>
     /// Gets whether a presentation result means the image reached the presentation engine. A
@@ -2783,17 +3356,24 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
     internal static bool CountsAsPresented(SwapchainResult result) =>
         result is SwapchainResult.Success or SwapchainResult.Suboptimal;
 
-    private void PresentPending() {
-        if (!_pendingPresent) {
+    private void PresentPending()
+    {
+        if (!_pendingPresent)
+        {
             return;
         }
 
-        SwapchainResult result = _swapchain!.Present(_device!.PresentQueue, _pendingRenderFinished, _pendingImageIndex);
+        SwapchainResult result = _swapchain!.Present(
+            _device!.PresentQueue,
+            _pendingRenderFinished,
+            _pendingImageIndex
+        );
         uint presentedImageIndex = _pendingImageIndex;
         _pendingPresent = false;
         _pendingRenderFinished = default;
         _instance!.ThrowIfValidationError("presenting a frame");
-        if (CountsAsPresented(result)) {
+        if (CountsAsPresented(result))
+        {
             // The image reached the presentation engine, so a frame completed. A suboptimal hint is a
             // routine driver notification and must not count toward the recovery bound, but the
             // presentation itself succeeded and is counted. An out-of-date, lost, or recreated
@@ -2806,7 +3386,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
 
         bool recoverSuboptimal = _suboptimalRecoveryPending;
         _suboptimalRecoveryPending = false;
-        switch (result) {
+        switch (result)
+        {
             case SwapchainResult.OutOfDate:
                 RecoverOrThrow(RenderRecoveryReason.SwapchainOutOfDate);
                 break;
@@ -2817,7 +3398,8 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
                 RecoverOrThrow(RenderRecoveryReason.SwapchainSuboptimal);
                 break;
             default:
-                if (recoverSuboptimal) {
+                if (recoverSuboptimal)
+                {
                     RecoverOrThrow(RenderRecoveryReason.SwapchainSuboptimal);
                 }
 
@@ -2825,11 +3407,14 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         }
     }
 
-    private int CountFramesInFlight() {
+    private int CountFramesInFlight()
+    {
         VulkanDevice device = _device!;
         int count = 0;
-        foreach (Fence fence in _fences) {
-            if (device.Vulkan.GetFenceStatus(device.Device, fence) == Result.NotReady) {
+        foreach (Fence fence in _fences)
+        {
+            if (device.Vulkan.GetFenceStatus(device.Device, fence) == Result.NotReady)
+            {
                 count++;
             }
         }
@@ -2837,28 +3422,32 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         return count;
     }
 
-    private RenderStats CreateZeroDrawStats(long frameIndex) => new(
-        frameIndex,
-        _presentedFrames,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        _sampleCount,
-        _swapchainFormat.IsHdr,
-        0,
-        0,
-        0,
-        _recoveryCount);
+    private RenderStats CreateZeroDrawStats(long frameIndex) =>
+        new(
+            frameIndex,
+            _presentedFrames,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            _sampleCount,
+            _swapchainFormat.IsHdr,
+            0,
+            0,
+            0,
+            _recoveryCount
+        );
 
     private bool HdrSelectionChanged(WindowHdrState hdr) =>
         hdr.HdrEnabled != _selectedHdrState.HdrEnabled
         || (hdr.HdrEnabled && hdr.SdrWhiteLevel != _selectedHdrState.SdrWhiteLevel);
 
-    private void UpdateInfo() {
-        _info = _device!.CreateEngineInfo() with {
+    private void UpdateInfo()
+    {
+        _info = _device!.CreateEngineInfo() with
+        {
             SwapchainFormat = _swapchainFormat.Description,
             HdrOutput = _swapchainFormat.IsHdr,
             SampleCount = _sampleCount,
@@ -2866,24 +3455,36 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
         };
     }
 
-    private void DeviceWaitIdle() {
-        if (_device is null) {
+    private void DeviceWaitIdle()
+    {
+        if (_device is null)
+        {
             return;
         }
 
         Result result = _device.Vulkan.DeviceWaitIdle(_device.Device);
-        if (result != Result.Success) {
-            _options?.Logger.LogWarning("The Vulkan device wait-idle before recreation failed with {Result}.", result);
+        if (result != Result.Success)
+        {
+            _options?.Logger.LogWarning(
+                "The Vulkan device wait-idle before recreation failed with {Result}.",
+                result
+            );
         }
     }
 
-    private void LogInitialized(VulkanDeviceCapabilities capabilities, WindowSurfaceState state, Extent2D extent) {
+    private void LogInitialized(
+        VulkanDeviceCapabilities capabilities,
+        WindowSurfaceState state,
+        Extent2D extent
+    )
+    {
         ILogger logger = _options!.Logger;
         logger.LogInformation(
             "Vulkan 1.2 renderer initialized: {GpuName}, API {ApiVersion}, validation {Validation}.",
             capabilities.DeviceName,
             VulkanVersion.Format(capabilities.ApiVersion),
-            _instance!.ValidationLayersEnabled ? "enabled" : "disabled");
+            _instance!.ValidationLayersEnabled ? "enabled" : "disabled"
+        );
         logger.LogInformation(
             "Presentation path: {Format}/{ColorSpace}, HDR {HdrOutput}, present mode {PresentMode}, {SampleCount}x MSAA, {ImageCount} swapchain image(s), {Width}x{Height}.",
             _swapchainFormat.Description,
@@ -2893,74 +3494,104 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             _sampleCount,
             _swapchain!.ImageCount,
             extent.Width,
-            extent.Height);
+            extent.Height
+        );
         logger.LogInformation(
             "Window HDR state: enabled {HdrEnabled}, SDR white level {SdrWhiteLevel}, HDR headroom {HdrHeadroom}.",
             state.Hdr.HdrEnabled,
             state.Hdr.SdrWhiteLevel,
-            state.Hdr.HdrHeadroom);
+            state.Hdr.HdrHeadroom
+        );
     }
 
-    private void LogSelectionWarnings(WindowSurfaceState state) {
+    private void LogSelectionWarnings(WindowSurfaceState state)
+    {
         ILogger logger = _options!.Logger;
         RenderSettings settings = _options.Settings;
-        if (_sampleCount != settings.SampleCount) {
+        if (_sampleCount != settings.SampleCount)
+        {
             logger.LogWarning(
                 "The requested MSAA sample count {Requested} is not supported by the device; using {Effective}.",
                 settings.SampleCount,
-                _sampleCount);
+                _sampleCount
+            );
         }
 
-        if (_presentMode.FellBack) {
+        if (_presentMode.FellBack)
+        {
             logger.LogWarning(
                 "The requested present mode {Requested} is not supported by the window surface; using {Effective}.",
                 settings.PresentMode,
-                _presentMode.Public);
+                _presentMode.Public
+            );
         }
 
-        if (state.Hdr.HdrEnabled && !_swapchainFormat.IsHdr) {
+        if (state.Hdr.HdrEnabled && !_swapchainFormat.IsHdr)
+        {
             logger.LogWarning(
                 "HDR presentation was requested for the window but the surface advertises no scRGB float format; falling back to {Format} with SDR output.",
-                _swapchainFormat.Description);
+                _swapchainFormat.Description
+            );
         }
 
-        if (_swapchainFormat.IsHdr && _swapchainFormat.ColorSpace == ColorSpaceKHR.SpaceSrgbNonlinearKhr) {
+        if (
+            _swapchainFormat.IsHdr
+            && _swapchainFormat.ColorSpace == ColorSpaceKHR.SpaceSrgbNonlinearKhr
+        )
+        {
             logger.LogWarning(
-                "The scRGB HDR swapchain uses the sRGB nonlinear color space because VK_EXT_swapchain_colorspace offered no extended-sRGB-linear pair; the compositor may treat the surface as SDR.");
+                "The scRGB HDR swapchain uses the sRGB nonlinear color space because VK_EXT_swapchain_colorspace offered no extended-sRGB-linear pair; the compositor may treat the surface as SDR."
+            );
         }
     }
 
-    private void EnsureInitialized() {
+    private void EnsureInitialized()
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_initialized) {
+        if (!_initialized)
+        {
             throw new InvalidOperationException("The renderer backend has not been initialized.");
         }
     }
 
-    private static Extent2D SelectExtent(SurfaceCapabilitiesKHR capabilities, int renderWidth, int renderHeight) {
-        Extent2D extent = VulkanSwapchainExtentSelection.Select(capabilities, renderWidth, renderHeight);
-        return new Extent2D {
+    private static Extent2D SelectExtent(
+        SurfaceCapabilitiesKHR capabilities,
+        int renderWidth,
+        int renderHeight
+    )
+    {
+        Extent2D extent = VulkanSwapchainExtentSelection.Select(
+            capabilities,
+            renderWidth,
+            renderHeight
+        );
+        return new Extent2D
+        {
             Width = Math.Max(1u, extent.Width),
             Height = Math.Max(1u, extent.Height),
         };
     }
 
-    private static void ThrowIfFailed(Result result, string operation) {
-        if (result == Result.Success) {
+    private static void ThrowIfFailed(Result result, string operation)
+    {
+        if (result == Result.Success)
+        {
             return;
         }
 
         throw new GraphicsException(
             $"The Vulkan command {operation} failed with {result}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
     /// <summary>
     /// The render-thread resources of one runtime render target: the images and render pass, the bindless
     /// color and depth views, the target's samplers, and the lazily created geometry pipeline cache.
     /// </summary>
-    private sealed class RenderTargetEntry {
+    private sealed class RenderTargetEntry
+    {
         internal RenderTargetEntry(
             long id,
             int sampleCount,
@@ -2972,7 +3603,9 @@ internal sealed unsafe class Vulkan12Backend : IRendererBackend, IAssetGpuWorker
             RenderTextureViewLifetime? depthViewLifetime,
             RenderTextureViewResource? depthViewResource,
             Sampler depthSampler,
-            TonemappingMode startupTonemappingMode) {
+            TonemappingMode startupTonemappingMode
+        )
+        {
             Id = id;
             SampleCount = sampleCount;
             Target = target;

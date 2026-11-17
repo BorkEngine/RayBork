@@ -4,16 +4,19 @@ using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests.Assets.Procedural;
 
-public sealed class MeshBuilderTests {
+public sealed class MeshBuilderTests
+{
     private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateMeshBuilderRejectsAnUndefinedTopology() {
+    public void CreateMeshBuilderRejectsAnUndefinedTopology()
+    {
         using ProceduralTestHarness harness = new();
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => harness.Service.CreateMeshBuilder((PrimitiveTopology)42));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            harness.Service.CreateMeshBuilder((PrimitiveTopology)42)
+        );
 
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         Assert.Equal(PrimitiveTopology.TriangleList, builder.Topology);
@@ -24,7 +27,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetVerticesAndSetIndicesReplaceTheContentsAndTheBuilderKeepsACopy() {
+    public void SetVerticesAndSetIndicesReplaceTheContentsAndTheBuilderKeepsACopy()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         Vertex[] vertices = CreateQuadPositions();
@@ -42,24 +46,28 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task EmptyMeshIsRejectedWithoutStartingAnUpload() {
+    public async Task EmptyMeshIsRejectedWithoutStartingAnUpload()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => builder.BuildAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
         Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task MissingIndicesAreRejected() {
+    public async Task MissingIndicesAreRejected()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices(CreateTrianglePositions());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => builder.BuildAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
     }
 
     [Theory]
@@ -69,7 +77,11 @@ public sealed class MeshBuilderTests {
     [InlineData(PrimitiveTopology.LineStrip, 1)]
     [InlineData(PrimitiveTopology.PointList, 0)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TopologySpecificIndexCountsAreValidated(PrimitiveTopology topology, int indexCount) {
+    public async Task TopologySpecificIndexCountsAreValidated(
+        PrimitiveTopology topology,
+        int indexCount
+    )
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.Topology = topology;
@@ -77,26 +89,30 @@ public sealed class MeshBuilderTests {
         uint[] indices = new uint[Math.Max(indexCount, 0)];
         builder.SetIndices(indices);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => builder.BuildAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
         Assert.Equal(0, harness.Worker.UploadCallCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task OutOfRangeIndexIsRejected() {
+    public async Task OutOfRangeIndexIsRejected()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices(CreateTrianglePositions());
         builder.SetIndices([0, 1, 3]);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => builder.BuildAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task NonFiniteAttributeIsRejected() {
+    public async Task NonFiniteAttributeIsRejected()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices([
@@ -106,8 +122,9 @@ public sealed class MeshBuilderTests {
         ]);
         builder.SetIndices([0, 1, 2]);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => builder.BuildAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
     }
 
     [Theory]
@@ -115,7 +132,8 @@ public sealed class MeshBuilderTests {
     [InlineData(PrimitiveTopology.LineStrip)]
     [InlineData(PrimitiveTopology.PointList)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NormalsAndTangentsRejectLineAndPointTopologies(PrimitiveTopology topology) {
+    public void NormalsAndTangentsRejectLineAndPointTopologies(PrimitiveTopology topology)
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.Topology = topology;
@@ -128,7 +146,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputeNormalsRejectsAnInvalidTriangleCount() {
+    public void ComputeNormalsRejectsAnInvalidTriangleCount()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices(CreateQuadPositions());
@@ -140,17 +159,21 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputeNormalsRejectsAnUndefinedMode() {
+    public void ComputeNormalsRejectsAnUndefinedMode()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateQuad(builder);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => builder.ComputeNormals((MeshNormalMode)42));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.ComputeNormals((MeshNormalMode)42)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SmoothNormalsAccumulateBySharedPosition() {
+    public void SmoothNormalsAccumulateBySharedPosition()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         // Two triangles meeting at an edge, with the shared edge duplicated as two vertex pairs. The
@@ -182,7 +205,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SmoothNormalsWeighFacesByArea() {
+    public void SmoothNormalsWeighFacesByArea()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         // A large +Z face and a small +Y face share the origin edge, so the +Z contribution is larger.
@@ -203,7 +227,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SmoothNormalsShareTheCornerOfACubeAcrossDuplicatedVertices() {
+    public void SmoothNormalsShareTheCornerOfACubeAcrossDuplicatedVertices()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         Vector3 origin = Vector3.Zero;
@@ -212,9 +237,15 @@ public sealed class MeshBuilderTests {
         Vector3 z = new(0f, 0f, 1f);
         // Three cube faces meet at the origin, each with its own copy of the shared corner.
         builder.SetVertices([
-            new Vertex(origin), new Vertex(x), new Vertex(y),
-            new Vertex(origin), new Vertex(y), new Vertex(z),
-            new Vertex(origin), new Vertex(z), new Vertex(x),
+            new Vertex(origin),
+            new Vertex(x),
+            new Vertex(y),
+            new Vertex(origin),
+            new Vertex(y),
+            new Vertex(z),
+            new Vertex(origin),
+            new Vertex(z),
+            new Vertex(x),
         ]);
         builder.SetIndices([0, 1, 2, 3, 4, 5, 6, 7, 8]);
 
@@ -231,7 +262,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FlatNormalsSplitEveryTriangleAndPreserveTheOtherAttributes() {
+    public void FlatNormalsSplitEveryTriangleAndPreserveTheOtherAttributes()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         Vertex a = new(Vector3.Zero, uv: new Vector2(0.1f, 0.2f), color: Color.Red);
@@ -262,7 +294,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FlatNormalsKeepAStripValidWithDegenerateConnectingIndices() {
+    public void FlatNormalsKeepAStripValidWithDegenerateConnectingIndices()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder(PrimitiveTopology.TriangleStrip);
         builder.SetVertices(CreateQuadPositions());
@@ -273,14 +306,16 @@ public sealed class MeshBuilderTests {
 
         Assert.Equal(6, builder.Vertices.Count);
         Assert.Equal(new uint[] { 0u, 1u, 2u, 2u, 3u, 4u, 5u }, builder.Indices);
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             AssertVector(new Vector3(0f, 0f, 1f), vertex.Normal);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TangentIsTheUVTangentWithHandedness() {
+    public void TangentIsTheUVTangentWithHandedness()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices([
@@ -294,15 +329,20 @@ public sealed class MeshBuilderTests {
 
         builder.ComputeTangents();
 
-        foreach (Vertex vertex in builder.Vertices) {
-            AssertVector(new Vector3(1f, 0f, 0f), new Vector3(vertex.Tangent.X, vertex.Tangent.Y, vertex.Tangent.Z));
+        foreach (Vertex vertex in builder.Vertices)
+        {
+            AssertVector(
+                new Vector3(1f, 0f, 0f),
+                new Vector3(vertex.Tangent.X, vertex.Tangent.Y, vertex.Tangent.Z)
+            );
             Assert.Equal(1f, vertex.Tangent.W);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DegenerateTrianglesLeaveAZeroTangent() {
+    public void DegenerateTrianglesLeaveAZeroTangent()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices([
@@ -315,14 +355,16 @@ public sealed class MeshBuilderTests {
 
         builder.ComputeTangents();
 
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             Assert.Equal(Vector4.Zero, vertex.Tangent);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TangentsRequireNonZeroNormals() {
+    public void TangentsRequireNonZeroNormals()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices([
@@ -337,7 +379,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputeBoundsUsesEveryVertexPosition() {
+    public void ComputeBoundsUsesEveryVertexPosition()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices([
@@ -355,7 +398,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputeBoundsRequiresAVertex() {
+    public void ComputeBoundsRequiresAVertex()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -364,7 +408,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BuildAsyncCreatesAProceduralMeshWithCpuDataAndBounds() {
+    public async Task BuildAsyncCreatesAProceduralMeshWithCpuDataAndBounds()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         Vertex[] vertices = CreateQuadPositions();
@@ -374,7 +419,8 @@ public sealed class MeshBuilderTests {
 
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
 
-        try {
+        try
+        {
             Assert.StartsWith("/_procedural/mesh/", mesh.Path, StringComparison.Ordinal);
             Assert.True(mesh.IsProcedural);
             Assert.Equal(PrimitiveTopology.TriangleList, mesh.Topology);
@@ -387,7 +433,9 @@ public sealed class MeshBuilderTests {
             MeshGpuUpload upload = Assert.IsType<MeshGpuUpload>(harness.Worker.UploadCalls[0]);
             Assert.Equal(mesh.Path[1..], upload.Path);
             Assert.Equal((4 * 88) + (6 * sizeof(uint)), upload.VertexAndIndexData.Length);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
 
@@ -400,7 +448,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BuildAsyncKeepsExplicitlyComputedBounds() {
+    public async Task BuildAsyncKeepsExplicitlyComputedBounds()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices(CreateQuadPositions());
@@ -409,17 +458,21 @@ public sealed class MeshBuilderTests {
         builder.Vertices.Add(new Vertex(new Vector3(100f, 100f, 100f)));
 
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.Equal(explicitBounds, mesh.Bounds);
             Assert.Equal(5, mesh.VertexCount);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BuildAsyncReturnsOnlyAfterTheDeferredGpuUploadCompletes() {
+    public async Task BuildAsyncReturnsOnlyAfterTheDeferredGpuUploadCompletes()
+    {
         using ProceduralTestHarness harness = new();
         harness.Worker.DeferUploads = true;
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
@@ -431,16 +484,20 @@ public sealed class MeshBuilderTests {
         Assert.False(build.IsCompleted);
         operation.Complete();
         Mesh mesh = await build.WaitAsync(_timeout, TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.True(mesh.IsProcedural);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CanceledBuildDestroysTheResourceAndLeavesTheBuilderReusable() {
+    public async Task CanceledBuildDestroysTheResourceAndLeavesTheBuilderReusable()
+    {
         using ProceduralTestHarness harness = new();
         harness.Worker.DeferUploads = true;
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
@@ -451,36 +508,44 @@ public sealed class MeshBuilderTests {
         FakeGpuAssetUploadOperation operation = harness.Worker.WaitForUpload(_timeout);
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => build.WaitAsync(_timeout, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            build.WaitAsync(_timeout, TestContext.Current.CancellationToken)
+        );
         Assert.True(
             SpinWait.SpinUntil(() => harness.Worker.CancelCalls.Count == 1, _timeout),
-            "The bridge did not cancel the upload operation.");
+            "The bridge did not cancel the upload operation."
+        );
         Assert.True(
             SpinWait.SpinUntil(() => harness.Bridge.LiveResourceCount == 0, _timeout),
-            "The canceled upload left a live resource.");
+            "The canceled upload left a live resource."
+        );
 
         harness.Worker.DeferUploads = false;
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.True(mesh.IsProcedural);
             Assert.NotEqual("/_procedural/mesh/1", mesh.Path);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task PreCanceledBuildStartsNoUpload() {
+    public async Task PreCanceledBuildStartsNoUpload()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateTriangle(builder);
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => builder.BuildAsync(cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            builder.BuildAsync(cancellation.Token)
+        );
 
         Assert.Equal(0, harness.Worker.UploadCallCount);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
@@ -488,7 +553,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task FailedUploadDestroysTheResourceAndLeavesTheBuilderReusable() {
+    public async Task FailedUploadDestroysTheResourceAndLeavesTheBuilderReusable()
+    {
         using ProceduralTestHarness harness = new();
         harness.Worker.DeferUploads = true;
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
@@ -496,68 +562,87 @@ public sealed class MeshBuilderTests {
 
         Task<Mesh> build = builder.BuildAsync(TestContext.Current.CancellationToken);
         FakeGpuAssetUploadOperation operation = harness.Worker.WaitForUpload(_timeout);
-        operation.Fail(new AssetLoadException(
-            "The test upload failed.",
-            DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-            null));
+        operation.Fail(
+            new AssetLoadException(
+                "The test upload failed.",
+                DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
+                null
+            )
+        );
 
-        AssetLoadException failure = await Assert.ThrowsAsync<AssetLoadException>(
-            () => build.WaitAsync(_timeout, TestContext.Current.CancellationToken));
+        AssetLoadException failure = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            build.WaitAsync(_timeout, TestContext.Current.CancellationToken)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED, failure.DiagnosticCode);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
 
         harness.Worker.DeferUploads = false;
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.True(mesh.IsProcedural);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task UploadExceptionFailsTheBuildWithoutAResource() {
+    public async Task UploadExceptionFailsTheBuildWithoutAResource()
+    {
         using ProceduralTestHarness harness = new();
         harness.Worker.UploadException = new InvalidOperationException("The fake worker failed.");
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateTriangle(builder);
 
-        await Assert.ThrowsAsync<AssetLoadException>(
-            () => builder.BuildAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<AssetLoadException>(() =>
+            builder.BuildAsync(TestContext.Current.CancellationToken)
+        );
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
 
         harness.Worker.UploadException = null;
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.True(mesh.IsProcedural);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task BuilderIsReusableAndEveryBuildGetsAFreshPath() {
+    public async Task BuilderIsReusableAndEveryBuildGetsAFreshPath()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateTriangle(builder);
 
         Mesh first = await builder.BuildAsync(TestContext.Current.CancellationToken);
         Mesh second;
-        try {
+        try
+        {
             builder.ComputeNormals();
             builder.Vertices[0] = new Vertex(new Vector3(-1f, 0f, 0f));
             second = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        } catch {
+        }
+        catch
+        {
             first.Dispose();
             throw;
         }
 
-        try {
+        try
+        {
             Assert.NotEqual(first.Path, second.Path);
             Assert.NotEqual(first.Vertices.Span[0].Position, second.Vertices.Span[0].Position);
-        } finally {
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
         }
@@ -565,7 +650,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task GenerateCollisionsMarksTheBuiltMesh() {
+    public async Task GenerateCollisionsMarksTheBuiltMesh()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateTriangle(builder);
@@ -573,9 +659,12 @@ public sealed class MeshBuilderTests {
         builder.GenerateCollisions();
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
 
-        try {
+        try
+        {
             Assert.True(mesh.HasCollisionAcceleration);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
 
@@ -584,15 +673,19 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task MeshWithoutGenerateCollisionsHasNoAccelerationStructure() {
+    public async Task MeshWithoutGenerateCollisionsHasNoAccelerationStructure()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateTriangle(builder);
 
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.False(mesh.HasCollisionAcceleration);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
@@ -602,7 +695,8 @@ public sealed class MeshBuilderTests {
     [InlineData(PrimitiveTopology.LineStrip)]
     [InlineData(PrimitiveTopology.PointList)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateCollisionsRejectsLineAndPointTopologies(PrimitiveTopology topology) {
+    public void GenerateCollisionsRejectsLineAndPointTopologies(PrimitiveTopology topology)
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.Topology = topology;
@@ -614,7 +708,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task GenerateCollisionsIsIdempotentAndDoesNotMutateTheGeometry() {
+    public async Task GenerateCollisionsIsIdempotentAndDoesNotMutateTheGeometry()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateQuad(builder);
@@ -627,16 +722,20 @@ public sealed class MeshBuilderTests {
         AssertVerticesEqual(vertices, builder.Vertices.ToArray());
         Assert.Equal(indices, builder.Indices.ToArray());
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.True(mesh.HasCollisionAcceleration);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task GenerateCollisionsPersistsForLaterBuildsFromTheSameBuilder() {
+    public async Task GenerateCollisionsPersistsForLaterBuildsFromTheSameBuilder()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         CreateTriangle(builder);
@@ -644,21 +743,27 @@ public sealed class MeshBuilderTests {
 
         Mesh first = await builder.BuildAsync(TestContext.Current.CancellationToken);
         Mesh second;
-        try {
+        try
+        {
             builder.Vertices[0] = new Vertex(new Vector3(-1f, 0f, 0f));
             second = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        } catch {
+        }
+        catch
+        {
             first.Dispose();
             throw;
         }
 
-        try {
+        try
+        {
             Assert.True(first.HasCollisionAcceleration);
             Assert.True(second.HasCollisionAcceleration);
             Ray ray = new(new Vector3(-0.25f, 0.25f, 1f), -Vector3.UnitZ);
             Assert.False(Collision.GetRayMesh(ray, first, Matrix4x4.Identity).Hit);
             Assert.True(Collision.GetRayMesh(ray, second, Matrix4x4.Identity).Hit);
-        } finally {
+        }
+        finally
+        {
             first.Dispose();
             second.Dispose();
         }
@@ -666,7 +771,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task FullyDegenerateGeometryBuildsWithoutAnAccelerationStructure() {
+    public async Task FullyDegenerateGeometryBuildsWithoutAnAccelerationStructure()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.SetVertices([
@@ -678,16 +784,20 @@ public sealed class MeshBuilderTests {
         builder.GenerateCollisions();
 
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.False(mesh.HasCollisionAcceleration);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CanceledCollisionBuildLeavesNoAssetAndTheBuilderReusable() {
+    public async Task CanceledCollisionBuildLeavesNoAssetAndTheBuilderReusable()
+    {
         using ProceduralTestHarness harness = new();
         harness.Worker.DeferUploads = true;
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
@@ -699,27 +809,34 @@ public sealed class MeshBuilderTests {
         FakeGpuAssetUploadOperation operation = harness.Worker.WaitForUpload(_timeout);
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => build.WaitAsync(_timeout, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            build.WaitAsync(_timeout, TestContext.Current.CancellationToken)
+        );
         Assert.True(
             SpinWait.SpinUntil(() => harness.Worker.CancelCalls.Count == 1, _timeout),
-            "The bridge did not cancel the upload operation.");
+            "The bridge did not cancel the upload operation."
+        );
         Assert.True(
             SpinWait.SpinUntil(() => harness.Bridge.LiveResourceCount == 0, _timeout),
-            "The canceled upload left a live resource.");
+            "The canceled upload left a live resource."
+        );
 
         harness.Worker.DeferUploads = false;
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.True(mesh.HasCollisionAcceleration);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GeneratePolyCreatesAnXzFanWithUpNormals() {
+    public void GeneratePolyCreatesAnXzFanWithUpNormals()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -729,7 +846,8 @@ public sealed class MeshBuilderTests {
         Assert.Equal(12, builder.Indices.Count);
         Assert.Equal(PrimitiveTopology.TriangleList, builder.Topology);
         AssertGeneratedMeshIsWellFormed(builder);
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             Assert.Equal(0f, vertex.Position.Y);
             AssertVector(Vector3.UnitY, vertex.Normal);
         }
@@ -743,7 +861,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GeneratePlaneCreatesAnXzGridWithUpNormals() {
+    public void GeneratePlaneCreatesAnXzGridWithUpNormals()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -752,7 +871,8 @@ public sealed class MeshBuilderTests {
         Assert.Equal(12, builder.Vertices.Count);
         Assert.Equal(36, builder.Indices.Count);
         AssertGeneratedMeshIsWellFormed(builder);
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             AssertVector(Vector3.UnitY, vertex.Normal);
         }
 
@@ -765,7 +885,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateCubeCreatesACenteredBoxWithPerFaceNormals() {
+    public void GenerateCubeCreatesACenteredBoxWithPerFaceNormals()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -789,7 +910,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateSphereCreatesAUvSphereWithYAxisPoles() {
+    public void GenerateSphereCreatesAUvSphereWithYAxisPoles()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -798,7 +920,8 @@ public sealed class MeshBuilderTests {
         Assert.Equal(2 + (7 * 17), builder.Vertices.Count);
         Assert.Equal(6 * 16 * 7, builder.Indices.Count);
         AssertGeneratedMeshIsWellFormed(builder);
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             Assert.Equal(2f, vertex.Position.Length(), 4);
             AssertVector(Vector3.Normalize(vertex.Position), vertex.Normal);
         }
@@ -812,7 +935,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateHemiSphereIsOpenAtTheEquator() {
+    public void GenerateHemiSphereIsOpenAtTheEquator()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -821,9 +945,13 @@ public sealed class MeshBuilderTests {
         Assert.Equal(1 + (4 * 9), builder.Vertices.Count);
         Assert.Equal(3 * 8 * 7, builder.Indices.Count);
         AssertGeneratedMeshIsWellFormed(builder);
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             Assert.Equal(2f, vertex.Position.Length(), 4);
-            Assert.True(vertex.Position.Y >= 0f, "The hemisphere must not extend below the equator.");
+            Assert.True(
+                vertex.Position.Y >= 0f,
+                "The hemisphere must not extend below the equator."
+            );
         }
 
         BoundingBox bounds = builder.ComputeBounds();
@@ -836,7 +964,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateCylinderHasSideQuadsAndBothCaps() {
+    public void GenerateCylinderHasSideQuadsAndBothCaps()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -860,7 +989,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateConeHasASmoothSideAndABaseCap() {
+    public void GenerateConeHasASmoothSideAndABaseCap()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -883,7 +1013,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateTorusCreatesARingAroundTheYAxis() {
+    public void GenerateTorusCreatesARingAroundTheYAxis()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -892,16 +1023,20 @@ public sealed class MeshBuilderTests {
         Assert.Equal(17 * 9, builder.Vertices.Count);
         Assert.Equal(16 * 8 * 6, builder.Indices.Count);
         AssertGeneratedMeshIsWellFormed(builder);
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             float radial = MathF.Sqrt(
-                (vertex.Position.X * vertex.Position.X) + (vertex.Position.Z * vertex.Position.Z));
+                (vertex.Position.X * vertex.Position.X) + (vertex.Position.Z * vertex.Position.Z)
+            );
             float tubeDistance = MathF.Sqrt(
-                ((radial - 2f) * (radial - 2f)) + (vertex.Position.Y * vertex.Position.Y));
+                ((radial - 2f) * (radial - 2f)) + (vertex.Position.Y * vertex.Position.Y)
+            );
             Assert.Equal(0.5f, tubeDistance, 4);
             Vector3 closest = new(
                 vertex.Position.X / radial * 2f,
                 0f,
-                vertex.Position.Z / radial * 2f);
+                vertex.Position.Z / radial * 2f
+            );
             AssertVector(Vector3.Normalize(vertex.Position - closest), vertex.Normal);
         }
 
@@ -912,7 +1047,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateKnotCreatesACenteredTrefoilTube() {
+    public void GenerateKnotCreatesACenteredTrefoilTube()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -921,10 +1057,12 @@ public sealed class MeshBuilderTests {
         Assert.Equal(25 * 9, builder.Vertices.Count);
         Assert.Equal(24 * 8 * 6, builder.Indices.Count);
         AssertGeneratedMeshIsWellFormed(builder);
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             Assert.True(
                 vertex.Position.Length() <= 1.2f + 1e-4f,
-                "Every knot vertex must stay inside the winding radius plus the tube radius.");
+                "Every knot vertex must stay inside the winding radius plus the tube radius."
+            );
         }
 
         BoundingBox bounds = builder.ComputeBounds();
@@ -938,7 +1076,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task GeneratePlaneReplacesGeometryAndSwitchesToTriangleList() {
+    public async Task GeneratePlaneReplacesGeometryAndSwitchesToTriangleList()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder(PrimitiveTopology.LineList);
         builder.SetVertices(CreateTrianglePositions());
@@ -951,25 +1090,30 @@ public sealed class MeshBuilderTests {
         Assert.Equal(4, builder.Vertices.Count);
         Assert.Equal(6, builder.Indices.Count);
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.Equal(PrimitiveTopology.TriangleList, mesh.Topology);
             Assert.Equal(4, mesh.VertexCount);
             Assert.Equal(6, mesh.IndexCount);
             Assert.Equal(1, harness.Worker.UploadCallCount);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task GeneratedSphereBuildsThroughTheTestHost() {
+    public async Task GeneratedSphereBuildsThroughTheTestHost()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
         builder.GenerateSphere(1.5f, 4, 8);
         Mesh mesh = await builder.BuildAsync(TestContext.Current.CancellationToken);
-        try {
+        try
+        {
             Assert.StartsWith("/_procedural/mesh/", mesh.Path, StringComparison.Ordinal);
             Assert.True(mesh.IsProcedural);
             Assert.Equal(PrimitiveTopology.TriangleList, mesh.Topology);
@@ -981,14 +1125,17 @@ public sealed class MeshBuilderTests {
             Assert.Equal(builder.Vertices[0].Uv, mesh.Vertices.Span[0].Uv);
             Assert.Equal(builder.Indices[0], mesh.Indices.Span[0]);
             Assert.Equal(1, harness.Worker.UploadCallCount);
-        } finally {
+        }
+        finally
+        {
             mesh.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GeneratedSphereSupportsTheExistingNormalAndTangentPasses() {
+    public void GeneratedSphereSupportsTheExistingNormalAndTangentPasses()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -997,9 +1144,12 @@ public sealed class MeshBuilderTests {
         builder.ComputeTangents();
 
         bool anyTangent = false;
-        foreach (Vertex vertex in builder.Vertices) {
+        foreach (Vertex vertex in builder.Vertices)
+        {
             Vector3 tangent = new(vertex.Tangent.X, vertex.Tangent.Y, vertex.Tangent.Z);
-            Assert.True(float.IsFinite(tangent.X) && float.IsFinite(tangent.Y) && float.IsFinite(tangent.Z));
+            Assert.True(
+                float.IsFinite(tangent.X) && float.IsFinite(tangent.Y) && float.IsFinite(tangent.Z)
+            );
             Assert.InRange(tangent.Length(), 0f, 1.0001f);
             anyTangent |= tangent.LengthSquared() > 0f;
         }
@@ -1009,7 +1159,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateRejectsEveryShapeAfterTheAppStops() {
+    public void GenerateRejectsEveryShapeAfterTheAppStops()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         harness.Service.Stop();
@@ -1027,7 +1178,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateValidatesPolyAndPlaneParameters() {
+    public void GenerateValidatesPolyAndPlaneParameters()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
         builder.GeneratePoly(3, 1f);
@@ -1050,7 +1202,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateValidatesCubeParameters() {
+    public void GenerateValidatesCubeParameters()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -1064,7 +1217,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateValidatesSphereAndHemiSphereParameters() {
+    public void GenerateValidatesSphereAndHemiSphereParameters()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -1079,7 +1233,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateValidatesCylinderAndConeParameters() {
+    public void GenerateValidatesCylinderAndConeParameters()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -1093,7 +1248,8 @@ public sealed class MeshBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GenerateValidatesTorusAndKnotParameters() {
+    public void GenerateValidatesTorusAndKnotParameters()
+    {
         using ProceduralTestHarness harness = new();
         MeshBuilder builder = harness.Service.CreateMeshBuilder();
 
@@ -1107,19 +1263,25 @@ public sealed class MeshBuilderTests {
         AssertOutOfRange("sides", () => builder.GenerateKnot(1f, 0.2f, 3, 2));
     }
 
-    private static void AssertGeneratedMeshIsWellFormed(MeshBuilder builder) {
+    private static void AssertGeneratedMeshIsWellFormed(MeshBuilder builder)
+    {
         Assert.True(builder.Vertices.Count > 0);
         Assert.True(builder.Indices.Count >= 3);
         Assert.Equal(0, builder.Indices.Count % 3);
         Assert.Equal(PrimitiveTopology.TriangleList, builder.Topology);
 
-        foreach (Vertex vertex in builder.Vertices) {
-            Assert.True(float.IsFinite(vertex.Position.X)
-                && float.IsFinite(vertex.Position.Y)
-                && float.IsFinite(vertex.Position.Z));
-            Assert.True(float.IsFinite(vertex.Normal.X)
-                && float.IsFinite(vertex.Normal.Y)
-                && float.IsFinite(vertex.Normal.Z));
+        foreach (Vertex vertex in builder.Vertices)
+        {
+            Assert.True(
+                float.IsFinite(vertex.Position.X)
+                    && float.IsFinite(vertex.Position.Y)
+                    && float.IsFinite(vertex.Position.Z)
+            );
+            Assert.True(
+                float.IsFinite(vertex.Normal.X)
+                    && float.IsFinite(vertex.Normal.Y)
+                    && float.IsFinite(vertex.Normal.Z)
+            );
             Assert.True(float.IsFinite(vertex.Uv.X) && float.IsFinite(vertex.Uv.Y));
             Assert.Equal(1f, vertex.Normal.Length(), 4);
             Assert.InRange(vertex.Uv.X, 0f, 1f);
@@ -1131,7 +1293,8 @@ public sealed class MeshBuilderTests {
         Assert.True(bounds.Min.Y <= bounds.Max.Y);
         Assert.True(bounds.Min.Z <= bounds.Max.Z);
 
-        for (int triangle = 0; triangle < builder.Indices.Count / 3; triangle++) {
+        for (int triangle = 0; triangle < builder.Indices.Count / 3; triangle++)
+        {
             int offset = triangle * 3;
             int index0 = checked((int)builder.Indices[offset]);
             int index1 = checked((int)builder.Indices[offset + 1]);
@@ -1144,22 +1307,31 @@ public sealed class MeshBuilderTests {
             Vertex vertex2 = builder.Vertices[index2];
             Vector3 face = Vector3.Cross(
                 vertex1.Position - vertex0.Position,
-                vertex2.Position - vertex0.Position);
+                vertex2.Position - vertex0.Position
+            );
             Assert.True(face.LengthSquared() > 0f, $"Triangles {triangle} is degenerate.");
-            Vector3 averageNormal = Vector3.Normalize(vertex0.Normal + vertex1.Normal + vertex2.Normal);
+            Vector3 averageNormal = Vector3.Normalize(
+                vertex0.Normal + vertex1.Normal + vertex2.Normal
+            );
             Assert.True(
                 Vector3.Dot(Vector3.Normalize(face), averageNormal) > 0f,
-                $"Triangle {triangle} does not wind counter-clockwise around its normals.");
+                $"Triangle {triangle} does not wind counter-clockwise around its normals."
+            );
         }
     }
 
-    private static int CountCapTriangles(MeshBuilder builder, Vector3 normal) {
+    private static int CountCapTriangles(MeshBuilder builder, Vector3 normal)
+    {
         int count = 0;
-        for (int triangle = 0; triangle < builder.Indices.Count / 3; triangle++) {
+        for (int triangle = 0; triangle < builder.Indices.Count / 3; triangle++)
+        {
             int offset = triangle * 3;
-            if (builder.Vertices[(int)builder.Indices[offset]].Normal == normal
+            if (
+                builder.Vertices[(int)builder.Indices[offset]].Normal == normal
                 && builder.Vertices[(int)builder.Indices[offset + 1]].Normal == normal
-                && builder.Vertices[(int)builder.Indices[offset + 2]].Normal == normal) {
+                && builder.Vertices[(int)builder.Indices[offset + 2]].Normal == normal
+            )
+            {
                 count++;
             }
         }
@@ -1167,43 +1339,51 @@ public sealed class MeshBuilderTests {
         return count;
     }
 
-    private static void AssertOutOfRange(string parameterName, Action action) {
+    private static void AssertOutOfRange(string parameterName, Action action)
+    {
         ArgumentOutOfRangeException exception = Assert.Throws<ArgumentOutOfRangeException>(action);
         Assert.Equal(parameterName, exception.ParamName);
     }
 
-    private static Vertex[] CreateQuadPositions() => [
-        new Vertex(Vector3.Zero),
-        new Vertex(new Vector3(1f, 0f, 0f)),
-        new Vertex(new Vector3(1f, 1f, 0f)),
-        new Vertex(new Vector3(0f, 1f, 0f)),
-    ];
+    private static Vertex[] CreateQuadPositions() =>
+        [
+            new Vertex(Vector3.Zero),
+            new Vertex(new Vector3(1f, 0f, 0f)),
+            new Vertex(new Vector3(1f, 1f, 0f)),
+            new Vertex(new Vector3(0f, 1f, 0f)),
+        ];
 
-    private static Vertex[] CreateTrianglePositions() => [
-        new Vertex(Vector3.Zero),
-        new Vertex(new Vector3(1f, 0f, 0f)),
-        new Vertex(new Vector3(0f, 1f, 0f)),
-    ];
+    private static Vertex[] CreateTrianglePositions() =>
+        [
+            new Vertex(Vector3.Zero),
+            new Vertex(new Vector3(1f, 0f, 0f)),
+            new Vertex(new Vector3(0f, 1f, 0f)),
+        ];
 
-    private static void CreateTriangle(MeshBuilder builder) {
+    private static void CreateTriangle(MeshBuilder builder)
+    {
         builder.SetVertices(CreateTrianglePositions());
         builder.SetIndices([0, 1, 2]);
     }
 
-    private static void CreateQuad(MeshBuilder builder) {
+    private static void CreateQuad(MeshBuilder builder)
+    {
         builder.SetVertices(CreateQuadPositions());
         builder.SetIndices([0, 1, 2, 0, 2, 3]);
     }
 
-    private static void AssertVector(Vector3 expected, Vector3 actual) {
+    private static void AssertVector(Vector3 expected, Vector3 actual)
+    {
         Assert.Equal(expected.X, actual.X, 4);
         Assert.Equal(expected.Y, actual.Y, 4);
         Assert.Equal(expected.Z, actual.Z, 4);
     }
 
-    private static void AssertVerticesEqual(Vertex[] expected, ReadOnlySpan<Vertex> actual) {
+    private static void AssertVerticesEqual(Vertex[] expected, ReadOnlySpan<Vertex> actual)
+    {
         Assert.Equal(expected.Length, actual.Length);
-        for (int index = 0; index < expected.Length; index++) {
+        for (int index = 0; index < expected.Length; index++)
+        {
             Vertex expectedVertex = expected[index];
             Vertex actualVertex = actual[index];
             Assert.Equal(expectedVertex.Position, actualVertex.Position);

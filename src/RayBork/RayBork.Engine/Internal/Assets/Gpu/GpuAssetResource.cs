@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// drained.
 /// </para>
 /// </remarks>
-internal abstract class GpuAssetResource {
+internal abstract class GpuAssetResource
+{
     private long _handle;
     private int _destroyed;
 
@@ -29,7 +30,8 @@ internal abstract class GpuAssetResource {
     /// <param name="upload">The retained upload description.</param>
     /// <param name="handle">The primary native handle, or <c>0</c> when the resource has none yet.</param>
     /// <exception cref="ArgumentNullException"><paramref name="upload"/> is <c>null</c>.</exception>
-    private protected GpuAssetResource(AssetGpuUpload upload, long handle) {
+    private protected GpuAssetResource(AssetGpuUpload upload, long handle)
+    {
         ArgumentNullException.ThrowIfNull(upload);
 
         Upload = upload;
@@ -79,11 +81,14 @@ internal abstract class GpuAssetResource {
     /// <exception cref="InvalidOperationException">
     /// <paramref name="restored"/> has a different <see cref="Kind"/>.
     /// </exception>
-    internal virtual void AdoptRestored(GpuAssetResource restored) {
+    internal virtual void AdoptRestored(GpuAssetResource restored)
+    {
         ArgumentNullException.ThrowIfNull(restored);
-        if (restored.Kind != Kind) {
+        if (restored.Kind != Kind)
+        {
             throw new InvalidOperationException(
-                $"Cannot adopt a restored {restored.Kind} resource into a live {Kind} resource.");
+                $"Cannot adopt a restored {restored.Kind} resource into a live {Kind} resource."
+            );
         }
 
         PublishHandle(restored.Handle);

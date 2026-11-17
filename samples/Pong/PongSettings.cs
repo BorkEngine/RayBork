@@ -17,7 +17,8 @@ namespace Pong;
 /// </para>
 /// </remarks>
 [GenerateShape]
-public sealed partial class PongSettings {
+public sealed partial class PongSettings
+{
     /// <summary>Gets the texture path of the paddle quad.</summary>
     [DefaultValue("/textures/paddle")]
     public string PaddleTexture { get; init; } = "/textures/paddle";

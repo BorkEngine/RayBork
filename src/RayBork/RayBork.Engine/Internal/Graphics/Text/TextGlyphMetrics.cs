@@ -19,4 +19,5 @@ internal readonly record struct TextGlyphMetrics(
     float BearingX,
     float BearingY,
     float Width,
-    float Height);
+    float Height
+);

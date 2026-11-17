@@ -5,10 +5,12 @@ using RayBork.Tests.Bake.TestInfrastructure;
 namespace RayBork.Tests.Bake.Fonts;
 
 /// <summary>Tests for the built-in font processor and its sfnt validation.</summary>
-public sealed class FontProcessorTests {
+public sealed class FontProcessorTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ValidTtfBakesTheDescriptorAndOriginalFaceBytes() {
+    public void ValidTtfBakesTheDescriptorAndOriginalFaceBytes()
+    {
         using var workspace = new TempBakeWorkspace();
         byte[] face = FontTestData.BuildTtf();
         workspace.WriteAssetBytes("fonts/minimal.ttf", face);
@@ -35,7 +37,8 @@ public sealed class FontProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OtfCffFaceIsAccepted() {
+    public void OtfCffFaceIsAccepted()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes("fonts/minimal.otf", FontTestData.BuildOtf());
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -49,7 +52,8 @@ public sealed class FontProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TrueMagicFaceIsAccepted() {
+    public void TrueMagicFaceIsAccepted()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes("fonts/true.ttf", FontTestData.BuildTrueMagicTtf());
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -63,55 +67,64 @@ public sealed class FontProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BadMagicIsRejectedWithoutOutputs() {
+    public void BadMagicIsRejectedWithoutOutputs()
+    {
         AssertRejected(FontTestData.WithBadMagic(FontTestData.BuildTtf()), "magic");
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TruncatedTableDirectoryIsRejected() {
+    public void TruncatedTableDirectoryIsRejected()
+    {
         AssertRejected(
             FontTestData.WithTruncatedDirectory(FontTestData.BuildTtf()),
-            "table directory extends past");
+            "table directory extends past"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OutOfBoundsTableIsRejected() {
-        AssertRejected(
-            FontTestData.WithOutOfBoundsTable(FontTestData.BuildTtf()),
-            "extends past");
+    public void OutOfBoundsTableIsRejected()
+    {
+        AssertRejected(FontTestData.WithOutOfBoundsTable(FontTestData.BuildTtf()), "extends past");
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingRequiredTableIsRejected() {
+    public void MissingRequiredTableIsRejected()
+    {
         AssertRejected(FontTestData.BuildTtf("cmap"), "cmap");
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TrueTypeCollectionIsRejected() {
+    public void TrueTypeCollectionIsRejected()
+    {
         AssertRejected(FontTestData.BuildTtc(), "TrueType Collection");
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Cff2OutlinesAreRejectedWithoutOutputs() {
+    public void Cff2OutlinesAreRejectedWithoutOutputs()
+    {
         AssertRejected(FontTestData.BuildCff2Otf(), "CFF2");
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FontSidecarSettingsAreStored() {
+    public void FontSidecarSettingsAreStored()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes("fonts/custom.ttf", FontTestData.BuildTtf());
-        workspace.WriteAsset("fonts/custom.toml", """
+        workspace.WriteAsset(
+            "fonts/custom.toml",
+            """
             [font]
             msdf_pixel_size = 64
             msdf_range = 8
             msdf_padding = 0
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -126,14 +139,18 @@ public sealed class FontProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void APixelSizeJustGreaterThanTwiceThePaddingIsAccepted() {
+    public void APixelSizeJustGreaterThanTwiceThePaddingIsAccepted()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes("fonts/tight.ttf", FontTestData.BuildTtf());
-        workspace.WriteAsset("fonts/tight.toml", """
+        workspace.WriteAsset(
+            "fonts/tight.toml",
+            """
             [font]
             msdf_pixel_size = 5
             msdf_padding = 2
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -155,7 +172,8 @@ public sealed class FontProcessorTests {
     [InlineData("[font]\nmsdf_pixel_size = \"big\"\n", "RB4002")]
     [InlineData("[font]\nbogus = 1\n", "RB4002")]
     [InlineData("[font]\nranges = [\"U+0020-007E\"]\n", "RB4002")]
-    public void InvalidSidecarValuesAreReported(string sidecar, string code) {
+    public void InvalidSidecarValuesAreReported(string sidecar, string code)
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes("fonts/bad.ttf", FontTestData.BuildTtf());
         workspace.WriteAsset("fonts/bad.toml", sidecar);
@@ -170,13 +188,17 @@ public sealed class FontProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ARangesSidecarKeyIsAnUnknownKeyError() {
+    public void ARangesSidecarKeyIsAnUnknownKeyError()
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes("fonts/ranged.ttf", FontTestData.BuildTtf());
-        workspace.WriteAsset("fonts/ranged.toml", """
+        workspace.WriteAsset(
+            "fonts/ranged.toml",
+            """
             [font]
             ranges = ["U+0020-007E"]
-            """);
+            """
+        );
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
 
         BakeRunResult result = workspace.Run(application);
@@ -187,7 +209,8 @@ public sealed class FontProcessorTests {
         Assert.False(File.Exists(workspace.GetPackPath()));
     }
 
-    private static void AssertRejected(byte[] face, string expectedMessage) {
+    private static void AssertRejected(byte[] face, string expectedMessage)
+    {
         using var workspace = new TempBakeWorkspace();
         workspace.WriteAssetBytes("fonts/invalid.ttf", face);
         BakeApplication application = workspace.Builder().UseDefaultProcessors().Build();
@@ -200,7 +223,8 @@ public sealed class FontProcessorTests {
         Assert.False(File.Exists(workspace.GetPackPath()));
     }
 
-    private static FontAssetDescriptor ReadFont(PackArchive archive, string path) {
+    private static FontAssetDescriptor ReadFont(PackArchive archive, string path)
+    {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"missing font '{path}'");
         Assert.NotNull(entry);
         Assert.Equal(AssetEntryType.Font, entry.Type);

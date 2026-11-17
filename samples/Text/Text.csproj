@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <PublishAot>true</PublishAot>
         <!-- The assets executable is JIT build-time tooling. The bake targets below build and run it
              out of process, exactly like build/RayBork.BuiltInAssets.targets, so neither it nor
              RayBork.Bake and its packages enter this project's Native AOT publish graph. -->
-        <TextAssetsProjectFile Condition="'$(TextAssetsProjectFile)' == ''">$(MSBuildProjectDirectory)\Text.Assets\Text.Assets.csproj</TextAssetsProjectFile>
+        <TextAssetsProjectFile Condition="'$(TextAssetsProjectFile)' == ''"
+            >$(MSBuildProjectDirectory)\Text.Assets\Text.Assets.csproj</TextAssetsProjectFile>
         <TextPackFileName Condition="'$(TextPackFileName)' == ''">text.pck</TextPackFileName>
         <!-- Samples are documentation, not shipped API, so they are held to the recommended set. -->
         <AnalysisLevel>latest-recommended</AnalysisLevel>
@@ -45,9 +45,7 @@
         build bakes in full. Explicit project and output roots keep the checked-in Assets directory
         and the generated pack independent of the working directory.
     -->
-    <Target Name="TextBakeAssets"
-            AfterTargets="Build"
-            Condition="'$(DesignTimeBuild)' != 'true'">
+    <Target Name="TextBakeAssets" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
         <PropertyGroup>
             <_TextAssetsDirectory>$([System.IO.Path]::GetDirectoryName('$(TextAssetsProjectFile)'))</_TextAssetsDirectory>
             <_TextAssetsAssembly>$(_TextAssetsDirectory)\bin\$(Configuration)\$(TargetFramework)\Text.Assets.dll</_TextAssetsAssembly>
@@ -56,30 +54,46 @@
         </PropertyGroup>
         <!-- Restore first so a standalone publish or a build on another host has the assets
              project's NuGet state, then build it without the sample's runtime/publish settings. -->
-        <MSBuild Projects="$(TextAssetsProjectFile)"
-                 Targets="Restore"
-                 Properties="Configuration=$(Configuration)"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
-        <MSBuild Projects="$(TextAssetsProjectFile)"
-                 Targets="Build"
-                 Properties="Configuration=$(Configuration)"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <MSBuild
+            Projects="$(TextAssetsProjectFile)"
+            Targets="Restore"
+            Properties="Configuration=$(Configuration)"
+            RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible"
+        />
+        <MSBuild
+            Projects="$(TextAssetsProjectFile)"
+            Targets="Build"
+            Properties="Configuration=$(Configuration)"
+            RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible"
+        />
         <!-- An AfterTargets hook is not reliable when Build is driven by another project's MSBuild
              task, so invoke the pinned libshaderc copy explicitly before the bake needs it. -->
-        <MSBuild Projects="$(TextAssetsProjectFile)"
-                 Targets="RayBorkCopyShadercNative"
-                 Properties="Configuration=$(Configuration)"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
-        <Error Condition="!Exists('$(_TextAssetsAssembly)')"
-               Text="RayBork Text sample: the assets executable was not produced at '$(_TextAssetsAssembly)'." />
+        <MSBuild
+            Projects="$(TextAssetsProjectFile)"
+            Targets="RayBorkCopyShadercNative"
+            Properties="Configuration=$(Configuration)"
+            RemoveProperties="RuntimeIdentifier;SelfContained;PublishDir;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible"
+        />
+        <Error
+            Condition="!Exists('$(_TextAssetsAssembly)')"
+            Text="RayBork Text sample: the assets executable was not produced at '$(_TextAssetsAssembly)'."
+        />
         <MakeDir Directories="$(_TextPackDirectory)" />
-        <Exec Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(_TextAssetsAssembly)&quot; bake --project-root &quot;$(_TextAssetsDirectory)&quot; --output-root &quot;$(_TextPackDirectory)&quot;"
-              WorkingDirectory="$(_TextAssetsDirectory)"
-              StandardOutputImportance="high"
-              StandardErrorImportance="high" />
-        <Error Condition="!Exists('$(_TextPackPath)')"
-               Text="RayBork Text sample: the bake did not produce '$(_TextPackPath)'." />
-        <Copy SourceFiles="$(_TextPackPath)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+        <Exec
+            Command="&quot;$(DOTNET_HOST_PATH)&quot; &quot;$(_TextAssetsAssembly)&quot; bake --project-root &quot;$(_TextAssetsDirectory)&quot; --output-root &quot;$(_TextPackDirectory)&quot;"
+            WorkingDirectory="$(_TextAssetsDirectory)"
+            StandardOutputImportance="high"
+            StandardErrorImportance="high"
+        />
+        <Error
+            Condition="!Exists('$(_TextPackPath)')"
+            Text="RayBork Text sample: the bake did not produce '$(_TextPackPath)'."
+        />
+        <Copy
+            SourceFiles="$(_TextPackPath)"
+            DestinationFolder="$(TargetDir)"
+            SkipUnchangedFiles="true"
+        />
     </Target>
 
     <!--
@@ -87,15 +101,22 @@
         intermediate output. This target copies that pack beside the published executable. A missing
         pack is an error instead of a published host that cannot start.
     -->
-    <Target Name="TextCopyPackToPublish"
-            AfterTargets="Publish"
-            Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'">
+    <Target
+        Name="TextCopyPackToPublish"
+        AfterTargets="Publish"
+        Condition="'$(PublishDir)' != '' and '$(DesignTimeBuild)' != 'true'"
+    >
         <PropertyGroup>
             <_TextPublishedPackPath>$(MSBuildProjectDirectory)\$(IntermediateOutputPath)text-pack\$(TextPackFileName)</_TextPublishedPackPath>
         </PropertyGroup>
-        <Error Condition="!Exists('$(_TextPublishedPackPath)')"
-               Text="RayBork Text sample: the baked pack '$(_TextPublishedPackPath)' is missing; the publish cannot place $(TextPackFileName) beside the published executable." />
-        <Copy SourceFiles="$(_TextPublishedPackPath)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+        <Error
+            Condition="!Exists('$(_TextPublishedPackPath)')"
+            Text="RayBork Text sample: the baked pack '$(_TextPublishedPackPath)' is missing; the publish cannot place $(TextPackFileName) beside the published executable."
+        />
+        <Copy
+            SourceFiles="$(_TextPublishedPackPath)"
+            DestinationFolder="$(PublishDir)"
+            SkipUnchangedFiles="true"
+        />
     </Target>
-
 </Project>

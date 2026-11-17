@@ -7,7 +7,8 @@ namespace RayBork.Tests.Bake.TestInfrastructure;
 
 /// <summary>One shaped custom asset emitted by test processors.</summary>
 [GenerateShape]
-internal sealed partial class TestPayload {
+internal sealed partial class TestPayload
+{
     [DefaultValue("")]
     public string Name { get; set; } = string.Empty;
 
@@ -16,7 +17,8 @@ internal sealed partial class TestPayload {
 
 /// <summary>A custom-data type used by the data TOML tests.</summary>
 [GenerateShape]
-internal sealed partial class GameSettings {
+internal sealed partial class GameSettings
+{
     public required string Name { get; set; }
 
     public int Difficulty { get; set; }
@@ -28,14 +30,16 @@ internal sealed partial class GameSettings {
 }
 
 /// <summary>A binder enum.</summary>
-internal enum TestDirection {
+internal enum TestDirection
+{
     Less,
     GreaterOrEqual,
 }
 
 /// <summary>A scalar/enum/vector/color binder fixture.</summary>
 [GenerateShape]
-internal sealed partial class ScalarConfig {
+internal sealed partial class ScalarConfig
+{
     [DefaultValue("")]
     public string Name { get; set; } = string.Empty;
 
@@ -56,7 +60,8 @@ internal sealed partial class ScalarConfig {
 
 /// <summary>A nested-table binder fixture.</summary>
 [GenerateShape]
-internal sealed partial class NestedConfig {
+internal sealed partial class NestedConfig
+{
     public ScalarConfig Inner { get; set; } = new();
 
     public ScalarConfig[] Items { get; set; } = [];
@@ -64,7 +69,8 @@ internal sealed partial class NestedConfig {
 
 /// <summary>A nullable-member binder fixture.</summary>
 [GenerateShape]
-internal sealed partial class NullableConfig {
+internal sealed partial class NullableConfig
+{
     public int? Count { get; set; }
 
     public string? Label { get; set; }
@@ -72,8 +78,10 @@ internal sealed partial class NullableConfig {
 
 /// <summary>A constructor-binding fixture.</summary>
 [GenerateShape]
-internal sealed partial class ConstructorConfig {
-    public ConstructorConfig(string name, int count, TestDirection direction = TestDirection.Less) {
+internal sealed partial class ConstructorConfig
+{
+    public ConstructorConfig(string name, int count, TestDirection direction = TestDirection.Less)
+    {
         Name = name;
         Count = count;
         Direction = direction;
@@ -88,7 +96,8 @@ internal sealed partial class ConstructorConfig {
 
 /// <summary>A name-attribute and ignore fixture.</summary>
 [GenerateShape]
-internal sealed partial class AttributeConfig {
+internal sealed partial class AttributeConfig
+{
     [JsonPropertyName("custom_name")]
     [DefaultValue("")]
     public string Name { get; set; } = string.Empty;
@@ -103,13 +112,15 @@ internal sealed partial class AttributeConfig {
 
 /// <summary>A property-initializer binder fixture with a C# required member.</summary>
 [GenerateShape]
-internal sealed partial class RequiredPropertyConfig {
+internal sealed partial class RequiredPropertyConfig
+{
     public required string Name { get; set; }
 }
 
 /// <summary>A sidecar shape for the optional/required processor tests.</summary>
 [GenerateShape]
-internal sealed partial class TestSidecar {
+internal sealed partial class TestSidecar
+{
     public int Value { get; set; }
 
     [DefaultValue("")]

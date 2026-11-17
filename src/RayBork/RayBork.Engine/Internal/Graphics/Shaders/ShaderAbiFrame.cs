@@ -12,7 +12,8 @@ namespace RayBork.Internal;
 /// delta seconds, the frame index, and zero, and <c>ScreenSize</c> packs the target width, height,
 /// exposure multiplier, and zero.
 /// </remarks>
-internal static class ShaderAbiFrame {
+internal static class ShaderAbiFrame
+{
     /// <summary>The complete frame block size in bytes.</summary>
     internal const int BLOCK_SIZE = 256;
 

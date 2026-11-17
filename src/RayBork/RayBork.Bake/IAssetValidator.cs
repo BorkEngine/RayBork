@@ -13,7 +13,8 @@ namespace RayBork.Bake;
 /// </remarks>
 /// <typeparam name="T">The data type, which must carry a compiled shape.</typeparam>
 public interface IAssetValidator<T>
-    where T : IShapeable<T> {
+    where T : IShapeable<T>
+{
     /// <summary>Validates one bound asset.</summary>
     /// <param name="assetPath">The asset's canonical path.</param>
     /// <param name="asset">The bound value.</param>

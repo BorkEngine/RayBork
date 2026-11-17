@@ -3,7 +3,8 @@ namespace RayBork.Internal;
 /// <summary>
 /// Selects how a pack writer stores payloads.
 /// </summary>
-internal enum PackCompressionPolicy {
+internal enum PackCompressionPolicy
+{
     /// <summary>
     /// Store every payload uncompressed. Debug packs trade size for fast iteration.
     /// </summary>

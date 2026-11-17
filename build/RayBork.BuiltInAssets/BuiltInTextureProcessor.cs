@@ -32,7 +32,8 @@ namespace RayBork.BuiltInAssets;
 /// <c>RB4007</c>.
 /// </para>
 /// </remarks>
-internal sealed class BuiltInTextureProcessor : IAssetProcessor {
+internal sealed class BuiltInTextureProcessor : IAssetProcessor
+{
     private const string PAYLOAD_SUFFIX = "-ktx2";
     private const string WHITE_MARKER = "white";
     private const string ERROR_MARKER = "error";
@@ -45,7 +46,8 @@ internal sealed class BuiltInTextureProcessor : IAssetProcessor {
 
     private static readonly UTF8Encoding _strictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: true);
+        throwOnInvalidBytes: true
+    );
 
     /// <inheritdoc/>
     public string Name => "builtin-texture";
@@ -60,26 +62,31 @@ internal sealed class BuiltInTextureProcessor : IAssetProcessor {
     public ITypeShape? SidecarShape => null;
 
     /// <inheritdoc/>
-    public void Process(AssetProcessorContext context) {
+    public void Process(AssetProcessorContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!TryReadMarker(context, out string marker)) {
+        if (!TryReadMarker(context, out string marker))
+        {
             return;
         }
 
         string name = context.SourceFileNameWithoutExtension;
-        if (!string.Equals(marker, name, StringComparison.Ordinal)) {
+        if (!string.Equals(marker, name, StringComparison.Ordinal))
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"The built-in texture marker '{context.RelativePath}' contains '{marker}'; the "
-                    + $"marker text must match the file name '{name}'.");
+                    + $"marker text must match the file name '{name}'."
+            );
             return;
         }
 
         int size;
         byte[] pixels;
         TextureFilter filter;
-        switch (name) {
+        switch (name)
+        {
             case WHITE_MARKER:
                 size = WHITE_TEXTURE_SIZE;
                 pixels = [255, 255, 255, 255];
@@ -96,29 +103,37 @@ internal sealed class BuiltInTextureProcessor : IAssetProcessor {
                 context.Diagnostics.Error(
                     TextureDiagnosticCodes.TEXTURE_INVALID,
                     $"The built-in texture source '{context.RelativePath}' has the unsupported "
-                        + $"placeholder name '{name}'; expected '{WHITE_MARKER}' or '{ERROR_MARKER}'.");
+                        + $"placeholder name '{name}'; expected '{WHITE_MARKER}' or '{ERROR_MARKER}'."
+                );
                 return;
         }
 
         BakedTexture baked;
-        try {
+        try
+        {
             baked = TextureBaker.Bake(
                 pixels,
                 size,
                 size,
                 TextureChannelType.Rgba,
                 TextureCompression.None,
-                isSrgb: true);
-        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+                isSrgb: true
+            );
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or InvalidOperationException)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"The built-in texture '{context.RelativePath}' could not be baked: "
-                    + exception.Message);
+                    + exception.Message
+            );
             return;
         }
 
         string payloadPath = context.BaseAssetPath + PAYLOAD_SUFFIX;
-        var descriptor = new TextureAssetDescriptor {
+        var descriptor = new TextureAssetDescriptor
+        {
             Payload = payloadPath,
             Width = (uint)size,
             Height = (uint)size,
@@ -140,10 +155,13 @@ internal sealed class BuiltInTextureProcessor : IAssetProcessor {
     /// otherwise.
     /// </summary>
     /// <returns>The straight-alpha RGBA8 pixels, exactly <c>size × size × 4</c> bytes.</returns>
-    private static byte[] CreateErrorCheckerboard() {
+    private static byte[] CreateErrorCheckerboard()
+    {
         var pixels = new byte[ERROR_TEXTURE_SIZE * ERROR_TEXTURE_SIZE * 4];
-        for (int y = 0; y < ERROR_TEXTURE_SIZE; y++) {
-            for (int x = 0; x < ERROR_TEXTURE_SIZE; x++) {
+        for (int y = 0; y < ERROR_TEXTURE_SIZE; y++)
+        {
+            for (int x = 0; x < ERROR_TEXTURE_SIZE; x++)
+            {
                 bool magenta = ((x + y) & 1) == 0;
                 int offset = ((y * ERROR_TEXTURE_SIZE) + x) * 4;
                 pixels[offset] = magenta ? (byte)255 : (byte)0;
@@ -156,42 +174,59 @@ internal sealed class BuiltInTextureProcessor : IAssetProcessor {
         return pixels;
     }
 
-    private static bool TryReadMarker(AssetProcessorContext context, out string marker) {
+    private static bool TryReadMarker(AssetProcessorContext context, out string marker)
+    {
         marker = string.Empty;
 
         byte[] bytes;
-        try {
+        try
+        {
             bytes = File.ReadAllBytes(context.SourcePath);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"Failed to read the built-in texture marker '{context.RelativePath}': "
-                    + exception.Message);
+                    + exception.Message
+            );
             return false;
         }
 
         ReadOnlySpan<byte> content = bytes;
-        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF) {
+        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF)
+        {
             content = content[3..];
         }
 
         string text;
-        try {
+        try
+        {
             text = _strictUtf8.GetString(content);
-        } catch (DecoderFallbackException) {
+        }
+        catch (DecoderFallbackException)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
-                $"The built-in texture marker '{context.RelativePath}' is not valid UTF-8.");
+                $"The built-in texture marker '{context.RelativePath}' is not valid UTF-8."
+            );
             return false;
         }
 
         marker = text.Trim();
-        if (marker.Length == 0) {
+        if (marker.Length == 0)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"The built-in texture marker '{context.RelativePath}' is empty; it must contain "
-                    + "the placeholder name.");
+                    + "the placeholder name."
+            );
             return false;
         }
 

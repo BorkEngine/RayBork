@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// <see cref="VulkanSampleCountSelection.Select"/>. The render thread additionally checks the device's
 /// <c>MaxImageDimension2D</c> before it allocates the images.
 /// </remarks>
-internal static class RenderTextureValidation {
+internal static class RenderTextureValidation
+{
     /// <summary>The largest accepted target width or height in pixels. It matches the texture bake limit.</summary>
     internal const int MAX_DIMENSION = 16384;
 
@@ -26,7 +27,12 @@ internal static class RenderTextureValidation {
     /// <see cref="TextureFormat.Rgba8Unorm"/>, or <see cref="TextureFormat.Rgba8Srgb"/>.
     /// </exception>
     internal static void Validate(RenderTextureDescription description) =>
-        Validate(description.Width, description.Height, description.ColorFormat, description.SampleCount);
+        Validate(
+            description.Width,
+            description.Height,
+            description.ColorFormat,
+            description.SampleCount
+        );
 
     /// <summary>
     /// Validates the description components.
@@ -40,21 +46,26 @@ internal static class RenderTextureValidation {
     /// <c>1</c>, <c>2</c>, <c>4</c>, or <c>8</c>.
     /// </exception>
     /// <exception cref="ArgumentException">The color format is not a supported render-target format.</exception>
-    internal static void Validate(int width, int height, TextureFormat colorFormat, int sampleCount) {
+    internal static void Validate(int width, int height, TextureFormat colorFormat, int sampleCount)
+    {
         ValidateDimensions(width, height);
-        if (!IsSupportedColorFormat(colorFormat)) {
+        if (!IsSupportedColorFormat(colorFormat))
+        {
             throw new ArgumentException(
                 $"The render texture color format '{colorFormat}' is not supported; use "
                     + "Rgba16Float, Rgba8Unorm, or Rgba8Srgb. The packed block-compressed formats and "
                     + "Depth32Float are not render-target color formats.",
-                nameof(colorFormat));
+                nameof(colorFormat)
+            );
         }
 
-        if (sampleCount is not (1 or 2 or 4 or 8)) {
+        if (sampleCount is not (1 or 2 or 4 or 8))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(sampleCount),
                 sampleCount,
-                "The render texture sample count must be 1, 2, 4, or 8.");
+                "The render texture sample count must be 1, 2, 4, or 8."
+            );
         }
     }
 
@@ -66,7 +77,8 @@ internal static class RenderTextureValidation {
     /// <exception cref="ArgumentOutOfRangeException">
     /// A dimension is not positive or exceeds <see cref="MAX_DIMENSION"/>.
     /// </exception>
-    internal static void ValidateDimensions(int width, int height) {
+    internal static void ValidateDimensions(int width, int height)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(width, MAX_DIMENSION);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
@@ -78,8 +90,8 @@ internal static class RenderTextureValidation {
     /// </summary>
     /// <param name="format">The color format.</param>
     /// <returns><see langword="true"/> for the three uncompressed RGBA render-target formats.</returns>
-    internal static bool IsSupportedColorFormat(TextureFormat format) => format is
-        TextureFormat.Rgba16Float or TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb;
+    internal static bool IsSupportedColorFormat(TextureFormat format) =>
+        format is TextureFormat.Rgba16Float or TextureFormat.Rgba8Unorm or TextureFormat.Rgba8Srgb;
 
     /// <summary>
     /// Gets whether a render-target color format stores linear HDR values.

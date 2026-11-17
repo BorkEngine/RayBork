@@ -14,7 +14,8 @@ namespace RayBork.Tests;
 /// GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL and
 /// Vulkan loader setup while each test owns its window, instance, and device.
 /// </remarks>
-internal sealed class GpuTestHost : IDisposable {
+internal sealed class GpuTestHost : IDisposable
+{
     private const string APPLICATION_NAME = "RayBork GPU Test";
 
     private readonly SdlTestHost _sdlHost;
@@ -27,7 +28,9 @@ internal sealed class GpuTestHost : IDisposable {
         SdlTestHost sdlHost,
         VulkanInstance instance,
         IntPtr surface,
-        VulkanDevice device) {
+        VulkanDevice device
+    )
+    {
         _sdlHost = sdlHost;
         _instance = instance;
         _surface = surface;
@@ -65,8 +68,10 @@ internal sealed class GpuTestHost : IDisposable {
     /// </summary>
     /// <param name="requestValidation">Whether the instance requests the validation layer.</param>
     /// <returns>The created host.</returns>
-    internal static GpuTestHost CreateOrSkip(bool requestValidation = true) {
-        if (!TryCreate(out GpuTestHost? host, out string skipReason, requestValidation)) {
+    internal static GpuTestHost CreateOrSkip(bool requestValidation = true)
+    {
+        if (!TryCreate(out GpuTestHost? host, out string skipReason, requestValidation))
+        {
             Assert.Skip(skipReason);
         }
 
@@ -83,10 +88,19 @@ internal sealed class GpuTestHost : IDisposable {
     internal static bool TryCreate(
         out GpuTestHost? host,
         out string skipReason,
-        bool requestValidation = true) {
+        bool requestValidation = true
+    )
+    {
         host = null;
         skipReason = string.Empty;
-        if (!SdlTestHost.TryCreateVulkan(out SdlTestHost? createdHost, out skipReason, minimalTestMode: true)) {
+        if (
+            !SdlTestHost.TryCreateVulkan(
+                out SdlTestHost? createdHost,
+                out skipReason,
+                minimalTestMode: true
+            )
+        )
+        {
             return false;
         }
 
@@ -95,38 +109,55 @@ internal sealed class GpuTestHost : IDisposable {
         VulkanInstance? instance = null;
         IntPtr surface = IntPtr.Zero;
         VulkanDevice? device = null;
-        try {
+        try
+        {
             IReadOnlyList<string> extensions;
-            try {
+            try
+            {
                 extensions = sdlHost.Platform.GetVulkanInstanceExtensions();
-            } catch (PlatformException exception) {
-                skipReason = $"SDL cannot provide the Vulkan instance extensions: {exception.Message}";
+            }
+            catch (PlatformException exception)
+            {
+                skipReason =
+                    $"SDL cannot provide the Vulkan instance extensions: {exception.Message}";
                 return false;
             }
 
-            try {
-                instance = VulkanInstance.Create(new VulkanInstanceOptions {
-                    ApplicationName = APPLICATION_NAME,
-                    ApplicationVersion = EngineVersion.Current,
-                    SurfaceExtensions = extensions,
-                    RequestValidation = requestValidation,
-                    Logger = NullLogger.Instance,
-                });
-            } catch (GraphicsException exception) when (IsEnvironmentalFailure(exception)) {
+            try
+            {
+                instance = VulkanInstance.Create(
+                    new VulkanInstanceOptions
+                    {
+                        ApplicationName = APPLICATION_NAME,
+                        ApplicationVersion = EngineVersion.Current,
+                        SurfaceExtensions = extensions,
+                        RequestValidation = requestValidation,
+                        Logger = NullLogger.Instance,
+                    }
+                );
+            }
+            catch (GraphicsException exception) when (IsEnvironmentalFailure(exception))
+            {
                 skipReason = exception.Message;
                 return false;
             }
 
-            try {
+            try
+            {
                 surface = sdlHost.Platform.CreateVulkanSurface(instance.Handle.Handle);
-            } catch (PlatformException exception) {
+            }
+            catch (PlatformException exception)
+            {
                 skipReason = $"SDL cannot create the Vulkan surface: {exception.Message}";
                 return false;
             }
 
-            try {
+            try
+            {
                 device = VulkanDevice.Create(instance, surface, NullLogger.Instance);
-            } catch (GraphicsException exception) when (IsEnvironmentalFailure(exception)) {
+            }
+            catch (GraphicsException exception) when (IsEnvironmentalFailure(exception))
+            {
                 skipReason = exception.Message;
                 return false;
             }
@@ -137,9 +168,12 @@ internal sealed class GpuTestHost : IDisposable {
             surface = IntPtr.Zero;
             device = null;
             return true;
-        } finally {
+        }
+        finally
+        {
             device?.Dispose();
-            if (instance is not null && surface != IntPtr.Zero) {
+            if (instance is not null && surface != IntPtr.Zero)
+            {
                 cleanupHost!.Platform.DestroyVulkanSurface(instance.Handle.Handle, surface);
             }
 
@@ -153,18 +187,24 @@ internal sealed class GpuTestHost : IDisposable {
     /// Gets whether the Vulkan loader can be loaded, without requiring a GPU or a window.
     /// </summary>
     /// <returns><see langword="true"/> when the loader loads.</returns>
-    internal static bool IsVulkanLoaderAvailable() {
-        try {
+    internal static bool IsVulkanLoaderAvailable()
+    {
+        try
+        {
             using VulkanLoader loader = VulkanLoader.Load(NullLogger.Instance);
             return true;
-        } catch (GraphicsException) {
+        }
+        catch (GraphicsException)
+        {
             return false;
         }
     }
 
     /// <inheritdoc />
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -177,7 +217,16 @@ internal sealed class GpuTestHost : IDisposable {
     }
 
     private static bool IsEnvironmentalFailure(GraphicsException exception) =>
-        exception.InnerException is DllNotFoundException or SymbolLoadingException or TypeInitializationException
-        || exception.Message.StartsWith(VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX, StringComparison.Ordinal)
-        || exception.Message.StartsWith(VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX, StringComparison.Ordinal);
+        exception.InnerException
+            is DllNotFoundException
+                or SymbolLoadingException
+                or TypeInitializationException
+        || exception.Message.StartsWith(
+            VulkanLoader.LOADER_FAILURE_MESSAGE_PREFIX,
+            StringComparison.Ordinal
+        )
+        || exception.Message.StartsWith(
+            VulkanDevice.NO_PHYSICAL_DEVICE_MESSAGE_PREFIX,
+            StringComparison.Ordinal
+        );
 }

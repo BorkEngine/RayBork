@@ -10,12 +10,14 @@ namespace RayBork.Internal;
 /// <see cref="OutlinePath.Empty"/> as its outline, even when the source glyph record carries a
 /// non-zero header box. The instance is immutable and safe to read from any thread.
 /// </remarks>
-internal readonly struct FontGlyph {
+internal readonly struct FontGlyph
+{
     /// <summary>Initializes a resolved glyph.</summary>
     /// <param name="glyphId">The glyph identifier.</param>
     /// <param name="bounds">The stored glyph bounds in font units.</param>
     /// <param name="outline">The closed outline in font units.</param>
-    internal FontGlyph(int glyphId, FontBounds bounds, OutlinePath outline) {
+    internal FontGlyph(int glyphId, FontBounds bounds, OutlinePath outline)
+    {
         GlyphId = glyphId;
         Bounds = bounds;
         Outline = outline;

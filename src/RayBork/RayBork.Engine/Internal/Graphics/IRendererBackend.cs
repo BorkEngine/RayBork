@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// throws <see cref="GraphicsException"/> (or a subclass); the app stops and rethrows it.
 /// </para>
 /// </remarks>
-internal interface IRendererBackend : IDisposable {
+internal interface IRendererBackend : IDisposable
+{
     /// <summary>
     /// Gets the immutable renderer, device, and presentation snapshot. It is valid after
     /// <see cref="Initialize"/> and is refreshed when a recovery changes the device or presentation

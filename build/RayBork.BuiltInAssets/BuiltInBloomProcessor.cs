@@ -23,7 +23,8 @@ namespace RayBork.BuiltInAssets;
 /// <c>RB4008</c>.
 /// </para>
 /// </remarks>
-internal sealed class BuiltInBloomProcessor : IAssetProcessor {
+internal sealed class BuiltInBloomProcessor : IAssetProcessor
+{
     private const string MARKER = "bloom";
     private const uint GPU_PAYLOAD_ALIGNMENT = 16;
     private const string FRAGMENT_PAYLOAD_SUFFIX = "-frag";
@@ -32,7 +33,8 @@ internal sealed class BuiltInBloomProcessor : IAssetProcessor {
 
     private static readonly UTF8Encoding _strictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: true);
+        throwOnInvalidBytes: true
+    );
 
     private readonly string _engineShadersDirectory;
 
@@ -41,7 +43,8 @@ internal sealed class BuiltInBloomProcessor : IAssetProcessor {
     /// The directory that holds the committed bloom SPIR-V blobs and their GLSL sources.
     /// </param>
     /// <exception cref="ArgumentException"><paramref name="engineShadersDirectory"/> is empty.</exception>
-    internal BuiltInBloomProcessor(string engineShadersDirectory) {
+    internal BuiltInBloomProcessor(string engineShadersDirectory)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(engineShadersDirectory);
         _engineShadersDirectory = Path.GetFullPath(engineShadersDirectory);
     }
@@ -59,54 +62,67 @@ internal sealed class BuiltInBloomProcessor : IAssetProcessor {
     public ITypeShape? SidecarShape => null;
 
     /// <inheritdoc/>
-    public void Process(AssetProcessorContext context) {
+    public void Process(AssetProcessorContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!TryReadMarker(context, out string marker)) {
+        if (!TryReadMarker(context, out string marker))
+        {
             return;
         }
 
-        if (!string.Equals(marker, MARKER, StringComparison.Ordinal)) {
+        if (!string.Equals(marker, MARKER, StringComparison.Ordinal))
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in bloom marker '{context.RelativePath}' contains '{marker}'; the marker "
-                    + $"text must be '{MARKER}'.");
+                    + $"text must be '{MARKER}'."
+            );
             return;
         }
 
-        if (!TryReadSpirv(context, BloomShaderContract.VERTEX_SPIRV_FILE, out byte[] vertexSpirV)) {
+        if (!TryReadSpirv(context, BloomShaderContract.VERTEX_SPIRV_FILE, out byte[] vertexSpirV))
+        {
             return;
         }
 
         context.Outputs.AddData(
             ToAssetPath(BloomShaderContract.VERTEX_PAYLOAD_PATH),
             vertexSpirV,
-            GPU_PAYLOAD_ALIGNMENT);
+            GPU_PAYLOAD_ALIGNMENT
+        );
 
-        if (!TryAddProgram(
+        if (
+            !TryAddProgram(
                 context,
                 BloomShaderContract.PREFILTER_PATH,
                 BloomShaderContract.PREFILTER_SPIRV_FILE,
                 BloomShaderContract.PREFILTER_UNIFORMS,
-                BloomShaderContract.PREFILTER_TEXTURES)
+                BloomShaderContract.PREFILTER_TEXTURES
+            )
             || !TryAddProgram(
                 context,
                 BloomShaderContract.DOWNSAMPLE_PATH,
                 BloomShaderContract.DOWNSAMPLE_SPIRV_FILE,
                 BloomShaderContract.DOWNSAMPLE_UNIFORMS,
-                BloomShaderContract.DOWNSAMPLE_TEXTURES)
+                BloomShaderContract.DOWNSAMPLE_TEXTURES
+            )
             || !TryAddProgram(
                 context,
                 BloomShaderContract.UPSAMPLE_PATH,
                 BloomShaderContract.UPSAMPLE_SPIRV_FILE,
                 BloomShaderContract.UPSAMPLE_UNIFORMS,
-                BloomShaderContract.UPSAMPLE_TEXTURES)
+                BloomShaderContract.UPSAMPLE_TEXTURES
+            )
             || !TryAddProgram(
                 context,
                 BloomShaderContract.COMPOSITE_PATH,
                 BloomShaderContract.COMPOSITE_SPIRV_FILE,
                 BloomShaderContract.COMPOSITE_UNIFORMS,
-                BloomShaderContract.COMPOSITE_TEXTURES)) {
+                BloomShaderContract.COMPOSITE_TEXTURES
+            )
+        )
+        {
             return;
         }
     }
@@ -116,14 +132,18 @@ internal sealed class BuiltInBloomProcessor : IAssetProcessor {
         string path,
         string fragmentFile,
         ShaderUniformAsset[] uniforms,
-        string[] textures) {
-        if (!TryReadSpirv(context, fragmentFile, out byte[] fragmentSpirV)) {
+        string[] textures
+    )
+    {
+        if (!TryReadSpirv(context, fragmentFile, out byte[] fragmentSpirV))
+        {
             return false;
         }
 
         string assetPath = ToAssetPath(path);
         string fragmentPayload = assetPath + FRAGMENT_PAYLOAD_SUFFIX;
-        var descriptor = new ShaderAssetDescriptor {
+        var descriptor = new ShaderAssetDescriptor
+        {
             AbiVersion = ShaderAbiNames.ABI_VERSION,
             VertexPayload = ToAssetPath(BloomShaderContract.VERTEX_PAYLOAD_PATH),
             FragmentPayload = fragmentPayload,
@@ -140,39 +160,55 @@ internal sealed class BuiltInBloomProcessor : IAssetProcessor {
         return true;
     }
 
-    private bool TryReadSpirv(AssetProcessorContext context, string fileName, out byte[] spirV) {
+    private bool TryReadSpirv(AssetProcessorContext context, string fileName, out byte[] spirV)
+    {
         spirV = [];
         string path = Path.Combine(_engineShadersDirectory, fileName);
-        if (!File.Exists(path)) {
+        if (!File.Exists(path))
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in bloom marker '{context.RelativePath}' needs the committed SPIR-V "
                     + $"module '{fileName}' in '{_engineShadersDirectory}', but it is missing. Run "
-                    + "scripts/compile-shaders.ps1 with the Vulkan SDK.");
+                    + "scripts/compile-shaders.ps1 with the Vulkan SDK."
+            );
             return false;
         }
 
-        try {
+        try
+        {
             context.AddInput(path);
             spirV = File.ReadAllBytes(path);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or ArgumentException or NotSupportedException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or ArgumentException
+                        or NotSupportedException
+            )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in bloom marker '{context.RelativePath}' could not read or register "
-                    + $"'{fileName}': {exception.Message}");
+                    + $"'{fileName}': {exception.Message}"
+            );
             return false;
         }
 
-        if (spirV.Length < 20
+        if (
+            spirV.Length < 20
             || (spirV.Length % 4) != 0
             || spirV[0] != 0x03
             || spirV[1] != 0x02
             || spirV[2] != 0x23
-            || spirV[3] != 0x07) {
+            || spirV[3] != 0x07
+        )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
-                $"The committed bloom module '{fileName}' is not a non-empty SPIR-V blob.");
+                $"The committed bloom module '{fileName}' is not a non-empty SPIR-V blob."
+            );
             return false;
         }
 
@@ -181,42 +217,59 @@ internal sealed class BuiltInBloomProcessor : IAssetProcessor {
 
     private static string ToAssetPath(string runtimePath) => runtimePath.TrimStart('/');
 
-    private static bool TryReadMarker(AssetProcessorContext context, out string marker) {
+    private static bool TryReadMarker(AssetProcessorContext context, out string marker)
+    {
         marker = string.Empty;
 
         byte[] bytes;
-        try {
+        try
+        {
             bytes = File.ReadAllBytes(context.SourcePath);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"Failed to read the built-in bloom marker '{context.RelativePath}': "
-                    + exception.Message);
+                    + exception.Message
+            );
             return false;
         }
 
         ReadOnlySpan<byte> content = bytes;
-        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF) {
+        if (content.Length >= 3 && content[0] == 0xEF && content[1] == 0xBB && content[2] == 0xBF)
+        {
             content = content[3..];
         }
 
         string text;
-        try {
+        try
+        {
             text = _strictUtf8.GetString(content);
-        } catch (DecoderFallbackException) {
+        }
+        catch (DecoderFallbackException)
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
-                $"The built-in bloom marker '{context.RelativePath}' is not valid UTF-8.");
+                $"The built-in bloom marker '{context.RelativePath}' is not valid UTF-8."
+            );
             return false;
         }
 
         marker = text.Trim();
-        if (marker.Length == 0) {
+        if (marker.Length == 0)
+        {
             context.Diagnostics.Error(
                 ShaderDiagnosticCodes.SHADER_INVALID,
                 $"The built-in bloom marker '{context.RelativePath}' is empty; it must contain "
-                    + $"'{MARKER}'.");
+                    + $"'{MARKER}'."
+            );
             return false;
         }
 

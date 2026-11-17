@@ -20,7 +20,8 @@ namespace RayBork.Internal;
 /// never throws. The queue is reusable; draining an empty queue is a no-op.
 /// </para>
 /// </remarks>
-internal sealed class MainThreadTeardownQueue {
+internal sealed class MainThreadTeardownQueue
+{
     private readonly Lock _gate = new();
     private readonly Queue<Action> _pending = new();
 
@@ -29,9 +30,11 @@ internal sealed class MainThreadTeardownQueue {
     /// </summary>
     /// <param name="action">The main-thread work to run.</param>
     /// <exception cref="ArgumentNullException"><paramref name="action"/> is <see langword="null"/>.</exception>
-    internal void Enqueue(Action action) {
+    internal void Enqueue(Action action)
+    {
         ArgumentNullException.ThrowIfNull(action);
-        lock (_gate) {
+        lock (_gate)
+        {
             _pending.Enqueue(action);
         }
     }
@@ -48,22 +51,30 @@ internal sealed class MainThreadTeardownQueue {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Teardown steps are queued by the render thread at shutdown; a failing step is logged and the remaining steps still run.")]
-    internal void RunPending(ILogger logger) {
+        Justification = "Teardown steps are queued by the render thread at shutdown; a failing step is logged and the remaining steps still run."
+    )]
+    internal void RunPending(ILogger logger)
+    {
         ArgumentNullException.ThrowIfNull(logger);
-        while (true) {
+        while (true)
+        {
             Action? action;
-            lock (_gate) {
-                if (_pending.Count == 0) {
+            lock (_gate)
+            {
+                if (_pending.Count == 0)
+                {
                     return;
                 }
 
                 action = _pending.Dequeue();
             }
 
-            try {
+            try
+            {
                 action();
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 logger.LogError(exception, "A main-thread teardown action failed.");
             }
         }

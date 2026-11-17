@@ -28,7 +28,8 @@ namespace RayBork.Bake.Shaders;
 /// is folded into the same message instead of throwing.
 /// </para>
 /// </remarks>
-internal static unsafe class GlslCompiler {
+internal static unsafe class GlslCompiler
+{
     private const string GLSL_ENTRY_POINT = "main";
 
     /// <summary>
@@ -55,7 +56,9 @@ internal static unsafe class GlslCompiler {
         ShaderKind kind,
         string entryPoint,
         out byte[] spirV,
-        out string message) {
+        out string message
+    )
+    {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
         ArgumentException.ThrowIfNullOrWhiteSpace(entryPoint);
@@ -63,26 +66,32 @@ internal static unsafe class GlslCompiler {
         spirV = [];
         message = string.Empty;
 
-        SpirvExecutionModel? executionModel = entryPoint == GLSL_ENTRY_POINT
-            ? null
-            : kind switch {
-                ShaderKind.GlslVertexShader => SpirvExecutionModel.Vertex,
-                ShaderKind.GlslFragmentShader => SpirvExecutionModel.Fragment,
-                _ => null,
-            };
+        SpirvExecutionModel? executionModel =
+            entryPoint == GLSL_ENTRY_POINT
+                ? null
+                : kind switch
+                {
+                    ShaderKind.GlslVertexShader => SpirvExecutionModel.Vertex,
+                    ShaderKind.GlslFragmentShader => SpirvExecutionModel.Fragment,
+                    _ => null,
+                };
         bool renamesEntryPoint = executionModel is not null;
-        if (entryPoint != GLSL_ENTRY_POINT && executionModel is null) {
-            message = $"The entry point '{entryPoint}' is supported only for GLSL vertex and "
+        if (entryPoint != GLSL_ENTRY_POINT && executionModel is null)
+        {
+            message =
+                $"The entry point '{entryPoint}' is supported only for GLSL vertex and "
                 + "fragment shaders.";
             return false;
         }
 
-        if (renamesEntryPoint && !IsIdentifier(entryPoint)) {
+        if (renamesEntryPoint && !IsIdentifier(entryPoint))
+        {
             message = $"The entry point '{entryPoint}' is not a valid GLSL identifier.";
             return false;
         }
 
-        if (renamesEntryPoint && !ContainsIdentifier(source, entryPoint)) {
+        if (renamesEntryPoint && !ContainsIdentifier(source, entryPoint))
+        {
             message = $"The shader source does not declare the entry point '{entryPoint}'.";
             return false;
         }
@@ -91,11 +100,13 @@ internal static unsafe class GlslCompiler {
         Compiler* compiler = null;
         CompileOptions* options = null;
         CompilationResult* result = null;
-        try {
+        try
+        {
             shaderc = _shadercApi.Value;
             compiler = shaderc.CompilerInitialize();
             options = shaderc.CompileOptionsInitialize();
-            if (compiler is null || options is null) {
+            if (compiler is null || options is null)
+            {
                 message = "Shaderc could not create a compiler.";
                 return false;
             }
@@ -104,16 +115,19 @@ internal static unsafe class GlslCompiler {
             shaderc.CompileOptionsSetTargetEnv(
                 options,
                 TargetEnv.Vulkan,
-                (uint)EnvVersion.Vulkan12);
+                (uint)EnvVersion.Vulkan12
+            );
             shaderc.CompileOptionsSetOptimizationLevel(options, OptimizationLevel.Performance);
             shaderc.CompileOptionsSetWarningsAsErrors(options);
-            if (renamesEntryPoint) {
+            if (renamesEntryPoint)
+            {
                 shaderc.CompileOptionsAddMacroDefinition(
                     options,
                     entryPoint,
                     (nuint)Encoding.UTF8.GetByteCount(entryPoint),
                     GLSL_ENTRY_POINT,
-                    (nuint)GLSL_ENTRY_POINT.Length);
+                    (nuint)GLSL_ENTRY_POINT.Length
+                );
             }
 
             result = shaderc.CompileIntoSpv(
@@ -123,15 +137,18 @@ internal static unsafe class GlslCompiler {
                 kind,
                 fileName,
                 entryPoint,
-                options);
-            if (result is null) {
+                options
+            );
+            if (result is null)
+            {
                 message = $"Shaderc returned no result for '{fileName}'.";
                 return false;
             }
 
             CompilationStatus status = shaderc.ResultGetCompilationStatus(result);
             string diagnostics = shaderc.ResultGetErrorMessageS(result) ?? string.Empty;
-            if (status != CompilationStatus.Success) {
+            if (status != CompilationStatus.Success)
+            {
                 message = string.IsNullOrWhiteSpace(diagnostics)
                     ? $"Shader compilation failed for '{fileName}' with {status}."
                     : diagnostics.Trim();
@@ -140,20 +157,26 @@ internal static unsafe class GlslCompiler {
 
             nuint length = shaderc.ResultGetLength(result);
             byte* bytes = shaderc.ResultGetBytes(result);
-            if (bytes is null || length == 0) {
+            if (bytes is null || length == 0)
+            {
                 message = $"Shader '{fileName}' produced no SPIR-V.";
                 return false;
             }
 
             spirV = new ReadOnlySpan<byte>(bytes, checked((int)length)).ToArray();
-            if (renamesEntryPoint && executionModel is { } model) {
-                if (!SpirvEntryPointRewriter.TryRename(
+            if (renamesEntryPoint && executionModel is { } model)
+            {
+                if (
+                    !SpirvEntryPointRewriter.TryRename(
                         spirV,
                         model,
                         GLSL_ENTRY_POINT,
                         entryPoint,
                         out byte[] rewritten,
-                        out string renameMessage)) {
+                        out string renameMessage
+                    )
+                )
+                {
                     message = renameMessage;
                     return false;
                 }
@@ -162,38 +185,50 @@ internal static unsafe class GlslCompiler {
             }
 
             return true;
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             message = $"Shaderc failed to compile '{fileName}': {exception.Message}";
             return false;
-        } finally {
-            if (shaderc is not null) {
-                if (result is not null) {
+        }
+        finally
+        {
+            if (shaderc is not null)
+            {
+                if (result is not null)
+                {
                     shaderc.ResultRelease(result);
                 }
 
-                if (options is not null) {
+                if (options is not null)
+                {
                     shaderc.CompileOptionsRelease(options);
                 }
 
-                if (compiler is not null) {
+                if (compiler is not null)
+                {
                     shaderc.CompilerRelease(compiler);
                 }
             }
         }
     }
 
-    private static bool ContainsIdentifier(string source, string identifier) {
+    private static bool ContainsIdentifier(string source, string identifier)
+    {
         int index = 0;
-        while (index <= source.Length - identifier.Length) {
+        while (index <= source.Length - identifier.Length)
+        {
             int found = source.IndexOf(identifier, index, StringComparison.Ordinal);
-            if (found < 0) {
+            if (found < 0)
+            {
                 return false;
             }
 
             int after = found + identifier.Length;
             bool startsAtBoundary = found == 0 || !IsIdentifierPart(source[found - 1]);
             bool endsAtBoundary = after == source.Length || !IsIdentifierPart(source[after]);
-            if (startsAtBoundary && endsAtBoundary) {
+            if (startsAtBoundary && endsAtBoundary)
+            {
                 return true;
             }
 
@@ -203,13 +238,17 @@ internal static unsafe class GlslCompiler {
         return false;
     }
 
-    private static bool IsIdentifier(string value) {
-        if (value.Length == 0 || char.IsAsciiDigit(value[0])) {
+    private static bool IsIdentifier(string value)
+    {
+        if (value.Length == 0 || char.IsAsciiDigit(value[0]))
+        {
             return false;
         }
 
-        foreach (char character in value) {
-            if (!IsIdentifierPart(character)) {
+        foreach (char character in value)
+        {
+            if (!IsIdentifierPart(character))
+            {
                 return false;
             }
         }
@@ -217,9 +256,6 @@ internal static unsafe class GlslCompiler {
         return true;
     }
 
-    private static bool IsIdentifierPart(char character)
-        => character is >= 'A' and <= 'Z'
-            or >= 'a' and <= 'z'
-            or >= '0' and <= '9'
-            or '_';
+    private static bool IsIdentifierPart(char character) =>
+        character is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '_';
 }

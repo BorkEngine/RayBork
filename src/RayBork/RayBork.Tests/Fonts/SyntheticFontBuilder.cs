@@ -5,15 +5,18 @@ using RayBork.Internal;
 namespace RayBork.Tests.Fonts;
 
 /// <summary>The container and outline kind of a synthetic face.</summary>
-internal enum SyntheticOutline {
+internal enum SyntheticOutline
+{
     TrueType,
     Cff,
     Cff2,
 }
 
 /// <summary>One table directory record of a built synthetic face.</summary>
-internal readonly struct SyntheticTableRecord {
-    internal SyntheticTableRecord(int recordOffset, int offset, int length) {
+internal readonly struct SyntheticTableRecord
+{
+    internal SyntheticTableRecord(int recordOffset, int offset, int length)
+    {
         RecordOffset = recordOffset;
         Offset = offset;
         Length = length;
@@ -36,7 +39,8 @@ internal readonly struct SyntheticTableRecord {
 /// parser does not validate them. Tests mutate the returned bytes through
 /// <see cref="FindTable"/> for the corrupt-input cases.
 /// </remarks>
-internal sealed class SyntheticFontBuilder {
+internal sealed class SyntheticFontBuilder
+{
     private const int HEAD_LENGTH = 54;
     private const int HHEA_LENGTH = 36;
     private const int MAXP_VERSION_1_0_LENGTH = 32;
@@ -63,20 +67,21 @@ internal sealed class SyntheticFontBuilder {
     private int _locaFormat;
     private int? _headIndexToLocFormat;
 
-    private SyntheticFontBuilder() {
-    }
+    private SyntheticFontBuilder() { }
 
     internal int GlyphCount => _glyphs.Count;
 
     /// <summary>Creates a builder whose glyph 0 is a small <c>.notdef</c> triangle.</summary>
-    internal static SyntheticFontBuilder Create() {
+    internal static SyntheticFontBuilder Create()
+    {
         var builder = new SyntheticFontBuilder();
         builder.AddSimple(
             500,
             0,
             new SyntheticPoint(0, 0),
             new SyntheticPoint(300, 0),
-            new SyntheticPoint(150, 400));
+            new SyntheticPoint(150, 400)
+        );
         return builder;
     }
 
@@ -88,8 +93,8 @@ internal sealed class SyntheticFontBuilder {
     internal int AddSimpleContours(
         int advanceWidth,
         int leftSideBearing,
-        params SyntheticPoint[][] contours) =>
-        Add(SyntheticGlyph.Simple(advanceWidth, leftSideBearing, contours));
+        params SyntheticPoint[][] contours
+    ) => Add(SyntheticGlyph.Simple(advanceWidth, leftSideBearing, contours));
 
     /// <summary>Adds a glyph that occupies no bytes in <c>glyf</c>.</summary>
     internal int AddEmpty(int advanceWidth) => Add(SyntheticGlyph.Empty(advanceWidth));
@@ -98,23 +103,25 @@ internal sealed class SyntheticFontBuilder {
     internal int AddComposite(
         int advanceWidth,
         int leftSideBearing,
-        params SyntheticComponent[] components) =>
-        Add(SyntheticGlyph.Composite(advanceWidth, leftSideBearing, null, components));
+        params SyntheticComponent[] components
+    ) => Add(SyntheticGlyph.Composite(advanceWidth, leftSideBearing, null, components));
 
     /// <summary>Adds a composite glyph with explicit header bounds.</summary>
     internal int AddComposite(
         int advanceWidth,
         int leftSideBearing,
         FontBounds bounds,
-        params SyntheticComponent[] components) =>
-        Add(SyntheticGlyph.Composite(advanceWidth, leftSideBearing, bounds, components));
+        params SyntheticComponent[] components
+    ) => Add(SyntheticGlyph.Composite(advanceWidth, leftSideBearing, bounds, components));
 
-    internal SyntheticFontBuilder WithUnitsPerEm(int unitsPerEm) {
+    internal SyntheticFontBuilder WithUnitsPerEm(int unitsPerEm)
+    {
         _unitsPerEm = unitsPerEm;
         return this;
     }
 
-    internal SyntheticFontBuilder WithVerticalMetrics(int ascender, int descender, int lineGap) {
+    internal SyntheticFontBuilder WithVerticalMetrics(int ascender, int descender, int lineGap)
+    {
         _ascender = ascender;
         _descender = descender;
         _lineGap = lineGap;
@@ -122,19 +129,22 @@ internal sealed class SyntheticFontBuilder {
     }
 
     /// <summary>Overrides how many glyphs carry a full metric record in <c>hmtx</c>.</summary>
-    internal SyntheticFontBuilder WithNumberOfHMetrics(int numberOfHMetrics) {
+    internal SyntheticFontBuilder WithNumberOfHMetrics(int numberOfHMetrics)
+    {
         _numberOfHMetrics = numberOfHMetrics;
         return this;
     }
 
     /// <summary>Selects the <c>loca</c> entry format: 0 for short, 1 for long.</summary>
-    internal SyntheticFontBuilder WithLocaFormat(int indexToLocFormat) {
+    internal SyntheticFontBuilder WithLocaFormat(int indexToLocFormat)
+    {
         _locaFormat = indexToLocFormat;
         return this;
     }
 
     /// <summary>Writes a <c>head</c> <c>indexToLocFormat</c> independently of the encoded <c>loca</c>.</summary>
-    internal SyntheticFontBuilder WithHeadIndexToLocFormat(int indexToLocFormat) {
+    internal SyntheticFontBuilder WithHeadIndexToLocFormat(int indexToLocFormat)
+    {
         _headIndexToLocFormat = indexToLocFormat;
         return this;
     }
@@ -142,8 +152,11 @@ internal sealed class SyntheticFontBuilder {
     /// <summary>Adds a cmap encoding record with the default platform/encoding for the format.</summary>
     internal SyntheticFontBuilder WithCmap(
         int format,
-        params (int Codepoint, int GlyphId)[] mappings) {
-        (int platformId, int encodingId) = format switch {
+        params (int Codepoint, int GlyphId)[] mappings
+    )
+    {
+        (int platformId, int encodingId) = format switch
+        {
             0 => (1, 0),
             12 => (3, 10),
             _ => (3, 1),
@@ -156,26 +169,33 @@ internal sealed class SyntheticFontBuilder {
         int platformId,
         int encodingId,
         int format,
-        params (int Codepoint, int GlyphId)[] mappings) {
+        params (int Codepoint, int GlyphId)[] mappings
+    )
+    {
         _cmapRecords.Add(new SyntheticCmapRecord(platformId, encodingId, format, mappings));
         return this;
     }
 
     /// <summary>Uses raw cmap table bytes instead of the generated record list.</summary>
-    internal SyntheticFontBuilder WithRawCmap(byte[] cmap) {
+    internal SyntheticFontBuilder WithRawCmap(byte[] cmap)
+    {
         _rawCmap = cmap;
         return this;
     }
 
     /// <summary>Adds a format 4 cmap whose segments address a glyph-id array.</summary>
     internal SyntheticFontBuilder WithCmapIndirectGlyphArray(
-        params (int Codepoint, int GlyphId)[] mappings) {
+        params (int Codepoint, int GlyphId)[] mappings
+    )
+    {
         _cmapRecords.Add(new SyntheticCmapRecord(3, 1, 4, mappings, indirectGlyphArray: true));
         return this;
     }
 
-    internal SyntheticFontBuilder WithKernPairs(params (int Left, int Right, int Value)[] pairs) {
-        foreach ((int left, int right, int value) in pairs) {
+    internal SyntheticFontBuilder WithKernPairs(params (int Left, int Right, int Value)[] pairs)
+    {
+        foreach ((int left, int right, int value) in pairs)
+        {
             _kernPairs.Add(new SyntheticKernPair(left, right, value));
         }
 
@@ -183,125 +203,174 @@ internal sealed class SyntheticFontBuilder {
     }
 
     /// <summary>Uses raw <c>kern</c> table bytes instead of the generated format 0 table.</summary>
-    internal SyntheticFontBuilder WithRawKern(byte[] kern) {
+    internal SyntheticFontBuilder WithRawKern(byte[] kern)
+    {
         _rawKern = kern;
         return this;
     }
 
     /// <summary>Uses raw <c>GPOS</c> table bytes instead of the generated table.</summary>
-    internal SyntheticFontBuilder WithRawGpos(byte[] gpos) {
+    internal SyntheticFontBuilder WithRawGpos(byte[] gpos)
+    {
         _rawGpos = gpos;
         return this;
     }
 
-    internal SyntheticFontBuilder WithGpos(SyntheticGpos gpos) {
+    internal SyntheticFontBuilder WithGpos(SyntheticGpos gpos)
+    {
         _gpos = gpos;
         return this;
     }
 
-    internal SyntheticFontBuilder UseCff(byte[] tableData) {
+    internal SyntheticFontBuilder UseCff(byte[] tableData)
+    {
         _outline = SyntheticOutline.Cff;
         _cffData = tableData;
         return this;
     }
 
-    internal SyntheticFontBuilder UseCff2(byte[] tableData) {
+    internal SyntheticFontBuilder UseCff2(byte[] tableData)
+    {
         _outline = SyntheticOutline.Cff2;
         _cff2Data = tableData;
         return this;
     }
 
     /// <summary>Omits one table from the built face.</summary>
-    internal SyntheticFontBuilder WithoutTable(string tag) {
+    internal SyntheticFontBuilder WithoutTable(string tag)
+    {
         _omittedTables.Add(tag);
         return this;
     }
 
     /// <summary>Builds the complete face bytes.</summary>
-    internal byte[] Build() {
-        if (_glyphs.Count == 0) {
+    internal byte[] Build()
+    {
+        if (_glyphs.Count == 0)
+        {
             throw new InvalidOperationException("A synthetic face needs at least one glyph.");
         }
 
         int glyphCount = _glyphs.Count;
-        if (glyphCount > 0xFFFF) {
-            throw new InvalidOperationException($"Synthetic glyph count {glyphCount} exceeds 65535.");
+        if (glyphCount > 0xFFFF)
+        {
+            throw new InvalidOperationException(
+                $"Synthetic glyph count {glyphCount} exceeds 65535."
+            );
         }
 
         int hmtxGlyphCount = _glyphs.Count;
         int numberOfHMetrics = _numberOfHMetrics < 0 ? hmtxGlyphCount : _numberOfHMetrics;
-        if (numberOfHMetrics < 1 || numberOfHMetrics > hmtxGlyphCount) {
+        if (numberOfHMetrics < 1 || numberOfHMetrics > hmtxGlyphCount)
+        {
             throw new InvalidOperationException(
-                $"Synthetic numberOfHMetrics {numberOfHMetrics} is outside 1..{hmtxGlyphCount}.");
+                $"Synthetic numberOfHMetrics {numberOfHMetrics} is outside 1..{hmtxGlyphCount}."
+            );
         }
 
-        if (_locaFormat is not 0 and not 1) {
-            throw new InvalidOperationException($"Synthetic loca format {_locaFormat} is not 0 or 1.");
+        if (_locaFormat is not 0 and not 1)
+        {
+            throw new InvalidOperationException(
+                $"Synthetic loca format {_locaFormat} is not 0 or 1."
+            );
         }
 
-        if (_rawGpos is not null && _gpos is not null) {
-            throw new InvalidOperationException("A synthetic face cannot use raw and generated GPOS bytes.");
+        if (_rawGpos is not null && _gpos is not null)
+        {
+            throw new InvalidOperationException(
+                "A synthetic face cannot use raw and generated GPOS bytes."
+            );
         }
 
-        if (_rawKern is null) {
-            foreach (SyntheticKernPair pair in _kernPairs) {
-                if (pair.Left < 0 || pair.Left >= glyphCount || pair.Right < 0 || pair.Right >= glyphCount) {
+        if (_rawKern is null)
+        {
+            foreach (SyntheticKernPair pair in _kernPairs)
+            {
+                if (
+                    pair.Left < 0
+                    || pair.Left >= glyphCount
+                    || pair.Right < 0
+                    || pair.Right >= glyphCount
+                )
+                {
                     throw new InvalidOperationException(
-                        $"Synthetic kern pair ({pair.Left}, {pair.Right}) is outside the face.");
+                        $"Synthetic kern pair ({pair.Left}, {pair.Right}) is outside the face."
+                    );
                 }
             }
         }
 
         List<(string Tag, byte[] Data)> tables = [];
-        if (!_omittedTables.Contains("head")) {
+        if (!_omittedTables.Contains("head"))
+        {
             tables.Add(("head", BuildHead(_headIndexToLocFormat ?? _locaFormat)));
         }
 
-        if (!_omittedTables.Contains("maxp")) {
+        if (!_omittedTables.Contains("maxp"))
+        {
             tables.Add(("maxp", BuildMaxp(glyphCount)));
         }
 
-        if (!_omittedTables.Contains("hhea")) {
+        if (!_omittedTables.Contains("hhea"))
+        {
             tables.Add(("hhea", BuildHhea(numberOfHMetrics)));
         }
 
-        if (!_omittedTables.Contains("hmtx")) {
+        if (!_omittedTables.Contains("hmtx"))
+        {
             tables.Add(("hmtx", BuildHmtx(numberOfHMetrics)));
         }
 
-        if (!_omittedTables.Contains("cmap")) {
+        if (!_omittedTables.Contains("cmap"))
+        {
             tables.Add(("cmap", BuildCmap()));
         }
 
-        if (_outline == SyntheticOutline.TrueType) {
+        if (_outline == SyntheticOutline.TrueType)
+        {
             (byte[] glyf, int[] locaOffsets) = BuildGlyf();
-            if (!_omittedTables.Contains("loca")) {
+            if (!_omittedTables.Contains("loca"))
+            {
                 tables.Add(("loca", BuildLoca(locaOffsets)));
             }
 
-            if (!_omittedTables.Contains("glyf")) {
+            if (!_omittedTables.Contains("glyf"))
+            {
                 tables.Add(("glyf", glyf));
             }
-        } else if (_outline == SyntheticOutline.Cff) {
-            if (!_omittedTables.Contains("CFF ")) {
+        }
+        else if (_outline == SyntheticOutline.Cff)
+        {
+            if (!_omittedTables.Contains("CFF "))
+            {
                 tables.Add(("CFF ", _cffData));
             }
-        } else if (!_omittedTables.Contains("CFF2")) {
+        }
+        else if (!_omittedTables.Contains("CFF2"))
+        {
             tables.Add(("CFF2", _cff2Data));
         }
 
-        if (!_omittedTables.Contains("kern")) {
-            if (_rawKern is not null) {
+        if (!_omittedTables.Contains("kern"))
+        {
+            if (_rawKern is not null)
+            {
                 tables.Add(("kern", _rawKern));
-            } else if (_kernPairs.Count > 0) {
+            }
+            else if (_kernPairs.Count > 0)
+            {
                 tables.Add(("kern", BuildKern()));
             }
         }
 
-        if (!_omittedTables.Contains("GPOS")) {
-            if (_rawGpos is not null) {
+        if (!_omittedTables.Contains("GPOS"))
+        {
+            if (_rawGpos is not null)
+            {
                 tables.Add(("GPOS", _rawGpos));
-            } else if (_gpos is not null) {
+            }
+            else if (_gpos is not null)
+            {
                 tables.Add(("GPOS", _gpos.Build(glyphCount)));
             }
         }
@@ -311,28 +380,34 @@ internal sealed class SyntheticFontBuilder {
     }
 
     /// <summary>Finds one table directory record in a built or mutated face.</summary>
-    internal static SyntheticTableRecord FindTable(ReadOnlySpan<byte> face, string tag) {
+    internal static SyntheticTableRecord FindTable(ReadOnlySpan<byte> face, string tag)
+    {
         int tableCount = BinaryPrimitives.ReadUInt16BigEndian(face[4..]);
-        for (int index = 0; index < tableCount; index++) {
+        for (int index = 0; index < tableCount; index++)
+        {
             int record = 12 + (index * TABLE_RECORD_LENGTH);
             string recordTag = Encoding.ASCII.GetString(face.Slice(record, 4));
-            if (string.Equals(recordTag, tag, StringComparison.Ordinal)) {
+            if (string.Equals(recordTag, tag, StringComparison.Ordinal))
+            {
                 return new SyntheticTableRecord(
                     record,
                     (int)BinaryPrimitives.ReadUInt32BigEndian(face[(record + 8)..]),
-                    (int)BinaryPrimitives.ReadUInt32BigEndian(face[(record + 12)..]));
+                    (int)BinaryPrimitives.ReadUInt32BigEndian(face[(record + 12)..])
+                );
             }
         }
 
         throw new ArgumentException($"The synthetic face has no '{tag}' table.", nameof(tag));
     }
 
-    private int Add(SyntheticGlyph glyph) {
+    private int Add(SyntheticGlyph glyph)
+    {
         _glyphs.Add(glyph);
         return _glyphs.Count - 1;
     }
 
-    private byte[] BuildHead(int indexToLocFormat) {
+    private byte[] BuildHead(int indexToLocFormat)
+    {
         byte[] head = new byte[HEAD_LENGTH];
         BinaryPrimitives.WriteUInt32BigEndian(head, 0x0001_0000);
         BinaryPrimitives.WriteUInt32BigEndian(head.AsSpan(4), 0x0001_0000);
@@ -344,17 +419,20 @@ internal sealed class SyntheticFontBuilder {
         return head;
     }
 
-    private byte[] BuildMaxp(int glyphCount) {
+    private byte[] BuildMaxp(int glyphCount)
+    {
         int length = _outline == SyntheticOutline.TrueType ? MAXP_VERSION_1_0_LENGTH : 6;
         byte[] maxp = new byte[length];
         BinaryPrimitives.WriteUInt32BigEndian(
             maxp,
-            _outline == SyntheticOutline.TrueType ? 0x0001_0000u : 0x0000_5000u);
+            _outline == SyntheticOutline.TrueType ? 0x0001_0000u : 0x0000_5000u
+        );
         BinaryPrimitives.WriteUInt16BigEndian(maxp.AsSpan(4), (ushort)glyphCount);
         return maxp;
     }
 
-    private byte[] BuildHhea(int numberOfHMetrics) {
+    private byte[] BuildHhea(int numberOfHMetrics)
+    {
         byte[] hhea = new byte[HHEA_LENGTH];
         BinaryPrimitives.WriteUInt32BigEndian(hhea, 0x0001_0000);
         BinaryPrimitives.WriteInt16BigEndian(hhea.AsSpan(4), (short)_ascender);
@@ -365,48 +443,61 @@ internal sealed class SyntheticFontBuilder {
         return hhea;
     }
 
-    private byte[] BuildHmtx(int numberOfHMetrics) {
+    private byte[] BuildHmtx(int numberOfHMetrics)
+    {
         int glyphCount = _glyphs.Count;
         byte[] hmtx = new byte[(4 * numberOfHMetrics) + (2 * (glyphCount - numberOfHMetrics))];
-        for (int glyph = 0; glyph < numberOfHMetrics; glyph++) {
+        for (int glyph = 0; glyph < numberOfHMetrics; glyph++)
+        {
             BinaryPrimitives.WriteUInt16BigEndian(
                 hmtx.AsSpan(4 * glyph),
-                (ushort)_glyphs[glyph].AdvanceWidth);
+                (ushort)_glyphs[glyph].AdvanceWidth
+            );
             BinaryPrimitives.WriteInt16BigEndian(
                 hmtx.AsSpan((4 * glyph) + 2),
-                (short)_glyphs[glyph].LeftSideBearing);
+                (short)_glyphs[glyph].LeftSideBearing
+            );
         }
 
-        for (int glyph = numberOfHMetrics; glyph < glyphCount; glyph++) {
+        for (int glyph = numberOfHMetrics; glyph < glyphCount; glyph++)
+        {
             int offset = (4 * numberOfHMetrics) + (2 * (glyph - numberOfHMetrics));
             BinaryPrimitives.WriteInt16BigEndian(
                 hmtx.AsSpan(offset),
-                (short)_glyphs[glyph].LeftSideBearing);
+                (short)_glyphs[glyph].LeftSideBearing
+            );
         }
 
         return hmtx;
     }
 
-    private byte[] BuildCmap() {
-        if (_rawCmap is not null) {
+    private byte[] BuildCmap()
+    {
+        if (_rawCmap is not null)
+        {
             return _rawCmap;
         }
 
-        if (_cmapRecords.Count == 0) {
+        if (_cmapRecords.Count == 0)
+        {
             throw new InvalidOperationException(
-                "A synthetic face needs at least one cmap record or raw cmap bytes.");
+                "A synthetic face needs at least one cmap record or raw cmap bytes."
+            );
         }
 
         return SyntheticCmap.Build(_cmapRecords);
     }
 
-    private (byte[] Glyf, int[] Offsets) BuildGlyf() {
+    private (byte[] Glyf, int[] Offsets) BuildGlyf()
+    {
         List<byte> glyf = [];
         int[] offsets = new int[_glyphs.Count + 1];
-        for (int index = 0; index < _glyphs.Count; index++) {
+        for (int index = 0; index < _glyphs.Count; index++)
+        {
             offsets[index] = glyf.Count;
             AppendGlyph(glyf, _glyphs[index]);
-            while (glyf.Count % TABLE_ALIGNMENT != 0) {
+            while (glyf.Count % TABLE_ALIGNMENT != 0)
+            {
                 glyf.Add(0);
             }
         }
@@ -415,17 +506,28 @@ internal sealed class SyntheticFontBuilder {
         return (glyf.ToArray(), offsets);
     }
 
-    private byte[] BuildLoca(int[] offsets) {
+    private byte[] BuildLoca(int[] offsets)
+    {
         int entryLength = _locaFormat == 0 ? 2 : 4;
         byte[] loca = new byte[offsets.Length * entryLength];
-        for (int index = 0; index < offsets.Length; index++) {
-            if (_locaFormat == 0) {
-                if (offsets[index] % 2 != 0) {
-                    throw new InvalidOperationException("Short loca entries need even glyf offsets.");
+        for (int index = 0; index < offsets.Length; index++)
+        {
+            if (_locaFormat == 0)
+            {
+                if (offsets[index] % 2 != 0)
+                {
+                    throw new InvalidOperationException(
+                        "Short loca entries need even glyf offsets."
+                    );
                 }
 
-                BinaryPrimitives.WriteUInt16BigEndian(loca.AsSpan(2 * index), (ushort)(offsets[index] / 2));
-            } else {
+                BinaryPrimitives.WriteUInt16BigEndian(
+                    loca.AsSpan(2 * index),
+                    (ushort)(offsets[index] / 2)
+                );
+            }
+            else
+            {
                 BinaryPrimitives.WriteUInt32BigEndian(loca.AsSpan(4 * index), (uint)offsets[index]);
             }
         }
@@ -433,12 +535,16 @@ internal sealed class SyntheticFontBuilder {
         return loca;
     }
 
-    private byte[] BuildKern() {
+    private byte[] BuildKern()
+    {
         List<SyntheticKernPair> pairs = [.. _kernPairs];
-        pairs.Sort(static (first, second) => {
-            int byLeft = first.Left.CompareTo(second.Left);
-            return byLeft != 0 ? byLeft : first.Right.CompareTo(second.Right);
-        });
+        pairs.Sort(
+            static (first, second) =>
+            {
+                int byLeft = first.Left.CompareTo(second.Left);
+                return byLeft != 0 ? byLeft : first.Right.CompareTo(second.Right);
+            }
+        );
 
         int subtableLength = 14 + (6 * pairs.Count);
         byte[] kern = new byte[4 + subtableLength];
@@ -450,7 +556,8 @@ internal sealed class SyntheticFontBuilder {
         BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(10), (ushort)pairs.Count);
         int searchRange = 6;
         int entrySelector = 0;
-        while ((searchRange * 2) <= (pairs.Count * 6)) {
+        while ((searchRange * 2) <= (pairs.Count * 6))
+        {
             searchRange *= 2;
             entrySelector++;
         }
@@ -459,19 +566,29 @@ internal sealed class SyntheticFontBuilder {
         BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(14), (ushort)entrySelector);
         BinaryPrimitives.WriteUInt16BigEndian(
             kern.AsSpan(16),
-            (ushort)((pairs.Count * 6) - searchRange));
-        for (int index = 0; index < pairs.Count; index++) {
+            (ushort)((pairs.Count * 6) - searchRange)
+        );
+        for (int index = 0; index < pairs.Count; index++)
+        {
             int offset = 18 + (6 * index);
             BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(offset), (ushort)pairs[index].Left);
-            BinaryPrimitives.WriteUInt16BigEndian(kern.AsSpan(offset + 2), (ushort)pairs[index].Right);
-            BinaryPrimitives.WriteInt16BigEndian(kern.AsSpan(offset + 4), (short)pairs[index].Value);
+            BinaryPrimitives.WriteUInt16BigEndian(
+                kern.AsSpan(offset + 2),
+                (ushort)pairs[index].Right
+            );
+            BinaryPrimitives.WriteInt16BigEndian(
+                kern.AsSpan(offset + 4),
+                (short)pairs[index].Value
+            );
         }
 
         return kern;
     }
 
-    private static void AppendGlyph(List<byte> glyf, SyntheticGlyph glyph) {
-        switch (glyph.Kind) {
+    private static void AppendGlyph(List<byte> glyf, SyntheticGlyph glyph)
+    {
+        switch (glyph.Kind)
+        {
             case SyntheticGlyphKind.Empty:
                 return;
             case SyntheticGlyphKind.Simple:
@@ -483,9 +600,11 @@ internal sealed class SyntheticFontBuilder {
         }
     }
 
-    private static void AppendSimpleGlyph(List<byte> glyf, SyntheticGlyph glyph) {
+    private static void AppendSimpleGlyph(List<byte> glyf, SyntheticGlyph glyph)
+    {
         int pointCount = 0;
-        foreach (SyntheticPoint[] contour in glyph.Contours) {
+        foreach (SyntheticPoint[] contour in glyph.Contours)
+        {
             pointCount += contour.Length;
         }
 
@@ -493,8 +612,10 @@ internal sealed class SyntheticFontBuilder {
         int yMin = int.MaxValue;
         int xMax = int.MinValue;
         int yMax = int.MinValue;
-        foreach (SyntheticPoint[] contour in glyph.Contours) {
-            foreach (SyntheticPoint point in contour) {
+        foreach (SyntheticPoint[] contour in glyph.Contours)
+        {
+            foreach (SyntheticPoint point in contour)
+            {
                 xMin = Math.Min(xMin, point.X);
                 yMin = Math.Min(yMin, point.Y);
                 xMax = Math.Max(xMax, point.X);
@@ -509,7 +630,8 @@ internal sealed class SyntheticFontBuilder {
         WriteInt16(glyf, yMax);
 
         int lastPoint = -1;
-        foreach (SyntheticPoint[] contour in glyph.Contours) {
+        foreach (SyntheticPoint[] contour in glyph.Contours)
+        {
             lastPoint += contour.Length;
             WriteUInt16(glyf, lastPoint);
         }
@@ -518,8 +640,10 @@ internal sealed class SyntheticFontBuilder {
 
         SyntheticPoint[] points = new SyntheticPoint[pointCount];
         int pointIndex = 0;
-        foreach (SyntheticPoint[] contour in glyph.Contours) {
-            foreach (SyntheticPoint point in contour) {
+        foreach (SyntheticPoint[] contour in glyph.Contours)
+        {
+            foreach (SyntheticPoint point in contour)
+            {
                 points[pointIndex++] = point;
             }
         }
@@ -529,7 +653,8 @@ internal sealed class SyntheticFontBuilder {
         byte[] flags = new byte[pointCount];
         int previousX = 0;
         int previousY = 0;
-        for (int index = 0; index < pointCount; index++) {
+        for (int index = 0; index < pointCount; index++)
+        {
             deltasX[index] = points[index].X - previousX;
             deltasY[index] = points[index].Y - previousY;
             previousX = points[index].X;
@@ -541,58 +666,71 @@ internal sealed class SyntheticFontBuilder {
         }
 
         WriteFlags(glyf, flags);
-        foreach (int delta in deltasX) {
+        foreach (int delta in deltasX)
+        {
             WriteDelta(glyf, delta);
         }
 
-        foreach (int delta in deltasY) {
+        foreach (int delta in deltasY)
+        {
             WriteDelta(glyf, delta);
         }
     }
 
-    private static void AppendCompositeGlyph(List<byte> glyf, SyntheticGlyph glyph) {
+    private static void AppendCompositeGlyph(List<byte> glyf, SyntheticGlyph glyph)
+    {
         WriteInt16(glyf, -1);
         FontBounds bounds = glyph.Bounds ?? new FontBounds(0, 0, 0, 0);
         WriteInt16(glyf, bounds.XMin);
         WriteInt16(glyf, bounds.YMin);
         WriteInt16(glyf, bounds.XMax);
         WriteInt16(glyf, bounds.YMax);
-        for (int index = 0; index < glyph.Components.Length; index++) {
+        for (int index = 0; index < glyph.Components.Length; index++)
+        {
             SyntheticComponent component = glyph.Components[index];
             int flags = 0;
-            if (component.WordArguments) {
+            if (component.WordArguments)
+            {
                 flags |= 0x0001;
             }
 
-            if (!component.PointMatched) {
+            if (!component.PointMatched)
+            {
                 flags |= 0x0002;
             }
 
-            flags |= component.Transform switch {
+            flags |= component.Transform switch
+            {
                 SyntheticComponentTransform.Scale => 0x0008,
                 SyntheticComponentTransform.XAndYScale => 0x0040,
                 SyntheticComponentTransform.TwoByTwo => 0x0080,
                 _ => 0,
             };
-            if (component.ScaledOffset) {
+            if (component.ScaledOffset)
+            {
                 flags |= 0x0800;
             }
 
-            if (index < glyph.Components.Length - 1) {
+            if (index < glyph.Components.Length - 1)
+            {
                 flags |= 0x0020;
             }
 
             WriteUInt16(glyf, flags);
             WriteUInt16(glyf, component.GlyphId);
-            if (component.WordArguments) {
+            if (component.WordArguments)
+            {
                 WriteInt16(glyf, component.OffsetX);
                 WriteInt16(glyf, component.OffsetY);
-            } else {
+            }
+            else
+            {
                 glyf.Add(unchecked((byte)(sbyte)component.OffsetX));
                 glyf.Add(unchecked((byte)(sbyte)component.OffsetY));
             }
 
-            switch (component.Transform) {
+            switch (component.Transform)
+            {
                 case SyntheticComponentTransform.Scale:
                     WriteF2Dot14(glyf, component.A);
                     break;
@@ -612,24 +750,30 @@ internal sealed class SyntheticFontBuilder {
         }
     }
 
-    private static byte DeltaFlag(int delta, int shortFlag, int sameOrPositiveFlag) {
-        if (delta == 0) {
+    private static byte DeltaFlag(int delta, int shortFlag, int sameOrPositiveFlag)
+    {
+        if (delta == 0)
+        {
             return (byte)sameOrPositiveFlag;
         }
 
-        if (Math.Abs(delta) <= 0xFF) {
+        if (Math.Abs(delta) <= 0xFF)
+        {
             return (byte)(shortFlag | (delta > 0 ? sameOrPositiveFlag : 0));
         }
 
         return 0;
     }
 
-    private static void WriteDelta(List<byte> target, int delta) {
-        if (delta == 0) {
+    private static void WriteDelta(List<byte> target, int delta)
+    {
+        if (delta == 0)
+        {
             return;
         }
 
-        if (Math.Abs(delta) <= 0xFF) {
+        if (Math.Abs(delta) <= 0xFF)
+        {
             target.Add((byte)Math.Abs(delta));
             return;
         }
@@ -637,47 +781,58 @@ internal sealed class SyntheticFontBuilder {
         WriteInt16(target, delta);
     }
 
-    private static void WriteFlags(List<byte> target, byte[] flags) {
+    private static void WriteFlags(List<byte> target, byte[] flags)
+    {
         int index = 0;
-        while (index < flags.Length) {
+        while (index < flags.Length)
+        {
             byte flag = flags[index];
             int run = 1;
-            while (index + run < flags.Length && flags[index + run] == flag && run < 0x100) {
+            while (index + run < flags.Length && flags[index + run] == flag && run < 0x100)
+            {
                 run++;
             }
 
-            if (run >= 2) {
+            if (run >= 2)
+            {
                 target.Add((byte)(flag | 0x08));
                 target.Add((byte)(run - 1));
                 index += run;
-            } else {
+            }
+            else
+            {
                 target.Add(flag);
                 index++;
             }
         }
     }
 
-    private static void WriteF2Dot14(List<byte> target, float value) {
+    private static void WriteF2Dot14(List<byte> target, float value)
+    {
         short fixedValue = (short)MathF.Round(value * 16384f);
         WriteInt16(target, fixedValue);
     }
 
-    private static void WriteUInt16(List<byte> target, int value) {
+    private static void WriteUInt16(List<byte> target, int value)
+    {
         target.Add((byte)(value >> 8));
         target.Add((byte)value);
     }
 
-    private static void WriteInt16(List<byte> target, int value) {
+    private static void WriteInt16(List<byte> target, int value)
+    {
         target.Add((byte)(value >> 8));
         target.Add((byte)value);
     }
 
-    private static byte[] Assemble(uint magic, List<(string Tag, byte[] Data)> tables) {
+    private static byte[] Assemble(uint magic, List<(string Tag, byte[] Data)> tables)
+    {
         tables.Sort(static (first, second) => string.CompareOrdinal(first.Tag, second.Tag));
         int count = tables.Count;
         int offset = 12 + (TABLE_RECORD_LENGTH * count);
         int[] offsets = new int[count];
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < count; index++)
+        {
             offsets[index] = offset;
             offset += tables[index].Data.Length;
             offset = (offset + 3) & ~3;
@@ -688,7 +843,8 @@ internal sealed class SyntheticFontBuilder {
         BinaryPrimitives.WriteUInt16BigEndian(face.AsSpan(4), (ushort)count);
         int searchRange = TABLE_RECORD_LENGTH;
         int entrySelector = 0;
-        while ((searchRange * 2) <= (count * TABLE_RECORD_LENGTH)) {
+        while ((searchRange * 2) <= (count * TABLE_RECORD_LENGTH))
+        {
             searchRange *= 2;
             entrySelector++;
         }
@@ -697,22 +853,27 @@ internal sealed class SyntheticFontBuilder {
         BinaryPrimitives.WriteUInt16BigEndian(face.AsSpan(8), (ushort)entrySelector);
         BinaryPrimitives.WriteUInt16BigEndian(
             face.AsSpan(10),
-            (ushort)((count * TABLE_RECORD_LENGTH) - searchRange));
-        for (int index = 0; index < count; index++) {
+            (ushort)((count * TABLE_RECORD_LENGTH) - searchRange)
+        );
+        for (int index = 0; index < count; index++)
+        {
             int record = 12 + (TABLE_RECORD_LENGTH * index);
             Encoding.ASCII.GetBytes(tables[index].Tag).CopyTo(face, record);
             BinaryPrimitives.WriteUInt32BigEndian(face.AsSpan(record + 8), (uint)offsets[index]);
             BinaryPrimitives.WriteUInt32BigEndian(
                 face.AsSpan(record + 12),
-                (uint)tables[index].Data.Length);
+                (uint)tables[index].Data.Length
+            );
             tables[index].Data.CopyTo(face, offsets[index]);
         }
 
         return face;
     }
 
-    private readonly struct SyntheticKernPair {
-        internal SyntheticKernPair(int left, int right, int value) {
+    private readonly struct SyntheticKernPair
+    {
+        internal SyntheticKernPair(int left, int right, int value)
+        {
             Left = left;
             Right = right;
             Value = value;

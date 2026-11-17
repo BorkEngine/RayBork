@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// while it is alive, and <see cref="Dispose"/> must not race those calls.
 /// </para>
 /// </remarks>
-internal sealed class VulkanLoader : INativeContext, IDisposable {
+internal sealed class VulkanLoader : INativeContext, IDisposable
+{
     /// <summary>
     /// The prefix of the message thrown when the platform Vulkan loader cannot be loaded.
     /// </summary>
@@ -40,7 +41,8 @@ internal sealed class VulkanLoader : INativeContext, IDisposable {
     private IntPtr _handle;
     private bool _disposed;
 
-    private VulkanLoader(IntPtr handle) {
+    private VulkanLoader(IntPtr handle)
+    {
         _handle = handle;
     }
 
@@ -54,20 +56,26 @@ internal sealed class VulkanLoader : INativeContext, IDisposable {
     /// The platform loader library is not installed. The message names the library and the platform;
     /// the diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static VulkanLoader Load(ILogger logger) {
+    internal static VulkanLoader Load(ILogger logger)
+    {
         ArgumentNullException.ThrowIfNull(logger);
-        string libraryName = OperatingSystem.IsWindows() ? WINDOWS_LIBRARY_NAME : LINUX_LIBRARY_NAME;
-        if (!NativeLibrary.TryLoad(libraryName, out IntPtr handle)) {
+        string libraryName = OperatingSystem.IsWindows()
+            ? WINDOWS_LIBRARY_NAME
+            : LINUX_LIBRARY_NAME;
+        if (!NativeLibrary.TryLoad(libraryName, out IntPtr handle))
+        {
             throw new GraphicsException(
                 $"{LOADER_FAILURE_MESSAGE_PREFIX} the Vulkan loader {libraryName} on {RuntimeInformation.OSDescription}. Install a Vulkan 1.2 driver.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         logger.LogInformation(
             "Vulkan loader {LibraryName} loaded on {Platform}.",
             libraryName,
-            RuntimeInformation.OSDescription);
+            RuntimeInformation.OSDescription
+        );
         return new VulkanLoader(handle);
     }
 
@@ -99,7 +107,8 @@ internal sealed class VulkanLoader : INativeContext, IDisposable {
     /// <exception cref="ArgumentNullException"><paramref name="proc"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="proc"/> is empty.</exception>
     /// <exception cref="ObjectDisposedException">The loader has been disposed.</exception>
-    public bool TryGetProcAddress(string proc, out IntPtr address, int? slot) {
+    public bool TryGetProcAddress(string proc, out IntPtr address, int? slot)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentException.ThrowIfNullOrEmpty(proc);
         return NativeLibrary.TryGetExport(_handle, proc, out address);
@@ -112,13 +121,16 @@ internal sealed class VulkanLoader : INativeContext, IDisposable {
     /// Runs on the render thread after the <see cref="Silk.NET.Vulkan.Vk"/> object created from this
     /// context has been disposed. Disposing twice is safe and frees the handle exactly once.
     /// </remarks>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        if (_handle != IntPtr.Zero) {
+        if (_handle != IntPtr.Zero)
+        {
             NativeLibrary.Free(_handle);
             _handle = IntPtr.Zero;
         }

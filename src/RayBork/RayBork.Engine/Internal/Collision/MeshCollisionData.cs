@@ -20,7 +20,8 @@ namespace RayBork.Internal;
 /// decoded payload is rejected with <see cref="ArgumentException"/> before a query can see it.
 /// </para>
 /// </remarks>
-internal sealed class MeshCollisionData {
+internal sealed class MeshCollisionData
+{
     /// <summary>The deepest node level the builder creates; every node at this depth is a leaf.</summary>
     internal const int MAX_DEPTH = 64;
 
@@ -51,60 +52,82 @@ internal sealed class MeshCollisionData {
         MeshCollisionNode[] nodes,
         int[] triangleIds,
         PrimitiveTopology topology,
-        int triangleCount) {
+        int triangleCount
+    )
+    {
         ArgumentNullException.ThrowIfNull(nodes);
         ArgumentNullException.ThrowIfNull(triangleIds);
 
-        if (topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip)) {
+        if (topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip))
+        {
             throw new ArgumentException(
                 "Ray-mesh collision supports only triangle topologies; the collision topology is "
                     + $"{topology}.",
-                nameof(topology));
+                nameof(topology)
+            );
         }
 
-        if (triangleCount <= 0) {
-            throw new ArgumentException("The canonical triangle count must be positive.", nameof(triangleCount));
+        if (triangleCount <= 0)
+        {
+            throw new ArgumentException(
+                "The canonical triangle count must be positive.",
+                nameof(triangleCount)
+            );
         }
 
-        if (nodes.Length == 0 || (nodes.Length & 1) == 0) {
+        if (nodes.Length == 0 || (nodes.Length & 1) == 0)
+        {
             throw new ArgumentException(
                 $"A collision tree has a positive odd node count; the tree has {nodes.Length}.",
-                nameof(nodes));
+                nameof(nodes)
+            );
         }
 
         long leafTriangleCount = 0L;
-        for (int index = 0; index < nodes.Length; index++) {
+        for (int index = 0; index < nodes.Length; index++)
+        {
             MeshCollisionNode node = nodes[index];
             ValidateBounds(node.Bounds, index, nameof(nodes));
-            if (node.Count < 0) {
+            if (node.Count < 0)
+            {
                 throw new ArgumentException(
                     $"Collision node {index} has a negative count {node.Count}.",
-                    nameof(nodes));
+                    nameof(nodes)
+                );
             }
 
-            if (node.Count == 0) {
-                if (node.LeftOrFirst < 0 || node.LeftOrFirst >= nodes.Length - 1) {
+            if (node.Count == 0)
+            {
+                if (node.LeftOrFirst < 0 || node.LeftOrFirst >= nodes.Length - 1)
+                {
                     throw new ArgumentException(
                         $"Collision node {index} has an out-of-range child index {node.LeftOrFirst}.",
-                        nameof(nodes));
+                        nameof(nodes)
+                    );
                 }
-            } else {
-                if (node.LeftOrFirst < 0 || node.Count > triangleIds.Length - node.LeftOrFirst) {
+            }
+            else
+            {
+                if (node.LeftOrFirst < 0 || node.Count > triangleIds.Length - node.LeftOrFirst)
+                {
                     throw new ArgumentException(
                         $"Collision node {index} has an out-of-range triangle range "
                             + $"[{node.LeftOrFirst}, {node.LeftOrFirst + node.Count}).",
-                        nameof(nodes));
+                        nameof(nodes)
+                    );
                 }
 
                 leafTriangleCount += node.Count;
             }
         }
 
-        if (leafTriangleCount != triangleIds.Length) {
+        if (leafTriangleCount != triangleIds.Length)
+        {
             throw new ArgumentException(
                 $"The leaves describe {leafTriangleCount} triangles; the triangle-id array has "
                     + $"{triangleIds.Length} entries.",
-                nameof(triangleIds));
+                nameof(triangleIds)
+            );
         }
 
         ValidateTriangleIds(triangleIds, triangleCount);
@@ -139,11 +162,13 @@ internal sealed class MeshCollisionData {
     /// <param name="topology">The primitive topology.</param>
     /// <param name="indexCount">The number of 32-bit indices.</param>
     /// <returns>The number of triangle windows, including degenerate triangles; zero for a non-triangle topology.</returns>
-    internal static int GetTriangleCount(PrimitiveTopology topology, int indexCount) => topology switch {
-        PrimitiveTopology.TriangleList => indexCount / 3,
-        PrimitiveTopology.TriangleStrip => indexCount >= 3 ? indexCount - 2 : 0,
-        _ => 0,
-    };
+    internal static int GetTriangleCount(PrimitiveTopology topology, int indexCount) =>
+        topology switch
+        {
+            PrimitiveTopology.TriangleList => indexCount / 3,
+            PrimitiveTopology.TriangleStrip => indexCount >= 3 ? indexCount - 2 : 0,
+            _ => 0,
+        };
 
     /// <summary>
     /// Gets the three vertex indices of one canonical triangle. A triangle strip swaps the first two
@@ -165,16 +190,21 @@ internal sealed class MeshCollisionData {
         int triangleId,
         out uint index0,
         out uint index1,
-        out uint index2) {
+        out uint index2
+    )
+    {
         index0 = 0;
         index1 = 0;
         index2 = 0;
-        if (triangleId < 0) {
+        if (triangleId < 0)
+        {
             return false;
         }
 
-        if (topology == PrimitiveTopology.TriangleList) {
-            if (triangleId > (indices.Length / 3) - 1) {
+        if (topology == PrimitiveTopology.TriangleList)
+        {
+            if (triangleId > (indices.Length / 3) - 1)
+            {
                 return false;
             }
 
@@ -183,20 +213,26 @@ internal sealed class MeshCollisionData {
             index1 = indices[offset + 1];
             index2 = indices[offset + 2];
             return true;
-        } else if (topology == PrimitiveTopology.TriangleStrip) {
-            if (triangleId > indices.Length - 3) {
+        }
+        else if (topology == PrimitiveTopology.TriangleStrip)
+        {
+            if (triangleId > indices.Length - 3)
+            {
                 return false;
             }
 
             index0 = indices[triangleId];
             index1 = indices[triangleId + 1];
             index2 = indices[triangleId + 2];
-            if ((triangleId & 1) != 0) {
+            if ((triangleId & 1) != 0)
+            {
                 (index0, index1) = (index1, index0);
             }
 
             return true;
-        } else {
+        }
+        else
+        {
             return false;
         }
     }
@@ -221,8 +257,8 @@ internal sealed class MeshCollisionData {
         ReadOnlySpan<Vertex> vertices,
         ReadOnlySpan<uint> indices,
         out int triangleId,
-        out float distance) =>
-        TryFindNearest(meshRay, vertices, indices, out triangleId, out distance, out _);
+        out float distance
+    ) => TryFindNearest(meshRay, vertices, indices, out triangleId, out distance, out _);
 
     /// <summary>
     /// Finds the nearest triangle and reports how many triangle intersections the traversal tested.
@@ -241,11 +277,14 @@ internal sealed class MeshCollisionData {
         ReadOnlySpan<uint> indices,
         out int triangleId,
         out float distance,
-        out int triangleTests) {
+        out int triangleTests
+    )
+    {
         triangleId = -1;
         distance = 0f;
         triangleTests = 0;
-        if (!IsFinite(meshRay)) {
+        if (!IsFinite(meshRay))
+        {
             return false;
         }
 
@@ -254,35 +293,49 @@ internal sealed class MeshCollisionData {
         stack[stackCount++] = 0;
         float bestDistance = float.PositiveInfinity;
         int bestTriangle = int.MaxValue;
-        while (stackCount > 0) {
+        while (stackCount > 0)
+        {
             int nodeIndex = stack[--stackCount];
             MeshCollisionNode node = _nodes[nodeIndex];
-            if (node.Count > 0) {
-                for (int index = 0; index < node.Count; index++) {
+            if (node.Count > 0)
+            {
+                for (int index = 0; index < node.Count; index++)
+                {
                     int candidate = _triangleIds[node.LeftOrFirst + index];
-                    if (!TryGetTriangleIndices(
+                    if (
+                        !TryGetTriangleIndices(
                             _topology,
                             indices,
                             candidate,
                             out uint index0,
                             out uint index1,
-                            out uint index2)) {
+                            out uint index2
+                        )
+                    )
+                    {
                         continue;
                     }
 
                     triangleTests++;
-                    if (!Collision.TryGetTriangleIntersection(
+                    if (
+                        !Collision.TryGetTriangleIntersection(
                             meshRay,
                             vertices[(int)index0].Position,
                             vertices[(int)index1].Position,
                             vertices[(int)index2].Position,
                             out float hitDistance,
-                            out _)) {
+                            out _
+                        )
+                    )
+                    {
                         continue;
                     }
 
-                    if (hitDistance < bestDistance
-                        || (hitDistance == bestDistance && candidate < bestTriangle)) {
+                    if (
+                        hitDistance < bestDistance
+                        || (hitDistance == bestDistance && candidate < bestTriangle)
+                    )
+                    {
                         bestDistance = hitDistance;
                         bestTriangle = candidate;
                         triangleId = candidate;
@@ -295,20 +348,38 @@ internal sealed class MeshCollisionData {
 
             int leftIndex = node.LeftOrFirst;
             int rightIndex = leftIndex + 1;
-            bool hitLeft = TryGetBoxEntry(meshRay, _nodes[leftIndex].Bounds, bestDistance, out float leftEntry);
-            bool hitRight = TryGetBoxEntry(meshRay, _nodes[rightIndex].Bounds, bestDistance, out float rightEntry);
-            if (hitLeft && hitRight) {
+            bool hitLeft = TryGetBoxEntry(
+                meshRay,
+                _nodes[leftIndex].Bounds,
+                bestDistance,
+                out float leftEntry
+            );
+            bool hitRight = TryGetBoxEntry(
+                meshRay,
+                _nodes[rightIndex].Bounds,
+                bestDistance,
+                out float rightEntry
+            );
+            if (hitLeft && hitRight)
+            {
                 // Push the farther child first so the nearer child is visited next.
-                if (leftEntry <= rightEntry) {
+                if (leftEntry <= rightEntry)
+                {
                     stack[stackCount++] = rightIndex;
                     stack[stackCount++] = leftIndex;
-                } else {
+                }
+                else
+                {
                     stack[stackCount++] = leftIndex;
                     stack[stackCount++] = rightIndex;
                 }
-            } else if (hitLeft) {
+            }
+            else if (hitLeft)
+            {
                 stack[stackCount++] = leftIndex;
-            } else if (hitRight) {
+            }
+            else if (hitRight)
+            {
                 stack[stackCount++] = rightIndex;
             }
         }
@@ -316,41 +387,57 @@ internal sealed class MeshCollisionData {
         return bestTriangle != int.MaxValue;
     }
 
-    private static void ValidateBounds(BoundingBox bounds, int index, string paramName) {
-        if (!IsFinite(bounds.Min) || !IsFinite(bounds.Max)) {
+    private static void ValidateBounds(BoundingBox bounds, int index, string paramName)
+    {
+        if (!IsFinite(bounds.Min) || !IsFinite(bounds.Max))
+        {
             throw new ArgumentException(
                 $"Collision node {index} has a non-finite bound.",
-                paramName);
+                paramName
+            );
         }
 
-        if (bounds.Min.X > bounds.Max.X || bounds.Min.Y > bounds.Max.Y || bounds.Min.Z > bounds.Max.Z) {
+        if (
+            bounds.Min.X > bounds.Max.X
+            || bounds.Min.Y > bounds.Max.Y
+            || bounds.Min.Z > bounds.Max.Z
+        )
+        {
             throw new ArgumentException(
                 $"Collision node {index} has an inverted bound.",
-                paramName);
+                paramName
+            );
         }
     }
 
-    private static void ValidateTriangleIds(int[] triangleIds, int triangleCount) {
+    private static void ValidateTriangleIds(int[] triangleIds, int triangleCount)
+    {
         int[] sorted = new int[triangleIds.Length];
         triangleIds.CopyTo(sorted, 0);
         Array.Sort(sorted);
-        for (int index = 0; index < sorted.Length; index++) {
+        for (int index = 0; index < sorted.Length; index++)
+        {
             int triangleId = sorted[index];
-            if ((uint)triangleId >= (uint)triangleCount) {
+            if ((uint)triangleId >= (uint)triangleCount)
+            {
                 throw new ArgumentException(
                     $"The triangle id {triangleId} is outside the canonical range [0, {triangleCount}).",
-                    nameof(triangleIds));
+                    nameof(triangleIds)
+                );
             }
 
-            if (index > 0 && triangleId == sorted[index - 1]) {
+            if (index > 0 && triangleId == sorted[index - 1])
+            {
                 throw new ArgumentException(
                     $"The triangle id {triangleId} appears more than once.",
-                    nameof(triangleIds));
+                    nameof(triangleIds)
+                );
             }
         }
     }
 
-    private static void ValidateTree(MeshCollisionNode[] nodes) {
+    private static void ValidateTree(MeshCollisionNode[] nodes)
+    {
         int[] stack = new int[nodes.Length];
         int[] depths = new int[nodes.Length];
         bool[] visited = new bool[nodes.Length];
@@ -359,26 +446,32 @@ internal sealed class MeshCollisionData {
         depths[stackCount] = 0;
         stackCount++;
         int visitedCount = 0;
-        while (stackCount > 0) {
+        while (stackCount > 0)
+        {
             stackCount--;
             int index = stack[stackCount];
             int depth = depths[stackCount];
-            if (visited[index]) {
+            if (visited[index])
+            {
                 throw new ArgumentException(
                     $"Collision node {index} is reached more than once.",
-                    nameof(nodes));
+                    nameof(nodes)
+                );
             }
 
             visited[index] = true;
             visitedCount++;
-            if (depth > MAX_DEPTH) {
+            if (depth > MAX_DEPTH)
+            {
                 throw new ArgumentException(
                     $"Collision node {index} is deeper than the maximum depth {MAX_DEPTH}.",
-                    nameof(nodes));
+                    nameof(nodes)
+                );
             }
 
             MeshCollisionNode node = nodes[index];
-            if (node.Count == 0) {
+            if (node.Count == 0)
+            {
                 stack[stackCount] = node.LeftOrFirst;
                 depths[stackCount] = depth + 1;
                 stackCount++;
@@ -388,11 +481,13 @@ internal sealed class MeshCollisionData {
             }
         }
 
-        if (visitedCount != nodes.Length) {
+        if (visitedCount != nodes.Length)
+        {
             throw new ArgumentException(
                 $"The collision tree reaches {visitedCount} of {nodes.Length} nodes; every node must "
                     + "be reachable from the root exactly once.",
-                nameof(nodes));
+                nameof(nodes)
+            );
         }
     }
 
@@ -400,22 +495,55 @@ internal sealed class MeshCollisionData {
         Ray ray,
         BoundingBox bounds,
         float maximumDistance,
-        out float entry) {
+        out float entry
+    )
+    {
         entry = float.NegativeInfinity;
         float exit = float.PositiveInfinity;
-        if (!IntersectSlab(ray.Origin.X, ray.Direction.X, bounds.Min.X, bounds.Max.X, ref entry, ref exit)) {
+        if (
+            !IntersectSlab(
+                ray.Origin.X,
+                ray.Direction.X,
+                bounds.Min.X,
+                bounds.Max.X,
+                ref entry,
+                ref exit
+            )
+        )
+        {
             return false;
         }
 
-        if (!IntersectSlab(ray.Origin.Y, ray.Direction.Y, bounds.Min.Y, bounds.Max.Y, ref entry, ref exit)) {
+        if (
+            !IntersectSlab(
+                ray.Origin.Y,
+                ray.Direction.Y,
+                bounds.Min.Y,
+                bounds.Max.Y,
+                ref entry,
+                ref exit
+            )
+        )
+        {
             return false;
         }
 
-        if (!IntersectSlab(ray.Origin.Z, ray.Direction.Z, bounds.Min.Z, bounds.Max.Z, ref entry, ref exit)) {
+        if (
+            !IntersectSlab(
+                ray.Origin.Z,
+                ray.Direction.Z,
+                bounds.Min.Z,
+                bounds.Max.Z,
+                ref entry,
+                ref exit
+            )
+        )
+        {
             return false;
         }
 
-        if (exit < 0f) {
+        if (exit < 0f)
+        {
             return false;
         }
 
@@ -429,23 +557,29 @@ internal sealed class MeshCollisionData {
         float minimum,
         float maximum,
         ref float entry,
-        ref float exit) {
-        if (direction == 0f) {
+        ref float exit
+    )
+    {
+        if (direction == 0f)
+        {
             return origin >= minimum && origin <= maximum;
         }
 
         float inverse = 1f / direction;
         float near = (minimum - origin) * inverse;
         float far = (maximum - origin) * inverse;
-        if (direction < 0f) {
+        if (direction < 0f)
+        {
             (near, far) = (far, near);
         }
 
-        if (near > entry) {
+        if (near > entry)
+        {
             entry = near;
         }
 
-        if (far < exit) {
+        if (far < exit)
+        {
             exit = far;
         }
 

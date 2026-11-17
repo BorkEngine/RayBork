@@ -16,7 +16,8 @@ namespace RayBork.Bake;
 /// <see cref="TextureChannelType.Rg"/>.
 /// </para>
 /// </remarks>
-public enum TextureCompression {
+public enum TextureCompression
+{
     /// <summary>Uncompressed storage when the channel type has an uncompressed format.</summary>
     None = 0,
 

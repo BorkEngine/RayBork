@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Identifies a gamepad button. Values match the SDL3 gamepad button indices for the shared buttons.
 /// </summary>
-public enum GamepadButton {
+public enum GamepadButton
+{
     /// <summary>
     /// The bottom face button (A on Xbox layouts, cross on PlayStation layouts).
     /// </summary>

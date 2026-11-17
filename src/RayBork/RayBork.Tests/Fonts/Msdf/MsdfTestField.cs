@@ -4,7 +4,8 @@ using RayBork.Internal;
 namespace RayBork.Tests.Fonts.Msdf;
 
 /// <summary>Decodes and asserts the RGBA8 distance field of the MSDF generator tests.</summary>
-internal static class MsdfTestField {
+internal static class MsdfTestField
+{
     /// <summary>
     /// The documented median reconstruction tolerance as a fraction of the range: 1.5 of 255 byte
     /// steps. It covers the byte quantization and the float distance arithmetic.
@@ -15,13 +16,15 @@ internal static class MsdfTestField {
     internal static float Tolerance(int range) => BYTE_TOLERANCE * range;
 
     /// <summary>Reconstructs the signed distance of one texel, in texels.</summary>
-    internal static float Reconstruct(byte[] bitmap, int width, int texelX, int texelY, int range) {
+    internal static float Reconstruct(byte[] bitmap, int width, int texelX, int texelY, int range)
+    {
         int index = ((texelY * width) + texelX) * 4;
         return (Median(bitmap[index], bitmap[index + 1], bitmap[index + 2]) - 0.5f) * range;
     }
 
     /// <summary>Computes the median of the three normalized channel values.</summary>
-    internal static float Median(byte red, byte green, byte blue) {
+    internal static float Median(byte red, byte green, byte blue)
+    {
         float r = red / 255f;
         float g = green / 255f;
         float b = blue / 255f;
@@ -29,24 +32,32 @@ internal static class MsdfTestField {
     }
 
     /// <summary>Gets the median normalized channel value of one texel.</summary>
-    internal static float MedianAt(byte[] bitmap, in MsdfGlyphLayout layout, int texelX, int texelY) {
+    internal static float MedianAt(byte[] bitmap, in MsdfGlyphLayout layout, int texelX, int texelY)
+    {
         int index = ((texelY * layout.TextureWidth) + texelX) * 4;
         return Median(bitmap[index], bitmap[index + 1], bitmap[index + 2]);
     }
 
     /// <summary>Asserts that every texel is opaque.</summary>
-    internal static void AssertOpaque(byte[] bitmap) {
-        for (int index = 3; index < bitmap.Length; index += 4) {
+    internal static void AssertOpaque(byte[] bitmap)
+    {
+        for (int index = 3; index < bitmap.Length; index += 4)
+        {
             Assert.Equal(255, bitmap[index]);
         }
     }
 
     /// <summary>Asserts that the field contains at least two different texel colours.</summary>
-    internal static void AssertNotConstant(byte[] bitmap) {
-        for (int index = 4; index < bitmap.Length; index += 4) {
-            if (bitmap[index] != bitmap[0]
+    internal static void AssertNotConstant(byte[] bitmap)
+    {
+        for (int index = 4; index < bitmap.Length; index += 4)
+        {
+            if (
+                bitmap[index] != bitmap[0]
                 || bitmap[index + 1] != bitmap[1]
-                || bitmap[index + 2] != bitmap[2]) {
+                || bitmap[index + 2] != bitmap[2]
+            )
+            {
                 return;
             }
         }
@@ -55,8 +66,10 @@ internal static class MsdfTestField {
     }
 
     /// <summary>Asserts that every texel is the outside extreme (black and opaque).</summary>
-    internal static void AssertAllOutside(byte[] bitmap) {
-        for (int index = 0; index < bitmap.Length; index += 4) {
+    internal static void AssertAllOutside(byte[] bitmap)
+    {
+        for (int index = 0; index < bitmap.Length; index += 4)
+        {
             Assert.Equal(0, bitmap[index]);
             Assert.Equal(0, bitmap[index + 1]);
             Assert.Equal(0, bitmap[index + 2]);
@@ -72,11 +85,14 @@ internal static class MsdfTestField {
         byte[] bitmap,
         in MsdfGlyphLayout layout,
         Vector2[][] contours,
-        float extraTolerance = 0f) => AssertFieldMatches(
+        float extraTolerance = 0f
+    ) =>
+        AssertFieldMatches(
             bitmap,
             layout,
             point => MsdfTestShapes.SignedDistanceToContours(contours, point),
-            extraTolerance);
+            extraTolerance
+        );
 
     /// <summary>
     /// Asserts that every texel reconstructs the exact signed distance to the contours, using an
@@ -87,11 +103,14 @@ internal static class MsdfTestField {
         byte[] bitmap,
         in MsdfGlyphLayout layout,
         Vector2[][] contours,
-        float extraTolerance = 0f) => AssertFieldMatches(
+        float extraTolerance = 0f
+    ) =>
+        AssertFieldMatches(
             bitmap,
             layout,
             point => MsdfTestShapes.SignedDistanceToEvenOddContours(contours, point),
-            extraTolerance);
+            extraTolerance
+        );
 
     /// <summary>
     /// Asserts that every texel reconstructs the exact signed distance to an axis-aligned rectangle in
@@ -104,21 +123,27 @@ internal static class MsdfTestField {
         float left,
         float top,
         float right,
-        float bottom) => AssertFieldMatches(
+        float bottom
+    ) =>
+        AssertFieldMatches(
             bitmap,
             layout,
-            point => {
-                if (point.X > left && point.X < right && point.Y > top && point.Y < bottom) {
+            point =>
+            {
+                if (point.X > left && point.X < right && point.Y > top && point.Y < bottom)
+                {
                     return MathF.Min(
                         MathF.Min(point.X - left, right - point.X),
-                        MathF.Min(point.Y - top, bottom - point.Y));
+                        MathF.Min(point.Y - top, bottom - point.Y)
+                    );
                 }
 
                 float deltaX = MathF.Max(MathF.Max(left - point.X, point.X - right), 0f);
                 float deltaY = MathF.Max(MathF.Max(top - point.Y, point.Y - bottom), 0f);
                 return -MathF.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
             },
-            0f);
+            0f
+        );
 
     /// <summary>Asserts that one texel reconstructs the expected signed distance.</summary>
     internal static void AssertTexelNear(
@@ -127,30 +152,38 @@ internal static class MsdfTestField {
         int texelX,
         int texelY,
         float expected,
-        float tolerance) {
+        float tolerance
+    )
+    {
         float actual = Reconstruct(bitmap, layout.TextureWidth, texelX, texelY, layout.Range);
         Assert.True(
             MathF.Abs(actual - expected) <= tolerance,
-            $"Texel ({texelX}, {texelY}) reconstructed {actual} but the expected distance is {expected}.");
+            $"Texel ({texelX}, {texelY}) reconstructed {actual} but the expected distance is {expected}."
+        );
     }
 
     private static void AssertFieldMatches(
         byte[] bitmap,
         in MsdfGlyphLayout layout,
         Func<Vector2, float> signedDistance,
-        float extraTolerance) {
+        float extraTolerance
+    )
+    {
         Assert.Equal(layout.TextureWidth * layout.TextureHeight * 4, bitmap.Length);
         AssertOpaque(bitmap);
         float tolerance = Tolerance(layout.Range) + extraTolerance;
         float halfRange = layout.Range * 0.5f;
-        for (int y = 0; y < layout.TextureHeight; y++) {
-            for (int x = 0; x < layout.TextureWidth; x++) {
+        for (int y = 0; y < layout.TextureHeight; y++)
+        {
+            for (int x = 0; x < layout.TextureWidth; x++)
+            {
                 Vector2 texelCentre = new(x + 0.5f, y + 0.5f);
                 float expected = Math.Clamp(signedDistance(texelCentre), -halfRange, halfRange);
                 float actual = Reconstruct(bitmap, layout.TextureWidth, x, y, layout.Range);
                 Assert.True(
                     MathF.Abs(actual - expected) <= tolerance,
-                    $"Texel ({x}, {y}) reconstructed {actual} but the exact distance is {expected}.");
+                    $"Texel ({x}, {y}) reconstructed {actual} but the exact distance is {expected}."
+                );
             }
         }
     }

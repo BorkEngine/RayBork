@@ -3,10 +3,12 @@ using RayBork.Tests.Bake.TestInfrastructure;
 
 namespace RayBork.Tests.Bake;
 
-public sealed class BakeApplicationBuilderTests {
+public sealed class BakeApplicationBuilderTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingProjectRootIsAConfigurationError() {
+    public void MissingProjectRootIsAConfigurationError()
+    {
         using var workspace = new TempBakeWorkspace();
         string missing = Path.Combine(workspace.Root, "missing");
         BakeApplication application = new BakeApplicationBuilder()
@@ -23,9 +25,11 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AssetRootMustStayInsideTheProjectRoot() {
+    public void AssetRootMustStayInsideTheProjectRoot()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .WithPack("outside.pck", "../Outside")
             .Build();
 
@@ -38,7 +42,8 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PackPathMustStayRelative() {
+    public void PackPathMustStayRelative()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = new BakeApplicationBuilder()
             .WithProjectRoot(workspace.ProjectRoot)
@@ -54,9 +59,11 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateAssetRegistrationsAreConfigurationErrors() {
+    public void DuplicateAssetRegistrationsAreConfigurationErrors()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .RegisterAsset<GameSettings>()
             .RegisterAsset<GameSettings>()
             .Build();
@@ -69,7 +76,8 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicatePackPathsAreConfigurationErrors() {
+    public void DuplicatePackPathsAreConfigurationErrors()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = workspace.Builder().Build();
 
@@ -90,7 +98,8 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NoPackIsAConfigurationError() {
+    public void NoPackIsAConfigurationError()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeApplication application = new BakeApplicationBuilder()
             .WithProjectRoot(workspace.ProjectRoot)
@@ -104,9 +113,11 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UseDefaultAssetsIsIdempotent() {
+    public void UseDefaultAssetsIsIdempotent()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .UseDefaultAssets()
             .UseDefaultAssets()
             .Build();
@@ -119,20 +130,25 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownTextureDefaultsAreRejectedImmediately() {
+    public void UnknownTextureDefaultsAreRejectedImmediately()
+    {
         var builder = new BakeApplicationBuilder();
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => builder.WithTextureDefaults((TextureFilter)999, TextureWrap.Clamp));
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => builder.WithTextureDefaults(TextureFilter.Linear, (TextureWrap)999));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.WithTextureDefaults((TextureFilter)999, TextureWrap.Clamp)
+        );
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            builder.WithTextureDefaults(TextureFilter.Linear, (TextureWrap)999)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateProcessorNamesAreConfigurationErrors() {
+    public void DuplicateProcessorNamesAreConfigurationErrors()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeApplication application = workspace.Builder()
+        BakeApplication application = workspace
+            .Builder()
             .AddProcessor(new CountingProcessor("same", "one"))
             .AddProcessor(new CountingProcessor("same", "two"))
             .Build();
@@ -145,10 +161,13 @@ public sealed class BakeApplicationBuilderTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NullProcessorIsRejectedImmediately() {
+    public void NullProcessorIsRejectedImmediately()
+    {
         var builder = new BakeApplicationBuilder();
 
         Assert.Throws<ArgumentNullException>(() => builder.AddProcessor(null!));
-        Assert.Throws<ArgumentNullException>(() => builder.RegisterAsset<GameSettings>((IAssetValidator<GameSettings>)null!));
+        Assert.Throws<ArgumentNullException>(() =>
+            builder.RegisterAsset<GameSettings>((IAssetValidator<GameSettings>)null!)
+        );
     }
 }

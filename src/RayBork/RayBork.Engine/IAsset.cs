@@ -16,7 +16,8 @@ namespace RayBork;
 /// <see cref="IAssetCatalog.Load{T}"/> is not an <see cref="IAsset"/> and is caller-owned.
 /// </para>
 /// </remarks>
-public interface IAsset : IDisposable {
+public interface IAsset : IDisposable
+{
     /// <summary>
     /// Gets the canonical asset path, beginning with <c>/</c>.
     /// </summary>

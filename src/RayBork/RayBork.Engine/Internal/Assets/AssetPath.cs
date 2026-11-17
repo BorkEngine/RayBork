@@ -16,7 +16,8 @@ namespace RayBork.Internal;
 /// normalization.
 /// </para>
 /// </remarks>
-internal static class AssetPath {
+internal static class AssetPath
+{
     /// <summary>The longest accepted asset path, in UTF-8 bytes.</summary>
     internal const int MAX_PATH_BYTES = 4096;
 
@@ -27,25 +28,28 @@ internal static class AssetPath {
     /// <returns>The canonical path, without a leading slash.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="path"/> is not a valid asset path.</exception>
-    internal static string Normalize(string? path) {
+    internal static string Normalize(string? path)
+    {
         ArgumentNullException.ThrowIfNull(path);
 
-        if (path.Contains('\\', StringComparison.Ordinal)) {
+        if (path.Contains('\\', StringComparison.Ordinal))
+        {
             throw new ArgumentException(
                 $"Invalid asset path '{path}': backslashes are not supported; use forward slashes.",
-                nameof(path));
+                nameof(path)
+            );
         }
 
         ReadOnlySpan<char> candidate = path;
-        if (candidate.Length > 0 && candidate[0] == '/') {
+        if (candidate.Length > 0 && candidate[0] == '/')
+        {
             candidate = candidate[1..];
         }
 
         string normalized = candidate.ToString().ToLowerInvariant();
-        if (!TryValidateCanonical(normalized, out string? reason)) {
-            throw new ArgumentException(
-                $"Invalid asset path '{path}': {reason}.",
-                nameof(path));
+        if (!TryValidateCanonical(normalized, out string? reason))
+        {
+            throw new ArgumentException($"Invalid asset path '{path}': {reason}.", nameof(path));
         }
 
         return normalized;
@@ -57,11 +61,14 @@ internal static class AssetPath {
     /// <param name="canonicalPath">The canonical path, without a leading slash.</param>
     /// <returns>The public path.</returns>
     /// <exception cref="ArgumentException"><paramref name="canonicalPath"/> is not canonical.</exception>
-    internal static string ToPublic(string canonicalPath) {
-        if (!TryValidateCanonical(canonicalPath, out string? reason)) {
+    internal static string ToPublic(string canonicalPath)
+    {
+        if (!TryValidateCanonical(canonicalPath, out string? reason))
+        {
             throw new ArgumentException(
                 $"Invalid canonical asset path '{canonicalPath}': {reason}.",
-                nameof(canonicalPath));
+                nameof(canonicalPath)
+            );
         }
 
         return "/" + canonicalPath;
@@ -80,54 +87,64 @@ internal static class AssetPath {
     /// <param name="path">The path to validate.</param>
     /// <param name="reason">The validation failure reason, or <see langword="null"/> on success.</param>
     /// <returns><see langword="true"/> when the path is canonical.</returns>
-    internal static bool TryValidateCanonical(string? path, out string? reason) {
-        if (path is null) {
+    internal static bool TryValidateCanonical(string? path, out string? reason)
+    {
+        if (path is null)
+        {
             reason = "the path is null";
             return false;
         }
 
-        if (path.Length == 0) {
+        if (path.Length == 0)
+        {
             reason = "the path is empty";
             return false;
         }
 
-        if (path.Length > MAX_PATH_BYTES) {
+        if (path.Length > MAX_PATH_BYTES)
+        {
             reason = $"the path exceeds {MAX_PATH_BYTES} bytes";
             return false;
         }
 
-        if (path[0] == '/' || path[^1] == '/') {
+        if (path[0] == '/' || path[^1] == '/')
+        {
             reason = "the path has a leading or trailing '/'";
             return false;
         }
 
         int segmentStart = 0;
-        for (int i = 0; i <= path.Length; i++) {
-            if (i != path.Length && path[i] != '/') {
+        for (int i = 0; i <= path.Length; i++)
+        {
+            if (i != path.Length && path[i] != '/')
+            {
                 continue;
             }
 
             int segmentLength = i - segmentStart;
-            if (segmentLength == 0) {
+            if (segmentLength == 0)
+            {
                 reason = "the path contains an empty segment";
                 return false;
             }
 
-            if (segmentLength == 1 && path[segmentStart] == '.') {
+            if (segmentLength == 1 && path[segmentStart] == '.')
+            {
                 reason = "the path contains a '.' segment";
                 return false;
             }
 
-            if (segmentLength == 2
-                && path[segmentStart] == '.'
-                && path[segmentStart + 1] == '.') {
+            if (segmentLength == 2 && path[segmentStart] == '.' && path[segmentStart + 1] == '.')
+            {
                 reason = "the path contains a '..' segment";
                 return false;
             }
 
-            for (int j = segmentStart; j < i; j++) {
+            for (int j = segmentStart; j < i; j++)
+            {
                 char character = path[j];
-                if (!IsCanonicalCharacter(character)) {
+                if (!IsCanonicalCharacter(character))
+                {
                     reason = $"the path contains the invalid character '{character}'";
                     return false;
                 }
@@ -140,9 +157,6 @@ internal static class AssetPath {
         return true;
     }
 
-    private static bool IsCanonicalCharacter(char character)
-        => character is >= 'a' and <= 'z'
-            or >= '0' and <= '9'
-            or '_'
-            or '-';
+    private static bool IsCanonicalCharacter(char character) =>
+        character is >= 'a' and <= 'z' or >= '0' and <= '9' or '_' or '-';
 }

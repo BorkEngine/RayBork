@@ -13,10 +13,12 @@ namespace RayBork.Tests;
 /// pixels. GPU test classes run in parallel; <see cref="SdlPlatform"/> serializes the process-global SDL
 /// and Vulkan loader setup.
 /// </remarks>
-public sealed class Vulkan12BackendRecoveryTests {
+public sealed class Vulkan12BackendRecoveryTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ForcedSwapchainOutOfDateRecoversAndIncrementsRecoveryCount() {
+    public void ForcedSwapchainOutOfDateRecoversAndIncrementsRecoveryCount()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         int recoveriesBefore = host.Backend.Stats.RecoveryCount;
@@ -33,7 +35,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SimulatedSwapchainOutOfDateRecoversOnTheNextSubmit() {
+    public void SimulatedSwapchainOutOfDateRecoversOnTheNextSubmit()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         int recoveriesBefore = host.Backend.Stats.RecoveryCount;
@@ -48,7 +51,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SimulatedDeviceLossRecoversOnTheNextSubmit() {
+    public void SimulatedDeviceLossRecoversOnTheNextSubmit()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         EngineInfo infoBefore = host.Backend.Info;
@@ -64,7 +68,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SimulatedSurfaceLossRecoversOnTheNextSubmit() {
+    public void SimulatedSurfaceLossRecoversOnTheNextSubmit()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         int createdBefore = host.SurfaceProvider.CreateCount;
@@ -82,7 +87,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ForcedSurfaceLossRecreatesTheSurface() {
+    public void ForcedSurfaceLossRecreatesTheSurface()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         int recoveriesBefore = host.Backend.Stats.RecoveryCount;
@@ -102,7 +108,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ForcedDeviceLossRecreatesTheDeviceAndResources() {
+    public void ForcedDeviceLossRecreatesTheDeviceAndResources()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         EngineInfo infoBefore = host.Backend.Info;
@@ -125,18 +132,21 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void RepeatedDeviceLossIsBoundedAndBecomesFatal() {
+    public void RepeatedDeviceLossIsBoundedAndBecomesFatal()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
 
-        for (int attempt = 1; attempt <= Vulkan12Backend.MAX_CONSECUTIVE_RECOVERIES; attempt++) {
+        for (int attempt = 1; attempt <= Vulkan12Backend.MAX_CONSECUTIVE_RECOVERIES; attempt++)
+        {
             Assert.True(host.Backend.Recover(RenderRecoveryReason.DeviceLost));
         }
 
         Assert.False(host.Backend.Recover(RenderRecoveryReason.DeviceLost));
         host.Backend.SimulateDeviceLossForTests();
-        GraphicsDeviceLostException exception = Assert.Throws<GraphicsDeviceLostException>(
-            () => host.Backend.Submit(new RenderFramePacket(2)));
+        GraphicsDeviceLostException exception = Assert.Throws<GraphicsDeviceLostException>(() =>
+            host.Backend.Submit(new RenderFramePacket(2))
+        );
         Assert.Equal(DiagnosticCodes.GRAPHICS_DEVICE_LOST, exception.DiagnosticCode);
         Assert.Empty(host.Instance.ConsumeValidationErrors());
         Assert.Null(Record.Exception(host.Dispose));
@@ -144,12 +154,14 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void UnrecoverableFailureIsFatal() {
+    public void UnrecoverableFailureIsFatal()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
 
         host.Backend.SimulateUnrecoverableFailureForTests();
-        GraphicsDeviceLostException exception = Assert.Throws<GraphicsDeviceLostException>(
-            () => host.Backend.Submit(new RenderFramePacket(1)));
+        GraphicsDeviceLostException exception = Assert.Throws<GraphicsDeviceLostException>(() =>
+            host.Backend.Submit(new RenderFramePacket(1))
+        );
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_DEVICE_LOST, exception.DiagnosticCode);
         Assert.Null(Record.Exception(host.Dispose));
@@ -157,7 +169,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void RecoveryIsValidationClean() {
+    public void RecoveryIsValidationClean()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
 
@@ -173,7 +186,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void PresentedFramesSurvivesAPresentationRecovery() {
+    public void PresentedFramesSurvivesAPresentationRecovery()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         Assert.Equal(1, host.Backend.Stats.PresentedFrames);
@@ -188,7 +202,8 @@ public sealed class Vulkan12BackendRecoveryTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DisposeAfterRecoveryIsClean() {
+    public void DisposeAfterRecoveryIsClean()
+    {
         BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         RenderFrame(host, 1);
         Assert.True(host.Backend.Recover(RenderRecoveryReason.DeviceLost));
@@ -197,7 +212,8 @@ public sealed class Vulkan12BackendRecoveryTests {
         Assert.Null(Record.Exception(host.Dispose));
     }
 
-    private static void RenderFrame(BackendTestHost host, long frameIndex) {
+    private static void RenderFrame(BackendTestHost host, long frameIndex)
+    {
         BackendPacketTestHelper.SubmitClearingFrame(host, frameIndex, Color.Black);
     }
 }

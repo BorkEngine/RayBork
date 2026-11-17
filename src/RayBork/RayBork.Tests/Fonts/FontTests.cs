@@ -9,12 +9,14 @@ namespace RayBork.Tests.Fonts;
 /// factory: em-unit metrics, measurement, on-demand glyph acquisition, the <c>.notdef</c> fallback, and
 /// the disposal contract.
 /// </summary>
-public sealed class FontTests {
+public sealed class FontTests
+{
     private static readonly TimeSpan _timeout = GlyphPipelineTestHarness.TIMEOUT;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FaceMetricsAreInEmUnits() {
+    public void FaceMetricsAreInEmUnits()
+    {
         using FontTestHarness harness = new(CreateKernedSquareFace(out int glyphId));
         Font font = harness.Font;
 
@@ -40,7 +42,8 @@ public sealed class FontTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureAppliesSizeKerningAndTheNotdefFallback() {
+    public void MeasureAppliesSizeKerningAndTheNotdefFallback()
+    {
         using FontTestHarness harness = new(CreateKernedSquareFace(out _));
         Font font = harness.Font;
 
@@ -55,7 +58,8 @@ public sealed class FontTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task TryGetGlyphIsFalseUntilTheGlyphTextureIsGenerated() {
+    public async Task TryGetGlyphIsFalseUntilTheGlyphTextureIsGenerated()
+    {
         using FontTestHarness harness = new(GlyphTestFonts.CreateSquareFace(out int glyphId));
         Font font = harness.Font;
 
@@ -91,7 +95,8 @@ public sealed class FontTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AnUnmappedRuneFallsBackToTheNotdefGlyph() {
+    public async Task AnUnmappedRuneFallsBackToTheNotdefGlyph()
+    {
         using FontTestHarness harness = new(GlyphTestFonts.CreateSquareFace(out _));
         Font font = harness.Font;
         Rune unmapped = new(0x4E00);
@@ -113,7 +118,8 @@ public sealed class FontTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AnEmptyGlyphAdvancesThePenWithoutATexture() {
+    public async Task AnEmptyGlyphAdvancesThePenWithoutATexture()
+    {
         using FontTestHarness harness = new(GlyphTestFonts.CreateEmptyGlyphFace(out int glyphId));
         Font font = harness.Font;
 
@@ -129,7 +135,8 @@ public sealed class FontTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeKeepsPathAndStateReadableAndRejectsEveryOtherMember() {
+    public void DisposeKeepsPathAndStateReadableAndRejectsEveryOtherMember()
+    {
         using FontTestHarness harness = new(GlyphTestFonts.CreateSquareFace(out int glyphId));
         Font font = harness.Font;
         string path = font.Path;
@@ -147,19 +154,29 @@ public sealed class FontTests {
         Assert.Throws<ObjectDisposedException>(() => font.Measure("A", 1f));
         Assert.Throws<ObjectDisposedException>(() => _ = font.Metrics);
         Assert.Throws<ObjectDisposedException>(() => font.BeginFrame(1));
-        Assert.Throws<ObjectDisposedException>(() => { _ = font.AcquireGlyphTexture(glyphId, new FrameAssetRetention()); });
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            _ = font.AcquireGlyphTexture(glyphId, new FrameAssetRetention());
+        });
         Assert.Throws<ObjectDisposedException>(() => font.TryGetGlyphId(new Rune('A'), out _));
         Assert.Throws<ObjectDisposedException>(() => font.GetKerning(glyphId, glyphId));
-        Assert.Throws<ObjectDisposedException>(() => { _ = font.WhenGlyphSettledAsync(glyphId); });
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            _ = font.WhenGlyphSettledAsync(glyphId);
+        });
         Assert.Throws<ObjectDisposedException>(font.Dispose);
     }
 
-    private static Texture? AcquireGlyph(Font font, int glyphId, long frameIndex) {
+    private static Texture? AcquireGlyph(Font font, int glyphId, long frameIndex)
+    {
         font.BeginFrame(frameIndex);
         FrameAssetRetention probe = new();
-        try {
+        try
+        {
             return font.AcquireGlyphTexture(glyphId, probe);
-        } finally {
+        }
+        finally
+        {
             probe.Release();
         }
     }
@@ -168,7 +185,8 @@ public sealed class FontTests {
     /// Builds a face like <see cref="GlyphTestFonts.CreateSquareFace"/> plus one kern pair of -100 units
     /// for the mapped glyph followed by itself.
     /// </summary>
-    private static SfntFace CreateKernedSquareFace(out int glyphId) {
+    private static SfntFace CreateKernedSquareFace(out int glyphId)
+    {
         SyntheticFontBuilder builder = SyntheticFontBuilder.Create();
         glyphId = builder.AddSimple(
             600,
@@ -176,32 +194,38 @@ public sealed class FontTests {
             new SyntheticPoint(0, 0),
             new SyntheticPoint(500, 0),
             new SyntheticPoint(500, 500),
-            new SyntheticPoint(0, 500));
+            new SyntheticPoint(0, 500)
+        );
         return SfntFace.Parse(
-            builder
-                .WithCmap(4, (0x41, glyphId))
-                .WithKernPairs((glyphId, glyphId, -100))
-                .Build());
+            builder.WithCmap(4, (0x41, glyphId)).WithKernPairs((glyphId, glyphId, -100)).Build()
+        );
     }
 
-    private static void AssertNear(float expected, float actual, float tolerance = 1e-5f)
-        => Assert.True(
+    private static void AssertNear(float expected, float actual, float tolerance = 1e-5f) =>
+        Assert.True(
             MathF.Abs(expected - actual) <= tolerance,
-            $"Expected {expected} within {tolerance} but found {actual}.");
+            $"Expected {expected} within {tolerance} but found {actual}."
+        );
 
-    private static void AssertVectorNear(System.Numerics.Vector2 expected, System.Numerics.Vector2 actual)
-        => Assert.True(
+    private static void AssertVectorNear(
+        System.Numerics.Vector2 expected,
+        System.Numerics.Vector2 actual
+    ) =>
+        Assert.True(
             MathF.Abs(expected.X - actual.X) <= 1e-5f && MathF.Abs(expected.Y - actual.Y) <= 1e-5f,
-            $"Expected {expected} but found {actual}.");
+            $"Expected {expected} but found {actual}."
+        );
 
     /// <summary>
     /// One parsed face, its pipeline, and a <see cref="Font"/> over a CPU-only <see cref="EngineAsset"/>.
     /// The fake texture factory and app-lifetime generation service come from the glyph test harness.
     /// </summary>
-    private sealed class FontTestHarness : IDisposable {
+    private sealed class FontTestHarness : IDisposable
+    {
         private readonly GlyphPipelineTestHarness _glyphs;
 
-        internal FontTestHarness(SfntFace face) {
+        internal FontTestHarness(SfntFace face)
+        {
             ArgumentNullException.ThrowIfNull(face);
 
             _glyphs = new GlyphPipelineTestHarness();
@@ -212,7 +236,8 @@ public sealed class FontTests {
                 resource: null,
                 static _ => { },
                 static () => { },
-                pipeline.Dispose);
+                pipeline.Dispose
+            );
             asset.AddOwnerReference();
             Font = new Font(asset, face, pipeline);
         }
@@ -221,12 +246,14 @@ public sealed class FontTests {
 
         internal FakeGlyphTextureFactory Factory { get; }
 
-        public void Dispose() {
+        public void Dispose()
+        {
             // Release the font's owner reference even when a test forgot to dispose it, so the harness
             // never leaks the lifetime. Disposing the pipeline again through the glyph harness is a
             // no-op, and the glyph harness stops the generation service before it disposes its
             // pipelines.
-            if (!Font.IsDisposed) {
+            if (!Font.IsDisposed)
+            {
                 Font.Dispose();
             }
 

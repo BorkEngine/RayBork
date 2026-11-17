@@ -2,10 +2,12 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class RendererContractTests {
+public sealed class RendererContractTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EngineInfoSupportsValueEqualityWithAndDeconstruction() {
+    public void EngineInfoSupportsValueEqualityWithAndDeconstruction()
+    {
         EngineInfo info = CreateEngineInfo();
 
         EngineInfo copy = info with { };
@@ -18,7 +20,18 @@ public sealed class RendererContractTests {
         Assert.NotEqual(info, changed);
         Assert.True(info != changed);
 
-        var (name, version, rendererName, gpuName, vulkanApiVersion, swapchainFormat, hdrOutput, sampleCount, presentMode, validationEnabled) = info;
+        var (
+            name,
+            version,
+            rendererName,
+            gpuName,
+            vulkanApiVersion,
+            swapchainFormat,
+            hdrOutput,
+            sampleCount,
+            presentMode,
+            validationEnabled
+        ) = info;
 
         Assert.Equal("RayBork", name);
         Assert.Equal(new Version(0, 1, 0, 0), version);
@@ -34,7 +47,8 @@ public sealed class RendererContractTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RenderStatsSupportsValueEqualityWithAndDeconstruction() {
+    public void RenderStatsSupportsValueEqualityWithAndDeconstruction()
+    {
         RenderStats stats = CreateRenderStats();
 
         RenderStats copy = stats with { };
@@ -47,7 +61,22 @@ public sealed class RendererContractTests {
         Assert.NotEqual(stats, changed);
         Assert.True(stats != changed);
 
-        var (frameIndex, presentedFrames, drawCalls, instances, triangles, culledInstances, pipelineCount, textureCount, sampleCount, hdrOutput, cpuFrameMilliseconds, gpuFrameMilliseconds, framesInFlight, recoveryCount) = stats;
+        var (
+            frameIndex,
+            presentedFrames,
+            drawCalls,
+            instances,
+            triangles,
+            culledInstances,
+            pipelineCount,
+            textureCount,
+            sampleCount,
+            hdrOutput,
+            cpuFrameMilliseconds,
+            gpuFrameMilliseconds,
+            framesInFlight,
+            recoveryCount
+        ) = stats;
 
         Assert.Equal(42L, frameIndex);
         Assert.Equal(84L, presentedFrames);
@@ -67,7 +96,8 @@ public sealed class RendererContractTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GraphicsExceptionsFormTheDocumentedHierarchy() {
+    public void GraphicsExceptionsFormTheDocumentedHierarchy()
+    {
         Assert.False(typeof(GraphicsException).IsSealed);
         Assert.True(typeof(GraphicsException).IsSubclassOf(typeof(RayBorkException)));
 
@@ -77,7 +107,8 @@ public sealed class RendererContractTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GraphicsExceptionPublicConstructorsPreserveMessageAndInnerException() {
+    public void GraphicsExceptionPublicConstructorsPreserveMessageAndInnerException()
+    {
         InvalidOperationException inner = new("inner");
 
         GraphicsException withMessage = new("boom");
@@ -94,7 +125,8 @@ public sealed class RendererContractTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GraphicsDeviceLostExceptionPublicConstructorsPreserveMessageAndInnerException() {
+    public void GraphicsDeviceLostExceptionPublicConstructorsPreserveMessageAndInnerException()
+    {
         InvalidOperationException inner = new("inner");
 
         GraphicsDeviceLostException withMessage = new("boom");
@@ -114,60 +146,70 @@ public sealed class RendererContractTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GraphicsExceptionInternalConstructorSetsDiagnosticCode() {
+    public void GraphicsExceptionInternalConstructorSetsDiagnosticCode()
+    {
         InvalidOperationException inner = new("inner");
 
         Assert.Equal(
             DiagnosticCodes.GRAPHICS_UNRECOVERABLE,
-            new GraphicsException("boom", DiagnosticCodes.GRAPHICS_UNRECOVERABLE, inner).DiagnosticCode);
+            new GraphicsException(
+                "boom",
+                DiagnosticCodes.GRAPHICS_UNRECOVERABLE,
+                inner
+            ).DiagnosticCode
+        );
         Assert.Equal(
             DiagnosticCodes.GRAPHICS_DEVICE_LOST,
-            new GraphicsDeviceLostException("boom", DiagnosticCodes.GRAPHICS_DEVICE_LOST, inner).DiagnosticCode);
+            new GraphicsDeviceLostException(
+                "boom",
+                DiagnosticCodes.GRAPHICS_DEVICE_LOST,
+                inner
+            ).DiagnosticCode
+        );
         Assert.Same(
             inner,
-            new GraphicsDeviceLostException("boom", DiagnosticCodes.GRAPHICS_DEVICE_LOST, inner).InnerException);
+            new GraphicsDeviceLostException(
+                "boom",
+                DiagnosticCodes.GRAPHICS_DEVICE_LOST,
+                inner
+            ).InnerException
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GraphicsDiagnosticCodesAreDistinctAndRbPrefixed() {
-        string[] codes = [
+    public void GraphicsDiagnosticCodesAreDistinctAndRbPrefixed()
+    {
+        string[] codes =
+        [
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
             DiagnosticCodes.GRAPHICS_DEVICE_LOST,
             DiagnosticCodes.GRAPHICS_UNRECOVERABLE,
         ];
 
         Assert.Equal(codes.Length, codes.Distinct(StringComparer.Ordinal).Count());
-        Assert.All(codes, code => Assert.True(
-            code.StartsWith("RB", StringComparison.Ordinal),
-            $"Diagnostic code '{code}' must start with 'RB'."));
+        Assert.All(codes, code =>
+            Assert.True(
+                code.StartsWith("RB", StringComparison.Ordinal),
+                $"Diagnostic code '{code}' must start with 'RB'."
+            )
+        );
     }
 
-    private static EngineInfo CreateEngineInfo() => new(
-        "RayBork",
-        new Version(0, 1, 0, 0),
-        "Vulkan 1.2",
-        "Test GPU",
-        4202496u,
-        "B8G8R8A8_SRGB",
-        false,
-        4,
-        PresentMode.Mailbox,
-        true);
+    private static EngineInfo CreateEngineInfo() =>
+        new(
+            "RayBork",
+            new Version(0, 1, 0, 0),
+            "Vulkan 1.2",
+            "Test GPU",
+            4202496u,
+            "B8G8R8A8_SRGB",
+            false,
+            4,
+            PresentMode.Mailbox,
+            true
+        );
 
-    private static RenderStats CreateRenderStats() => new(
-        42L,
-        84L,
-        7,
-        9,
-        1200,
-        3,
-        2,
-        5,
-        4,
-        false,
-        1.5,
-        2.5,
-        2,
-        1);
+    private static RenderStats CreateRenderStats() =>
+        new(42L, 84L, 7, 9, 1200, 3, 2, 5, 4, false, 1.5, 2.5, 2, 1);
 }

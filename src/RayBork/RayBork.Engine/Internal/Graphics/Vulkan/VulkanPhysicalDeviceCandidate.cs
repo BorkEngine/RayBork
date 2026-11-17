@@ -37,4 +37,5 @@ internal readonly record struct VulkanPhysicalDeviceCandidate(
     bool HasSwapchainExtension,
     uint BindlessTextureCapacity = VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
     string MissingBindlessFeatures = "",
-    ResolveModeFlags SupportedDepthResolveModes = ResolveModeFlags.None);
+    ResolveModeFlags SupportedDepthResolveModes = ResolveModeFlags.None
+);

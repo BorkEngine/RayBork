@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// it is not thread-safe and retains the sliced table bytes.
 /// </para>
 /// </remarks>
-internal sealed class CffDictReader {
+internal sealed class CffDictReader
+{
     /// <summary>The maximum number of operands one DICT operator may carry.</summary>
     internal const int MAX_OPERANDS = 48;
 
@@ -47,7 +48,8 @@ internal sealed class CffDictReader {
     /// <summary>Initializes a DICT reader over one slice with a diagnostic context.</summary>
     /// <param name="data">The DICT bytes.</param>
     /// <param name="context">A description such as <c>the CFF Top DICT</c> used in failure reasons.</param>
-    internal CffDictReader(ReadOnlyMemory<byte> data, string context) {
+    internal CffDictReader(ReadOnlyMemory<byte> data, string context)
+    {
         _data = data;
         _context = context;
     }
@@ -60,13 +62,18 @@ internal sealed class CffDictReader {
     /// The DICT is truncated, uses a reserved byte, has a malformed real operand, overflows the
     /// operand stack, or ends with operands that no operator consumes.
     /// </exception>
-    internal bool TryRead(out int operatorCode, out int operandCount) {
+    internal bool TryRead(out int operatorCode, out int operandCount)
+    {
         ReadOnlySpan<byte> data = _data.Span;
-        while (true) {
-            if (_position >= data.Length) {
-                if (_operandCount != 0) {
+        while (true)
+        {
+            if (_position >= data.Length)
+            {
+                if (_operandCount != 0)
+                {
                     throw new FontFormatException(
-                        $"{_context} ends with {_operandCount} operand(s) that no operator consumes");
+                        $"{_context} ends with {_operandCount} operand(s) that no operator consumes"
+                    );
                 }
 
                 operatorCode = 0;
@@ -75,12 +82,14 @@ internal sealed class CffDictReader {
             }
 
             byte value = data[_position++];
-            if (value >= 32) {
+            if (value >= 32)
+            {
                 ReadNumber(data, value);
                 continue;
             }
 
-            switch (value) {
+            switch (value)
+            {
                 case SHORT_INT:
                     RequireBytes(data, sizeof(short));
                     Push(BinaryPrimitives.ReadInt16BigEndian(data[_position..]));
@@ -98,18 +107,24 @@ internal sealed class CffDictReader {
                     break;
             }
 
-            if (value > 21) {
+            if (value > 21)
+            {
                 throw new FontFormatException(
-                    $"{_context} contains the reserved byte 0x{value:X2}");
+                    $"{_context} contains the reserved byte 0x{value:X2}"
+                );
             }
 
-            if (value == 12) {
-                if (_position >= data.Length) {
+            if (value == 12)
+            {
+                if (_position >= data.Length)
+                {
                     throw new FontFormatException($"{_context} ends after the escape byte 12");
                 }
 
                 operatorCode = ESCAPE_OPERATOR_FLAG | data[_position++];
-            } else {
+            }
+            else
+            {
                 operatorCode = value;
             }
 
@@ -124,31 +139,38 @@ internal sealed class CffDictReader {
     /// <param name="index">The zero-based operand index.</param>
     /// <returns>The operand value.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is outside the operator's operands.</exception>
-    internal double Operand(int index) {
-        if ((uint)index >= (uint)_availableOperandCount) {
+    internal double Operand(int index)
+    {
+        if ((uint)index >= (uint)_availableOperandCount)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(index),
                 index,
-                $"The operator has {_availableOperandCount} operand(s).");
+                $"The operator has {_availableOperandCount} operand(s)."
+            );
         }
 
         return _operands[index];
     }
 
-    private void ReadNumber(ReadOnlySpan<byte> data, byte value) {
-        if (value <= ONE_BYTE_INT_MAX) {
+    private void ReadNumber(ReadOnlySpan<byte> data, byte value)
+    {
+        if (value <= ONE_BYTE_INT_MAX)
+        {
             Push(value - 139);
             return;
         }
 
-        if (value <= TWO_BYTE_POSITIVE_MAX) {
+        if (value <= TWO_BYTE_POSITIVE_MAX)
+        {
             RequireBytes(data, 1);
             Push(((value - 247) * 256) + data[_position] + 108);
             _position++;
             return;
         }
 
-        if (value <= TWO_BYTE_NEGATIVE_MAX) {
+        if (value <= TWO_BYTE_NEGATIVE_MAX)
+        {
             RequireBytes(data, 1);
             Push(-((value - 251) * 256) - data[_position] - 108);
             _position++;
@@ -158,7 +180,8 @@ internal sealed class CffDictReader {
         throw new FontFormatException($"{_context} contains the reserved byte 0xFF");
     }
 
-    private double ReadReal(ReadOnlySpan<byte> data) {
+    private double ReadReal(ReadOnlySpan<byte> data)
+    {
         bool negative = false;
         bool seenDigit = false;
         bool seenDot = false;
@@ -168,44 +191,55 @@ internal sealed class CffDictReader {
         double mantissa = 0;
         int fractionalDigits = 0;
         int exponent = 0;
-        while (true) {
-            if (_position >= data.Length) {
+        while (true)
+        {
+            if (_position >= data.Length)
+            {
                 throw new FontFormatException($"{_context} ends inside a real operand");
             }
 
             byte packed = data[_position++];
-            for (int half = 0; half < 2; half++) {
+            for (int half = 0; half < 2; half++)
+            {
                 int nibble = half == 0 ? (packed >> 4) & 0x0F : packed & 0x0F;
-                switch (nibble) {
+                switch (nibble)
+                {
                     case <= 9:
-                        if (seenExponent) {
+                        if (seenExponent)
+                        {
                             exponentDigit = true;
                             exponent = Math.Min((exponent * 10) + nibble, MAX_REAL_EXPONENT);
-                        } else {
+                        }
+                        else
+                        {
                             seenDigit = true;
                             mantissa = (mantissa * 10) + nibble;
-                            if (seenDot) {
+                            if (seenDot)
+                            {
                                 fractionalDigits++;
                             }
                         }
 
                         break;
                     case 0x0A:
-                        if (seenDot || seenExponent) {
+                        if (seenDot || seenExponent)
+                        {
                             throw MalformedReal();
                         }
 
                         seenDot = true;
                         break;
                     case 0x0B:
-                        if (seenExponent || (!seenDigit && !seenDot)) {
+                        if (seenExponent || (!seenDigit && !seenDot))
+                        {
                             throw MalformedReal();
                         }
 
                         seenExponent = true;
                         break;
                     case 0x0C:
-                        if (seenExponent || (!seenDigit && !seenDot)) {
+                        if (seenExponent || (!seenDigit && !seenDot))
+                        {
                             throw MalformedReal();
                         }
 
@@ -214,39 +248,48 @@ internal sealed class CffDictReader {
                         break;
                     case REAL_NIBBLE_RESERVED:
                         throw new FontFormatException(
-                            $"{_context} contains the reserved nibble 0x{nibble:X1} in a real operand");
+                            $"{_context} contains the reserved nibble 0x{nibble:X1} in a real operand"
+                        );
                     case 0x0E:
-                        if (seenExponent || negative || seenDigit || seenDot) {
+                        if (seenExponent || negative || seenDigit || seenDot)
+                        {
                             throw MalformedReal();
                         }
 
                         negative = true;
                         break;
                     default:
-                        if (!seenDigit) {
+                        if (!seenDigit)
+                        {
                             throw MalformedReal();
                         }
 
-                        if (seenExponent && !exponentDigit) {
+                        if (seenExponent && !exponentDigit)
+                        {
                             throw MalformedReal();
                         }
 
                         double value = mantissa;
-                        if (fractionalDigits > 0) {
+                        if (fractionalDigits > 0)
+                        {
                             value /= Math.Pow(10, fractionalDigits);
                         }
 
-                        if (exponent != 0) {
+                        if (exponent != 0)
+                        {
                             value *= Math.Pow(10, exponentNegative ? -exponent : exponent);
                         }
 
-                        if (negative) {
+                        if (negative)
+                        {
                             value = -value;
                         }
 
-                        if (!double.IsFinite(value)) {
+                        if (!double.IsFinite(value))
+                        {
                             throw new FontFormatException(
-                                $"{_context} has a real operand outside the supported double range");
+                                $"{_context} has a real operand outside the supported double range"
+                            );
                         }
 
                         return value;
@@ -258,19 +301,25 @@ internal sealed class CffDictReader {
     private FontFormatException MalformedReal() =>
         new($"{_context} has a malformed real operand at offset {_position - 1}");
 
-    private void Push(double value) {
-        if (_operandCount >= MAX_OPERANDS) {
+    private void Push(double value)
+    {
+        if (_operandCount >= MAX_OPERANDS)
+        {
             throw new FontFormatException(
-                $"{_context} pushes more than {MAX_OPERANDS} operands for one operator");
+                $"{_context} pushes more than {MAX_OPERANDS} operands for one operator"
+            );
         }
 
         _operands[_operandCount++] = value;
     }
 
-    private void RequireBytes(ReadOnlySpan<byte> data, int count) {
-        if (count > data.Length - _position) {
+    private void RequireBytes(ReadOnlySpan<byte> data, int count)
+    {
+        if (count > data.Length - _position)
+        {
             throw new FontFormatException(
-                $"{_context} is truncated: the {count}-byte operand at offset {_position} is outside the {data.Length}-byte DICT");
+                $"{_context} is truncated: the {count}-byte operand at offset {_position} is outside the {data.Length}-byte DICT"
+            );
         }
     }
 }

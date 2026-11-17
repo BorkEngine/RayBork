@@ -12,16 +12,19 @@ namespace RayBork.Tests.Assets.Procedural;
 /// deferred upload test never depends on scheduling. <see cref="Dispose"/> stops the service before
 /// the pump so a failed build cannot start new work, then closes the bridge and joins the thread.
 /// </remarks>
-internal sealed class ProceduralTestHarness : IDisposable {
+internal sealed class ProceduralTestHarness : IDisposable
+{
     private readonly ManualResetEventSlim _pumpStop = new(false);
     private readonly Thread _pumpThread;
 
-    internal ProceduralTestHarness() {
+    internal ProceduralTestHarness()
+    {
         Bridge = new GpuAssetBridge();
         Worker = new FakeAssetGpuWorker();
         Bridge.AttachWorker(Worker);
         Service = new ProceduralAssetService(Bridge);
-        _pumpThread = new Thread(PumpLoop) {
+        _pumpThread = new Thread(PumpLoop)
+        {
             IsBackground = true,
             Name = "RayBork.Tests.ProceduralGpuPump",
         };
@@ -38,7 +41,8 @@ internal sealed class ProceduralTestHarness : IDisposable {
     internal ProceduralAssetService Service { get; }
 
     /// <inheritdoc />
-    public void Dispose() {
+    public void Dispose()
+    {
         Service.Stop();
         _pumpStop.Set();
         _pumpThread.Join();
@@ -46,11 +50,14 @@ internal sealed class ProceduralTestHarness : IDisposable {
         _pumpStop.Dispose();
     }
 
-    private void PumpLoop() {
+    private void PumpLoop()
+    {
         WaitHandle[] handles = [Bridge.Signal, _pumpStop.WaitHandle, Worker.Progress];
-        while (true) {
+        while (true)
+        {
             int index = WaitHandle.WaitAny(handles);
-            if (index == 1) {
+            if (index == 1)
+            {
                 return;
             }
 

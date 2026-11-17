@@ -24,7 +24,8 @@ namespace RayBork;
 /// <see cref="ObjectDisposedException"/>; <see cref="IsDisposed"/> stays readable.
 /// </para>
 /// </remarks>
-public sealed class EngineDefaults {
+public sealed class EngineDefaults
+{
     /// <summary>The canonical path of the built-in mesh shader program.</summary>
     internal const string MESH_SHADER_PATH = "/shaders/mesh";
 
@@ -62,7 +63,9 @@ public sealed class EngineDefaults {
         Texture white,
         Texture error,
         Font defaultFont,
-        Font defaultMonoFont) {
+        Font defaultMonoFont
+    )
+    {
         ArgumentNullException.ThrowIfNull(meshShader);
         ArgumentNullException.ThrowIfNull(white);
         ArgumentNullException.ThrowIfNull(error);
@@ -81,8 +84,10 @@ public sealed class EngineDefaults {
     /// dispose it.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
-    public Texture White {
-        get {
+    public Texture White
+    {
+        get
+        {
             ThrowIfDisposed();
             return _white;
         }
@@ -93,8 +98,10 @@ public sealed class EngineDefaults {
     /// engine owns it; do not dispose it.
     /// </summary>
     /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
-    public Texture Error {
-        get {
+    public Texture Error
+    {
+        get
+        {
             ThrowIfDisposed();
             return _error;
         }
@@ -109,8 +116,10 @@ public sealed class EngineDefaults {
     /// no glyph textures. Its <see cref="Font.CachedGlyphCount"/> grows as text draws need glyphs.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
-    public Font DefaultFont {
-        get {
+    public Font DefaultFont
+    {
+        get
+        {
             ThrowIfDisposed();
             return _defaultFont;
         }
@@ -128,8 +137,10 @@ public sealed class EngineDefaults {
     /// draws need glyphs.
     /// </remarks>
     /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
-    public Font DefaultMonoFont {
-        get {
+    public Font DefaultMonoFont
+    {
+        get
+        {
             ThrowIfDisposed();
             return _defaultMonoFont;
         }
@@ -147,7 +158,8 @@ public sealed class EngineDefaults {
     /// A new caller-owned material with its own uniform cursor and texture bindings. Dispose it once.
     /// </returns>
     /// <exception cref="ObjectDisposedException">The engine released the defaults.</exception>
-    public Shader CreateMeshShader() {
+    public Shader CreateMeshShader()
+    {
         ThrowIfDisposed();
         return _meshShader.CreateMaterial();
     }
@@ -166,7 +178,8 @@ public sealed class EngineDefaults {
     /// <exception cref="AssetLoadException">
     /// A built-in default is missing, was baked as the wrong type, or could not be uploaded.
     /// </exception>
-    internal static async Task<EngineDefaults> LoadAsync(IAssetCatalog assets) {
+    internal static async Task<EngineDefaults> LoadAsync(IAssetCatalog assets)
+    {
         ArgumentNullException.ThrowIfNull(assets);
 
         ShaderProgram? meshShader = null;
@@ -174,14 +187,17 @@ public sealed class EngineDefaults {
         Texture? error = null;
         Font? defaultFont = null;
         Font? defaultMonoFont = null;
-        try {
+        try
+        {
             meshShader = await assets.Load<ShaderProgram>(MESH_SHADER_PATH).ConfigureAwait(false);
             white = await assets.Load<Texture>(WHITE_TEXTURE_PATH).ConfigureAwait(false);
             error = await assets.Load<Texture>(ERROR_TEXTURE_PATH).ConfigureAwait(false);
             defaultFont = await assets.Load<Font>(DEFAULT_FONT_PATH).ConfigureAwait(false);
             defaultMonoFont = await assets.Load<Font>(DEFAULT_MONO_FONT_PATH).ConfigureAwait(false);
             return new EngineDefaults(meshShader, white, error, defaultFont, defaultMonoFont);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             ReleaseQuietly(meshShader);
             ReleaseQuietly(white);
             ReleaseQuietly(error);
@@ -194,7 +210,8 @@ public sealed class EngineDefaults {
                     + $"and the monospaced font '{DEFAULT_MONO_FONT_PATH}' must all load from the "
                     + "built-in pack.",
                 DiagnosticCodes.ASSET_LOAD_FAILED,
-                exception);
+                exception
+            );
         }
     }
 
@@ -202,8 +219,10 @@ public sealed class EngineDefaults {
     /// Releases the owner reference for each default asset. Idempotent; called by the app during
     /// shutdown after the game callbacks returned.
     /// </summary>
-    internal void Dispose() {
-        if (_disposed) {
+    internal void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -215,38 +234,53 @@ public sealed class EngineDefaults {
         ReleaseQuietly(_defaultMonoFont);
     }
 
-    private static void ReleaseQuietly(ShaderProgram? program) {
-        if (program is null) {
+    private static void ReleaseQuietly(ShaderProgram? program)
+    {
+        if (program is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             program.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The catalog force-disposed the asset during shutdown; its reference is already gone.
         }
     }
 
-    private static void ReleaseQuietly(Texture? texture) {
-        if (texture is null) {
+    private static void ReleaseQuietly(Texture? texture)
+    {
+        if (texture is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             texture.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The catalog force-disposed the asset during shutdown; its reference is already gone.
         }
     }
 
-    private static void ReleaseQuietly(Font? font) {
-        if (font is null) {
+    private static void ReleaseQuietly(Font? font)
+    {
+        if (font is null)
+        {
             return;
         }
 
-        try {
+        try
+        {
             font.Lifetime.ReleaseOwnerReference();
-        } catch (ObjectDisposedException) {
+        }
+        catch (ObjectDisposedException)
+        {
             // The catalog force-disposed the asset during shutdown; its reference is already gone.
         }
     }

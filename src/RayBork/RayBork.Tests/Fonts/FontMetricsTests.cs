@@ -8,14 +8,22 @@ namespace RayBork.Tests.Fonts;
 /// side-bearing reads, including the <c>numberOfHMetrics</c> boundary, compact trailing bearings,
 /// signed values, and the rejected inconsistencies.
 /// </summary>
-public sealed class FontMetricsTests {
+public sealed class FontMetricsTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReadsHeadHheaAndMaxpMetrics() {
-        var builder = SyntheticFontBuilder.Create()
+    public void ReadsHeadHheaAndMaxpMetrics()
+    {
+        var builder = SyntheticFontBuilder
+            .Create()
             .WithUnitsPerEm(2048)
             .WithVerticalMetrics(1500, -450, 120);
-        int glyph = builder.AddSimple(600, 10, new SyntheticPoint(0, 0), new SyntheticPoint(500, 0));
+        int glyph = builder.AddSimple(
+            600,
+            10,
+            new SyntheticPoint(0, 0),
+            new SyntheticPoint(500, 0)
+        );
         SfntFace face = SfntFace.Parse(builder.WithCmap(4, (0x41, glyph)).Build());
 
         Assert.Equal(2048, face.UnitsPerEm);
@@ -28,7 +36,8 @@ public sealed class FontMetricsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AdvancesAndBearingsCrossTheLongMetricsBoundary() {
+    public void AdvancesAndBearingsCrossTheLongMetricsBoundary()
+    {
         var builder = SyntheticFontBuilder.Create();
         int notdef = 0;
         int first = AddGlyph(builder, 600, 40);
@@ -56,7 +65,8 @@ public sealed class FontMetricsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TrailingGlyphsInheritTheLastAdvance() {
+    public void TrailingGlyphsInheritTheLastAdvance()
+    {
         var builder = SyntheticFontBuilder.Create();
         int first = AddGlyph(builder, 640, 0);
         int second = AddGlyph(builder, 500, 20);
@@ -73,7 +83,8 @@ public sealed class FontMetricsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsZeroLongHorizontalMetrics() {
+    public void RejectsZeroLongHorizontalMetrics()
+    {
         byte[] faceBytes = CreateMetricFace();
         SyntheticTableRecord hhea = SyntheticFontBuilder.FindTable(faceBytes, "hhea");
         BinaryPrimitives.WriteUInt16BigEndian(faceBytes.AsSpan(hhea.Offset + 34), 0);
@@ -83,21 +94,24 @@ public sealed class FontMetricsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsLongMetricsBeyondTheGlyphCount() {
+    public void RejectsLongMetricsBeyondTheGlyphCount()
+    {
         byte[] faceBytes = CreateMetricFace();
         SyntheticTableRecord hhea = SyntheticFontBuilder.FindTable(faceBytes, "hhea");
         SyntheticTableRecord maxp = SyntheticFontBuilder.FindTable(faceBytes, "maxp");
         int glyphCount = BinaryPrimitives.ReadUInt16BigEndian(faceBytes.AsSpan(maxp.Offset + 4));
         BinaryPrimitives.WriteUInt16BigEndian(
             faceBytes.AsSpan(hhea.Offset + 34),
-            (ushort)(glyphCount + 1));
+            (ushort)(glyphCount + 1)
+        );
 
         FontTestData.AssertFaceFailure(faceBytes, "long horizontal metrics but 'maxp'");
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsTruncatedHorizontalMetrics() {
+    public void RejectsTruncatedHorizontalMetrics()
+    {
         byte[] faceBytes = CreateMetricFace();
         SyntheticTableRecord hmtx = SyntheticFontBuilder.FindTable(faceBytes, "hmtx");
         BinaryPrimitives.WriteUInt32BigEndian(faceBytes.AsSpan(hmtx.RecordOffset + 12), 6);
@@ -107,7 +121,8 @@ public sealed class FontMetricsTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsGlyphIdentifiersOutsideTheFace() {
+    public void RejectsGlyphIdentifiersOutsideTheFace()
+    {
         SfntFace face = SfntFace.Parse(CreateMetricFace());
 
         Assert.Throws<ArgumentOutOfRangeException>(() => face.GetAdvanceWidth(-1));
@@ -122,9 +137,11 @@ public sealed class FontMetricsTests {
             leftSideBearing,
             new SyntheticPoint(0, 0),
             new SyntheticPoint(400, 0),
-            new SyntheticPoint(200, 500));
+            new SyntheticPoint(200, 500)
+        );
 
-    private static byte[] CreateMetricFace() {
+    private static byte[] CreateMetricFace()
+    {
         var builder = SyntheticFontBuilder.Create();
         int first = AddGlyph(builder, 600, 40);
         AddGlyph(builder, 700, -20);

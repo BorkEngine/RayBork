@@ -21,7 +21,8 @@ namespace RayBork.Bake.Processors;
 /// keeps no per-source state and reads the latest builder sampler defaults at process time.
 /// </para>
 /// </remarks>
-internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
+internal sealed class TextureProcessor : AssetProcessor<TextureSidecar>
+{
     private const string PAYLOAD_SUFFIX = "-ktx2";
     private const float DEFAULT_ANISOTROPY = 1f;
 
@@ -33,7 +34,8 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
     /// <summary>Initializes the built-in texture processor.</summary>
     /// <param name="defaultFilter">Reads the current builder default filter.</param>
     /// <param name="defaultWrap">Reads the current builder default wrap mode.</param>
-    internal TextureProcessor(Func<TextureFilter> defaultFilter, Func<TextureWrap> defaultWrap) {
+    internal TextureProcessor(Func<TextureFilter> defaultFilter, Func<TextureWrap> defaultWrap)
+    {
         ArgumentNullException.ThrowIfNull(defaultFilter);
         ArgumentNullException.ThrowIfNull(defaultWrap);
 
@@ -51,52 +53,65 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
     public override SidecarPolicy Policy => SidecarPolicy.Optional;
 
     /// <inheritdoc/>
-    protected override TextureSidecar CreateDefaultSidecar(AssetProcessorContext context) {
+    protected override TextureSidecar CreateDefaultSidecar(AssetProcessorContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
         return new TextureSidecar();
     }
 
     /// <inheritdoc/>
-    protected override void Process(AssetProcessorContext context, TextureSidecar sidecar) {
+    protected override void Process(AssetProcessorContext context, TextureSidecar sidecar)
+    {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(sidecar);
 
-        if (!TryResolveFormat(context, sidecar, out TextureChannelType channelType,
-                out TextureCompression compression, out bool isSrgb)
+        if (
+            !TryResolveFormat(
+                context,
+                sidecar,
+                out TextureChannelType channelType,
+                out TextureCompression compression,
+                out bool isSrgb
+            )
             || !TryResolveFilter(context, sidecar, out TextureFilter filter)
             || !TryResolveWrap(context, sidecar, out TextureWrap wrap)
-            || !TryResolveAnisotropy(context, sidecar, out float anisotropy)) {
+            || !TryResolveAnisotropy(context, sidecar, out float anisotropy)
+        )
+        {
             return;
         }
 
-        if (!TextureSourceReader.TryDecode(
+        if (
+            !TextureSourceReader.TryDecode(
                 context.SourcePath,
                 context.RelativePath,
                 (code, message) => context.Diagnostics.Error(code, message),
                 out byte[] pixels,
                 out int width,
-                out int height)) {
+                out int height
+            )
+        )
+        {
             return;
         }
 
         BakedTexture baked;
-        try {
-            baked = TextureBaker.Bake(
-                pixels,
-                width,
-                height,
-                channelType,
-                compression,
-                isSrgb);
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
+        try
+        {
+            baked = TextureBaker.Bake(pixels, width, height, channelType, compression, isSrgb);
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
-                $"Texture source '{context.RelativePath}' could not be baked: {exception.Message}");
+                $"Texture source '{context.RelativePath}' could not be baked: {exception.Message}"
+            );
             return;
         }
 
         string payloadPath = context.BaseAssetPath + PAYLOAD_SUFFIX;
-        var descriptor = new RayBork.Internal.TextureAssetDescriptor {
+        var descriptor = new RayBork.Internal.TextureAssetDescriptor
+        {
             Payload = payloadPath,
             Width = (uint)width,
             Height = (uint)height,
@@ -117,10 +132,13 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
         TextureSidecar sidecar,
         out TextureChannelType channelType,
         out TextureCompression compression,
-        out bool isSrgb) {
+        out bool isSrgb
+    )
+    {
         string format = sidecar.Format ?? "rgba8";
         bool defaultSrgb;
-        switch (format) {
+        switch (format)
+        {
             case "rgba8":
                 channelType = TextureChannelType.Rgba;
                 compression = TextureCompression.None;
@@ -152,17 +170,20 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
                 context.Diagnostics.Error(
                     TextureDiagnosticCodes.TEXTURE_INVALID,
                     $"Texture source '{context.RelativePath}' declares the unsupported format "
-                        + $"'{format}'; expected one of rgba8, bc7, bc5, or r8.");
+                        + $"'{format}'; expected one of rgba8, bc7, bc5, or r8."
+                );
                 return false;
         }
 
         isSrgb = sidecar.Srgb ?? defaultSrgb;
-        if (isSrgb && !defaultSrgb) {
+        if (isSrgb && !defaultSrgb)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"Texture source '{context.RelativePath}' sets srgb = true, but the format "
                     + $"'{format}' is a linear data format; sRGB storage is supported only for "
-                    + "rgba8 and bc7.");
+                    + "rgba8 and bc7."
+            );
             return false;
         }
 
@@ -172,13 +193,17 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
     private bool TryResolveFilter(
         AssetProcessorContext context,
         TextureSidecar sidecar,
-        out TextureFilter filter) {
-        if (sidecar.Filter is null) {
+        out TextureFilter filter
+    )
+    {
+        if (sidecar.Filter is null)
+        {
             filter = _defaultFilter();
             return true;
         }
 
-        switch (sidecar.Filter) {
+        switch (sidecar.Filter)
+        {
             case "nearest":
                 filter = TextureFilter.Nearest;
                 return true;
@@ -196,7 +221,8 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
                 context.Diagnostics.Error(
                     TextureDiagnosticCodes.TEXTURE_INVALID,
                     $"Texture source '{context.RelativePath}' declares the unsupported filter "
-                        + $"'{sidecar.Filter}'; expected one of nearest, linear, or anisotropic.");
+                        + $"'{sidecar.Filter}'; expected one of nearest, linear, or anisotropic."
+                );
                 return false;
         }
     }
@@ -204,13 +230,17 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
     private bool TryResolveWrap(
         AssetProcessorContext context,
         TextureSidecar sidecar,
-        out TextureWrap wrap) {
-        if (sidecar.Wrap is null) {
+        out TextureWrap wrap
+    )
+    {
+        if (sidecar.Wrap is null)
+        {
             wrap = _defaultWrap();
             return true;
         }
 
-        switch (sidecar.Wrap) {
+        switch (sidecar.Wrap)
+        {
             case "repeat":
                 wrap = TextureWrap.Repeat;
                 return true;
@@ -228,7 +258,8 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
                 context.Diagnostics.Error(
                     TextureDiagnosticCodes.TEXTURE_INVALID,
                     $"Texture source '{context.RelativePath}' declares the unsupported wrap mode "
-                        + $"'{sidecar.Wrap}'; expected one of repeat, clamp, or mirror.");
+                        + $"'{sidecar.Wrap}'; expected one of repeat, clamp, or mirror."
+                );
                 return false;
         }
     }
@@ -236,13 +267,17 @@ internal sealed class TextureProcessor : AssetProcessor<TextureSidecar> {
     private static bool TryResolveAnisotropy(
         AssetProcessorContext context,
         TextureSidecar sidecar,
-        out float anisotropy) {
+        out float anisotropy
+    )
+    {
         anisotropy = sidecar.Anisotropy ?? DEFAULT_ANISOTROPY;
-        if (!float.IsFinite(anisotropy) || anisotropy <= 0f) {
+        if (!float.IsFinite(anisotropy) || anisotropy <= 0f)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"Texture source '{context.RelativePath}' declares the anisotropy "
-                    + $"'{anisotropy}'; it must be a positive finite number.");
+                    + $"'{anisotropy}'; it must be a positive finite number."
+            );
             return false;
         }
 

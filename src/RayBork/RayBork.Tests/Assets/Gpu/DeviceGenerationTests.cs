@@ -5,10 +5,12 @@ namespace RayBork.Tests.Assets.Gpu;
 /// <summary>
 /// GPU tests for the logical-device generation that gates GPU asset restoration.
 /// </summary>
-public sealed class DeviceGenerationTests {
+public sealed class DeviceGenerationTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void GenerationChangesOnlyWhenTheLogicalDeviceIsRecreated() {
+    public void GenerationChangesOnlyWhenTheLogicalDeviceIsRecreated()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         host.Backend.Submit(new RenderFramePacket(1));
         host.Backend.Present();

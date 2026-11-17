@@ -19,7 +19,8 @@ namespace RayBork.Internal;
 /// array and a unit test can assert the extents without a GPU.
 /// </para>
 /// </remarks>
-internal static class BloomPyramid {
+internal static class BloomPyramid
+{
     /// <summary>The maximum number of downsample levels in the pyramid.</summary>
     internal const int MAX_LEVELS = 5;
 
@@ -39,25 +40,32 @@ internal static class BloomPyramid {
     /// <returns>The number of levels written, from one to <see cref="MAX_LEVELS"/>.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="width"/> or <paramref name="height"/> is not positive.</exception>
     /// <exception cref="ArgumentException"><paramref name="levels"/> is too short.</exception>
-    internal static int BuildLevels(int width, int height, Span<Extent2D> levels) {
+    internal static int BuildLevels(int width, int height, Span<Extent2D> levels)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        if (levels.Length < MAX_LEVELS) {
+        if (levels.Length < MAX_LEVELS)
+        {
             throw new ArgumentException(
                 $"The pyramid level destination must hold at least {MAX_LEVELS} extents; it holds "
                     + $"{levels.Length}.",
-                nameof(levels));
+                nameof(levels)
+            );
         }
 
         int count = 0;
         uint currentWidth = (uint)width;
         uint currentHeight = (uint)height;
-        for (int level = 0; level < MAX_LEVELS; level++) {
+        for (int level = 0; level < MAX_LEVELS; level++)
+        {
             currentWidth = Math.Max(1u, currentWidth / 2u);
             currentHeight = Math.Max(1u, currentHeight / 2u);
-            if (count > 0
+            if (
+                count > 0
                 && levels[count - 1].Width == currentWidth
-                && levels[count - 1].Height == currentHeight) {
+                && levels[count - 1].Height == currentHeight
+            )
+            {
                 break;
             }
 

@@ -48,7 +48,8 @@ namespace RayBork.Internal;
 /// reuses the raw contours instead of copying them. Concurrent reads share no mutable state.
 /// </para>
 /// </remarks>
-internal sealed class CffFont {
+internal sealed class CffFont
+{
     private const int HEADER_LENGTH = 4;
     private const int MIN_HEADER_SIZE = 4;
     private const int MIN_OFF_SIZE = 1;
@@ -106,7 +107,9 @@ internal sealed class CffFont {
         CffPrivateDict privateDict,
         CffPrivateDict[]? fontDicts,
         CffFdSelect? fdSelect,
-        bool isCidKeyed) {
+        bool isCidKeyed
+    )
+    {
         _glyphCount = glyphCount;
         _unitsPerEm = unitsPerEm;
         _globalSubrs = globalSubrs;
@@ -141,53 +144,70 @@ internal sealed class CffFont {
     /// the face exceeds a parse limit (256 Font DICTs, 1,048,576 local-subroutine entries, or
     /// 8,388,608 private-DICT bytes).
     /// </exception>
-    internal static CffFont Parse(ReadOnlyMemory<byte> table, int glyphCount, int unitsPerEm) {
+    internal static CffFont Parse(ReadOnlyMemory<byte> table, int glyphCount, int unitsPerEm)
+    {
         SfntReader reader = new(table.Span, "the 'CFF ' table");
-        if (table.Length < HEADER_LENGTH) {
+        if (table.Length < HEADER_LENGTH)
+        {
             throw new FontFormatException(
-                $"the 'CFF ' table is {table.Length} byte(s) long; the {HEADER_LENGTH}-byte CFF header is required");
+                $"the 'CFF ' table is {table.Length} byte(s) long; the {HEADER_LENGTH}-byte CFF header is required"
+            );
         }
 
         int major = reader.ReadByte(0);
         int minor = reader.ReadByte(1);
-        if (major != CFF_MAJOR_VERSION) {
-            if (major == CFF2_MAJOR_VERSION) {
+        if (major != CFF_MAJOR_VERSION)
+        {
+            if (major == CFF2_MAJOR_VERSION)
+            {
                 throw new FontUnsupportedException(
-                    $"the table uses CFF version {major}.{minor}; only CFF 1.0 outlines are supported");
+                    $"the table uses CFF version {major}.{minor}; only CFF 1.0 outlines are supported"
+                );
             }
 
             throw new FontFormatException(
-                $"the CFF version is {major}.{minor}; version 1.0 is supported");
+                $"the CFF version is {major}.{minor}; version 1.0 is supported"
+            );
         }
 
         int headerSize = reader.ReadByte(2);
-        if (headerSize < MIN_HEADER_SIZE) {
+        if (headerSize < MIN_HEADER_SIZE)
+        {
             throw new FontFormatException(
-                $"the CFF header declares the header size {headerSize}; at least {MIN_HEADER_SIZE} bytes are required");
+                $"the CFF header declares the header size {headerSize}; at least {MIN_HEADER_SIZE} bytes are required"
+            );
         }
 
-        if (headerSize > table.Length) {
+        if (headerSize > table.Length)
+        {
             throw new FontFormatException(
-                $"the CFF header declares the header size {headerSize}; the table is {table.Length} byte(s) long");
+                $"the CFF header declares the header size {headerSize}; the table is {table.Length} byte(s) long"
+            );
         }
 
         int offSize = reader.ReadByte(3);
-        if (offSize is < MIN_OFF_SIZE or > MAX_OFF_SIZE) {
+        if (offSize is < MIN_OFF_SIZE or > MAX_OFF_SIZE)
+        {
             throw new FontFormatException(
-                $"the CFF header declares the offset size {offSize}; the supported range is {MIN_OFF_SIZE} to {MAX_OFF_SIZE}");
+                $"the CFF header declares the offset size {offSize}; the supported range is {MIN_OFF_SIZE} to {MAX_OFF_SIZE}"
+            );
         }
 
         int position = headerSize;
         CffIndex names = CffIndex.Parse(table, position, "the CFF Name INDEX", out position);
-        if (names.Count != 1) {
+        if (names.Count != 1)
+        {
             throw new FontFormatException(
-                $"the CFF Name INDEX has {names.Count} name(s); exactly one is required");
+                $"the CFF Name INDEX has {names.Count} name(s); exactly one is required"
+            );
         }
 
         CffIndex topDicts = CffIndex.Parse(table, position, "the CFF Top DICT INDEX", out position);
-        if (topDicts.Count != 1) {
+        if (topDicts.Count != 1)
+        {
             throw new FontFormatException(
-                $"the CFF Top DICT INDEX has {topDicts.Count} DICT(s); exactly one is required");
+                $"the CFF Top DICT INDEX has {topDicts.Count} DICT(s); exactly one is required"
+            );
         }
 
         _ = CffIndex.Parse(table, position, "the CFF String INDEX", out position);
@@ -204,15 +224,18 @@ internal sealed class CffFont {
         bool isCidKeyed = false;
 
         CffDictReader topDict = new(topDicts.Get(0), "the CFF Top DICT");
-        while (topDict.TryRead(out int operatorCode, out int operandCount)) {
-            switch (operatorCode) {
+        while (topDict.TryRead(out int operatorCode, out int operandCount))
+        {
+            switch (operatorCode)
+            {
                 case CHARSTRINGS_OPERATOR:
                     charStringsOffset = ReadIntegerOperand(
                         topDict,
                         operandCount,
                         1,
                         0,
-                        "CharStrings");
+                        "CharStrings"
+                    );
                     break;
                 case CHARSET_OPERATOR:
                     charsetOffset = ReadIntegerOperand(topDict, operandCount, 1, 0, "charset");
@@ -223,28 +246,38 @@ internal sealed class CffFont {
                 case PRIVATE_OPERATOR:
                     RequireOperandCount(operandCount, PRIVATE_OPERAND_COUNT, "Private");
                     privateSize = ToInteger(topDict.Operand(0), "the CFF Top DICT Private size");
-                    privateOffset = ToInteger(topDict.Operand(1), "the CFF Top DICT Private offset");
+                    privateOffset = ToInteger(
+                        topDict.Operand(1),
+                        "the CFF Top DICT Private offset"
+                    );
                     break;
-                case CHARSTRING_TYPE_OPERATOR: {
+                case CHARSTRING_TYPE_OPERATOR:
+                {
                     int charStringType = ReadIntegerOperand(
                         topDict,
                         operandCount,
                         1,
                         0,
-                        "CharstringType");
-                    if (charStringType != TYPE_2_CHARSTRING_TYPE) {
+                        "CharstringType"
+                    );
+                    if (charStringType != TYPE_2_CHARSTRING_TYPE)
+                    {
                         throw new FontUnsupportedException(
-                            $"the CFF Top DICT declares CharstringType {charStringType}; only Type 2 charstrings are supported");
+                            $"the CFF Top DICT declares CharstringType {charStringType}; only Type 2 charstrings are supported"
+                        );
                     }
 
                     break;
                 }
 
-                case PAINT_TYPE_OPERATOR: {
+                case PAINT_TYPE_OPERATOR:
+                {
                     int paintType = ReadIntegerOperand(topDict, operandCount, 1, 0, "PaintType");
-                    if (paintType != FILLED_PAINT_TYPE) {
+                    if (paintType != FILLED_PAINT_TYPE)
+                    {
                         throw new FontUnsupportedException(
-                            $"the CFF Top DICT declares PaintType {paintType}; only filled outlines (PaintType 0) are supported");
+                            $"the CFF Top DICT declares PaintType {paintType}; only filled outlines (PaintType 0) are supported"
+                        );
                     }
 
                     break;
@@ -253,13 +286,17 @@ internal sealed class CffFont {
                 case SYNTHETIC_BASE_OPERATOR:
                     RequireOperandCount(operandCount, 1, "SyntheticBase");
                     throw new FontUnsupportedException(
-                        "the CFF Top DICT declares SyntheticBase; synthetic multiple-master faces are not supported");
-                case STROKE_WIDTH_OPERATOR: {
+                        "the CFF Top DICT declares SyntheticBase; synthetic multiple-master faces are not supported"
+                    );
+                case STROKE_WIDTH_OPERATOR:
+                {
                     RequireOperandCount(operandCount, 1, "StrokeWidth");
                     double strokeWidth = topDict.Operand(0);
-                    if (strokeWidth != 0) {
+                    if (strokeWidth != 0)
+                    {
                         throw new FontUnsupportedException(
-                            $"the CFF Top DICT declares StrokeWidth {strokeWidth}; stroked outlines are not supported");
+                            $"the CFF Top DICT declares StrokeWidth {strokeWidth}; stroked outlines are not supported"
+                        );
                     }
 
                     break;
@@ -267,7 +304,8 @@ internal sealed class CffFont {
 
                 case FONT_MATRIX_OPERATOR:
                     RequireOperandCount(operandCount, FONT_MATRIX_OPERAND_COUNT, "FontMatrix");
-                    fontMatrixOperands = [
+                    fontMatrixOperands =
+                    [
                         topDict.Operand(0),
                         topDict.Operand(1),
                         topDict.Operand(2),
@@ -291,31 +329,39 @@ internal sealed class CffFont {
             }
         }
 
-        if (charStringsOffset is null) {
+        if (charStringsOffset is null)
+        {
             throw new FontFormatException(
-                "the CFF Top DICT is missing the CharStrings operator (17)");
+                "the CFF Top DICT is missing the CharStrings operator (17)"
+            );
         }
 
-        if (encodingOffset is { } encoding && (encoding < 0 || encoding > table.Length)) {
+        if (encodingOffset is { } encoding && (encoding < 0 || encoding > table.Length))
+        {
             throw new FontFormatException(
-                $"the CFF Top DICT Encoding offset {encoding} is outside the {table.Length}-byte table");
+                $"the CFF Top DICT Encoding offset {encoding} is outside the {table.Length}-byte table"
+            );
         }
 
         CffIndex charStrings = CffIndex.Parse(
             table,
             charStringsOffset.Value,
             "the CFF CharStrings INDEX",
-            out _);
-        if (charStrings.Count != glyphCount) {
+            out _
+        );
+        if (charStrings.Count != glyphCount)
+        {
             throw new FontFormatException(
-                $"the CFF CharStrings INDEX has {charStrings.Count} entry/entries; the face has {glyphCount} glyph(s)");
+                $"the CFF CharStrings INDEX has {charStrings.Count} entry/entries; the face has {glyphCount} glyph(s)"
+            );
         }
 
         CffCharset charset = CffCharset.Parse(
             table,
             glyphCount,
             charsetOffset ?? 0,
-            "the CFF charset");
+            "the CFF charset"
+        );
 
         CffFontMatrix fontMatrix = fontMatrixOperands is null
             ? CffFontMatrix.Default
@@ -325,19 +371,25 @@ internal sealed class CffFont {
                 fontMatrixOperands[2],
                 fontMatrixOperands[3],
                 fontMatrixOperands[4],
-                fontMatrixOperands[5]);
+                fontMatrixOperands[5]
+            );
 
         CffParseState state = new();
         CffPrivateDict privateDict = CffPrivateDict.Empty;
-        if (privateSize is not null && privateOffset is not null) {
-            if (privateSize < 0) {
+        if (privateSize is not null && privateOffset is not null)
+        {
+            if (privateSize < 0)
+            {
                 throw new FontFormatException(
-                    $"the CFF Top DICT declares the Private DICT size {privateSize}; sizes are non-negative");
+                    $"the CFF Top DICT declares the Private DICT size {privateSize}; sizes are non-negative"
+                );
             }
 
-            if (privateOffset < 0) {
+            if (privateOffset < 0)
+            {
                 throw new FontFormatException(
-                    $"the CFF Top DICT declares the Private DICT offset {privateOffset}; offsets are non-negative");
+                    $"the CFF Top DICT declares the Private DICT offset {privateOffset}; offsets are non-negative"
+                );
             }
 
             privateDict = ResolvePrivateDict(
@@ -345,42 +397,49 @@ internal sealed class CffFont {
                 privateSize.Value,
                 privateOffset.Value,
                 "the CFF Private DICT",
-                state);
+                state
+            );
         }
         CffPrivateDict[]? fontDicts = null;
         CffFdSelect? fdSelect = null;
-        if (isCidKeyed) {
-            if (fdArrayOffset is null) {
+        if (isCidKeyed)
+        {
+            if (fdArrayOffset is null)
+            {
                 throw new FontFormatException(
-                    "the CID-keyed CFF Top DICT is missing the FDArray operator (12 36)");
+                    "the CID-keyed CFF Top DICT is missing the FDArray operator (12 36)"
+                );
             }
 
-            if (fdSelectOffset is null) {
+            if (fdSelectOffset is null)
+            {
                 throw new FontFormatException(
-                    "the CID-keyed CFF Top DICT is missing the FDSelect operator (12 37)");
+                    "the CID-keyed CFF Top DICT is missing the FDSelect operator (12 37)"
+                );
             }
 
             CffIndex fdArray = CffIndex.Parse(
                 table,
                 fdArrayOffset.Value,
                 "the CFF FDArray INDEX",
-                out _);
-            if (fdArray.Count == 0) {
+                out _
+            );
+            if (fdArray.Count == 0)
+            {
                 throw new FontFormatException("the CFF FDArray INDEX is empty");
             }
 
-            if (fdArray.Count > MAX_FONT_DICTS) {
+            if (fdArray.Count > MAX_FONT_DICTS)
+            {
                 throw new FontUnsupportedException(
-                    $"the CFF FDArray has {fdArray.Count} Font DICT(s); the limit is {MAX_FONT_DICTS}");
+                    $"the CFF FDArray has {fdArray.Count} Font DICT(s); the limit is {MAX_FONT_DICTS}"
+                );
             }
 
             fontDicts = new CffPrivateDict[fdArray.Count];
-            for (int index = 0; index < fdArray.Count; index++) {
-                fontDicts[index] = ParseFontDict(
-                    table,
-                    fdArray.Get(index),
-                    index,
-                    state);
+            for (int index = 0; index < fdArray.Count; index++)
+            {
+                fontDicts[index] = ParseFontDict(table, fdArray.Get(index), index, state);
             }
 
             fdSelect = CffFdSelect.Parse(
@@ -388,7 +447,8 @@ internal sealed class CffFont {
                 glyphCount,
                 fdArray.Count,
                 fdSelectOffset.Value,
-                "the CFF FDSelect");
+                "the CFF FDSelect"
+            );
         }
 
         return new CffFont(
@@ -401,7 +461,8 @@ internal sealed class CffFont {
             privateDict,
             fontDicts,
             fdSelect,
-            isCidKeyed);
+            isCidKeyed
+        );
     }
 
     /// <summary>Resolves one glyph's bounds and font-unit outline.</summary>
@@ -412,11 +473,13 @@ internal sealed class CffFont {
     /// <exception cref="FontUnsupportedException">
     /// The glyph uses an unsupported CFF feature or exceeds an interpreter limit.
     /// </exception>
-    internal FontGlyph ReadGlyph(int glyphId) {
+    internal FontGlyph ReadGlyph(int glyphId)
+    {
         ThrowIfGlyphOutOfRange(glyphId);
         CffGlyphBudget budget = new();
         OutlineContour[] raw = ReadRawContours(glyphId, budget, allowSeac: true);
-        if (raw.Length == 0) {
+        if (raw.Length == 0)
+        {
             return new FontGlyph(glyphId, default, OutlinePath.Empty);
         }
 
@@ -424,10 +487,13 @@ internal sealed class CffFont {
         // raw contours are returned as-is instead of copying every contour and segment. The raw
         // points are still checked so a charstring cannot produce non-finite bounds.
         OutlineContour[] contours;
-        if (_fontMatrix.IsIdentity(_unitsPerEm)) {
+        if (_fontMatrix.IsIdentity(_unitsPerEm))
+        {
             ValidateFinitePoints(raw, glyphId);
             contours = raw;
-        } else {
+        }
+        else
+        {
             contours = Transform(raw, glyphId);
         }
 
@@ -446,14 +512,10 @@ internal sealed class CffFont {
     /// This is the component-resolution seam for <see cref="CffType2Interpreter"/>; the returned
     /// contours are not transformed. The caller validates <paramref name="glyphId"/>.
     /// </remarks>
-    internal OutlineContour[] ReadRawContours(int glyphId, CffGlyphBudget budget, bool allowSeac) {
+    internal OutlineContour[] ReadRawContours(int glyphId, CffGlyphBudget budget, bool allowSeac)
+    {
         CffPrivateDict privateDict = GetPrivateDict(glyphId);
-        CffType2Interpreter interpreter = new(
-            this,
-            budget,
-            privateDict,
-            glyphId,
-            allowSeac);
+        CffType2Interpreter interpreter = new(this, budget, privateDict, glyphId, allowSeac);
         return interpreter.Run(_charStrings.Get(glyphId));
     }
 
@@ -462,9 +524,11 @@ internal sealed class CffFont {
     /// <param name="glyphId">The resolved glyph identifier, or zero when the code does not resolve.</param>
     /// <returns><see langword="true"/> when the code resolves through the charset.</returns>
     /// <remarks>This is the <c>seac</c> resolution seam for <see cref="CffType2Interpreter"/>.</remarks>
-    internal bool TryGetStandardEncodingGlyphId(int code, out int glyphId) {
+    internal bool TryGetStandardEncodingGlyphId(int code, out int glyphId)
+    {
         glyphId = 0;
-        if ((uint)code >= (uint)CffStandardEncoding.CODE_COUNT) {
+        if ((uint)code >= (uint)CffStandardEncoding.CODE_COUNT)
+        {
             return false;
         }
 
@@ -477,33 +541,43 @@ internal sealed class CffFont {
         int size,
         int offset,
         string context,
-        CffParseState state) {
-        if (size == 0) {
-            if (offset > table.Length) {
+        CffParseState state
+    )
+    {
+        if (size == 0)
+        {
+            if (offset > table.Length)
+            {
                 throw new FontFormatException(
-                    $"{context} is empty but its offset {offset} is past the {table.Length}-byte table");
+                    $"{context} is empty but its offset {offset} is past the {table.Length}-byte table"
+                );
             }
 
             return CffPrivateDict.Empty;
         }
 
         (int Offset, int Size) key = (offset, size);
-        if (state.PrivateDicts.TryGetValue(key, out CffPrivateDict cached)) {
+        if (state.PrivateDicts.TryGetValue(key, out CffPrivateDict cached))
+        {
             return cached;
         }
 
         SfntReader tableReader = new(table.Span, context);
         tableReader.Require(offset, size);
-        if (size > MAX_PRIVATE_DICT_BYTES - state.PrivateDictBytes) {
+        if (size > MAX_PRIVATE_DICT_BYTES - state.PrivateDictBytes)
+        {
             throw new FontUnsupportedException(
-                $"the CFF face parses more than {MAX_PRIVATE_DICT_BYTES} private-DICT bytes");
+                $"the CFF face parses more than {MAX_PRIVATE_DICT_BYTES} private-DICT bytes"
+            );
         }
 
         state.PrivateDictBytes += size;
         CffDictReader dict = new(table.Slice(offset, size), context);
         int? subrsRelativeOffset = null;
-        while (dict.TryRead(out int operatorCode, out int operandCount)) {
-            switch (operatorCode) {
+        while (dict.TryRead(out int operatorCode, out int operandCount))
+        {
+            switch (operatorCode)
+            {
                 case SUBRS_OPERATOR:
                     subrsRelativeOffset = ReadIntegerOperand(dict, operandCount, 1, 0, "Subrs");
                     break;
@@ -519,24 +593,26 @@ internal sealed class CffFont {
         }
 
         CffPrivateDict privateDict = CffPrivateDict.Empty;
-        if (subrsRelativeOffset is int relative) {
+        if (subrsRelativeOffset is int relative)
+        {
             long absoluteOffset = (long)offset + relative;
-            if (relative < 0 || absoluteOffset > table.Length) {
+            if (relative < 0 || absoluteOffset > table.Length)
+            {
                 throw new FontFormatException(
-                    $"{context} declares the Subrs offset {relative}; the offset from the Private DICT start resolves to {absoluteOffset} in the {table.Length}-byte table");
+                    $"{context} declares the Subrs offset {relative}; the offset from the Private DICT start resolves to {absoluteOffset} in the {table.Length}-byte table"
+                );
             }
 
             int subrsOffset = (int)absoluteOffset;
-            if (!state.LocalSubrs.TryGetValue(subrsOffset, out CffIndex? index)) {
-                index = CffIndex.Parse(
-                    table,
-                    subrsOffset,
-                    "the CFF Local Subr INDEX",
-                    out _);
+            if (!state.LocalSubrs.TryGetValue(subrsOffset, out CffIndex? index))
+            {
+                index = CffIndex.Parse(table, subrsOffset, "the CFF Local Subr INDEX", out _);
                 state.LocalSubrEntries += index.Count;
-                if (state.LocalSubrEntries > MAX_LOCAL_SUBR_ENTRIES) {
+                if (state.LocalSubrEntries > MAX_LOCAL_SUBR_ENTRIES)
+                {
                     throw new FontUnsupportedException(
-                        $"the CFF face parses more than {MAX_LOCAL_SUBR_ENTRIES} local subroutine entries");
+                        $"the CFF face parses more than {MAX_LOCAL_SUBR_ENTRIES} local subroutine entries"
+                    );
                 }
 
                 state.LocalSubrs.Add(subrsOffset, index);
@@ -553,13 +629,17 @@ internal sealed class CffFont {
         ReadOnlyMemory<byte> table,
         ReadOnlyMemory<byte> data,
         int fontDictIndex,
-        CffParseState state) {
+        CffParseState state
+    )
+    {
         string context = $"the CFF Font DICT {fontDictIndex}";
         CffDictReader dict = new(data, context);
         int? privateSize = null;
         int? privateOffset = null;
-        while (dict.TryRead(out int operatorCode, out int operandCount)) {
-            if (operatorCode != PRIVATE_OPERATOR) {
+        while (dict.TryRead(out int operatorCode, out int operandCount))
+        {
+            if (operatorCode != PRIVATE_OPERATOR)
+            {
                 continue;
             }
 
@@ -568,18 +648,23 @@ internal sealed class CffFont {
             privateOffset = ToInteger(dict.Operand(1), $"{context} Private offset");
         }
 
-        if (privateSize is null || privateOffset is null) {
+        if (privateSize is null || privateOffset is null)
+        {
             return CffPrivateDict.Empty;
         }
 
-        if (privateSize < 0) {
+        if (privateSize < 0)
+        {
             throw new FontFormatException(
-                $"{context} declares the Private DICT size {privateSize}; sizes are non-negative");
+                $"{context} declares the Private DICT size {privateSize}; sizes are non-negative"
+            );
         }
 
-        if (privateOffset < 0) {
+        if (privateOffset < 0)
+        {
             throw new FontFormatException(
-                $"{context} declares the Private DICT offset {privateOffset}; offsets are non-negative");
+                $"{context} declares the Private DICT offset {privateOffset}; offsets are non-negative"
+            );
         }
 
         return ResolvePrivateDict(
@@ -587,7 +672,8 @@ internal sealed class CffFont {
             privateSize.Value,
             privateOffset.Value,
             $"{context} Private DICT",
-            state);
+            state
+        );
     }
 
     private static int ReadIntegerOperand(
@@ -595,28 +681,37 @@ internal sealed class CffFont {
         int operandCount,
         int expectedCount,
         int operandIndex,
-        string key) {
+        string key
+    )
+    {
         RequireOperandCount(operandCount, expectedCount, key);
         return ToInteger(dict.Operand(operandIndex), $"the CFF Top DICT {key}");
     }
 
-    private static int ToInteger(double value, string context) {
-        if (value != Math.Floor(value) || value < int.MinValue || value > int.MaxValue) {
+    private static int ToInteger(double value, string context)
+    {
+        if (value != Math.Floor(value) || value < int.MinValue || value > int.MaxValue)
+        {
             throw new FontFormatException($"{context} operand {value} is not a 32-bit integer");
         }
 
         return (int)value;
     }
 
-    private static void RequireOperandCount(int actual, int expected, string key) {
-        if (actual != expected) {
+    private static void RequireOperandCount(int actual, int expected, string key)
+    {
+        if (actual != expected)
+        {
             throw new FontFormatException(
-                $"the CFF DICT {key} operator has {actual} operand(s); {expected} are required");
+                $"the CFF DICT {key} operator has {actual} operand(s); {expected} are required"
+            );
         }
     }
 
-    private CffPrivateDict GetPrivateDict(int glyphId) {
-        if (!_isCidKeyed) {
+    private CffPrivateDict GetPrivateDict(int glyphId)
+    {
+        if (!_isCidKeyed)
+        {
             return _privateDict;
         }
 
@@ -624,87 +719,110 @@ internal sealed class CffFont {
         return _fontDicts![fontDictIndex];
     }
 
-    private OutlineContour[] Transform(OutlineContour[] contours, int glyphId) {
+    private OutlineContour[] Transform(OutlineContour[] contours, int glyphId)
+    {
         OutlineContour[] transformed = new OutlineContour[contours.Length];
-        for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++) {
+        for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++)
+        {
             OutlineContour contour = contours[contourIndex];
             ReadOnlySpan<OutlineSegment> segments = contour.Segments.Span;
             OutlineSegment[] transformedSegments = new OutlineSegment[segments.Length];
-            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++) {
+            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++)
+            {
                 OutlineSegment segment = segments[segmentIndex];
-                transformedSegments[segmentIndex] = segment.Kind switch {
+                transformedSegments[segmentIndex] = segment.Kind switch
+                {
                     OutlineSegmentKind.Line => OutlineSegment.Line(
-                        TransformPoint(segment.End, glyphId)),
+                        TransformPoint(segment.End, glyphId)
+                    ),
                     OutlineSegmentKind.Quadratic => OutlineSegment.Quadratic(
                         TransformPoint(segment.Control1, glyphId),
-                        TransformPoint(segment.End, glyphId)),
+                        TransformPoint(segment.End, glyphId)
+                    ),
                     _ => OutlineSegment.Cubic(
                         TransformPoint(segment.Control1, glyphId),
                         TransformPoint(segment.Control2, glyphId),
-                        TransformPoint(segment.End, glyphId)),
+                        TransformPoint(segment.End, glyphId)
+                    ),
                 };
             }
 
             transformed[contourIndex] = new OutlineContour(
                 TransformPoint(contour.Start, glyphId),
-                transformedSegments);
+                transformedSegments
+            );
         }
 
         return transformed;
     }
 
-    private Vector2 TransformPoint(Vector2 point, int glyphId) {
+    private Vector2 TransformPoint(Vector2 point, int glyphId)
+    {
         Vector2 transformed = _fontMatrix.Transform(point, _unitsPerEm);
         ValidateFinitePoint(transformed, glyphId);
         return transformed;
     }
 
-    private static void ValidateFinitePoints(OutlineContour[] contours, int glyphId) {
-        foreach (OutlineContour contour in contours) {
+    private static void ValidateFinitePoints(OutlineContour[] contours, int glyphId)
+    {
+        foreach (OutlineContour contour in contours)
+        {
             ValidateFinitePoint(contour.Start, glyphId);
-            foreach (OutlineSegment segment in contour.Segments.Span) {
+            foreach (OutlineSegment segment in contour.Segments.Span)
+            {
                 ValidateFinitePoint(segment.End, glyphId);
-                if (segment.Kind != OutlineSegmentKind.Line) {
+                if (segment.Kind != OutlineSegmentKind.Line)
+                {
                     ValidateFinitePoint(segment.Control1, glyphId);
                 }
 
-                if (segment.Kind == OutlineSegmentKind.Cubic) {
+                if (segment.Kind == OutlineSegmentKind.Cubic)
+                {
                     ValidateFinitePoint(segment.Control2, glyphId);
                 }
             }
         }
     }
 
-    private static void ValidateFinitePoint(Vector2 point, int glyphId) {
-        if (!float.IsFinite(point.X) || !float.IsFinite(point.Y)) {
+    private static void ValidateFinitePoint(Vector2 point, int glyphId)
+    {
+        if (!float.IsFinite(point.X) || !float.IsFinite(point.Y))
+        {
             throw new FontFormatException(
-                $"the outline of glyph {glyphId} has a coordinate that is not finite");
+                $"the outline of glyph {glyphId} has a coordinate that is not finite"
+            );
         }
     }
 
-    private static FontBounds ComputeBounds(OutlineContour[] contours) {
+    private static FontBounds ComputeBounds(OutlineContour[] contours)
+    {
         double xMin = double.MaxValue;
         double yMin = double.MaxValue;
         double xMax = double.MinValue;
         double yMax = double.MinValue;
 
-        void Include(Vector2 point) {
+        void Include(Vector2 point)
+        {
             xMin = Math.Min(xMin, point.X);
             yMin = Math.Min(yMin, point.Y);
             xMax = Math.Max(xMax, point.X);
             yMax = Math.Max(yMax, point.Y);
         }
 
-        foreach (OutlineContour contour in contours) {
+        foreach (OutlineContour contour in contours)
+        {
             Include(contour.Start);
             ReadOnlySpan<OutlineSegment> segments = contour.Segments.Span;
-            foreach (OutlineSegment segment in segments) {
+            foreach (OutlineSegment segment in segments)
+            {
                 Include(segment.End);
-                if (segment.Kind != OutlineSegmentKind.Line) {
+                if (segment.Kind != OutlineSegmentKind.Line)
+                {
                     Include(segment.Control1);
                 }
 
-                if (segment.Kind == OutlineSegmentKind.Cubic) {
+                if (segment.Kind == OutlineSegmentKind.Cubic)
+                {
                     Include(segment.Control2);
                 }
             }
@@ -714,42 +832,52 @@ internal sealed class CffFont {
             FloorToInt(xMin),
             FloorToInt(yMin),
             CeilingToInt(xMax),
-            CeilingToInt(yMax));
+            CeilingToInt(yMax)
+        );
     }
 
-    private static int FloorToInt(double value) {
-        if (value <= int.MinValue) {
+    private static int FloorToInt(double value)
+    {
+        if (value <= int.MinValue)
+        {
             return int.MinValue;
         }
 
-        if (value >= int.MaxValue) {
+        if (value >= int.MaxValue)
+        {
             return int.MaxValue;
         }
 
         return (int)Math.Floor(value);
     }
 
-    private static int CeilingToInt(double value) {
-        if (value <= int.MinValue) {
+    private static int CeilingToInt(double value)
+    {
+        if (value <= int.MinValue)
+        {
             return int.MinValue;
         }
 
-        if (value >= int.MaxValue) {
+        if (value >= int.MaxValue)
+        {
             return int.MaxValue;
         }
 
         return (int)Math.Ceiling(value);
     }
 
-    private void ThrowIfGlyphOutOfRange(int glyphId) {
-        if ((uint)glyphId < (uint)_glyphCount) {
+    private void ThrowIfGlyphOutOfRange(int glyphId)
+    {
+        if ((uint)glyphId < (uint)_glyphCount)
+        {
             return;
         }
 
         throw new ArgumentOutOfRangeException(
             nameof(glyphId),
             glyphId,
-            $"The face has {_glyphCount} glyph(s).");
+            $"The face has {_glyphCount} glyph(s)."
+        );
     }
 
     /// <summary>
@@ -759,7 +887,8 @@ internal sealed class CffFont {
     /// Shared by the Top DICT Private DICT and every Font DICT, so a Private DICT or Local Subr
     /// INDEX referenced by many Font DICTs is parsed and counted once.
     /// </remarks>
-    private sealed class CffParseState {
+    private sealed class CffParseState
+    {
         internal Dictionary<(int Offset, int Size), CffPrivateDict> PrivateDicts { get; } = [];
 
         internal Dictionary<int, CffIndex> LocalSubrs { get; } = [];

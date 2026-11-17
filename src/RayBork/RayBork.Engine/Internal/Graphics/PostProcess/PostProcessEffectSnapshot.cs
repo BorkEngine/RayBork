@@ -24,7 +24,8 @@ namespace RayBork.Internal;
 /// again. The shared disabled snapshot is never pooled.
 /// </para>
 /// </remarks>
-internal abstract class PostProcessEffectSnapshot {
+internal abstract class PostProcessEffectSnapshot
+{
     private PostProcessEffect? _owner;
     private bool _attached;
 
@@ -64,8 +65,7 @@ internal abstract class PostProcessEffectSnapshot {
     /// after the camera captured the effect.
     /// </summary>
     /// <param name="retention">The recording frame's retention set.</param>
-    internal virtual void Retain(FrameAssetRetention retention) {
-    }
+    internal virtual void Retain(FrameAssetRetention retention) { }
 
     /// <summary>
     /// Attaches the owning effect so <see cref="Reset"/> can return the snapshot to its pool. Called on
@@ -73,9 +73,11 @@ internal abstract class PostProcessEffectSnapshot {
     /// </summary>
     /// <param name="owner">The effect that captured this snapshot.</param>
     /// <exception cref="ArgumentNullException"><paramref name="owner"/> is <c>null</c>.</exception>
-    internal void Attach(PostProcessEffect owner) {
+    internal void Attach(PostProcessEffect owner)
+    {
         ArgumentNullException.ThrowIfNull(owner);
-        if (IsShared) {
+        if (IsShared)
+        {
             return;
         }
 
@@ -87,8 +89,10 @@ internal abstract class PostProcessEffectSnapshot {
     /// Releases the state the snapshot holds and returns the snapshot to its effect's pool. Called on the
     /// tick thread when the pass that held it is recycled. Idempotent, and a no-op for a shared snapshot.
     /// </summary>
-    internal void Reset() {
-        if (IsShared || !_attached) {
+    internal void Reset()
+    {
+        if (IsShared || !_attached)
+        {
             return;
         }
 
@@ -100,8 +104,7 @@ internal abstract class PostProcessEffectSnapshot {
     /// <summary>
     /// Releases the references and state a reused snapshot must not keep between runs.
     /// </summary>
-    protected virtual void ReleaseState() {
-    }
+    protected virtual void ReleaseState() { }
 
     /// <summary>
     /// Records this effect's passes into the current post-process chain.

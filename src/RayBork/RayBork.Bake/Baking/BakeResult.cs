@@ -3,7 +3,8 @@ using RayBork.Bake.Diagnostics;
 namespace RayBork.Bake.Baking;
 
 /// <summary>Classification of one bake invocation.</summary>
-internal enum BakeStatus {
+internal enum BakeStatus
+{
     /// <summary>Every pack validated and was written, or the check succeeded.</summary>
     Success,
 
@@ -18,7 +19,8 @@ internal enum BakeStatus {
 }
 
 /// <summary>The outcome of one configured pack.</summary>
-internal sealed class BakedPackResult {
+internal sealed class BakedPackResult
+{
     /// <summary>Initializes a pack result.</summary>
     /// <param name="pack">The configured pack.</param>
     /// <param name="packPath">The absolute output path.</param>
@@ -28,7 +30,9 @@ internal sealed class BakedPackResult {
         BakePack pack,
         string packPath,
         bool packWritten,
-        IReadOnlyList<BakedEntry> entries) {
+        IReadOnlyList<BakedEntry> entries
+    )
+    {
         ArgumentNullException.ThrowIfNull(pack);
         ArgumentException.ThrowIfNullOrWhiteSpace(packPath);
         ArgumentNullException.ThrowIfNull(entries);
@@ -61,7 +65,8 @@ internal sealed class BakedPackResult {
 }
 
 /// <summary>The outcome of one bake invocation.</summary>
-internal sealed class BakeResult {
+internal sealed class BakeResult
+{
     /// <summary>Initializes a result.</summary>
     /// <param name="status">The outcome classification.</param>
     /// <param name="packs">The per-pack results.</param>
@@ -71,7 +76,9 @@ internal sealed class BakeResult {
         BakeStatus status,
         IReadOnlyList<BakedPackResult> packs,
         IReadOnlyList<BakedEntry> entries,
-        IReadOnlyList<BakeDiagnostic> diagnostics) {
+        IReadOnlyList<BakeDiagnostic> diagnostics
+    )
+    {
         ArgumentNullException.ThrowIfNull(packs);
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(diagnostics);

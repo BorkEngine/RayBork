@@ -6,7 +6,8 @@ namespace RayBork.Tests.Graphics.Assets;
 /// <summary>
 /// Unit tests for the packed texture format mapping the KTX2 reader and Vulkan upload share.
 /// </summary>
-public sealed class VulkanTextureFormatTests {
+public sealed class VulkanTextureFormatTests
+{
     [Theory]
     [InlineData(TextureFormat.Rgba8Unorm, Format.R8G8B8A8Unorm)]
     [InlineData(TextureFormat.Rgba8Srgb, Format.R8G8B8A8Srgb)]
@@ -15,7 +16,8 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(TextureFormat.Bc5Unorm, Format.BC5UnormBlock)]
     [InlineData(TextureFormat.R8Unorm, Format.R8Unorm)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MapsPackedFormatsToVulkanFormats(TextureFormat format, Format expected) {
+    public void MapsPackedFormatsToVulkanFormats(TextureFormat format, Format expected)
+    {
         Assert.Equal(expected, VulkanTextureFormat.ToVkFormat(format));
     }
 
@@ -23,9 +25,12 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(TextureFormat.Rgba16Float)]
     [InlineData(TextureFormat.Depth32Float)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsRenderTargetFormats(TextureFormat format) {
+    public void RejectsRenderTargetFormats(TextureFormat format)
+    {
         Assert.False(VulkanTextureFormat.IsPacked(format));
-        AssetLoadException failure = Assert.Throws<AssetLoadException>(() => VulkanTextureFormat.ToVkFormat(format));
+        AssetLoadException failure = Assert.Throws<AssetLoadException>(() =>
+            VulkanTextureFormat.ToVkFormat(format)
+        );
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, failure.DiagnosticCode);
         Assert.Contains("render-target", failure.Message, StringComparison.Ordinal);
     }
@@ -38,9 +43,13 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(TextureFormat.Bc5Unorm, false)]
     [InlineData(TextureFormat.R8Unorm, false)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReportsSrgbFromTheFormat(TextureFormat format, bool expected) {
+    public void ReportsSrgbFromTheFormat(TextureFormat format, bool expected)
+    {
         Assert.Equal(expected, VulkanTextureFormat.IsSrgb(format));
-        Assert.Equal(expected ? VulkanTextureFormat.TRANSFER_SRGB : VulkanTextureFormat.TRANSFER_LINEAR, VulkanTextureFormat.DfdTransferFunction(format));
+        Assert.Equal(
+            expected ? VulkanTextureFormat.TRANSFER_SRGB : VulkanTextureFormat.TRANSFER_LINEAR,
+            VulkanTextureFormat.DfdTransferFunction(format)
+        );
     }
 
     [Theory]
@@ -51,7 +60,8 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(TextureFormat.Bc5Unorm, 3, 3, 16)]
     [InlineData(TextureFormat.R8Unorm, 4, 4, 16)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputesLevelByteLength(TextureFormat format, int width, int height, int expected) {
+    public void ComputesLevelByteLength(TextureFormat format, int width, int height, int expected)
+    {
         Assert.Equal(expected, VulkanTextureFormat.GetLevelByteLength(format, width, height));
     }
 
@@ -61,7 +71,8 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(TextureFormat.Bc7Unorm, 16)]
     [InlineData(TextureFormat.Bc5Unorm, 16)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputesLevelAlignment(TextureFormat format, int expected) {
+    public void ComputesLevelAlignment(TextureFormat format, int expected)
+    {
         Assert.Equal(expected, VulkanTextureFormat.GetLevelAlignment(format));
     }
 
@@ -71,7 +82,8 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(5u, 3u, 3u)]
     [InlineData(1024u, 1u, 11u)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputesTheFullMipChain(uint width, uint height, uint expected) {
+    public void ComputesTheFullMipChain(uint width, uint height, uint expected)
+    {
         Assert.Equal(expected, VulkanTextureFormat.FullMipCount(width, height));
     }
 
@@ -81,7 +93,8 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(4u, 2, 1)]
     [InlineData(1u, 5, 1)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ComputesLevelExtent(uint baseExtent, int level, int expected) {
+    public void ComputesLevelExtent(uint baseExtent, int level, int expected)
+    {
         Assert.Equal(expected, VulkanTextureFormat.LevelExtent(baseExtent, level));
     }
 
@@ -91,7 +104,8 @@ public sealed class VulkanTextureFormatTests {
     [InlineData(TextureFormat.Bc7Unorm, VulkanTextureFormat.COLOR_MODEL_BC7)]
     [InlineData(TextureFormat.Bc5Unorm, VulkanTextureFormat.COLOR_MODEL_BC5)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ReportsTheDfdColorModel(TextureFormat format, byte expected) {
+    public void ReportsTheDfdColorModel(TextureFormat format, byte expected)
+    {
         Assert.Equal(expected, VulkanTextureFormat.DfdColorModel(format));
     }
 }

@@ -1,13 +1,15 @@
 namespace RayBork.Bake.Baking;
 
 /// <summary>One configured pack after path resolution.</summary>
-internal sealed class BakePack {
+internal sealed class BakePack
+{
     /// <summary>Initializes a resolved pack.</summary>
     /// <param name="index">The configuration order index.</param>
     /// <param name="root">The absolute asset root.</param>
     /// <param name="relativeRoot">The project-relative asset root with <c>/</c> separators.</param>
     /// <param name="packPath">The output-root-relative pack path with <c>/</c> separators.</param>
-    internal BakePack(int index, string root, string relativeRoot, string packPath) {
+    internal BakePack(int index, string root, string relativeRoot, string packPath)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentException.ThrowIfNullOrWhiteSpace(root);
         ArgumentException.ThrowIfNullOrWhiteSpace(relativeRoot);

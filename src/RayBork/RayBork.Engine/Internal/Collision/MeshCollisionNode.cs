@@ -20,7 +20,8 @@ namespace RayBork.Internal;
 /// </para>
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
-internal readonly struct MeshCollisionNode {
+internal readonly struct MeshCollisionNode
+{
     /// <summary>Gets the node bounds in mesh space.</summary>
     internal BoundingBox Bounds { get; }
 
@@ -42,7 +43,8 @@ internal readonly struct MeshCollisionNode {
     /// The first child index for an internal node, or the first triangle-id index for a leaf.
     /// </param>
     /// <param name="count">Zero for an internal node, or the leaf triangle count.</param>
-    internal MeshCollisionNode(BoundingBox bounds, int leftOrFirst, int count) {
+    internal MeshCollisionNode(BoundingBox bounds, int leftOrFirst, int count)
+    {
         Bounds = bounds;
         LeftOrFirst = leftOrFirst;
         Count = count;

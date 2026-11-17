@@ -10,10 +10,12 @@ namespace RayBork.Tests.Fonts;
 /// deterministic preference order, supplementary planes, unmapped codepoints, <c>.notdef</c>, the
 /// mapped-glyph count, and allocation-free lookups.
 /// </summary>
-public sealed class CmapTests {
+public sealed class CmapTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format0MapsByteCodepoints() {
+    public void Format0MapsByteCodepoints()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder.WithCmap(0, (0x41, first), (0x42, second)).Build();
         SfntFace face = SfntFace.Parse(faceBytes);
@@ -28,7 +30,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format4MapsBmpCodepoints() {
+    public void Format4MapsBmpCodepoints()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmap(4, (0x20, first), (0x41, second), (0x42, second))
@@ -47,7 +50,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format6MapsContiguousRanges() {
+    public void Format6MapsContiguousRanges()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmap(6, (0x30, first), (0x31, second), (0x33, first))
@@ -65,7 +69,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format12MapsSupplementaryPlanes() {
+    public void Format12MapsSupplementaryPlanes()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmap(12, (0x41, first), (0x1F600, second), (0x10FFFF, first))
@@ -83,14 +88,16 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format4MapsConsecutiveRuns() {
+    public void Format4MapsConsecutiveRuns()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         int third = builder.AddSimple(
             800,
             30,
             new SyntheticPoint(0, 0),
             new SyntheticPoint(700, 0),
-            new SyntheticPoint(350, 900));
+            new SyntheticPoint(350, 900)
+        );
         byte[] faceBytes = builder
             .WithCmap(4, (0x41, first), (0x42, second), (0x43, third), (0x60, first))
             .Build();
@@ -107,14 +114,16 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format12GroupsCrossTheBmpBoundary() {
+    public void Format12GroupsCrossTheBmpBoundary()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         int third = builder.AddSimple(
             800,
             30,
             new SyntheticPoint(0, 0),
             new SyntheticPoint(700, 0),
-            new SyntheticPoint(350, 900));
+            new SyntheticPoint(350, 900)
+        );
         byte[] faceBytes = builder
             .WithCmap(
                 12,
@@ -122,7 +131,8 @@ public sealed class CmapTests {
                 (0xFFFE, second),
                 (0xFFFF, third),
                 (0x10000, first),
-                (0x10001, second))
+                (0x10001, second)
+            )
             .Build();
         SfntFace face = SfntFace.Parse(faceBytes);
 
@@ -139,14 +149,16 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format12MappedGlyphCountExcludesSurrogates() {
+    public void Format12MappedGlyphCountExcludesSurrogates()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         int third = builder.AddSimple(
             800,
             30,
             new SyntheticPoint(0, 0),
             new SyntheticPoint(700, 0),
-            new SyntheticPoint(350, 900));
+            new SyntheticPoint(350, 900)
+        );
         byte[] faceBytes = builder
             .WithCmap(12, (0xD7FF, first), (0xD800, second), (0xE000, third))
             .Build();
@@ -159,7 +171,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PrefersFormat12OverFormat4() {
+    public void PrefersFormat12OverFormat4()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmapRecord(3, 1, 4, (0x41, first))
@@ -173,7 +186,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PrefersFormat4OverFormat6() {
+    public void PrefersFormat4OverFormat6()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmapRecord(3, 1, 6, (0x41, first))
@@ -187,7 +201,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PrefersFormat6OverFormat0() {
+    public void PrefersFormat6OverFormat0()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmapRecord(0, 3, 0, (0x41, first))
@@ -201,11 +216,10 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FallsBackToALegacySubtable() {
+    public void FallsBackToALegacySubtable()
+    {
         (SyntheticFontBuilder builder, int first, int _) = CreateMappableBuilder();
-        byte[] faceBytes = builder
-            .WithCmapRecord(1, 0, 0, (0x41, first))
-            .Build();
+        byte[] faceBytes = builder.WithCmapRecord(1, 0, 0, (0x41, first)).Build();
         SfntFace face = SfntFace.Parse(faceBytes);
 
         Assert.Equal(0, face.CmapFormat);
@@ -214,15 +228,9 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RejectsAFaceWithoutAUsableSubtable() {
-        byte[] cmap = [
-            0, 0,
-            0, 1,
-            0, 3,
-            0, 1,
-            0, 0, 0, 12,
-            0, 2,
-        ];
+    public void RejectsAFaceWithoutAUsableSubtable()
+    {
+        byte[] cmap = [0, 0, 0, 1, 0, 3, 0, 1, 0, 0, 0, 12, 0, 2];
         byte[] face = CreateMappableBuilder().Builder.WithRawCmap(cmap).Build();
 
         FontTestData.AssertFaceFailure(face, "no supported subtable");
@@ -230,11 +238,10 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MappedGlyphCountExcludesGlyphZeroAndOutOfRangeIds() {
+    public void MappedGlyphCountExcludesGlyphZeroAndOutOfRangeIds()
+    {
         (SyntheticFontBuilder builder, int first, int _) = CreateMappableBuilder();
-        byte[] faceBytes = builder
-            .WithCmap(4, (0x41, 0), (0x42, first), (0x43, 0x7FFF))
-            .Build();
+        byte[] faceBytes = builder.WithCmap(4, (0x41, 0), (0x42, first), (0x43, 0x7FFF)).Build();
         SfntFace face = SfntFace.Parse(faceBytes);
 
         Assert.Equal(1, face.MappedGlyphCount);
@@ -245,7 +252,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void GlyphZeroIsNotdef() {
+    public void GlyphZeroIsNotdef()
+    {
         (SyntheticFontBuilder builder, int first, int _) = CreateMappableBuilder();
         byte[] faceBytes = builder.WithCmap(4, (0x41, first)).Build();
         SfntFace face = SfntFace.Parse(faceBytes);
@@ -259,7 +267,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LookupsAllocateNothing() {
+    public void LookupsAllocateNothing()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmap(12, (0x41, first), (0x1F600, second), (0x10FFFF, first))
@@ -267,8 +276,10 @@ public sealed class CmapTests {
         SfntFace face = SfntFace.Parse(faceBytes);
 
         int mapped = 0;
-        for (int iteration = 0; iteration < 100; iteration++) {
-            if (face.TryGetGlyphId(new Rune(0x1F600), out int glyph)) {
+        for (int iteration = 0; iteration < 100; iteration++)
+        {
+            if (face.TryGetGlyphId(new Rune(0x1F600), out int glyph))
+            {
                 mapped += glyph;
             }
         }
@@ -288,10 +299,13 @@ public sealed class CmapTests {
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.NoInlining)]
-    private static int LookupAll(SfntFace face) {
+    private static int LookupAll(SfntFace face)
+    {
         int mapped = 0;
-        for (int iteration = 0; iteration < 10_000; iteration++) {
-            if (face.TryGetGlyphId(new Rune(0x41 + (iteration % 4)), out int glyph)) {
+        for (int iteration = 0; iteration < 10_000; iteration++)
+        {
+            if (face.TryGetGlyphId(new Rune(0x41 + (iteration % 4)), out int glyph))
+            {
                 mapped += glyph;
             }
         }
@@ -301,7 +315,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format4IndirectGlyphArrayMapsCodepoints() {
+    public void Format4IndirectGlyphArrayMapsCodepoints()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         int third = AddGlyph(builder, 800);
         byte[] faceBytes = builder
@@ -319,15 +334,14 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format4IndirectGlyphArrayOutsideTheSubtableIsUnmapped() {
+    public void Format4IndirectGlyphArrayOutsideTheSubtableIsUnmapped()
+    {
         (SyntheticFontBuilder builder, int first, int second) = CreateMappableBuilder();
         byte[] faceBytes = builder
             .WithCmapIndirectGlyphArray((0x41, first), (0x42, second))
             .Build();
         SyntheticTableRecord cmap = SyntheticFontBuilder.FindTable(faceBytes, "cmap");
-        BinaryPrimitives.WriteUInt16BigEndian(
-            faceBytes.AsSpan(cmap.Offset + 12 + 22),
-            0xFFFF);
+        BinaryPrimitives.WriteUInt16BigEndian(faceBytes.AsSpan(cmap.Offset + 12 + 22), 0xFFFF);
 
         SfntFace face = SfntFace.Parse(faceBytes);
 
@@ -338,7 +352,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format4MappedGlyphCountExcludesSurrogates() {
+    public void Format4MappedGlyphCountExcludesSurrogates()
+    {
         var builder = SyntheticFontBuilder.Create();
         int first = AddGlyph(builder, 600);
         int second = AddGlyph(builder, 700);
@@ -355,7 +370,8 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format4IndirectMappedGlyphCountExcludesSurrogates() {
+    public void Format4IndirectMappedGlyphCountExcludesSurrogates()
+    {
         var builder = SyntheticFontBuilder.Create();
         int first = AddGlyph(builder, 600);
         int second = AddGlyph(builder, 700);
@@ -372,10 +388,12 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format6MappedGlyphCountExcludesSurrogates() {
+    public void Format6MappedGlyphCountExcludesSurrogates()
+    {
         var builder = SyntheticFontBuilder.Create();
         int[] glyphs = new int[5];
-        for (int index = 0; index < glyphs.Length; index++) {
+        for (int index = 0; index < glyphs.Length; index++)
+        {
             glyphs[index] = AddGlyph(builder, 600 + index);
         }
 
@@ -386,7 +404,8 @@ public sealed class CmapTests {
                 (0xD7FF, glyphs[1]),
                 (0xD800, glyphs[2]),
                 (0xD801, glyphs[3]),
-                (0xE000, glyphs[4]))
+                (0xE000, glyphs[4])
+            )
             .Build();
 
         SfntFace face = SfntFace.Parse(faceBytes);
@@ -398,11 +417,10 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format12GlyphIdentifierOverflowIsRejected() {
+    public void Format12GlyphIdentifierOverflowIsRejected()
+    {
         (SyntheticFontBuilder builder, int _, int _) = CreateMappableBuilder();
-        byte[] faceBytes = builder
-            .WithRawCmap(BuildRawFormat12(0x41, 0xFFFF_FFFEu))
-            .Build();
+        byte[] faceBytes = builder.WithRawCmap(BuildRawFormat12(0x41, 0xFFFF_FFFEu)).Build();
 
         FontFormatException exception = FontTestData.AssertFaceFailure(faceBytes, "format 12");
         Assert.Contains("maximum glyph identifier", exception.Reason, StringComparison.Ordinal);
@@ -410,11 +428,10 @@ public sealed class CmapTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Format12GlyphIdentifierPastTheGlyphCountIsUnmapped() {
+    public void Format12GlyphIdentifierPastTheGlyphCountIsUnmapped()
+    {
         (SyntheticFontBuilder builder, int _, int _) = CreateMappableBuilder();
-        byte[] faceBytes = builder
-            .WithRawCmap(BuildRawFormat12(0x41, 100_000))
-            .Build();
+        byte[] faceBytes = builder.WithRawCmap(BuildRawFormat12(0x41, 100_000)).Build();
 
         SfntFace face = SfntFace.Parse(faceBytes);
 
@@ -430,11 +447,11 @@ public sealed class CmapTests {
     public void Format12GlyphIdentifierBoundariesAreEnforced(
         uint startGlyph,
         bool expectedMapped,
-        int expectedGlyph) {
+        int expectedGlyph
+    )
+    {
         (SyntheticFontBuilder builder, int _, int _) = CreateMappableBuilder();
-        byte[] faceBytes = builder
-            .WithRawCmap(BuildRawFormat12(0x41, startGlyph))
-            .Build();
+        byte[] faceBytes = builder.WithRawCmap(BuildRawFormat12(0x41, startGlyph)).Build();
 
         SfntFace face = SfntFace.Parse(faceBytes);
 
@@ -443,7 +460,8 @@ public sealed class CmapTests {
         Assert.Equal(expectedMapped ? 1 : 0, face.MappedGlyphCount);
     }
 
-    private static byte[] BuildRawFormat12(int codepoint, uint startGlyph) {
+    private static byte[] BuildRawFormat12(int codepoint, uint startGlyph)
+    {
         byte[] cmap = new byte[40];
         BinaryPrimitives.WriteUInt16BigEndian(cmap, 0);
         BinaryPrimitives.WriteUInt16BigEndian(cmap.AsSpan(2), 1);
@@ -461,31 +479,37 @@ public sealed class CmapTests {
         return cmap;
     }
 
-    private static int AddGlyph(SyntheticFontBuilder builder, int advance) => builder.AddSimple(
-        advance,
-        10,
-        new SyntheticPoint(0, 0),
-        new SyntheticPoint(500, 0),
-        new SyntheticPoint(250, 700));
+    private static int AddGlyph(SyntheticFontBuilder builder, int advance) =>
+        builder.AddSimple(
+            advance,
+            10,
+            new SyntheticPoint(0, 0),
+            new SyntheticPoint(500, 0),
+            new SyntheticPoint(250, 700)
+        );
 
-    private static (SyntheticFontBuilder Builder, int First, int Second) CreateMappableBuilder() {
+    private static (SyntheticFontBuilder Builder, int First, int Second) CreateMappableBuilder()
+    {
         var builder = SyntheticFontBuilder.Create();
         int first = builder.AddSimple(
             600,
             10,
             new SyntheticPoint(0, 0),
             new SyntheticPoint(500, 0),
-            new SyntheticPoint(250, 700));
+            new SyntheticPoint(250, 700)
+        );
         int second = builder.AddSimple(
             700,
             20,
             new SyntheticPoint(0, 0),
             new SyntheticPoint(600, 0),
-            new SyntheticPoint(300, 800));
+            new SyntheticPoint(300, 800)
+        );
         return (builder, first, second);
     }
 
-    private static void AssertMapped(SfntFace face, int codepoint, int expectedGlyph) {
+    private static void AssertMapped(SfntFace face, int codepoint, int expectedGlyph)
+    {
         Assert.True(face.TryGetGlyphId(new Rune(codepoint), out int glyphId));
         Assert.Equal(expectedGlyph, glyphId);
     }
@@ -493,7 +517,8 @@ public sealed class CmapTests {
     private static void AssertMapped(SfntFace face, char character, int expectedGlyph) =>
         AssertMapped(face, (int)character, expectedGlyph);
 
-    private static void AssertUnmapped(SfntFace face, int codepoint) {
+    private static void AssertUnmapped(SfntFace face, int codepoint)
+    {
         Assert.False(face.TryGetGlyphId(new Rune(codepoint), out int glyphId));
         Assert.Equal(0, glyphId);
     }

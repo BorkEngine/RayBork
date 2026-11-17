@@ -23,7 +23,8 @@ namespace RayBork.Internal;
 /// one entry in <see cref="InstanceLayout"/>.
 /// </para>
 /// </remarks>
-internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapshot {
+internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapshot
+{
     private EngineAsset? _program;
     private byte[] _instanceData = [];
     private int _instanceDataLength;
@@ -33,8 +34,7 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     private int _sourceColorBinding;
     private int _sourceDepthBinding;
 
-    private ShaderPostProcessEffectSnapshot() {
-    }
+    private ShaderPostProcessEffectSnapshot() { }
 
     /// <summary>
     /// Gets the captured per-instance uniform bytes, without the 96-byte instance header.
@@ -98,69 +98,80 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
         int sourceColorBinding,
         int sourceDepthBinding,
         bool targetHasDepth,
-        string targetDescription) {
+        string targetDescription
+    )
+    {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(program);
         int textureCount = program.Abi.Textures.Count;
-        if (textures.Length != textureCount) {
+        if (textures.Length != textureCount)
+        {
             throw new ArgumentException(
                 $"The shader '{program.Path}' declares {textureCount} texture binding(s), but the "
                     + $"captured material state has {textures.Length}.",
-                nameof(textures));
+                nameof(textures)
+            );
         }
 
-        if (instanceData.Length != program.Abi.InstanceDataSize) {
+        if (instanceData.Length != program.Abi.InstanceDataSize)
+        {
             throw new ArgumentException(
                 $"The shader '{program.Path}' expects {program.Abi.InstanceDataSize} bytes of uniform "
                     + $"data, but the captured material state has {instanceData.Length}.",
-                nameof(instanceData));
+                nameof(instanceData)
+            );
         }
 
         ValidateReservedBinding(program, sourceColorBinding, nameof(sourceColorBinding));
-        if (sourceDepthBinding >= 0) {
+        if (sourceDepthBinding >= 0)
+        {
             ValidateReservedBinding(program, sourceDepthBinding, nameof(sourceDepthBinding));
-            if (!targetHasDepth) {
+            if (!targetHasDepth)
+            {
                 throw new InvalidOperationException(
                     $"The post-process shader '{program.Path}' declares the reserved '{PostProcessNames.SOURCE_DEPTH}' "
                         + $"texture binding, but {targetDescription} has no depth attachment to bind to it. "
-                        + "Use a target created with Depth: true, or remove the sourceDepth binding.");
+                        + "Use a target created with Depth: true, or remove the sourceDepth binding."
+                );
             }
         }
 
         ShaderPostProcessEffectSnapshot snapshot =
-            owner.TakeSnapshot<ShaderPostProcessEffectSnapshot>() ?? new ShaderPostProcessEffectSnapshot();
-        snapshot.Fill(
-            program,
-            instanceData,
-            textures,
-            sourceColorBinding,
-            sourceDepthBinding);
+            owner.TakeSnapshot<ShaderPostProcessEffectSnapshot>()
+            ?? new ShaderPostProcessEffectSnapshot();
+        snapshot.Fill(program, instanceData, textures, sourceColorBinding, sourceDepthBinding);
         return snapshot;
     }
 
     /// <inheritdoc/>
-    internal override void Retain(FrameAssetRetention retention) {
+    internal override void Retain(FrameAssetRetention retention)
+    {
         ArgumentNullException.ThrowIfNull(retention);
-        if (_program is null) {
+        if (_program is null)
+        {
             return;
         }
 
         retention.Add(_program);
-        for (int index = 0; index < _textureCount; index++) {
-            if (IsReservedTextureBinding(index)) {
+        for (int index = 0; index < _textureCount; index++)
+        {
+            if (IsReservedTextureBinding(index))
+            {
                 // The engine overrides the reserved binding, so its material value is never sampled.
                 continue;
             }
 
             Texture? texture = _textures[index];
-            if (texture is not null) {
+            if (texture is not null)
+            {
                 retention.Add(texture.RetentionTarget);
             }
         }
     }
 
     /// <inheritdoc/>
-    protected override void ReleaseState() {
+    protected override void ReleaseState()
+    {
         _program = null;
         Array.Clear(_textures, 0, _textureCount);
         _textureCount = 0;
@@ -171,10 +182,13 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
     }
 
     /// <inheritdoc/>
-    internal override void Run(PostProcessContext context) {
+    internal override void Run(PostProcessContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
-        EngineAsset program = _program ?? throw new InvalidOperationException(
-            "The post-process effect snapshot ran after it was reset.");
+        EngineAsset program = _program
+            ?? throw new InvalidOperationException(
+                "The post-process effect snapshot ran after it was reset."
+            );
         VulkanPostTarget destination = context.RentColorTarget();
         context.RecordCustomShaderPass(destination, this, program);
         context.CompleteColorTarget(destination);
@@ -185,15 +199,19 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
         ReadOnlySpan<byte> instanceData,
         ReadOnlySpan<Texture?> textures,
         int sourceColorBinding,
-        int sourceDepthBinding) {
+        int sourceDepthBinding
+    )
+    {
         _program = program.Lifetime;
-        if (_instanceData.Length < instanceData.Length) {
+        if (_instanceData.Length < instanceData.Length)
+        {
             _instanceData = new byte[instanceData.Length];
         }
 
         instanceData.CopyTo(_instanceData);
         _instanceDataLength = instanceData.Length;
-        if (_textures.Length < textures.Length) {
+        if (_textures.Length < textures.Length)
+        {
             _textures = new Texture?[textures.Length];
         }
 
@@ -203,11 +221,21 @@ internal sealed class ShaderPostProcessEffectSnapshot : PostProcessEffectSnapsho
         _sourceDepthBinding = sourceDepthBinding;
         _instanceLayout[0] = new PostProcessInstanceRecord(
             ShaderAbiLayout.INSTANCE_HEADER_SIZE + instanceData.Length,
-            1);
+            1
+        );
     }
 
-    private static void ValidateReservedBinding(ShaderProgram program, int binding, string parameterName) {
+    private static void ValidateReservedBinding(
+        ShaderProgram program,
+        int binding,
+        string parameterName
+    )
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(binding);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(binding, program.Abi.Textures.Count, parameterName);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(
+            binding,
+            program.Abi.Textures.Count,
+            parameterName
+        );
     }
 }

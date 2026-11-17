@@ -3,17 +3,22 @@ namespace RayBork.Bake.Diagnostics;
 /// <summary>
 /// Collects bake diagnostics and renders them in deterministic order.
 /// </summary>
-internal sealed class BakeDiagnostics {
+internal sealed class BakeDiagnostics
+{
     private readonly List<BakeDiagnostic> _items = [];
 
     /// <summary>Gets the number of collected diagnostics.</summary>
     internal int Count => _items.Count;
 
     /// <summary>Gets a value indicating whether at least one error was collected.</summary>
-    internal bool HasErrors {
-        get {
-            foreach (BakeDiagnostic diagnostic in _items) {
-                if (diagnostic.Severity == BakeSeverity.Error) {
+    internal bool HasErrors
+    {
+        get
+        {
+            foreach (BakeDiagnostic diagnostic in _items)
+            {
+                if (diagnostic.Severity == BakeSeverity.Error)
+                {
                     return true;
                 }
             }
@@ -23,10 +28,14 @@ internal sealed class BakeDiagnostics {
     }
 
     /// <summary>Gets a value indicating whether at least one warning was collected.</summary>
-    internal bool HasWarnings {
-        get {
-            foreach (BakeDiagnostic diagnostic in _items) {
-                if (diagnostic.Severity == BakeSeverity.Warning) {
+    internal bool HasWarnings
+    {
+        get
+        {
+            foreach (BakeDiagnostic diagnostic in _items)
+            {
+                if (diagnostic.Severity == BakeSeverity.Warning)
+                {
                     return true;
                 }
             }
@@ -56,20 +65,25 @@ internal sealed class BakeDiagnostics {
         int? line = null,
         int? column = null,
         string? assetPath = null,
-        string? memberPath = null)
-        => _items.Add(new BakeDiagnostic(
-            severity,
-            code,
-            message,
-            filePath,
-            line,
-            column,
-            assetPath,
-            memberPath));
+        string? memberPath = null
+    ) =>
+        _items.Add(
+            new BakeDiagnostic(
+                severity,
+                code,
+                message,
+                filePath,
+                line,
+                column,
+                assetPath,
+                memberPath
+            )
+        );
 
     /// <summary>Returns the collected diagnostics in deterministic order.</summary>
     /// <returns>A new array sorted by file, line, column, code, message, then severity.</returns>
-    internal IReadOnlyList<BakeDiagnostic> GetSorted() {
+    internal IReadOnlyList<BakeDiagnostic> GetSorted()
+    {
         BakeDiagnostic[] sorted = [.. _items];
         Array.Sort(sorted, Compare);
         return sorted;
@@ -78,11 +92,16 @@ internal sealed class BakeDiagnostics {
     /// <summary>Counts diagnostics that fail the invocation under the given warning policy.</summary>
     /// <param name="warningsAsErrors">Whether warnings fail the invocation.</param>
     /// <returns>The count of failing diagnostics.</returns>
-    internal int CountFailures(bool warningsAsErrors) {
+    internal int CountFailures(bool warningsAsErrors)
+    {
         int count = 0;
-        foreach (BakeDiagnostic diagnostic in _items) {
-            if (diagnostic.Severity == BakeSeverity.Error
-                || (warningsAsErrors && diagnostic.Severity == BakeSeverity.Warning)) {
+        foreach (BakeDiagnostic diagnostic in _items)
+        {
+            if (
+                diagnostic.Severity == BakeSeverity.Error
+                || (warningsAsErrors && diagnostic.Severity == BakeSeverity.Warning)
+            )
+            {
                 count++;
             }
         }
@@ -90,24 +109,32 @@ internal sealed class BakeDiagnostics {
         return count;
     }
 
-    private static int Compare(BakeDiagnostic left, BakeDiagnostic right) {
-        int result = string.CompareOrdinal(left.FilePath ?? string.Empty, right.FilePath ?? string.Empty);
-        if (result != 0) {
+    private static int Compare(BakeDiagnostic left, BakeDiagnostic right)
+    {
+        int result = string.CompareOrdinal(
+            left.FilePath ?? string.Empty,
+            right.FilePath ?? string.Empty
+        );
+        if (result != 0)
+        {
             return result;
         }
 
         result = (left.Line ?? 0).CompareTo(right.Line ?? 0);
-        if (result != 0) {
+        if (result != 0)
+        {
             return result;
         }
 
         result = (left.Column ?? 0).CompareTo(right.Column ?? 0);
-        if (result != 0) {
+        if (result != 0)
+        {
             return result;
         }
 
         result = string.CompareOrdinal(left.Code, right.Code);
-        if (result != 0) {
+        if (result != 0)
+        {
             return result;
         }
 

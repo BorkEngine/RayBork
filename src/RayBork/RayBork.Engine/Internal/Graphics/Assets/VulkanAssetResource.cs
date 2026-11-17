@@ -18,7 +18,8 @@ namespace RayBork.Internal;
 /// cref="VulkanAssetWorker.Destroy"/> idempotent even if a caller invokes it twice.
 /// </para>
 /// </remarks>
-internal abstract class VulkanAssetResource : GpuAssetResource {
+internal abstract class VulkanAssetResource : GpuAssetResource
+{
     private int _released;
 
     /// <summary>
@@ -28,7 +29,8 @@ internal abstract class VulkanAssetResource : GpuAssetResource {
     /// <param name="handle">The primary native handle, or <c>0</c> before creation completes.</param>
     /// <param name="deviceGeneration">The logical-device generation that owns the handles.</param>
     private protected VulkanAssetResource(AssetGpuUpload upload, long handle, int deviceGeneration)
-        : base(upload, handle) {
+        : base(upload, handle)
+    {
         DeviceGeneration = deviceGeneration;
     }
 
@@ -57,7 +59,8 @@ internal abstract class VulkanAssetResource : GpuAssetResource {
     /// Adopts the generation of a resource recreated after a device recovery.
     /// </summary>
     /// <param name="restored">The recreated resource.</param>
-    private protected void AdoptGeneration(VulkanAssetResource restored) => DeviceGeneration = restored.DeviceGeneration;
+    private protected void AdoptGeneration(VulkanAssetResource restored) =>
+        DeviceGeneration = restored.DeviceGeneration;
 
     /// <summary>
     /// Casts a restored resource to the expected concrete resource type.
@@ -68,10 +71,14 @@ internal abstract class VulkanAssetResource : GpuAssetResource {
     /// <exception cref="InvalidOperationException">
     /// The restored resource is a different concrete type.
     /// </exception>
-    private protected T CastRestored<T>(GpuAssetResource restored) where T : VulkanAssetResource {
-        if (restored is not T typed) {
+    private protected T CastRestored<T>(GpuAssetResource restored)
+        where T : VulkanAssetResource
+    {
+        if (restored is not T typed)
+        {
             throw new InvalidOperationException(
-                $"Cannot adopt a {restored.GetType().Name} resource into a {GetType().Name} resource.");
+                $"Cannot adopt a {restored.GetType().Name} resource into a {GetType().Name} resource."
+            );
         }
 
         return typed;

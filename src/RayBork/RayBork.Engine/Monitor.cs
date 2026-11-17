@@ -15,4 +15,5 @@ public readonly record struct Monitor(
     Rect Bounds,
     Rect WorkArea,
     float DpiScale,
-    int RefreshRate);
+    int RefreshRate
+);

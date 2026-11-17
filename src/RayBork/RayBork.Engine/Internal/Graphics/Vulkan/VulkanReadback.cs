@@ -20,7 +20,8 @@ namespace RayBork.Internal;
 /// runs on that backend's render thread. Nothing here is thread-safe.
 /// </para>
 /// </remarks>
-internal static unsafe class VulkanReadback {
+internal static unsafe class VulkanReadback
+{
     private const ulong WAIT_TIMEOUT = ulong.MaxValue;
     private const uint COLOR_PIXEL_BYTES = 8;
     private const uint DEPTH_PIXEL_BYTES = 4;
@@ -50,7 +51,9 @@ internal static unsafe class VulkanReadback {
         uint y,
         out float r,
         out float g,
-        out float b) {
+        out float b
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(target);
         ValidatePixel(target, x, y);
@@ -62,7 +65,8 @@ internal static unsafe class VulkanReadback {
             ImageLayout.ShaderReadOnlyOptimal,
             COLOR_PIXEL_BYTES,
             x,
-            y);
+            y
+        );
         r = (float)BitConverter.ToHalf(pixel, 0);
         g = (float)BitConverter.ToHalf(pixel, 2);
         b = (float)BitConverter.ToHalf(pixel, 4);
@@ -94,12 +98,16 @@ internal static unsafe class VulkanReadback {
         VulkanRenderTarget target,
         uint x,
         uint y,
-        out float depth) {
+        out float depth
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(target);
-        if (!target.HasDepth) {
+        if (!target.HasDepth)
+        {
             throw new InvalidOperationException(
-                "The render target has no depth attachment to read.");
+                "The render target has no depth attachment to read."
+            );
         }
 
         ValidatePixel(target, x, y);
@@ -109,7 +117,8 @@ internal static unsafe class VulkanReadback {
             CreateDepthBarrier(target.ResolvedDepthLayout, target.IsMultisampled),
             DEPTH_PIXEL_BYTES,
             x,
-            y);
+            y
+        );
         depth = BitConverter.ToSingle(pixel, 0);
     }
 
@@ -142,17 +151,21 @@ internal static unsafe class VulkanReadback {
         uint y,
         out float r,
         out float g,
-        out float b) {
+        out float b
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(target);
         ValidatePixel(target, x, y);
 
-        uint pixelBytes = target.ColorFormat switch {
+        uint pixelBytes = target.ColorFormat switch
+        {
             Format.R16G16B16A16Sfloat => COLOR_PIXEL_BYTES,
             Format.R8G8B8A8Unorm or Format.R8G8B8A8Srgb => PRESENTED_BYTE_PIXEL_BYTES,
             _ => throw new NotSupportedException(
                 $"The render target color format {VulkanFormatInfo.Describe(target.ColorFormat)} is not "
-                    + "a supported color probe format."),
+                    + "a supported color probe format."
+            ),
         };
         byte[] pixel = ReadPixel(
             device,
@@ -160,15 +173,18 @@ internal static unsafe class VulkanReadback {
             CreateAttachmentBarrier(ImageAspectFlags.ColorBit, target.ResolvedColorLayout),
             pixelBytes,
             x,
-            y);
-        if (target.ColorFormat == Format.R16G16B16A16Sfloat) {
+            y
+        );
+        if (target.ColorFormat == Format.R16G16B16A16Sfloat)
+        {
             r = (float)BitConverter.ToHalf(pixel, 0);
             g = (float)BitConverter.ToHalf(pixel, 2);
             b = (float)BitConverter.ToHalf(pixel, 4);
             return;
         }
 
-        if (target.ColorFormat == Format.R8G8B8A8Srgb) {
+        if (target.ColorFormat == Format.R8G8B8A8Srgb)
+        {
             r = SrgbDecode(pixel[0]);
             g = SrgbDecode(pixel[1]);
             b = SrgbDecode(pixel[2]);
@@ -214,31 +230,41 @@ internal static unsafe class VulkanReadback {
     /// A Vulkan object could not be created, the copy failed, or the image is too large for one host
     /// buffer. The diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static byte[] ReadRenderTargetColorImage(VulkanDevice device, VulkanRenderTarget target) {
+    internal static byte[] ReadRenderTargetColorImage(
+        VulkanDevice device,
+        VulkanRenderTarget target
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(target);
-        if (target.ResolvedColorLayout == ImageLayout.Undefined) {
+        if (target.ResolvedColorLayout == ImageLayout.Undefined)
+        {
             throw new InvalidOperationException(
                 "The render target's resolved color image has no defined layout; it was never written, "
-                    + "so the backend returns the opaque-black default instead of copying it.");
+                    + "so the backend returns the opaque-black default instead of copying it."
+            );
         }
 
-        uint pixelBytes = target.ColorFormat switch {
+        uint pixelBytes = target.ColorFormat switch
+        {
             Format.R16G16B16A16Sfloat => COLOR_PIXEL_BYTES,
             Format.R8G8B8A8Unorm or Format.R8G8B8A8Srgb => PRESENTED_BYTE_PIXEL_BYTES,
             _ => throw new NotSupportedException(
                 $"The render target color format {VulkanFormatInfo.Describe(target.ColorFormat)} is not "
-                    + "a supported color readback format."),
+                    + "a supported color readback format."
+            ),
         };
         uint width = target.Extent.Width;
         uint height = target.Extent.Height;
         ulong byteCount = (ulong)width * height * pixelBytes;
-        if (byteCount > int.MaxValue) {
+        if (byteCount > int.MaxValue)
+        {
             throw new GraphicsException(
                 $"The {width}x{height} render target needs {byteCount} byte(s) for readback, which "
                     + "exceeds the host staging buffer limit.",
                 DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                null);
+                null
+            );
         }
 
         return ReadImage(
@@ -246,8 +272,19 @@ internal static unsafe class VulkanReadback {
             target.ResolvedColorImage,
             CreateColorReadBarrier(target.ResolvedColorLayout),
             checked((uint)byteCount),
-            new Offset3D { X = 0, Y = 0, Z = 0 },
-            new Extent3D { Width = width, Height = height, Depth = 1 });
+            new Offset3D
+            {
+                X = 0,
+                Y = 0,
+                Z = 0,
+            },
+            new Extent3D
+            {
+                Width = width,
+                Height = height,
+                Depth = 1,
+            }
+        );
     }
 
     /// <summary>
@@ -304,27 +341,35 @@ internal static unsafe class VulkanReadback {
         uint y,
         out float r,
         out float g,
-        out float b) {
+        out float b
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(swapchain);
-        if (!swapchain.SupportsPresentReadback) {
+        if (!swapchain.SupportsPresentReadback)
+        {
             throw new NotSupportedException(
-                "The swapchain images were not created with VK_IMAGE_USAGE_TRANSFER_SRC_BIT, so the " +
-                "presented pixel cannot be read back on this surface.");
+                "The swapchain images were not created with VK_IMAGE_USAGE_TRANSFER_SRC_BIT, so the "
+                    + "presented pixel cannot be read back on this surface."
+            );
         }
 
-        if (imageIndex >= (uint)swapchain.ImageCount) {
+        if (imageIndex >= (uint)swapchain.ImageCount)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(imageIndex),
                 imageIndex,
-                $"The swapchain has {swapchain.ImageCount} image(s), so image index {imageIndex} is out of range.");
+                $"The swapchain has {swapchain.ImageCount} image(s), so image index {imageIndex} is out of range."
+            );
         }
 
         Extent2D extent = swapchain.Extent;
-        if (x >= extent.Width || y >= extent.Height) {
+        if (x >= extent.Width || y >= extent.Height)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(x),
-                $"The pixel ({x}, {y}) lies outside the {extent.Width}x{extent.Height} swapchain image.");
+                $"The pixel ({x}, {y}) lies outside the {extent.Width}x{extent.Height} swapchain image."
+            );
         }
 
         Format format = swapchain.Format;
@@ -341,10 +386,12 @@ internal static unsafe class VulkanReadback {
                 ImageAspectFlags.ColorBit,
                 ImageLayout.PresentSrcKhr,
                 PipelineStageFlags.AllCommandsBit,
-                AccessFlags.None),
+                AccessFlags.None
+            ),
             pixelBytes,
             x,
-            y);
+            y
+        );
         DecodePresentedColor(format, halfFloat, pixel, out r, out g, out b);
     }
 
@@ -355,13 +402,8 @@ internal static unsafe class VulkanReadback {
         ImageLayout originalLayout,
         uint byteCount,
         uint x,
-        uint y) => ReadPixel(
-            device,
-            image,
-            CreateAttachmentBarrier(aspect, originalLayout),
-            byteCount,
-            x,
-            y);
+        uint y
+    ) => ReadPixel(device, image, CreateAttachmentBarrier(aspect, originalLayout), byteCount, x, y);
 
     private static byte[] ReadPixel(
         VulkanDevice device,
@@ -369,13 +411,26 @@ internal static unsafe class VulkanReadback {
         PixelCopyBarrier barrierInfo,
         uint byteCount,
         uint x,
-        uint y) => ReadImage(
+        uint y
+    ) =>
+        ReadImage(
             device,
             image,
             barrierInfo,
             byteCount,
-            new Offset3D { X = (int)x, Y = (int)y, Z = 0 },
-            new Extent3D { Width = 1, Height = 1, Depth = 1 });
+            new Offset3D
+            {
+                X = (int)x,
+                Y = (int)y,
+                Z = 0,
+            },
+            new Extent3D
+            {
+                Width = 1,
+                Height = 1,
+                Depth = 1,
+            }
+        );
 
     private static byte[] ReadImage(
         VulkanDevice device,
@@ -383,7 +438,9 @@ internal static unsafe class VulkanReadback {
         PixelCopyBarrier barrierInfo,
         uint byteCount,
         Offset3D imageOffset,
-        Extent3D imageExtent) {
+        Extent3D imageExtent
+    )
+    {
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
         CommandPool commandPool = default;
@@ -391,87 +448,149 @@ internal static unsafe class VulkanReadback {
         DeviceMemory stagingMemory = default;
         Fence fence = default;
         void* mapped = null;
-        try {
-            CommandPoolCreateInfo poolInfo = new() {
+        try
+        {
+            CommandPoolCreateInfo poolInfo = new()
+            {
                 SType = StructureType.CommandPoolCreateInfo,
                 Flags = CommandPoolCreateFlags.TransientBit,
                 QueueFamilyIndex = device.Capabilities.GraphicsQueueFamily,
             };
-            ThrowIfFailed(vulkan.CreateCommandPool(deviceHandle, &poolInfo, null, out commandPool), "vkCreateCommandPool");
+            ThrowIfFailed(
+                vulkan.CreateCommandPool(deviceHandle, &poolInfo, null, out commandPool),
+                "vkCreateCommandPool"
+            );
 
-            CommandBufferAllocateInfo allocateInfo = new() {
+            CommandBufferAllocateInfo allocateInfo = new()
+            {
                 SType = StructureType.CommandBufferAllocateInfo,
                 CommandPool = commandPool,
                 Level = CommandBufferLevel.Primary,
                 CommandBufferCount = 1,
             };
             ThrowIfFailed(
-                vulkan.AllocateCommandBuffers(deviceHandle, &allocateInfo, out CommandBuffer commandBuffer),
-                "vkAllocateCommandBuffers");
+                vulkan.AllocateCommandBuffers(
+                    deviceHandle,
+                    &allocateInfo,
+                    out CommandBuffer commandBuffer
+                ),
+                "vkAllocateCommandBuffers"
+            );
 
-            BufferCreateInfo bufferInfo = new() {
+            BufferCreateInfo bufferInfo = new()
+            {
                 SType = StructureType.BufferCreateInfo,
                 Size = byteCount,
                 Usage = BufferUsageFlags.TransferDstBit,
                 SharingMode = SharingMode.Exclusive,
             };
-            ThrowIfFailed(vulkan.CreateBuffer(deviceHandle, &bufferInfo, null, out stagingBuffer), "vkCreateBuffer");
-            MemoryRequirements requirements = vulkan.GetBufferMemoryRequirements(deviceHandle, stagingBuffer);
-            PhysicalDeviceMemoryProperties memoryProperties = vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
-            MemoryAllocateInfo memoryInfo = new() {
+            ThrowIfFailed(
+                vulkan.CreateBuffer(deviceHandle, &bufferInfo, null, out stagingBuffer),
+                "vkCreateBuffer"
+            );
+            MemoryRequirements requirements = vulkan.GetBufferMemoryRequirements(
+                deviceHandle,
+                stagingBuffer
+            );
+            PhysicalDeviceMemoryProperties memoryProperties =
+                vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
+            MemoryAllocateInfo memoryInfo = new()
+            {
                 SType = StructureType.MemoryAllocateInfo,
                 AllocationSize = requirements.Size,
-                MemoryTypeIndex = FindHostVisibleMemoryType(requirements.MemoryTypeBits, memoryProperties),
+                MemoryTypeIndex = FindHostVisibleMemoryType(
+                    requirements.MemoryTypeBits,
+                    memoryProperties
+                ),
             };
-            ThrowIfFailed(vulkan.AllocateMemory(deviceHandle, &memoryInfo, null, out stagingMemory), "vkAllocateMemory");
-            ThrowIfFailed(vulkan.BindBufferMemory(deviceHandle, stagingBuffer, stagingMemory, 0), "vkBindBufferMemory");
             ThrowIfFailed(
-                vulkan.MapMemory(deviceHandle, stagingMemory, 0, byteCount, MemoryMapFlags.None, &mapped),
-                "vkMapMemory");
+                vulkan.AllocateMemory(deviceHandle, &memoryInfo, null, out stagingMemory),
+                "vkAllocateMemory"
+            );
+            ThrowIfFailed(
+                vulkan.BindBufferMemory(deviceHandle, stagingBuffer, stagingMemory, 0),
+                "vkBindBufferMemory"
+            );
+            ThrowIfFailed(
+                vulkan.MapMemory(
+                    deviceHandle,
+                    stagingMemory,
+                    0,
+                    byteCount,
+                    MemoryMapFlags.None,
+                    &mapped
+                ),
+                "vkMapMemory"
+            );
 
-            CommandBufferBeginInfo beginInfo = new() {
+            CommandBufferBeginInfo beginInfo = new()
+            {
                 SType = StructureType.CommandBufferBeginInfo,
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
-            ThrowIfFailed(vulkan.BeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
-            RecordCopy(vulkan, commandBuffer, image, barrierInfo, stagingBuffer, imageOffset, imageExtent);
+            ThrowIfFailed(
+                vulkan.BeginCommandBuffer(commandBuffer, &beginInfo),
+                "vkBeginCommandBuffer"
+            );
+            RecordCopy(
+                vulkan,
+                commandBuffer,
+                image,
+                barrierInfo,
+                stagingBuffer,
+                imageOffset,
+                imageExtent
+            );
             ThrowIfFailed(vulkan.EndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
             FenceCreateInfo fenceInfo = new() { SType = StructureType.FenceCreateInfo };
-            ThrowIfFailed(vulkan.CreateFence(deviceHandle, &fenceInfo, null, out fence), "vkCreateFence");
-            SubmitInfo submitInfo = new() {
+            ThrowIfFailed(
+                vulkan.CreateFence(deviceHandle, &fenceInfo, null, out fence),
+                "vkCreateFence"
+            );
+            SubmitInfo submitInfo = new()
+            {
                 SType = StructureType.SubmitInfo,
                 CommandBufferCount = 1,
                 PCommandBuffers = &commandBuffer,
             };
             ThrowIfFailed(
                 vulkan.QueueSubmit(device.GraphicsQueue, 1, &submitInfo, fence),
-                "vkQueueSubmit");
+                "vkQueueSubmit"
+            );
             ThrowIfFailed(
                 vulkan.WaitForFences(deviceHandle, 1, &fence, true, WAIT_TIMEOUT),
-                "vkWaitForFences");
+                "vkWaitForFences"
+            );
 
             byte[] pixel = new byte[byteCount];
             new ReadOnlySpan<byte>(mapped, (int)byteCount).CopyTo(pixel);
             return pixel;
-        } finally {
-            if (mapped is not null) {
+        }
+        finally
+        {
+            if (mapped is not null)
+            {
                 vulkan.UnmapMemory(deviceHandle, stagingMemory);
             }
 
-            if (fence.Handle != 0) {
+            if (fence.Handle != 0)
+            {
                 vulkan.DestroyFence(deviceHandle, fence, null);
             }
 
-            if (stagingBuffer.Handle != 0) {
+            if (stagingBuffer.Handle != 0)
+            {
                 vulkan.DestroyBuffer(deviceHandle, stagingBuffer, null);
             }
 
-            if (stagingMemory.Handle != 0) {
+            if (stagingMemory.Handle != 0)
+            {
                 vulkan.FreeMemory(deviceHandle, stagingMemory, null);
             }
 
-            if (commandPool.Handle != 0) {
+            if (commandPool.Handle != 0)
+            {
                 vulkan.DestroyCommandPool(deviceHandle, commandPool, null);
             }
         }
@@ -484,8 +603,11 @@ internal static unsafe class VulkanReadback {
         PixelCopyBarrier barrierInfo,
         Buffer stagingBuffer,
         Offset3D imageOffset,
-        Extent3D imageExtent) {
-        ImageMemoryBarrier barrier = new() {
+        Extent3D imageExtent
+    )
+    {
+        ImageMemoryBarrier barrier = new()
+        {
             SType = StructureType.ImageMemoryBarrier,
             SrcAccessMask = barrierInfo.Access,
             DstAccessMask = AccessFlags.TransferReadBit,
@@ -494,7 +616,8 @@ internal static unsafe class VulkanReadback {
             SrcQueueFamilyIndex = Vk.QueueFamilyIgnored,
             DstQueueFamilyIndex = Vk.QueueFamilyIgnored,
             Image = image,
-            SubresourceRange = new ImageSubresourceRange {
+            SubresourceRange = new ImageSubresourceRange
+            {
                 AspectMask = barrierInfo.Aspect,
                 BaseMipLevel = 0,
                 LevelCount = 1,
@@ -512,12 +635,15 @@ internal static unsafe class VulkanReadback {
             0,
             null,
             1,
-            &barrier);
-        BufferImageCopy copy = new() {
+            &barrier
+        );
+        BufferImageCopy copy = new()
+        {
             BufferOffset = 0,
             BufferRowLength = 0,
             BufferImageHeight = 0,
-            ImageSubresource = new ImageSubresourceLayers {
+            ImageSubresource = new ImageSubresourceLayers
+            {
                 AspectMask = barrierInfo.Aspect,
                 MipLevel = 0,
                 BaseArrayLayer = 0,
@@ -532,7 +658,8 @@ internal static unsafe class VulkanReadback {
             ImageLayout.TransferSrcOptimal,
             stagingBuffer,
             1,
-            &copy);
+            &copy
+        );
 
         ImageMemoryBarrier restore = barrier;
         restore.SrcAccessMask = AccessFlags.TransferReadBit;
@@ -549,12 +676,15 @@ internal static unsafe class VulkanReadback {
             0,
             null,
             1,
-            &restore);
+            &restore
+        );
     }
 
     private static PixelCopyBarrier CreateAttachmentBarrier(
         ImageAspectFlags aspect,
-        ImageLayout originalLayout) {
+        ImageLayout originalLayout
+    )
+    {
         bool depth = (aspect & ImageAspectFlags.DepthBit) != 0;
         PipelineStageFlags stage = depth
             ? PipelineStageFlags.LateFragmentTestsBit
@@ -565,10 +695,12 @@ internal static unsafe class VulkanReadback {
         return new PixelCopyBarrier(aspect, originalLayout, stage, access);
     }
 
-    private static PixelCopyBarrier CreateColorReadBarrier(ImageLayout originalLayout) {
+    private static PixelCopyBarrier CreateColorReadBarrier(ImageLayout originalLayout)
+    {
         PipelineStageFlags stage;
         AccessFlags access;
-        switch (originalLayout) {
+        switch (originalLayout)
+        {
             case ImageLayout.ShaderReadOnlyOptimal:
                 stage = PipelineStageFlags.FragmentShaderBit;
                 access = AccessFlags.ShaderReadBit;
@@ -588,10 +720,15 @@ internal static unsafe class VulkanReadback {
         return new PixelCopyBarrier(ImageAspectFlags.ColorBit, originalLayout, stage, access);
     }
 
-    private static PixelCopyBarrier CreateDepthBarrier(ImageLayout originalLayout, bool multisampledResolve) {
+    private static PixelCopyBarrier CreateDepthBarrier(
+        ImageLayout originalLayout,
+        bool multisampledResolve
+    )
+    {
         PipelineStageFlags stage;
         AccessFlags access;
-        switch (originalLayout) {
+        switch (originalLayout)
+        {
             case ImageLayout.ShaderReadOnlyOptimal:
                 stage = PipelineStageFlags.FragmentShaderBit;
                 access = AccessFlags.ShaderReadBit;
@@ -600,10 +737,13 @@ internal static unsafe class VulkanReadback {
                 // Vulkan performs a multisampled depth resolve in the color-attachment output stage with
                 // color-attachment write access, even though the image is a depth image. A single-sample
                 // depth image has no resolve and is written by the depth test in late fragment tests.
-                if (multisampledResolve) {
+                if (multisampledResolve)
+                {
                     stage = PipelineStageFlags.ColorAttachmentOutputBit;
                     access = AccessFlags.ColorAttachmentWriteBit;
-                } else {
+                }
+                else
+                {
                     stage = PipelineStageFlags.LateFragmentTestsBit;
                     access = AccessFlags.DepthStencilAttachmentWriteBit;
                 }
@@ -618,8 +758,10 @@ internal static unsafe class VulkanReadback {
         return new PixelCopyBarrier(ImageAspectFlags.DepthBit, originalLayout, stage, access);
     }
 
-    private static uint PresentedColorPixelBytes(Format format, out bool halfFloat) {
-        switch (format) {
+    private static uint PresentedColorPixelBytes(Format format, out bool halfFloat)
+    {
+        switch (format)
+        {
             case Format.R16G16B16A16Sfloat:
                 halfFloat = true;
                 return PRESENTED_FLOAT_PIXEL_BYTES;
@@ -631,10 +773,11 @@ internal static unsafe class VulkanReadback {
                 return PRESENTED_BYTE_PIXEL_BYTES;
             default:
                 throw new GraphicsException(
-                    $"The swapchain format {VulkanFormatInfo.Describe(format)} is not a supported presented-color probe format. " +
-                    "The probe supports R16G16B16A16_SFLOAT and the 8-bit B8G8R8A8/R8G8B8A8 SRGB and UNORM formats.",
+                    $"The swapchain format {VulkanFormatInfo.Describe(format)} is not a supported presented-color probe format. "
+                        + "The probe supports R16G16B16A16_SFLOAT and the 8-bit B8G8R8A8/R8G8B8A8 SRGB and UNORM formats.",
                     DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null);
+                    null
+                );
         }
     }
 
@@ -644,8 +787,11 @@ internal static unsafe class VulkanReadback {
         byte[] pixel,
         out float r,
         out float g,
-        out float b) {
-        if (halfFloat) {
+        out float b
+    )
+    {
+        if (halfFloat)
+        {
             r = (float)BitConverter.ToHalf(pixel, 0);
             g = (float)BitConverter.ToHalf(pixel, 2);
             b = (float)BitConverter.ToHalf(pixel, 4);
@@ -667,16 +813,24 @@ internal static unsafe class VulkanReadback {
         ImageAspectFlags Aspect,
         ImageLayout OriginalLayout,
         PipelineStageFlags Stage,
-        AccessFlags Access);
+        AccessFlags Access
+    );
 
     private static uint FindHostVisibleMemoryType(
         uint typeBits,
-        PhysicalDeviceMemoryProperties memoryProperties) {
-        MemoryPropertyFlags requiredProperties = MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit;
-        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++) {
+        PhysicalDeviceMemoryProperties memoryProperties
+    )
+    {
+        MemoryPropertyFlags requiredProperties =
+            MemoryPropertyFlags.HostVisibleBit | MemoryPropertyFlags.HostCoherentBit;
+        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++)
+        {
             bool typeSupported = (typeBits & (1u << (int)index)) != 0;
-            bool propertiesMatch = (memoryProperties.MemoryTypes[(int)index].PropertyFlags & requiredProperties) == requiredProperties;
-            if (typeSupported && propertiesMatch) {
+            bool propertiesMatch =
+                (memoryProperties.MemoryTypes[(int)index].PropertyFlags & requiredProperties)
+                == requiredProperties;
+            if (typeSupported && propertiesMatch)
+            {
                 return index;
             }
         }
@@ -684,25 +838,32 @@ internal static unsafe class VulkanReadback {
         throw new GraphicsException(
             $"No host-visible Vulkan memory type is available for staging with type bits 0x{typeBits:X8}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
-    private static void ValidatePixel(VulkanRenderTarget target, uint x, uint y) {
-        if (x >= target.Extent.Width || y >= target.Extent.Height) {
+    private static void ValidatePixel(VulkanRenderTarget target, uint x, uint y)
+    {
+        if (x >= target.Extent.Width || y >= target.Extent.Height)
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(x),
-                $"The pixel ({x}, {y}) lies outside the {target.Extent.Width}x{target.Extent.Height} scene target.");
+                $"The pixel ({x}, {y}) lies outside the {target.Extent.Width}x{target.Extent.Height} scene target."
+            );
         }
     }
 
-    private static void ThrowIfFailed(Result result, string operation) {
-        if (result == Result.Success) {
+    private static void ThrowIfFailed(Result result, string operation)
+    {
+        if (result == Result.Success)
+        {
             return;
         }
 
         throw new GraphicsException(
             $"The Vulkan command {operation} failed with {result}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 }

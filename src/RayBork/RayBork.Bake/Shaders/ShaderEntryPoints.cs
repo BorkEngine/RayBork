@@ -7,7 +7,8 @@ namespace RayBork.Bake.Shaders;
 /// The shader ABI contract fixes the vertex and fragment entry points. A sidecar may restate them for
 /// clarity, but it cannot rename them in M3.
 /// </remarks>
-internal static class ShaderEntryPoints {
+internal static class ShaderEntryPoints
+{
     /// <summary>The fixed vertex-stage entry point.</summary>
     internal const string VERTEX = "main_vertex";
 

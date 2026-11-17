@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// exposed, with glyph reads raising <see cref="FontUnsupportedException"/> because CFF2 is not
 /// supported).
 /// </remarks>
-internal enum SfntOutlineKind {
+internal enum SfntOutlineKind
+{
     /// <summary>TrueType quadratic outlines in the <c>glyf</c> table.</summary>
     TrueType,
 

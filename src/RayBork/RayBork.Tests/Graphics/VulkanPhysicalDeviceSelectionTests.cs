@@ -3,15 +3,18 @@ using Silk.NET.Vulkan;
 
 namespace RayBork.Tests;
 
-public sealed class VulkanPhysicalDeviceSelectionTests {
+public sealed class VulkanPhysicalDeviceSelectionTests
+{
     private const uint API_1_2 = (1u << 22) | (2u << 12);
     private const uint API_1_1 = (1u << 22) | (1u << 12);
     private const uint API_1_3 = (1u << 22) | (3u << 12);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DiscreteGpuWinsOverIntegratedGpuRegardlessOfIndex() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void DiscreteGpuWinsOverIntegratedGpuRegardlessOfIndex()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "Integrated", PhysicalDeviceType.IntegratedGpu, API_1_3),
             Candidate(1, "Discrete", PhysicalDeviceType.DiscreteGpu, API_1_2),
         ];
@@ -21,8 +24,10 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void VirtualCpuAndOtherDevicesRankBelowIntegratedGpu() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void VirtualCpuAndOtherDevicesRankBelowIntegratedGpu()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "Other", PhysicalDeviceType.Other),
             Candidate(1, "Cpu", PhysicalDeviceType.Cpu),
             Candidate(2, "Virtual", PhysicalDeviceType.VirtualGpu),
@@ -34,12 +39,16 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void Vulkan11DeviceIsRejected() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void Vulkan11DeviceIsRejected()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "Old GPU", PhysicalDeviceType.DiscreteGpu, API_1_1),
         ];
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanPhysicalDeviceSelector.Select(candidates)
+        );
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
         Assert.Contains("Old GPU", exception.Message, StringComparison.Ordinal);
@@ -48,54 +57,87 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingPresentationQueueIsRejected() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void MissingPresentationQueueIsRejected()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "No Present GPU", supportsPresent: false),
         ];
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanPhysicalDeviceSelector.Select(candidates)
+        );
 
-        Assert.Contains("no presentation queue family", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "no presentation queue family",
+            exception.Message,
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingSwapchainExtensionIsRejected() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void MissingSwapchainExtensionIsRejected()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "No Swapchain GPU", hasSwapchainExtension: false),
         ];
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanPhysicalDeviceSelector.Select(candidates)
+        );
 
         Assert.Contains("VK_KHR_swapchain", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingBindlessDescriptorFeaturesAreRejectedAndNamed() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void MissingBindlessDescriptorFeaturesAreRejectedAndNamed()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(
                 0,
                 "No Bindless GPU",
-                missingBindlessFeatures: "descriptorBindingPartiallyBound, shaderSampledImageArrayNonUniformIndexing"),
+                missingBindlessFeatures: "descriptorBindingPartiallyBound, shaderSampledImageArrayNonUniformIndexing"
+            ),
         ];
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanPhysicalDeviceSelector.Select(candidates)
+        );
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
-        Assert.Contains("descriptorBindingPartiallyBound", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("shaderSampledImageArrayNonUniformIndexing", exception.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("runtimeDescriptorArray", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "descriptorBindingPartiallyBound",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+        Assert.Contains(
+            "shaderSampledImageArrayNonUniformIndexing",
+            exception.Message,
+            StringComparison.Ordinal
+        );
+        Assert.DoesNotContain(
+            "runtimeDescriptorArray",
+            exception.Message,
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InsufficientBindlessTextureCapacityIsRejectedAndNamed() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void InsufficientBindlessTextureCapacityIsRejectedAndNamed()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "Small Table GPU", bindlessTextureCapacity: 1024),
         ];
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanPhysicalDeviceSelector.Select(candidates)
+        );
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
         Assert.Contains("1024", exception.Message, StringComparison.Ordinal);
@@ -104,8 +146,10 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void HigherApiVersionBreaksATypeTie() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void HigherApiVersionBreaksATypeTie()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "Older Discrete", PhysicalDeviceType.DiscreteGpu, API_1_2),
             Candidate(1, "Newer Discrete", PhysicalDeviceType.DiscreteGpu, API_1_3),
         ];
@@ -115,8 +159,10 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LowerIndexBreaksAFullTie() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void LowerIndexBreaksAFullTie()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(2, "Second", PhysicalDeviceType.DiscreteGpu),
             Candidate(1, "First", PhysicalDeviceType.DiscreteGpu),
         ];
@@ -126,61 +172,119 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NoCandidateExceptionNamesEveryRejectedDeviceAndReason() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
+    public void NoCandidateExceptionNamesEveryRejectedDeviceAndReason()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
             Candidate(0, "Old GPU", PhysicalDeviceType.DiscreteGpu, API_1_1),
             Candidate(1, "No Present GPU", supportsPresent: false, hasSwapchainExtension: false),
         ];
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanPhysicalDeviceSelector.Select(candidates)
+        );
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
         Assert.Contains("[0] Old GPU", exception.Message, StringComparison.Ordinal);
         Assert.Contains("[1] No Present GPU", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("no presentation queue family", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "no presentation queue family",
+            exception.Message,
+            StringComparison.Ordinal
+        );
         Assert.Contains("VK_KHR_swapchain", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingDepthResolveModeIsRejectedAndNamed() {
-        VulkanPhysicalDeviceCandidate[] candidates = [
-            Candidate(
-                0,
-                "No Resolve GPU",
-                supportedDepthResolveModes: ResolveModeFlags.AverageBit),
+    public void MissingDepthResolveModeIsRejectedAndNamed()
+    {
+        VulkanPhysicalDeviceCandidate[] candidates =
+        [
+            Candidate(0, "No Resolve GPU", supportedDepthResolveModes: ResolveModeFlags.AverageBit),
         ];
 
-        GraphicsException exception = Assert.Throws<GraphicsException>(() => VulkanPhysicalDeviceSelector.Select(candidates));
+        GraphicsException exception = Assert.Throws<GraphicsException>(() =>
+            VulkanPhysicalDeviceSelector.Select(candidates)
+        );
 
         Assert.Equal(DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED, exception.DiagnosticCode);
         Assert.Contains("No Resolve GPU", exception.Message, StringComparison.Ordinal);
         Assert.Contains(
             "VkPhysicalDeviceDepthStencilResolveProperties.supportedDepthResolveModes",
             exception.Message,
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
         Assert.Contains("VK_RESOLVE_MODE_AVERAGE_BIT", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("VK_RESOLVE_MODE_SAMPLE_ZERO_BIT", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "VK_RESOLVE_MODE_SAMPLE_ZERO_BIT",
+            exception.Message,
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void IsSuitableRequiresEveryM2Fact() {
-        Assert.True(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "Suitable", PhysicalDeviceType.DiscreteGpu)));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "No Graphics", supportsGraphics: false)));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "No Present", supportsPresent: false)));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "No Swapchain", hasSwapchainExtension: false)));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(Candidate(0, "Old", PhysicalDeviceType.DiscreteGpu, API_1_1)));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
-            Candidate(0, "No Bindless", missingBindlessFeatures: "shaderSampledImageArrayNonUniformIndexing")));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
-            Candidate(0, "Small Table", bindlessTextureCapacity: 2047)));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
-            Candidate(0, "No Resolve", supportedDepthResolveModes: ResolveModeFlags.None)));
-        Assert.False(VulkanPhysicalDeviceSelector.IsSuitable(
-            Candidate(0, "Min Resolve", supportedDepthResolveModes: ResolveModeFlags.MinBit)));
-        Assert.True(VulkanPhysicalDeviceSelector.IsSuitable(
-            Candidate(0, "Sample Zero Resolve", supportedDepthResolveModes: ResolveModeFlags.SampleZeroBit)));
+    public void IsSuitableRequiresEveryM2Fact()
+    {
+        Assert.True(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "Suitable", PhysicalDeviceType.DiscreteGpu)
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "No Graphics", supportsGraphics: false)
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "No Present", supportsPresent: false)
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "No Swapchain", hasSwapchainExtension: false)
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "Old", PhysicalDeviceType.DiscreteGpu, API_1_1)
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(
+                    0,
+                    "No Bindless",
+                    missingBindlessFeatures: "shaderSampledImageArrayNonUniformIndexing"
+                )
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "Small Table", bindlessTextureCapacity: 2047)
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "No Resolve", supportedDepthResolveModes: ResolveModeFlags.None)
+            )
+        );
+        Assert.False(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(0, "Min Resolve", supportedDepthResolveModes: ResolveModeFlags.MinBit)
+            )
+        );
+        Assert.True(
+            VulkanPhysicalDeviceSelector.IsSuitable(
+                Candidate(
+                    0,
+                    "Sample Zero Resolve",
+                    supportedDepthResolveModes: ResolveModeFlags.SampleZeroBit
+                )
+            )
+        );
     }
 
     private static VulkanPhysicalDeviceCandidate Candidate(
@@ -193,7 +297,8 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
         bool hasSwapchainExtension = true,
         uint bindlessTextureCapacity = VulkanDeviceCapabilities.TARGET_BINDLESS_TEXTURE_CAPACITY,
         string missingBindlessFeatures = "",
-        ResolveModeFlags supportedDepthResolveModes = ResolveModeFlags.SampleZeroBit) =>
+        ResolveModeFlags supportedDepthResolveModes = ResolveModeFlags.SampleZeroBit
+    ) =>
         new(
             index,
             name,
@@ -204,5 +309,6 @@ public sealed class VulkanPhysicalDeviceSelectionTests {
             hasSwapchainExtension,
             bindlessTextureCapacity,
             missingBindlessFeatures,
-            supportedDepthResolveModes);
+            supportedDepthResolveModes
+        );
 }

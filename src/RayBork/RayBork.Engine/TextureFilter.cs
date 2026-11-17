@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// The minification, magnification, and mipmap filtering mode of a texture sampler.
 /// </summary>
-public enum TextureFilter {
+public enum TextureFilter
+{
     /// <summary>Nearest-neighbor filtering.</summary>
     Nearest = 0,
 

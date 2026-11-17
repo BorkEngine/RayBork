@@ -3,7 +3,8 @@ namespace RayBork;
 /// <summary>
 /// Identifies a gamepad analog trigger.
 /// </summary>
-public enum GamepadTrigger {
+public enum GamepadTrigger
+{
     /// <summary>
     /// The left trigger.
     /// </summary>

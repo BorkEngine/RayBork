@@ -4,21 +4,26 @@ using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests.Assets.Catalog;
 
-public sealed class AssetCatalogFailureTests {
+public sealed class AssetCatalogFailureTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void StartRejectsATruncatedPackAndStartsNoLoaderThread() {
+    public void StartRejectsATruncatedPackAndStartsNoLoaderThread()
+    {
         using TempPackDirectory directory = new();
         string path = directory.GetPath("truncated.pck");
         File.WriteAllBytes(path, CatalogTestData.BuildStandardPack()[..16]);
         (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([path]);
 
-        try {
+        try
+        {
             AssetPackException thrown = Assert.Throws<AssetPackException>(catalog.Start);
 
             Assert.Equal(DiagnosticCodes.ASSET_PACK_READ_FAILED, thrown.DiagnosticCode);
             Assert.Null(catalog.LoaderThread);
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
         }
@@ -26,7 +31,8 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void StartRejectsABadMagicAndStartsNoLoaderThread() {
+    public void StartRejectsABadMagicAndStartsNoLoaderThread()
+    {
         using TempPackDirectory directory = new();
         string path = directory.GetPath("magic.pck");
         byte[] pack = CatalogTestData.BuildStandardPack();
@@ -34,12 +40,15 @@ public sealed class AssetCatalogFailureTests {
         File.WriteAllBytes(path, pack);
         (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([path]);
 
-        try {
+        try
+        {
             AssetPackException thrown = Assert.Throws<AssetPackException>(catalog.Start);
 
             Assert.Equal(DiagnosticCodes.ASSET_PACK_UNSUPPORTED_VERSION, thrown.DiagnosticCode);
             Assert.Null(catalog.LoaderThread);
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
         }
@@ -47,7 +56,8 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void StartRejectsABadIndexHashAndStartsNoLoaderThread() {
+    public void StartRejectsABadIndexHashAndStartsNoLoaderThread()
+    {
         using TempPackDirectory directory = new();
         string path = directory.GetPath("index-hash.pck");
         PackTestPack editor = new(CatalogTestData.BuildStandardPack());
@@ -55,12 +65,15 @@ public sealed class AssetCatalogFailureTests {
         File.WriteAllBytes(path, editor.Bytes);
         (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([path]);
 
-        try {
+        try
+        {
             AssetPackException thrown = Assert.Throws<AssetPackException>(catalog.Start);
 
             Assert.Equal(DiagnosticCodes.ASSET_PACK_INDEX_HASH_MISMATCH, thrown.DiagnosticCode);
             Assert.Null(catalog.LoaderThread);
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
         }
@@ -68,18 +81,22 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void StartRejectsAMissingPackAndMountsNothing() {
+    public void StartRejectsAMissingPackAndMountsNothing()
+    {
         using TempPackDirectory directory = new();
         string missing = directory.GetPath("missing.pck");
         (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([missing]);
 
-        try {
+        try
+        {
             AssetPackException thrown = Assert.Throws<AssetPackException>(catalog.Start);
 
             Assert.Equal(DiagnosticCodes.ASSET_PACK_READ_FAILED, thrown.DiagnosticCode);
             Assert.Null(catalog.LoaderThread);
             Assert.Throws<InvalidOperationException>(() => catalog.Exists("/meshes/quad"));
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
         }
@@ -87,7 +104,8 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadWithoutAWorkerFailsAsAssetLoad() {
+    public async Task LoadWithoutAWorkerFailsAsAssetLoad()
+    {
         using TempPackDirectory directory = new();
         string path = directory.GetPath("catalog.pck");
         File.WriteAllBytes(path, CatalogTestData.BuildStandardPack());
@@ -97,15 +115,20 @@ public sealed class AssetCatalogFailureTests {
             bridge,
             ReadOnlyMemory<byte>.Empty,
             [path],
-            []);
+            []
+        );
         catalog.Start();
 
-        try {
-            AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-                () => catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken));
+        try
+        {
+            AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+                catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken)
+            );
 
             Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
         }
@@ -113,9 +136,11 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task MissingSiblingPayloadFailsAsAssetLoadWithoutUpload() {
+    public async Task MissingSiblingPayloadFailsAsAssetLoadWithoutUpload()
+    {
         ShaderAssetDescriptor template = CatalogTestData.CreateShaderDescriptor();
-        ShaderAssetDescriptor descriptor = new() {
+        ShaderAssetDescriptor descriptor = new()
+        {
             AbiVersion = template.AbiVersion,
             VertexPayload = "shaders/missing-vert",
             FragmentPayload = CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH,
@@ -127,12 +152,22 @@ public sealed class AssetCatalogFailureTests {
             Textures = template.Textures,
         };
         byte[] pack = CatalogTestData.BuildPack(
-            (CatalogTestData.SHADER_PATH, AssetEntryType.Shader, AssetSerialization.Serialize(descriptor)),
-            (CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()));
+            (
+                CatalogTestData.SHADER_PATH,
+                AssetEntryType.Shader,
+                AssetSerialization.Serialize(descriptor)
+            ),
+            (
+                CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH,
+                AssetEntryType.Raw,
+                CatalogTestData.CreateShaderFragmentPayload()
+            )
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Equal(0, harness.Worker.UploadCallCount);
@@ -143,9 +178,13 @@ public sealed class AssetCatalogFailureTests {
     [InlineData(1)]
     [InlineData(3)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AShaderBakedWithADifferentAbiVersionFailsAsAssetLoadWithARebakeMessage(int abiVersion) {
+    public async Task AShaderBakedWithADifferentAbiVersionFailsAsAssetLoadWithARebakeMessage(
+        int abiVersion
+    )
+    {
         ShaderAssetDescriptor template = CatalogTestData.CreateShaderDescriptor();
-        ShaderAssetDescriptor descriptor = new() {
+        ShaderAssetDescriptor descriptor = new()
+        {
             AbiVersion = abiVersion,
             VertexPayload = template.VertexPayload,
             FragmentPayload = template.FragmentPayload,
@@ -157,13 +196,27 @@ public sealed class AssetCatalogFailureTests {
             Textures = template.Textures,
         };
         byte[] pack = CatalogTestData.BuildPack(
-            (CatalogTestData.SHADER_PATH, AssetEntryType.Shader, AssetSerialization.Serialize(descriptor)),
-            (CatalogTestData.SHADER_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
-            (CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()));
+            (
+                CatalogTestData.SHADER_PATH,
+                AssetEntryType.Shader,
+                AssetSerialization.Serialize(descriptor)
+            ),
+            (
+                CatalogTestData.SHADER_VERTEX_PAYLOAD_PATH,
+                AssetEntryType.Raw,
+                CatalogTestData.CreateShaderVertexPayload()
+            ),
+            (
+                CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH,
+                AssetEntryType.Raw,
+                CatalogTestData.CreateShaderFragmentPayload()
+            )
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains("/shaders/basic", thrown.Message, StringComparison.Ordinal);
@@ -174,9 +227,11 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AShaderDescriptorWithoutAnAbiVersionMemberFailsAsAssetLoadWithTheRebakeMessage() {
+    public async Task AShaderDescriptorWithoutAnAbiVersionMemberFailsAsAssetLoadWithTheRebakeMessage()
+    {
         ShaderAssetDescriptor template = CatalogTestData.CreateShaderDescriptor();
-        LegacyShaderAssetDescriptor legacy = new() {
+        LegacyShaderAssetDescriptor legacy = new()
+        {
             VertexPayload = template.VertexPayload,
             FragmentPayload = template.FragmentPayload,
             VertexEntry = template.VertexEntry,
@@ -187,13 +242,27 @@ public sealed class AssetCatalogFailureTests {
             Textures = template.Textures,
         };
         byte[] pack = CatalogTestData.BuildPack(
-            (CatalogTestData.SHADER_PATH, AssetEntryType.Shader, AssetSerialization.Serialize(legacy)),
-            (CatalogTestData.SHADER_VERTEX_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderVertexPayload()),
-            (CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateShaderFragmentPayload()));
+            (
+                CatalogTestData.SHADER_PATH,
+                AssetEntryType.Shader,
+                AssetSerialization.Serialize(legacy)
+            ),
+            (
+                CatalogTestData.SHADER_VERTEX_PAYLOAD_PATH,
+                AssetEntryType.Raw,
+                CatalogTestData.CreateShaderVertexPayload()
+            ),
+            (
+                CatalogTestData.SHADER_FRAGMENT_PAYLOAD_PATH,
+                AssetEntryType.Raw,
+                CatalogTestData.CreateShaderFragmentPayload()
+            )
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Shader>("/shaders/basic", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains("/shaders/basic", thrown.Message, StringComparison.Ordinal);
@@ -204,20 +273,27 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AFailedMountDiscardsThePacksOpenedBeforeIt() {
+    public void AFailedMountDiscardsThePacksOpenedBeforeIt()
+    {
         using TempPackDirectory directory = new();
         string validPath = directory.GetPath("valid.pck");
         File.WriteAllBytes(validPath, CatalogTestData.BuildStandardPack());
         string missingPath = directory.GetPath("missing.pck");
-        (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([validPath, missingPath]);
+        (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([
+            validPath,
+            missingPath,
+        ]);
 
-        try {
+        try
+        {
             AssetPackException thrown = Assert.Throws<AssetPackException>(catalog.Start);
 
             Assert.Equal(DiagnosticCodes.ASSET_PACK_READ_FAILED, thrown.DiagnosticCode);
             Assert.Null(catalog.LoaderThread);
             Assert.Throws<InvalidOperationException>(() => catalog.Exists("/meshes/quad"));
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
         }
@@ -225,9 +301,11 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task InvalidTextureDescriptorFailsBeforeTheUpload() {
+    public async Task InvalidTextureDescriptorFailsBeforeTheUpload()
+    {
         TextureAssetDescriptor template = CatalogTestData.CreateTextureDescriptor();
-        TextureAssetDescriptor descriptor = new() {
+        TextureAssetDescriptor descriptor = new()
+        {
             Payload = CatalogTestData.TEXTURE_PAYLOAD_PATH,
             Width = template.Width,
             Height = template.Height,
@@ -239,12 +317,22 @@ public sealed class AssetCatalogFailureTests {
             MaxAnisotropy = template.MaxAnisotropy,
         };
         byte[] pack = CatalogTestData.BuildPack(
-            (CatalogTestData.TEXTURE_PATH, AssetEntryType.Texture, AssetSerialization.Serialize(descriptor)),
-            (CatalogTestData.TEXTURE_PAYLOAD_PATH, AssetEntryType.Raw, CatalogTestData.CreateTexturePayload()));
+            (
+                CatalogTestData.TEXTURE_PATH,
+                AssetEntryType.Texture,
+                AssetSerialization.Serialize(descriptor)
+            ),
+            (
+                CatalogTestData.TEXTURE_PAYLOAD_PATH,
+                AssetEntryType.Raw,
+                CatalogTestData.CreateTexturePayload()
+            )
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Texture>("/textures/albedo", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Texture>("/textures/albedo", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Equal(0, harness.Worker.UploadCallCount);
@@ -252,42 +340,56 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadDataSurfacesAPayloadHashMismatch() {
+    public async Task LoadDataSurfacesAPayloadHashMismatch()
+    {
         PackTestPack editor = new(CatalogTestData.BuildStandardPack());
         editor.FlipPayloadByte("data/settings", 0);
         using CatalogTestHarness harness = new(userPacks: [editor.Bytes]);
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.LoadData("/data/settings", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.LoadData("/data/settings", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_PACK_PAYLOAD_HASH_MISMATCH, thrown.DiagnosticCode);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task LoadDataForAMissingPathThrowsAssetNotFound() {
+    public async Task LoadDataForAMissingPathThrowsAssetNotFound()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
 
-        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(
-            () => harness.Catalog.LoadData("/data/absent", TestContext.Current.CancellationToken));
+        AssetNotFoundException thrown = await Assert.ThrowsAsync<AssetNotFoundException>(() =>
+            harness.Catalog.LoadData("/data/absent", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_NOT_FOUND, thrown.DiagnosticCode);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task MeshIndexOutsideTheVertexListFailsAsAssetLoad() {
+    public async Task MeshIndexOutsideTheVertexListFailsAsAssetLoad()
+    {
         byte[] payload = CatalogTestData.CreateMeshPayload();
         BinaryPrimitives.WriteUInt32LittleEndian(
-            payload.AsSpan((int)CatalogTestData.MESH_VERTEX_COUNT * MeshAssetDescriptor.VERTEX_STRIDE),
-            CatalogTestData.MESH_VERTEX_COUNT);
+            payload.AsSpan(
+                (int)CatalogTestData.MESH_VERTEX_COUNT * MeshAssetDescriptor.VERTEX_STRIDE
+            ),
+            CatalogTestData.MESH_VERTEX_COUNT
+        );
         byte[] pack = CatalogTestData.BuildPack(
-            (CatalogTestData.MESH_PATH, AssetEntryType.Mesh, AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())),
-            (CatalogTestData.MESH_PAYLOAD_PATH, AssetEntryType.Raw, payload));
+            (
+                CatalogTestData.MESH_PATH,
+                AssetEntryType.Mesh,
+                AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())
+            ),
+            (CatalogTestData.MESH_PAYLOAD_PATH, AssetEntryType.Raw, payload)
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains("outside", thrown.Message, StringComparison.Ordinal);
@@ -296,16 +398,23 @@ public sealed class AssetCatalogFailureTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AFailingValueLoaderReportsTheRegisteredFailureDescription() {
+    public async Task AFailingValueLoaderReportsTheRegisteredFailureDescription()
+    {
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [CatalogTestData.BuildStandardPack()],
-            assetTypes: [new LoaderAssetTypeRegistration<CatalogTestSettings>(new ThrowingSettingsLoader())]);
+            assetTypes:
+            [
+                new LoaderAssetTypeRegistration<CatalogTestSettings>(new ThrowingSettingsLoader()),
+            ]
+        );
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<CatalogTestSettings>(
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<CatalogTestSettings>(
                 "/data/settings",
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains("could not be loaded", thrown.Message, StringComparison.Ordinal);
@@ -313,63 +422,85 @@ public sealed class AssetCatalogFailureTests {
         Assert.DoesNotContain(
             CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION,
             thrown.Message,
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CustomDataDeserializationFailureReportsTheCustomDataDescription() {
+    public async Task CustomDataDeserializationFailureReportsTheCustomDataDescription()
+    {
         byte[] pack = CatalogTestData.BuildPack(
-            (CatalogTestData.DATA_PATH, AssetEntryType.Data, [0xFF, 0xFF, 0xFF, 0xFF]));
+            (CatalogTestData.DATA_PATH, AssetEntryType.Data, [0xFF, 0xFF, 0xFF, 0xFF])
+        );
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [pack],
-            assetTypes: [CatalogTestData.SettingsRegistration]);
+            assetTypes: [CatalogTestData.SettingsRegistration]
+        );
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<CatalogTestSettings>(
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<CatalogTestSettings>(
                 "/data/settings",
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Contains(
             CatalogTestData.CUSTOM_DATA_FAILURE_DESCRIPTION,
             thrown.Message,
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ALoaderThatReturnsNullFailsAsAssetLoad() {
+    public async Task ALoaderThatReturnsNullFailsAsAssetLoad()
+    {
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [CatalogTestData.BuildStandardPack()],
-            assetTypes: [new LoaderAssetTypeRegistration<CatalogTestSettings>(new NullResultLoader())]);
+            assetTypes:
+            [
+                new LoaderAssetTypeRegistration<CatalogTestSettings>(new NullResultLoader()),
+            ]
+        );
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<CatalogTestSettings>(
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<CatalogTestSettings>(
                 "/data/settings",
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
-        Assert.Contains("the registered loader returned no value", thrown.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "the registered loader returned no value",
+            thrown.Message,
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AFailedStartLeavesTheGlyphServiceStopped() {
+    public void AFailedStartLeavesTheGlyphServiceStopped()
+    {
         using TempPackDirectory directory = new();
         string path = directory.GetPath("truncated-glyph.pck");
         File.WriteAllBytes(path, CatalogTestData.BuildStandardPack()[..16]);
         (GpuAssetBridge bridge, AssetCatalog catalog) = CreateUnstartedCatalog([path]);
 
-        try {
+        try
+        {
             Assert.False(catalog.GlyphService.IsRunning);
 
             Assert.Throws<AssetPackException>(catalog.Start);
 
             Assert.False(catalog.GlyphService.IsRunning);
-        } finally {
+        }
+        finally
+        {
             catalog.Stop();
             bridge.Close(null);
         }
@@ -377,7 +508,10 @@ public sealed class AssetCatalogFailureTests {
         Assert.False(catalog.GlyphService.IsRunning);
     }
 
-    private static (GpuAssetBridge Bridge, AssetCatalog Catalog) CreateUnstartedCatalog(string[] paths) {
+    private static (GpuAssetBridge Bridge, AssetCatalog Catalog) CreateUnstartedCatalog(
+        string[] paths
+    )
+    {
         GpuAssetBridge bridge = new();
         bridge.AttachWorker(new FakeAssetGpuWorker());
         AssetCatalog catalog = new(
@@ -385,21 +519,24 @@ public sealed class AssetCatalogFailureTests {
             bridge,
             ReadOnlyMemory<byte>.Empty,
             paths,
-            []);
+            []
+        );
         return (bridge, catalog);
     }
 
-    private sealed class ThrowingSettingsLoader : IAssetLoader<CatalogTestSettings> {
+    private sealed class ThrowingSettingsLoader : IAssetLoader<CatalogTestSettings>
+    {
         public AssetEntryType EntryType => AssetEntryType.Data;
 
-        public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context)
-            => throw new InvalidOperationException("the loader failed on purpose");
+        public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context) =>
+            throw new InvalidOperationException("the loader failed on purpose");
     }
 
-    private sealed class NullResultLoader : IAssetLoader<CatalogTestSettings> {
+    private sealed class NullResultLoader : IAssetLoader<CatalogTestSettings>
+    {
         public AssetEntryType EntryType => AssetEntryType.Data;
 
-        public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context)
-            => Task.FromResult<CatalogTestSettings>(null!);
+        public Task<CatalogTestSettings> LoadAsync(AssetLoadContext context) =>
+            Task.FromResult<CatalogTestSettings>(null!);
     }
 }

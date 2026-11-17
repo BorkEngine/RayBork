@@ -11,15 +11,19 @@ namespace RayBork.Tests.Fonts.Msdf;
 /// nearest-edge distance too; the documented corner caveat is about bilinear filtering between texels,
 /// which no test here samples.
 /// </summary>
-public sealed class MsdfAnalyticFieldTests {
+public sealed class MsdfAnalyticFieldTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnAxisAlignedRectangleFieldMatchesTheExactSignedDistance() {
+    public void AnAxisAlignedRectangleFieldMatchesTheExactSignedDistance()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
-        Vector2[] corners = [
+        Vector2[] corners =
+        [
             layout.ToPixel(new Vector2(0f, 0f)),
             layout.ToPixel(new Vector2(1000f, 0f)),
             layout.ToPixel(new Vector2(1000f, 1000f)),
@@ -35,12 +39,15 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ARightTriangleFieldMatchesTheExactSignedDistance() {
+    public void ARightTriangleFieldMatchesTheExactSignedDistance()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 600, 600),
-            unitsPerEm: 600);
+            unitsPerEm: 600
+        );
         OutlinePath outline = MsdfTestShapes.RightTriangle(600f, 600f);
-        Vector2[] corners = [
+        Vector2[] corners =
+        [
             layout.ToPixel(Vector2.Zero),
             layout.ToPixel(new Vector2(600f, 0f)),
             layout.ToPixel(new Vector2(0f, 600f)),
@@ -55,15 +62,18 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ARegularPolygonFieldMatchesTheExactSignedDistance() {
+    public void ARegularPolygonFieldMatchesTheExactSignedDistance()
+    {
         const int sides = 96;
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(100, 100, 900, 900),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.Polygon(sides, 500f, 500f, 400f);
         Vector2[] fontVertices = MsdfTestShapes.PolygonVertices(sides, 500f, 500f, 400f);
         Vector2[] pixelVertices = new Vector2[fontVertices.Length];
-        for (int index = 0; index < fontVertices.Length; index++) {
+        for (int index = 0; index < fontVertices.Length; index++)
+        {
             pixelVertices[index] = layout.ToPixel(fontVertices[index]);
         }
 
@@ -76,10 +86,12 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TexelCentresOnTheOutlineReconstructToTheEdgeValue() {
+    public void TexelCentresOnTheOutlineReconstructToTheEdgeValue()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         float edgeFontX = (2.5f - layout.OriginX) / layout.Scale;
         OutlinePath outline = MsdfTestShapes.Rectangle(edgeFontX, 100f, 1000f, 900f);
 
@@ -97,10 +109,12 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TextureRowsAreTopDownFromTheQuadUpperEdge() {
+    public void TextureRowsAreTopDownFromTheQuadUpperEdge()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         // The glyph is the lower 40% of its box, so in the top-down texture it must occupy the higher
         // row indices. This pins the engine's top-left UV convention against an accidental flip.
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 400f);
@@ -113,13 +127,15 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheContentIsBottomAlignedForANonSquareLayout() {
+    public void TheContentIsBottomAlignedForANonSquareLayout()
+    {
         // Fitted content: x in [2, 30], y in [2.676, 12]. The bottom padding is exactly two pixels;
         // the ceil remainder (0.676 pixels) is extra top padding. The hard-coded rows and the direct
         // pixel rectangle share neither the layout transform nor the production winding rule.
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 333),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 333f);
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
@@ -134,14 +150,16 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AGlyphSmallerThanItsPaddingIsPlacedCorrectly() {
+    public void AGlyphSmallerThanItsPaddingIsPlacedCorrectly()
+    {
         // One pixel of content with eight pixels of padding on every side; the content must still be
         // bottom-aligned at row eight.
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 10, 10),
             unitsPerEm: 10,
             pixelSize: 17,
-            padding: 8);
+            padding: 8
+        );
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 10f, 10f);
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
@@ -154,15 +172,18 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ARangeLargerThanTheTextureSidePreservesTheDistances() {
+    public void ARangeLargerThanTheTextureSidePreservesTheDistances()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
             unitsPerEm: 1000,
             pixelSize: 8,
             padding: 0,
-            range: 100);
+            range: 100
+        );
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
-        Vector2[] corners = [
+        Vector2[] corners =
+        [
             layout.ToPixel(new Vector2(0f, 0f)),
             layout.ToPixel(new Vector2(1000f, 0f)),
             layout.ToPixel(new Vector2(1000f, 1000f)),
@@ -180,12 +201,14 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void APixelSizeOfOneTexelProducesAValidField() {
+    public void APixelSizeOfOneTexelProducesAValidField()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
             unitsPerEm: 1000,
             pixelSize: 1,
-            padding: 0);
+            padding: 0
+        );
         OutlinePath outline = MsdfTestShapes.Rectangle(0f, 0f, 1000f, 1000f);
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
@@ -198,10 +221,12 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ADeepInsideTexelSaturatesNearOneAndAFarOutsideTexelNearZero() {
+    public void ADeepInsideTexelSaturatesNearOneAndAFarOutsideTexelNearZero()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         float edgeFontX = (2.5f - layout.OriginX) / layout.Scale;
         OutlinePath outline = MsdfTestShapes.Rectangle(edgeFontX, 100f, 1000f, 900f);
 
@@ -217,19 +242,22 @@ public sealed class MsdfAnalyticFieldTests {
             16,
             16,
             layout.Range * 0.5f,
-            MsdfTestField.Tolerance(layout.Range));
+            MsdfTestField.Tolerance(layout.Range)
+        );
         MsdfTestField.AssertTexelNear(
             bitmap,
             layout,
             0,
             0,
             -layout.Range * 0.5f,
-            MsdfTestField.Tolerance(layout.Range));
+            MsdfTestField.Tolerance(layout.Range)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TheRangeScalesTheStoredEdgeDistance() {
+    public void TheRangeScalesTheStoredEdgeDistance()
+    {
         var bounds = new FontBounds(0, 0, 1000, 1000);
         MsdfGlyphLayout narrow = MsdfGenerator.ComputeLayout(bounds, unitsPerEm: 1000, range: 4);
         MsdfGlyphLayout wide = MsdfGenerator.ComputeLayout(bounds, unitsPerEm: 1000, range: 8);
@@ -240,15 +268,30 @@ public sealed class MsdfAnalyticFieldTests {
 
         // The texel centre half a texel outside the left outline edge stores an eighth of the range at
         // range 4 and a sixteenth at range 8.
-        MsdfTestField.AssertTexelNear(narrowBitmap, narrow, 1, 16, -0.5f, MsdfTestField.Tolerance(narrow.Range));
-        MsdfTestField.AssertTexelNear(wideBitmap, wide, 1, 16, -0.5f, MsdfTestField.Tolerance(wide.Range));
+        MsdfTestField.AssertTexelNear(
+            narrowBitmap,
+            narrow,
+            1,
+            16,
+            -0.5f,
+            MsdfTestField.Tolerance(narrow.Range)
+        );
+        MsdfTestField.AssertTexelNear(
+            wideBitmap,
+            wide,
+            1,
+            16,
+            -0.5f,
+            MsdfTestField.Tolerance(wide.Range)
+        );
         Assert.Equal(96f / 255f, MsdfTestField.MedianAt(narrowBitmap, narrow, 1, 16), 4);
         Assert.Equal(112f / 255f, MsdfTestField.MedianAt(wideBitmap, wide, 1, 16), 4);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void APaddingSmallerThanHalfTheRangeClipsTheFieldAtTheTextureEdge() {
+    public void APaddingSmallerThanHalfTheRangeClipsTheFieldAtTheTextureEdge()
+    {
         var bounds = new FontBounds(0, 0, 1000, 1000);
         MsdfGlyphLayout full = MsdfGenerator.ComputeLayout(bounds, unitsPerEm: 1000, range: 4);
         MsdfGlyphLayout clipped = MsdfGenerator.ComputeLayout(bounds, unitsPerEm: 1000, range: 8);
@@ -266,17 +309,21 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnOutlineThatCoversTheWholeTextureSaturatesInside() {
+    public void AnOutlineThatCoversTheWholeTextureSaturatesInside()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
 
         // The layout intentionally belongs to a smaller box; every texel is far inside this outline.
         byte[] bitmap = MsdfGenerator.Generate(
             MsdfTestShapes.Rectangle(-5000f, -5000f, 5000f, 5000f),
-            layout);
+            layout
+        );
 
-        for (int index = 0; index < bitmap.Length; index += 4) {
+        for (int index = 0; index < bitmap.Length; index += 4)
+        {
             Assert.Equal(255, bitmap[index]);
             Assert.Equal(255, bitmap[index + 1]);
             Assert.Equal(255, bitmap[index + 2]);
@@ -286,25 +333,30 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AnOutlineFarOutsideTheTextureSaturatesOutside() {
+    public void AnOutlineFarOutsideTheTextureSaturatesOutside()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
 
         // The layout intentionally belongs to a different outline; every texel is far outside it.
         byte[] bitmap = MsdfGenerator.Generate(
             MsdfTestShapes.Rectangle(5000f, 5000f, 5010f, 5010f),
-            layout);
+            layout
+        );
 
         MsdfTestField.AssertAllOutside(bitmap);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AHoleIsOutsideByTheNonZeroWinding() {
+    public void AHoleIsOutsideByTheNonZeroWinding()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.RectangleWithHole(
             100f,
             100f,
@@ -313,14 +365,17 @@ public sealed class MsdfAnalyticFieldTests {
             400f,
             400f,
             600f,
-            600f);
-        Vector2[] outer = [
+            600f
+        );
+        Vector2[] outer =
+        [
             layout.ToPixel(new Vector2(100f, 100f)),
             layout.ToPixel(new Vector2(900f, 100f)),
             layout.ToPixel(new Vector2(900f, 900f)),
             layout.ToPixel(new Vector2(100f, 900f)),
         ];
-        Vector2[] hole = [
+        Vector2[] hole =
+        [
             layout.ToPixel(new Vector2(400f, 400f)),
             layout.ToPixel(new Vector2(400f, 600f)),
             layout.ToPixel(new Vector2(600f, 600f)),
@@ -336,39 +391,53 @@ public sealed class MsdfAnalyticFieldTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AQuadraticOutlineStaysWithinTheFlatteningTolerance() {
+    public void AQuadraticOutlineStaysWithinTheFlatteningTolerance()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.QuadraticDome(100f, 100f, 500f, 900f, 900f, 100f);
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
 
-        Vector2[][] contours = MsdfTestShapes.SampleContours(outline, layout, samplesPerSegment: 1024);
+        Vector2[][] contours = MsdfTestShapes.SampleContours(
+            outline,
+            layout,
+            samplesPerSegment: 1024
+        );
         MsdfTestField.AssertNotConstant(bitmap);
         MsdfTestField.AssertMatchesContours(
             bitmap,
             layout,
             contours,
-            extraTolerance: MsdfOutlineFlattener.FLATTEN_TOLERANCE_PX);
+            extraTolerance: MsdfOutlineFlattener.FLATTEN_TOLERANCE_PX
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ACubicOutlineStaysWithinTheFlatteningTolerance() {
+    public void ACubicOutlineStaysWithinTheFlatteningTolerance()
+    {
         MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
             new FontBounds(0, 0, 1000, 1000),
-            unitsPerEm: 1000);
+            unitsPerEm: 1000
+        );
         OutlinePath outline = MsdfTestShapes.CubicCapsule(200f, 800f, 500f, 300f);
 
         byte[] bitmap = MsdfGenerator.Generate(outline, layout);
 
-        Vector2[][] contours = MsdfTestShapes.SampleContours(outline, layout, samplesPerSegment: 1024);
+        Vector2[][] contours = MsdfTestShapes.SampleContours(
+            outline,
+            layout,
+            samplesPerSegment: 1024
+        );
         MsdfTestField.AssertNotConstant(bitmap);
         MsdfTestField.AssertMatchesContours(
             bitmap,
             layout,
             contours,
-            extraTolerance: MsdfOutlineFlattener.FLATTEN_TOLERANCE_PX);
+            extraTolerance: MsdfOutlineFlattener.FLATTEN_TOLERANCE_PX
+        );
     }
 }

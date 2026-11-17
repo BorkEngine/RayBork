@@ -33,7 +33,8 @@ namespace RayBork.Tests;
 /// by <see cref="PrimitiveDrawGpuHarness.CreateOrSkip"/>.
 /// </para>
 /// </remarks>
-public sealed class ScreenDrawGpuTests {
+public sealed class ScreenDrawGpuTests
+{
     private static readonly Color _clearColor = new(0.05f, 0.1f, 0.2f, 1f);
     private static readonly Color _topLeft = new(1f, 0f, 0f, 1f);
     private static readonly Color _topRight = new(0f, 1f, 0f, 1f);
@@ -66,8 +67,11 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void PixelAlignedTexturedQuadSamplesEachQuadrantAndLeavesTheClearOutside() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void PixelAlignedTexturedQuadSamplesEachQuadrantAndLeavesTheClearOutside()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Texture texture = CreateQuadrantTexture(harness);
 
         // Both destinations start on a whole render pixel, so every pixel center lies inside exactly one
@@ -77,7 +81,8 @@ public sealed class ScreenDrawGpuTests {
         Vector2 anchoredPixel = default;
         Transform anchored = default;
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 Rect destination = new(24f, 24f, 32f, 24f);
                 anchored = ScreenRectTransform(camera, destination);
                 anchoredPixel = camera.WorldToScreen(anchored.Position);
@@ -85,7 +90,8 @@ public sealed class ScreenDrawGpuTests {
                 DrawTexturedRect(camera, texture, new Rect(101f, 61f, 7f, 9f));
             },
             clearColor: _clearColor,
-            height: harness.Height);
+            height: harness.Height
+        );
 
         // Passing the target height makes the plane support one world unit per render pixel at 100% DPI:
         // the rectangle's center lands on its render pixel and the transform has a unit scale.
@@ -127,12 +133,16 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void SourceRectangleSamplingSelectsTheNormalizedSubRectangle() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void SourceRectangleSamplingSelectsTheNormalizedSubRectangle()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Texture texture = CreateQuadrantTexture(harness);
 
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 // The full-texture form samples the authored (0, 0, 1, 1) rectangle.
                 DrawTexturedRect(camera, texture, new Rect(24f, 24f, 32f, 32f));
                 // The source form samples the texture's top-right cell over the whole destination quad.
@@ -140,16 +150,19 @@ public sealed class ScreenDrawGpuTests {
                     camera,
                     texture,
                     new Rect(88f, 24f, 32f, 32f),
-                    new Rect(0.5f, 0f, 0.5f, 0.5f));
+                    new Rect(0.5f, 0f, 0.5f, 0.5f)
+                );
                 // The bottom-left source cell proves the V axis is offset as well as the U axis.
                 DrawTexturedRect(
                     camera,
                     texture,
                     new Rect(152f, 24f, 32f, 32f),
-                    new Rect(0f, 0.5f, 0.5f, 0.5f));
+                    new Rect(0f, 0.5f, 0.5f, 0.5f)
+                );
             },
             clearColor: _clearColor,
-            height: harness.Height);
+            height: harness.Height
+        );
 
         // The full-texture form keeps the four cells in the authored orientation.
         AssertColorNear(_topLeft, harness.ReadColor(32, 32));
@@ -180,8 +193,11 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void AlphaBlendedSolidQuadBlendsOverTheClearAndOpaqueQuadCoversIt() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void AlphaBlendedSolidQuadBlendsOverTheClearAndOpaqueQuadCoversIt()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Color blendedTint = new(0.9f, 0.2f, 0.1f, 0.5f);
         Color opaqueTint = new(0.1f, 0.8f, 0.3f, 1f);
         Color textureColor = new(0.8f, 0.4f, 0.2f, 1f);
@@ -189,9 +205,20 @@ public sealed class ScreenDrawGpuTests {
         Texture texture = harness.CreateTexture(1, 1, textureColor);
 
         harness.SubmitOrthographic(
-            camera => {
-                DrawSolidRect(camera, new Rect(40f, 40f, 80f, 60f), blendedTint, RenderState.AlphaBlend);
-                DrawSolidRect(camera, new Rect(200f, 40f, 80f, 60f), opaqueTint, RenderState.Opaque);
+            camera =>
+            {
+                DrawSolidRect(
+                    camera,
+                    new Rect(40f, 40f, 80f, 60f),
+                    blendedTint,
+                    RenderState.AlphaBlend
+                );
+                DrawSolidRect(
+                    camera,
+                    new Rect(200f, 40f, 80f, 60f),
+                    opaqueTint,
+                    RenderState.Opaque
+                );
                 // The textured form multiplies the texture by the per-instance tint on the mesh
                 // program, so the same source-over result applies to the mesh-program fragment.
                 DrawTexturedRect(
@@ -199,10 +226,12 @@ public sealed class ScreenDrawGpuTests {
                     texture,
                     new Rect(120f, 120f, 80f, 60f),
                     texturedTint,
-                    RenderState.AlphaBlend);
+                    RenderState.AlphaBlend
+                );
             },
             clearColor: _clearColor,
-            height: harness.Height);
+            height: harness.Height
+        );
 
         // The alpha preset is source-over: src.rgb * src.a + dst.rgb * (1 - src.a).
         Color expectedBlend = SourceOver(blendedTint, _clearColor);
@@ -211,8 +240,10 @@ public sealed class ScreenDrawGpuTests {
                 Unorm(textureColor).R,
                 Unorm(textureColor).G,
                 Unorm(textureColor).B,
-                texturedTint.A),
-            _clearColor);
+                texturedTint.A
+            ),
+            _clearColor
+        );
         AssertColorNear(expectedBlend, harness.ReadColor(80, 70), BLEND_TOLERANCE);
         AssertColorNear(opaqueTint, harness.ReadColor(240, 70));
         AssertColorNear(expectedTextureBlend, harness.ReadColor(160, 150), BLEND_TOLERANCE);
@@ -230,20 +261,25 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void TexturedQuadsBatchAcrossTexturesAndSplitOnlyOnRenderState() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void TexturedQuadsBatchAcrossTexturesAndSplitOnlyOnRenderState()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Texture red = harness.CreateTexture(1, 1, new Color(1f, 0f, 0f, 1f));
         Texture blue = harness.CreateTexture(1, 1, new Color(0f, 0f, 1f, 1f));
 
         // Two records with different shared textures use the same quad mesh, mesh program, source
         // rectangle, and opaque state, so the per-instance texture bindings keep them in one batch.
         RenderFramePacket packet = harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 DrawTexturedRect(camera, red, new Rect(40f, 40f, 64f, 64f));
                 DrawTexturedRect(camera, blue, new Rect(200f, 40f, 64f, 64f));
             },
             clearColor: _clearColor,
-            height: harness.Height);
+            height: harness.Height
+        );
 
         RenderStats batched = harness.Host.Backend.Stats;
         Assert.Equal(1, batched.DrawCalls);
@@ -271,28 +307,33 @@ public sealed class ScreenDrawGpuTests {
         Color alpha = new(0.1f, 0.9f, 0.1f, 1f);
         Color secondOpaque = new(0.1f, 0.1f, 0.9f, 1f);
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 DrawTexturedRect(
                     camera,
                     white,
                     new Rect(32f, 80f, 64f, 64f),
                     firstOpaque,
-                    RenderState.Opaque);
+                    RenderState.Opaque
+                );
                 DrawTexturedRect(
                     camera,
                     white,
                     new Rect(128f, 80f, 64f, 64f),
                     alpha,
-                    RenderState.AlphaBlend);
+                    RenderState.AlphaBlend
+                );
                 DrawTexturedRect(
                     camera,
                     white,
                     new Rect(224f, 80f, 64f, 64f),
                     secondOpaque,
-                    RenderState.Opaque);
+                    RenderState.Opaque
+                );
             },
             clearColor: _clearColor,
-            height: harness.Height);
+            height: harness.Height
+        );
 
         RenderStats split = harness.Host.Backend.Stats;
         Assert.Equal(2, split.DrawCalls);
@@ -307,23 +348,31 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DiscAndSolidQuadRenderTheirInteriorsAndLeaveTheClearOutside() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void DiscAndSolidQuadRenderTheirInteriorsAndLeaveTheClearOutside()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Color quadColor = new(0.9f, 0.3f, 0.1f, 1f);
         Color discColor = new(0.1f, 0.6f, 0.9f, 1f);
 
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 DrawSolidRect(camera, new Rect(40f, 40f, 64f, 40f), quadColor, RenderState.Opaque);
                 // The disc center is the center of pixel (240, 100); the probe below reads pixel
                 // (251, 111), about 15.6 pixels away on a 45 degree diagonal. The disc fan has ten
                 // degree radial edges, so that pixel sits between the edges at 40 and 50 degrees, is
                 // 8 pixels inside the rim, and is far from the shared fan vertex.
-                Transform discTransform = camera.ScreenToWorldTransform(new Vector2(240.5f, 100.5f), SCREEN_DISTANCE);
+                Transform discTransform = camera.ScreenToWorldTransform(
+                    new Vector2(240.5f, 100.5f),
+                    SCREEN_DISTANCE
+                );
                 camera.DrawDisc(discTransform, 24f, discColor);
             },
             clearColor: _clearColor,
-            height: harness.Height);
+            height: harness.Height
+        );
 
         AssertColorNear(quadColor, harness.ReadColor(72, 60));
         AssertColorNear(discColor, harness.ReadColor(251, 111));
@@ -345,8 +394,11 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void ScreenSpaceScoreAndSpriteShareOneFrame() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void ScreenSpaceScoreAndSpriteShareOneFrame()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Font font = harness.LoadFont();
         harness.WarmGlyphs(font, SCORE_TEXT);
         (TextLayoutResult layout, TextGlyphInstance[] glyphs) = ArrangeText(font, SCORE_TEXT);
@@ -356,16 +408,22 @@ public sealed class ScreenDrawGpuTests {
         (uint X, uint Y) ink = default;
 
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 // The screen transform scale is one world unit per render pixel, so a text layout at 120
                 // units gives a 120-pixel em height and the block's layout bounds center on pixel (80, 100).
-                Transform textTransform = ScreenTextTransform(camera, layout, new Vector2(80f, 100f));
+                Transform textTransform = ScreenTextTransform(
+                    camera,
+                    layout,
+                    new Vector2(80f, 100f)
+                );
                 camera.DrawText(font, SCORE_TEXT, textTransform, TEXT_PIXEL_SIZE, textColor);
                 ink = GlyphCenterPixel(camera, glyphs[1], textTransform);
                 DrawTexturedRect(camera, spriteTexture, new Rect(220f, 60f, 60f, 60f));
             },
             clearColor: _clearColor,
-            height: harness.Height);
+            height: harness.Height
+        );
 
         // The capital I stem fills the center of its padded glyph quad, so a frozen glyph texture or a
         // mis-transformed block cannot leave that pixel at the clear color.
@@ -384,8 +442,11 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void FullViewportQuadIsNotFrustumCulled() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void FullViewportQuadIsNotFrustumCulled()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Color color = new(0.2f, 0.5f, 0.8f, 1f);
         uint width = harness.Width;
         uint height = harness.Height;
@@ -393,13 +454,15 @@ public sealed class ScreenDrawGpuTests {
         // The quad's world bounds sit exactly on the viewport planes, the case the frustum
         // Intersects tolerance exists for: the positive corner is on the plane, not behind it.
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 Vector2 center = new(width / 2f, height / 2f);
                 Transform transform = camera.ScreenToWorldTransform(center, SCREEN_DISTANCE);
                 camera.DrawQuad(transform, new Vector2(width, height), color);
             },
             clearColor: _clearColor,
-            height: height);
+            height: height
+        );
 
         RenderStats stats = harness.Host.Backend.Stats;
         Assert.Equal(1, stats.DrawCalls);
@@ -418,8 +481,11 @@ public sealed class ScreenDrawGpuTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void OrthographicCameraRendersThreeDimensionalCubeGeometry() {
-        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(sampleCount: 1);
+    public void OrthographicCameraRendersThreeDimensionalCubeGeometry()
+    {
+        using PrimitiveDrawGpuHarness harness = PrimitiveDrawGpuHarness.CreateOrSkip(
+            sampleCount: 1
+        );
         Color nearColor = new(0.9f, 0.2f, 0.1f, 1f);
         Color farColor = new(0.1f, 0.3f, 0.9f, 1f);
         Texture texture = harness.CreateTexture(1, 1, Color.White);
@@ -431,20 +497,24 @@ public sealed class ScreenDrawGpuTests {
         // [-1, 1]; the near cube's front face is closer to the camera and wins the depth test at the
         // center, while the far cube stays visible around it.
         harness.SubmitOrthographic(
-            camera => {
+            camera =>
+            {
                 material.SetUniform(PrimitiveDrawGpuHarness.MESH_TEXTURE_BINDING, texture);
                 camera.DrawModel(
                     model,
                     new Transform(Vector3.Zero, Quaternion.Identity, new Vector3(4f)),
-                    farColor);
+                    farColor
+                );
                 camera.DrawModel(
                     model,
                     new Transform(new Vector3(0f, 0f, 2f), Quaternion.Identity, new Vector3(2f)),
-                    nearColor);
+                    nearColor
+                );
             },
             transform: new Transform(new Vector3(0f, 0f, 5f)),
             clearColor: _clearColor,
-            height: 4f);
+            height: 4f
+        );
 
         uint centerX = harness.Width / 2;
         uint centerY = harness.Height / 2;
@@ -480,7 +550,9 @@ public sealed class ScreenDrawGpuTests {
         Texture texture,
         Rect destination,
         Color? tint = null,
-        RenderState? renderState = null) {
+        RenderState? renderState = null
+    )
+    {
         Transform transform = ScreenRectTransform(camera, destination);
         camera.DrawQuad(transform, destination.Size, texture, tint, renderState);
     }
@@ -493,7 +565,9 @@ public sealed class ScreenDrawGpuTests {
         Camera camera,
         Texture texture,
         Rect destination,
-        Rect source) {
+        Rect source
+    )
+    {
         Transform transform = ScreenRectTransform(camera, destination);
         camera.DrawQuad(transform, destination.Size, texture, source);
     }
@@ -505,7 +579,9 @@ public sealed class ScreenDrawGpuTests {
         Camera camera,
         Rect destination,
         Color color,
-        RenderState renderState) {
+        RenderState renderState
+    )
+    {
         Transform transform = ScreenRectTransform(camera, destination);
         camera.DrawQuad(transform, destination.Size, color, renderState);
     }
@@ -517,14 +593,20 @@ public sealed class ScreenDrawGpuTests {
         camera.ScreenToWorldTransform(
             new Vector2(
                 destination.X + (destination.Width * 0.5f),
-                destination.Y + (destination.Height * 0.5f)),
-            SCREEN_DISTANCE);
+                destination.Y + (destination.Height * 0.5f)
+            ),
+            SCREEN_DISTANCE
+        );
 
     /// <summary>
     /// Lays the score out with the engine layout engine over the loaded font's metrics at the pixel em
     /// height the screen transform authors.
     /// </summary>
-    private static (TextLayoutResult Result, TextGlyphInstance[] Glyphs) ArrangeText(Font font, string text) {
+    private static (TextLayoutResult Result, TextGlyphInstance[] Glyphs) ArrangeText(
+        Font font,
+        string text
+    )
+    {
         TextLayoutBuffer buffer = new();
         TextLayoutEngine.Arrange(
             font.Metrics,
@@ -534,7 +616,8 @@ public sealed class ScreenDrawGpuTests {
             TextWrapping.None,
             0f,
             buffer,
-            out TextLayoutResult result);
+            out TextLayoutResult result
+        );
         return (result, buffer.Glyphs.ToArray());
     }
 
@@ -548,18 +631,23 @@ public sealed class ScreenDrawGpuTests {
     private static Transform ScreenTextTransform(
         Camera camera,
         TextLayoutResult layout,
-        Vector2 centerPixel) {
+        Vector2 centerPixel
+    )
+    {
         Vector2 layoutCenter = (layout.BoundsMin + layout.BoundsMax) * 0.5f;
-        Vector2 originPixel = new(
-            centerPixel.X - layoutCenter.X,
-            centerPixel.Y + layoutCenter.Y);
+        Vector2 originPixel = new(centerPixel.X - layoutCenter.X, centerPixel.Y + layoutCenter.Y);
         return camera.ScreenToWorldTransform(originPixel, SCREEN_DISTANCE);
     }
 
     /// <summary>
     /// Gets the center pixel of one laid-out glyph's padded quad.
     /// </summary>
-    private static (uint X, uint Y) GlyphCenterPixel(Camera camera, TextGlyphInstance glyph, Transform transform) {
+    private static (uint X, uint Y) GlyphCenterPixel(
+        Camera camera,
+        TextGlyphInstance glyph,
+        Transform transform
+    )
+    {
         Vector2 local = glyph.Position + (glyph.Size * 0.5f);
         Vector2 screen = camera.WorldToScreen(transform.TransformPoint(new Vector3(local, 0f)));
         return (Pixel(screen.X), Pixel(screen.Y));
@@ -571,34 +659,46 @@ public sealed class ScreenDrawGpuTests {
     /// Gets the source-over result of a straight-alpha source color over the destination color, the
     /// result the <see cref="BlendMode.Alpha"/> preset produces.
     /// </summary>
-    private static Color SourceOver(Color source, Color destination) => new(
-        (source.R * source.A) + (destination.R * (1f - source.A)),
-        (source.G * source.A) + (destination.G * (1f - source.A)),
-        (source.B * source.A) + (destination.B * (1f - source.A)),
-        1f);
+    private static Color SourceOver(Color source, Color destination) =>
+        new(
+            (source.R * source.A) + (destination.R * (1f - source.A)),
+            (source.G * source.A) + (destination.G * (1f - source.A)),
+            (source.B * source.A) + (destination.B * (1f - source.A)),
+            1f
+        );
 
     /// <summary>
     /// Converts a color to the value an RGBA8 texture upload stores, so a texture probe is compared
     /// against the quantized sample rather than the authored color.
     /// </summary>
-    private static Color Unorm(Color color) => new(
-        UnormChannel(color.R),
-        UnormChannel(color.G),
-        UnormChannel(color.B),
-        UnormChannel(color.A));
+    private static Color Unorm(Color color) =>
+        new(
+            UnormChannel(color.R),
+            UnormChannel(color.G),
+            UnormChannel(color.B),
+            UnormChannel(color.A)
+        );
 
     private static float UnormChannel(float value) =>
         (byte)((int)((Math.Clamp(value, 0f, 1f) * 255f) + 0.5f)) / 255f;
 
-    private static void AssertColorNear(Color expected, (float R, float G, float B) actual, float tolerance = COLOR_TOLERANCE) {
+    private static void AssertColorNear(
+        Color expected,
+        (float R, float G, float B) actual,
+        float tolerance = COLOR_TOLERANCE
+    )
+    {
         Assert.True(
             MathF.Abs(expected.R - actual.R) <= tolerance,
-            $"Red {actual.R} is not within {tolerance} of {expected.R}.");
+            $"Red {actual.R} is not within {tolerance} of {expected.R}."
+        );
         Assert.True(
             MathF.Abs(expected.G - actual.G) <= tolerance,
-            $"Green {actual.G} is not within {tolerance} of {expected.G}.");
+            $"Green {actual.G} is not within {tolerance} of {expected.G}."
+        );
         Assert.True(
             MathF.Abs(expected.B - actual.B) <= tolerance,
-            $"Blue {actual.B} is not within {tolerance} of {expected.B}.");
+            $"Blue {actual.B} is not within {tolerance} of {expected.B}."
+        );
     }
 }

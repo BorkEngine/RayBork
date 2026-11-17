@@ -10,7 +10,8 @@ namespace RayBork.Internal;
 /// entries are <c>main</c> because these modules are compiled directly by
 /// <c>scripts/compile-shaders.ps1</c> rather than through the bake's entry-point rewriter.
 /// </remarks>
-internal static class SsaoShaderContract {
+internal static class SsaoShaderContract
+{
     internal const string VERTEX_SPIRV_FILE = "SsaoFullscreen.vert.spv";
     internal const string VERTEX_PAYLOAD_PATH = "/shaders/ssao/fullscreen-vert";
     internal const string ENTRY_POINT = "main";
@@ -36,7 +37,8 @@ internal static class SsaoShaderContract {
     internal const string AO_TEXTURE = "aoTexture";
     internal const string SOURCE_COLOR_TEXTURE = "sourceColor";
 
-    internal static readonly ShaderUniformAsset[] AO_UNIFORMS = [
+    internal static readonly ShaderUniformAsset[] AO_UNIFORMS =
+    [
         Uniform("uProjectionInverse", ShaderUniformType.Matrix4x4),
         Uniform("uRadius", ShaderUniformType.Float),
         Uniform("uDistanceFalloff", ShaderUniformType.Float),
@@ -46,7 +48,8 @@ internal static class SsaoShaderContract {
         Uniform("uScreenSpaceRadius", ShaderUniformType.Bool),
     ];
 
-    internal static readonly ShaderUniformAsset[] DENOISE_UNIFORMS = [
+    internal static readonly ShaderUniformAsset[] DENOISE_UNIFORMS =
+    [
         Uniform("uProjectionInverse", ShaderUniformType.Matrix4x4),
         Uniform("uDenoiseRadius", ShaderUniformType.Float),
         Uniform("uRadius", ShaderUniformType.Float),
@@ -55,14 +58,16 @@ internal static class SsaoShaderContract {
         Uniform("uIteration", ShaderUniformType.UInt),
     ];
 
-    internal static readonly ShaderUniformAsset[] COMPOSITE_UNIFORMS = [
+    internal static readonly ShaderUniformAsset[] COMPOSITE_UNIFORMS =
+    [
         Uniform("uAoColor", ShaderUniformType.Vector4),
         Uniform("uIntensity", ShaderUniformType.Float),
     ];
 
     internal static readonly string[] AO_TEXTURES = [SCENE_DEPTH_TEXTURE, BLUE_NOISE_TEXTURE];
 
-    internal static readonly string[] DENOISE_TEXTURES = [
+    internal static readonly string[] DENOISE_TEXTURES =
+    [
         AO_TEXTURE,
         SCENE_DEPTH_TEXTURE,
         BLUE_NOISE_TEXTURE,
@@ -70,9 +75,11 @@ internal static class SsaoShaderContract {
 
     internal static readonly string[] COMPOSITE_TEXTURES = [SOURCE_COLOR_TEXTURE, AO_TEXTURE];
 
-    private static ShaderUniformAsset Uniform(string name, ShaderUniformType type) => new() {
-        Name = name,
-        Type = type,
-        Default = [],
-    };
+    private static ShaderUniformAsset Uniform(string name, ShaderUniformType type) =>
+        new()
+        {
+            Name = name,
+            Type = type,
+            Default = [],
+        };
 }

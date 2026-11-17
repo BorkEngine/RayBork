@@ -2,20 +2,25 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class TickSynchronizationContextTests {
+public sealed class TickSynchronizationContextTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TaskYieldContinuationRunsOnThePumpingThread() {
+    public void TaskYieldContinuationRunsOnThePumpingThread()
+    {
         using TickSynchronizationContext context = new();
         YieldProbe probe = new();
         int pumpingThreadId = Environment.CurrentManagedThreadId;
         SynchronizationContext? previous = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(context);
-        try {
+        try
+        {
             Task task = probe.RunAsync();
 
             context.PumpUntilComplete(task);
-        } finally {
+        }
+        finally
+        {
             SynchronizationContext.SetSynchronizationContext(previous);
         }
 
@@ -25,7 +30,8 @@ public sealed class TickSynchronizationContextTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PostedCallbackDoesNotRunUntilPumped() {
+    public void PostedCallbackDoesNotRunUntilPumped()
+    {
         using TickSynchronizationContext context = new();
         int invocations = 0;
 
@@ -39,7 +45,8 @@ public sealed class TickSynchronizationContextTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PumpOneRunsAQueuedCallback() {
+    public void PumpOneRunsAQueuedCallback()
+    {
         using TickSynchronizationContext context = new();
         int invocations = 0;
         context.Post(_ => invocations++, null);
@@ -51,16 +58,19 @@ public sealed class TickSynchronizationContextTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PumpUntilCompleteRunsQueuedCallbacksUntilTheTaskCompletes() {
+    public void PumpUntilCompleteRunsQueuedCallbacksUntilTheTaskCompletes()
+    {
         using TickSynchronizationContext context = new();
         TaskCompletionSource completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         int invocations = 0;
         context.Post(
-            _ => {
+            _ =>
+            {
                 invocations++;
                 completion.SetResult();
             },
-            null);
+            null
+        );
 
         context.PumpUntilComplete(completion.Task);
 
@@ -69,19 +79,22 @@ public sealed class TickSynchronizationContextTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PumpUntilCompletePropagatesAFaultedTask() {
+    public void PumpUntilCompletePropagatesAFaultedTask()
+    {
         using TickSynchronizationContext context = new();
         Task faulted = Task.FromException(new InvalidOperationException("setup failed"));
 
-        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => context.PumpUntilComplete(faulted));
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            context.PumpUntilComplete(faulted)
+        );
 
         Assert.Equal("setup failed", exception.Message);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PostedCallbackExceptionPropagatesFromThePump() {
+    public void PostedCallbackExceptionPropagatesFromThePump()
+    {
         using TickSynchronizationContext context = new();
         context.Post(static _ => throw new InvalidOperationException("callback failed"), null);
 
@@ -90,7 +103,8 @@ public sealed class TickSynchronizationContextTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PostAfterDisposeThrows() {
+    public void PostAfterDisposeThrows()
+    {
         TickSynchronizationContext context = new();
         context.Dispose();
 
@@ -99,7 +113,8 @@ public sealed class TickSynchronizationContextTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PumpAfterDisposeThrows() {
+    public void PumpAfterDisposeThrows()
+    {
         TickSynchronizationContext context = new();
         context.Dispose();
 
@@ -110,7 +125,8 @@ public sealed class TickSynchronizationContextTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeDiscardsQueuedCallbacksAndIsIdempotent() {
+    public void DisposeDiscardsQueuedCallbacksAndIsIdempotent()
+    {
         TickSynchronizationContext context = new();
         int invocations = 0;
         context.Post(_ => invocations++, null);
@@ -122,12 +138,14 @@ public sealed class TickSynchronizationContextTests {
         Assert.False(context.TryPumpOne());
     }
 
-    private sealed class YieldProbe {
+    private sealed class YieldProbe
+    {
         public int BeforeYieldThreadId { get; private set; }
 
         public int AfterYieldThreadId { get; private set; }
 
-        public async Task RunAsync() {
+        public async Task RunAsync()
+        {
             BeforeYieldThreadId = Environment.CurrentManagedThreadId;
             await Task.Yield();
             AfterYieldThreadId = Environment.CurrentManagedThreadId;

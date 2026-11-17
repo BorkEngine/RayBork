@@ -25,7 +25,8 @@ namespace RayBork;
 /// static: there is no skeletal or morph animation, and the part list is immutable.
 /// </para>
 /// </remarks>
-public sealed class Model : IDisposable {
+public sealed class Model : IDisposable
+{
     private readonly IReadOnlyList<ModelPart> _parts;
     private readonly BoundingBox _bounds;
     private readonly Mesh[] _meshes;
@@ -49,8 +50,7 @@ public sealed class Model : IDisposable {
     /// </exception>
     /// <exception cref="ObjectDisposedException">A part mesh or material is disposed.</exception>
     public Model(params ModelPart[] parts)
-        : this((IEnumerable<ModelPart>)parts) {
-    }
+        : this((IEnumerable<ModelPart>)parts) { }
 
     /// <summary>
     /// Initializes a model over caller parts.
@@ -68,7 +68,8 @@ public sealed class Model : IDisposable {
     /// <paramref name="parts"/> is empty, a part name is whitespace, or a part has no mesh or material.
     /// </exception>
     /// <exception cref="ObjectDisposedException">A part mesh or material is disposed.</exception>
-    public Model(IEnumerable<ModelPart> parts) {
+    public Model(IEnumerable<ModelPart> parts)
+    {
         ArgumentNullException.ThrowIfNull(parts);
 
         ModelPart[] resolved = [.. parts];
@@ -80,13 +81,18 @@ public sealed class Model : IDisposable {
         _materials = DistinctMaterials(resolved);
 
         int acquired = 0;
-        try {
-            foreach (Mesh mesh in _meshes) {
+        try
+        {
+            foreach (Mesh mesh in _meshes)
+            {
                 mesh.Lifetime.AddOwnerReference();
                 acquired++;
             }
-        } catch {
-            for (int index = 0; index < acquired; index++) {
+        }
+        catch
+        {
+            for (int index = 0; index < acquired; index++)
+            {
                 _meshes[index].Lifetime.ReleaseOwnerReference();
             }
 
@@ -96,8 +102,10 @@ public sealed class Model : IDisposable {
 
     /// <summary>Gets the flat part list in construction order.</summary>
     /// <exception cref="ObjectDisposedException">The model is disposed.</exception>
-    public IReadOnlyList<ModelPart> Parts {
-        get {
+    public IReadOnlyList<ModelPart> Parts
+    {
+        get
+        {
             ThrowIfDisposed();
             return _parts;
         }
@@ -105,8 +113,10 @@ public sealed class Model : IDisposable {
 
     /// <summary>Gets the union of every part's model-space bounds.</summary>
     /// <exception cref="ObjectDisposedException">The model is disposed.</exception>
-    public BoundingBox Bounds {
-        get {
+    public BoundingBox Bounds
+    {
+        get
+        {
             ThrowIfDisposed();
             return _bounds;
         }
@@ -124,47 +134,67 @@ public sealed class Model : IDisposable {
     /// transferred to this model, so it is disposed here exactly once and must not be disposed by the
     /// caller.
     /// </remarks>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
         _disposed = true;
-        foreach (Shader material in _materials) {
-            try {
+        foreach (Shader material in _materials)
+        {
+            try
+            {
                 material.Dispose();
-            } catch (ObjectDisposedException) {
+            }
+            catch (ObjectDisposedException)
+            {
                 // Shutdown force-disposed the material's program before the model was disposed.
             }
         }
 
-        foreach (Mesh mesh in _meshes) {
-            try {
+        foreach (Mesh mesh in _meshes)
+        {
+            try
+            {
                 mesh.Lifetime.ReleaseOwnerReference();
-            } catch (ObjectDisposedException) {
+            }
+            catch (ObjectDisposedException)
+            {
                 // Shutdown force-disposed the mesh before the model was disposed.
             }
         }
     }
 
-    private static void ValidateParts(ModelPart[] parts) {
-        if (parts.Length == 0) {
+    private static void ValidateParts(ModelPart[] parts)
+    {
+        if (parts.Length == 0)
+        {
             throw new ArgumentException("A model must contain at least one part.", nameof(parts));
         }
 
-        foreach (ModelPart part in parts) {
-            if (string.IsNullOrWhiteSpace(part.Name)) {
+        foreach (ModelPart part in parts)
+        {
+            if (string.IsNullOrWhiteSpace(part.Name))
+            {
                 throw new ArgumentException(
                     "Every model part must have a non-empty name.",
-                    nameof(parts));
+                    nameof(parts)
+                );
             }
 
-            if (part.Mesh is null) {
+            if (part.Mesh is null)
+            {
                 throw new ArgumentException("Every model part must have a mesh.", nameof(parts));
             }
 
-            if (part.Shader is null) {
-                throw new ArgumentException("Every model part must have a shader material.", nameof(parts));
+            if (part.Shader is null)
+            {
+                throw new ArgumentException(
+                    "Every model part must have a shader material.",
+                    nameof(parts)
+                );
             }
 
             ObjectDisposedException.ThrowIf(part.Mesh.IsDisposed, part.Mesh);
@@ -172,10 +202,12 @@ public sealed class Model : IDisposable {
         }
     }
 
-    private static BoundingBox UnionBounds(ModelPart[] parts) {
+    private static BoundingBox UnionBounds(ModelPart[] parts)
+    {
         Vector3 minimum = parts[0].Bounds.Min;
         Vector3 maximum = parts[0].Bounds.Max;
-        for (int index = 1; index < parts.Length; index++) {
+        for (int index = 1; index < parts.Length; index++)
+        {
             minimum = Vector3.Min(minimum, parts[index].Bounds.Min);
             maximum = Vector3.Max(maximum, parts[index].Bounds.Max);
         }
@@ -183,18 +215,22 @@ public sealed class Model : IDisposable {
         return new BoundingBox(minimum, maximum);
     }
 
-    private static Mesh[] DistinctMeshes(ModelPart[] parts) {
+    private static Mesh[] DistinctMeshes(ModelPart[] parts)
+    {
         HashSet<Mesh> meshes = new(ReferenceEqualityComparer.Instance);
-        foreach (ModelPart part in parts) {
+        foreach (ModelPart part in parts)
+        {
             meshes.Add(part.Mesh);
         }
 
         return [.. meshes];
     }
 
-    private static Shader[] DistinctMaterials(ModelPart[] parts) {
+    private static Shader[] DistinctMaterials(ModelPart[] parts)
+    {
         HashSet<Shader> materials = new(ReferenceEqualityComparer.Instance);
-        foreach (ModelPart part in parts) {
+        foreach (ModelPart part in parts)
+        {
             materials.Add(part.Shader);
         }
 

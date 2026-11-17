@@ -25,7 +25,8 @@ namespace RayBork.Internal;
 /// each one reserves a fresh slot before frames resume. Every member is render-thread only.
 /// </para>
 /// </remarks>
-internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
+internal sealed unsafe class VulkanBindlessTextureTable : IDisposable
+{
     /// <summary>The slot that always holds the white fallback texture.</summary>
     internal const uint WHITE_SLOT = 0;
 
@@ -53,7 +54,8 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
     /// <param name="logger">The renderer logger for white-texture diagnostics.</param>
     /// <exception cref="ArgumentNullException"><paramref name="logger"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is zero.</exception>
-    internal VulkanBindlessTextureTable(uint capacity, ILogger logger) {
+    internal VulkanBindlessTextureTable(uint capacity, ILogger logger)
+    {
         ArgumentNullException.ThrowIfNull(logger);
 
         _allocator = new VulkanBindlessSlotAllocator(capacity);
@@ -85,13 +87,18 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
     internal void Initialize(
         VulkanDevice device,
         VulkanDescriptorState descriptors,
-        VulkanFrameResources frameResources) {
+        VulkanFrameResources frameResources
+    )
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(descriptors);
         ArgumentNullException.ThrowIfNull(frameResources);
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_initialized) {
-            throw new InvalidOperationException("The bindless texture table is already initialized.");
+        if (_initialized)
+        {
+            throw new InvalidOperationException(
+                "The bindless texture table is already initialized."
+            );
         }
 
         _vulkan = device.Vulkan;
@@ -104,7 +111,8 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
             frameResources.DescriptorSets,
             WHITE_SLOT,
             _whiteView,
-            _whiteSampler);
+            _whiteSampler
+        );
         _initialized = true;
     }
 
@@ -115,7 +123,8 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
     /// <param name="slot">The reserved slot, or <c>0</c> when the table is full.</param>
     /// <returns><see langword="true"/> when a slot was reserved.</returns>
     /// <exception cref="InvalidOperationException">The table is not initialized.</exception>
-    internal bool TryAllocate(out uint slot) {
+    internal bool TryAllocate(out uint slot)
+    {
         EnsureInitialized();
         return _allocator.TryAllocate(out slot);
     }
@@ -127,7 +136,8 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
     /// <param name="view">The texture image view.</param>
     /// <param name="sampler">The sampler for the texture's state.</param>
     /// <exception cref="InvalidOperationException">The table is not initialized.</exception>
-    internal void WriteTexture(uint slot, ImageView view, Sampler sampler) {
+    internal void WriteTexture(uint slot, ImageView view, Sampler sampler)
+    {
         EnsureInitialized();
         _descriptors!.WriteBindlessTexture(_frameResources!.DescriptorSets, slot, view, sampler);
     }
@@ -143,7 +153,8 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
     /// Releases every slot and destroys the white texture. The caller has waited for the device to
     /// idle and calls it before destroying the descriptor state and the logical device.
     /// </summary>
-    internal void Reset() {
+    internal void Reset()
+    {
         _allocator.Reset();
         DestroyWhiteTexture();
         _initialized = false;
@@ -154,8 +165,10 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
     /// <summary>
     /// Releases every slot and destroys the white texture. The call is idempotent.
     /// </summary>
-    public void Dispose() {
-        if (_disposed) {
+    public void Dispose()
+    {
+        if (_disposed)
+        {
             return;
         }
 
@@ -164,14 +177,17 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
         _vulkan = null;
     }
 
-    private void EnsureInitialized() {
+    private void EnsureInitialized()
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (!_initialized) {
+        if (!_initialized)
+        {
             throw new InvalidOperationException("The bindless texture table is not initialized.");
         }
     }
 
-    private void CreateWhiteTexture(VulkanDevice device) {
+    private void CreateWhiteTexture(VulkanDevice device)
+    {
         Vk vulkan = device.Vulkan;
         Device deviceHandle = device.Device;
         Image image = default;
@@ -180,12 +196,15 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
         Sampler sampler = default;
         CommandPool commandPool = default;
         Fence fence = default;
-        try {
-            ImageCreateInfo imageInfo = new() {
+        try
+        {
+            ImageCreateInfo imageInfo = new()
+            {
                 SType = StructureType.ImageCreateInfo,
                 ImageType = ImageType.Type2D,
                 Format = Format.R8G8B8A8Unorm,
-                Extent = new Extent3D {
+                Extent = new Extent3D
+                {
                     Width = WHITE_TEXTURE_SIZE,
                     Height = WHITE_TEXTURE_SIZE,
                     Depth = 1,
@@ -198,29 +217,48 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
                 SharingMode = SharingMode.Exclusive,
                 InitialLayout = ImageLayout.Undefined,
             };
-            ThrowIfFailed(vulkan.CreateImage(deviceHandle, &imageInfo, null, out image), "vkCreateImage");
-            MemoryRequirements requirements = vulkan.GetImageMemoryRequirements(deviceHandle, image);
+            ThrowIfFailed(
+                vulkan.CreateImage(deviceHandle, &imageInfo, null, out image),
+                "vkCreateImage"
+            );
+            MemoryRequirements requirements = vulkan.GetImageMemoryRequirements(
+                deviceHandle,
+                image
+            );
             PhysicalDeviceMemoryProperties memoryProperties =
                 vulkan.GetPhysicalDeviceMemoryProperties(device.PhysicalDevice);
-            MemoryAllocateInfo allocateInfo = new() {
+            MemoryAllocateInfo allocateInfo = new()
+            {
                 SType = StructureType.MemoryAllocateInfo,
                 AllocationSize = requirements.Size,
-                MemoryTypeIndex = FindDeviceLocalMemoryType(requirements.MemoryTypeBits, memoryProperties),
+                MemoryTypeIndex = FindDeviceLocalMemoryType(
+                    requirements.MemoryTypeBits,
+                    memoryProperties
+                ),
             };
-            ThrowIfFailed(vulkan.AllocateMemory(deviceHandle, &allocateInfo, null, out memory), "vkAllocateMemory");
-            ThrowIfFailed(vulkan.BindImageMemory(deviceHandle, image, memory, 0), "vkBindImageMemory");
-            ImageViewCreateInfo viewInfo = new() {
+            ThrowIfFailed(
+                vulkan.AllocateMemory(deviceHandle, &allocateInfo, null, out memory),
+                "vkAllocateMemory"
+            );
+            ThrowIfFailed(
+                vulkan.BindImageMemory(deviceHandle, image, memory, 0),
+                "vkBindImageMemory"
+            );
+            ImageViewCreateInfo viewInfo = new()
+            {
                 SType = StructureType.ImageViewCreateInfo,
                 Image = image,
                 ViewType = ImageViewType.Type2D,
                 Format = Format.R8G8B8A8Unorm,
-                Components = new ComponentMapping {
+                Components = new ComponentMapping
+                {
                     R = ComponentSwizzle.Identity,
                     G = ComponentSwizzle.Identity,
                     B = ComponentSwizzle.Identity,
                     A = ComponentSwizzle.Identity,
                 },
-                SubresourceRange = new ImageSubresourceRange {
+                SubresourceRange = new ImageSubresourceRange
+                {
                     AspectMask = ImageAspectFlags.ColorBit,
                     BaseMipLevel = 0,
                     LevelCount = 1,
@@ -228,9 +266,13 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
                     LayerCount = 1,
                 },
             };
-            ThrowIfFailed(vulkan.CreateImageView(deviceHandle, &viewInfo, null, out view), "vkCreateImageView");
+            ThrowIfFailed(
+                vulkan.CreateImageView(deviceHandle, &viewInfo, null, out view),
+                "vkCreateImageView"
+            );
 
-            SamplerCreateInfo samplerInfo = new() {
+            SamplerCreateInfo samplerInfo = new()
+            {
                 SType = StructureType.SamplerCreateInfo,
                 MagFilter = Filter.Linear,
                 MinFilter = Filter.Linear,
@@ -248,40 +290,67 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
                 BorderColor = BorderColor.FloatOpaqueWhite,
                 UnnormalizedCoordinates = false,
             };
-            ThrowIfFailed(vulkan.CreateSampler(deviceHandle, &samplerInfo, null, out sampler), "vkCreateSampler");
+            ThrowIfFailed(
+                vulkan.CreateSampler(deviceHandle, &samplerInfo, null, out sampler),
+                "vkCreateSampler"
+            );
 
-            CommandPoolCreateInfo poolInfo = new() {
+            CommandPoolCreateInfo poolInfo = new()
+            {
                 SType = StructureType.CommandPoolCreateInfo,
                 Flags = CommandPoolCreateFlags.TransientBit,
                 QueueFamilyIndex = device.Capabilities.GraphicsQueueFamily,
             };
-            ThrowIfFailed(vulkan.CreateCommandPool(deviceHandle, &poolInfo, null, out commandPool), "vkCreateCommandPool");
-            CommandBufferAllocateInfo allocateCommandInfo = new() {
+            ThrowIfFailed(
+                vulkan.CreateCommandPool(deviceHandle, &poolInfo, null, out commandPool),
+                "vkCreateCommandPool"
+            );
+            CommandBufferAllocateInfo allocateCommandInfo = new()
+            {
                 SType = StructureType.CommandBufferAllocateInfo,
                 CommandPool = commandPool,
                 Level = CommandBufferLevel.Primary,
                 CommandBufferCount = 1,
             };
             ThrowIfFailed(
-                vulkan.AllocateCommandBuffers(deviceHandle, &allocateCommandInfo, out CommandBuffer commandBuffer),
-                "vkAllocateCommandBuffers");
-            CommandBufferBeginInfo beginInfo = new() {
+                vulkan.AllocateCommandBuffers(
+                    deviceHandle,
+                    &allocateCommandInfo,
+                    out CommandBuffer commandBuffer
+                ),
+                "vkAllocateCommandBuffers"
+            );
+            CommandBufferBeginInfo beginInfo = new()
+            {
                 SType = StructureType.CommandBufferBeginInfo,
                 Flags = CommandBufferUsageFlags.OneTimeSubmitBit,
             };
-            ThrowIfFailed(vulkan.BeginCommandBuffer(commandBuffer, &beginInfo), "vkBeginCommandBuffer");
+            ThrowIfFailed(
+                vulkan.BeginCommandBuffer(commandBuffer, &beginInfo),
+                "vkBeginCommandBuffer"
+            );
             RecordWhiteTextureClear(vulkan, commandBuffer, image);
             ThrowIfFailed(vulkan.EndCommandBuffer(commandBuffer), "vkEndCommandBuffer");
 
             FenceCreateInfo fenceInfo = new() { SType = StructureType.FenceCreateInfo };
-            ThrowIfFailed(vulkan.CreateFence(deviceHandle, &fenceInfo, null, out fence), "vkCreateFence");
-            SubmitInfo submitInfo = new() {
+            ThrowIfFailed(
+                vulkan.CreateFence(deviceHandle, &fenceInfo, null, out fence),
+                "vkCreateFence"
+            );
+            SubmitInfo submitInfo = new()
+            {
                 SType = StructureType.SubmitInfo,
                 CommandBufferCount = 1,
                 PCommandBuffers = &commandBuffer,
             };
-            ThrowIfFailed(vulkan.QueueSubmit(device.GraphicsQueue, 1, &submitInfo, fence), "vkQueueSubmit");
-            ThrowIfFailed(vulkan.WaitForFences(deviceHandle, 1, &fence, true, WAIT_TIMEOUT), "vkWaitForFences");
+            ThrowIfFailed(
+                vulkan.QueueSubmit(device.GraphicsQueue, 1, &submitInfo, fence),
+                "vkQueueSubmit"
+            );
+            ThrowIfFailed(
+                vulkan.WaitForFences(deviceHandle, 1, &fence, true, WAIT_TIMEOUT),
+                "vkWaitForFences"
+            );
 
             _whiteImage = image;
             _whiteMemory = memory;
@@ -291,42 +360,53 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
             memory = default;
             view = default;
             sampler = default;
-        } finally {
-            if (fence.Handle != 0) {
+        }
+        finally
+        {
+            if (fence.Handle != 0)
+            {
                 vulkan.DestroyFence(deviceHandle, fence, null);
             }
 
-            if (commandPool.Handle != 0) {
+            if (commandPool.Handle != 0)
+            {
                 vulkan.DestroyCommandPool(deviceHandle, commandPool, null);
             }
 
-            if (sampler.Handle != 0) {
+            if (sampler.Handle != 0)
+            {
                 vulkan.DestroySampler(deviceHandle, sampler, null);
             }
 
-            if (view.Handle != 0) {
+            if (view.Handle != 0)
+            {
                 vulkan.DestroyImageView(deviceHandle, view, null);
             }
 
-            if (image.Handle != 0) {
+            if (image.Handle != 0)
+            {
                 vulkan.DestroyImage(deviceHandle, image, null);
             }
 
-            if (memory.Handle != 0) {
+            if (memory.Handle != 0)
+            {
                 vulkan.FreeMemory(deviceHandle, memory, null);
             }
         }
     }
 
-    private static void RecordWhiteTextureClear(Vk vulkan, CommandBuffer commandBuffer, Image image) {
-        ImageSubresourceRange range = new() {
+    private static void RecordWhiteTextureClear(Vk vulkan, CommandBuffer commandBuffer, Image image)
+    {
+        ImageSubresourceRange range = new()
+        {
             AspectMask = ImageAspectFlags.ColorBit,
             BaseMipLevel = 0,
             LevelCount = 1,
             BaseArrayLayer = 0,
             LayerCount = 1,
         };
-        ImageMemoryBarrier toTransfer = new() {
+        ImageMemoryBarrier toTransfer = new()
+        {
             SType = StructureType.ImageMemoryBarrier,
             SrcAccessMask = AccessFlags.None,
             DstAccessMask = AccessFlags.TransferWriteBit,
@@ -347,8 +427,10 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
             0,
             null,
             1,
-            &toTransfer);
-        ClearColorValue white = new() {
+            &toTransfer
+        );
+        ClearColorValue white = new()
+        {
             Float32_0 = 1f,
             Float32_1 = 1f,
             Float32_2 = 1f,
@@ -360,7 +442,8 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
             ImageLayout.TransferDstOptimal,
             &white,
             1,
-            &range);
+            &range
+        );
 
         ImageMemoryBarrier toShaderRead = toTransfer;
         toShaderRead.SrcAccessMask = AccessFlags.TransferWriteBit;
@@ -377,31 +460,40 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
             0,
             null,
             1,
-            &toShaderRead);
+            &toShaderRead
+        );
     }
 
-    private void DestroyWhiteTexture() {
-        if (_vulkan is null) {
+    private void DestroyWhiteTexture()
+    {
+        if (_vulkan is null)
+        {
             return;
         }
 
         Vk vulkan = _vulkan;
-        if (_whiteSampler.Handle != 0) {
+        if (_whiteSampler.Handle != 0)
+        {
             DestroyBestEffort("sampler", () => vulkan.DestroySampler(_device, _whiteSampler, null));
             _whiteSampler = default;
         }
 
-        if (_whiteView.Handle != 0) {
-            DestroyBestEffort("image view", () => vulkan.DestroyImageView(_device, _whiteView, null));
+        if (_whiteView.Handle != 0)
+        {
+            DestroyBestEffort("image view", () =>
+                vulkan.DestroyImageView(_device, _whiteView, null)
+            );
             _whiteView = default;
         }
 
-        if (_whiteImage.Handle != 0) {
+        if (_whiteImage.Handle != 0)
+        {
             DestroyBestEffort("image", () => vulkan.DestroyImage(_device, _whiteImage, null));
             _whiteImage = default;
         }
 
-        if (_whiteMemory.Handle != 0) {
+        if (_whiteMemory.Handle != 0)
+        {
             DestroyBestEffort("memory", () => vulkan.FreeMemory(_device, _whiteMemory, null));
             _whiteMemory = default;
         }
@@ -410,26 +502,39 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The helper exists to destroy one table resource best-effort during teardown; the caller logs and moves on.")]
-    private void DestroyBestEffort(string description, Action destroy) {
-        try {
+        Justification = "The helper exists to destroy one table resource best-effort during teardown; the caller logs and moves on."
+    )]
+    private void DestroyBestEffort(string description, Action destroy)
+    {
+        try
+        {
             destroy();
-        } catch (Exception exception) {
+        }
+        catch (Exception exception)
+        {
             // The table can be reset while a failed device recovery is already unwinding. Logging is
             // the only safe action; the object belongs to the device that is being torn down.
-            _logger.LogWarning(exception, "The Vulkan bindless white texture {Description} could not be destroyed.", description);
+            _logger.LogWarning(
+                exception,
+                "The Vulkan bindless white texture {Description} could not be destroyed.",
+                description
+            );
         }
     }
 
     private static uint FindDeviceLocalMemoryType(
         uint typeBits,
-        PhysicalDeviceMemoryProperties memoryProperties) {
+        PhysicalDeviceMemoryProperties memoryProperties
+    )
+    {
         const MemoryPropertyFlags required = MemoryPropertyFlags.DeviceLocalBit;
-        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++) {
+        for (uint index = 0; index < memoryProperties.MemoryTypeCount; index++)
+        {
             bool typeSupported = (typeBits & (1u << (int)index)) != 0;
             bool propertiesMatch =
                 (memoryProperties.MemoryTypes[(int)index].PropertyFlags & required) == required;
-            if (typeSupported && propertiesMatch) {
+            if (typeSupported && propertiesMatch)
+            {
                 return index;
             }
         }
@@ -438,17 +543,21 @@ internal sealed unsafe class VulkanBindlessTextureTable : IDisposable {
             $"No device-local Vulkan memory type is available for the bindless white texture "
                 + $"(type bits 0x{typeBits:X8}).",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 
-    private static void ThrowIfFailed(Result result, string operation) {
-        if (result == Result.Success) {
+    private static void ThrowIfFailed(Result result, string operation)
+    {
+        if (result == Result.Success)
+        {
             return;
         }
 
         throw new GraphicsException(
             $"The Vulkan command {operation} failed while creating the bindless white texture: {result}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 }

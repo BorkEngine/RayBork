@@ -13,7 +13,8 @@ namespace RayBork.Internal;
 /// prefix, for example <c>B8G8R8A8_SRGB</c>. The Silk.NET enum member names use a different casing,
 /// so the mapping reads the native-name metadata that Silk.NET emits for every format.
 /// </remarks>
-internal static class VulkanFormatInfo {
+internal static class VulkanFormatInfo
+{
     private const string VK_FORMAT_PREFIX = "VK_FORMAT_";
     private const string SRGB_TOKEN = "_SRGB";
 
@@ -25,16 +26,22 @@ internal static class VulkanFormatInfo {
     /// The format token without the <c>VK_FORMAT_</c> prefix, or <c>VK_FORMAT_</c> followed by the
     /// numeric value when the format is not defined by Vulkan.
     /// </returns>
-    internal static string Describe(Format format) {
+    internal static string Describe(Format format)
+    {
         string? memberName = Enum.GetName(format);
-        if (memberName is null) {
+        if (memberName is null)
+        {
             return VK_FORMAT_PREFIX + ((int)format).ToString(CultureInfo.InvariantCulture);
         }
 
-        FieldInfo? field = typeof(Format).GetField(memberName, BindingFlags.Public | BindingFlags.Static);
+        FieldInfo? field = typeof(Format).GetField(
+            memberName,
+            BindingFlags.Public | BindingFlags.Static
+        );
         NativeNameAttribute? nativeName = field?.GetCustomAttribute<NativeNameAttribute>();
         string? name = nativeName?.Name;
-        if (string.IsNullOrEmpty(name)) {
+        if (string.IsNullOrEmpty(name))
+        {
             return VK_FORMAT_PREFIX + ((int)format).ToString(CultureInfo.InvariantCulture);
         }
 

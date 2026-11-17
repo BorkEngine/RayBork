@@ -9,7 +9,8 @@ namespace RayBork.Bake.Toml;
 /// Segments are length-prefixed so a quoted key containing dots or a separator character cannot
 /// collide with another path. Array elements are addressed with a <c>#index</c> suffix.
 /// </remarks>
-internal readonly record struct TomlPath {
+internal readonly record struct TomlPath
+{
     private TomlPath(string key) => Key = key;
 
     /// <summary>Gets the encoded dictionary key.</summary>
@@ -21,12 +22,12 @@ internal readonly record struct TomlPath {
     /// <summary>Returns a child path for a key segment.</summary>
     /// <param name="name">The decoded key segment.</param>
     /// <returns>The child path.</returns>
-    internal TomlPath Child(string name)
-        => new(Key + name.Length.ToString(CultureInfo.InvariantCulture) + ":" + name);
+    internal TomlPath Child(string name) =>
+        new(Key + name.Length.ToString(CultureInfo.InvariantCulture) + ":" + name);
 
     /// <summary>Returns an element path for an array item.</summary>
     /// <param name="index">The zero-based element index.</param>
     /// <returns>The element path.</returns>
-    internal TomlPath Element(int index)
-        => new(Key + "#" + index.ToString(CultureInfo.InvariantCulture));
+    internal TomlPath Element(int index) =>
+        new(Key + "#" + index.ToString(CultureInfo.InvariantCulture));
 }

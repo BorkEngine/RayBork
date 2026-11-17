@@ -10,7 +10,8 @@ namespace RayBork.Bake.Textures;
 /// layouts. RayBork has no uncompressed two-channel format, so <see cref="TextureChannelType.Rg"/>
 /// always maps to BC5.
 /// </remarks>
-internal static class TextureFormatMapping {
+internal static class TextureFormatMapping
+{
     /// <summary>Maps a channel type and compression mode to the concrete format.</summary>
     /// <param name="channelType">The channel type.</param>
     /// <param name="compression">The compression mode.</param>
@@ -20,18 +21,27 @@ internal static class TextureFormatMapping {
     internal static TextureFormat Map(
         TextureChannelType channelType,
         TextureCompression compression,
-        bool isSrgb) {
-        if (!IsDefined(channelType, compression)) {
+        bool isSrgb
+    )
+    {
+        if (!IsDefined(channelType, compression))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(channelType),
                 channelType,
-                "The channel type and compression mode must be defined enum values.");
+                "The channel type and compression mode must be defined enum values."
+            );
         }
 
-        return channelType switch {
+        return channelType switch
+        {
             TextureChannelType.Rgba => isSrgb
-                ? compression == TextureCompression.Auto ? TextureFormat.Bc7Srgb : TextureFormat.Rgba8Srgb
-                : compression == TextureCompression.Auto ? TextureFormat.Bc7Unorm : TextureFormat.Rgba8Unorm,
+                ? compression == TextureCompression.Auto
+                    ? TextureFormat.Bc7Srgb
+                    : TextureFormat.Rgba8Srgb
+                : compression == TextureCompression.Auto
+                    ? TextureFormat.Bc7Unorm
+                    : TextureFormat.Rgba8Unorm,
             TextureChannelType.Rgb => compression == TextureCompression.Auto
                 ? TextureFormat.Bc7Unorm
                 : TextureFormat.Rgba8Unorm,
@@ -44,6 +54,8 @@ internal static class TextureFormatMapping {
     /// <param name="channelType">The channel type.</param>
     /// <param name="compression">The compression mode.</param>
     /// <returns><see langword="true"/> when both values are defined.</returns>
-    internal static bool IsDefined(TextureChannelType channelType, TextureCompression compression)
-        => Enum.IsDefined(channelType) && Enum.IsDefined(compression);
+    internal static bool IsDefined(
+        TextureChannelType channelType,
+        TextureCompression compression
+    ) => Enum.IsDefined(channelType) && Enum.IsDefined(compression);
 }

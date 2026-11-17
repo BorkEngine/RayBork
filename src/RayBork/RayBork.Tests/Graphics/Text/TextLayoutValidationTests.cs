@@ -6,7 +6,8 @@ namespace RayBork.Tests.Graphics.Text;
 /// Tests the documented validation contract of the text layout engine. Invalid input throws before the
 /// engine touches the output buffer.
 /// </summary>
-public sealed class TextLayoutValidationTests {
+public sealed class TextLayoutValidationTests
+{
     [Theory]
     [InlineData(0f)]
     [InlineData(-1f)]
@@ -14,19 +15,23 @@ public sealed class TextLayoutValidationTests {
     [InlineData(float.PositiveInfinity)]
     [InlineData(float.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ArrangeRejectsNonPositiveOrNonFiniteSize(float size) {
+    public void ArrangeRejectsNonPositiveOrNonFiniteSize(float size)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            size,
-            TextAlignment.Left,
-            TextWrapping.None,
-            0f,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                size,
+                TextAlignment.Left,
+                TextWrapping.None,
+                0f,
+                buffer,
+                out _
+            )
+        );
     }
 
     [Theory]
@@ -36,10 +41,13 @@ public sealed class TextLayoutValidationTests {
     [InlineData(float.PositiveInfinity)]
     [InlineData(float.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureRejectsNonPositiveOrNonFiniteSize(float size) {
+    public void MeasureRejectsNonPositiveOrNonFiniteSize(float size)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Measure(metrics, "a", size));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Measure(metrics, "a", size)
+        );
     }
 
     [Theory]
@@ -48,19 +56,23 @@ public sealed class TextLayoutValidationTests {
     [InlineData(float.PositiveInfinity)]
     [InlineData(float.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ArrangeRejectsNegativeOrNonFiniteMaxWidth(float maxWidth) {
+    public void ArrangeRejectsNegativeOrNonFiniteMaxWidth(float maxWidth)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            1f,
-            TextAlignment.Left,
-            TextWrapping.None,
-            maxWidth,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                1f,
+                TextAlignment.Left,
+                TextWrapping.None,
+                maxWidth,
+                buffer,
+                out _
+            )
+        );
     }
 
     [Theory]
@@ -69,96 +81,118 @@ public sealed class TextLayoutValidationTests {
     [InlineData(TextWrapping.Character, 0f)]
     [InlineData(TextWrapping.Character, -1f)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WrappingRequiresAPositiveMaxWidth(TextWrapping wrapping, float maxWidth) {
+    public void WrappingRequiresAPositiveMaxWidth(TextWrapping wrapping, float maxWidth)
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            1f,
-            TextAlignment.Left,
-            wrapping,
-            maxWidth,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                1f,
+                TextAlignment.Left,
+                wrapping,
+                maxWidth,
+                buffer,
+                out _
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ArrangeRejectsAnUndefinedAlignment() {
+    public void ArrangeRejectsAnUndefinedAlignment()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            1f,
-            (TextAlignment)3,
-            TextWrapping.None,
-            0f,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                1f,
+                (TextAlignment)3,
+                TextWrapping.None,
+                0f,
+                buffer,
+                out _
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ArrangeRejectsAnUndefinedWrappingMode() {
+    public void ArrangeRejectsAnUndefinedWrappingMode()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            1f,
-            TextAlignment.Left,
-            (TextWrapping)3,
-            1f,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                1f,
+                TextAlignment.Left,
+                (TextWrapping)3,
+                1f,
+                buffer,
+                out _
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ArrangeRejectsNullMetrics() {
+    public void ArrangeRejectsNullMetrics()
+    {
         TextLayoutBuffer buffer = new();
 
-        Assert.Throws<ArgumentNullException>(() => TextLayoutEngine.Arrange(
-            null!,
-            "a",
-            1f,
-            TextAlignment.Left,
-            TextWrapping.None,
-            0f,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentNullException>(() =>
+            TextLayoutEngine.Arrange(
+                null!,
+                "a",
+                1f,
+                TextAlignment.Left,
+                TextWrapping.None,
+                0f,
+                buffer,
+                out _
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ArrangeRejectsNullBuffer() {
+    public void ArrangeRejectsNullBuffer()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
 
-        Assert.Throws<ArgumentNullException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            1f,
-            TextAlignment.Left,
-            TextWrapping.None,
-            0f,
-            null!,
-            out _));
+        Assert.Throws<ArgumentNullException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                1f,
+                TextAlignment.Left,
+                TextWrapping.None,
+                0f,
+                null!,
+                out _
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MeasureRejectsNullMetrics() {
+    public void MeasureRejectsNullMetrics()
+    {
         Assert.Throws<ArgumentNullException>(() => TextLayoutEngine.Measure(null!, "a", 1f));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidInputLeavesAPrefilledBufferUnchanged() {
+    public void InvalidInputLeavesAPrefilledBufferUnchanged()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
         TextLayoutEngine.Arrange(
@@ -169,58 +203,71 @@ public sealed class TextLayoutValidationTests {
             TextWrapping.None,
             0f,
             buffer,
-            out _);
+            out _
+        );
         int capacity = buffer.Capacity;
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            0f,
-            TextAlignment.Left,
-            TextWrapping.None,
-            0f,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                0f,
+                TextAlignment.Left,
+                TextWrapping.None,
+                0f,
+                buffer,
+                out _
+            )
+        );
         AssertPrefilled(buffer, capacity);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            1f,
-            TextAlignment.Left,
-            TextWrapping.Word,
-            0f,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                1f,
+                TextAlignment.Left,
+                TextWrapping.Word,
+                0f,
+                buffer,
+                out _
+            )
+        );
         AssertPrefilled(buffer, capacity);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => TextLayoutEngine.Arrange(
-            metrics,
-            "a",
-            1f,
-            (TextAlignment)3,
-            TextWrapping.None,
-            0f,
-            buffer,
-            out _));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            TextLayoutEngine.Arrange(
+                metrics,
+                "a",
+                1f,
+                (TextAlignment)3,
+                TextWrapping.None,
+                0f,
+                buffer,
+                out _
+            )
+        );
         AssertPrefilled(buffer, capacity);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BufferRejectsNegativeInitialCapacity() {
+    public void BufferRejectsNegativeInitialCapacity()
+    {
         Assert.Throws<ArgumentOutOfRangeException>(() => new TextLayoutBuffer(-1));
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BufferRejectsNegativeReserveCount() {
+    public void BufferRejectsNegativeReserveCount()
+    {
         TextLayoutBuffer buffer = new();
 
         Assert.Throws<ArgumentOutOfRangeException>(() => buffer.Reserve(-1));
     }
 
-    private static void AssertPrefilled(TextLayoutBuffer buffer, int capacity) {
+    private static void AssertPrefilled(TextLayoutBuffer buffer, int capacity)
+    {
         Assert.Equal(3, buffer.Count);
         Assert.Equal(3, buffer.Glyphs.Length);
         Assert.Equal(capacity, buffer.Capacity);

@@ -42,7 +42,8 @@ namespace RayBork.Internal;
 /// corrupt input.
 /// </para>
 /// </remarks>
-internal sealed class SfntFace {
+internal sealed class SfntFace
+{
     /// <summary>The <c>.notdef</c> glyph identifier.</summary>
     internal const int NOTDEF_GLYPH_ID = 0;
 
@@ -96,7 +97,9 @@ internal sealed class SfntFace {
         CmapTable cmap,
         GlyphOutlineReader? outlines,
         CffFont? cffOutlines,
-        KerningReader kerning) {
+        KerningReader kerning
+    )
+    {
         _tables = tables;
         _hmtx = hmtx;
         _metrics = metrics;
@@ -160,41 +163,53 @@ internal sealed class SfntFace {
     /// or the CFF table is CFF2, uses a predefined Expert charset, has an FDSelect format 4 table,
     /// declares a CFF Top DICT feature outside the supported subset, or exceeds a CFF parse limit.
     /// </exception>
-    internal static SfntFace Parse(ReadOnlyMemory<byte> data) {
+    internal static SfntFace Parse(ReadOnlyMemory<byte> data)
+    {
         SfntReader face = new(data.Span, "the face");
-        if (face.Length < OFFSET_TABLE_LENGTH) {
+        if (face.Length < OFFSET_TABLE_LENGTH)
+        {
             throw new FontFormatException(
-                $"the face is {face.Length} byte(s) long; the 12-byte sfnt offset table is required");
+                $"the face is {face.Length} byte(s) long; the 12-byte sfnt offset table is required"
+            );
         }
 
         uint magic = face.ReadUInt32(0);
         bool trueType = magic is TRUETYPE_MAGIC or TRUE_MAGIC;
-        if (!trueType && magic != OTTO_MAGIC) {
-            if (magic == TTC_MAGIC) {
+        if (!trueType && magic != OTTO_MAGIC)
+        {
+            if (magic == TTC_MAGIC)
+            {
                 throw new FontFormatException(
-                    "the face is a TrueType Collection (ttcf); a single sfnt face is required");
+                    "the face is a TrueType Collection (ttcf); a single sfnt face is required"
+                );
             }
 
             throw new FontFormatException(
-                $"the face magic 0x{magic:X8} is not a supported TrueType (0x00010000 or true) or OpenType (OTTO) face");
+                $"the face magic 0x{magic:X8} is not a supported TrueType (0x00010000 or true) or OpenType (OTTO) face"
+            );
         }
 
         int tableCount = face.ReadUInt16(4);
         long directoryLength = OFFSET_TABLE_LENGTH + ((long)tableCount * TABLE_RECORD_LENGTH);
-        if (directoryLength > face.Length) {
+        if (directoryLength > face.Length)
+        {
             throw new FontFormatException(
-                $"the {tableCount}-entry table directory extends past the {face.Length}-byte face");
+                $"the {tableCount}-entry table directory extends past the {face.Length}-byte face"
+            );
         }
 
         FontTable[] tables = new FontTable[tableCount];
-        for (int index = 0; index < tableCount; index++) {
+        for (int index = 0; index < tableCount; index++)
+        {
             int recordOffset = OFFSET_TABLE_LENGTH + (index * TABLE_RECORD_LENGTH);
             FontTableTag tag = FontTableTag.FromAscii(face.Slice(recordOffset, 4));
             uint offset = face.ReadUInt32(recordOffset + 8);
             uint length = face.ReadUInt32(recordOffset + 12);
-            if ((ulong)offset + length > (ulong)face.Length) {
+            if ((ulong)offset + length > (ulong)face.Length)
+            {
                 throw new FontFormatException(
-                    $"the '{tag}' table at offset {offset} with length {length} extends past the {face.Length}-byte face");
+                    $"the '{tag}' table at offset {offset} with length {length} extends past the {face.Length}-byte face"
+                );
             }
 
             tables[index] = new FontTable(tag, (int)offset, data.Slice((int)offset, (int)length));
@@ -214,7 +229,8 @@ internal sealed class SfntFace {
         ReadOnlyMemory<byte> cff2 = ReadOnlyMemory<byte>.Empty;
         GlyphOutlineReader? outlines = null;
         CffFont? cffOutlines = null;
-        if (trueType) {
+        if (trueType)
+        {
             FontTable loca = RequireTable(directory, FontTableTag.Loca);
             FontTable glyf = RequireTable(directory, FontTableTag.Glyf);
             outlineKind = SfntOutlineKind.TrueType;
@@ -222,19 +238,25 @@ internal sealed class SfntFace {
                 glyf.Data,
                 loca.Data,
                 metrics.GlyphCount,
-                metrics.LongLoca);
-        } else {
+                metrics.LongLoca
+            );
+        }
+        else
+        {
             FontTable? cffTable = FindTable(directory, FontTableTag.Cff);
             FontTable? cff2Table = FindTable(directory, FontTableTag.Cff2);
-            if (cffTable is null && cff2Table is null) {
+            if (cffTable is null && cff2Table is null)
+            {
                 throw new FontFormatException(
-                    "the CFF face is missing the required 'CFF ' or 'CFF2' table");
+                    "the CFF face is missing the required 'CFF ' or 'CFF2' table"
+                );
             }
 
             outlineKind = cffTable is not null ? SfntOutlineKind.Cff : SfntOutlineKind.Cff2;
             cff = cffTable?.Data ?? ReadOnlyMemory<byte>.Empty;
             cff2 = cff2Table?.Data ?? ReadOnlyMemory<byte>.Empty;
-            if (cffTable is not null) {
+            if (cffTable is not null)
+            {
                 cffOutlines = CffFont.Parse(cff, metrics.GlyphCount, metrics.UnitsPerEm);
             }
         }
@@ -256,7 +278,8 @@ internal sealed class SfntFace {
             cmapTable,
             outlines,
             cffOutlines,
-            kerning);
+            kerning
+        );
     }
 
     /// <summary>Finds one table record by tag.</summary>
@@ -267,9 +290,11 @@ internal sealed class SfntFace {
     /// A corrupt face that repeats a tag keeps the first record; the sfnt specification requires
     /// unique tags, so this only affects malformed input.
     /// </remarks>
-    internal bool TryGetTable(FontTableTag tag, out FontTable table) {
+    internal bool TryGetTable(FontTableTag tag, out FontTable table)
+    {
         FontTable? found = FindTable(_tables.Span, tag);
-        if (found is null) {
+        if (found is null)
+        {
             table = default;
             return false;
         }
@@ -282,18 +307,18 @@ internal sealed class SfntFace {
     /// <param name="rune">The Unicode scalar value.</param>
     /// <param name="glyphId">The glyph identifier, or zero when the codepoint is unmapped.</param>
     /// <returns><see langword="true"/> when the codepoint maps to a real glyph.</returns>
-    internal bool TryGetGlyphId(Rune rune, out int glyphId) => _cmap.TryGetGlyphId(rune, out glyphId);
+    internal bool TryGetGlyphId(Rune rune, out int glyphId) =>
+        _cmap.TryGetGlyphId(rune, out glyphId);
 
     /// <summary>Gets one glyph's advance width.</summary>
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
     /// <returns>The advance width in font units.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    internal int GetAdvanceWidth(int glyphId) {
+    internal int GetAdvanceWidth(int glyphId)
+    {
         ThrowIfGlyphOutOfRange(glyphId, nameof(glyphId));
         SfntReader hmtx = new(_hmtx.Span, "the 'hmtx' table");
-        int metric = glyphId < _metrics.NumberOfHMetrics
-            ? glyphId
-            : _metrics.NumberOfHMetrics - 1;
+        int metric = glyphId < _metrics.NumberOfHMetrics ? glyphId : _metrics.NumberOfHMetrics - 1;
         return hmtx.ReadUInt16(metric * LONG_METRIC_LENGTH);
     }
 
@@ -301,17 +326,19 @@ internal sealed class SfntFace {
     /// <param name="glyphId">The glyph identifier, in <c>[0, numGlyphs)</c>.</param>
     /// <returns>The left side bearing in font units.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    internal int GetLeftSideBearing(int glyphId) {
+    internal int GetLeftSideBearing(int glyphId)
+    {
         ThrowIfGlyphOutOfRange(glyphId, nameof(glyphId));
         SfntReader hmtx = new(_hmtx.Span, "the 'hmtx' table");
-        if (glyphId < _metrics.NumberOfHMetrics) {
+        if (glyphId < _metrics.NumberOfHMetrics)
+        {
             return hmtx.ReadInt16((glyphId * LONG_METRIC_LENGTH) + TRAILING_BEARING_LENGTH);
         }
 
         int trailing = glyphId - _metrics.NumberOfHMetrics;
         return hmtx.ReadInt16(
-            (_metrics.NumberOfHMetrics * LONG_METRIC_LENGTH)
-                + (trailing * TRAILING_BEARING_LENGTH));
+            (_metrics.NumberOfHMetrics * LONG_METRIC_LENGTH) + (trailing * TRAILING_BEARING_LENGTH)
+        );
     }
 
     /// <summary>Resolves one glyph's stored bounds and font-unit outline.</summary>
@@ -332,18 +359,22 @@ internal sealed class SfntFace {
     /// or more than 8,388,608 private-DICT bytes — are reported by <see cref="Parse"/> before a glyph
     /// is read.
     /// </exception>
-    internal FontGlyph GetGlyph(int glyphId) {
+    internal FontGlyph GetGlyph(int glyphId)
+    {
         ThrowIfGlyphOutOfRange(glyphId, nameof(glyphId));
-        if (_outlines is not null) {
+        if (_outlines is not null)
+        {
             return _outlines.ReadGlyph(glyphId);
         }
 
-        if (_cffOutlines is not null) {
+        if (_cffOutlines is not null)
+        {
             return _cffOutlines.ReadGlyph(glyphId);
         }
 
         throw new FontUnsupportedException(
-            "the face stores CFF2 outlines; only TrueType 'glyf' and CFF 1.0 outlines are resolved");
+            "the face stores CFF2 outlines; only TrueType 'glyf' and CFF 1.0 outlines are resolved"
+        );
     }
 
     /// <summary>Gets the kerning adjustment of one horizontal pair.</summary>
@@ -351,7 +382,8 @@ internal sealed class SfntFace {
     /// <param name="rightGlyphId">The right glyph identifier, in <c>[0, numGlyphs)</c>.</param>
     /// <returns>The adjustment in font units, or zero when the pair is not kerned.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A glyph identifier is outside the face.</exception>
-    internal int GetKerning(int leftGlyphId, int rightGlyphId) {
+    internal int GetKerning(int leftGlyphId, int rightGlyphId)
+    {
         ThrowIfGlyphOutOfRange(leftGlyphId, nameof(leftGlyphId));
         ThrowIfGlyphOutOfRange(rightGlyphId, nameof(rightGlyphId));
         return _kerning.GetKerning(leftGlyphId, rightGlyphId);
@@ -361,74 +393,99 @@ internal sealed class SfntFace {
         FontTable head,
         FontTable maxp,
         FontTable hhea,
-        FontTable hmtx) {
+        FontTable hmtx
+    )
+    {
         SfntReader headReader = new(head.Data.Span, "the 'head' table");
-        if (headReader.Length < HEAD_LENGTH) {
+        if (headReader.Length < HEAD_LENGTH)
+        {
             throw new FontFormatException(
-                $"the 'head' table is {headReader.Length} byte(s) long; {HEAD_LENGTH} are required");
+                $"the 'head' table is {headReader.Length} byte(s) long; {HEAD_LENGTH} are required"
+            );
         }
 
         uint headVersion = headReader.ReadUInt32(0);
-        if (headVersion != HEAD_VERSION) {
+        if (headVersion != HEAD_VERSION)
+        {
             throw new FontFormatException(
-                $"the 'head' table version is 0x{headVersion:X8}; version 1.0 is required");
+                $"the 'head' table version is 0x{headVersion:X8}; version 1.0 is required"
+            );
         }
 
         int unitsPerEm = headReader.ReadUInt16(UNITS_PER_EM_OFFSET);
-        if (unitsPerEm < MIN_UNITS_PER_EM || unitsPerEm > MAX_UNITS_PER_EM) {
+        if (unitsPerEm < MIN_UNITS_PER_EM || unitsPerEm > MAX_UNITS_PER_EM)
+        {
             throw new FontFormatException(
-                $"the 'head' table declares unitsPerEm {unitsPerEm}; the supported range is {MIN_UNITS_PER_EM} to {MAX_UNITS_PER_EM}");
+                $"the 'head' table declares unitsPerEm {unitsPerEm}; the supported range is {MIN_UNITS_PER_EM} to {MAX_UNITS_PER_EM}"
+            );
         }
 
         short indexToLocFormat = headReader.ReadInt16(INDEX_TO_LOC_FORMAT_OFFSET);
-        if (indexToLocFormat is not 0 and not 1) {
+        if (indexToLocFormat is not 0 and not 1)
+        {
             throw new FontFormatException(
-                $"the 'head' table declares indexToLocFormat {indexToLocFormat}; 0 and 1 are supported");
+                $"the 'head' table declares indexToLocFormat {indexToLocFormat}; 0 and 1 are supported"
+            );
         }
 
         SfntReader maxpReader = new(maxp.Data.Span, "the 'maxp' table");
-        if (maxpReader.Length < MAXP_LENGTH) {
+        if (maxpReader.Length < MAXP_LENGTH)
+        {
             throw new FontFormatException(
-                $"the 'maxp' table is {maxpReader.Length} byte(s) long; {MAXP_LENGTH} are required");
+                $"the 'maxp' table is {maxpReader.Length} byte(s) long; {MAXP_LENGTH} are required"
+            );
         }
 
         uint maxpVersion = maxpReader.ReadUInt32(0);
-        if (maxpVersion is not MAXP_VERSION_0_5 and not MAXP_VERSION_1_0) {
+        if (maxpVersion is not MAXP_VERSION_0_5 and not MAXP_VERSION_1_0)
+        {
             throw new FontFormatException(
-                $"the 'maxp' table version is 0x{maxpVersion:X8}; versions 0.5 and 1.0 are supported");
+                $"the 'maxp' table version is 0x{maxpVersion:X8}; versions 0.5 and 1.0 are supported"
+            );
         }
 
-        if (maxpVersion == MAXP_VERSION_1_0 && maxpReader.Length < MAXP_VERSION_1_0_LENGTH) {
+        if (maxpVersion == MAXP_VERSION_1_0 && maxpReader.Length < MAXP_VERSION_1_0_LENGTH)
+        {
             throw new FontFormatException(
-                $"the 'maxp' version 1.0 table is {maxpReader.Length} byte(s) long; {MAXP_VERSION_1_0_LENGTH} are required");
+                $"the 'maxp' version 1.0 table is {maxpReader.Length} byte(s) long; {MAXP_VERSION_1_0_LENGTH} are required"
+            );
         }
 
         int glyphCount = maxpReader.ReadUInt16(NUM_GLYPHS_OFFSET);
-        if (glyphCount == 0) {
+        if (glyphCount == 0)
+        {
             throw new FontFormatException("the 'maxp' table declares zero glyphs");
         }
 
         SfntReader hheaReader = new(hhea.Data.Span, "the 'hhea' table");
-        if (hheaReader.Length < HHEA_LENGTH) {
+        if (hheaReader.Length < HHEA_LENGTH)
+        {
             throw new FontFormatException(
-                $"the 'hhea' table is {hheaReader.Length} byte(s) long; {HHEA_LENGTH} are required");
+                $"the 'hhea' table is {hheaReader.Length} byte(s) long; {HHEA_LENGTH} are required"
+            );
         }
 
         int numberOfHMetrics = hheaReader.ReadUInt16(NUMBER_OF_HMETRICS_OFFSET);
-        if (numberOfHMetrics == 0) {
+        if (numberOfHMetrics == 0)
+        {
             throw new FontFormatException("the 'hhea' table declares zero long horizontal metrics");
         }
 
-        if (numberOfHMetrics > glyphCount) {
+        if (numberOfHMetrics > glyphCount)
+        {
             throw new FontFormatException(
-                $"the 'hhea' table declares {numberOfHMetrics} long horizontal metrics but 'maxp' declares {glyphCount} glyph(s)");
+                $"the 'hhea' table declares {numberOfHMetrics} long horizontal metrics but 'maxp' declares {glyphCount} glyph(s)"
+            );
         }
 
-        long required = (LONG_METRIC_LENGTH * (long)numberOfHMetrics)
+        long required =
+            (LONG_METRIC_LENGTH * (long)numberOfHMetrics)
             + (TRAILING_BEARING_LENGTH * (long)(glyphCount - numberOfHMetrics));
-        if (hmtx.Length < required) {
+        if (hmtx.Length < required)
+        {
             throw new FontFormatException(
-                $"the 'hmtx' table is {hmtx.Length} byte(s); {glyphCount} glyph(s) with {numberOfHMetrics} long metric(s) need {required}");
+                $"the 'hmtx' table is {hmtx.Length} byte(s); {glyphCount} glyph(s) with {numberOfHMetrics} long metric(s) need {required}"
+            );
         }
 
         return new Metrics(
@@ -438,21 +495,27 @@ internal sealed class SfntFace {
             hheaReader.ReadInt16(LINE_GAP_OFFSET),
             glyphCount,
             numberOfHMetrics,
-            indexToLocFormat == 1);
+            indexToLocFormat == 1
+        );
     }
 
-    private static FontTable RequireTable(ReadOnlySpan<FontTable> tables, FontTableTag tag) {
+    private static FontTable RequireTable(ReadOnlySpan<FontTable> tables, FontTableTag tag)
+    {
         FontTable? table = FindTable(tables, tag);
-        if (table is null) {
+        if (table is null)
+        {
             throw new FontFormatException($"the face is missing the required '{tag}' table");
         }
 
         return table.Value;
     }
 
-    private static FontTable? FindTable(ReadOnlySpan<FontTable> tables, FontTableTag tag) {
-        for (int index = 0; index < tables.Length; index++) {
-            if (tables[index].Tag == tag) {
+    private static FontTable? FindTable(ReadOnlySpan<FontTable> tables, FontTableTag tag)
+    {
+        for (int index = 0; index < tables.Length; index++)
+        {
+            if (tables[index].Tag == tag)
+            {
                 return tables[index];
             }
         }
@@ -460,18 +523,22 @@ internal sealed class SfntFace {
         return null;
     }
 
-    private void ThrowIfGlyphOutOfRange(int glyphId, string parameterName) {
-        if ((uint)glyphId < (uint)_metrics.GlyphCount) {
+    private void ThrowIfGlyphOutOfRange(int glyphId, string parameterName)
+    {
+        if ((uint)glyphId < (uint)_metrics.GlyphCount)
+        {
             return;
         }
 
         throw new ArgumentOutOfRangeException(
             parameterName,
             glyphId,
-            $"The face has {_metrics.GlyphCount} glyph(s).");
+            $"The face has {_metrics.GlyphCount} glyph(s)."
+        );
     }
 
-    private readonly struct Metrics {
+    private readonly struct Metrics
+    {
         internal Metrics(
             int unitsPerEm,
             int ascender,
@@ -479,7 +546,9 @@ internal sealed class SfntFace {
             int lineGap,
             int glyphCount,
             int numberOfHMetrics,
-            bool longLoca) {
+            bool longLoca
+        )
+        {
             UnitsPerEm = unitsPerEm;
             Ascender = ascender;
             Descender = descender;

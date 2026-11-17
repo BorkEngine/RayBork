@@ -44,4 +44,5 @@ public readonly record struct RenderTextureDescription(
     int Height,
     TextureFormat ColorFormat = TextureFormat.Rgba16Float,
     bool Depth = true,
-    int SampleCount = 4);
+    int SampleCount = 4
+);

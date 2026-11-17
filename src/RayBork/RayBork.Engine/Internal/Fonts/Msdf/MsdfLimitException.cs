@@ -16,11 +16,13 @@ namespace RayBork.Internal;
 /// the face advance with a zero quad and the glyph is never generated.
 /// </para>
 /// </remarks>
-internal sealed class MsdfLimitException : Exception {
+internal sealed class MsdfLimitException : Exception
+{
     /// <summary>Initializes an over-limit failure.</summary>
     /// <param name="reason">The actionable cause, without a sentence prefix.</param>
     internal MsdfLimitException(string reason)
-        : base($"The MSDF glyph request exceeds a generator limit: {reason}.") {
+        : base($"The MSDF glyph request exceeds a generator limit: {reason}.")
+    {
         Reason = reason;
     }
 

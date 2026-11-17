@@ -16,8 +16,10 @@ namespace RayBork.Internal;
 /// slash and normalizes it.
 /// </para>
 /// </remarks>
-internal abstract class AssetGpuUpload {
-    private protected AssetGpuUpload(AssetGpuUploadKind kind, string path) {
+internal abstract class AssetGpuUpload
+{
+    private protected AssetGpuUpload(AssetGpuUploadKind kind, string path)
+    {
         ArgumentNullException.ThrowIfNull(path);
 
         Kind = kind;

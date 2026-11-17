@@ -34,4 +34,5 @@ public readonly record struct EngineInfo(
     bool HdrOutput,
     int SampleCount,
     PresentMode PresentMode,
-    bool ValidationEnabled);
+    bool ValidationEnabled
+);

@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// The names are generated into every shader module; changing one is an ABI break that requires the
 /// bake, the runtime pipeline layout, and the API reference to change together.
 /// </remarks>
-internal static class ShaderAbiNames {
+internal static class ShaderAbiNames
+{
     /// <summary>The shader ABI version a baked shader descriptor records: 2.</summary>
     /// <remarks>
     /// Version 2 selects the per-pass frame block array: binding 0 is a storage buffer of

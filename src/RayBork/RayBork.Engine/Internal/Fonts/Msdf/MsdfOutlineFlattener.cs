@@ -40,7 +40,8 @@ namespace RayBork.Internal;
 /// sign is only meaningful for the non-overlapping regions a real font uses.
 /// </para>
 /// </remarks>
-internal static class MsdfOutlineFlattener {
+internal static class MsdfOutlineFlattener
+{
     /// <summary>The colour pair that contributes to the red and green channels.</summary>
     internal const int YELLOW = 0b011;
 
@@ -67,20 +68,25 @@ internal static class MsdfOutlineFlattener {
     /// <exception cref="MsdfLimitException">
     /// The outline flattens to more than <see cref="MsdfGenerator.MAX_FLATTENED_EDGES"/> edges.
     /// </exception>
-    internal static int CountEdges(OutlinePath outline, in MsdfGlyphLayout layout) {
+    internal static int CountEdges(OutlinePath outline, in MsdfGlyphLayout layout)
+    {
         long count = 0;
         ReadOnlySpan<OutlineContour> contours = outline.Contours.Span;
-        for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++) {
+        for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++)
+        {
             OutlineContour contour = contours[contourIndex];
             ReadOnlySpan<OutlineSegment> segments = contour.Segments.Span;
             Vector2 from = layout.ToPixel(contour.Start);
-            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++) {
+            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++)
+            {
                 OutlineSegment segment = segments[segmentIndex];
                 Vector2 end = layout.ToPixel(segment.End);
                 count += GetDivisions(from, segment, end, layout);
-                if (count > MsdfGenerator.MAX_FLATTENED_EDGES) {
+                if (count > MsdfGenerator.MAX_FLATTENED_EDGES)
+                {
                     throw new MsdfLimitException(
-                        $"the outline flattens to more than {MsdfGenerator.MAX_FLATTENED_EDGES} edges");
+                        $"the outline flattens to more than {MsdfGenerator.MAX_FLATTENED_EDGES} edges"
+                    );
                 }
 
                 from = end;
@@ -96,10 +102,16 @@ internal static class MsdfOutlineFlattener {
     /// <param name="edges">
     /// The destination span. It must hold exactly <see cref="CountEdges"/> edges.
     /// </param>
-    internal static void Flatten(OutlinePath outline, in MsdfGlyphLayout layout, Span<MsdfEdge> edges) {
+    internal static void Flatten(
+        OutlinePath outline,
+        in MsdfGlyphLayout layout,
+        Span<MsdfEdge> edges
+    )
+    {
         int index = 0;
         ReadOnlySpan<OutlineContour> contours = outline.Contours.Span;
-        for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++) {
+        for (int contourIndex = 0; contourIndex < contours.Length; contourIndex++)
+        {
             OutlineContour contour = contours[contourIndex];
             ReadOnlySpan<OutlineSegment> segments = contour.Segments.Span;
             // The closing edge's colour depends on the contour's flattened edge count, so count the
@@ -107,7 +119,8 @@ internal static class MsdfOutlineFlattener {
             // per cubic segment.
             int contourEdgeCount = 0;
             Vector2 from = layout.ToPixel(contour.Start);
-            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++) {
+            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++)
+            {
                 OutlineSegment segment = segments[segmentIndex];
                 Vector2 end = layout.ToPixel(segment.End);
                 contourEdgeCount += GetDivisions(from, segment, end, layout);
@@ -116,24 +129,32 @@ internal static class MsdfOutlineFlattener {
 
             int contourStart = index;
             from = layout.ToPixel(contour.Start);
-            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++) {
+            for (int segmentIndex = 0; segmentIndex < segments.Length; segmentIndex++)
+            {
                 OutlineSegment segment = segments[segmentIndex];
                 Vector2 end = layout.ToPixel(segment.End);
                 Vector2 control1 = layout.ToPixel(segment.Control1);
                 Vector2 control2 = layout.ToPixel(segment.Control2);
                 int divisions = GetDivisions(from, segment, end, layout);
                 Vector2 segmentStart = from;
-                for (int step = 1; step <= divisions; step++) {
-                    Vector2 to = segment.Kind == OutlineSegmentKind.Line
-                        ? end
-                        : Evaluate(
-                            segmentStart,
-                            control1,
-                            control2,
-                            end,
-                            segment.Kind,
-                            (float)step / divisions);
-                    edges[index] = new MsdfEdge(from, to, GetColorMask(index - contourStart, contourEdgeCount));
+                for (int step = 1; step <= divisions; step++)
+                {
+                    Vector2 to =
+                        segment.Kind == OutlineSegmentKind.Line
+                            ? end
+                            : Evaluate(
+                                segmentStart,
+                                control1,
+                                control2,
+                                end,
+                                segment.Kind,
+                                (float)step / divisions
+                            );
+                    edges[index] = new MsdfEdge(
+                        from,
+                        to,
+                        GetColorMask(index - contourStart, contourEdgeCount)
+                    );
                     index++;
                     from = to;
                 }
@@ -145,17 +166,22 @@ internal static class MsdfOutlineFlattener {
         Vector2 start,
         in OutlineSegment segment,
         Vector2 end,
-        in MsdfGlyphLayout layout) {
+        in MsdfGlyphLayout layout
+    )
+    {
         int divisions;
-        switch (segment.Kind) {
-            case OutlineSegmentKind.Quadratic: {
+        switch (segment.Kind)
+        {
+            case OutlineSegmentKind.Quadratic:
+            {
                 Vector2 control = layout.ToPixel(segment.Control1);
                 Vector2 secondDifference = start - (2f * control) + end;
                 divisions = GetDivisionCount(secondDifference.Length(), QUADRATIC_ERROR_FACTOR);
                 break;
             }
 
-            case OutlineSegmentKind.Cubic: {
+            case OutlineSegmentKind.Cubic:
+            {
                 Vector2 control1 = layout.ToPixel(segment.Control1);
                 Vector2 control2 = layout.ToPixel(segment.Control2);
                 float first = (start - (2f * control1) + control2).Length();
@@ -174,13 +200,16 @@ internal static class MsdfOutlineFlattener {
         return (start == end && divisions <= 1) ? 0 : divisions;
     }
 
-    private static int GetDivisionCount(float deviation, double errorFactor) {
-        if (!(deviation > 0f)) {
+    private static int GetDivisionCount(float deviation, double errorFactor)
+    {
+        if (!(deviation > 0f))
+        {
             return 1;
         }
 
         double required = Math.Sqrt((deviation * errorFactor) / FLATTEN_TOLERANCE_PX);
-        if (required >= MAXIMUM_SEGMENTS_PER_CURVE) {
+        if (required >= MAXIMUM_SEGMENTS_PER_CURVE)
+        {
             return MAXIMUM_SEGMENTS_PER_CURVE;
         }
 
@@ -193,9 +222,12 @@ internal static class MsdfOutlineFlattener {
         Vector2 control2,
         Vector2 end,
         OutlineSegmentKind kind,
-        float t) {
+        float t
+    )
+    {
         float remaining = 1f - t;
-        if (kind == OutlineSegmentKind.Quadratic) {
+        if (kind == OutlineSegmentKind.Quadratic)
+        {
             return (remaining * remaining * start)
                 + (2f * remaining * t * control1)
                 + (t * t * end);
@@ -209,15 +241,18 @@ internal static class MsdfOutlineFlattener {
             + (tSquared * t * end);
     }
 
-    private static int GetColorMask(int edgeIndex, int contourEdgeCount) {
+    private static int GetColorMask(int edgeIndex, int contourEdgeCount)
+    {
         int color = edgeIndex % COLOR_COUNT;
         // A contour with 3n + 1 edges lands the closing edge on the first edge's yellow pair. Cyan is
         // the remaining pair, and it differs from both the first edge and the previous magenta edge.
-        if (contourEdgeCount > 1 && edgeIndex == contourEdgeCount - 1 && color == 0) {
+        if (contourEdgeCount > 1 && edgeIndex == contourEdgeCount - 1 && color == 0)
+        {
             color = 1;
         }
 
-        return color switch {
+        return color switch
+        {
             0 => YELLOW,
             1 => CYAN,
             _ => MAGENTA,

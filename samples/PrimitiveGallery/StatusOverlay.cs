@@ -14,7 +14,8 @@ namespace PrimitiveGallery;
 /// instance is per sample. The sample draws the returned line in
 /// <see cref="EngineDefaults.DefaultMonoFont"/>, so the changing counters keep their positions.
 /// </remarks>
-internal sealed class StatusOverlay {
+internal sealed class StatusOverlay
+{
     private const double SAMPLE_SECONDS = 1.0;
 
     private long _sampleStartedAt;
@@ -25,23 +26,30 @@ internal sealed class StatusOverlay {
     /// Returns the status line for the current tick and advances the one-second presentation sample.
     /// </summary>
     /// <param name="context">The tick context that supplies the tick rate and the render statistics.</param>
-    internal string Build(EngineContext context) {
+    internal string Build(EngineContext context)
+    {
         RenderStats stats = context.Stats;
         long now = Stopwatch.GetTimestamp();
-        if (_sampleStartedAt == 0) {
+        if (_sampleStartedAt == 0)
+        {
             // The first tick only anchors the window; a presented rate needs a completed interval.
             _sampleStartedAt = now;
             _presentedAtSampleStart = stats.PresentedFrames;
-        } else {
+        }
+        else
+        {
             double elapsed = Stopwatch.GetElapsedTime(_sampleStartedAt, now).TotalSeconds;
-            if (elapsed >= SAMPLE_SECONDS) {
-                _presentedFramesPerSecond = (stats.PresentedFrames - _presentedAtSampleStart) / elapsed;
+            if (elapsed >= SAMPLE_SECONDS)
+            {
+                _presentedFramesPerSecond =
+                    (stats.PresentedFrames - _presentedAtSampleStart) / elapsed;
                 _sampleStartedAt = now;
                 _presentedAtSampleStart = stats.PresentedFrames;
             }
         }
 
         return FormattableString.Invariant(
-            $"presented {_presentedFramesPerSecond:0.0} fps   tick {context.Fps:0.0}   render {stats.CpuFrameMilliseconds:0.0} ms   draw calls {stats.DrawCalls}   instances {stats.Instances}");
+            $"presented {_presentedFramesPerSecond:0.0} fps   tick {context.Fps:0.0}   render {stats.CpuFrameMilliseconds:0.0} ms   draw calls {stats.DrawCalls}   instances {stats.Instances}"
+        );
     }
 }

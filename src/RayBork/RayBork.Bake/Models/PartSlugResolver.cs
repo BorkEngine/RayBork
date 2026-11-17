@@ -14,7 +14,8 @@ namespace RayBork.Bake.Models;
 /// earlier part's payload, so all three paths are reserved and checked together. The slug length cap
 /// leaves room for the longest suffix, <c>-collision</c>.
 /// </remarks>
-internal sealed class PartSlugResolver {
+internal sealed class PartSlugResolver
+{
     private const int MAX_SLUG_LENGTH = 64;
     private const int MIN_SLUG_LENGTH = 8;
     private const string PAYLOAD_SUFFIX = "-mesh";
@@ -25,7 +26,8 @@ internal sealed class PartSlugResolver {
     private readonly int _maxSlugLength;
     private readonly HashSet<string> _usedOutputPaths = new(StringComparer.Ordinal);
 
-    private PartSlugResolver(string basePath, int maxSlugLength) {
+    private PartSlugResolver(string basePath, int maxSlugLength)
+    {
         _basePath = basePath;
         _maxSlugLength = maxSlugLength;
     }
@@ -38,12 +40,15 @@ internal sealed class PartSlugResolver {
     internal static bool TryCreate(
         string basePath,
         out PartSlugResolver? resolver,
-        out string? reason) {
+        out string? reason
+    )
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(basePath);
 
         resolver = null;
         int available = AssetPath.MAX_PATH_BYTES - basePath.Length - 1 - COLLISION_SUFFIX.Length;
-        if (available < MIN_SLUG_LENGTH) {
+        if (available < MIN_SLUG_LENGTH)
+        {
             reason = $"The model path '{basePath}' leaves no room for a part path.";
             return false;
         }
@@ -63,17 +68,23 @@ internal sealed class PartSlugResolver {
         string? name,
         out string meshPath,
         out string payloadPath,
-        out string collisionPath) {
+        out string collisionPath
+    )
+    {
         string stem = Sanitize(name, _maxSlugLength);
-        for (int suffix = 1; ; suffix++) {
+        for (int suffix = 1; ; suffix++)
+        {
             string candidate = suffix == 1 ? stem : $"{stem}-{suffix}";
             string slug = Fit(candidate, _maxSlugLength);
             string candidateMeshPath = _basePath + "/" + slug;
             string candidatePayloadPath = candidateMeshPath + PAYLOAD_SUFFIX;
             string candidateCollisionPath = candidateMeshPath + COLLISION_SUFFIX;
-            if (_usedOutputPaths.Contains(candidateMeshPath)
+            if (
+                _usedOutputPaths.Contains(candidateMeshPath)
                 || _usedOutputPaths.Contains(candidatePayloadPath)
-                || _usedOutputPaths.Contains(candidateCollisionPath)) {
+                || _usedOutputPaths.Contains(candidateCollisionPath)
+            )
+            {
                 continue;
             }
 
@@ -91,29 +102,39 @@ internal sealed class PartSlugResolver {
     /// <param name="name">The source name, or <see langword="null"/>.</param>
     /// <param name="maxLength">The maximum segment length.</param>
     /// <returns>A non-empty segment of <c>a-z0-9_-</c>.</returns>
-    internal static string Sanitize(string? name, int maxLength) {
+    internal static string Sanitize(string? name, int maxLength)
+    {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxLength, 1);
 
         var builder = new StringBuilder();
-        foreach (char character in name ?? string.Empty) {
-            char lowered = character is >= 'A' and <= 'Z' ? (char)(character + ('a' - 'A')) : character;
-            if (lowered is >= 'a' and <= 'z' or >= '0' and <= '9' or '_') {
+        foreach (char character in name ?? string.Empty)
+        {
+            char lowered = character is >= 'A' and <= 'Z'
+                ? (char)(character + ('a' - 'A'))
+                : character;
+            if (lowered is >= 'a' and <= 'z' or >= '0' and <= '9' or '_')
+            {
                 builder.Append(lowered);
-            } else if (builder.Length == 0 || builder[^1] != '-') {
+            }
+            else if (builder.Length == 0 || builder[^1] != '-')
+            {
                 builder.Append('-');
             }
         }
 
         string slug = builder.ToString().Trim('-');
-        if (slug.Length == 0) {
+        if (slug.Length == 0)
+        {
             return Fit(FALLBACK_SLUG, maxLength);
         }
 
         return Fit(slug, maxLength);
     }
 
-    private static string Fit(string slug, int maxLength) {
-        if (slug.Length <= maxLength) {
+    private static string Fit(string slug, int maxLength)
+    {
+        if (slug.Length <= maxLength)
+        {
             return slug;
         }
 

@@ -3,12 +3,14 @@ using RayBork.Internal;
 
 namespace RayBork.Tests.Rendering;
 
-public sealed class CameraTests {
+public sealed class CameraTests
+{
     private const float TOLERANCE = 1e-5f;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PerspectiveCameraTestHelperExposesItsDefaults() {
+    public void PerspectiveCameraTestHelperExposesItsDefaults()
+    {
         // CameraAppTests covers the public EngineContext defaults; this host helper keeps its own
         // infinity far default for the tests that need an infinite perspective far plane.
         using CameraTestHost host = new();
@@ -32,7 +34,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void OrthographicCameraExposesItsHeightAndFiniteFarPlane() {
+    public void OrthographicCameraExposesItsHeightAndFiniteFarPlane()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
@@ -52,35 +55,44 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnifiedCreateCameraCreatesBothProjections() {
+    public void UnifiedCreateCameraCreatesBothProjections()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        using (Camera perspective = host.Service.CreateCamera(
-            Transform.Identity,
-            CameraProjection.Perspective,
-            fieldOfView: 75f,
-            orthographicHeight: 0f,
-            ClearMode.ColorAndDepth,
-            clearColor: null,
-            near: 0.1f,
-            far: 100f,
-            viewport: null)) {
+        using (
+            Camera perspective = host.Service.CreateCamera(
+                Transform.Identity,
+                CameraProjection.Perspective,
+                fieldOfView: 75f,
+                orthographicHeight: 0f,
+                ClearMode.ColorAndDepth,
+                clearColor: null,
+                near: 0.1f,
+                far: 100f,
+                viewport: null
+            )
+        )
+        {
             Assert.Equal(CameraProjection.Perspective, perspective.Projection);
             Assert.Equal(75f, perspective.FieldOfView);
             Assert.Equal(0f, perspective.OrthographicHeight);
         }
 
-        using (Camera orthographic = host.Service.CreateCamera(
-            Transform.Identity,
-            CameraProjection.Orthographic,
-            fieldOfView: 0f,
-            orthographicHeight: 4.5f,
-            ClearMode.ColorAndDepth,
-            clearColor: null,
-            near: 0.1f,
-            far: 100f,
-            viewport: null)) {
+        using (
+            Camera orthographic = host.Service.CreateCamera(
+                Transform.Identity,
+                CameraProjection.Orthographic,
+                fieldOfView: 0f,
+                orthographicHeight: 4.5f,
+                ClearMode.ColorAndDepth,
+                clearColor: null,
+                near: 0.1f,
+                far: 100f,
+                viewport: null
+            )
+        )
+        {
             Assert.Equal(CameraProjection.Orthographic, orthographic.Projection);
             Assert.Equal(0f, orthographic.FieldOfView);
             Assert.Equal(4.5f, orthographic.OrthographicHeight);
@@ -99,12 +111,14 @@ public sealed class CameraTests {
         CameraProjection projection,
         float fieldOfView,
         float orthographicHeight,
-        string expectedParameter) {
+        string expectedParameter
+    )
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        ArgumentException thrown = Assert.Throws<ArgumentException>(
-            () => host.Service.CreateCamera(
+        ArgumentException thrown = Assert.Throws<ArgumentException>(() =>
+            host.Service.CreateCamera(
                 Transform.Identity,
                 projection,
                 fieldOfView,
@@ -113,7 +127,9 @@ public sealed class CameraTests {
                 clearColor: null,
                 near: 0.1f,
                 far: 100f,
-                viewport: null));
+                viewport: null
+            )
+        );
         Assert.Equal(expectedParameter, thrown.ParamName);
 
         host.EndFrame();
@@ -121,12 +137,13 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnifiedCreateCameraRejectsAnUndefinedProjection() {
+    public void UnifiedCreateCameraRejectsAnUndefinedProjection()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
-            () => host.Service.CreateCamera(
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            host.Service.CreateCamera(
                 Transform.Identity,
                 (CameraProjection)42,
                 fieldOfView: 60f,
@@ -135,7 +152,9 @@ public sealed class CameraTests {
                 clearColor: null,
                 near: 0.1f,
                 far: 100f,
-                viewport: null));
+                viewport: null
+            )
+        );
         Assert.Equal("projection", thrown.ParamName);
 
         host.EndFrame();
@@ -143,7 +162,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnifiedCreateCameraAcceptsAnInfinitePerspectiveFarPlane() {
+    public void UnifiedCreateCameraAcceptsAnInfinitePerspectiveFarPlane()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
@@ -156,7 +176,8 @@ public sealed class CameraTests {
             clearColor: null,
             near: 0.1f,
             far: float.PositiveInfinity,
-            viewport: null);
+            viewport: null
+        );
 
         Assert.Equal(float.PositiveInfinity, camera.Far);
         camera.Dispose();
@@ -174,12 +195,14 @@ public sealed class CameraTests {
     public void UnifiedCreateCameraEnforcesTheFarPlaneRules(
         CameraProjection projection,
         float near,
-        float far) {
+        float far
+    )
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
-            () => host.Service.CreateCamera(
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            host.Service.CreateCamera(
                 Transform.Identity,
                 projection,
                 projection == CameraProjection.Perspective ? 60f : 0f,
@@ -188,7 +211,9 @@ public sealed class CameraTests {
                 clearColor: null,
                 near,
                 far,
-                viewport: null));
+                viewport: null
+            )
+        );
         Assert.Equal("far", thrown.ParamName);
 
         host.EndFrame();
@@ -196,7 +221,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnifiedCreateCameraAppliesClearModeColorAndViewport() {
+    public void UnifiedCreateCameraAppliesClearModeColorAndViewport()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Color clearColor = new(0.25f, 0.5f, 2f, 1f);
@@ -210,7 +236,8 @@ public sealed class CameraTests {
             clearColor,
             near: 0.5f,
             far: 50f,
-            viewport: new Rect(100f, 50f, 640f, 360f));
+            viewport: new Rect(100f, 50f, 640f, 360f)
+        );
 
         Assert.Equal(ClearMode.Color, camera.ClearMode);
         Assert.Equal(clearColor, camera.ClearColor);
@@ -222,18 +249,21 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NullClearColorIsOpaqueBlackAndHdrValuesAreAccepted() {
+    public void NullClearColorIsOpaqueBlackAndHdrValuesAreAccepted()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        using (Camera black = host.CreatePerspectiveCamera(clearColor: null)) {
+        using (Camera black = host.CreatePerspectiveCamera(clearColor: null))
+        {
             Assert.Equal(Color.Black, black.ClearColor);
         }
 
         Color hdr = new(4f, 2f, 0.5f, 1f);
-        using (Camera camera = host.CreatePerspectiveCamera(
-            clearColor: hdr,
-            clearMode: ClearMode.All)) {
+        using (
+            Camera camera = host.CreatePerspectiveCamera(clearColor: hdr, clearMode: ClearMode.All)
+        )
+        {
             Assert.Equal(hdr, camera.ClearColor);
             Assert.Equal(ClearMode.All, camera.ClearMode);
         }
@@ -243,12 +273,14 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NonFiniteClearColorThrows() {
+    public void NonFiniteClearColorThrows()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        ArgumentException thrown = Assert.Throws<ArgumentException>(
-            () => host.CreatePerspectiveCamera(clearColor: new Color(float.NaN, 0f, 0f, 1f)));
+        ArgumentException thrown = Assert.Throws<ArgumentException>(() =>
+            host.CreatePerspectiveCamera(clearColor: new Color(float.NaN, 0f, 0f, 1f))
+        );
         Assert.Equal("clearColor", thrown.ParamName);
 
         host.EndFrame();
@@ -256,12 +288,12 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ViewportIsClampedAndDrivesTheProjectionAspect() {
+    public void ViewportIsClampedAndDrivesTheProjectionAspect()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        Camera camera = host.CreatePerspectiveCamera(
-            viewport: new Rect(-10f, -20f, 200f, 100f));
+        Camera camera = host.CreatePerspectiveCamera(viewport: new Rect(-10f, -20f, 200f, 100f));
 
         Assert.Equal(new Rect(0f, 0f, 190f, 80f), camera.Viewport);
         float f = 1f / MathF.Tan(60f * MathF.PI / 180f * 0.5f);
@@ -278,26 +310,33 @@ public sealed class CameraTests {
     [InlineData(0f, 0f, -1f, 10f)]
     [InlineData(2000f, 0f, 10f, 10f)]
     [InlineData(0f, 2000f, 10f, 10f)]
-    public void InvalidViewportThrows(float x, float y, float width, float height) {
+    public void InvalidViewportThrows(float x, float y, float width, float height)
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
         Assert.Equal(
             "viewport",
-            Assert.Throws<ArgumentException>(
-                () => host.CreatePerspectiveCamera(viewport: new Rect(x, y, width, height))).ParamName);
+            Assert
+                .Throws<ArgumentException>(() =>
+                    host.CreatePerspectiveCamera(viewport: new Rect(x, y, width, height))
+                )
+                .ParamName
+        );
 
         host.EndFrame();
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidClearModeBitsThrow() {
+    public void InvalidClearModeBitsThrow()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => host.CreatePerspectiveCamera(clearMode: (ClearMode)8));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            host.CreatePerspectiveCamera(clearMode: (ClearMode)8)
+        );
 
         host.EndFrame();
     }
@@ -308,12 +347,14 @@ public sealed class CameraTests {
     [InlineData(180f, 0.1f, 100f)]
     [InlineData(60f, 0f, 100f)]
     [InlineData(60f, 0.1f, 0.05f)]
-    public void InvalidPerspectiveArgumentsThrow(float fieldOfView, float near, float far) {
+    public void InvalidPerspectiveArgumentsThrow(float fieldOfView, float near, float far)
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => host.CreatePerspectiveCamera(fieldOfView: fieldOfView, near: near, far: far));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            host.CreatePerspectiveCamera(fieldOfView: fieldOfView, near: near, far: far)
+        );
 
         host.EndFrame();
     }
@@ -324,24 +365,28 @@ public sealed class CameraTests {
     [InlineData(4f, 0f, 100f)]
     [InlineData(4f, 0.1f, float.PositiveInfinity)]
     [InlineData(4f, 0.1f, 0.05f)]
-    public void InvalidOrthographicArgumentsThrow(float height, float near, float far) {
+    public void InvalidOrthographicArgumentsThrow(float height, float near, float far)
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => host.CreateOrthographicCamera(height: height, near: near, far: far));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            host.CreateOrthographicCamera(height: height, near: near, far: far)
+        );
 
         host.EndFrame();
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidOrthographicHeightReportsThePublicParameterName() {
+    public void InvalidOrthographicHeightReportsThePublicParameterName()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
-        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
-            () => host.CreateOrthographicCamera(height: 0f));
+        ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            host.CreateOrthographicCamera(height: 0f)
+        );
         Assert.Equal("orthographicHeight", thrown.ParamName);
 
         host.EndFrame();
@@ -349,26 +394,30 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SingularCameraTransformThrowsInvalidOperation() {
+    public void SingularCameraTransformThrowsInvalidOperation()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
         Transform singular = new(Vector3.Zero, Quaternion.Identity, new Vector3(1f, 0f, 1f));
-        Assert.Throws<InvalidOperationException>(
-            () => host.CreatePerspectiveCamera(transform: singular));
+        Assert.Throws<InvalidOperationException>(() =>
+            host.CreatePerspectiveCamera(transform: singular)
+        );
 
         host.EndFrame();
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreatingASecondCameraWhileOneIsActiveThrows() {
+    public void CreatingASecondCameraWhileOneIsActiveThrows()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
 
         Camera first = host.CreatePerspectiveCamera();
-        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(
-            () => host.CreatePerspectiveCamera());
+        InvalidOperationException thrown = Assert.Throws<InvalidOperationException>(() =>
+            host.CreatePerspectiveCamera()
+        );
         Assert.Contains("Camera 1", thrown.Message, StringComparison.Ordinal);
 
         first.Dispose();
@@ -381,12 +430,14 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CameraCreationOutsideAFrameThrows() {
+    public void CameraCreationOutsideAFrameThrows()
+    {
         CameraService service = new(new FakePlatformWindow(static () => { }));
         TickThread.Attach();
-        try {
-            Assert.Throws<InvalidOperationException>(
-                () => service.CreateCamera(
+        try
+        {
+            Assert.Throws<InvalidOperationException>(() =>
+                service.CreateCamera(
                     Transform.Identity,
                     CameraProjection.Perspective,
                     60f,
@@ -395,20 +446,25 @@ public sealed class CameraTests {
                     null,
                     0.1f,
                     100f,
-                    null));
-        } finally {
+                    null
+                )
+            );
+        }
+        finally
+        {
             TickThread.Detach();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CameraCreationRequiresTheTickThread() {
+    public void CameraCreationRequiresTheTickThread()
+    {
         CameraService service = new(new FakePlatformWindow(static () => { }));
 
         Assert.False(TickThread.IsCurrent);
-        Assert.Throws<InvalidOperationException>(
-            () => service.CreateCamera(
+        Assert.Throws<InvalidOperationException>(() =>
+            service.CreateCamera(
                 Transform.Identity,
                 CameraProjection.Perspective,
                 60f,
@@ -417,12 +473,15 @@ public sealed class CameraTests {
                 null,
                 0.1f,
                 100f,
-                null));
+                null
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeIsIdempotentAndSealsThePass() {
+    public void DisposeIsIdempotentAndSealsThePass()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
@@ -438,7 +497,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryPropertyAndDrawThrowsAfterDispose() {
+    public void EveryPropertyAndDrawThrowsAfterDispose()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
@@ -446,7 +506,8 @@ public sealed class CameraTests {
         Shader shader = RenderingTestAssets.CreateShader();
         using Model model = RenderingTestAssets.CreateModel(
             meshes: [RenderingTestAssets.CreateMesh("meshes/model")],
-            materials: [RenderingTestAssets.CreateShader("shaders/model")]);
+            materials: [RenderingTestAssets.CreateShader("shaders/model")]
+        );
         camera.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => _ = camera.Transform);
@@ -462,22 +523,24 @@ public sealed class CameraTests {
         Assert.Throws<ObjectDisposedException>(() => _ = camera.ProjectionMatrix);
         Assert.Throws<ObjectDisposedException>(() => _ = camera.ViewProjectionMatrix);
         Assert.Throws<ObjectDisposedException>(() => _ = camera.Frustum);
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawMesh(mesh, Transform.Identity, shader));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawInstanced(mesh, shader, [Transform.Identity]));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawModel(model, Transform.Identity));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawWireModel(model, Transform.Identity));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawModelInstanced(model, [Transform.Identity]));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.ScreenToWorldRay(new Vector2(0f, 0f)));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.ScreenToWorldTransform(new Vector2(0f, 0f), 1f));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.WorldToScreen(Vector3.Zero));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawMesh(mesh, Transform.Identity, shader)
+        );
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawInstanced(mesh, shader, [Transform.Identity])
+        );
+        Assert.Throws<ObjectDisposedException>(() => camera.DrawModel(model, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawWireModel(model, Transform.Identity)
+        );
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawModelInstanced(model, [Transform.Identity])
+        );
+        Assert.Throws<ObjectDisposedException>(() => camera.ScreenToWorldRay(new Vector2(0f, 0f)));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.ScreenToWorldTransform(new Vector2(0f, 0f), 1f)
+        );
+        Assert.Throws<ObjectDisposedException>(() => camera.WorldToScreen(Vector3.Zero));
         Assert.True(camera.IsDisposed);
 
         host.EndFrame();
@@ -485,7 +548,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EndFrameCopiesTheAttachedRuntimeToneMappingIntoThePacket() {
+    public void EndFrameCopiesTheAttachedRuntimeToneMappingIntoThePacket()
+    {
         using CameraTestHost host = new();
         TonemappingSettings tonemapping = new(1f, 4f, 2f);
         host.AttachTonemapping(tonemapping);
@@ -501,7 +565,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EndFrameUsesTheDefaultSnapshotWithoutAttachedRuntimeSettings() {
+    public void EndFrameUsesTheDefaultSnapshotWithoutAttachedRuntimeSettings()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
 
@@ -512,7 +577,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AttachTonemappingRejectsNull() {
+    public void AttachTonemappingRejectsNull()
+    {
         using CameraTestHost host = new();
 
         Assert.Throws<ArgumentNullException>(() => host.AttachTonemapping(null!));
@@ -520,7 +586,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ACameraLeftUndisposedMakesEndFrameThrowAndNamesIt() {
+    public void ACameraLeftUndisposedMakesEndFrameThrowAndNamesIt()
+    {
         using CameraTestHost host = new();
         _ = host.BeginFrame();
         host.CreatePerspectiveCamera();
@@ -533,7 +600,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PassRecordsTheCameraValueSnapshots() {
+    public void PassRecordsTheCameraValueSnapshots()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame(time: 2.5, deltaTime: 0.02);
         Color clearColor = new(0.25f, 0.5f, 0.75f, 1f);
@@ -542,7 +610,8 @@ public sealed class CameraTests {
             transform: transform,
             clearMode: ClearMode.All,
             clearColor: clearColor,
-            viewport: new Rect(10f, 20f, 300f, 200f));
+            viewport: new Rect(10f, 20f, 300f, 200f)
+        );
 
         Matrix4x4 view = camera.ViewMatrix;
         Matrix4x4 projection = camera.ProjectionMatrix;
@@ -568,7 +637,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawMeshSnapshotsTheShaderCursorAtCallTime() {
+    public void DrawMeshSnapshotsTheShaderCursorAtCallTime()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Shader shader = RenderingTestAssets.CreateShader(defaultValue: 0f);
@@ -582,7 +652,14 @@ public sealed class CameraTests {
         host.EndFrame();
 
         RenderDrawRecord record = packet.Passes[0].Draws[0];
-        Assert.Equal(2f, RenderingTestAssets.ReadInstanceFloat(shader, record.InstanceTemplate, RenderingTestAssets.VALUE_UNIFORM));
+        Assert.Equal(
+            2f,
+            RenderingTestAssets.ReadInstanceFloat(
+                shader,
+                record.InstanceTemplate,
+                RenderingTestAssets.VALUE_UNIFORM
+            )
+        );
         Assert.Equal(1, record.InstanceCount);
         Assert.Single(record.GetTextureBindings().ToArray());
         Assert.Null(record.GetTextureBindings()[0]);
@@ -594,7 +671,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawMeshUsesTheRenderStateAndTintOverrides() {
+    public void DrawMeshUsesTheRenderStateAndTintOverrides()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Shader shader = RenderingTestAssets.CreateShader();
@@ -613,10 +691,13 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawMeshUsesTheShaderDefaultRenderStateWhenNoOverrideIsGiven() {
+    public void DrawMeshUsesTheShaderDefaultRenderStateWhenNoOverrideIsGiven()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
-        Shader shader = RenderingTestAssets.CreateShader(defaultRenderState: RenderState.AlphaBlend);
+        Shader shader = RenderingTestAssets.CreateShader(
+            defaultRenderState: RenderState.AlphaBlend
+        );
         Mesh mesh = RenderingTestAssets.CreateMesh();
         Camera camera = host.CreatePerspectiveCamera();
 
@@ -629,7 +710,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawMeshRetainsTheMeshShaderAndBoundTextures() {
+    public void DrawMeshRetainsTheMeshShaderAndBoundTextures()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Shader shader = RenderingTestAssets.CreateShader();
@@ -647,7 +729,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawingADisposedMeshOrShaderThrowsObjectDisposed() {
+    public void DrawingADisposedMeshOrShaderThrowsObjectDisposed()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
@@ -655,14 +738,16 @@ public sealed class CameraTests {
         Shader shader = RenderingTestAssets.CreateShader();
         disposedMesh.Dispose();
 
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawMesh(disposedMesh, Transform.Identity, shader));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawMesh(disposedMesh, Transform.Identity, shader)
+        );
 
         Shader disposedShader = RenderingTestAssets.CreateShader("shaders/disposed");
         disposedShader.Dispose();
         Mesh mesh = RenderingTestAssets.CreateMesh("meshes/live");
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawMesh(mesh, Transform.Identity, disposedShader));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawMesh(mesh, Transform.Identity, disposedShader)
+        );
 
         camera.Dispose();
         host.EndFrame();
@@ -670,17 +755,20 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AShaderWithoutBothStagesThrowsInvalidOperation() {
+    public void AShaderWithoutBothStagesThrowsInvalidOperation()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
         Shader vertexOnly = RenderingTestAssets.CreateShader(
             "shaders/vertex-only",
-            stages: ShaderStageMask.Vertex);
+            stages: ShaderStageMask.Vertex
+        );
         Mesh mesh = RenderingTestAssets.CreateMesh();
 
-        Assert.Throws<InvalidOperationException>(
-            () => camera.DrawMesh(mesh, Transform.Identity, vertexOnly));
+        Assert.Throws<InvalidOperationException>(() =>
+            camera.DrawMesh(mesh, Transform.Identity, vertexOnly)
+        );
 
         camera.Dispose();
         host.EndFrame();
@@ -688,13 +776,15 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawInstancedCopiesEveryTransformAndOneCursorSnapshot() {
+    public void DrawInstancedCopiesEveryTransformAndOneCursorSnapshot()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Shader shader = RenderingTestAssets.CreateShader();
         Mesh mesh = RenderingTestAssets.CreateMesh(indexCount: 3);
         Camera camera = host.CreatePerspectiveCamera();
-        Transform[] transforms = [
+        Transform[] transforms =
+        [
             new(new Vector3(1f, 0f, 0f)),
             new(new Vector3(2f, 0f, 0f)),
             new(new Vector3(3f, 0f, 0f)),
@@ -707,14 +797,16 @@ public sealed class CameraTests {
         RenderDrawRecord record = packet.Passes[0].Draws[0];
         Assert.Equal(3, record.InstanceCount);
         ReadOnlySpan<Matrix4x4> worldMatrices = record.GetWorldMatrices();
-        for (int index = 0; index < transforms.Length; index++) {
+        for (int index = 0; index < transforms.Length; index++)
+        {
             Assert.Equal(transforms[index].ToMatrix(), worldMatrices[index]);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptyInstancedSpanRecordsNothing() {
+    public void EmptyInstancedSpanRecordsNothing()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Shader shader = RenderingTestAssets.CreateShader();
@@ -730,7 +822,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelSnapshotsThePartMaterialCursorAtCallTime() {
+    public void DrawModelSnapshotsThePartMaterialCursorAtCallTime()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Shader material = RenderingTestAssets.CreateShader(defaultValue: 0.5f);
@@ -752,7 +845,9 @@ public sealed class CameraTests {
             RenderingTestAssets.ReadInstanceFloat(
                 material,
                 record.InstanceTemplate,
-                RenderingTestAssets.VALUE_UNIFORM));
+                RenderingTestAssets.VALUE_UNIFORM
+            )
+        );
         Assert.Same(texture, record.GetTextureBindings()[0]);
         Assert.Equal(Color.White, record.Tint);
         // One distinct mesh, the part material's internal program, and the bound texture.
@@ -761,16 +856,21 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelUsesEachPartMaterialProgramStateAndTexture() {
+    public void DrawModelUsesEachPartMaterialProgramStateAndTexture()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh firstMesh = RenderingTestAssets.CreateMesh("meshes/first");
         Mesh secondMesh = RenderingTestAssets.CreateMesh("meshes/second");
         Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/first", defaultValue: 0f);
-        Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/second", defaultValue: 0f);
+        Shader secondMaterial = RenderingTestAssets.CreateShader(
+            "shaders/second",
+            defaultValue: 0f
+        );
         using Model model = new(
             new ModelPart("first", firstMesh, firstMaterial, RenderState.Additive),
-            new ModelPart("second", secondMesh, secondMaterial, RenderState.Multiply));
+            new ModelPart("second", secondMesh, secondMaterial, RenderState.Multiply)
+        );
         Texture firstTexture = RenderingTestAssets.CreateTexture("textures/first");
         Texture secondTexture = RenderingTestAssets.CreateTexture("textures/second");
         Camera camera = host.CreatePerspectiveCamera();
@@ -796,13 +896,17 @@ public sealed class CameraTests {
             RenderingTestAssets.ReadInstanceFloat(
                 firstMaterial,
                 firstRecord.InstanceTemplate,
-                RenderingTestAssets.VALUE_UNIFORM));
+                RenderingTestAssets.VALUE_UNIFORM
+            )
+        );
         Assert.Equal(
             8f,
             RenderingTestAssets.ReadInstanceFloat(
                 secondMaterial,
                 secondRecord.InstanceTemplate,
-                RenderingTestAssets.VALUE_UNIFORM));
+                RenderingTestAssets.VALUE_UNIFORM
+            )
+        );
         Assert.Same(firstTexture, firstRecord.GetTextureBindings()[0]);
         Assert.Same(secondTexture, secondRecord.GetTextureBindings()[0]);
         Assert.Equal(RenderState.Additive, firstRecord.RenderState);
@@ -813,13 +917,15 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelDrawComposesThePartLocalTransformBeforeTheInstanceTransform() {
+    public void ModelDrawComposesThePartLocalTransformBeforeTheInstanceTransform()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh mesh = RenderingTestAssets.CreateMesh();
         using Model model = RenderingTestAssets.CreateModel(
             meshes: [mesh],
-            localTransform: new Transform(new Vector3(1f, 0f, 0f)));
+            localTransform: new Transform(new Vector3(1f, 0f, 0f))
+        );
         Camera camera = host.CreatePerspectiveCamera();
 
         camera.DrawModel(model, new Transform(new Vector3(0f, 2f, 0f)));
@@ -832,24 +938,33 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawWireModelRecordsEveryPartWithTheWireframeState() {
+    public void DrawWireModelRecordsEveryPartWithTheWireframeState()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh firstMesh = RenderingTestAssets.CreateMesh("meshes/wire-first");
         Mesh secondMesh = RenderingTestAssets.CreateMesh("meshes/wire-second");
-        Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/wire-first", defaultValue: 0.25f);
-        Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/wire-second", defaultValue: 0.5f);
+        Shader firstMaterial = RenderingTestAssets.CreateShader(
+            "shaders/wire-first",
+            defaultValue: 0.25f
+        );
+        Shader secondMaterial = RenderingTestAssets.CreateShader(
+            "shaders/wire-second",
+            defaultValue: 0.5f
+        );
         Transform local = new(new Vector3(1f, 0f, 0f));
         using Model model = RenderingTestAssets.CreateModel(
             meshes: [firstMesh, secondMesh],
             materials: [firstMaterial, secondMaterial],
-            localTransform: local);
+            localTransform: local
+        );
         Camera camera = host.CreatePerspectiveCamera();
         Color tint = new(0.5f, 0.25f, 0.125f, 1f);
         Transform instance = new(
             new Vector3(0f, 2f, 0f),
             Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2f),
-            new Vector3(2f));
+            new Vector3(2f)
+        );
 
         camera.DrawWireModel(model, instance, tint);
         camera.Dispose();
@@ -859,7 +974,8 @@ public sealed class CameraTests {
         RenderDrawRecord[] records = [.. packet.Passes[0].Draws];
         Assert.Same(firstMaterial.Program.Lifetime, records[0].Program);
         Assert.Same(secondMaterial.Program.Lifetime, records[1].Program);
-        foreach (RenderDrawRecord record in records) {
+        foreach (RenderDrawRecord record in records)
+        {
             Assert.True(record.Wireframe);
             Assert.Equal(tint, record.Tint);
             Assert.Equal(local.ToMatrix() * instance.ToMatrix(), record.GetWorldMatrices()[0]);
@@ -868,7 +984,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelAndDrawWireModelUseSeparateBatches() {
+    public void DrawModelAndDrawWireModelUseSeparateBatches()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh mesh = RenderingTestAssets.CreateMesh();
@@ -897,29 +1014,38 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawWireModelRejectsDisposedModelPartAssetsAndInvalidMaterials() {
+    public void DrawWireModelRejectsDisposedModelPartAssetsAndInvalidMaterials()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
 
         Model disposedModel = RenderingTestAssets.CreateModel(
             meshes: [RenderingTestAssets.CreateMesh("meshes/wire-disposed-model")],
-            materials: [RenderingTestAssets.CreateShader("shaders/wire-disposed-model")]);
+            materials: [RenderingTestAssets.CreateShader("shaders/wire-disposed-model")]
+        );
         disposedModel.Dispose();
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawWireModel(disposedModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawWireModel(disposedModel, Transform.Identity)
+        );
 
         Mesh disposedMesh = RenderingTestAssets.CreateMesh("meshes/wire-disposed-part");
         Shader liveMaterial = RenderingTestAssets.CreateShader("shaders/wire-live-part");
         using Model meshModel = new(new ModelPart("part", disposedMesh, liveMaterial));
         disposedMesh.Lifetime.ForceDispose();
-        Assert.Throws<ObjectDisposedException>(() => camera.DrawWireModel(meshModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawWireModel(meshModel, Transform.Identity)
+        );
 
         Mesh liveMesh = RenderingTestAssets.CreateMesh("meshes/wire-live-part");
-        Shader disposedMaterial = RenderingTestAssets.CreateShader("shaders/wire-disposed-material");
+        Shader disposedMaterial = RenderingTestAssets.CreateShader(
+            "shaders/wire-disposed-material"
+        );
         using Model materialModel = new(new ModelPart("part", liveMesh, disposedMaterial));
         disposedMaterial.Dispose();
-        Assert.Throws<ObjectDisposedException>(() => camera.DrawWireModel(materialModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawWireModel(materialModel, Transform.Identity)
+        );
 
         Mesh texturedMesh = RenderingTestAssets.CreateMesh("meshes/wire-textured-part");
         Shader texturedMaterial = RenderingTestAssets.CreateShader("shaders/wire-textured-part");
@@ -927,15 +1053,24 @@ public sealed class CameraTests {
         Texture disposedTexture = RenderingTestAssets.CreateTexture("textures/wire-disposed-part");
         texturedMaterial.SetUniform(RenderingTestAssets.TEXTURE_BINDING, disposedTexture);
         disposedTexture.Lifetime.ForceDispose();
-        Assert.Throws<ObjectDisposedException>(() => camera.DrawWireModel(texturedModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawWireModel(texturedModel, Transform.Identity)
+        );
 
         Shader vertexOnly = RenderingTestAssets.CreateShader(
             "shaders/wire-vertex-only",
-            stages: ShaderStageMask.Vertex);
+            stages: ShaderStageMask.Vertex
+        );
         using Model invalidMaterialModel = new(
-            new ModelPart("part", RenderingTestAssets.CreateMesh("meshes/wire-invalid-part"), vertexOnly));
-        Assert.Throws<InvalidOperationException>(
-            () => camera.DrawWireModel(invalidMaterialModel, Transform.Identity));
+            new ModelPart(
+                "part",
+                RenderingTestAssets.CreateMesh("meshes/wire-invalid-part"),
+                vertexOnly
+            )
+        );
+        Assert.Throws<InvalidOperationException>(() =>
+            camera.DrawWireModel(invalidMaterialModel, Transform.Identity)
+        );
 
         // Validation runs before any part is recorded, so a bad part cannot leave frame holds behind.
         Assert.Equal(0, packet.Passes[0].DrawCount);
@@ -947,22 +1082,27 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelInstancedSnapshotsEachPartMaterialAndTransform() {
+    public void DrawModelInstancedSnapshotsEachPartMaterialAndTransform()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh first = RenderingTestAssets.CreateMesh("meshes/first");
         Mesh second = RenderingTestAssets.CreateMesh("meshes/second");
-        Shader firstMaterial = RenderingTestAssets.CreateShader("shaders/first", defaultValue: 0.25f);
-        Shader secondMaterial = RenderingTestAssets.CreateShader("shaders/second", defaultValue: 0.5f);
+        Shader firstMaterial = RenderingTestAssets.CreateShader(
+            "shaders/first",
+            defaultValue: 0.25f
+        );
+        Shader secondMaterial = RenderingTestAssets.CreateShader(
+            "shaders/second",
+            defaultValue: 0.5f
+        );
         using Model model = RenderingTestAssets.CreateModel(
             meshes: [first, second],
             materials: [firstMaterial, secondMaterial],
-            localTransform: new Transform(new Vector3(0f, 1f, 0f)));
+            localTransform: new Transform(new Vector3(0f, 1f, 0f))
+        );
         Camera camera = host.CreatePerspectiveCamera();
-        Transform[] transforms = [
-            new(new Vector3(0f, 0f, 0f)),
-            new(new Vector3(10f, 0f, 0f)),
-        ];
+        Transform[] transforms = [new(new Vector3(0f, 0f, 0f)), new(new Vector3(10f, 0f, 0f))];
 
         camera.DrawModelInstanced(model, transforms);
         camera.Dispose();
@@ -972,10 +1112,17 @@ public sealed class CameraTests {
         RenderDrawRecord[] records = [.. packet.Passes[0].Draws];
         Assert.Same(firstMaterial.Program.Lifetime, records[0].Program);
         Assert.Same(secondMaterial.Program.Lifetime, records[1].Program);
-        foreach (RenderDrawRecord record in records) {
+        foreach (RenderDrawRecord record in records)
+        {
             Assert.Equal(2, record.InstanceCount);
-            Assert.Equal(new Vector3(0f, 1f, 0f), Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[0]));
-            Assert.Equal(new Vector3(10f, 1f, 0f), Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[1]));
+            Assert.Equal(
+                new Vector3(0f, 1f, 0f),
+                Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[0])
+            );
+            Assert.Equal(
+                new Vector3(10f, 1f, 0f),
+                Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[1])
+            );
         }
 
         Assert.Equal(
@@ -983,18 +1130,23 @@ public sealed class CameraTests {
             RenderingTestAssets.ReadInstanceFloat(
                 firstMaterial,
                 records[0].InstanceTemplate,
-                RenderingTestAssets.VALUE_UNIFORM));
+                RenderingTestAssets.VALUE_UNIFORM
+            )
+        );
         Assert.Equal(
             0.5f,
             RenderingTestAssets.ReadInstanceFloat(
                 secondMaterial,
                 records[1].InstanceTemplate,
-                RenderingTestAssets.VALUE_UNIFORM));
+                RenderingTestAssets.VALUE_UNIFORM
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelInstancedRecordsEveryTransformForLargeInstanceCounts() {
+    public void DrawModelInstancedRecordsEveryTransformForLargeInstanceCounts()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh mesh = RenderingTestAssets.CreateMesh();
@@ -1002,7 +1154,8 @@ public sealed class CameraTests {
         using Model model = RenderingTestAssets.CreateModel(meshes: [mesh], materials: [material]);
         Camera camera = host.CreatePerspectiveCamera();
         Transform[] transforms = new Transform[100];
-        for (int index = 0; index < transforms.Length; index++) {
+        for (int index = 0; index < transforms.Length; index++)
+        {
             transforms[index] = new Transform(new Vector3(index, 0f, 0f));
         }
 
@@ -1016,12 +1169,14 @@ public sealed class CameraTests {
         Assert.Equal(Vector3.Zero, Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[0]));
         Assert.Equal(
             new Vector3(transforms.Length - 1, 0f, 0f),
-            Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[transforms.Length - 1]));
+            Vector3.Transform(Vector3.Zero, record.GetWorldMatrices()[transforms.Length - 1])
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptyModelInstancedSpanRecordsNothing() {
+    public void EmptyModelInstancedSpanRecordsNothing()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh mesh = RenderingTestAssets.CreateMesh();
@@ -1039,12 +1194,16 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DrawModelRetainsPartMeshesProgramsAndTexturesOnly() {
+    public void DrawModelRetainsPartMeshesProgramsAndTexturesOnly()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Shader material = RenderingTestAssets.CreateShader();
         Mesh mesh = RenderingTestAssets.CreateMesh();
-        using Model model = RenderingTestAssets.CreateModel(meshes: [mesh, mesh], materials: [material, material]);
+        using Model model = RenderingTestAssets.CreateModel(
+            meshes: [mesh, mesh],
+            materials: [material, material]
+        );
         Camera camera = host.CreatePerspectiveCamera();
         Texture texture = RenderingTestAssets.CreateTexture();
         material.SetUniform(RenderingTestAssets.TEXTURE_BINDING, texture);
@@ -1060,31 +1219,39 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ModelDrawsRejectDisposedModelAndPartAssets() {
+    public void ModelDrawsRejectDisposedModelAndPartAssets()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
 
         Model disposedModel = RenderingTestAssets.CreateModel(
             meshes: [RenderingTestAssets.CreateMesh("meshes/disposed-model")],
-            materials: [RenderingTestAssets.CreateShader("shaders/disposed-model")]);
+            materials: [RenderingTestAssets.CreateShader("shaders/disposed-model")]
+        );
         disposedModel.Dispose();
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawModel(disposedModel, Transform.Identity));
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.DrawModelInstanced(disposedModel, [Transform.Identity]));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawModel(disposedModel, Transform.Identity)
+        );
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawModelInstanced(disposedModel, [Transform.Identity])
+        );
 
         Mesh disposedMesh = RenderingTestAssets.CreateMesh("meshes/disposed-part");
         Shader liveMaterial = RenderingTestAssets.CreateShader("shaders/live-part");
         using Model meshModel = new(new ModelPart("part", disposedMesh, liveMaterial));
         disposedMesh.Lifetime.ForceDispose();
-        Assert.Throws<ObjectDisposedException>(() => camera.DrawModel(meshModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawModel(meshModel, Transform.Identity)
+        );
 
         Mesh liveMesh = RenderingTestAssets.CreateMesh("meshes/live-part");
         Shader disposedMaterial = RenderingTestAssets.CreateShader("shaders/disposed-material");
         using Model materialModel = new(new ModelPart("part", liveMesh, disposedMaterial));
         disposedMaterial.Dispose();
-        Assert.Throws<ObjectDisposedException>(() => camera.DrawModel(materialModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawModel(materialModel, Transform.Identity)
+        );
 
         Mesh texturedMesh = RenderingTestAssets.CreateMesh("meshes/textured-part");
         Shader texturedMaterial = RenderingTestAssets.CreateShader("shaders/textured-part");
@@ -1092,7 +1259,9 @@ public sealed class CameraTests {
         Texture disposedTexture = RenderingTestAssets.CreateTexture("textures/disposed-part");
         texturedMaterial.SetUniform(RenderingTestAssets.TEXTURE_BINDING, disposedTexture);
         disposedTexture.Lifetime.ForceDispose();
-        Assert.Throws<ObjectDisposedException>(() => camera.DrawModel(texturedModel, Transform.Identity));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.DrawModel(texturedModel, Transform.Identity)
+        );
 
         Assert.Equal(0, packet.Passes[0].DrawCount);
         Assert.Equal(0, packet.Retention.Count);
@@ -1103,7 +1272,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidPartMaterialRecordsNothing() {
+    public void InvalidPartMaterialRecordsNothing()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         Mesh firstMesh = RenderingTestAssets.CreateMesh("meshes/first");
@@ -1111,15 +1281,18 @@ public sealed class CameraTests {
         Mesh secondMesh = RenderingTestAssets.CreateMesh("meshes/second");
         Shader vertexOnly = RenderingTestAssets.CreateShader(
             "shaders/vertex-only",
-            stages: ShaderStageMask.Vertex);
+            stages: ShaderStageMask.Vertex
+        );
         using Model model = new(
             new ModelPart("first", firstMesh, firstMaterial),
-            new ModelPart("second", secondMesh, vertexOnly));
+            new ModelPart("second", secondMesh, vertexOnly)
+        );
         Camera camera = host.CreatePerspectiveCamera();
 
         Assert.Throws<InvalidOperationException>(() => camera.DrawModel(model, Transform.Identity));
-        Assert.Throws<InvalidOperationException>(
-            () => camera.DrawModelInstanced(model, [Transform.Identity]));
+        Assert.Throws<InvalidOperationException>(() =>
+            camera.DrawModelInstanced(model, [Transform.Identity])
+        );
 
         // Validation runs before any part is recorded, so a bad part cannot leave frame holds behind.
         Assert.Equal(0, packet.Passes[0].DrawCount);
@@ -1131,7 +1304,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TwoPartMaterialsOverOneProgramShareOneModelBatch() {
+    public void TwoPartMaterialsOverOneProgramShareOneModelBatch()
+    {
         using CameraTestHost host = new();
         RenderFramePacket packet = host.BeginFrame();
         ShaderProgram program = RenderingTestAssets.CreateProgram("shaders/shared");
@@ -1140,7 +1314,8 @@ public sealed class CameraTests {
         Mesh sharedMesh = RenderingTestAssets.CreateMesh();
         using Model model = new(
             new ModelPart("first", sharedMesh, first),
-            new ModelPart("second", sharedMesh, second));
+            new ModelPart("second", sharedMesh, second)
+        );
         Camera camera = host.CreatePerspectiveCamera();
 
         camera.DrawModel(model, Transform.Identity);
@@ -1159,10 +1334,13 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldRayRoundTripsForAPerspectiveCamera() {
+    public void ScreenToWorldRayRoundTripsForAPerspectiveCamera()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
-        Camera camera = host.CreatePerspectiveCamera(transform: new Transform(new Vector3(0f, 0f, 5f)));
+        Camera camera = host.CreatePerspectiveCamera(
+            transform: new Transform(new Vector3(0f, 0f, 5f))
+        );
 
         Ray ray = camera.ScreenToWorldRay(new Vector2(640f, 360f));
         Vector2 screen = camera.WorldToScreen(ray.Origin + (ray.Direction * 10f));
@@ -1177,10 +1355,13 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldRayExtrapolatesForAPositionOutsideTheViewport() {
+    public void ScreenToWorldRayExtrapolatesForAPositionOutsideTheViewport()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
-        Camera camera = host.CreatePerspectiveCamera(transform: new Transform(new Vector3(0f, 0f, 5f)));
+        Camera camera = host.CreatePerspectiveCamera(
+            transform: new Transform(new Vector3(0f, 0f, 5f))
+        );
 
         Vector2 outside = new(-100f, 800f);
         Ray ray = camera.ScreenToWorldRay(outside);
@@ -1197,10 +1378,14 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldRayRoundTripsForAnOrthographicCamera() {
+    public void ScreenToWorldRayRoundTripsForAnOrthographicCamera()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
-        Camera camera = host.CreateOrthographicCamera(transform: new Transform(new Vector3(0f, 0f, 5f)), height: 4f);
+        Camera camera = host.CreateOrthographicCamera(
+            transform: new Transform(new Vector3(0f, 0f, 5f)),
+            height: 4f
+        );
 
         Ray ray = camera.ScreenToWorldRay(new Vector2(640f, 360f));
         Vector2 screen = camera.WorldToScreen(ray.Origin + (ray.Direction * 2f));
@@ -1215,12 +1400,14 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenHelpersUseTheOffsetViewport() {
+    public void ScreenHelpersUseTheOffsetViewport()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera(
             transform: new Transform(new Vector3(0f, 0f, 5f)),
-            viewport: new Rect(100f, 50f, 640f, 360f));
+            viewport: new Rect(100f, 50f, 640f, 360f)
+        );
 
         Vector2 center = new(420f, 230f);
         Ray ray = camera.ScreenToWorldRay(center);
@@ -1234,15 +1421,16 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenHelpersRejectNonFiniteInput() {
+    public void ScreenHelpersRejectNonFiniteInput()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
 
-        Assert.Throws<ArgumentException>(
-            () => camera.ScreenToWorldRay(new Vector2(float.NaN, 0f)));
-        Assert.Throws<ArgumentException>(
-            () => camera.WorldToScreen(new Vector3(0f, float.PositiveInfinity, 0f)));
+        Assert.Throws<ArgumentException>(() => camera.ScreenToWorldRay(new Vector2(float.NaN, 0f)));
+        Assert.Throws<ArgumentException>(() =>
+            camera.WorldToScreen(new Vector3(0f, float.PositiveInfinity, 0f))
+        );
 
         camera.Dispose();
         host.EndFrame();
@@ -1250,7 +1438,8 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NullDrawArgumentsThrowArgumentNullException() {
+    public void NullDrawArgumentsThrowArgumentNullException()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
@@ -1259,12 +1448,21 @@ public sealed class CameraTests {
 
         Assert.Throws<ArgumentNullException>(() => camera.DrawModel(null!, Transform.Identity));
         Assert.Throws<ArgumentNullException>(() => camera.DrawWireModel(null!, Transform.Identity));
-        Assert.Throws<ArgumentNullException>(
-            () => camera.DrawModelInstanced(null!, [Transform.Identity]));
-        Assert.Throws<ArgumentNullException>(() => camera.DrawMesh(null!, Transform.Identity, shader));
-        Assert.Throws<ArgumentNullException>(() => camera.DrawMesh(mesh, Transform.Identity, null!));
-        Assert.Throws<ArgumentNullException>(() => camera.DrawInstanced(null!, shader, [Transform.Identity]));
-        Assert.Throws<ArgumentNullException>(() => camera.DrawInstanced(mesh, null!, [Transform.Identity]));
+        Assert.Throws<ArgumentNullException>(() =>
+            camera.DrawModelInstanced(null!, [Transform.Identity])
+        );
+        Assert.Throws<ArgumentNullException>(() =>
+            camera.DrawMesh(null!, Transform.Identity, shader)
+        );
+        Assert.Throws<ArgumentNullException>(() =>
+            camera.DrawMesh(mesh, Transform.Identity, null!)
+        );
+        Assert.Throws<ArgumentNullException>(() =>
+            camera.DrawInstanced(null!, shader, [Transform.Identity])
+        );
+        Assert.Throws<ArgumentNullException>(() =>
+            camera.DrawInstanced(mesh, null!, [Transform.Identity])
+        );
 
         camera.Dispose();
         host.EndFrame();
@@ -1272,17 +1470,20 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldTransformRoundTripsForAPerspectiveCamera() {
+    public void ScreenToWorldTransformRoundTripsForAPerspectiveCamera()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera(
             transform: new Transform(new Vector3(0f, 0f, 5f)),
-            fieldOfView: 60f);
+            fieldOfView: 60f
+        );
         const float distance = 7.5f;
         float expectedScale = 2f * distance * MathF.Tan(60f * MathF.PI / 180f * 0.5f) / 720f;
 
         Vector2[] points = [new(0f, 0f), new(640f, 360f), new(1279f, 719f)];
-        foreach (Vector2 point in points) {
+        foreach (Vector2 point in points)
+        {
             Transform anchored = camera.ScreenToWorldTransform(point, distance);
             Vector2 screen = camera.WorldToScreen(anchored.Position);
 
@@ -1302,7 +1503,9 @@ public sealed class CameraTests {
 
         // The top-left pixel is left of and above the camera axis; the bottom-right pixel is the mirror.
         Vector3 topLeft = camera.ScreenToWorldTransform(new Vector2(0f, 0f), distance).Position;
-        Vector3 bottomRight = camera.ScreenToWorldTransform(new Vector2(1280f, 720f), distance).Position;
+        Vector3 bottomRight = camera
+            .ScreenToWorldTransform(new Vector2(1280f, 720f), distance)
+            .Position;
         Assert.True(topLeft.X < 0f);
         Assert.True(topLeft.Y > 0f);
         Assert.True(bottomRight.X > 0f);
@@ -1314,12 +1517,14 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldTransformRoundTripsForAnOrthographicCamera() {
+    public void ScreenToWorldTransformRoundTripsForAnOrthographicCamera()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreateOrthographicCamera(
             transform: new Transform(new Vector3(0f, 0f, 5f)),
-            height: 4f);
+            height: 4f
+        );
 
         Transform centered = camera.ScreenToWorldTransform(new Vector2(640f, 360f), 2f);
         Assert.Equal(0f, centered.Position.X, 1e-4f);
@@ -1345,8 +1550,11 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldTransformUsesTheCameraRotation() {
-        Quaternion rotation = Quaternion.Normalize(Quaternion.CreateFromYawPitchRoll(0.7f, -0.35f, 0.2f));
+    public void ScreenToWorldTransformUsesTheCameraRotation()
+    {
+        Quaternion rotation = Quaternion.Normalize(
+            Quaternion.CreateFromYawPitchRoll(0.7f, -0.35f, 0.2f)
+        );
         Transform cameraTransform = new(new Vector3(2f, -1f, 6f), rotation, Vector3.One);
         using CameraTestHost host = new();
         host.BeginFrame();
@@ -1372,13 +1580,15 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldTransformUsesViewportRelativePixels() {
+    public void ScreenToWorldTransformUsesViewportRelativePixels()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera(
             transform: new Transform(new Vector3(0f, 0f, 5f)),
             fieldOfView: 60f,
-            viewport: new Rect(100f, 50f, 640f, 360f));
+            viewport: new Rect(100f, 50f, 640f, 360f)
+        );
         Vector2 relative = new(20f, 30f);
         const float distance = 10f;
 
@@ -1397,35 +1607,48 @@ public sealed class CameraTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ScreenToWorldTransformValidatesItsArgumentsAndDisposal() {
+    public void ScreenToWorldTransformValidatesItsArgumentsAndDisposal()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();
 
-        foreach (float distance in new[] { 0f, -1f, float.NaN, float.PositiveInfinity }) {
-            ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(
-                () => camera.ScreenToWorldTransform(Vector2.Zero, distance));
+        foreach (float distance in new[] { 0f, -1f, float.NaN, float.PositiveInfinity })
+        {
+            ArgumentOutOfRangeException thrown = Assert.Throws<ArgumentOutOfRangeException>(() =>
+                camera.ScreenToWorldTransform(Vector2.Zero, distance)
+            );
             Assert.Equal("distance", thrown.ParamName);
         }
 
         Assert.Equal(
             "point",
-            Assert.Throws<ArgumentException>(
-                () => camera.ScreenToWorldTransform(new Vector2(float.NaN, 0f), 1f)).ParamName);
+            Assert
+                .Throws<ArgumentException>(() =>
+                    camera.ScreenToWorldTransform(new Vector2(float.NaN, 0f), 1f)
+                )
+                .ParamName
+        );
         Assert.Equal(
             "point",
-            Assert.Throws<ArgumentException>(
-                () => camera.ScreenToWorldTransform(new Vector2(0f, float.PositiveInfinity), 1f)).ParamName);
+            Assert
+                .Throws<ArgumentException>(() =>
+                    camera.ScreenToWorldTransform(new Vector2(0f, float.PositiveInfinity), 1f)
+                )
+                .ParamName
+        );
 
         camera.Dispose();
-        Assert.Throws<ObjectDisposedException>(
-            () => camera.ScreenToWorldTransform(Vector2.Zero, 1f));
+        Assert.Throws<ObjectDisposedException>(() =>
+            camera.ScreenToWorldTransform(Vector2.Zero, 1f)
+        );
         host.EndFrame();
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WorldToScreenReturnsNaNBehindTheCamera() {
+    public void WorldToScreenReturnsNaNBehindTheCamera()
+    {
         using CameraTestHost host = new();
         host.BeginFrame();
         Camera camera = host.CreatePerspectiveCamera();

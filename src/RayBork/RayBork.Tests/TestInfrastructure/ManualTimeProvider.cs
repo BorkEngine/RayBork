@@ -10,7 +10,8 @@ namespace RayBork.Tests;
 /// <see cref="TimestampFrequency"/> and <see cref="GetTimestamp"/>, so the inherited implementation
 /// is already consistent with the manual timestamps.
 /// </remarks>
-internal sealed class ManualTimeProvider : TimeProvider {
+internal sealed class ManualTimeProvider : TimeProvider
+{
     private const long TIMESTAMP_FREQUENCY = TimeSpan.TicksPerSecond;
 
     private long _timestamp;
@@ -20,7 +21,8 @@ internal sealed class ManualTimeProvider : TimeProvider {
     /// <summary>
     /// Gets or sets the current timestamp in <see cref="TimestampFrequency"/> units.
     /// </summary>
-    public long Timestamp {
+    public long Timestamp
+    {
         get => _timestamp;
         set => _timestamp = value;
     }

@@ -21,7 +21,8 @@ namespace RayBork.Internal;
 /// <see cref="IAssetGpuWorker.Cancel"/> cannot destroy anything twice.
 /// </para>
 /// </remarks>
-internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation {
+internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation
+{
     private int _finished;
     private int _canceled;
 
@@ -40,8 +41,10 @@ internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation {
         VulkanAssetUploadCommands.UploadSubmission submission,
         Buffer stagingBuffer,
         DeviceMemory stagingMemory,
-        VulkanAssetResource resource)
-        : base(upload) {
+        VulkanAssetResource resource
+    )
+        : base(upload)
+    {
         ArgumentNullException.ThrowIfNull(device);
         ArgumentNullException.ThrowIfNull(resource);
 
@@ -108,7 +111,8 @@ internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation {
     /// Marks the operation finished with an error.
     /// </summary>
     /// <param name="error">The failure to report to the bridge.</param>
-    internal void MarkFailed(Exception error) {
+    internal void MarkFailed(Exception error)
+    {
         ArgumentNullException.ThrowIfNull(error);
 
         Error = error;
@@ -125,7 +129,8 @@ internal sealed class VulkanAssetUploadOperation : GpuAssetUploadOperation {
     /// Clears the staging and submission handles after the worker released them. A later
     /// <see cref="IAssetGpuWorker.Cancel"/> then cannot destroy them twice.
     /// </summary>
-    internal void ClearTransients() {
+    internal void ClearTransients()
+    {
         Submission = default;
         StagingBuffer = default;
         StagingMemory = default;

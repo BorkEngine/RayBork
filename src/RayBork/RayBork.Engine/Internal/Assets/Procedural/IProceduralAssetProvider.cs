@@ -9,7 +9,8 @@ namespace RayBork.Internal;
 /// engine context requires the provider; a substitute catalog without procedural support is an
 /// engine programming error.
 /// </remarks>
-internal interface IProceduralAssetProvider {
+internal interface IProceduralAssetProvider
+{
     /// <summary>
     /// Gets the service behind the procedural mesh and texture builders.
     /// </summary>

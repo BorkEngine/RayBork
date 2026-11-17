@@ -4,26 +4,39 @@ namespace RayBork.Tests;
 /// App-level tests for creating render textures from <see cref="IGame.Setup"/> and
 /// <see cref="IGame.Tick"/>, and for the clean shutdown failure.
 /// </summary>
-public sealed class RenderTextureAppTests {
+public sealed class RenderTextureAppTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CreateRenderTextureAsyncIsLegalInSetupAndTickAndFailsAfterShutdown() {
+    public async Task CreateRenderTextureAsyncIsLegalInSetupAndTickAndFailsAfterShutdown()
+    {
         RenderTexture? setupTarget = null;
         RenderTexture? tickTarget = null;
         EngineContext? context = null;
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.SetupHandler = async setupContext => {
+        game.SetupHandler = async setupContext =>
+        {
             context = setupContext;
             setupTarget = await setupContext.CreateRenderTextureAsync(
-                new RenderTextureDescription(32, 16, TextureFormat.Rgba16Float));
+                new RenderTextureDescription(32, 16, TextureFormat.Rgba16Float)
+            );
             Assert.False(setupTarget.IsDisposed);
             Assert.Equal(32, setupTarget.Width);
             Assert.Equal(16, setupTarget.Height);
         };
-        game.TickHandler = tickContext => {
-            tickTarget = tickContext.CreateRenderTextureAsync(
-                new RenderTextureDescription(8, 8, TextureFormat.Rgba8Unorm, Depth: false, SampleCount: 1))
+        game.TickHandler = tickContext =>
+        {
+            tickTarget = tickContext
+                .CreateRenderTextureAsync(
+                    new RenderTextureDescription(
+                        8,
+                        8,
+                        TextureFormat.Rgba8Unorm,
+                        Depth: false,
+                        SampleCount: 1
+                    )
+                )
                 .GetAwaiter()
                 .GetResult();
             Assert.Equal(1, tickTarget.SampleCount);
@@ -40,27 +53,33 @@ public sealed class RenderTextureAppTests {
         setupTarget.Dispose();
         tickTarget.Dispose();
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(
-            () => context.CreateRenderTextureAsync(
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            context.CreateRenderTextureAsync(
                 new RenderTextureDescription(8, 8),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CreateRenderTextureAsyncRejectsAPreCanceledToken() {
+    public void CreateRenderTextureAsyncRejectsAPreCanceledToken()
+    {
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.SetupHandler = async setupContext => {
+        game.SetupHandler = async setupContext =>
+        {
             using CancellationTokenSource cancellation = new();
             await cancellation.CancelAsync();
             // The test cancels its own token to prove the API honors cancellation before completion; the
             // xUnit test token would cancel the test instead.
 #pragma warning disable xUnit1051
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(
-                () => setupContext.CreateRenderTextureAsync(
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                setupContext.CreateRenderTextureAsync(
                     new RenderTextureDescription(16, 16),
-                    cancellation.Token));
+                    cancellation.Token
+                )
+            );
 #pragma warning restore xUnit1051
         };
         game.TickHandler = tickContext => tickContext.RequestExit();
@@ -72,15 +91,19 @@ public sealed class RenderTextureAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ResizeRecreatesTheTargetAndUpdatesBothViewsInPlace() {
+    public void ResizeRecreatesTheTargetAndUpdatesBothViewsInPlace()
+    {
         RenderTexture? target = null;
         Texture? colorTexture = null;
         Texture? depthTexture = null;
         int sampleCount = 0;
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.SetupHandler = async setupContext => {
-            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(32, 16));
+        game.SetupHandler = async setupContext =>
+        {
+            target = await setupContext.CreateRenderTextureAsync(
+                new RenderTextureDescription(32, 16)
+            );
             colorTexture = target.ColorTexture;
             depthTexture = target.DepthTexture;
             sampleCount = target.SampleCount;
@@ -119,25 +142,34 @@ public sealed class RenderTextureAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ResizeDuringACameraTargetingTheTargetThrowsInvalidOperationException() {
+    public void ResizeDuringACameraTargetingTheTargetThrowsInvalidOperationException()
+    {
         RenderTexture? target = null;
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.SetupHandler = async setupContext => {
-            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(16, 16));
+        game.SetupHandler = async setupContext =>
+        {
+            target = await setupContext.CreateRenderTextureAsync(
+                new RenderTextureDescription(16, 16)
+            );
         };
-        game.TickHandler = tickContext => {
-            using (Camera camera = tickContext.CreateCamera(
-                Transform.Identity,
-                CameraProjection.Perspective,
-                60f,
-                0f,
-                ClearMode.ColorAndDepth,
-                null,
-                0.1f,
-                100f,
-                null,
-                target)) {
+        game.TickHandler = tickContext =>
+        {
+            using (
+                Camera camera = tickContext.CreateCamera(
+                    Transform.Identity,
+                    CameraProjection.Perspective,
+                    60f,
+                    0f,
+                    ClearMode.ColorAndDepth,
+                    null,
+                    0.1f,
+                    100f,
+                    null,
+                    target
+                )
+            )
+            {
                 Assert.Same(target, camera.Target);
                 Assert.Throws<InvalidOperationException>(() => target!.Resize(32, 32));
                 Assert.Equal(16, target!.Width);
@@ -154,7 +186,8 @@ public sealed class RenderTextureAppTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ReadbackIsLegalInSetupAndTickAndFailsAfterShutdown() {
+    public async Task ReadbackIsLegalInSetupAndTickAndFailsAfterShutdown()
+    {
         RenderTexture? target = null;
         EngineContext? context = null;
         Color[,]? setupColors = null;
@@ -163,20 +196,30 @@ public sealed class RenderTextureAppTests {
         byte[]? tickPixels = null;
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.SetupHandler = async setupContext => {
+        game.SetupHandler = async setupContext =>
+        {
             context = setupContext;
-            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(8, 4));
+            target = await setupContext.CreateRenderTextureAsync(
+                new RenderTextureDescription(8, 4)
+            );
             // Setup can await both readback forms; the fake renderer services the request on the render
             // thread while this continuation is suspended.
             setupColors = await target.ReadColorsAsync(TestContext.Current.CancellationToken);
             setupPixels = await target.ReadPixelsAsync(TestContext.Current.CancellationToken);
         };
-        game.TickHandler = tickContext => {
+        game.TickHandler = tickContext =>
+        {
             Assert.NotNull(target);
             // IGame.Tick is void, so a tick caller blocks on the returned task. The render thread
             // services the queued readback independently, so the tick does not deadlock.
-            tickColors = target.ReadColorsAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
-            tickPixels = target.ReadPixelsAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+            tickColors = target
+                .ReadColorsAsync(TestContext.Current.CancellationToken)
+                .GetAwaiter()
+                .GetResult();
+            tickPixels = target
+                .ReadPixelsAsync(TestContext.Current.CancellationToken)
+                .GetAwaiter()
+                .GetResult();
             tickContext.RequestExit();
         };
 
@@ -194,26 +237,34 @@ public sealed class RenderTextureAppTests {
         Assert.NotNull(target);
         Assert.False(target.IsDisposed);
 
-        await Assert.ThrowsAsync<ObjectDisposedException>(
-            () => target.ReadColorsAsync(TestContext.Current.CancellationToken));
-        await Assert.ThrowsAsync<ObjectDisposedException>(
-            () => target.ReadPixelsAsync(TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            target.ReadColorsAsync(TestContext.Current.CancellationToken)
+        );
+        await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+            target.ReadPixelsAsync(TestContext.Current.CancellationToken)
+        );
         target.Dispose();
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ReadbackOfADisposedTargetThrowsObjectDisposed() {
+    public async Task ReadbackOfADisposedTargetThrowsObjectDisposed()
+    {
         RenderTexture? target = null;
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.SetupHandler = async setupContext => {
-            target = await setupContext.CreateRenderTextureAsync(new RenderTextureDescription(4, 4));
+        game.SetupHandler = async setupContext =>
+        {
+            target = await setupContext.CreateRenderTextureAsync(
+                new RenderTextureDescription(4, 4)
+            );
             target.Dispose();
-            await Assert.ThrowsAsync<ObjectDisposedException>(
-                () => target.ReadColorsAsync(TestContext.Current.CancellationToken));
-            await Assert.ThrowsAsync<ObjectDisposedException>(
-                () => target.ReadPixelsAsync(TestContext.Current.CancellationToken));
+            await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+                target.ReadColorsAsync(TestContext.Current.CancellationToken)
+            );
+            await Assert.ThrowsAsync<ObjectDisposedException>(() =>
+                target.ReadPixelsAsync(TestContext.Current.CancellationToken)
+            );
         };
         game.TickHandler = tickContext => tickContext.RequestExit();
 

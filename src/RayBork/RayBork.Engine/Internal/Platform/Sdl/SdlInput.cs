@@ -8,7 +8,8 @@ namespace RayBork.Internal;
 /// Translates SDL3 input events into the raw <see cref="InputState"/>. Runs on the main thread; the
 /// tick thread captures the state through <see cref="Capture"/>.
 /// </summary>
-internal sealed class SdlInput {
+internal sealed class SdlInput
+{
     private readonly Func<Vector2> _pixelScaleProvider;
     private readonly InputState _state;
 
@@ -20,7 +21,8 @@ internal sealed class SdlInput {
     /// Returns the render-to-window pixel ratio used for mouse position and delta. The platform
     /// supplies the live window ratio; tests pass a fixed ratio.
     /// </param>
-    internal SdlInput(IGamepadVibrationSink vibrationSink, Func<Vector2> pixelScaleProvider) {
+    internal SdlInput(IGamepadVibrationSink vibrationSink, Func<Vector2> pixelScaleProvider)
+    {
         ArgumentNullException.ThrowIfNull(pixelScaleProvider);
         _pixelScaleProvider = pixelScaleProvider;
         _state = new InputState(vibrationSink);
@@ -45,10 +47,15 @@ internal sealed class SdlInput {
     /// Applies one SDL3 event to the raw input state. Window, display, close, and gamepad device
     /// events are owned by the platform and are ignored here.
     /// </summary>
-    internal void HandleEvent(in SDL.Event sdlEvent) {
-        switch ((SDL.EventType)sdlEvent.Type) {
+    internal void HandleEvent(in SDL.Event sdlEvent)
+    {
+        switch ((SDL.EventType)sdlEvent.Type)
+        {
             case SDL.EventType.KeyDown:
-                _state.HandleKeyDown(InputMappings.ToKey(sdlEvent.Key.Scancode), sdlEvent.Key.Repeat);
+                _state.HandleKeyDown(
+                    InputMappings.ToKey(sdlEvent.Key.Scancode),
+                    sdlEvent.Key.Repeat
+                );
                 break;
             case SDL.EventType.KeyUp:
                 _state.HandleKeyUp(InputMappings.ToKey(sdlEvent.Key.Scancode));
@@ -89,13 +96,23 @@ internal sealed class SdlInput {
     /// <param name="windowWidth">The window width.</param>
     /// <param name="windowHeight">The window height.</param>
     /// <returns>The x and y pixel ratios, each 1 when its ratio is unusable.</returns>
-    internal static Vector2 ComputePixelScale(float renderWidth, float renderHeight, float windowWidth, float windowHeight)
-        => new(ComputeAxisScale(renderWidth, windowWidth), ComputeAxisScale(renderHeight, windowHeight));
+    internal static Vector2 ComputePixelScale(
+        float renderWidth,
+        float renderHeight,
+        float windowWidth,
+        float windowHeight
+    ) =>
+        new(
+            ComputeAxisScale(renderWidth, windowWidth),
+            ComputeAxisScale(renderHeight, windowHeight)
+        );
 
-    private static float ComputeAxisScale(float renderExtent, float windowExtent) {
+    private static float ComputeAxisScale(float renderExtent, float windowExtent)
+    {
         // A hidden, minimized, or zero-sized window can report no extent. Keeping the ratio at 1
         // leaves mouse motion well defined instead of collapsing it to zero or NaN.
-        if (!(windowExtent > 0f)) {
+        if (!(windowExtent > 0f))
+        {
             return 1f;
         }
 
@@ -103,7 +120,8 @@ internal sealed class SdlInput {
         return float.IsFinite(scale) && scale > 0f ? scale : 1f;
     }
 
-    private void ApplyMouseMotion(in SDL.MouseMotionEvent motion) {
+    private void ApplyMouseMotion(in SDL.MouseMotionEvent motion)
+    {
         // SDL reports mouse position and relative motion in window coordinates. The public input
         // contract uses render pixels so a game can pass MousePosition straight to
         // Camera.ScreenToWorldRay; scale once here rather than in every game.
@@ -112,36 +130,57 @@ internal sealed class SdlInput {
             motion.X * scale.X,
             motion.Y * scale.Y,
             motion.XRel * scale.X,
-            motion.YRel * scale.Y);
+            motion.YRel * scale.Y
+        );
     }
 
-    private void AppendTextInput(IntPtr textPointer) {
-        if (textPointer == IntPtr.Zero) {
+    private void AppendTextInput(IntPtr textPointer)
+    {
+        if (textPointer == IntPtr.Zero)
+        {
             return;
         }
 
         string? text = Marshal.PtrToStringUTF8(textPointer);
-        if (!string.IsNullOrEmpty(text)) {
+        if (!string.IsNullOrEmpty(text))
+        {
             _state.AppendText(text);
         }
     }
 
-    private void ApplyMouseButton(byte sdlButton, bool down) {
-        if (InputMappings.TryGetMouseButton(sdlButton, out MouseButton button)) {
+    private void ApplyMouseButton(byte sdlButton, bool down)
+    {
+        if (InputMappings.TryGetMouseButton(sdlButton, out MouseButton button))
+        {
             _state.HandleMouseButton(button, down);
         }
     }
 
-    private void ApplyGamepadButton(uint instanceId, byte sdlButton, bool down) {
-        if (InputMappings.TryGetGamepadButton((SDL.GamepadButton)sdlButton, out GamepadButton button)) {
+    private void ApplyGamepadButton(uint instanceId, byte sdlButton, bool down)
+    {
+        if (
+            InputMappings.TryGetGamepadButton(
+                (SDL.GamepadButton)sdlButton,
+                out GamepadButton button
+            )
+        )
+        {
             _state.HandleGamepadButton(instanceId, button, down);
         }
     }
 
-    private void ApplyGamepadAxis(uint instanceId, byte sdlAxis, short value) {
-        if (InputMappings.TryGetGamepadAxis(sdlAxis, out GamepadAxis axis)) {
-            _state.HandleGamepadStickAxis(instanceId, axis, InputMappings.NormalizeStickAxis(value));
-        } else if (InputMappings.TryGetGamepadTrigger(sdlAxis, out GamepadTrigger trigger)) {
+    private void ApplyGamepadAxis(uint instanceId, byte sdlAxis, short value)
+    {
+        if (InputMappings.TryGetGamepadAxis(sdlAxis, out GamepadAxis axis))
+        {
+            _state.HandleGamepadStickAxis(
+                instanceId,
+                axis,
+                InputMappings.NormalizeStickAxis(value)
+            );
+        }
+        else if (InputMappings.TryGetGamepadTrigger(sdlAxis, out GamepadTrigger trigger))
+        {
             _state.HandleGamepadTrigger(instanceId, trigger, InputMappings.NormalizeTrigger(value));
         }
     }

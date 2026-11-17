@@ -11,11 +11,10 @@ namespace RayBork.Internal;
 /// that order. <see cref="Bounds"/> carries six floats: minimum X/Y/Z followed by maximum X/Y/Z.
 /// </remarks>
 [GenerateShape]
-internal sealed partial class MeshAssetDescriptor {
-
+internal sealed partial class MeshAssetDescriptor
+{
     /// <summary>The fixed vertex stride in bytes.</summary>
     internal const int VERTEX_STRIDE = 88;
-
 
     /// <summary>Gets the canonical path of the mesh payload entry.</summary>
     public required string Payload { get; init; }

@@ -7,16 +7,25 @@ namespace RayBork.Tests.Graphics.Text;
 /// Tests word and character wrapping and kerning. The uniform fake uses a <c>0.5</c> em advance, so a
 /// word of <c>n</c> runes is <c>n * 0.5</c> world units wide at size <c>1</c>.
 /// </summary>
-public sealed class TextLayoutWrappingTests {
+public sealed class TextLayoutWrappingTests
+{
     private const float TOLERANCE = 1e-5f;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordWrapBreaksAtASpaceAndConsumesIt() {
+    public void WordWrapBreaksAtASpaceAndConsumesIt()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab cd", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab cd",
+            buffer,
+            TextWrapping.Word,
+            1.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(4, count);
         Assert.Equal(2, result.LineCount);
@@ -30,11 +39,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordThatExactlyFitsMaxWidthDoesNotWrap() {
+    public void WordThatExactlyFitsMaxWidthDoesNotWrap()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab cd", buffer, TextWrapping.Word, 2.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab cd",
+            buffer,
+            TextWrapping.Word,
+            2.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(5, count);
         Assert.Equal(1, result.LineCount);
@@ -46,11 +63,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordThatOverflowsMaxWidthWraps() {
+    public void WordThatOverflowsMaxWidthWraps()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab cd", buffer, TextWrapping.Word, 2.4f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab cd",
+            buffer,
+            TextWrapping.Word,
+            2.4f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(4, count);
         Assert.Equal(2, result.LineCount);
@@ -59,11 +84,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordWiderThanMaxWidthOverflowsOnItsOwnLine() {
+    public void WordWiderThanMaxWidthOverflowsOnItsOwnLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "abcd", buffer, TextWrapping.Word, 1f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "abcd",
+            buffer,
+            TextWrapping.Word,
+            1f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(4, count);
         Assert.Equal(1, result.LineCount);
@@ -73,11 +106,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordWiderThanMaxWidthAfterAShortWordOverflowsAlone() {
+    public void WordWiderThanMaxWidthAfterAShortWordOverflowsAlone()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab cde", buffer, TextWrapping.Word, 1f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab cde",
+            buffer,
+            TextWrapping.Word,
+            1f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(5, count);
         Assert.Equal(2, result.LineCount);
@@ -88,11 +129,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConsecutiveSpacesAreDrawnWhenTheLineFits() {
+    public void ConsecutiveSpacesAreDrawnWhenTheLineFits()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "a   b", buffer, TextWrapping.Word, 4f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "a   b",
+            buffer,
+            TextWrapping.Word,
+            4f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(5, count);
         Assert.Equal(1, result.LineCount);
@@ -104,11 +153,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConsecutiveSpacesAreConsumedAtABreak() {
+    public void ConsecutiveSpacesAreConsumedAtABreak()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "a   b", buffer, TextWrapping.Word, 0.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "a   b",
+            buffer,
+            TextWrapping.Word,
+            0.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(2, count);
         Assert.Equal(2, result.LineCount);
@@ -118,11 +175,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TrailingSpaceStaysOnItsLineAtABreak() {
+    public void TrailingSpaceStaysOnItsLineAtABreak()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab cd ", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab cd ",
+            buffer,
+            TextWrapping.Word,
+            1.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(5, count);
         Assert.Equal(2, result.LineCount);
@@ -135,11 +200,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TrailingSpaceWithoutABreakIsDrawn() {
+    public void TrailingSpaceWithoutABreakIsDrawn()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab ", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab ",
+            buffer,
+            TextWrapping.Word,
+            1.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(3, count);
         Assert.Equal(1, result.LineCount);
@@ -149,11 +222,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LeadingSpaceStaysOnTheFirstLine() {
+    public void LeadingSpaceStaysOnTheFirstLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, " ab", buffer, TextWrapping.Word, 1f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            " ab",
+            buffer,
+            TextWrapping.Word,
+            1f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(3, count);
         Assert.Equal(1, result.LineCount);
@@ -164,11 +245,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordWrapBreaksBetweenWordsGreedily() {
+    public void WordWrapBreaksBetweenWordsGreedily()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "aa bb cc", buffer, TextWrapping.Word, 2.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "aa bb cc",
+            buffer,
+            TextWrapping.Word,
+            2.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(7, count);
         Assert.Equal(2, result.LineCount);
@@ -178,11 +267,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrapBreaksBetweenRunes() {
+    public void CharacterWrapBreaksBetweenRunes()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "abcd", buffer, TextWrapping.Character, 1.2f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "abcd",
+            buffer,
+            TextWrapping.Character,
+            1.2f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(4, count);
         Assert.Equal(2, result.LineCount);
@@ -194,11 +291,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrapKeepsAFittingLine() {
+    public void CharacterWrapKeepsAFittingLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab", buffer, TextWrapping.Character, 1f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab",
+            buffer,
+            TextWrapping.Character,
+            1f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(2, count);
         Assert.Equal(1, result.LineCount);
@@ -207,11 +312,21 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrapMovesAWideRuneToItsOwnLine() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform().Glyph('d', TextLayoutTestData.GLYPH_D, 2f);
+    public void CharacterWrapMovesAWideRuneToItsOwnLine()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
+            .Glyph('d', TextLayoutTestData.GLYPH_D, 2f);
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ad", buffer, TextWrapping.Character, 1f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ad",
+            buffer,
+            TextWrapping.Character,
+            1f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(2, count);
         Assert.Equal(2, result.LineCount);
@@ -221,8 +336,10 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrapDropsKerningAcrossTheBreak() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void CharacterWrapDropsKerningAcrossTheBreak()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_B, TextLayoutTestData.GLYPH_C, 1f);
         TextLayoutBuffer wrapped = new();
         TextLayoutBuffer unwrapped = new();
@@ -236,8 +353,10 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordWrapDropsKerningAcrossTheBreak() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void WordWrapDropsKerningAcrossTheBreak()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_B, TextLayoutTestData.GLYPH_C, 1f);
         TextLayoutBuffer buffer = new();
 
@@ -248,8 +367,10 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KerningAppliesBetweenAdjacentGlyphs() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void KerningAppliesBetweenAdjacentGlyphs()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_A, TextLayoutTestData.GLYPH_B, 0.25f);
         TextLayoutBuffer buffer = new();
 
@@ -261,8 +382,10 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KerningAppliesAcrossAWhitespaceGlyphWithinALine() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void KerningAppliesAcrossAWhitespaceGlyphWithinALine()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_A, TextLayoutTestData.GLYPH_SPACE, 0.25f)
             .Kerning(TextLayoutTestData.GLYPH_SPACE, TextLayoutTestData.GLYPH_B, 0.5f);
         TextLayoutBuffer buffer = new();
@@ -276,7 +399,8 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WhitespaceOnlyTextIsOneLine() {
+    public void WhitespaceOnlyTextIsOneLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -292,11 +416,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WhitespaceOnlyTextIsOneLineWithWordWrapping() {
+    public void WhitespaceOnlyTextIsOneLineWithWordWrapping()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "   ", buffer, TextWrapping.Word, 1f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "   ",
+            buffer,
+            TextWrapping.Word,
+            1f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(3, count);
         Assert.Equal(1, result.LineCount);
@@ -304,11 +436,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordExactlyFittingANewLineStaysOnIt() {
+    public void WordExactlyFittingANewLineStaysOnIt()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab cde", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab cde",
+            buffer,
+            TextWrapping.Word,
+            1.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(5, count);
         Assert.Equal(2, result.LineCount);
@@ -318,11 +458,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordWrapRestartsAtEachParagraph() {
+    public void WordWrapRestartsAtEachParagraph()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab cd\nef", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab cd\nef",
+            buffer,
+            TextWrapping.Word,
+            1.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(6, count);
         Assert.Equal(3, result.LineCount);
@@ -334,11 +482,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EmptyParagraphKeepsItsLine() {
+    public void EmptyParagraphKeepsItsLine()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab\n\ncd", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab\n\ncd",
+            buffer,
+            TextWrapping.Word,
+            1.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(4, count);
         Assert.Equal(3, result.LineCount);
@@ -348,12 +504,22 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void KerningScalesWithSize() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void KerningScalesWithSize()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_A, TextLayoutTestData.GLYPH_B, 0.25f);
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab", buffer, TextWrapping.None, 0f, out TextLayoutResult result, size: 2f);
+        int count = Arrange(
+            metrics,
+            "ab",
+            buffer,
+            TextWrapping.None,
+            0f,
+            out TextLayoutResult result,
+            size: 2f
+        );
 
         Assert.Equal(2, count);
         Assert.Equal(1, result.LineCount);
@@ -366,13 +532,29 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WordWrappingScalesWithSize() {
+    public void WordWrappingScalesWithSize()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer unscaled = new();
         TextLayoutBuffer scaled = new();
 
-        Arrange(metrics, "ab cd", unscaled, TextWrapping.Word, 3f, out TextLayoutResult unscaledResult);
-        Arrange(metrics, "ab cd", scaled, TextWrapping.Word, 3f, out TextLayoutResult scaledResult, size: 2f);
+        Arrange(
+            metrics,
+            "ab cd",
+            unscaled,
+            TextWrapping.Word,
+            3f,
+            out TextLayoutResult unscaledResult
+        );
+        Arrange(
+            metrics,
+            "ab cd",
+            scaled,
+            TextWrapping.Word,
+            3f,
+            out TextLayoutResult scaledResult,
+            size: 2f
+        );
 
         Assert.Equal(1, unscaledResult.LineCount);
         Assert.Equal(5, unscaled.Count);
@@ -384,13 +566,29 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrappingScalesWithSize() {
+    public void CharacterWrappingScalesWithSize()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer unscaled = new();
         TextLayoutBuffer scaled = new();
 
-        Arrange(metrics, "abcd", unscaled, TextWrapping.Character, 3f, out TextLayoutResult unscaledResult);
-        Arrange(metrics, "abcd", scaled, TextWrapping.Character, 3f, out TextLayoutResult scaledResult, size: 2f);
+        Arrange(
+            metrics,
+            "abcd",
+            unscaled,
+            TextWrapping.Character,
+            3f,
+            out TextLayoutResult unscaledResult
+        );
+        Arrange(
+            metrics,
+            "abcd",
+            scaled,
+            TextWrapping.Character,
+            3f,
+            out TextLayoutResult scaledResult,
+            size: 2f
+        );
 
         Assert.Equal(1, unscaledResult.LineCount);
         Assert.Equal(4, unscaled.Count);
@@ -401,7 +599,8 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrapDoesNotSplitASurrogatePair() {
+    public void CharacterWrapDoesNotSplitASurrogatePair()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -411,7 +610,8 @@ public sealed class TextLayoutWrappingTests {
             buffer,
             TextWrapping.Character,
             0.5f,
-            out TextLayoutResult result);
+            out TextLayoutResult result
+        );
 
         Assert.Equal(3, count);
         Assert.Equal(3, result.LineCount);
@@ -424,11 +624,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrapCanStartALineWithWhitespace() {
+    public void CharacterWrapCanStartALineWithWhitespace()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "a b", buffer, TextWrapping.Character, 0.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "a b",
+            buffer,
+            TextWrapping.Character,
+            0.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(3, count);
         Assert.Equal(3, result.LineCount);
@@ -439,11 +647,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CarriageReturnBeforeNewlineUnderWordWrapping() {
+    public void CarriageReturnBeforeNewlineUnderWordWrapping()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab\r\ncd", buffer, TextWrapping.Word, 1.5f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab\r\ncd",
+            buffer,
+            TextWrapping.Word,
+            1.5f,
+            out TextLayoutResult result
+        );
 
         Assert.Equal(4, count);
         Assert.Equal(2, result.LineCount);
@@ -455,7 +671,8 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CarriageReturnBeforeNewlineUnderCharacterWrapping() {
+    public void CarriageReturnBeforeNewlineUnderCharacterWrapping()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
@@ -465,7 +682,8 @@ public sealed class TextLayoutWrappingTests {
             buffer,
             TextWrapping.Character,
             1.2f,
-            out TextLayoutResult result);
+            out TextLayoutResult result
+        );
 
         Assert.Equal(4, count);
         Assert.Equal(2, result.LineCount);
@@ -477,11 +695,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CarriageReturnInsideAParagraphDoesNotBreakAWord() {
+    public void CarriageReturnInsideAParagraphDoesNotBreakAWord()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab\rcd", buffer, TextWrapping.Word, 1f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab\rcd",
+            buffer,
+            TextWrapping.Word,
+            1f,
+            out TextLayoutResult result
+        );
 
         // \r is ignored, so "ab\rcd" stays one word and overflows as one line. Without the word-scan
         // carriage-return guard, "ab" and "cd" become separate words and wrap into two lines.
@@ -496,11 +722,19 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CarriageReturnInsideAParagraphIsNotAGlyph() {
+    public void CarriageReturnInsideAParagraphIsNotAGlyph()
+    {
         FakeTextMetrics metrics = TextLayoutTestData.CreateUniform();
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "ab\rcd", buffer, TextWrapping.Character, 100f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "ab\rcd",
+            buffer,
+            TextWrapping.Character,
+            100f,
+            out TextLayoutResult result
+        );
 
         // The fake maps \r, so a fifth glyph record would appear if the read path did not skip it.
         Assert.Equal(4, count);
@@ -513,12 +747,21 @@ public sealed class TextLayoutWrappingTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CharacterWrapBreakCandidateIncludesKerning() {
-        FakeTextMetrics metrics = TextLayoutTestData.CreateUniform()
+    public void CharacterWrapBreakCandidateIncludesKerning()
+    {
+        FakeTextMetrics metrics = TextLayoutTestData
+            .CreateUniform()
             .Kerning(TextLayoutTestData.GLYPH_B, TextLayoutTestData.GLYPH_C, -0.5f);
         TextLayoutBuffer buffer = new();
 
-        int count = Arrange(metrics, "abc", buffer, TextWrapping.Character, 1.2f, out TextLayoutResult result);
+        int count = Arrange(
+            metrics,
+            "abc",
+            buffer,
+            TextWrapping.Character,
+            1.2f,
+            out TextLayoutResult result
+        );
 
         // The b-to-c kern pulls c back to b's pen; the line ends at 1.0 and fits. A candidate that
         // ignored kerning would measure 1.5, break after b, and produce two lines.
@@ -537,7 +780,9 @@ public sealed class TextLayoutWrappingTests {
         TextWrapping wrapping,
         float maxWidth,
         out TextLayoutResult result,
-        float size = 1f) {
+        float size = 1f
+    )
+    {
         return TextLayoutEngine.Arrange(
             metrics,
             text,
@@ -546,14 +791,17 @@ public sealed class TextLayoutWrappingTests {
             wrapping,
             maxWidth,
             buffer,
-            out result);
+            out result
+        );
     }
 
     private static int Arrange(
         FakeTextMetrics metrics,
         string text,
         TextLayoutBuffer buffer,
-        out TextLayoutResult result) {
+        out TextLayoutResult result
+    )
+    {
         return TextLayoutEngine.Arrange(
             metrics,
             text,
@@ -562,16 +810,19 @@ public sealed class TextLayoutWrappingTests {
             TextWrapping.None,
             0f,
             buffer,
-            out result);
+            out result
+        );
     }
 
-    private static void AssertGlyph(TextGlyphInstance glyph, int glyphId, float x, float y) {
+    private static void AssertGlyph(TextGlyphInstance glyph, int glyphId, float x, float y)
+    {
         Assert.Equal(glyphId, glyph.GlyphId);
         Assert.Equal(x, glyph.Position.X, TOLERANCE);
         Assert.Equal(y, glyph.Position.Y, TOLERANCE);
     }
 
-    private static void AssertVector(Vector2 expected, Vector2 actual) {
+    private static void AssertVector(Vector2 expected, Vector2 actual)
+    {
         Assert.Equal(expected.X, actual.X, TOLERANCE);
         Assert.Equal(expected.Y, actual.Y, TOLERANCE);
     }

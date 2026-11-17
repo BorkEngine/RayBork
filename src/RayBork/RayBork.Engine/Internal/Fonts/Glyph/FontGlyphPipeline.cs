@@ -58,7 +58,8 @@ namespace RayBork.Internal;
 /// every cached texture exactly once, and settles every pending waiter.
 /// </para>
 /// </remarks>
-internal sealed class FontGlyphPipeline : IDisposable {
+internal sealed class FontGlyphPipeline : IDisposable
+{
     /// <summary>The maximum number of generated glyph textures one font caches.</summary>
     internal const int MAX_CACHED_TEXTURES = 512;
 
@@ -95,9 +96,9 @@ internal sealed class FontGlyphPipeline : IDisposable {
         FontGlyphSettings settings,
         IGlyphTextureFactory textureFactory,
         GlyphGenerationService service,
-        ILogger logger)
-        : this(face, settings, textureFactory, service, MAX_CACHED_TEXTURES, logger) {
-    }
+        ILogger logger
+    )
+        : this(face, settings, textureFactory, service, MAX_CACHED_TEXTURES, logger) { }
 
     /// <summary>
     /// Initializes a pipeline with an explicit texture budget. Tests use a small budget; production
@@ -120,17 +121,21 @@ internal sealed class FontGlyphPipeline : IDisposable {
         IGlyphTextureFactory textureFactory,
         GlyphGenerationService service,
         int textureBudget,
-        ILogger logger) {
+        ILogger logger
+    )
+    {
         ArgumentNullException.ThrowIfNull(face);
         ArgumentNullException.ThrowIfNull(textureFactory);
         ArgumentNullException.ThrowIfNull(service);
         ArgumentNullException.ThrowIfNull(logger);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(textureBudget);
-        if (settings.UnitsPerEm != face.UnitsPerEm) {
+        if (settings.UnitsPerEm != face.UnitsPerEm)
+        {
             throw new ArgumentException(
                 $"The glyph settings declare {settings.UnitsPerEm} units per em but the face declares "
                     + $"{face.UnitsPerEm}.",
-                nameof(settings));
+                nameof(settings)
+            );
         }
 
         _face = face;
@@ -155,18 +160,24 @@ internal sealed class FontGlyphPipeline : IDisposable {
 
     /// <summary>Gets the number of cached textures. Diagnostic, for tests.</summary>
     /// <remarks>It is zero after disposal.</remarks>
-    internal int CachedGlyphCount {
-        get {
-            lock (_gate) {
+    internal int CachedGlyphCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _cachedTextures.Count;
             }
         }
     }
 
     /// <summary>Gets whether the pipeline is disposed. The generation service reads it before enqueueing.</summary>
-    internal bool IsDisposed {
-        get {
-            lock (_gate) {
+    internal bool IsDisposed
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _disposed;
             }
         }
@@ -185,14 +196,18 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// no-op.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="frameIndex"/> is negative.</exception>
-    internal void BeginFrame(long frameIndex) {
+    internal void BeginFrame(long frameIndex)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(frameIndex);
-        lock (_gate) {
-            if (_disposed) {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return;
             }
 
-            if (frameIndex > _frameIndex) {
+            if (frameIndex > _frameIndex)
+            {
                 _frameIndex = frameIndex;
             }
         }
@@ -215,38 +230,46 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
     /// <exception cref="ObjectDisposedException">The pipeline is disposed.</exception>
-    internal TextGlyphMetrics GetMetrics(int glyphId) {
+    internal TextGlyphMetrics GetMetrics(int glyphId)
+    {
         ValidateGlyphId(glyphId);
-        lock (_gate) {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_glyphs.TryGetValue(glyphId, out GlyphEntry? cached) && cached.HasMetrics) {
+            if (_glyphs.TryGetValue(glyphId, out GlyphEntry? cached) && cached.HasMetrics)
+            {
                 return cached.Metrics;
             }
         }
 
         (TextGlyphMetrics metrics, Exception? failure) = ComputeMetrics(glyphId);
         bool logFailure;
-        lock (_gate) {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
             GlyphEntry entry = GetOrCreateLocked(glyphId);
-            if (entry.HasMetrics) {
+            if (entry.HasMetrics)
+            {
                 return entry.Metrics;
             }
 
             entry.HasMetrics = true;
             entry.Metrics = metrics;
             logFailure = failure is not null && !entry.MetricsFailureLogged;
-            if (logFailure) {
+            if (logFailure)
+            {
                 entry.MetricsFailureLogged = true;
             }
         }
 
-        if (logFailure) {
+        if (logFailure)
+        {
             _logger.LogWarning(
                 failure,
                 "The metrics of glyph {GlyphId} fall back to the face advance and a zero quad: {Reason}",
                 glyphId,
-                DescribeFailure(failure!));
+                DescribeFailure(failure!)
+            );
         }
 
         return metrics;
@@ -276,17 +299,21 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="retention"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    internal Texture? Acquire(int glyphId, FrameAssetRetention retention) {
+    internal Texture? Acquire(int glyphId, FrameAssetRetention retention)
+    {
         ValidateGlyphId(glyphId);
         ArgumentNullException.ThrowIfNull(retention);
 
-        lock (_gate) {
-            if (_disposed) {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return null;
             }
 
             GlyphEntry entry = GetOrCreateLocked(glyphId);
-            switch (entry.State) {
+            switch (entry.State)
+            {
                 case GlyphState.Ready:
                     entry.LastUseStamp = _frameIndex;
                     retention.Add(entry.Texture!.Lifetime);
@@ -318,13 +345,18 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// <see cref="Acquire"/> instead. After disposal it returns <see langword="false"/>.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    internal bool TryGetTexture(int glyphId, out Texture? texture) {
+    internal bool TryGetTexture(int glyphId, out Texture? texture)
+    {
         ValidateGlyphId(glyphId);
-        lock (_gate) {
-            if (!_disposed
+        lock (_gate)
+        {
+            if (
+                !_disposed
                 && _glyphs.TryGetValue(glyphId, out GlyphEntry? entry)
                 && entry.State == GlyphState.Ready
-                && entry.Texture is not null) {
+                && entry.Texture is not null
+            )
+            {
                 texture = entry.Texture;
                 return true;
             }
@@ -342,9 +374,11 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// <returns><see langword="true"/> for a ready empty or textured glyph; otherwise <see langword="false"/>.</returns>
     /// <remarks>After disposal it returns <see langword="false"/>.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    internal bool IsGlyphReady(int glyphId) {
+    internal bool IsGlyphReady(int glyphId)
+    {
         ValidateGlyphId(glyphId);
-        lock (_gate) {
+        lock (_gate)
+        {
             return !_disposed
                 && _glyphs.TryGetValue(glyphId, out GlyphEntry? entry)
                 && entry.State is GlyphState.Ready or GlyphState.Empty;
@@ -366,12 +400,17 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// it returns a completed task.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphId"/> is outside the face.</exception>
-    internal Task WhenGlyphSettledAsync(int glyphId) {
+    internal Task WhenGlyphSettledAsync(int glyphId)
+    {
         ValidateGlyphId(glyphId);
-        lock (_gate) {
-            if (_disposed
+        lock (_gate)
+        {
+            if (
+                _disposed
                 || !_glyphs.TryGetValue(glyphId, out GlyphEntry? entry)
-                || entry.State != GlyphState.Pending) {
+                || entry.State != GlyphState.Pending
+            )
+            {
                 return Task.CompletedTask;
             }
 
@@ -395,21 +434,31 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// disposed pipeline is disposed instead of leaked. Evicted textures are disposed outside the cache
     /// lock, and the glyph waiter is settled even when a disposal throws.
     /// </remarks>
-    internal void Insert(int glyphId, Texture texture) {
+    internal void Insert(int glyphId, Texture texture)
+    {
         ArgumentNullException.ThrowIfNull(texture);
 
         Texture? redundant = null;
         List<Texture>? evicted = null;
         TaskCompletionSource? waiter = null;
-        lock (_gate) {
-            if (_disposed) {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 redundant = texture;
-            } else {
+            }
+            else
+            {
                 GlyphEntry entry = GetOrCreateLocked(glyphId);
-                if (entry.Texture is not null
-                    || entry.State is GlyphState.Ready or GlyphState.Empty or GlyphState.Failed) {
+                if (
+                    entry.Texture is not null
+                    || entry.State is GlyphState.Ready or GlyphState.Empty or GlyphState.Failed
+                )
+                {
                     redundant = texture;
-                } else {
+                }
+                else
+                {
                     EvictForInsertLocked(ref evicted);
                     entry.Texture = texture;
                     entry.State = GlyphState.Ready;
@@ -422,14 +471,19 @@ internal sealed class FontGlyphPipeline : IDisposable {
             }
         }
 
-        try {
+        try
+        {
             redundant?.Dispose();
-            if (evicted is not null) {
-                foreach (Texture evictedTexture in evicted) {
+            if (evicted is not null)
+            {
+                foreach (Texture evictedTexture in evicted)
+                {
                     evictedTexture.Dispose();
                 }
             }
-        } finally {
+        }
+        finally
+        {
             waiter?.TrySetResult();
         }
     }
@@ -439,15 +493,19 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// thread for an empty glyph such as a space.
     /// </summary>
     /// <param name="glyphId">The glyph identifier.</param>
-    internal void CompleteEmpty(int glyphId) {
+    internal void CompleteEmpty(int glyphId)
+    {
         TaskCompletionSource? waiter;
-        lock (_gate) {
-            if (_disposed) {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return;
             }
 
             GlyphEntry entry = GetOrCreateLocked(glyphId);
-            if (entry.State is GlyphState.Ready or GlyphState.Empty or GlyphState.Failed) {
+            if (entry.State is GlyphState.Ready or GlyphState.Empty or GlyphState.Failed)
+            {
                 return;
             }
 
@@ -474,9 +532,12 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// </summary>
     /// <param name="glyphId">The glyph identifier.</param>
     /// <returns><see langword="true"/> when a metrics fallback warning was already logged.</returns>
-    internal bool HasLoggedMetricsFailure(int glyphId) {
-        lock (_gate) {
-            return _glyphs.TryGetValue(glyphId, out GlyphEntry? entry) && entry.MetricsFailureLogged;
+    internal bool HasLoggedMetricsFailure(int glyphId)
+    {
+        lock (_gate)
+        {
+            return _glyphs.TryGetValue(glyphId, out GlyphEntry? entry)
+                && entry.MetricsFailureLogged;
         }
     }
 
@@ -486,16 +547,20 @@ internal sealed class FontGlyphPipeline : IDisposable {
     /// exactly once, and settles every pending waiter even when a texture disposal throws. The service
     /// must be stopped first.
     /// </remarks>
-    public void Dispose() {
+    public void Dispose()
+    {
         List<Texture> textures = [];
         List<TaskCompletionSource> waiters = [];
-        lock (_gate) {
-            if (_disposed) {
+        lock (_gate)
+        {
+            if (_disposed)
+            {
                 return;
             }
 
             _disposed = true;
-            foreach (GlyphEntry entry in _cachedTextures.Values) {
+            foreach (GlyphEntry entry in _cachedTextures.Values)
+            {
                 textures.Add(entry.Texture!);
                 entry.Texture = null;
                 entry.State = GlyphState.Absent;
@@ -504,13 +569,16 @@ internal sealed class FontGlyphPipeline : IDisposable {
             }
 
             _cachedTextures.Clear();
-            foreach (GlyphEntry entry in _glyphs.Values) {
-                if (entry.Ready is not null) {
+            foreach (GlyphEntry entry in _glyphs.Values)
+            {
+                if (entry.Ready is not null)
+                {
                     waiters.Add(entry.Ready);
                     entry.Ready = null;
                 }
 
-                if (entry.State == GlyphState.Pending) {
+                if (entry.State == GlyphState.Pending)
+                {
                     entry.State = GlyphState.Failed;
                 }
             }
@@ -519,25 +587,34 @@ internal sealed class FontGlyphPipeline : IDisposable {
         }
 
         _service.Unregister(this);
-        try {
-            foreach (Texture texture in textures) {
+        try
+        {
+            foreach (Texture texture in textures)
+            {
                 texture.Dispose();
             }
-        } finally {
-            foreach (TaskCompletionSource waiter in waiters) {
+        }
+        finally
+        {
+            foreach (TaskCompletionSource waiter in waiters)
+            {
                 waiter.TrySetResult();
             }
         }
     }
 
-    private (TextGlyphMetrics Metrics, Exception? Failure) ComputeMetrics(int glyphId) {
+    private (TextGlyphMetrics Metrics, Exception? Failure) ComputeMetrics(int glyphId)
+    {
         float advanceX = _face.GetAdvanceWidth(glyphId) / (float)_settings.UnitsPerEm;
-        try {
+        try
+        {
             FontGlyph glyph = _face.GetGlyph(glyphId);
             FontBounds bounds = glyph.Bounds;
-            if (bounds.XMax < bounds.XMin || bounds.YMax < bounds.YMin) {
+            if (bounds.XMax < bounds.XMin || bounds.YMax < bounds.YMin)
+            {
                 throw new FontFormatException(
-                    $"the glyph {glyphId} stores the inverted bounds ({bounds.XMin}, {bounds.YMin})-({bounds.XMax}, {bounds.YMax})");
+                    $"the glyph {glyphId} stores the inverted bounds ({bounds.XMin}, {bounds.YMin})-({bounds.XMax}, {bounds.YMax})"
+                );
             }
 
             MsdfGlyphLayout layout = MsdfGenerator.ComputeLayout(
@@ -545,11 +622,14 @@ internal sealed class FontGlyphPipeline : IDisposable {
                 _settings.UnitsPerEm,
                 _settings.MsdfPixelSize,
                 _settings.MsdfRange,
-                _settings.MsdfPadding);
+                _settings.MsdfPadding
+            );
             long texelCount = (long)layout.TextureWidth * layout.TextureHeight;
-            if (texelCount > MsdfGenerator.MAX_TEXELS) {
+            if (texelCount > MsdfGenerator.MAX_TEXELS)
+            {
                 throw new MsdfLimitException(
-                    $"the {layout.TextureWidth} by {layout.TextureHeight} glyph texture has {texelCount} texels; the limit is {MsdfGenerator.MAX_TEXELS}");
+                    $"the {layout.TextureWidth} by {layout.TextureHeight} glyph texture has {texelCount} texels; the limit is {MsdfGenerator.MAX_TEXELS}"
+                );
             }
 
             return (
@@ -559,17 +639,23 @@ internal sealed class FontGlyphPipeline : IDisposable {
                     layout.BearingXEm,
                     layout.BearingYEm,
                     layout.WidthEm,
-                    layout.HeightEm),
-                null);
-        } catch (Exception exception) when (exception is FontUnsupportedException
-            or FontFormatException
-            or MsdfLimitException) {
+                    layout.HeightEm
+                ),
+                null
+            );
+        }
+        catch (Exception exception)
+            when (exception is FontUnsupportedException or FontFormatException or MsdfLimitException
+            )
+        {
             return (new TextGlyphMetrics(glyphId, advanceX, 0f, 0f, 0f, 0f), exception);
         }
     }
 
-    private void HandleEnqueueResult(int glyphId, GlyphEnqueueResult result) {
-        switch (result) {
+    private void HandleEnqueueResult(int glyphId, GlyphEnqueueResult result)
+    {
+        switch (result)
+        {
             case GlyphEnqueueResult.Queued:
             case GlyphEnqueueResult.AlreadyPending:
                 return;
@@ -584,37 +670,53 @@ internal sealed class FontGlyphPipeline : IDisposable {
         MarkGlyphFailed(glyphId);
     }
 
-    private void LogRejectionOnce(bool notStarted) {
+    private void LogRejectionOnce(bool notStarted)
+    {
         bool log;
-        lock (_gate) {
-            if (notStarted) {
+        lock (_gate)
+        {
+            if (notStarted)
+            {
                 log = !_loggedNotStartedRejection;
                 _loggedNotStartedRejection = true;
-            } else {
+            }
+            else
+            {
                 log = !_loggedStoppingRejection;
                 _loggedStoppingRejection = true;
             }
         }
 
-        if (!log) {
+        if (!log)
+        {
             return;
         }
 
-        if (notStarted) {
+        if (notStarted)
+        {
             _logger.LogWarning(
-                "A glyph generation request was rejected because the RayBork.Font service was never started; load fonts only after the app starts the service.");
-        } else {
+                "A glyph generation request was rejected because the RayBork.Font service was never started; load fonts only after the app starts the service."
+            );
+        }
+        else
+        {
             _logger.LogWarning(
-                "A glyph generation request was rejected because the RayBork.Font service is stopping; the glyph is dropped.");
+                "A glyph generation request was rejected because the RayBork.Font service is stopping; the glyph is dropped."
+            );
         }
     }
 
-    private void CompleteGlyph(int glyphId, GlyphState state) {
+    private void CompleteGlyph(int glyphId, GlyphState state)
+    {
         TaskCompletionSource? waiter;
-        lock (_gate) {
-            if (_disposed
+        lock (_gate)
+        {
+            if (
+                _disposed
                 || !_glyphs.TryGetValue(glyphId, out GlyphEntry? entry)
-                || entry.State != GlyphState.Pending) {
+                || entry.State != GlyphState.Pending
+            )
+            {
                 return;
             }
 
@@ -626,20 +728,26 @@ internal sealed class FontGlyphPipeline : IDisposable {
         waiter?.TrySetResult();
     }
 
-    private void EvictForInsertLocked(ref List<Texture>? evicted) {
+    private void EvictForInsertLocked(ref List<Texture>? evicted)
+    {
         int required = _cachedTextures.Count - _textureBudget + 1;
-        if (required <= 0) {
+        if (required <= 0)
+        {
             return;
         }
 
         List<GlyphEntry> candidates = [.. _cachedTextures.Values];
-        candidates.Sort(static (first, second) => {
-            int byUse = first.LastUseStamp.CompareTo(second.LastUseStamp);
-            return byUse != 0 ? byUse : first.Sequence.CompareTo(second.Sequence);
-        });
+        candidates.Sort(
+            static (first, second) =>
+            {
+                int byUse = first.LastUseStamp.CompareTo(second.LastUseStamp);
+                return byUse != 0 ? byUse : first.Sequence.CompareTo(second.Sequence);
+            }
+        );
 
         int count = Math.Min(required, candidates.Count);
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < count; index++)
+        {
             GlyphEntry victim = candidates[index];
             _cachedTextures.Remove(victim.GlyphId);
             evicted ??= [];
@@ -651,8 +759,10 @@ internal sealed class FontGlyphPipeline : IDisposable {
         }
     }
 
-    private GlyphEntry GetOrCreateLocked(int glyphId) {
-        if (_glyphs.TryGetValue(glyphId, out GlyphEntry? entry)) {
+    private GlyphEntry GetOrCreateLocked(int glyphId)
+    {
+        if (_glyphs.TryGetValue(glyphId, out GlyphEntry? entry))
+        {
             return entry;
         }
 
@@ -661,28 +771,34 @@ internal sealed class FontGlyphPipeline : IDisposable {
         return entry;
     }
 
-    private void ValidateGlyphId(int glyphId) {
-        if ((uint)glyphId < (uint)_face.GlyphCount) {
+    private void ValidateGlyphId(int glyphId)
+    {
+        if ((uint)glyphId < (uint)_face.GlyphCount)
+        {
             return;
         }
 
         throw new ArgumentOutOfRangeException(
             nameof(glyphId),
             glyphId,
-            $"The face has {_face.GlyphCount} glyph(s).");
+            $"The face has {_face.GlyphCount} glyph(s)."
+        );
     }
 
-    private static string DescribeFailure(Exception failure) => failure switch {
-        FontFormatException format => format.Reason,
-        FontUnsupportedException unsupported => unsupported.Reason,
-        MsdfLimitException limit => limit.Reason,
-        _ => failure.Message,
-    };
+    private static string DescribeFailure(Exception failure) =>
+        failure switch
+        {
+            FontFormatException format => format.Reason,
+            FontUnsupportedException unsupported => unsupported.Reason,
+            MsdfLimitException limit => limit.Reason,
+            _ => failure.Message,
+        };
 
     private static TaskCompletionSource CreateWaiter() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private enum GlyphState {
+    private enum GlyphState
+    {
         Absent,
         Pending,
         Ready,
@@ -690,7 +806,8 @@ internal sealed class FontGlyphPipeline : IDisposable {
         Failed,
     }
 
-    private sealed class GlyphEntry {
+    private sealed class GlyphEntry
+    {
         internal GlyphEntry(int glyphId) => GlyphId = glyphId;
 
         internal int GlyphId { get; }

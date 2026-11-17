@@ -20,7 +20,8 @@ namespace RayBork.BuiltInAssets;
 /// <c>RB4007</c>.
 /// </para>
 /// </remarks>
-internal sealed class BuiltInBlueNoiseProcessor : IAssetProcessor {
+internal sealed class BuiltInBlueNoiseProcessor : IAssetProcessor
+{
     private const int SIZE = 128;
     private const int BYTE_COUNT = SIZE * SIZE * 4;
     private const string SOURCE_FILE_NAME = "blue-noise.rgba8";
@@ -40,41 +41,59 @@ internal sealed class BuiltInBlueNoiseProcessor : IAssetProcessor {
     public ITypeShape? SidecarShape => null;
 
     /// <inheritdoc/>
-    public void Process(AssetProcessorContext context) {
+    public void Process(AssetProcessorContext context)
+    {
         ArgumentNullException.ThrowIfNull(context);
 
-        if (!string.Equals(
+        if (
+            !string.Equals(
                 context.SourceFileNameWithoutExtension,
                 Path.GetFileNameWithoutExtension(SOURCE_FILE_NAME),
-                StringComparison.Ordinal)) {
+                StringComparison.Ordinal
+            )
+        )
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"The built-in raw image '{context.RelativePath}' is not the supported "
-                    + $"'{SOURCE_FILE_NAME}' source.");
+                    + $"'{SOURCE_FILE_NAME}' source."
+            );
             return;
         }
 
         byte[] pixels;
-        try {
+        try
+        {
             pixels = File.ReadAllBytes(context.SourcePath);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"Failed to read the built-in blue-noise source '{context.RelativePath}': "
-                    + exception.Message);
+                    + exception.Message
+            );
             return;
         }
 
-        if (pixels.Length != BYTE_COUNT) {
+        if (pixels.Length != BYTE_COUNT)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"The built-in blue-noise source '{context.RelativePath}' is {pixels.Length} bytes; "
-                    + $"it must be exactly {BYTE_COUNT} bytes for a {SIZE}x{SIZE} RGBA8 image.");
+                    + $"it must be exactly {BYTE_COUNT} bytes for a {SIZE}x{SIZE} RGBA8 image."
+            );
             return;
         }
 
-        try {
+        try
+        {
             TextureBaker.AddTo(
                 context,
                 pixels,
@@ -85,12 +104,17 @@ internal sealed class BuiltInBlueNoiseProcessor : IAssetProcessor {
                 TextureFilter.Nearest,
                 TextureWrap.Repeat,
                 srgb: false,
-                maxAnisotropy: 1f);
-        } catch (Exception exception) when (exception is ArgumentException or InvalidOperationException) {
+                maxAnisotropy: 1f
+            );
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or InvalidOperationException)
+        {
             context.Diagnostics.Error(
                 TextureDiagnosticCodes.TEXTURE_INVALID,
                 $"The built-in blue-noise texture '{context.RelativePath}' could not be baked: "
-                    + exception.Message);
+                    + exception.Message
+            );
         }
     }
 }

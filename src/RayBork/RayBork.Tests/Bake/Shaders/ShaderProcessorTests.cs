@@ -7,10 +7,12 @@ using Silk.NET.Shaderc;
 
 namespace RayBork.Tests.Bake.Shaders;
 
-public sealed class ShaderProcessorTests {
+public sealed class ShaderProcessorTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ValidShaderPairEmitsTheDescriptorAndBothSpirvPayloads() {
+    public void ValidShaderPairEmitsTheDescriptorAndBothSpirvPayloads()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeRunResult result = RunDefault(workspace, ShaderTestAssets.COMPLETE_TOML);
 
@@ -26,13 +28,15 @@ public sealed class ShaderProcessorTests {
         Assert.Equal("main_fragment", descriptor.FragmentEntry);
         Assert.Equal(ShaderStageMask.Vertex | ShaderStageMask.Fragment, descriptor.Stages);
         Assert.Equal(
-            new RenderState {
+            new RenderState
+            {
                 Blend = BlendMode.Alpha,
                 Cull = CullMode.None,
                 DepthTest = DepthTest.Disabled,
                 DepthWrite = false,
             },
-            descriptor.DefaultRenderState);
+            descriptor.DefaultRenderState
+        );
 
         ShaderUniformAsset uniform = Assert.Single(descriptor.Uniforms);
         Assert.Equal("uTint", uniform.Name);
@@ -41,17 +45,24 @@ public sealed class ShaderProcessorTests {
         Assert.Equal(["mainTexture"], descriptor.Textures);
 
         AssertPayload(archive, "shaders/castle-vert", "main_vertex", SpirvExecutionModel.Vertex);
-        AssertPayload(archive, "shaders/castle-frag", "main_fragment", SpirvExecutionModel.Fragment);
+        AssertPayload(
+            archive,
+            "shaders/castle-frag",
+            "main_fragment",
+            SpirvExecutionModel.Fragment
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void NestedShaderEmitsNestedPayloadPaths() {
+    public void NestedShaderEmitsNestedPayloadPaths()
+    {
         using var workspace = new TempBakeWorkspace();
         BakeRunResult result = RunDefault(
             workspace,
             ShaderTestAssets.COMPLETE_TOML,
-            basePath: "shaders/materials/castle");
+            basePath: "shaders/materials/castle"
+        );
 
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
@@ -59,19 +70,33 @@ public sealed class ShaderProcessorTests {
         ShaderAssetDescriptor descriptor = ReadDescriptor(archive, entry);
         Assert.Equal("shaders/materials/castle-vert", descriptor.VertexPayload);
         Assert.Equal("shaders/materials/castle-frag", descriptor.FragmentPayload);
-        AssertPayload(archive, "shaders/materials/castle-vert", "main_vertex", SpirvExecutionModel.Vertex);
-        AssertPayload(archive, "shaders/materials/castle-frag", "main_fragment", SpirvExecutionModel.Fragment);
+        AssertPayload(
+            archive,
+            "shaders/materials/castle-vert",
+            "main_vertex",
+            SpirvExecutionModel.Vertex
+        );
+        AssertPayload(
+            archive,
+            "shaders/materials/castle-frag",
+            "main_fragment",
+            SpirvExecutionModel.Fragment
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void AbsentEntryPointsAndRenderStateUseTheM3Defaults() {
+    public void AbsentEntryPointsAndRenderStateUseTheM3Defaults()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeRunResult result = RunDefault(workspace, """
+        BakeRunResult result = RunDefault(
+            workspace,
+            """
             [shader]
             vertex = "castle.vert"
             fragment = "castle.frag"
-            """);
+            """
+        );
 
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
@@ -85,9 +110,12 @@ public sealed class ShaderProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EverySupportedUniformTypeAndDefaultMapsToTheDescriptor() {
+    public void EverySupportedUniformTypeAndDefaultMapsToTheDescriptor()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeRunResult result = RunDefault(workspace, """
+        BakeRunResult result = RunDefault(
+            workspace,
+            """
             [shader]
             vertex = "castle.vert"
             fragment = "castle.frag"
@@ -135,7 +163,8 @@ public sealed class ShaderProcessorTests {
             [[shader.uniforms]]
             name = "uPlain"
             type = "float"
-            """);
+            """
+        );
 
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
@@ -149,19 +178,25 @@ public sealed class ShaderProcessorTests {
             uniform => AssertUniform(uniform, "uVec2", ShaderUniformType.Vector2, [1f, 2f]),
             uniform => AssertUniform(uniform, "uVec3", ShaderUniformType.Vector3, [1f, 2f, 3f]),
             uniform => AssertUniform(uniform, "uVec4", ShaderUniformType.Vector4, [1f, 2f, 3f, 4f]),
-            uniform => AssertUniform(
-                uniform,
-                "uMat4",
-                ShaderUniformType.Matrix4x4,
-                [1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f]),
-            uniform => AssertUniform(uniform, "uPlain", ShaderUniformType.Float, []));
+            uniform =>
+                AssertUniform(
+                    uniform,
+                    "uMat4",
+                    ShaderUniformType.Matrix4x4,
+                    [1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f, 16f]
+                ),
+            uniform => AssertUniform(uniform, "uPlain", ShaderUniformType.Float, [])
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void EveryRenderStateTokenMapsToTheEngineEnum() {
+    public void EveryRenderStateTokenMapsToTheEngineEnum()
+    {
         using var workspace = new TempBakeWorkspace();
-        BakeRunResult result = RunDefault(workspace, """
+        BakeRunResult result = RunDefault(
+            workspace,
+            """
             [shader]
             vertex = "castle.vert"
             fragment = "castle.frag"
@@ -171,35 +206,41 @@ public sealed class ShaderProcessorTests {
             cull = "front"
             depth_test = "less_or_equal"
             depth_write = true
-            """);
+            """
+        );
 
         Assert.True(result.ExitCode == 0, result.Error + result.Output);
         using PackArchive archive = PackArchive.Open(workspace.GetPackPath());
         ShaderAssetDescriptor descriptor = ReadDescriptor(archive, "shaders/castle");
         Assert.Equal(
-            new RenderState {
+            new RenderState
+            {
                 Blend = BlendMode.Multiply,
                 Cull = CullMode.Front,
                 DepthTest = DepthTest.LessOrEqual,
                 DepthWrite = true,
             },
-            descriptor.DefaultRenderState);
+            descriptor.DefaultRenderState
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InvalidGlslIsRb4008AndEmitsNoOutputs() {
+    public void InvalidGlslIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
             ShaderTestAssets.COMPLETE_TOML,
             "RB4008",
-            fragment: "this is not GLSL at all");
+            fragment: "this is not GLSL at all"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingStageFileIsRb4008AndEmitsNoOutputs() {
+    public void MissingStageFileIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         ShaderTestAssets.Write(workspace, "shaders/castle", ShaderTestAssets.COMPLETE_TOML);
         File.Delete(Path.Combine(workspace.AssetRoot, "shaders", "castle.vert"));
@@ -214,7 +255,8 @@ public sealed class ShaderProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RenamedEntryPointIsRb4008AndEmitsNoOutputs() {
+    public void RenamedEntryPointIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -224,12 +266,14 @@ public sealed class ShaderProcessorTests {
             fragment = "castle.frag"
             vertex_entry = "main"
             """,
-            "RB4008");
+            "RB4008"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingEntryPointInTheGlslIsRb4008AndEmitsNoOutputs() {
+    public void MissingEntryPointInTheGlslIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -240,16 +284,18 @@ public sealed class ShaderProcessorTests {
             """,
             "RB4008",
             vertex: """
-                #version 450
-                void main() {
-                    gl_Position = vec4(0.0);
-                }
-                """);
+            #version 450
+            void main() {
+                gl_Position = vec4(0.0);
+            }
+            """
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnsupportedUniformTypeIsRb4008AndEmitsNoOutputs() {
+    public void UnsupportedUniformTypeIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -262,12 +308,14 @@ public sealed class ShaderProcessorTests {
             name = "uBasis"
             type = "mat3"
             """,
-            "RB4008");
+            "RB4008"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WrongDefaultLengthIsRb4008AndEmitsNoOutputs() {
+    public void WrongDefaultLengthIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -281,12 +329,14 @@ public sealed class ShaderProcessorTests {
             type = "vec4"
             default = [1.0, 1.0, 1.0]
             """,
-            "RB4008");
+            "RB4008"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateUniformNamesAreRb4008AndEmitNoOutputs() {
+    public void DuplicateUniformNamesAreRb4008AndEmitNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -303,12 +353,14 @@ public sealed class ShaderProcessorTests {
             name = "uTint"
             type = "vec4"
             """,
-            "RB4008");
+            "RB4008"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DuplicateTextureNamesAreRb4008AndEmitNoOutputs() {
+    public void DuplicateTextureNamesAreRb4008AndEmitNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -323,12 +375,14 @@ public sealed class ShaderProcessorTests {
             [[shader.textures]]
             name = "mainTexture"
             """,
-            "RB4008");
+            "RB4008"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownRenderStateTokenIsRb4008AndEmitsNoOutputs() {
+    public void UnknownRenderStateTokenIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -340,18 +394,23 @@ public sealed class ShaderProcessorTests {
             [shader.render_state]
             blend = "screen"
             """,
-            "RB4008");
+            "RB4008"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void StagePathOutsideTheSourceDirectoryIsRb4008AndEmitsNoOutputs() {
+    public void StagePathOutsideTheSourceDirectoryIsRb4008AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("shaders/castle.toml", """
+        workspace.WriteAsset(
+            "shaders/castle.toml",
+            """
             [shader]
             vertex = "../outside.vert"
             fragment = "castle.frag"
-            """);
+            """
+        );
         workspace.WriteAsset("outside.vert", ShaderTestAssets.VERTEX_SOURCE);
         workspace.WriteAsset("shaders/castle.frag", ShaderTestAssets.FRAGMENT_SOURCE);
 
@@ -365,7 +424,8 @@ public sealed class ShaderProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownSidecarKeysAreRb4002AndEmitNoOutputs() {
+    public void UnknownSidecarKeysAreRb4002AndEmitNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -375,12 +435,14 @@ public sealed class ShaderProcessorTests {
             fragment = "castle.frag"
             pipeline = "forward"
             """,
-            "RB4002");
+            "RB4002"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void UnknownUniformKeysAreRb4002AndEmitNoOutputs() {
+    public void UnknownUniformKeysAreRb4002AndEmitNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -394,17 +456,22 @@ public sealed class ShaderProcessorTests {
             type = "vec4"
             size = 4
             """,
-            "RB4002");
+            "RB4002"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MissingRequiredStageKeyIsRb4002AndEmitsNoOutputs() {
+    public void MissingRequiredStageKeyIsRb4002AndEmitsNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
-        workspace.WriteAsset("shaders/castle.toml", """
+        workspace.WriteAsset(
+            "shaders/castle.toml",
+            """
             [shader]
             fragment = "castle.frag"
-            """);
+            """
+        );
 
         BakeRunResult result = workspace.Run(DefaultApplication(workspace));
 
@@ -416,7 +483,8 @@ public sealed class ShaderProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WrongSidecarValueTypesAreRb4002AndEmitNoOutputs() {
+    public void WrongSidecarValueTypesAreRb4002AndEmitNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         AssertFailure(
             workspace,
@@ -428,18 +496,21 @@ public sealed class ShaderProcessorTests {
             [shader.render_state]
             depth_write = "yes"
             """,
-            "RB4002");
+            "RB4002"
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void MoreThanSixteenTextureBindingsAreRb4008AndEmitNoOutputs() {
+    public void MoreThanSixteenTextureBindingsAreRb4008AndEmitNoOutputs()
+    {
         using var workspace = new TempBakeWorkspace();
         var toml = new System.Text.StringBuilder();
         toml.AppendLine("[shader]");
         toml.AppendLine("vertex = \"castle.vert\"");
         toml.AppendLine("fragment = \"castle.frag\"");
-        for (int binding = 0; binding < 17; binding++) {
+        for (int binding = 0; binding < 17; binding++)
+        {
             toml.AppendLine("[[shader.textures]]");
             toml.AppendLine(CultureInfo.InvariantCulture, $"name = \"texture{binding}\"");
         }
@@ -449,7 +520,8 @@ public sealed class ShaderProcessorTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void CompilerSupportsTheMainEntryPointUsedByToolProcessors() {
+    public void CompilerSupportsTheMainEntryPointUsedByToolProcessors()
+    {
         const string source = """
             #version 450
             void main() {
@@ -463,7 +535,8 @@ public sealed class ShaderProcessorTests {
             ShaderKind.GlslVertexShader,
             "main",
             out byte[] spirV,
-            out string message);
+            out string message
+        );
 
         Assert.True(compiled, message);
         Assert.True(
@@ -471,20 +544,24 @@ public sealed class ShaderProcessorTests {
                 spirV,
                 "main",
                 SpirvExecutionModel.Vertex,
-                out string problem),
-            problem);
+                out string problem
+            ),
+            problem
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SpirvInspectorRejectsTheWrongExecutionModel() {
+    public void SpirvInspectorRejectsTheWrongExecutionModel()
+    {
         bool compiled = GlslCompiler.TryCompile(
             ShaderTestAssets.VERTEX_SOURCE,
             "castle.vert",
             ShaderKind.GlslVertexShader,
             "main_vertex",
             out byte[] spirV,
-            out string message);
+            out string message
+        );
         Assert.True(compiled, message);
 
         Assert.False(
@@ -492,7 +569,9 @@ public sealed class ShaderProcessorTests {
                 spirV,
                 "main_vertex",
                 SpirvExecutionModel.Fragment,
-                out string problem));
+                out string problem
+            )
+        );
         Assert.Contains("Vertex", problem);
 
         Assert.False(
@@ -500,13 +579,16 @@ public sealed class ShaderProcessorTests {
                 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
                 "main_vertex",
                 SpirvExecutionModel.Vertex,
-                out string malformed));
+                out string malformed
+            )
+        );
         Assert.Contains("magic", malformed);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void InstanceRecordSizeAboveFourKiBWarnsWithoutFailingTheBake() {
+    public void InstanceRecordSizeAboveFourKiBWarnsWithoutFailingTheBake()
+    {
         using var below = new TempBakeWorkspace();
         BakeRunResult accepted = RunDefault(below, MatrixUniformToml(62));
         Assert.True(accepted.ExitCode == 0, accepted.Error + accepted.Output);
@@ -522,12 +604,14 @@ public sealed class ShaderProcessorTests {
         Assert.True(File.Exists(above.GetPackPath()));
     }
 
-    private static string MatrixUniformToml(int count) {
+    private static string MatrixUniformToml(int count)
+    {
         var toml = new System.Text.StringBuilder();
         toml.AppendLine("[shader]");
         toml.AppendLine("vertex = \"castle.vert\"");
         toml.AppendLine("fragment = \"castle.frag\"");
-        for (int index = 0; index < count; index++) {
+        for (int index = 0; index < count; index++)
+        {
             toml.AppendLine("[[shader.uniforms]]");
             toml.AppendLine(CultureInfo.InvariantCulture, $"name = \"uMatrix{index}\"");
             toml.AppendLine("type = \"mat4\"");
@@ -539,20 +623,24 @@ public sealed class ShaderProcessorTests {
     private static BakeRunResult RunDefault(
         TempBakeWorkspace workspace,
         string toml,
-        string basePath = "shaders/castle") {
+        string basePath = "shaders/castle"
+    )
+    {
         ShaderTestAssets.Write(workspace, basePath, toml);
         return workspace.Run(DefaultApplication(workspace));
     }
 
-    private static BakeApplication DefaultApplication(TempBakeWorkspace workspace)
-        => workspace.Builder().UseDefaultProcessors().Build();
+    private static BakeApplication DefaultApplication(TempBakeWorkspace workspace) =>
+        workspace.Builder().UseDefaultProcessors().Build();
 
     private static void AssertFailure(
         TempBakeWorkspace workspace,
         string toml,
         string code,
         string? vertex = null,
-        string? fragment = null) {
+        string? fragment = null
+    )
+    {
         ShaderTestAssets.Write(workspace, "shaders/castle", toml, vertex, fragment);
         BakeRunResult result = workspace.Run(DefaultApplication(workspace));
 
@@ -561,10 +649,11 @@ public sealed class ShaderProcessorTests {
         Assert.False(File.Exists(workspace.GetPackPath()));
     }
 
-    private static ShaderAssetDescriptor ReadDescriptor(PackArchive archive, PackEntry entry)
-        => AssetSerialization.Deserialize<ShaderAssetDescriptor>(archive.ReadPayload(entry));
+    private static ShaderAssetDescriptor ReadDescriptor(PackArchive archive, PackEntry entry) =>
+        AssetSerialization.Deserialize<ShaderAssetDescriptor>(archive.ReadPayload(entry));
 
-    private static ShaderAssetDescriptor ReadDescriptor(PackArchive archive, string path) {
+    private static ShaderAssetDescriptor ReadDescriptor(PackArchive archive, string path)
+    {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry));
         return ReadDescriptor(archive, entry);
     }
@@ -573,7 +662,9 @@ public sealed class ShaderProcessorTests {
         PackArchive archive,
         string path,
         string entryPoint,
-        SpirvExecutionModel executionModel) {
+        SpirvExecutionModel executionModel
+    )
+    {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry));
         Assert.Equal(AssetEntryType.Raw, entry.Type);
         Assert.Equal(16u, entry.Alignment);
@@ -584,7 +675,9 @@ public sealed class ShaderProcessorTests {
         ShaderUniformAsset uniform,
         string name,
         ShaderUniformType type,
-        float[] defaultValue) {
+        float[] defaultValue
+    )
+    {
         Assert.Equal(name, uniform.Name);
         Assert.Equal(type, uniform.Type);
         Assert.Equal(defaultValue, uniform.Default);

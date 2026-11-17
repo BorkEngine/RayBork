@@ -17,8 +17,10 @@ namespace RayBork.Internal;
 /// finished operation again.
 /// </para>
 /// </remarks>
-internal abstract class GpuAssetUploadOperation {
-    private protected GpuAssetUploadOperation(AssetGpuUpload upload) {
+internal abstract class GpuAssetUploadOperation
+{
+    private protected GpuAssetUploadOperation(AssetGpuUpload upload)
+    {
         ArgumentNullException.ThrowIfNull(upload);
 
         Upload = upload;

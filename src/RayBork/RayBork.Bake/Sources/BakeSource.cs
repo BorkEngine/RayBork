@@ -5,7 +5,8 @@ using RayBork.Bake.Toml;
 namespace RayBork.Bake.Sources;
 
 /// <summary>How a discovered source produces its entries.</summary>
-internal enum BakeSourceKind {
+internal enum BakeSourceKind
+{
     /// <summary>A <c>[raybork]</c> custom-data TOML.</summary>
     Data,
 
@@ -19,7 +20,8 @@ internal enum BakeSourceKind {
 /// <summary>
 /// One discovered source, its canonical base path, and its optional sidecar document.
 /// </summary>
-internal sealed class BakeSource {
+internal sealed class BakeSource
+{
     /// <summary>Initializes a discovered source.</summary>
     /// <param name="pack">The owning pack.</param>
     /// <param name="kind">The source kind.</param>
@@ -37,7 +39,9 @@ internal sealed class BakeSource {
         string baseAssetPath,
         BakeProcessorRegistration? processor,
         string? matchedExtension,
-        TomlDocument? document = null) {
+        TomlDocument? document = null
+    )
+    {
         ArgumentNullException.ThrowIfNull(pack);
         ArgumentException.ThrowIfNullOrWhiteSpace(fullPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
@@ -90,19 +94,27 @@ internal sealed class BakeSource {
     internal string SourceId => RelativePath;
 
     /// <summary>Gets the processor name used for incremental identity, or <c>data</c>.</summary>
-    internal string KindName => Kind switch {
-        BakeSourceKind.Data => "data",
-        BakeSourceKind.ProcessorToml => "processor-toml",
-        _ => "processor-file",
-    };
+    internal string KindName =>
+        Kind switch
+        {
+            BakeSourceKind.Data => "data",
+            BakeSourceKind.ProcessorToml => "processor-toml",
+            _ => "processor-file",
+        };
 
     /// <summary>Gets the processor name for a processor source.</summary>
     internal string? ProcessorName => Processor?.Name;
 
     /// <summary>Gets the primary input files, including a discovered sidecar.</summary>
-    internal IReadOnlyList<string> PrimaryInputs {
-        get {
-            if (SidecarPath is null || string.Equals(SidecarPath, FullPath, StringComparison.Ordinal)) {
+    internal IReadOnlyList<string> PrimaryInputs
+    {
+        get
+        {
+            if (
+                SidecarPath is null
+                || string.Equals(SidecarPath, FullPath, StringComparison.Ordinal)
+            )
+            {
                 return [FullPath];
             }
 
@@ -112,11 +124,13 @@ internal sealed class BakeSource {
 }
 
 /// <summary>The source list of one configured pack.</summary>
-internal sealed class BakePackSources {
+internal sealed class BakePackSources
+{
     /// <summary>Initializes a pack source list.</summary>
     /// <param name="pack">The configured pack.</param>
     /// <param name="sources">The sources in deterministic order.</param>
-    internal BakePackSources(BakePack pack, IReadOnlyList<BakeSource> sources) {
+    internal BakePackSources(BakePack pack, IReadOnlyList<BakeSource> sources)
+    {
         ArgumentNullException.ThrowIfNull(pack);
         ArgumentNullException.ThrowIfNull(sources);
         Pack = pack;
@@ -131,10 +145,12 @@ internal sealed class BakePackSources {
 }
 
 /// <summary>The source lists for every configured pack.</summary>
-internal sealed class BakeSourceSet {
+internal sealed class BakeSourceSet
+{
     /// <summary>Initializes a source set.</summary>
     /// <param name="packs">The per-pack source lists in configuration order.</param>
-    internal BakeSourceSet(IReadOnlyList<BakePackSources> packs) {
+    internal BakeSourceSet(IReadOnlyList<BakePackSources> packs)
+    {
         ArgumentNullException.ThrowIfNull(packs);
         Packs = [.. packs];
     }

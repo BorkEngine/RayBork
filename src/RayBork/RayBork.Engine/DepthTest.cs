@@ -7,7 +7,8 @@ namespace RayBork;
 /// The engine uses reverse-Z depth: a closer fragment has a larger depth value. <see cref="Greater"/>
 /// and <see cref="GreaterOrEqual"/> mean "closer wins".
 /// </remarks>
-public enum DepthTest {
+public enum DepthTest
+{
     /// <summary>No depth test.</summary>
     Disabled = 0,
 

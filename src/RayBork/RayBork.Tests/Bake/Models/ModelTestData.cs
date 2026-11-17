@@ -6,7 +6,8 @@ using RayBork.Internal;
 namespace RayBork.Tests.Bake.Models;
 
 /// <summary>Source fixtures and pack readers shared by the model processor tests.</summary>
-internal static class ModelTestData {
+internal static class ModelTestData
+{
     internal const string TWO_GROUP_OBJ = """
         o first
         v 0 0 0
@@ -29,21 +30,24 @@ internal static class ModelTestData {
         f 1 2 3
         """;
 
-    internal static ModelAssetDescriptor ReadModel(PackArchive archive, string path) {
+    internal static ModelAssetDescriptor ReadModel(PackArchive archive, string path)
+    {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"missing model '{path}'");
         Assert.NotNull(entry);
         Assert.Equal(AssetEntryType.Model, entry.Type);
         return AssetSerialization.Deserialize<ModelAssetDescriptor>(archive.ReadPayload(entry));
     }
 
-    internal static MeshAssetDescriptor ReadMesh(PackArchive archive, string path) {
+    internal static MeshAssetDescriptor ReadMesh(PackArchive archive, string path)
+    {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"missing mesh '{path}'");
         Assert.NotNull(entry);
         Assert.Equal(AssetEntryType.Mesh, entry.Type);
         return AssetSerialization.Deserialize<MeshAssetDescriptor>(archive.ReadPayload(entry));
     }
 
-    internal static byte[] ReadPayload(PackArchive archive, string path) {
+    internal static byte[] ReadPayload(PackArchive archive, string path)
+    {
         Assert.True(archive.TryGetEntry(path, out PackEntry? entry), $"missing payload '{path}'");
         Assert.NotNull(entry);
         Assert.Equal(AssetEntryType.Raw, entry.Type);
@@ -53,52 +57,62 @@ internal static class ModelTestData {
     internal static MeshCollisionData ReadCollision(
         PackArchive archive,
         string meshPath,
-        MeshAssetDescriptor mesh) {
+        MeshAssetDescriptor mesh
+    )
+    {
         Assert.NotNull(mesh.CollisionPayload);
         byte[] payload = ReadPayload(archive, mesh.CollisionPayload!);
         return MeshCollisionCodec.Decode(
             payload,
             mesh.Topology,
             checked((int)mesh.IndexCount),
-            meshPath);
+            meshPath
+        );
     }
 
-    internal static Vector3 PositionAt(byte[] payload, int vertexIndex)
-        => new(
+    internal static Vector3 PositionAt(byte[] payload, int vertexIndex) =>
+        new(
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88)),
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 4)),
-            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 8)));
+            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 8))
+        );
 
-    internal static Vector3 NormalAt(byte[] payload, int vertexIndex)
-        => new(
+    internal static Vector3 NormalAt(byte[] payload, int vertexIndex) =>
+        new(
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 12)),
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 16)),
-            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 20)));
+            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 20))
+        );
 
-    internal static Vector2 UvAt(byte[] payload, int vertexIndex)
-        => new(
+    internal static Vector2 UvAt(byte[] payload, int vertexIndex) =>
+        new(
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 24)),
-            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 28)));
+            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 28))
+        );
 
-    internal static Vector4 ColorAt(byte[] payload, int vertexIndex)
-        => new(
+    internal static Vector4 ColorAt(byte[] payload, int vertexIndex) =>
+        new(
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 56)),
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 60)),
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 64)),
-            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 68)));
+            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 68))
+        );
 
-    internal static Vector4 TangentAt(byte[] payload, int vertexIndex)
-        => new(
+    internal static Vector4 TangentAt(byte[] payload, int vertexIndex) =>
+        new(
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 72)),
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 76)),
             BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 80)),
-            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 84)));
+            BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(vertexIndex * 88 + 84))
+        );
 
-    internal static uint IndexAt(byte[] payload, int vertexCount, int index)
-        => BinaryPrimitives.ReadUInt32LittleEndian(
-            payload.AsSpan((vertexCount * 88) + (index * sizeof(uint))));
+    internal static uint IndexAt(byte[] payload, int vertexCount, int index) =>
+        BinaryPrimitives.ReadUInt32LittleEndian(
+            payload.AsSpan((vertexCount * 88) + (index * sizeof(uint)))
+        );
 
-    internal static byte[] UvTriangleBufferData() {
+    internal static byte[] UvTriangleBufferData()
+    {
         var buffer = new byte[66];
         WriteVector(buffer, 0, 0f, 0f, 0f);
         WriteVector(buffer, 12, 1f, 0f, 0f);
@@ -112,8 +126,8 @@ internal static class ModelTestData {
         return buffer;
     }
 
-    internal static string UvTriangleGltf()
-        => $$"""
+    internal static string UvTriangleGltf() =>
+        $$"""
             {
               "asset": { "version": "2.0" },
               "scene": 0,
@@ -134,7 +148,9 @@ internal static class ModelTestData {
               "buffers": [
                 {
                   "byteLength": 66,
-                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(UvTriangleBufferData())}}"
+                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(
+                UvTriangleBufferData()
+            )}}"
                 }
               ],
               "bufferViews": [
@@ -157,7 +173,8 @@ internal static class ModelTestData {
             }
             """;
 
-    internal static byte[] TriangleBufferData() {
+    internal static byte[] TriangleBufferData()
+    {
         var buffer = new byte[42];
         WriteVector(buffer, 0, 0f, 0f, 0f);
         WriteVector(buffer, 12, 1f, 0f, 0f);
@@ -168,7 +185,8 @@ internal static class ModelTestData {
         return buffer;
     }
 
-    internal static byte[] LineBufferData() {
+    internal static byte[] LineBufferData()
+    {
         var buffer = new byte[28];
         WriteVector(buffer, 0, 0f, 0f, 0f);
         WriteVector(buffer, 12, 1f, 0f, 0f);
@@ -177,8 +195,8 @@ internal static class ModelTestData {
         return buffer;
     }
 
-    internal static string LineGltf()
-        => $$"""
+    internal static string LineGltf() =>
+        $$"""
             {
               "asset": { "version": "2.0" },
               "scene": 0,
@@ -195,7 +213,9 @@ internal static class ModelTestData {
               "buffers": [
                 {
                   "byteLength": 28,
-                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(LineBufferData())}}"
+                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(
+                LineBufferData()
+            )}}"
                 }
               ],
               "bufferViews": [
@@ -216,8 +236,8 @@ internal static class ModelTestData {
             }
             """;
 
-    internal static string EmbeddedTriangleGltf(string translation = "1, 2, 3")
-        => $$"""
+    internal static string EmbeddedTriangleGltf(string translation = "1, 2, 3") =>
+        $$"""
             {
               "asset": { "version": "2.0" },
               "scene": 0,
@@ -234,7 +254,9 @@ internal static class ModelTestData {
               "buffers": [
                 {
                   "byteLength": 42,
-                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(TriangleBufferData())}}"
+                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(
+                TriangleBufferData()
+            )}}"
                 }
               ],
               "bufferViews": [
@@ -255,8 +277,8 @@ internal static class ModelTestData {
             }
             """;
 
-    internal static string ExternalBufferGltf(string bufferUri)
-        => $$"""
+    internal static string ExternalBufferGltf(string bufferUri) =>
+        $$"""
             {
               "asset": { "version": "2.0" },
               "scene": 0,
@@ -289,8 +311,8 @@ internal static class ModelTestData {
             }
             """;
 
-    internal static string NodeChainGltf()
-        => $$"""
+    internal static string NodeChainGltf() =>
+        $$"""
             {
               "asset": { "version": "2.0" },
               "scene": 0,
@@ -310,7 +332,9 @@ internal static class ModelTestData {
               "buffers": [
                 {
                   "byteLength": 42,
-                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(TriangleBufferData())}}"
+                  "uri": "data:application/octet-stream;base64,{{Convert.ToBase64String(
+                TriangleBufferData()
+            )}}"
                 }
               ],
               "bufferViews": [
@@ -331,8 +355,8 @@ internal static class ModelTestData {
             }
             """;
 
-    internal static string GlbJson()
-        => """
+    internal static string GlbJson() =>
+        """
             {
               "asset": { "version": "2.0" },
               "scene": 0,
@@ -365,7 +389,8 @@ internal static class ModelTestData {
             }
             """;
 
-    internal static byte[] BuildGlb(string json, byte[] binary) {
+    internal static byte[] BuildGlb(string json, byte[] binary)
+    {
         byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
         int jsonLength = Align4(jsonBytes.Length);
         int binaryLength = Align4(binary.Length);
@@ -391,13 +416,15 @@ internal static class ModelTestData {
 
     internal static int Align4(int value) => (value + 3) & ~3;
 
-    private static void WriteVector(byte[] buffer, int offset, float x, float y, float z) {
+    private static void WriteVector(byte[] buffer, int offset, float x, float y, float z)
+    {
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset), x);
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset + 4), y);
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset + 8), z);
     }
 
-    private static void WriteVector2(byte[] buffer, int offset, float x, float y) {
+    private static void WriteVector2(byte[] buffer, int offset, float x, float y)
+    {
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset), x);
         BinaryPrimitives.WriteSingleLittleEndian(buffer.AsSpan(offset + 4), y);
     }

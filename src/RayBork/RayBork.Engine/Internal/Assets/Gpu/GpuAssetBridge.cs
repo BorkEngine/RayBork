@@ -34,7 +34,8 @@ namespace RayBork.Internal;
 /// caller can hang on a stopped render thread.
 /// </para>
 /// </remarks>
-internal sealed class GpuAssetBridge {
+internal sealed class GpuAssetBridge
+{
     /// <summary>
     /// The maximum number of queued uploads. The asset loader coalesces loads, so the bound is a
     /// backstop against a render thread that stopped draining, not a normal concurrency limit.
@@ -74,8 +75,7 @@ internal sealed class GpuAssetBridge {
     /// Initializes a bridge with the production in-flight bounds.
     /// </summary>
     internal GpuAssetBridge()
-        : this(MAX_IN_FLIGHT_UPLOADS, MAX_IN_FLIGHT_UPLOAD_BYTES) {
-    }
+        : this(MAX_IN_FLIGHT_UPLOADS, MAX_IN_FLIGHT_UPLOAD_BYTES) { }
 
     /// <summary>
     /// Initializes a bridge with explicit in-flight bounds. Tests use small values.
@@ -83,7 +83,8 @@ internal sealed class GpuAssetBridge {
     /// <param name="maxInFlightUploads">The maximum number of concurrent GPU copies.</param>
     /// <param name="maxInFlightUploadBytes">The maximum payload bytes the concurrent copies retain.</param>
     /// <exception cref="ArgumentOutOfRangeException">A bound is not positive.</exception>
-    internal GpuAssetBridge(int maxInFlightUploads, long maxInFlightUploadBytes) {
+    internal GpuAssetBridge(int maxInFlightUploads, long maxInFlightUploadBytes)
+    {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxInFlightUploads);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxInFlightUploadBytes);
 
@@ -100,9 +101,12 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// Gets whether <see cref="Close"/> already ran.
     /// </summary>
-    internal bool IsClosed {
-        get {
-            lock (_gate) {
+    internal bool IsClosed
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _closed;
             }
         }
@@ -111,9 +115,12 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// Gets whether a worker is attached and the bridge accepts uploads.
     /// </summary>
-    internal bool HasWorker {
-        get {
-            lock (_gate) {
+    internal bool HasWorker
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _worker is not null;
             }
         }
@@ -123,9 +130,12 @@ internal sealed class GpuAssetBridge {
     /// Gets whether the bridge still has a queued or in-flight upload. The render loop uses it to
     /// choose the short polling wait while an upload is still copying on the GPU.
     /// </summary>
-    internal bool HasPendingWork {
-        get {
-            lock (_gate) {
+    internal bool HasPendingWork
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _uploads.Count > 0 || _inFlight.Count > 0;
             }
         }
@@ -134,9 +144,12 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// Gets the number of queued upload requests. Diagnostic, for tests.
     /// </summary>
-    internal int PendingUploadCount {
-        get {
-            lock (_gate) {
+    internal int PendingUploadCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _uploads.Count;
             }
         }
@@ -145,9 +158,12 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// Gets the number of uploads whose GPU copy is in flight. Diagnostic, for tests.
     /// </summary>
-    internal int InFlightUploadCount {
-        get {
-            lock (_gate) {
+    internal int InFlightUploadCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _inFlight.Count;
             }
         }
@@ -156,9 +172,12 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// Gets the estimated payload bytes retained by the in-flight uploads. Diagnostic, for tests.
     /// </summary>
-    internal long InFlightUploadBytes {
-        get {
-            lock (_gate) {
+    internal long InFlightUploadBytes
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _inFlightBytes;
             }
         }
@@ -168,9 +187,12 @@ internal sealed class GpuAssetBridge {
     /// Gets whether a destroy request is queued. The render loop uses it to keep polling while a
     /// submitted frame still references the resource, so a minimized window cannot strand the destroy.
     /// </summary>
-    internal bool HasPendingDestroys {
-        get {
-            lock (_gate) {
+    internal bool HasPendingDestroys
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _destroys.Count > 0;
             }
         }
@@ -179,9 +201,12 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// Gets the number of queued destroy requests. Diagnostic, for tests.
     /// </summary>
-    internal int PendingDestroyCount {
-        get {
-            lock (_gate) {
+    internal int PendingDestroyCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _destroys.Count;
             }
         }
@@ -190,9 +215,12 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// Gets the number of live resources. Diagnostic, for tests.
     /// </summary>
-    internal int LiveResourceCount {
-        get {
-            lock (_gate) {
+    internal int LiveResourceCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _live.Count;
             }
         }
@@ -206,12 +234,15 @@ internal sealed class GpuAssetBridge {
     /// <exception cref="ArgumentNullException"><paramref name="worker"/> is <c>null</c>.</exception>
     /// <exception cref="ObjectDisposedException">The bridge is closed.</exception>
     /// <exception cref="InvalidOperationException">A worker is already attached.</exception>
-    internal void AttachWorker(IAssetGpuWorker worker) {
+    internal void AttachWorker(IAssetGpuWorker worker)
+    {
         ArgumentNullException.ThrowIfNull(worker);
 
-        lock (_gate) {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_closed, this);
-            if (_worker is not null) {
+            if (_worker is not null)
+            {
                 throw new InvalidOperationException("The GPU asset bridge already has a worker.");
             }
 
@@ -230,37 +261,53 @@ internal sealed class GpuAssetBridge {
     /// created a resource destroys it instead of leaking it.
     /// </returns>
     /// <exception cref="ArgumentNullException"><paramref name="upload"/> is <c>null</c>.</exception>
-    internal Task<GpuAssetResource> UploadAsync(AssetGpuUpload upload, CancellationToken cancellationToken) {
+    internal Task<GpuAssetResource> UploadAsync(
+        AssetGpuUpload upload,
+        CancellationToken cancellationToken
+    )
+    {
         ArgumentNullException.ThrowIfNull(upload);
-        if (cancellationToken.IsCancellationRequested) {
+        if (cancellationToken.IsCancellationRequested)
+        {
             return Task.FromCanceled<GpuAssetResource>(cancellationToken);
         }
 
         UploadRequest request = new(this, upload, cancellationToken);
-        lock (_gate) {
-            if (_closed) {
+        lock (_gate)
+        {
+            if (_closed)
+            {
                 return Task.FromException<GpuAssetResource>(CreateClosedException());
             }
 
-            if (_worker is null) {
-                return Task.FromException<GpuAssetResource>(new GraphicsException(
-                    "The GPU asset bridge has no worker; the renderer backend cannot upload GPU assets.",
-                    DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-                    null));
+            if (_worker is null)
+            {
+                return Task.FromException<GpuAssetResource>(
+                    new GraphicsException(
+                        "The GPU asset bridge has no worker; the renderer backend cannot upload GPU assets.",
+                        DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
+                        null
+                    )
+                );
             }
 
-            if (_uploads.Count >= MAX_PENDING_UPLOADS) {
-                return Task.FromException<GpuAssetResource>(new AssetLoadException(
-                    $"The GPU asset upload queue is full ({MAX_PENDING_UPLOADS} pending requests); " +
-                    "the render thread is not draining it.",
-                    DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-                    null));
+            if (_uploads.Count >= MAX_PENDING_UPLOADS)
+            {
+                return Task.FromException<GpuAssetResource>(
+                    new AssetLoadException(
+                        $"The GPU asset upload queue is full ({MAX_PENDING_UPLOADS} pending requests); "
+                            + "the render thread is not draining it.",
+                        DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
+                        null
+                    )
+                );
             }
 
             _uploads.Enqueue(request);
         }
 
-        if (cancellationToken.CanBeCanceled) {
+        if (cancellationToken.CanBeCanceled)
+        {
             request.RegisterCancellation();
         }
 
@@ -277,19 +324,24 @@ internal sealed class GpuAssetBridge {
     /// <param name="resource">The resource to destroy.</param>
     /// <exception cref="ArgumentNullException"><paramref name="resource"/> is <c>null</c>.</exception>
     /// <exception cref="InvalidOperationException">The destroy queue is full.</exception>
-    internal void Destroy(GpuAssetResource resource) {
+    internal void Destroy(GpuAssetResource resource)
+    {
         ArgumentNullException.ThrowIfNull(resource);
 
-        lock (_gate) {
-            if (_closed || !_live.Remove(resource)) {
+        lock (_gate)
+        {
+            if (_closed || !_live.Remove(resource))
+            {
                 return;
             }
 
-            if (_destroys.Count >= MAX_PENDING_DESTROYS) {
+            if (_destroys.Count >= MAX_PENDING_DESTROYS)
+            {
                 _live.Add(resource);
                 throw new InvalidOperationException(
-                    $"The GPU asset bridge destroy queue is full ({MAX_PENDING_DESTROYS} pending " +
-                    "requests); the render thread is not draining it.");
+                    $"The GPU asset bridge destroy queue is full ({MAX_PENDING_DESTROYS} pending "
+                        + "requests); the render thread is not draining it."
+                );
             }
 
             _destroys.Enqueue(resource);
@@ -312,22 +364,27 @@ internal sealed class GpuAssetBridge {
     /// </remarks>
     /// <param name="worker">The worker for the current device.</param>
     /// <exception cref="ArgumentNullException"><paramref name="worker"/> is <c>null</c>.</exception>
-    internal void ProcessPending(IAssetGpuWorker worker) {
+    internal void ProcessPending(IAssetGpuWorker worker)
+    {
         ArgumentNullException.ThrowIfNull(worker);
 
         bool progress;
-        do {
+        do
+        {
             progress = PollInFlight(worker);
             progress |= StartQueuedUploads(worker);
         } while (progress);
 
-        if (!worker.AreFrameResourcesIdle) {
+        if (!worker.AreFrameResourcesIdle)
+        {
             return;
         }
 
-        while (true) {
+        while (true)
+        {
             GpuAssetResource? resource = TryDequeueDestroy();
-            if (resource is null) {
+            if (resource is null)
+            {
                 break;
             }
 
@@ -351,13 +408,17 @@ internal sealed class GpuAssetBridge {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Device recovery replays every live resource on the render thread; a failing replay is recorded so the remaining resources are still restored, and the failures are reported as one AssetLoadException afterwards.")]
-    internal void Restore(IAssetGpuWorker worker) {
+        Justification = "Device recovery replays every live resource on the render thread; a failing replay is recorded so the remaining resources are still restored, and the failures are reported as one AssetLoadException afterwards."
+    )]
+    internal void Restore(IAssetGpuWorker worker)
+    {
         ArgumentNullException.ThrowIfNull(worker);
 
         GpuAssetResource[] live;
-        lock (_gate) {
-            if (_closed) {
+        lock (_gate)
+        {
+            if (_closed)
+            {
                 return;
             }
 
@@ -365,36 +426,47 @@ internal sealed class GpuAssetBridge {
         }
 
         List<Exception>? failures = null;
-        foreach (GpuAssetResource resource in live) {
+        foreach (GpuAssetResource resource in live)
+        {
             string path = AssetPath.ToPublic(resource.Upload.Path);
-            try {
+            try
+            {
                 GpuAssetResource restored = worker.Restore(resource.Upload, resource)
                     ?? throw new InvalidOperationException(
-                        $"The GPU asset worker returned no resource while restoring '{path}'.");
+                        $"The GPU asset worker returned no resource while restoring '{path}'."
+                    );
                 resource.AdoptRestored(restored);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 failures ??= [];
-                failures.Add(IsUploadFailure(exception)
-                    ? exception
-                    : new AssetLoadException(
-                        $"The GPU asset re-upload of '{path}' failed after a device recovery.",
-                        DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-                        exception));
+                failures.Add(
+                    IsUploadFailure(exception)
+                        ? exception
+                        : new AssetLoadException(
+                            $"The GPU asset re-upload of '{path}' failed after a device recovery.",
+                            DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
+                            exception
+                        )
+                );
             }
         }
 
-        if (failures is null) {
+        if (failures is null)
+        {
             return;
         }
 
-        if (failures.Count == 1) {
+        if (failures.Count == 1)
+        {
             throw failures[0];
         }
 
         throw new AssetLoadException(
             $"The GPU asset bridge could not re-upload {failures.Count} live resources after a device recovery.",
             DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-            new AggregateException(failures));
+            new AggregateException(failures)
+        );
     }
 
     /// <summary>
@@ -407,14 +479,17 @@ internal sealed class GpuAssetBridge {
     /// The render loop failure that stopped the app, or <see langword="null"/> for a graceful stop.
     /// Pending uploads receive it; a graceful stop uses <see cref="ObjectDisposedException"/>.
     /// </param>
-    internal void Close(Exception? failure) {
+    internal void Close(Exception? failure)
+    {
         UploadRequest[] uploads;
         InFlightUpload[] inFlight;
         GpuAssetResource[] queuedDestroys;
         GpuAssetResource[] live;
         IAssetGpuWorker? worker;
-        lock (_gate) {
-            if (_closed) {
+        lock (_gate)
+        {
+            if (_closed)
+            {
                 return;
             }
 
@@ -432,34 +507,41 @@ internal sealed class GpuAssetBridge {
         }
 
         Exception completion = failure ?? CreateClosedException();
-        foreach (UploadRequest request in uploads) {
+        foreach (UploadRequest request in uploads)
+        {
             request.DisposeRegistration();
             request.Completion.TrySetException(completion);
         }
 
-        foreach (InFlightUpload upload in inFlight) {
+        foreach (InFlightUpload upload in inFlight)
+        {
             upload.Request.DisposeRegistration();
             upload.Request.Completion.TrySetException(completion);
         }
 
-        if (worker is null) {
+        if (worker is null)
+        {
             return;
         }
 
         // A canceled in-flight operation owns staging and partial GPU objects; cancel it before the
         // backend destroys the device. This may wait for the upload fence, which is fine because the
         // loop is stopping.
-        foreach (InFlightUpload upload in inFlight) {
-            if (upload.Operation is not null) {
+        foreach (InFlightUpload upload in inFlight)
+        {
+            if (upload.Operation is not null)
+            {
                 CancelOperation(worker, upload.Operation);
             }
         }
 
-        foreach (GpuAssetResource resource in queuedDestroys) {
+        foreach (GpuAssetResource resource in queuedDestroys)
+        {
             DestroyResourceNow(worker, resource);
         }
 
-        foreach (GpuAssetResource resource in live) {
+        foreach (GpuAssetResource resource in live)
+        {
             DestroyResourceNow(worker, resource);
         }
     }
@@ -467,32 +549,42 @@ internal sealed class GpuAssetBridge {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "The render thread polls worker completions; a worker failure completes the request with the error and keeps the loop alive.")]
-    private bool PollInFlight(IAssetGpuWorker worker) {
+        Justification = "The render thread polls worker completions; a worker failure completes the request with the error and keeps the loop alive."
+    )]
+    private bool PollInFlight(IAssetGpuWorker worker)
+    {
         bool progress = false;
-        foreach (InFlightUpload upload in SnapshotInFlight()) {
+        foreach (InFlightUpload upload in SnapshotInFlight())
+        {
             GpuAssetUploadOperation? operation = upload.Operation;
-            if (operation is null) {
+            if (operation is null)
+            {
                 continue;
             }
 
             bool finished;
             GpuAssetResource? resource = null;
             Exception? error = null;
-            try {
+            try
+            {
                 finished = worker.TryComplete(operation, out resource, out error);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 CancelOperation(worker, operation);
                 RemoveInFlight(upload);
                 upload.Request.DisposeRegistration();
                 upload.Request.Completion.TrySetException(
-                    CreateUploadFailure(upload.Request.Upload, exception));
+                    CreateUploadFailure(upload.Request.Upload, exception)
+                );
                 progress = true;
                 continue;
             }
 
-            if (!finished) {
-                if (upload.Request.Completion.Task.IsCompleted) {
+            if (!finished)
+            {
+                if (upload.Request.Completion.Task.IsCompleted)
+                {
                     // The caller canceled while the GPU copy was still pending. Cancellation is rare,
                     // so the worker may wait for the fence before releasing the staging and partial
                     // resource.
@@ -517,20 +609,27 @@ internal sealed class GpuAssetBridge {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "A failing upload start is reported through its request, and the loop keeps servicing the remaining uploads.")]
-    private bool StartQueuedUploads(IAssetGpuWorker worker) {
+        Justification = "A failing upload start is reported through its request, and the loop keeps servicing the remaining uploads."
+    )]
+    private bool StartQueuedUploads(IAssetGpuWorker worker)
+    {
         bool started = false;
-        while (true) {
+        while (true)
+        {
             UploadRequest? request;
             InFlightUpload upload;
-            lock (_gate) {
-                while (true) {
-                    if (_uploads.Count == 0) {
+            lock (_gate)
+            {
+                while (true)
+                {
+                    if (_uploads.Count == 0)
+                    {
                         return started;
                     }
 
                     request = _uploads.Peek();
-                    if (!request.Completion.Task.IsCompleted) {
+                    if (!request.Completion.Task.IsCompleted)
+                    {
                         break;
                     }
 
@@ -539,8 +638,11 @@ internal sealed class GpuAssetBridge {
                 }
 
                 long bytes = request.Upload.EstimatedBytes;
-                if (_inFlight.Count >= _maxInFlightUploads
-                    || (_inFlight.Count > 0 && _inFlightBytes + bytes > _maxInFlightUploadBytes)) {
+                if (
+                    _inFlight.Count >= _maxInFlightUploads
+                    || (_inFlight.Count > 0 && _inFlightBytes + bytes > _maxInFlightUploadBytes)
+                )
+                {
                     return started;
                 }
 
@@ -550,10 +652,13 @@ internal sealed class GpuAssetBridge {
                 _inFlightBytes += bytes;
             }
 
-            try {
+            try
+            {
                 upload.Operation = worker.BeginUpload(request.Upload);
                 started = true;
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 RemoveInFlight(upload);
                 request.DisposeRegistration();
                 request.Completion.TrySetException(CreateUploadFailure(request.Upload, exception));
@@ -566,9 +671,13 @@ internal sealed class GpuAssetBridge {
         IAssetGpuWorker worker,
         UploadRequest request,
         GpuAssetResource? resource,
-        Exception? error) {
-        if (error is not null) {
-            if (resource is not null) {
+        Exception? error
+    )
+    {
+        if (error is not null)
+        {
+            if (resource is not null)
+            {
                 // A worker that reports both a failure and a resource still owns a GPU object; never
                 // leak it because the caller cannot receive it.
                 DestroyResourceNow(worker, resource);
@@ -578,26 +687,35 @@ internal sealed class GpuAssetBridge {
             return;
         }
 
-        if (resource is null) {
-            request.Completion.TrySetException(new AssetLoadException(
-                $"The GPU asset worker returned no resource for '{AssetPath.ToPublic(request.Upload.Path)}'.",
-                DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-                null));
+        if (resource is null)
+        {
+            request.Completion.TrySetException(
+                new AssetLoadException(
+                    $"The GPU asset worker returned no resource for '{AssetPath.ToPublic(request.Upload.Path)}'.",
+                    DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
+                    null
+                )
+            );
             return;
         }
 
-        if (resource.Kind != request.Upload.Kind) {
-            request.Completion.TrySetException(new AssetLoadException(
-                $"The GPU asset worker created a {resource.Kind} resource for the " +
-                $"{request.Upload.Kind} upload '{AssetPath.ToPublic(request.Upload.Path)}'.",
-                DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-                null));
+        if (resource.Kind != request.Upload.Kind)
+        {
+            request.Completion.TrySetException(
+                new AssetLoadException(
+                    $"The GPU asset worker created a {resource.Kind} resource for the "
+                        + $"{request.Upload.Kind} upload '{AssetPath.ToPublic(request.Upload.Path)}'.",
+                    DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
+                    null
+                )
+            );
             DestroyResourceNow(worker, resource);
             return;
         }
 
         AddLive(resource);
-        if (!request.Completion.TrySetResult(resource)) {
+        if (!request.Completion.TrySetResult(resource))
+        {
             // The caller canceled while the worker was finishing the upload; destroy the resource
             // instead of leaking a live GPU resource that no asset will ever release.
             RemoveLive(resource);
@@ -608,45 +726,62 @@ internal sealed class GpuAssetBridge {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Cancellation runs during shutdown, when the device may already be gone; it must never stop the render loop.")]
-    private static void CancelOperation(IAssetGpuWorker worker, GpuAssetUploadOperation operation) {
-        try {
+        Justification = "Cancellation runs during shutdown, when the device may already be gone; it must never stop the render loop."
+    )]
+    private static void CancelOperation(IAssetGpuWorker worker, GpuAssetUploadOperation operation)
+    {
+        try
+        {
             worker.Cancel(operation);
-        } catch (Exception) {
+        }
+        catch (Exception)
+        {
             // The device may already be gone during shutdown. Cancellation must never stop the loop;
             // the worker logs its own cleanup failures.
         }
     }
 
-    private InFlightUpload[] SnapshotInFlight() {
-        lock (_gate) {
+    private InFlightUpload[] SnapshotInFlight()
+    {
+        lock (_gate)
+        {
             return [.. _inFlight];
         }
     }
 
-    private void RemoveInFlight(InFlightUpload upload) {
-        lock (_gate) {
-            if (_inFlight.Remove(upload)) {
+    private void RemoveInFlight(InFlightUpload upload)
+    {
+        lock (_gate)
+        {
+            if (_inFlight.Remove(upload))
+            {
                 _inFlightBytes -= upload.Bytes;
             }
         }
     }
 
-    private void AddLive(GpuAssetResource resource) {
-        lock (_gate) {
+    private void AddLive(GpuAssetResource resource)
+    {
+        lock (_gate)
+        {
             _live.Add(resource);
         }
     }
 
-    private void RemoveLive(GpuAssetResource resource) {
-        lock (_gate) {
+    private void RemoveLive(GpuAssetResource resource)
+    {
+        lock (_gate)
+        {
             _live.Remove(resource);
         }
     }
 
-    private GpuAssetResource? TryDequeueDestroy() {
-        lock (_gate) {
-            if (_closed || _destroys.Count == 0) {
+    private GpuAssetResource? TryDequeueDestroy()
+    {
+        lock (_gate)
+        {
+            if (_closed || _destroys.Count == 0)
+            {
                 return null;
             }
 
@@ -657,29 +792,38 @@ internal sealed class GpuAssetBridge {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "Destroying a GPU resource during shutdown or upload failure may itself throw; the destruction pass must keep going.")]
-    private static void DestroyResourceNow(IAssetGpuWorker worker, GpuAssetResource resource) {
-        if (!resource.TryMarkDestroyed()) {
+        Justification = "Destroying a GPU resource during shutdown or upload failure may itself throw; the destruction pass must keep going."
+    )]
+    private static void DestroyResourceNow(IAssetGpuWorker worker, GpuAssetResource resource)
+    {
+        if (!resource.TryMarkDestroyed())
+        {
             return;
         }
 
-        try {
+        try
+        {
             worker.Destroy(resource);
-        } catch (Exception) {
+        }
+        catch (Exception)
+        {
             // The app is tearing down or the driver is already gone; a failed destroy cannot be
             // reported to a caller and must not stop the render thread.
         }
     }
 
-    private static Exception CreateUploadFailure(AssetGpuUpload upload, Exception exception) {
-        if (exception is AssetLoadException) {
+    private static Exception CreateUploadFailure(AssetGpuUpload upload, Exception exception)
+    {
+        if (exception is AssetLoadException)
+        {
             return exception;
         }
 
         return new AssetLoadException(
             $"The GPU upload of '{AssetPath.ToPublic(upload.Path)}' failed.",
             DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-            exception);
+            exception
+        );
     }
 
     private static bool IsUploadFailure(Exception exception) =>
@@ -687,17 +831,22 @@ internal sealed class GpuAssetBridge {
         && string.Equals(
             assetFailure.DiagnosticCode,
             DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-            StringComparison.Ordinal);
+            StringComparison.Ordinal
+        );
 
-    private static ObjectDisposedException CreateClosedException() => new(
-        nameof(GpuAssetBridge),
-        "The GPU asset bridge is closed; the render loop has stopped servicing GPU assets.");
+    private static ObjectDisposedException CreateClosedException() =>
+        new(
+            nameof(GpuAssetBridge),
+            "The GPU asset bridge is closed; the render loop has stopped servicing GPU assets."
+        );
 
     /// <summary>
     /// One upload that the render thread started and has not completed or canceled yet.
     /// </summary>
-    private sealed class InFlightUpload {
-        internal InFlightUpload(UploadRequest request, long bytes) {
+    private sealed class InFlightUpload
+    {
+        internal InFlightUpload(UploadRequest request, long bytes)
+        {
             Request = request;
             Bytes = bytes;
         }
@@ -712,15 +861,23 @@ internal sealed class GpuAssetBridge {
     /// <summary>
     /// One queued upload and its single completion task.
     /// </summary>
-    private sealed class UploadRequest {
+    private sealed class UploadRequest
+    {
         private readonly GpuAssetBridge _owner;
         private CancellationTokenRegistration _registration;
 
-        internal UploadRequest(GpuAssetBridge owner, AssetGpuUpload upload, CancellationToken cancellationToken) {
+        internal UploadRequest(
+            GpuAssetBridge owner,
+            AssetGpuUpload upload,
+            CancellationToken cancellationToken
+        )
+        {
             _owner = owner;
             Upload = upload;
             CancellationToken = cancellationToken;
-            Completion = new TaskCompletionSource<GpuAssetResource>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Completion = new TaskCompletionSource<GpuAssetResource>(
+                TaskCreationOptions.RunContinuationsAsynchronously
+            );
         }
 
         internal AssetGpuUpload Upload { get; }
@@ -729,16 +886,20 @@ internal sealed class GpuAssetBridge {
 
         internal TaskCompletionSource<GpuAssetResource> Completion { get; }
 
-        internal void RegisterCancellation() {
+        internal void RegisterCancellation()
+        {
             _registration = CancellationToken.Register(
                 static state => ((UploadRequest)state!).Cancel(),
-                this);
+                this
+            );
         }
 
         internal void DisposeRegistration() => _registration.Dispose();
 
-        private void Cancel() {
-            if (Completion.TrySetCanceled(CancellationToken)) {
+        private void Cancel()
+        {
+            if (Completion.TrySetCanceled(CancellationToken))
+            {
                 // Wake the render thread so it can drop the queued request without creating a
                 // resource, or cancel one it already started.
                 _owner._workAvailable.Set();

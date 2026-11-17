@@ -37,11 +37,13 @@ namespace RayBork;
 /// tangent basis is needed.
 /// </para>
 /// </remarks>
-public sealed class MeshBuilder {
+public sealed class MeshBuilder
+{
     private const int MIN_SUBDIVISIONS = 1;
     private const int MIN_TESSELLATION = 3;
 
-    private static readonly (Vector3 Normal, Vector3 Right, Vector3 Up)[] _cubeFaces = [
+    private static readonly (Vector3 Normal, Vector3 Right, Vector3 Up)[] _cubeFaces =
+    [
         (new Vector3(1f, 0f, 0f), new Vector3(0f, 0f, -1f), new Vector3(0f, 1f, 0f)),
         (new Vector3(-1f, 0f, 0f), new Vector3(0f, 0f, 1f), new Vector3(0f, 1f, 0f)),
         (new Vector3(0f, 1f, 0f), new Vector3(1f, 0f, 0f), new Vector3(0f, 0f, -1f)),
@@ -65,7 +67,8 @@ public sealed class MeshBuilder {
     /// <param name="topology">The primitive topology of the mesh.</param>
     /// <exception cref="ArgumentNullException"><paramref name="service"/> is <c>null</c>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="topology"/> is not a defined value.</exception>
-    internal MeshBuilder(ProceduralAssetService service, PrimitiveTopology topology) {
+    internal MeshBuilder(ProceduralAssetService service, PrimitiveTopology topology)
+    {
         ArgumentNullException.ThrowIfNull(service);
 
         ValidateTopology(topology);
@@ -79,13 +82,15 @@ public sealed class MeshBuilder {
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The value is not a defined topology.</exception>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    public PrimitiveTopology Topology {
-        get {
+    public PrimitiveTopology Topology
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _topology;
         }
-
-        set {
+        set
+        {
             _service.ThrowIfStopped();
             ValidateTopology(value);
             _topology = value;
@@ -96,8 +101,10 @@ public sealed class MeshBuilder {
     /// Gets the mutable vertex list. Add vertices directly or replace the list contents with
     /// <see cref="SetVertices"/>.
     /// </summary>
-    public List<Vertex> Vertices {
-        get {
+    public List<Vertex> Vertices
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _vertices;
         }
@@ -107,8 +114,10 @@ public sealed class MeshBuilder {
     /// Gets the mutable 32-bit index list. Add indices directly or replace the list contents with
     /// <see cref="SetIndices"/>.
     /// </summary>
-    public List<uint> Indices {
-        get {
+    public List<uint> Indices
+    {
+        get
+        {
             _service.ThrowIfStopped();
             return _indices;
         }
@@ -119,7 +128,8 @@ public sealed class MeshBuilder {
     /// </summary>
     /// <param name="vertices">The new vertices.</param>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    public void SetVertices(ReadOnlySpan<Vertex> vertices) {
+    public void SetVertices(ReadOnlySpan<Vertex> vertices)
+    {
         _service.ThrowIfStopped();
         _vertices.Clear();
         _vertices.AddRange(vertices);
@@ -131,7 +141,8 @@ public sealed class MeshBuilder {
     /// </summary>
     /// <param name="indices">The new 32-bit indices.</param>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    public void SetIndices(ReadOnlySpan<uint> indices) {
+    public void SetIndices(ReadOnlySpan<uint> indices)
+    {
         _service.ThrowIfStopped();
         _indices.Clear();
         _indices.AddRange(indices);
@@ -160,16 +171,25 @@ public sealed class MeshBuilder {
     /// normalized face normal, and a triangle strip keeps its topology by inserting one degenerate
     /// connecting index when the next triangle would start at an odd position.
     /// </remarks>
-    public void ComputeNormals(MeshNormalMode mode = MeshNormalMode.Smooth) {
+    public void ComputeNormals(MeshNormalMode mode = MeshNormalMode.Smooth)
+    {
         _service.ThrowIfStopped();
-        if (!Enum.IsDefined(mode)) {
-            throw new ArgumentOutOfRangeException(nameof(mode), mode, "The normal mode is not a defined value.");
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(mode),
+                mode,
+                "The normal mode is not a defined value."
+            );
         }
 
         EnsureTriangleGeometry();
-        if (mode == MeshNormalMode.Flat) {
+        if (mode == MeshNormalMode.Flat)
+        {
             ComputeFlatNormals();
-        } else {
+        }
+        else
+        {
             ComputeSmoothNormals();
         }
     }
@@ -190,14 +210,16 @@ public sealed class MeshBuilder {
     /// (zero-area geometry or a collapsed UV triangle) keeps a zero tangent, and the <c>W</c> of a
     /// zero tangent is zero. Call <see cref="ComputeNormals"/> first.
     /// </remarks>
-    public void ComputeTangents() {
+    public void ComputeTangents()
+    {
         _service.ThrowIfStopped();
         EnsureTriangleGeometry();
         EnsureNormalsAndUvs();
 
         Vector3[] tangents = new Vector3[_vertices.Count];
         Vector3[] bitangents = new Vector3[_vertices.Count];
-        for (int triangle = 0; triangle < TriangleCount; triangle++) {
+        for (int triangle = 0; triangle < TriangleCount; triangle++)
+        {
             GetTriangle(triangle, out int index0, out int index1, out int index2);
             Vertex vertex0 = _vertices[index0];
             Vertex vertex1 = _vertices[index1];
@@ -207,7 +229,8 @@ public sealed class MeshBuilder {
             Vector2 deltaUv1 = vertex1.Uv - vertex0.Uv;
             Vector2 deltaUv2 = vertex2.Uv - vertex0.Uv;
             float determinant = (deltaUv1.X * deltaUv2.Y) - (deltaUv1.Y * deltaUv2.X);
-            if (MathF.Abs(determinant) < 1e-12f) {
+            if (MathF.Abs(determinant) < 1e-12f)
+            {
                 continue;
             }
 
@@ -222,18 +245,21 @@ public sealed class MeshBuilder {
             bitangents[index2] += bitangent;
         }
 
-        for (int index = 0; index < _vertices.Count; index++) {
+        for (int index = 0; index < _vertices.Count; index++)
+        {
             Vertex vertex = _vertices[index];
             Vector3 normal = Vector3.Normalize(vertex.Normal);
             Vector3 tangent = tangents[index];
-            if (tangent.LengthSquared() <= 1e-12f) {
+            if (tangent.LengthSquared() <= 1e-12f)
+            {
                 vertex.Tangent = Vector4.Zero;
                 _vertices[index] = vertex;
                 continue;
             }
 
             Vector3 orthogonal = tangent - (normal * Vector3.Dot(normal, tangent));
-            if (orthogonal.LengthSquared() <= 1e-12f) {
+            if (orthogonal.LengthSquared() <= 1e-12f)
+            {
                 vertex.Tangent = Vector4.Zero;
                 _vertices[index] = vertex;
                 continue;
@@ -271,11 +297,14 @@ public sealed class MeshBuilder {
     /// <see cref="PrimitiveTopology.TriangleStrip"/>.
     /// </exception>
     /// <exception cref="ObjectDisposedException">The app has stopped.</exception>
-    public void GenerateCollisions() {
+    public void GenerateCollisions()
+    {
         _service.ThrowIfStopped();
-        if (_topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip)) {
+        if (_topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip))
+        {
             throw new NotSupportedException(
-                $"Collision generation supports only triangle topologies; the builder topology is {_topology}.");
+                $"Collision generation supports only triangle topologies; the builder topology is {_topology}."
+            );
         }
 
         _generateCollisions = true;
@@ -298,7 +327,8 @@ public sealed class MeshBuilder {
     /// <c>(0.5, 0.5)</c> and the first corner, on +Z, is <c>(0.5, 0)</c>, so the perimeter follows the
     /// unit circle around the center.
     /// </remarks>
-    public void GeneratePoly(int sides, float radius) {
+    public void GeneratePoly(int sides, float radius)
+    {
         _service.ThrowIfStopped();
         ValidateTessellation(sides, nameof(sides));
         ValidatePositiveFinite(radius, nameof(radius));
@@ -306,17 +336,20 @@ public sealed class MeshBuilder {
         BeginTriangleGeometry();
         int center = AddVertex(Vector3.Zero, Vector3.UnitY, new Vector2(0.5f, 0.5f));
         int first = _vertices.Count;
-        for (int side = 0; side < sides; side++) {
+        for (int side = 0; side < sides; side++)
+        {
             float angle = MathF.Tau * side / sides;
             float sine = MathF.Sin(angle);
             float cosine = MathF.Cos(angle);
             AddVertex(
                 new Vector3(sine * radius, 0f, cosine * radius),
                 Vector3.UnitY,
-                new Vector2(0.5f + (0.5f * sine), 0.5f - (0.5f * cosine)));
+                new Vector2(0.5f + (0.5f * sine), 0.5f - (0.5f * cosine))
+            );
         }
 
-        for (int side = 0; side < sides; side++) {
+        for (int side = 0; side < sides; side++)
+        {
             AddTriangle(center, first + side, first + ((side + 1) % sides));
         }
     }
@@ -340,7 +373,8 @@ public sealed class MeshBuilder {
     /// and its front face is toward +Y. Every normal is <c>(0, 1, 0)</c>. UV <c>u</c> runs from 0 at
     /// the -X edge to 1 at the +X edge; UV <c>v</c> runs from 0 at the -Z edge to 1 at the +Z edge.
     /// </remarks>
-    public void GeneratePlane(float width, float length, int resX, int resZ) {
+    public void GeneratePlane(float width, float length, int resX, int resZ)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(width, nameof(width));
         ValidatePositiveFinite(length, nameof(length));
@@ -349,18 +383,22 @@ public sealed class MeshBuilder {
 
         BeginTriangleGeometry();
         int rowLength = resX + 1;
-        for (int row = 0; row <= resZ; row++) {
+        for (int row = 0; row <= resZ; row++)
+        {
             float v = (float)row / resZ;
             float z = ((v - 0.5f) * length);
-            for (int column = 0; column <= resX; column++) {
+            for (int column = 0; column <= resX; column++)
+            {
                 float u = (float)column / resX;
                 float x = ((u - 0.5f) * width);
                 AddVertex(new Vector3(x, 0f, z), Vector3.UnitY, new Vector2(u, v));
             }
         }
 
-        for (int row = 0; row < resZ; row++) {
-            for (int column = 0; column < resX; column++) {
+        for (int row = 0; row < resZ; row++)
+        {
+            for (int column = 0; column < resX; column++)
+            {
                 int lowerLeft = (row * rowLength) + column;
                 int lowerRight = lowerLeft + 1;
                 int upperLeft = lowerLeft + rowLength;
@@ -388,7 +426,8 @@ public sealed class MeshBuilder {
     /// face's UVs cover 0..1 with the origin at the face's top-left corner and V increasing
     /// downward, matching the engine's top-left UV convention.
     /// </remarks>
-    public void GenerateCube(float width, float height, float length) {
+    public void GenerateCube(float width, float height, float length)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(width, nameof(width));
         ValidatePositiveFinite(height, nameof(height));
@@ -396,7 +435,8 @@ public sealed class MeshBuilder {
 
         BeginTriangleGeometry();
         Vector3 half = new(width * 0.5f, height * 0.5f, length * 0.5f);
-        foreach ((Vector3 normal, Vector3 rightAxis, Vector3 upAxis) in _cubeFaces) {
+        foreach ((Vector3 normal, Vector3 rightAxis, Vector3 upAxis) in _cubeFaces)
+        {
             Vector3 center = normal * Extent(normal, half);
             Vector3 right = rightAxis * Extent(rightAxis, half);
             Vector3 up = upAxis * Extent(upAxis, half);
@@ -429,7 +469,8 @@ public sealed class MeshBuilder {
     /// <c>u</c> runs 0..1 around the +Y axis starting at +Z and turning toward +X; UV <c>v</c> is 0 at
     /// the +Y pole and 1 at the -Y pole.
     /// </remarks>
-    public void GenerateSphere(float radius, int rings, int slices) {
+    public void GenerateSphere(float radius, int rings, int slices)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(radius, nameof(radius));
         ValidateTessellation(rings, nameof(rings));
@@ -439,40 +480,51 @@ public sealed class MeshBuilder {
         int top = AddVertex(new Vector3(0f, radius, 0f), Vector3.UnitY, new Vector2(0.5f, 0f));
         int firstRing = _vertices.Count;
         int rowLength = slices + 1;
-        for (int ring = 1; ring < rings; ring++) {
+        for (int ring = 1; ring < rings; ring++)
+        {
             float v = (float)ring / rings;
             float phi = v * MathF.PI;
             float y = radius * MathF.Cos(phi);
             float ringRadius = radius * MathF.Sin(phi);
-            for (int slice = 0; slice <= slices; slice++) {
+            for (int slice = 0; slice <= slices; slice++)
+            {
                 float u = (float)slice / slices;
                 float theta = MathF.Tau * (slice % slices) / slices;
                 float sine = MathF.Sin(theta);
                 float cosine = MathF.Cos(theta);
-                Vector3 normal = new(sine * MathF.Sin(phi), MathF.Cos(phi), cosine * MathF.Sin(phi));
+                Vector3 normal = new(
+                    sine * MathF.Sin(phi),
+                    MathF.Cos(phi),
+                    cosine * MathF.Sin(phi)
+                );
                 AddVertex(
                     new Vector3(ringRadius * sine, y, ringRadius * cosine),
                     normal,
-                    new Vector2(u, v));
+                    new Vector2(u, v)
+                );
             }
         }
 
         int bottom = AddVertex(new Vector3(0f, -radius, 0f), -Vector3.UnitY, new Vector2(0.5f, 1f));
-        for (int slice = 0; slice < slices; slice++) {
+        for (int slice = 0; slice < slices; slice++)
+        {
             AddTriangle(top, firstRing + slice, firstRing + slice + 1);
         }
 
-        for (int ring = 0; ring < rings - 2; ring++) {
+        for (int ring = 0; ring < rings - 2; ring++)
+        {
             int upper = firstRing + (ring * rowLength);
             int lower = upper + rowLength;
-            for (int slice = 0; slice < slices; slice++) {
+            for (int slice = 0; slice < slices; slice++)
+            {
                 AddTriangle(upper + slice, lower + slice, upper + slice + 1);
                 AddTriangle(upper + slice + 1, lower + slice, lower + slice + 1);
             }
         }
 
         int lastRing = firstRing + ((rings - 2) * rowLength);
-        for (int slice = 0; slice < slices; slice++) {
+        for (int slice = 0; slice < slices; slice++)
+        {
             AddTriangle(lastRing + slice, bottom, lastRing + slice + 1);
         }
     }
@@ -498,7 +550,8 @@ public sealed class MeshBuilder {
     /// match the full sphere: <c>u</c> runs 0..1 around +Y starting at +Z, and <c>v</c> is 0 at the
     /// pole and 1 at the equator.
     /// </remarks>
-    public void GenerateHemiSphere(float radius, int rings, int slices) {
+    public void GenerateHemiSphere(float radius, int rings, int slices)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(radius, nameof(radius));
         ValidateTessellation(rings, nameof(rings));
@@ -508,13 +561,15 @@ public sealed class MeshBuilder {
         int top = AddVertex(new Vector3(0f, radius, 0f), Vector3.UnitY, new Vector2(0.5f, 0f));
         int firstRing = _vertices.Count;
         int rowLength = slices + 1;
-        for (int ring = 1; ring <= rings; ring++) {
+        for (int ring = 1; ring <= rings; ring++)
+        {
             float v = (float)ring / rings;
             float phi = v * MathF.PI * 0.5f;
             bool equator = ring == rings;
             float y = equator ? 0f : radius * MathF.Cos(phi);
             float ringRadius = radius * MathF.Sin(phi);
-            for (int slice = 0; slice <= slices; slice++) {
+            for (int slice = 0; slice <= slices; slice++)
+            {
                 float u = (float)slice / slices;
                 float theta = MathF.Tau * (slice % slices) / slices;
                 float sine = MathF.Sin(theta);
@@ -525,18 +580,22 @@ public sealed class MeshBuilder {
                 AddVertex(
                     new Vector3(ringRadius * sine, y, ringRadius * cosine),
                     normal,
-                    new Vector2(u, v));
+                    new Vector2(u, v)
+                );
             }
         }
 
-        for (int slice = 0; slice < slices; slice++) {
+        for (int slice = 0; slice < slices; slice++)
+        {
             AddTriangle(top, firstRing + slice, firstRing + slice + 1);
         }
 
-        for (int ring = 0; ring < rings - 1; ring++) {
+        for (int ring = 0; ring < rings - 1; ring++)
+        {
             int upper = firstRing + (ring * rowLength);
             int lower = upper + rowLength;
-            for (int slice = 0; slice < slices; slice++) {
+            for (int slice = 0; slice < slices; slice++)
+            {
                 AddTriangle(upper + slice, lower + slice, upper + slice + 1);
                 AddTriangle(upper + slice + 1, lower + slice, lower + slice + 1);
             }
@@ -564,7 +623,8 @@ public sealed class MeshBuilder {
     /// <c>u = 0.5 + 0.5 * sin(angle)</c>, <c>v = 0.5 - 0.5 * cos(angle)</c> centered at
     /// <c>(0.5, 0.5)</c>.
     /// </remarks>
-    public void GenerateCylinder(float radius, float height, int slices) {
+    public void GenerateCylinder(float radius, float height, int slices)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(radius, nameof(radius));
         ValidatePositiveFinite(height, nameof(height));
@@ -572,7 +632,8 @@ public sealed class MeshBuilder {
 
         BeginTriangleGeometry();
         int sideStart = _vertices.Count;
-        for (int slice = 0; slice <= slices; slice++) {
+        for (int slice = 0; slice <= slices; slice++)
+        {
             float u = (float)slice / slices;
             float theta = MathF.Tau * (slice % slices) / slices;
             float sine = MathF.Sin(theta);
@@ -584,7 +645,8 @@ public sealed class MeshBuilder {
             AddVertex(bottom, normal, new Vector2(u, 1f));
         }
 
-        for (int slice = 0; slice < slices; slice++) {
+        for (int slice = 0; slice < slices; slice++)
+        {
             int top = sideStart + (slice * 2);
             int bottom = top + 1;
             int nextTop = top + 2;
@@ -617,7 +679,8 @@ public sealed class MeshBuilder {
     /// planar disc mapping <c>u = 0.5 + 0.5 * sin(angle)</c>,
     /// <c>v = 0.5 - 0.5 * cos(angle)</c> centered at <c>(0.5, 0.5)</c>.
     /// </remarks>
-    public void GenerateCone(float radius, float height, int slices) {
+    public void GenerateCone(float radius, float height, int slices)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(radius, nameof(radius));
         ValidatePositiveFinite(height, nameof(height));
@@ -626,20 +689,23 @@ public sealed class MeshBuilder {
         BeginTriangleGeometry();
         int sideStart = _vertices.Count;
         float normalScale = 1f / MathF.Sqrt((height * height) + (radius * radius));
-        for (int slice = 0; slice <= slices; slice++) {
+        for (int slice = 0; slice <= slices; slice++)
+        {
             float u = (float)slice / slices;
             float theta = MathF.Tau * (slice % slices) / slices;
             float sine = MathF.Sin(theta);
             float cosine = MathF.Cos(theta);
-            Vector3 normal = new(height * sine * normalScale, radius * normalScale, height * cosine * normalScale);
+            Vector3 normal = new(
+                height * sine * normalScale,
+                radius * normalScale,
+                height * cosine * normalScale
+            );
             AddVertex(new Vector3(0f, height, 0f), normal, new Vector2(u, 0f));
-            AddVertex(
-                new Vector3(sine * radius, 0f, cosine * radius),
-                normal,
-                new Vector2(u, 1f));
+            AddVertex(new Vector3(sine * radius, 0f, cosine * radius), normal, new Vector2(u, 1f));
         }
 
-        for (int slice = 0; slice < slices; slice++) {
+        for (int slice = 0; slice < slices; slice++)
+        {
             int apex = sideStart + (slice * 2);
             int baseVertex = apex + 1;
             int nextBase = baseVertex + 2;
@@ -671,7 +737,8 @@ public sealed class MeshBuilder {
     /// 0..1 around the tube, starting at the outer equator and turning toward +Y. Normals point
     /// outward from the tube center line.
     /// </remarks>
-    public void GenerateTorus(float radius, float size, int radSeg, int sides) {
+    public void GenerateTorus(float radius, float size, int radSeg, int sides)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(radius, nameof(radius));
         ValidatePositiveFinite(size, nameof(size));
@@ -680,12 +747,14 @@ public sealed class MeshBuilder {
 
         BeginTriangleGeometry();
         int rowLength = sides + 1;
-        for (int segment = 0; segment <= radSeg; segment++) {
+        for (int segment = 0; segment <= radSeg; segment++)
+        {
             float u = (float)segment / radSeg;
             float theta = MathF.Tau * (segment % radSeg) / radSeg;
             float sine = MathF.Sin(theta);
             float cosine = MathF.Cos(theta);
-            for (int side = 0; side <= sides; side++) {
+            for (int side = 0; side <= sides; side++)
+            {
                 float v = (float)side / sides;
                 float phi = MathF.Tau * (side % sides) / sides;
                 float cosPhi = MathF.Cos(phi);
@@ -695,12 +764,15 @@ public sealed class MeshBuilder {
                 AddVertex(
                     new Vector3(ringRadius * sine, size * sinPhi, ringRadius * cosine),
                     normal,
-                    new Vector2(u, v));
+                    new Vector2(u, v)
+                );
             }
         }
 
-        for (int segment = 0; segment < radSeg; segment++) {
-            for (int side = 0; side < sides; side++) {
+        for (int segment = 0; segment < radSeg; segment++)
+        {
+            for (int side = 0; side < sides; side++)
+            {
                 int a = (segment * rowLength) + side;
                 int b = a + rowLength;
                 int c = a + 1;
@@ -733,7 +805,8 @@ public sealed class MeshBuilder {
     /// <c>u</c> runs 0..1 along the closed curve; UV <c>v</c> runs 0..1 around the tube. Normals
     /// point outward from the tube center line.
     /// </remarks>
-    public void GenerateKnot(float radius, float size, int radSeg, int sides) {
+    public void GenerateKnot(float radius, float size, int radSeg, int sides)
+    {
         _service.ThrowIfStopped();
         ValidatePositiveFinite(radius, nameof(radius));
         ValidatePositiveFinite(size, nameof(size));
@@ -746,7 +819,8 @@ public sealed class MeshBuilder {
         const float curveRadius = 0.8f;
         float scale = radius / curveRadius;
         int rowLength = sides + 1;
-        for (int segment = 0; segment <= radSeg; segment++) {
+        for (int segment = 0; segment <= radSeg; segment++)
+        {
             float u = (float)segment / radSeg;
             float angle = MathF.Tau * 2f * (segment % radSeg) / radSeg;
             float wavelet = 1.5f * angle;
@@ -757,18 +831,19 @@ public sealed class MeshBuilder {
             Vector3 center = new(
                 ringRadius * cosine * scale,
                 0.5f * MathF.Sin(wavelet) * scale,
-                ringRadius * sine * scale);
+                ringRadius * sine * scale
+            );
             Vector3 tangent = new(
                 (ringRadiusDerivative * cosine) - (ringRadius * sine),
                 0.75f * MathF.Cos(wavelet),
-                (ringRadiusDerivative * sine) + (ringRadius * cosine));
+                (ringRadiusDerivative * sine) + (ringRadius * cosine)
+            );
             tangent = Vector3.Normalize(tangent);
             Vector3 across = new(tangent.Z, 0f, -tangent.X);
-            across = across.LengthSquared() <= 1e-12f
-                ? Vector3.UnitX
-                : Vector3.Normalize(across);
+            across = across.LengthSquared() <= 1e-12f ? Vector3.UnitX : Vector3.Normalize(across);
             Vector3 vertical = Vector3.Cross(tangent, across);
-            for (int side = 0; side <= sides; side++) {
+            for (int side = 0; side <= sides; side++)
+            {
                 float v = (float)side / sides;
                 float phi = MathF.Tau * (side % sides) / sides;
                 float cosPhi = MathF.Cos(phi);
@@ -778,8 +853,10 @@ public sealed class MeshBuilder {
             }
         }
 
-        for (int segment = 0; segment < radSeg; segment++) {
-            for (int side = 0; side < sides; side++) {
+        for (int segment = 0; segment < radSeg; segment++)
+        {
+            for (int side = 0; side < sides; side++)
+            {
                 int a = (segment * rowLength) + side;
                 int b = a + rowLength;
                 int c = a + 1;
@@ -801,7 +878,8 @@ public sealed class MeshBuilder {
     /// are not recomputed when the exposed <see cref="Vertices"/> list is mutated afterwards; call
     /// this method again after changing positions.
     /// </remarks>
-    public BoundingBox ComputeBounds() {
+    public BoundingBox ComputeBounds()
+    {
         _service.ThrowIfStopped();
         BoundingBox bounds = ComputeBoundsCore(_vertices);
         _bounds = bounds;
@@ -829,7 +907,8 @@ public sealed class MeshBuilder {
     /// <see cref="GenerateCollisions"/> was called, the build also creates the collision acceleration
     /// structure from the same snapshot and exposes it through <see cref="Mesh.HasCollisionAcceleration"/>.
     /// </remarks>
-    public async Task<Mesh> BuildAsync(CancellationToken cancellationToken = default) {
+    public async Task<Mesh> BuildAsync(CancellationToken cancellationToken = default)
+    {
         _service.ThrowIfStopped();
         ValidateForBuild();
 
@@ -838,14 +917,18 @@ public sealed class MeshBuilder {
         BoundingBox bounds = _bounds ?? ComputeBoundsCore(vertices);
         PrimitiveTopology topology = _topology;
         MeshCollisionData? collision = null;
-        if (_generateCollisions) {
-            if (topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip)) {
+        if (_generateCollisions)
+        {
+            if (topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip))
+            {
                 throw new NotSupportedException(
-                    $"Collision generation supports only triangle topologies; the builder topology is {topology}.");
+                    $"Collision generation supports only triangle topologies; the builder topology is {topology}."
+                );
             }
 
             Vector3[] positions = new Vector3[vertices.Length];
-            for (int index = 0; index < vertices.Length; index++) {
+            for (int index = 0; index < vertices.Length; index++)
+            {
                 positions[index] = vertices[index].Position;
             }
 
@@ -854,11 +937,13 @@ public sealed class MeshBuilder {
 
         int id = ProceduralAssetIds.NextMeshId();
         string canonicalPath = ProceduralAssetIds.MeshPath(id);
-        MeshAssetDescriptor descriptor = new() {
+        MeshAssetDescriptor descriptor = new()
+        {
             Payload = canonicalPath,
             VertexCount = checked((uint)vertices.Length),
             IndexCount = checked((uint)indices.Length),
-            Bounds = [
+            Bounds =
+            [
                 bounds.Min.X,
                 bounds.Min.Y,
                 bounds.Min.Z,
@@ -868,57 +953,81 @@ public sealed class MeshBuilder {
             ],
             Topology = topology,
         };
-        MeshGpuUpload upload = new(canonicalPath, descriptor, MeshPayloadCodec.Encode(vertices, indices));
-        GpuAssetResource resource = await _service.UploadAsync(upload, cancellationToken).ConfigureAwait(false);
-        try {
-            EngineAsset lifetime = new(canonicalPath, resource, _service.QueueDestruction, static () => { });
+        MeshGpuUpload upload = new(
+            canonicalPath,
+            descriptor,
+            MeshPayloadCodec.Encode(vertices, indices)
+        );
+        GpuAssetResource resource = await _service
+            .UploadAsync(upload, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            EngineAsset lifetime = new(
+                canonicalPath,
+                resource,
+                _service.QueueDestruction,
+                static () => { }
+            );
             lifetime.AddOwnerReference();
             return new Mesh(lifetime, descriptor, vertices, indices, isProcedural: true, collision);
-        } catch {
+        }
+        catch
+        {
             _service.QueueDestruction(resource);
             throw;
         }
     }
 
-    private void BeginTriangleGeometry() {
+    private void BeginTriangleGeometry()
+    {
         _vertices.Clear();
         _indices.Clear();
         _topology = PrimitiveTopology.TriangleList;
         _bounds = null;
     }
 
-    private int AddVertex(Vector3 position, Vector3 normal, Vector2 uv) {
+    private int AddVertex(Vector3 position, Vector3 normal, Vector2 uv)
+    {
         int index = _vertices.Count;
         _vertices.Add(new Vertex(position, normal, uv: uv));
         return index;
     }
 
-    private void AddTriangle(int index0, int index1, int index2) {
+    private void AddTriangle(int index0, int index1, int index2)
+    {
         _indices.Add((uint)index0);
         _indices.Add((uint)index1);
         _indices.Add((uint)index2);
     }
 
-    private void AddCap(float y, float radius, int slices, bool isTop) {
+    private void AddCap(float y, float radius, int slices, bool isTop)
+    {
         Vector3 normal = isTop ? Vector3.UnitY : -Vector3.UnitY;
         int center = AddVertex(new Vector3(0f, y, 0f), normal, new Vector2(0.5f, 0.5f));
         int first = _vertices.Count;
-        for (int slice = 0; slice < slices; slice++) {
+        for (int slice = 0; slice < slices; slice++)
+        {
             float theta = MathF.Tau * slice / slices;
             float sine = MathF.Sin(theta);
             float cosine = MathF.Cos(theta);
             AddVertex(
                 new Vector3(sine * radius, y, cosine * radius),
                 normal,
-                new Vector2(0.5f + (0.5f * sine), 0.5f - (0.5f * cosine)));
+                new Vector2(0.5f + (0.5f * sine), 0.5f - (0.5f * cosine))
+            );
         }
 
-        for (int slice = 0; slice < slices; slice++) {
+        for (int slice = 0; slice < slices; slice++)
+        {
             int current = first + slice;
             int next = first + ((slice + 1) % slices);
-            if (isTop) {
+            if (isTop)
+            {
                 AddTriangle(center, current, next);
-            } else {
+            }
+            else
+            {
                 AddTriangle(center, next, current);
             }
         }
@@ -927,94 +1036,128 @@ public sealed class MeshBuilder {
     private static float Extent(Vector3 axis, Vector3 half) =>
         (MathF.Abs(axis.X) * half.X) + (MathF.Abs(axis.Y) * half.Y) + (MathF.Abs(axis.Z) * half.Z);
 
-    private static void ValidateTessellation(int value, string parameterName) {
-        if (value < MIN_TESSELLATION) {
+    private static void ValidateTessellation(int value, string parameterName)
+    {
+        if (value < MIN_TESSELLATION)
+        {
             throw new ArgumentOutOfRangeException(
                 parameterName,
                 value,
-                $"The tessellation must be at least {MIN_TESSELLATION}.");
+                $"The tessellation must be at least {MIN_TESSELLATION}."
+            );
         }
     }
 
-    private static void ValidateSubdivisions(int value, string parameterName) {
-        if (value < MIN_SUBDIVISIONS) {
+    private static void ValidateSubdivisions(int value, string parameterName)
+    {
+        if (value < MIN_SUBDIVISIONS)
+        {
             throw new ArgumentOutOfRangeException(
                 parameterName,
                 value,
-                $"The subdivision count must be at least {MIN_SUBDIVISIONS}.");
+                $"The subdivision count must be at least {MIN_SUBDIVISIONS}."
+            );
         }
     }
 
-    private static void ValidatePositiveFinite(float value, string parameterName) {
-        if (!float.IsFinite(value) || value <= 0f) {
+    private static void ValidatePositiveFinite(float value, string parameterName)
+    {
+        if (!float.IsFinite(value) || value <= 0f)
+        {
             throw new ArgumentOutOfRangeException(
                 parameterName,
                 value,
-                "The value must be positive and finite.");
+                "The value must be positive and finite."
+            );
         }
     }
 
-    private static void ValidateTopology(PrimitiveTopology topology) {
-        if (!Enum.IsDefined(topology)) {
+    private static void ValidateTopology(PrimitiveTopology topology)
+    {
+        if (!Enum.IsDefined(topology))
+        {
             throw new ArgumentOutOfRangeException(
                 nameof(topology),
                 topology,
-                "The primitive topology is not a defined value.");
+                "The primitive topology is not a defined value."
+            );
         }
     }
 
-    private void EnsureTriangleGeometry() {
-        if (_topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip)) {
+    private void EnsureTriangleGeometry()
+    {
+        if (_topology is not (PrimitiveTopology.TriangleList or PrimitiveTopology.TriangleStrip))
+        {
             throw new NotSupportedException(
-                $"Normal and tangent generation supports only triangle topologies; the builder topology is {_topology}.");
+                $"Normal and tangent generation supports only triangle topologies; the builder topology is {_topology}."
+            );
         }
 
-        if (_vertices.Count == 0) {
+        if (_vertices.Count == 0)
+        {
             throw new InvalidOperationException("The mesh has no vertices.");
         }
 
-        if (_topology == PrimitiveTopology.TriangleList) {
-            if (_indices.Count < 3 || _indices.Count % 3 != 0) {
+        if (_topology == PrimitiveTopology.TriangleList)
+        {
+            if (_indices.Count < 3 || _indices.Count % 3 != 0)
+            {
                 throw new InvalidOperationException(
-                    $"A triangle list requires at least three indices in whole triangles; the builder has {_indices.Count}.");
+                    $"A triangle list requires at least three indices in whole triangles; the builder has {_indices.Count}."
+                );
             }
-        } else if (_indices.Count < 3) {
+        }
+        else if (_indices.Count < 3)
+        {
             throw new InvalidOperationException(
-                $"A triangle strip requires at least three indices; the builder has {_indices.Count}.");
+                $"A triangle strip requires at least three indices; the builder has {_indices.Count}."
+            );
         }
 
-        for (int index = 0; index < _indices.Count; index++) {
-            if (_indices[index] >= (uint)_vertices.Count) {
+        for (int index = 0; index < _indices.Count; index++)
+        {
+            if (_indices[index] >= (uint)_vertices.Count)
+            {
                 throw new InvalidOperationException(
-                    $"The index {_indices[index]} at position {index} is outside the {_vertices.Count} vertices.");
+                    $"The index {_indices[index]} at position {index} is outside the {_vertices.Count} vertices."
+                );
             }
         }
     }
 
-    private void EnsureNormalsAndUvs() {
-        for (int index = 0; index < _vertices.Count; index++) {
+    private void EnsureNormalsAndUvs()
+    {
+        for (int index = 0; index < _vertices.Count; index++)
+        {
             Vertex vertex = _vertices[index];
-            if (!IsFinite(vertex.Normal) || !IsFinite(vertex.Uv)) {
+            if (!IsFinite(vertex.Normal) || !IsFinite(vertex.Uv))
+            {
                 throw new InvalidOperationException(
-                    $"The normal or first UV of vertex {index} is not finite.");
+                    $"The normal or first UV of vertex {index} is not finite."
+                );
             }
 
-            if (vertex.Normal.LengthSquared() <= 0f) {
+            if (vertex.Normal.LengthSquared() <= 0f)
+            {
                 throw new InvalidOperationException(
-                    $"The normal of vertex {index} is zero; compute the normals before the tangents.");
+                    $"The normal of vertex {index} is zero; compute the normals before the tangents."
+                );
             }
         }
     }
 
-    private void ComputeSmoothNormals() {
+    private void ComputeSmoothNormals()
+    {
         Dictionary<Vector3, Vector3> accumulated = [];
-        for (int triangle = 0; triangle < TriangleCount; triangle++) {
+        for (int triangle = 0; triangle < TriangleCount; triangle++)
+        {
             GetTriangle(triangle, out int index0, out int index1, out int index2);
             Vector3 position0 = _vertices[index0].Position;
             Vector3 position1 = _vertices[index1].Position;
             Vector3 position2 = _vertices[index2].Position;
             Vector3 face = Vector3.Cross(position1 - position0, position2 - position0);
-            if (face.LengthSquared() <= 0f) {
+            if (face.LengthSquared() <= 0f)
+            {
                 continue;
             }
 
@@ -1023,9 +1166,11 @@ public sealed class MeshBuilder {
             Accumulate(accumulated, position2, face);
         }
 
-        for (int index = 0; index < _vertices.Count; index++) {
+        for (int index = 0; index < _vertices.Count; index++)
+        {
             Vertex vertex = _vertices[index];
-            vertex.Normal = accumulated.TryGetValue(vertex.Position, out Vector3 sum)
+            vertex.Normal =
+                accumulated.TryGetValue(vertex.Position, out Vector3 sum)
                 && sum.LengthSquared() > 0f
                     ? Vector3.Normalize(sum)
                     : Vector3.Zero;
@@ -1033,21 +1178,25 @@ public sealed class MeshBuilder {
         }
     }
 
-    private void ComputeFlatNormals() {
+    private void ComputeFlatNormals()
+    {
         List<Vertex> source = [.. _vertices];
         List<Vertex> vertices = new(TriangleCount * 3);
         List<uint> indices = new(TriangleCount * 3);
-        for (int triangle = 0; triangle < TriangleCount; triangle++) {
+        for (int triangle = 0; triangle < TriangleCount; triangle++)
+        {
             GetTriangle(triangle, out int index0, out int index1, out int index2);
             Vertex vertex0 = source[index0];
             Vertex vertex1 = source[index1];
             Vertex vertex2 = source[index2];
             Vector3 face = Vector3.Cross(
                 vertex1.Position - vertex0.Position,
-                vertex2.Position - vertex0.Position);
+                vertex2.Position - vertex0.Position
+            );
             Vector3 normal = face.LengthSquared() > 0f ? Vector3.Normalize(face) : Vector3.Zero;
 
-            if (_topology == PrimitiveTopology.TriangleStrip && (indices.Count & 1) != 0) {
+            if (_topology == PrimitiveTopology.TriangleStrip && (indices.Count & 1) != 0)
+            {
                 // A strip flips the winding of a triangle that starts at an odd index. Duplicating the
                 // last index shifts the next triangle to an even position and inserts a degenerate
                 // triangle that the rasterizer discards.
@@ -1071,33 +1220,44 @@ public sealed class MeshBuilder {
         _indices.AddRange(indices);
     }
 
-    private void ValidateForBuild() {
-        if (_vertices.Count == 0) {
+    private void ValidateForBuild()
+    {
+        if (_vertices.Count == 0)
+        {
             throw new InvalidOperationException("The mesh must contain at least one vertex.");
         }
 
-        if (_indices.Count == 0) {
+        if (_indices.Count == 0)
+        {
             throw new InvalidOperationException("The mesh must contain at least one index.");
         }
 
         ValidateIndexCount(_topology, _indices.Count);
-        for (int index = 0; index < _indices.Count; index++) {
-            if (_indices[index] >= (uint)_vertices.Count) {
+        for (int index = 0; index < _indices.Count; index++)
+        {
+            if (_indices[index] >= (uint)_vertices.Count)
+            {
                 throw new InvalidOperationException(
-                    $"The index {_indices[index]} at position {index} is outside the {_vertices.Count} vertices.");
+                    $"The index {_indices[index]} at position {index} is outside the {_vertices.Count} vertices."
+                );
             }
         }
 
-        for (int index = 0; index < _vertices.Count; index++) {
-            if (!IsFinite(_vertices[index])) {
+        for (int index = 0; index < _vertices.Count; index++)
+        {
+            if (!IsFinite(_vertices[index]))
+            {
                 throw new InvalidOperationException(
-                    $"The vertex at index {index} has a non-finite attribute.");
+                    $"The vertex at index {index} has a non-finite attribute."
+                );
             }
         }
     }
 
-    private static void ValidateIndexCount(PrimitiveTopology topology, int indexCount) {
-        bool valid = topology switch {
+    private static void ValidateIndexCount(PrimitiveTopology topology, int indexCount)
+    {
+        bool valid = topology switch
+        {
             PrimitiveTopology.TriangleList => indexCount >= 3 && indexCount % 3 == 0,
             PrimitiveTopology.TriangleStrip => indexCount >= 3,
             PrimitiveTopology.LineList => indexCount >= 2 && indexCount % 2 == 0,
@@ -1105,20 +1265,25 @@ public sealed class MeshBuilder {
             PrimitiveTopology.PointList => indexCount >= 1,
             _ => false,
         };
-        if (!valid) {
+        if (!valid)
+        {
             throw new InvalidOperationException(
-                $"A {topology} mesh cannot have {indexCount} indices; the count does not describe whole primitives.");
+                $"A {topology} mesh cannot have {indexCount} indices; the count does not describe whole primitives."
+            );
         }
     }
 
-    private static BoundingBox ComputeBoundsCore(IReadOnlyList<Vertex> vertices) {
-        if (vertices.Count == 0) {
+    private static BoundingBox ComputeBoundsCore(IReadOnlyList<Vertex> vertices)
+    {
+        if (vertices.Count == 0)
+        {
             throw new InvalidOperationException("The mesh must contain at least one vertex.");
         }
 
         Vector3 minimum = vertices[0].Position;
         Vector3 maximum = minimum;
-        for (int index = 1; index < vertices.Count; index++) {
+        for (int index = 1; index < vertices.Count; index++)
+        {
             Vector3 position = vertices[index].Position;
             minimum = Vector3.Min(minimum, position);
             maximum = Vector3.Max(maximum, position);
@@ -1127,12 +1292,13 @@ public sealed class MeshBuilder {
         return new BoundingBox(minimum, maximum);
     }
 
-    private int TriangleCount => _topology == PrimitiveTopology.TriangleList
-        ? _indices.Count / 3
-        : _indices.Count - 2;
+    private int TriangleCount =>
+        _topology == PrimitiveTopology.TriangleList ? _indices.Count / 3 : _indices.Count - 2;
 
-    private void GetTriangle(int triangle, out int index0, out int index1, out int index2) {
-        if (_topology == PrimitiveTopology.TriangleList) {
+    private void GetTriangle(int triangle, out int index0, out int index1, out int index2)
+    {
+        if (_topology == PrimitiveTopology.TriangleList)
+        {
             int offset = triangle * 3;
             index0 = checked((int)_indices[offset]);
             index1 = checked((int)_indices[offset + 1]);
@@ -1143,13 +1309,21 @@ public sealed class MeshBuilder {
         index0 = checked((int)_indices[triangle]);
         index1 = checked((int)_indices[triangle + 1]);
         index2 = checked((int)_indices[triangle + 2]);
-        if ((triangle & 1) != 0) {
+        if ((triangle & 1) != 0)
+        {
             (index0, index1) = (index1, index0);
         }
     }
 
-    private static void Accumulate(Dictionary<Vector3, Vector3> accumulated, Vector3 position, Vector3 face) {
-        accumulated[position] = accumulated.TryGetValue(position, out Vector3 sum) ? sum + face : face;
+    private static void Accumulate(
+        Dictionary<Vector3, Vector3> accumulated,
+        Vector3 position,
+        Vector3 face
+    )
+    {
+        accumulated[position] = accumulated.TryGetValue(position, out Vector3 sum)
+            ? sum + face
+            : face;
     }
 
     private static bool IsFinite(Vertex vertex) =>
@@ -1165,11 +1339,15 @@ public sealed class MeshBuilder {
         && float.IsFinite(vertex.Color.A)
         && IsFinite(vertex.Tangent);
 
-    private static bool IsFinite(Vector2 value) => float.IsFinite(value.X) && float.IsFinite(value.Y);
+    private static bool IsFinite(Vector2 value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y);
 
-    private static bool IsFinite(Vector3 value)
-        => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
+    private static bool IsFinite(Vector3 value) =>
+        float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z);
 
-    private static bool IsFinite(Vector4 value)
-        => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z) && float.IsFinite(value.W);
+    private static bool IsFinite(Vector4 value) =>
+        float.IsFinite(value.X)
+        && float.IsFinite(value.Y)
+        && float.IsFinite(value.Z)
+        && float.IsFinite(value.W);
 }

@@ -11,7 +11,8 @@ namespace RayBork.Bake.Commands;
 /// The command surface shared by every assets executable: argument parsing, configuration validation,
 /// dispatch, exit codes, and stdout/stderr routing.
 /// </summary>
-internal static class BakeCommandLine {
+internal static class BakeCommandLine
+{
     internal const int SUCCESS_EXIT_CODE = 0;
     internal const int DIAGNOSTICS_EXIT_CODE = 1;
     internal const int USAGE_EXIT_CODE = 2;
@@ -31,7 +32,9 @@ internal static class BakeCommandLine {
         string[] args,
         TextWriter output,
         TextWriter error,
-        string programName) {
+        string programName
+    )
+    {
         ArgumentNullException.ThrowIfNull(definition);
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
@@ -39,14 +42,17 @@ internal static class BakeCommandLine {
         ArgumentException.ThrowIfNullOrWhiteSpace(programName);
 
         bool verboseRequested = Array.IndexOf(args, "--verbose") >= 0;
-        try {
-            if (args.Length == 0) {
+        try
+        {
+            if (args.Length == 0)
+            {
                 error.WriteLine($"{programName}: a command is required.");
                 WriteUsage(error, programName);
                 return USAGE_EXIT_CODE;
             }
 
-            switch (args[0]) {
+            switch (args[0])
+            {
                 case "--help":
                 case "-h":
                     WriteUsage(output, programName);
@@ -54,7 +60,8 @@ internal static class BakeCommandLine {
 
                 case "--version":
                     output.WriteLine(
-                        $"{programName} {definition.ToolVersionOverride ?? BakeToolInfo.Version}");
+                        $"{programName} {definition.ToolVersionOverride ?? BakeToolInfo.Version}"
+                    );
                     return SUCCESS_EXIT_CODE;
 
                 case "bake":
@@ -71,10 +78,14 @@ internal static class BakeCommandLine {
                     WriteUsage(error, programName);
                     return USAGE_EXIT_CODE;
             }
-        } catch (Exception exception) when (exception is not OutOfMemoryException) {
-            error.WriteLine(verboseRequested
-                ? $"{programName}: internal error: {exception}"
-                : $"{programName}: internal error: {exception.Message}");
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            error.WriteLine(
+                verboseRequested
+                    ? $"{programName}: internal error: {exception}"
+                    : $"{programName}: internal error: {exception.Message}"
+            );
             return INTERNAL_EXIT_CODE;
         }
     }
@@ -84,30 +95,52 @@ internal static class BakeCommandLine {
         ReadOnlySpan<string> args,
         TextWriter output,
         TextWriter error,
-        string programName) {
-        if (!TryParse(args, CommandKind.Bake, out CommandOptions options, out string? parseError)) {
+        string programName
+    )
+    {
+        if (!TryParse(args, CommandKind.Bake, out CommandOptions options, out string? parseError))
+        {
             error.WriteLine($"{programName}: {parseError}");
             WriteUsage(error, programName);
             return USAGE_EXIT_CODE;
         }
 
-        if (options.Help) {
+        if (options.Help)
+        {
             WriteUsage(output, programName);
             return SUCCESS_EXIT_CODE;
         }
 
-        if (!TryResolveInvocation(options, error, programName, out string? projectRoot, out string outputRoot)) {
+        if (
+            !TryResolveInvocation(
+                options,
+                error,
+                programName,
+                out string? projectRoot,
+                out string outputRoot
+            )
+        )
+        {
             return USAGE_EXIT_CODE;
         }
 
         var diagnostics = new BakeDiagnostics();
-        if (!BakeProjectFactory.TryCreate(definition, projectRoot, diagnostics, out BakeProject? project)
-            || project is null) {
+        if (
+            !BakeProjectFactory.TryCreate(
+                definition,
+                projectRoot,
+                diagnostics,
+                out BakeProject? project
+            ) || project is null
+        )
+        {
             WriteDiagnostics(error, diagnostics, options.Verbose);
-            if (!options.Quiet) {
+            if (!options.Quiet)
+            {
                 output.WriteLine(
                     $"{programName}: the bake configuration is invalid "
-                        + $"({CountErrors(diagnostics)} error(s)).");
+                        + $"({CountErrors(diagnostics)} error(s))."
+                );
             }
 
             return USAGE_EXIT_CODE;
@@ -119,16 +152,20 @@ internal static class BakeCommandLine {
             options.Mode,
             options.Check,
             options.Force,
-            options.WarningsAsErrors);
+            options.WarningsAsErrors
+        );
         BakeResult result = BakePipeline.Run(project, bakeOptions, sources, diagnostics);
         WriteDiagnostics(error, result.Diagnostics, options.Verbose);
 
-        if (result.Status is BakeStatus.Success or BakeStatus.UpToDate) {
-            if (!options.Quiet) {
+        if (result.Status is BakeStatus.Success or BakeStatus.UpToDate)
+        {
+            if (!options.Quiet)
+            {
                 WriteSuccessSummary(output, programName, result, options);
             }
 
-            if (options.Verbose) {
+            if (options.Verbose)
+            {
                 WriteEntryList(output, result.Entries);
             }
 
@@ -136,9 +173,11 @@ internal static class BakeCommandLine {
         }
 
         int failures = CountFailures(result.Diagnostics, options.WarningsAsErrors);
-        if (!options.Quiet) {
+        if (!options.Quiet)
+        {
             output.WriteLine(
-                $"{programName}: the bake has {failures} error(s); no pack was written.");
+                $"{programName}: the bake has {failures} error(s); no pack was written."
+            );
         }
 
         return result.Status == BakeStatus.ConfigurationError
@@ -151,27 +190,48 @@ internal static class BakeCommandLine {
         ReadOnlySpan<string> args,
         TextWriter output,
         TextWriter error,
-        string programName) {
-        if (!TryParse(args, CommandKind.Clean, out CommandOptions options, out string? parseError)) {
+        string programName
+    )
+    {
+        if (!TryParse(args, CommandKind.Clean, out CommandOptions options, out string? parseError))
+        {
             error.WriteLine($"{programName}: {parseError}");
             WriteUsage(error, programName);
             return USAGE_EXIT_CODE;
         }
 
-        if (options.Help) {
+        if (options.Help)
+        {
             WriteUsage(output, programName);
             return SUCCESS_EXIT_CODE;
         }
 
-        if (!TryResolveInvocation(options, error, programName, out string? projectRoot, out string outputRoot)) {
+        if (
+            !TryResolveInvocation(
+                options,
+                error,
+                programName,
+                out string? projectRoot,
+                out string outputRoot
+            )
+        )
+        {
             return USAGE_EXIT_CODE;
         }
 
         var diagnostics = new BakeDiagnostics();
-        if (!BakeProjectFactory.TryCreate(definition, projectRoot, diagnostics, out BakeProject? project)
-            || project is null) {
+        if (
+            !BakeProjectFactory.TryCreate(
+                definition,
+                projectRoot,
+                diagnostics,
+                out BakeProject? project
+            ) || project is null
+        )
+        {
             WriteDiagnostics(error, diagnostics, options.Verbose);
-            if (!options.Quiet) {
+            if (!options.Quiet)
+            {
                 output.WriteLine($"{programName}: the bake configuration is invalid.");
             }
 
@@ -179,61 +239,91 @@ internal static class BakeCommandLine {
         }
 
         IReadOnlyList<BakePackOutput> outputs;
-        try {
+        try
+        {
             outputs = BakeOutputLayout.Resolve(project, BakeOutputLayout.ResolveRoot(outputRoot));
-        } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-            or PathTooLongException) {
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
             error.WriteLine($"{programName}: the output root is invalid: {exception.Message}");
             return USAGE_EXIT_CODE;
         }
 
         int deleted = 0;
-        foreach (BakePackOutput packOutput in outputs) {
-            try {
-                if (File.Exists(packOutput.Path)) {
+        foreach (BakePackOutput packOutput in outputs)
+        {
+            try
+            {
+                if (File.Exists(packOutput.Path))
+                {
                     File.Delete(packOutput.Path);
                     deleted++;
                 }
-            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-                or NotSupportedException or ArgumentException) {
+            }
+            catch (Exception exception)
+                when (exception
+                        is IOException
+                            or UnauthorizedAccessException
+                            or NotSupportedException
+                            or ArgumentException
+                )
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.PACK_WRITE_FAILED,
                     $"Failed to delete the pack '{packOutput.Path}': {exception.Message}",
-                    packOutput.Path);
+                    packOutput.Path
+                );
             }
         }
 
         string stateDirectory = BakeManifestStore.Directory(project.ProjectRoot);
         bool hadState = Directory.Exists(stateDirectory);
-        if (hadState) {
-            try {
+        if (hadState)
+        {
+            try
+            {
                 Directory.Delete(stateDirectory, recursive: true);
-            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-                or NotSupportedException or ArgumentException) {
+            }
+            catch (Exception exception)
+                when (exception
+                        is IOException
+                            or UnauthorizedAccessException
+                            or NotSupportedException
+                            or ArgumentException
+                )
+            {
                 diagnostics.Add(
                     BakeSeverity.Error,
                     BakeDiagnosticCodes.INCREMENTAL_FAILED,
                     $"Failed to delete the incremental manifest directory '{stateDirectory}': "
                         + exception.Message,
-                    stateDirectory);
+                    stateDirectory
+                );
             }
         }
 
         WriteDiagnostics(error, diagnostics, options.Verbose);
-        if (diagnostics.HasErrors) {
-            if (!options.Quiet) {
+        if (diagnostics.HasErrors)
+        {
+            if (!options.Quiet)
+            {
                 output.WriteLine($"{programName}: failed to clean every configured pack.");
             }
 
             return DIAGNOSTICS_EXIT_CODE;
         }
 
-        if (!options.Quiet) {
-            string state = hadState ? "and the incremental manifest" : "(no incremental manifest was present)";
+        if (!options.Quiet)
+        {
+            string state = hadState
+                ? "and the incremental manifest"
+                : "(no incremental manifest was present)";
             output.WriteLine(
                 $"{programName}: cleaned {deleted} pack(s) under "
-                    + $"'{Path.GetFullPath(outputRoot)}' {state}.");
+                    + $"'{Path.GetFullPath(outputRoot)}' {state}."
+            );
         }
 
         return SUCCESS_EXIT_CODE;
@@ -244,54 +334,92 @@ internal static class BakeCommandLine {
         ReadOnlySpan<string> args,
         TextWriter output,
         TextWriter error,
-        string programName) {
-        if (!TryParse(args, CommandKind.Inspect, out CommandOptions options, out string? parseError)) {
+        string programName
+    )
+    {
+        if (
+            !TryParse(args, CommandKind.Inspect, out CommandOptions options, out string? parseError)
+        )
+        {
             error.WriteLine($"{programName}: {parseError}");
             WriteUsage(error, programName);
             return USAGE_EXIT_CODE;
         }
 
-        if (options.Help) {
+        if (options.Help)
+        {
             WriteUsage(output, programName);
             return SUCCESS_EXIT_CODE;
         }
 
-        if (!TryResolveInvocation(options, error, programName, out string? projectRoot, out string outputRoot)) {
+        if (
+            !TryResolveInvocation(
+                options,
+                error,
+                programName,
+                out string? projectRoot,
+                out string outputRoot
+            )
+        )
+        {
             return USAGE_EXIT_CODE;
         }
 
         var paths = new List<string>();
-        if (!string.IsNullOrWhiteSpace(options.Pack)) {
-            if (!BakePath.TryNormalizeRelative(options.Pack, out string normalized, out string? reason)
-                || !BakePath.TryResolveUnderRoot(outputRoot, normalized, out string fullPath)) {
+        if (!string.IsNullOrWhiteSpace(options.Pack))
+        {
+            if (
+                !BakePath.TryNormalizeRelative(
+                    options.Pack,
+                    out string normalized,
+                    out string? reason
+                ) || !BakePath.TryResolveUnderRoot(outputRoot, normalized, out string fullPath)
+            )
+            {
                 error.WriteLine(
-                    $"{programName}: invalid --pack '{options.Pack}': {reason ?? "it escapes the output root"}.");
+                    $"{programName}: invalid --pack '{options.Pack}': {reason ?? "it escapes the output root"}."
+                );
                 return USAGE_EXIT_CODE;
             }
 
             paths.Add(fullPath);
-        } else {
+        }
+        else
+        {
             var diagnostics = new BakeDiagnostics();
-            if (!BakeProjectFactory.TryCreate(
-                definition,
-                projectRoot,
-                diagnostics,
-                out BakeProject? project)
-                || project is null) {
+            if (
+                !BakeProjectFactory.TryCreate(
+                    definition,
+                    projectRoot,
+                    diagnostics,
+                    out BakeProject? project
+                ) || project is null
+            )
+            {
                 WriteDiagnostics(error, diagnostics, options.Verbose);
-                if (!options.Quiet) {
+                if (!options.Quiet)
+                {
                     output.WriteLine($"{programName}: the bake configuration is invalid.");
                 }
 
                 return USAGE_EXIT_CODE;
             }
 
-            try {
-                paths.AddRange(BakeOutputLayout
-                    .Resolve(project, BakeOutputLayout.ResolveRoot(outputRoot))
-                    .Select(packOutput => packOutput.Path));
-            } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-                or PathTooLongException) {
+            try
+            {
+                paths.AddRange(
+                    BakeOutputLayout
+                        .Resolve(project, BakeOutputLayout.ResolveRoot(outputRoot))
+                        .Select(packOutput => packOutput.Path)
+                );
+            }
+            catch (Exception exception)
+                when (exception
+                        is ArgumentException
+                            or NotSupportedException
+                            or PathTooLongException
+                )
+            {
                 error.WriteLine($"{programName}: the output root is invalid: {exception.Message}");
                 return USAGE_EXIT_CODE;
             }
@@ -299,34 +427,53 @@ internal static class BakeCommandLine {
 
         int packCount = 0;
         int entryCount = 0;
-        foreach (string path in paths) {
-            try {
+        foreach (string path in paths)
+        {
+            try
+            {
                 using PackArchive archive = PackArchive.Open(path);
                 packCount++;
                 entryCount += archive.Entries.Count;
-                if (!options.Quiet) {
+                if (!options.Quiet)
+                {
                     output.WriteLine($"{path}:");
-                    foreach (PackEntry entry in archive.Entries) {
+                    foreach (PackEntry entry in archive.Entries)
+                    {
                         output.WriteLine(
                             $"  {entry.Path} -> {entry.Type} ({entry.UncompressedSize} bytes, "
-                                + $"alignment {entry.Alignment})");
+                                + $"alignment {entry.Alignment})"
+                        );
                     }
                 }
-            } catch (RayBorkException exception) {
+            }
+            catch (RayBorkException exception)
+            {
                 error.WriteLine(
                     $"{path}: error {exception.DiagnosticCode ?? DiagnosticCodes.ASSET_PACK_READ_FAILED}: "
-                        + exception.Message);
+                        + exception.Message
+                );
                 return DIAGNOSTICS_EXIT_CODE;
-            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-                or ArgumentException or NotSupportedException) {
-                error.WriteLine($"{path}: error {DiagnosticCodes.ASSET_PACK_READ_FAILED}: {exception.Message}");
+            }
+            catch (Exception exception)
+                when (exception
+                        is IOException
+                            or UnauthorizedAccessException
+                            or ArgumentException
+                            or NotSupportedException
+                )
+            {
+                error.WriteLine(
+                    $"{path}: error {DiagnosticCodes.ASSET_PACK_READ_FAILED}: {exception.Message}"
+                );
                 return DIAGNOSTICS_EXIT_CODE;
             }
         }
 
-        if (!options.Quiet) {
+        if (!options.Quiet)
+        {
             output.WriteLine(
-                $"{programName}: inspected {packCount} pack(s), {entryCount} asset(s).");
+                $"{programName}: inspected {packCount} pack(s), {entryCount} asset(s)."
+            );
         }
 
         return SUCCESS_EXIT_CODE;
@@ -337,18 +484,29 @@ internal static class BakeCommandLine {
         TextWriter error,
         string programName,
         out string? projectRoot,
-        out string outputRoot) {
+        out string outputRoot
+    )
+    {
         projectRoot = null;
         outputRoot = string.Empty;
 
-        if (!string.IsNullOrWhiteSpace(options.ProjectRoot)) {
-            try {
+        if (!string.IsNullOrWhiteSpace(options.ProjectRoot))
+        {
+            try
+            {
                 projectRoot = Path.GetFullPath(options.ProjectRoot);
-            } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-                or PathTooLongException) {
+            }
+            catch (Exception exception)
+                when (exception
+                        is ArgumentException
+                            or NotSupportedException
+                            or PathTooLongException
+                )
+            {
                 error.WriteLine(
                     $"{programName}: --project-root '{options.ProjectRoot}' is not a valid path: "
-                        + exception.Message);
+                        + exception.Message
+                );
                 return false;
             }
         }
@@ -356,14 +514,18 @@ internal static class BakeCommandLine {
         string requestedOutput = string.IsNullOrWhiteSpace(options.OutputRoot)
             ? AppContext.BaseDirectory
             : options.OutputRoot;
-        try {
+        try
+        {
             outputRoot = Path.GetFullPath(requestedOutput);
             return true;
-        } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-            or PathTooLongException) {
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
             error.WriteLine(
                 $"{programName}: --output-root '{requestedOutput}' is not a valid path: "
-                    + exception.Message);
+                    + exception.Message
+            );
             return false;
         }
     }
@@ -372,25 +534,40 @@ internal static class BakeCommandLine {
         ReadOnlySpan<string> args,
         CommandKind kind,
         out CommandOptions options,
-        out string? error) {
+        out string? error
+    )
+    {
         options = new CommandOptions();
         error = null;
 
         string command = _commands[(int)kind];
-        for (int index = 0; index < args.Length; index++) {
+        for (int index = 0; index < args.Length; index++)
+        {
             string argument = args[index];
-            switch (argument) {
+            switch (argument)
+            {
                 case "--help":
                 case "-h":
                     options.Help = true;
                     break;
 
                 case "--project-root":
-                    if (!TryTakeValue(args, ref index, command, argument, out string? projectRoot, out error)) {
+                    if (
+                        !TryTakeValue(
+                            args,
+                            ref index,
+                            command,
+                            argument,
+                            out string? projectRoot,
+                            out error
+                        )
+                    )
+                    {
                         return false;
                     }
 
-                    if (options.ProjectRoot is not null) {
+                    if (options.ProjectRoot is not null)
+                    {
                         error = $"{command} accepts --project-root only once.";
                         return false;
                     }
@@ -399,11 +576,22 @@ internal static class BakeCommandLine {
                     break;
 
                 case "--output-root":
-                    if (!TryTakeValue(args, ref index, command, argument, out string? outputRoot, out error)) {
+                    if (
+                        !TryTakeValue(
+                            args,
+                            ref index,
+                            command,
+                            argument,
+                            out string? outputRoot,
+                            out error
+                        )
+                    )
+                    {
                         return false;
                     }
 
-                    if (options.OutputRoot is not null) {
+                    if (options.OutputRoot is not null)
+                    {
                         error = $"{command} accepts --output-root only once.";
                         return false;
                     }
@@ -412,11 +600,22 @@ internal static class BakeCommandLine {
                     break;
 
                 case "--mode" when kind == CommandKind.Bake:
-                    if (!TryTakeValue(args, ref index, command, argument, out string? mode, out error)) {
+                    if (
+                        !TryTakeValue(
+                            args,
+                            ref index,
+                            command,
+                            argument,
+                            out string? mode,
+                            out error
+                        )
+                    )
+                    {
                         return false;
                     }
 
-                    if (!BakeModeExtensions.TryParse(mode, out BakeMode parsed)) {
+                    if (!BakeModeExtensions.TryParse(mode, out BakeMode parsed))
+                    {
                         error = $"--mode must be 'debug' or 'release'; got '{mode}'.";
                         return false;
                     }
@@ -437,11 +636,22 @@ internal static class BakeCommandLine {
                     break;
 
                 case "--pack" when kind == CommandKind.Inspect:
-                    if (!TryTakeValue(args, ref index, command, argument, out string? pack, out error)) {
+                    if (
+                        !TryTakeValue(
+                            args,
+                            ref index,
+                            command,
+                            argument,
+                            out string? pack,
+                            out error
+                        )
+                    )
+                    {
                         return false;
                     }
 
-                    if (options.Pack is not null) {
+                    if (options.Pack is not null)
+                    {
                         error = "inspect accepts --pack only once.";
                         return false;
                     }
@@ -463,7 +673,8 @@ internal static class BakeCommandLine {
             }
         }
 
-        if (options.Verbose && options.Quiet) {
+        if (options.Verbose && options.Quiet)
+        {
             error = "--verbose and --quiet are mutually exclusive.";
             return false;
         }
@@ -477,16 +688,20 @@ internal static class BakeCommandLine {
         string command,
         string optionName,
         out string? value,
-        out string? error) {
+        out string? error
+    )
+    {
         value = null;
         error = null;
-        if (index + 1 >= args.Length) {
+        if (index + 1 >= args.Length)
+        {
             error = $"{command} requires a value after {optionName}.";
             return false;
         }
 
         value = args[++index];
-        if (string.IsNullOrWhiteSpace(value)) {
+        if (string.IsNullOrWhiteSpace(value))
+        {
             error = $"{command} requires a non-empty value after {optionName}.";
             return false;
         }
@@ -498,29 +713,35 @@ internal static class BakeCommandLine {
         TextWriter output,
         string programName,
         BakeResult result,
-        CommandOptions options) {
-        string packs = string.Join(
-            ", ",
-            result.Packs.Select(pack => $"'{pack.Pack.PackPath}'"));
-        if (result.Status == BakeStatus.UpToDate) {
+        CommandOptions options
+    )
+    {
+        string packs = string.Join(", ", result.Packs.Select(pack => $"'{pack.Pack.PackPath}'"));
+        if (result.Status == BakeStatus.UpToDate)
+        {
             output.WriteLine($"{programName}: up to date: {packs}; no inputs changed.");
             return;
         }
 
-        if (options.Check) {
+        if (options.Check)
+        {
             output.WriteLine(
                 $"{programName}: valid (--check): {packs} ({result.Packs.Count} pack(s), "
-                    + $"{result.AssetCount} asset(s), {result.RawCount} raw payload(s)); no pack written.");
+                    + $"{result.AssetCount} asset(s), {result.RawCount} raw payload(s)); no pack written."
+            );
             return;
         }
 
         output.WriteLine(
             $"{programName}: baked {packs} ({result.Packs.Count} pack(s), {result.AssetCount} "
-                + $"asset(s), {result.RawCount} raw payload(s), {options.Mode.ToName()} mode).");
+                + $"asset(s), {result.RawCount} raw payload(s), {options.Mode.ToName()} mode)."
+        );
     }
 
-    private static void WriteEntryList(TextWriter output, IReadOnlyList<BakedEntry> entries) {
-        foreach (BakedEntry entry in entries) {
+    private static void WriteEntryList(TextWriter output, IReadOnlyList<BakedEntry> entries)
+    {
+        foreach (BakedEntry entry in entries)
+        {
             output.WriteLine($"  {entry.Path} -> {entry.Type} ({entry.Payload.Length} bytes)");
         }
     }
@@ -528,15 +749,19 @@ internal static class BakeCommandLine {
     private static void WriteDiagnostics(
         TextWriter error,
         BakeDiagnostics diagnostics,
-        bool includeInfo)
-        => WriteDiagnostics(error, diagnostics.GetSorted(), includeInfo);
+        bool includeInfo
+    ) => WriteDiagnostics(error, diagnostics.GetSorted(), includeInfo);
 
     private static void WriteDiagnostics(
         TextWriter error,
         IReadOnlyList<BakeDiagnostic> diagnostics,
-        bool includeInfo) {
-        foreach (BakeDiagnostic diagnostic in diagnostics) {
-            if (diagnostic.Severity == BakeSeverity.Info && !includeInfo) {
+        bool includeInfo
+    )
+    {
+        foreach (BakeDiagnostic diagnostic in diagnostics)
+        {
+            if (diagnostic.Severity == BakeSeverity.Info && !includeInfo)
+            {
                 continue;
             }
 
@@ -544,10 +769,13 @@ internal static class BakeCommandLine {
         }
     }
 
-    private static int CountErrors(BakeDiagnostics diagnostics) {
+    private static int CountErrors(BakeDiagnostics diagnostics)
+    {
         int count = 0;
-        foreach (BakeDiagnostic diagnostic in diagnostics.GetSorted()) {
-            if (diagnostic.Severity == BakeSeverity.Error) {
+        foreach (BakeDiagnostic diagnostic in diagnostics.GetSorted())
+        {
+            if (diagnostic.Severity == BakeSeverity.Error)
+            {
                 count++;
             }
         }
@@ -557,11 +785,17 @@ internal static class BakeCommandLine {
 
     private static int CountFailures(
         IReadOnlyList<BakeDiagnostic> diagnostics,
-        bool warningsAsErrors) {
+        bool warningsAsErrors
+    )
+    {
         int count = 0;
-        foreach (BakeDiagnostic diagnostic in diagnostics) {
-            if (diagnostic.Severity == BakeSeverity.Error
-                || (warningsAsErrors && diagnostic.Severity == BakeSeverity.Warning)) {
+        foreach (BakeDiagnostic diagnostic in diagnostics)
+        {
+            if (
+                diagnostic.Severity == BakeSeverity.Error
+                || (warningsAsErrors && diagnostic.Severity == BakeSeverity.Warning)
+            )
+            {
                 count++;
             }
         }
@@ -569,28 +803,43 @@ internal static class BakeCommandLine {
         return count;
     }
 
-    private static void WriteUsage(TextWriter writer, string programName) {
+    private static void WriteUsage(TextWriter writer, string programName)
+    {
         writer.WriteLine($"usage: {programName} <command> [options]");
         writer.WriteLine("  --help       show this help");
         writer.WriteLine("  --version    show the tool version");
-        writer.WriteLine("  bake      [--project-root <dir>] [--output-root <dir>] [--mode debug|release]");
-        writer.WriteLine("            [--check] [--force] [--warnings-as-errors] [--verbose|--quiet]");
-        writer.WriteLine("            discover, bind, process, validate, and atomically write every pack");
-        writer.WriteLine("  clean     [--project-root <dir>] [--output-root <dir>] [--verbose|--quiet]");
+        writer.WriteLine(
+            "  bake      [--project-root <dir>] [--output-root <dir>] [--mode debug|release]"
+        );
+        writer.WriteLine(
+            "            [--check] [--force] [--warnings-as-errors] [--verbose|--quiet]"
+        );
+        writer.WriteLine(
+            "            discover, bind, process, validate, and atomically write every pack"
+        );
+        writer.WriteLine(
+            "  clean     [--project-root <dir>] [--output-root <dir>] [--verbose|--quiet]"
+        );
         writer.WriteLine("            delete every configured pack and the incremental manifest");
-        writer.WriteLine("  inspect   [--project-root <dir>] [--output-root <dir>] [--pack <path>]");
+        writer.WriteLine(
+            "  inspect   [--project-root <dir>] [--output-root <dir>] [--pack <path>]"
+        );
         writer.WriteLine("            [--verbose|--quiet]");
         writer.WriteLine("            list the entries of the configured packs or one --pack file");
-        writer.WriteLine("exit codes: 0 success, 1 source diagnostics, 2 usage/configuration, 3 internal");
+        writer.WriteLine(
+            "exit codes: 0 success, 1 source diagnostics, 2 usage/configuration, 3 internal"
+        );
     }
 
-    private enum CommandKind {
+    private enum CommandKind
+    {
         Bake,
         Clean,
         Inspect,
     }
 
-    private sealed class CommandOptions {
+    private sealed class CommandOptions
+    {
         internal string? ProjectRoot { get; set; }
 
         internal string? OutputRoot { get; set; }

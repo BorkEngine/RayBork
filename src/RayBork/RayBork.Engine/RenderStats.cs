@@ -51,4 +51,5 @@ public readonly record struct RenderStats(
     double CpuFrameMilliseconds,
     double GpuFrameMilliseconds,
     int FramesInFlight,
-    int RecoveryCount);
+    int RecoveryCount
+);

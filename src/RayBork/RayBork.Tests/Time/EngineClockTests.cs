@@ -2,12 +2,14 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class EngineClockTests {
+public sealed class EngineClockTests
+{
     private const double MAX_DELTA_TIME = 0.25;
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorRejectsNullTimeProvider() {
+    public void ConstructorRejectsNullTimeProvider()
+    {
         Assert.Throws<ArgumentNullException>(() => new EngineClock(null!, MAX_DELTA_TIME));
     }
 
@@ -18,13 +20,17 @@ public sealed class EngineClockTests {
     [InlineData(double.PositiveInfinity)]
     [InlineData(double.NegativeInfinity)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorRejectsInvalidMaxDeltaTime(double maxDeltaTime) {
-        Assert.Throws<ArgumentOutOfRangeException>(() => new EngineClock(new ManualTimeProvider(), maxDeltaTime));
+    public void ConstructorRejectsInvalidMaxDeltaTime(double maxDeltaTime)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new EngineClock(new ManualTimeProvider(), maxDeltaTime)
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void BeginTickBeforeStartThrows() {
+    public void BeginTickBeforeStartThrows()
+    {
         EngineClock clock = new(new ManualTimeProvider(), MAX_DELTA_TIME);
 
         Assert.Throws<InvalidOperationException>(() => clock.BeginTick());
@@ -32,7 +38,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void StartTwiceThrows() {
+    public void StartTwiceThrows()
+    {
         EngineClock clock = new(new ManualTimeProvider(), MAX_DELTA_TIME);
         clock.Start();
 
@@ -41,7 +48,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FirstTickHasZeroDeltasAndStartsFrameCountAtOne() {
+    public void FirstTickHasZeroDeltasAndStartsFrameCountAtOne()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
@@ -59,7 +67,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void LaterTicksReportTheRawIntervalSinceThePreviousTick() {
+    public void LaterTicksReportTheRawIntervalSinceThePreviousTick()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
@@ -85,7 +94,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DeltaIsClampedWhileUnscaledDeltaAndTimeAreNot() {
+    public void DeltaIsClampedWhileUnscaledDeltaAndTimeAreNot()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
@@ -102,7 +112,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TimeProgressesIndependentlyOfClampedDeltas() {
+    public void TimeProgressesIndependentlyOfClampedDeltas()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
@@ -123,7 +134,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TimePropertyIsZeroBeforeStart() {
+    public void TimePropertyIsZeroBeforeStart()
+    {
         EngineClock clock = new(new ManualTimeProvider(), MAX_DELTA_TIME);
 
         Assert.Equal(0.0, clock.Time);
@@ -131,7 +143,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TimePropertyAdvancesWithoutTicksAndTicksSnapshotIt() {
+    public void TimePropertyAdvancesWithoutTicksAndTicksSnapshotIt()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
@@ -153,15 +166,18 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FpsIsTheAverageOfTheOneSecondWindow() {
+    public void FpsIsTheAverageOfTheOneSecondWindow()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
 
         TickTime tick = default;
-        for (int i = 0; i < 12; i++) {
+        for (int i = 0; i < 12; i++)
+        {
             tick = clock.BeginTick();
-            if (i < 11) {
+            if (i < 11)
+            {
                 time.Advance(TimeSpan.FromMilliseconds(100));
             }
         }
@@ -171,7 +187,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FpsKeepsTwoSamplesWhenTheWindowIsStale() {
+    public void FpsKeepsTwoSamplesWhenTheWindowIsStale()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
@@ -185,7 +202,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FpsDropsSamplesOlderThanTheWindow() {
+    public void FpsDropsSamplesOlderThanTheWindow()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();
@@ -203,7 +221,8 @@ public sealed class EngineClockTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FpsIsZeroWhenTickTimestampsDoNotAdvance() {
+    public void FpsIsZeroWhenTickTimestampsDoNotAdvance()
+    {
         ManualTimeProvider time = new();
         EngineClock clock = new(time, MAX_DELTA_TIME);
         clock.Start();

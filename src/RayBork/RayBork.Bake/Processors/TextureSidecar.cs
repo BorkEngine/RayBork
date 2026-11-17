@@ -20,7 +20,8 @@ namespace RayBork.Bake.Processors;
 /// </para>
 /// </remarks>
 [GenerateShape]
-internal sealed partial class TextureSidecar {
+internal sealed partial class TextureSidecar
+{
     /// <summary>
     /// Gets or sets the storage format token: <c>rgba8</c> (default), <c>bc7</c>, <c>bc5</c>, or
     /// <c>r8</c>.

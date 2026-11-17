@@ -3,14 +3,19 @@ using RayBork.Tests.Assets.Gpu;
 
 namespace RayBork.Tests.Assets.Catalog;
 
-public sealed class AssetCatalogLifetimeTests {
+public sealed class AssetCatalogLifetimeTests
+{
     private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DisposeKeepsPathAndIsDisposedReadableAndRejectsMetadata() {
+    public async Task DisposeKeepsPathAndIsDisposedReadableAndRejectsMetadata()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken);
+        Mesh mesh = await harness.Catalog.Load<Mesh>(
+            "/meshes/quad",
+            TestContext.Current.CancellationToken
+        );
 
         mesh.Dispose();
 
@@ -25,7 +30,8 @@ public sealed class AssetCatalogLifetimeTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task DisposingTheSameSharedObjectTwiceReleasesBothOwnersAsDocumented() {
+    public async Task DisposingTheSameSharedObjectTwiceReleasesBothOwnersAsDocumented()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Mesh first = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
@@ -48,9 +54,13 @@ public sealed class AssetCatalogLifetimeTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task FrameHoldDefersGpuDestructionUntilTheLastHoldIsReleased() {
+    public async Task FrameHoldDefersGpuDestructionUntilTheLastHoldIsReleased()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken);
+        Mesh mesh = await harness.Catalog.Load<Mesh>(
+            "/meshes/quad",
+            TestContext.Current.CancellationToken
+        );
         EngineAsset lifetime = mesh.Lifetime;
 
         lifetime.AddFrameHold();
@@ -63,16 +73,21 @@ public sealed class AssetCatalogLifetimeTests {
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 1,
-            "The released frame hold must queue exactly one GPU destruction.");
+            "The released frame hold must queue exactly one GPU destruction."
+        );
         Assert.True(harness.Worker.DestroyCalls[0].IsDestroyed);
         Assert.Throws<InvalidOperationException>(() => lifetime.ReleaseFrameHold());
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task FrameHoldCannotBeAddedToADisposedAsset() {
+    public async Task FrameHoldCannotBeAddedToADisposedAsset()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
-        Mesh mesh = await harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken);
+        Mesh mesh = await harness.Catalog.Load<Mesh>(
+            "/meshes/quad",
+            TestContext.Current.CancellationToken
+        );
         EngineAsset lifetime = mesh.Lifetime;
 
         mesh.Dispose();
@@ -82,7 +97,8 @@ public sealed class AssetCatalogLifetimeTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ConcurrentLoadsCoalesceToOneUploadAndEachAcquireAReference() {
+    public async Task ConcurrentLoadsCoalesceToOneUploadAndEachAcquireAReference()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -107,12 +123,14 @@ public sealed class AssetCatalogLifetimeTests {
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 1,
-            "The last released reference must queue one GPU destruction.");
+            "The last released reference must queue one GPU destruction."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CanceledWaiterAcquiresNoReferenceAndDoesNotBreakTheOtherWaiter() {
+    public async Task CanceledWaiterAcquiresNoReferenceAndDoesNotBreakTheOtherWaiter()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -133,12 +151,14 @@ public sealed class AssetCatalogLifetimeTests {
         Assert.True(mesh.IsDisposed);
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 1,
-            "The canceled waiter must not have acquired an extra reference.");
+            "The canceled waiter must not have acquired an extra reference."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AllCanceledWaitersReleaseTheUnusedUploadAndLeaveNoCacheEntry() {
+    public async Task AllCanceledWaitersReleaseTheUnusedUploadAndLeaveNoCacheEntry()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -152,7 +172,8 @@ public sealed class AssetCatalogLifetimeTests {
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.CancelCalls.Count + harness.Worker.DestroyCalls.Count == 1,
-            "A load whose waiters all canceled must release the started upload.");
+            "A load whose waiters all canceled must release the started upload."
+        );
 
         Task<Mesh> retryTask = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
         FakeGpuAssetUploadOperation retryUpload = harness.Worker.WaitForUpload(1, _timeout);
@@ -160,55 +181,72 @@ public sealed class AssetCatalogLifetimeTests {
         Mesh retry = await retryTask.WaitAsync(_timeout, cancellationToken);
         int destroysBefore = harness.Worker.DestroyCalls.Count;
 
-        try {
+        try
+        {
             Assert.Equal(2, harness.Worker.UploadCallCount);
             Assert.Equal(3, retry.VertexCount);
-        } finally {
+        }
+        finally
+        {
             retry.Dispose();
         }
 
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == destroysBefore + 1,
-            "The retry must be destroyed when its only owner disposes.");
+            "The retry must be destroyed when its only owner disposes."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task FailedUploadIsNotCachedAndARetrySucceeds() {
+    public async Task FailedUploadIsNotCachedAndARetrySucceeds()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         AssetLoadException uploadFailure = new(
             "The fake worker refused the upload.",
             DiagnosticCodes.ASSET_GPU_UPLOAD_FAILED,
-            null);
+            null
+        );
         harness.Worker.UploadException = uploadFailure;
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken)
+        );
 
         Assert.Same(uploadFailure, thrown);
         harness.Worker.UploadException = null;
 
         Mesh retry = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
 
-        try {
+        try
+        {
             Assert.Equal(2, harness.Worker.UploadCallCount);
             Assert.False(retry.IsDisposed);
-        } finally {
+        }
+        finally
+        {
             retry.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CorruptMeshPayloadFailsAsAssetLoadAndCreatesNoResource() {
+    public async Task CorruptMeshPayloadFailsAsAssetLoadAndCreatesNoResource()
+    {
         byte[] pack = CatalogTestData.BuildPack(
-            (CatalogTestData.MESH_PATH, AssetEntryType.Mesh, AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())),
-            (CatalogTestData.MESH_PAYLOAD_PATH, AssetEntryType.Raw, new byte[16]));
+            (
+                CatalogTestData.MESH_PATH,
+                AssetEntryType.Mesh,
+                AssetSerialization.Serialize(CatalogTestData.CreateMeshDescriptor())
+            ),
+            (CatalogTestData.MESH_PAYLOAD_PATH, AssetEntryType.Raw, new byte[16])
+        );
         using CatalogTestHarness harness = new(userPacks: [pack]);
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<Mesh>("/meshes/quad", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
         Assert.Equal(0, harness.Worker.UploadCallCount);
@@ -217,43 +255,53 @@ public sealed class AssetCatalogLifetimeTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task CustomDataShapeFailureIsAssetLoad() {
-        byte[] pack = CatalogTestData.BuildPack(
-            ("data/broken", AssetEntryType.Data, [0xC1]));
+    public async Task CustomDataShapeFailureIsAssetLoad()
+    {
+        byte[] pack = CatalogTestData.BuildPack(("data/broken", AssetEntryType.Data, [0xC1]));
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [pack],
-            assetTypes: [CatalogTestData.SettingsRegistration]);
+            assetTypes: [CatalogTestData.SettingsRegistration]
+        );
 
-        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(
-            () => harness.Catalog.Load<CatalogTestSettings>("/data/broken", TestContext.Current.CancellationToken));
+        AssetLoadException thrown = await Assert.ThrowsAsync<AssetLoadException>(() =>
+            harness.Catalog.Load<CatalogTestSettings>(
+                "/data/broken",
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(DiagnosticCodes.ASSET_LOAD_FAILED, thrown.DiagnosticCode);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task AlreadyCanceledCustomDataCallerStillLeavesLaterCallsWorking() {
+    public async Task AlreadyCanceledCustomDataCallerStillLeavesLaterCallsWorking()
+    {
         using CatalogTestHarness harness = new(
             builtInPack: null,
             userPacks: [CatalogTestData.BuildStandardPack()],
-            assetTypes: [CatalogTestData.SettingsRegistration]);
+            assetTypes: [CatalogTestData.SettingsRegistration]
+        );
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         using CancellationTokenSource cancellation = new();
         cancellation.Cancel();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => harness.Catalog.Load<CatalogTestSettings>("/data/settings", cancellation.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            harness.Catalog.Load<CatalogTestSettings>("/data/settings", cancellation.Token)
+        );
 
         CatalogTestSettings settings = await harness.Catalog.Load<CatalogTestSettings>(
             "/data/settings",
-            cancellationToken);
+            cancellationToken
+        );
         Assert.Equal("catalog", settings.Name);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task OneOwnerDisposeDoesNotBreakAnotherCoalescedWaiter() {
+    public async Task OneOwnerDisposeDoesNotBreakAnotherCoalescedWaiter()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -275,12 +323,14 @@ public sealed class AssetCatalogLifetimeTests {
         second.Dispose();
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Worker.DestroyCalls.Count == 1,
-            "The surviving waiter's reference must keep the asset alive until it disposes.");
+            "The surviving waiter's reference must keep the asset alive until it disposes."
+        );
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ReloadAfterTheLastDisposeCreatesANewObjectAndUpload() {
+    public async Task ReloadAfterTheLastDisposeCreatesANewObjectAndUpload()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
         Mesh first = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
@@ -288,22 +338,27 @@ public sealed class AssetCatalogLifetimeTests {
 
         Mesh second = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
 
-        try {
+        try
+        {
             Assert.NotSame(first, second);
             Assert.False(second.IsDisposed);
             Assert.Equal(2, harness.Worker.UploadCallCount);
-        } finally {
+        }
+        finally
+        {
             second.Dispose();
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task ConcurrentCacheHitAndLastDisposeNeverReturnADisposedAsset() {
+    public async Task ConcurrentCacheHitAndLastDisposeNeverReturnADisposedAsset()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
 
-        for (int iteration = 0; iteration < 50; iteration++) {
+        for (int iteration = 0; iteration < 50; iteration++)
+        {
             Mesh owner = await harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
             long destroysBefore = harness.Worker.DestroyCalls.Count;
             Mesh? loaded = null;
@@ -311,27 +366,38 @@ public sealed class AssetCatalogLifetimeTests {
             Exception? disposeFailure = null;
             using Barrier barrier = new(participantCount: 2);
 
-            Thread loaderThread = new(() => {
-                try {
+            Thread loaderThread = new(() =>
+            {
+                try
+                {
                     barrier.SignalAndWait(_timeout, cancellationToken);
-                    loaded = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken)
+                    loaded = harness
+                        .Catalog.Load<Mesh>("/meshes/quad", cancellationToken)
                         .GetAwaiter()
                         .GetResult();
-                } catch (Exception exception) {
+                }
+                catch (Exception exception)
+                {
                     loadFailure = exception;
                 }
-            }) {
+            })
+            {
                 IsBackground = true,
                 Name = "RayBork.Tests.AssetLoadRace",
             };
-            Thread disposerThread = new(() => {
-                try {
+            Thread disposerThread = new(() =>
+            {
+                try
+                {
                     barrier.SignalAndWait(_timeout, cancellationToken);
                     owner.Dispose();
-                } catch (Exception exception) {
+                }
+                catch (Exception exception)
+                {
                     disposeFailure = exception;
                 }
-            }) {
+            })
+            {
                 IsBackground = true,
                 Name = "RayBork.Tests.AssetDisposeRace",
             };
@@ -343,19 +409,25 @@ public sealed class AssetCatalogLifetimeTests {
 
             Assert.Null(disposeFailure);
             int expectedDestroys;
-            if (loadFailure is not null) {
+            if (loadFailure is not null)
+            {
                 Assert.IsType<ObjectDisposedException>(loadFailure);
                 Assert.True(owner.IsDisposed);
                 expectedDestroys = 1;
-            } else {
+            }
+            else
+            {
                 Assert.NotNull(loaded);
                 Assert.False(loaded!.IsDisposed);
 
-                if (ReferenceEquals(owner, loaded)) {
+                if (ReferenceEquals(owner, loaded))
+                {
                     // The cache hit won the retain race; both references belong to the same asset.
                     loaded.Dispose();
                     expectedDestroys = 1;
-                } else {
+                }
+                else
+                {
                     // The dispose won and removed the cache entry before the lookup, so the load
                     // started a fresh asset. Both the old and the new resource are destroyed once.
                     Assert.True(owner.IsDisposed);
@@ -368,14 +440,16 @@ public sealed class AssetCatalogLifetimeTests {
 
             AssetCatalogLoadTests.WaitUntil(
                 () => harness.Worker.DestroyCalls.Count == destroysBefore + expectedDestroys,
-                "The race must destroy every resource exactly once.");
+                "The race must destroy every resource exactly once."
+            );
             Assert.Equal(0, harness.Bridge.LiveResourceCount);
         }
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public async Task StopFailsPendingLoadsAndStopsTheLoaderThread() {
+    public async Task StopFailsPendingLoadsAndStopsTheLoaderThread()
+    {
         using CatalogTestHarness harness = new(userPacks: [CatalogTestData.BuildStandardPack()]);
         harness.Worker.DeferUploads = true;
         CancellationToken cancellationToken = TestContext.Current.CancellationToken;
@@ -398,17 +472,18 @@ public sealed class AssetCatalogLifetimeTests {
         // asserting the count at a scheduling-dependent instant.
         AssetCatalogLoadTests.WaitUntil(
             () => harness.Bridge.LiveResourceCount == 0,
-            "The stopped catalog must destroy the uploaded resource.");
+            "The stopped catalog must destroy the uploaded resource."
+        );
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
         Assert.Throws<ObjectDisposedException>(() => harness.Catalog.Exists("/meshes/quad"));
-        Assert.Throws<ObjectDisposedException>(
-            () => {
-                _ = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
-            });
-        Assert.Throws<ObjectDisposedException>(
-            () => {
-                _ = harness.Catalog.LoadData("/meshes/quad", cancellationToken);
-            });
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            _ = harness.Catalog.Load<Mesh>("/meshes/quad", cancellationToken);
+        });
+        Assert.Throws<ObjectDisposedException>(() =>
+        {
+            _ = harness.Catalog.LoadData("/meshes/quad", cancellationToken);
+        });
 
         harness.Catalog.Stop();
     }

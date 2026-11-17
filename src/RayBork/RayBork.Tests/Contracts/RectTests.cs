@@ -2,10 +2,12 @@ using System.Numerics;
 
 namespace RayBork.Tests;
 
-public sealed class RectTests {
+public sealed class RectTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ConstructorStoresOriginAndSize() {
+    public void ConstructorStoresOriginAndSize()
+    {
         Rect rect = new(2f, 3f, 5f, 7f);
 
         Assert.Equal(2f, rect.X);
@@ -16,7 +18,8 @@ public sealed class RectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RightAndBottomAreDerivedFromOriginAndSize() {
+    public void RightAndBottomAreDerivedFromOriginAndSize()
+    {
         Rect rect = new(-2f, 1.5f, 4f, 3.5f);
 
         Assert.Equal(2f, rect.Right);
@@ -25,7 +28,8 @@ public sealed class RectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PositionAndSizeReturnVectors() {
+    public void PositionAndSizeReturnVectors()
+    {
         Rect rect = new(1f, 2f, 3f, 4f);
 
         Assert.Equal(new Vector2(1f, 2f), rect.Position);
@@ -34,7 +38,8 @@ public sealed class RectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FromSizeCreatesRectangleAtOrigin() {
+    public void FromSizeCreatesRectangleAtOrigin()
+    {
         Rect rect = Rect.FromSize(3f, 4f);
 
         Assert.Equal(new Rect(0f, 0f, 3f, 4f), rect);
@@ -52,7 +57,8 @@ public sealed class RectTests {
     [InlineData(-0.01f, 2.5f, false)]
     [InlineData(5f, -0.01f, false)]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ContainsUsesInclusiveMinimumAndExclusiveMaximum(float x, float y, bool expected) {
+    public void ContainsUsesInclusiveMinimumAndExclusiveMaximum(float x, float y, bool expected)
+    {
         Rect rect = new(0f, 0f, 10f, 5f);
 
         Assert.Equal(expected, rect.Contains(new Vector2(x, y)));
@@ -60,7 +66,8 @@ public sealed class RectTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ContainsAccountsForOffsetOrigin() {
+    public void ContainsAccountsForOffsetOrigin()
+    {
         Rect rect = new(10f, 20f, 4f, 2f);
 
         Assert.True(rect.Contains(new Vector2(10f, 20f)));

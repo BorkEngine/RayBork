@@ -58,7 +58,8 @@ namespace RayBork.Internal;
 /// earlier already unregistered itself, so no queued request can point at it when the service stops.
 /// </para>
 /// </remarks>
-internal sealed class GlyphGenerationService : IDisposable {
+internal sealed class GlyphGenerationService : IDisposable
+{
     /// <summary>The generation thread and logger category name.</summary>
     internal const string THREAD_NAME = "RayBork.Font";
 
@@ -72,8 +73,9 @@ internal sealed class GlyphGenerationService : IDisposable {
     private readonly List<TaskCompletionSource> _idleWaiters = [];
     private readonly AutoResetEvent _wake = new(false);
     private readonly CancellationTokenSource _stopSource = new();
-    private readonly TaskCompletionSource _stopCompletion =
-        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _stopCompletion = new(
+        TaskCreationOptions.RunContinuationsAsynchronously
+    );
 
     private Thread? _generationThread;
     private bool _started;
@@ -89,7 +91,8 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// </summary>
     /// <param name="loggerFactory">The app logger factory.</param>
     /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> is <c>null</c>.</exception>
-    internal GlyphGenerationService(ILoggerFactory loggerFactory) {
+    internal GlyphGenerationService(ILoggerFactory loggerFactory)
+    {
         ArgumentNullException.ThrowIfNull(loggerFactory);
 
         _logger = loggerFactory.CreateLogger(LOGGER_CATEGORY);
@@ -99,18 +102,24 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// Gets whether the service started and has not stopped accepting work. Before
     /// <see cref="Start"/> and after <see cref="Stop"/> it is <see langword="false"/>.
     /// </summary>
-    internal bool IsRunning {
-        get {
-            lock (_gate) {
+    internal bool IsRunning
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _started && !_stopRequested;
             }
         }
     }
 
     /// <summary>Gets the font thread, or <see langword="null"/> before <see cref="Start"/>. Diagnostic, for tests.</summary>
-    internal Thread? GenerationThread {
-        get {
-            lock (_gate) {
+    internal Thread? GenerationThread
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _generationThread;
             }
         }
@@ -120,9 +129,12 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// Gets the number of concurrent <see cref="Stop"/> callers waiting for the first stop to finish.
     /// Diagnostic, for tests.
     /// </summary>
-    internal int StopWaiterCount {
-        get {
-            lock (_gate) {
+    internal int StopWaiterCount
+    {
+        get
+        {
+            lock (_gate)
+            {
                 return _stopWaiterCount;
             }
         }
@@ -133,17 +145,19 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// </summary>
     /// <exception cref="ObjectDisposedException">The service already stopped.</exception>
     /// <exception cref="InvalidOperationException">The service was already started.</exception>
-    internal void Start() {
-        lock (_gate) {
+    internal void Start()
+    {
+        lock (_gate)
+        {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_started) {
-                throw new InvalidOperationException("The glyph generation service is already started.");
+            if (_started)
+            {
+                throw new InvalidOperationException(
+                    "The glyph generation service is already started."
+                );
             }
 
-            Thread thread = new(RunLoop) {
-                IsBackground = true,
-                Name = THREAD_NAME,
-            };
+            Thread thread = new(RunLoop) { IsBackground = true, Name = THREAD_NAME };
             thread.Start();
             _generationThread = thread;
             _started = true;
@@ -167,20 +181,25 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// pipeline lock before the service lock, so the two locks cannot deadlock.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <c>null</c>.</exception>
-    internal GlyphEnqueueResult Enqueue(FontGlyphPipeline pipeline, int glyphId) {
+    internal GlyphEnqueueResult Enqueue(FontGlyphPipeline pipeline, int glyphId)
+    {
         ArgumentNullException.ThrowIfNull(pipeline);
 
-        lock (_gate) {
-            if (pipeline.IsDisposed || _disposed || _stopRequested) {
+        lock (_gate)
+        {
+            if (pipeline.IsDisposed || _disposed || _stopRequested)
+            {
                 return GlyphEnqueueResult.RejectedStopping;
             }
 
-            if (!_started) {
+            if (!_started)
+            {
                 return GlyphEnqueueResult.RejectedNotStarted;
             }
 
             GlyphRequestKey key = new(pipeline, glyphId);
-            if (!_pending.Add(key)) {
+            if (!_pending.Add(key))
+            {
                 return GlyphEnqueueResult.AlreadyPending;
             }
 
@@ -197,31 +216,37 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// </summary>
     /// <param name="pipeline">The pipeline that is disposing.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipeline"/> is <c>null</c>.</exception>
-    internal void Unregister(FontGlyphPipeline pipeline) {
+    internal void Unregister(FontGlyphPipeline pipeline)
+    {
         ArgumentNullException.ThrowIfNull(pipeline);
 
         List<GlyphRequest> removed = [];
         TaskCompletionSource[] idleWaiters;
-        lock (_gate) {
-            if (_queue.Count > 0) {
+        lock (_gate)
+        {
+            if (_queue.Count > 0)
+            {
                 int count = _queue.Count;
-                for (int index = 0; index < count; index++) {
+                for (int index = 0; index < count; index++)
+                {
                     GlyphRequest request = _queue.Dequeue();
-                    if (ReferenceEquals(request.Pipeline, pipeline)) {
+                    if (ReferenceEquals(request.Pipeline, pipeline))
+                    {
                         _pending.Remove(new GlyphRequestKey(request.Pipeline, request.GlyphId));
                         removed.Add(request);
-                    } else {
+                    }
+                    else
+                    {
                         _queue.Enqueue(request);
                     }
                 }
             }
 
-            idleWaiters = _queue.Count == 0 && _active is null
-                ? TakeIdleWaitersLocked()
-                : [];
+            idleWaiters = _queue.Count == 0 && _active is null ? TakeIdleWaitersLocked() : [];
         }
 
-        foreach (GlyphRequest request in removed) {
+        foreach (GlyphRequest request in removed)
+        {
             request.Pipeline.MarkGlyphFailed(request.GlyphId);
         }
 
@@ -233,9 +258,12 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// </summary>
     /// <returns>A completed task when the service is already idle, or the pending idle task.</returns>
     /// <remarks>Test hook. Pausing does not count as idleness when requests are queued.</remarks>
-    internal Task WhenIdleAsync() {
-        lock (_gate) {
-            if (_queue.Count == 0 && _active is null) {
+    internal Task WhenIdleAsync()
+    {
+        lock (_gate)
+        {
+            if (_queue.Count == 0 && _active is null)
+            {
                 return Task.CompletedTask;
             }
 
@@ -252,9 +280,12 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// <remarks>
     /// Test hook. Pair it with <see cref="Resume"/>; the pause is not a cancellation.
     /// </remarks>
-    internal void Pause() {
-        lock (_gate) {
-            if (_disposed || _stopRequested) {
+    internal void Pause()
+    {
+        lock (_gate)
+        {
+            if (_disposed || _stopRequested)
+            {
                 return;
             }
 
@@ -266,9 +297,12 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// Lets a paused loop dequeue again and signals it for any work that arrived while paused.
     /// </summary>
     /// <remarks>Test hook. After <see cref="Stop"/> it is a no-op.</remarks>
-    internal void Resume() {
-        lock (_gate) {
-            if (_disposed || _stopRequested) {
+    internal void Resume()
+    {
+        lock (_gate)
+        {
+            if (_disposed || _stopRequested)
+            {
                 return;
             }
 
@@ -285,23 +319,30 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// unbounded: the factory must observe the stop token so an in-flight upload can be canceled.
     /// </remarks>
     /// <exception cref="InvalidOperationException">Called from the font thread.</exception>
-    internal void Stop() {
+    internal void Stop()
+    {
         GlyphRequest[] queued;
         TaskCompletionSource[] idleWaiters;
         Thread? thread;
         bool waitForFirstStop = false;
-        lock (_gate) {
-            if (ReferenceEquals(Thread.CurrentThread, _generationThread)) {
+        lock (_gate)
+        {
+            if (ReferenceEquals(Thread.CurrentThread, _generationThread))
+            {
                 throw new InvalidOperationException(
-                    "The glyph generation service cannot be stopped from its own font thread.");
+                    "The glyph generation service cannot be stopped from its own font thread."
+                );
             }
 
-            if (_stopRequested) {
+            if (_stopRequested)
+            {
                 waitForFirstStop = true;
                 queued = [];
                 idleWaiters = [];
                 thread = null;
-            } else {
+            }
+            else
+            {
                 _disposed = true;
                 _stopRequested = true;
                 queued = [.. _queue];
@@ -311,15 +352,21 @@ internal sealed class GlyphGenerationService : IDisposable {
             }
         }
 
-        if (waitForFirstStop) {
-            lock (_gate) {
+        if (waitForFirstStop)
+        {
+            lock (_gate)
+            {
                 _stopWaiterCount++;
             }
 
-            try {
+            try
+            {
                 _stopCompletion.Task.GetAwaiter().GetResult();
-            } finally {
-                lock (_gate) {
+            }
+            finally
+            {
+                lock (_gate)
+                {
                     _stopWaiterCount--;
                 }
             }
@@ -327,36 +374,48 @@ internal sealed class GlyphGenerationService : IDisposable {
             return;
         }
 
-        try {
-            try {
+        try
+        {
+            try
+            {
                 _stopSource.Cancel();
-            } catch (AggregateException) {
+            }
+            catch (AggregateException)
+            {
                 // A factory cancellation callback must never stop shutdown; the join below still
                 // observes the canceled token.
             }
 
-            lock (_gate) {
+            lock (_gate)
+            {
                 _wake.Set();
             }
 
             // Queued requests never ran, so their waiters would otherwise hang. Settle them before the
             // join; the in-flight request settles its own waiter when it observes the stop token.
-            foreach (GlyphRequest request in queued) {
+            foreach (GlyphRequest request in queued)
+            {
                 request.Pipeline.MarkGlyphFailed(request.GlyphId);
             }
 
             thread?.Join();
 
-            lock (_gate) {
+            lock (_gate)
+            {
                 idleWaiters = TakeIdleWaitersLocked();
             }
 
             CompleteIdleWaiters(idleWaiters);
-        } finally {
-            try {
+        }
+        finally
+        {
+            try
+            {
                 _stopSource.Dispose();
                 _wake.Dispose();
-            } finally {
+            }
+            finally
+            {
                 _stopCompletion.TrySetResult();
             }
         }
@@ -366,17 +425,23 @@ internal sealed class GlyphGenerationService : IDisposable {
     /// <remarks>Same as <see cref="Stop"/>.</remarks>
     public void Dispose() => Stop();
 
-    private void RunLoop() {
-        while (true) {
+    private void RunLoop()
+    {
+        while (true)
+        {
             _wake.WaitOne();
-            while (true) {
+            while (true)
+            {
                 GlyphRequest request;
-                lock (_gate) {
-                    if (_stopRequested) {
+                lock (_gate)
+                {
+                    if (_stopRequested)
+                    {
                         return;
                     }
 
-                    if (_paused || _queue.Count == 0) {
+                    if (_paused || _queue.Count == 0)
+                    {
                         break;
                     }
 
@@ -387,7 +452,8 @@ internal sealed class GlyphGenerationService : IDisposable {
                 Execute(request);
 
                 TaskCompletionSource[] idleWaiters;
-                lock (_gate) {
+                lock (_gate)
+                {
                     _pending.Remove(new GlyphRequestKey(request.Pipeline, request.GlyphId));
                     _active = null;
                     idleWaiters = _queue.Count == 0 ? TakeIdleWaitersLocked() : [];
@@ -406,11 +472,14 @@ internal sealed class GlyphGenerationService : IDisposable {
     [SuppressMessage(
         "Design",
         "CA1031",
-        Justification = "One glyph generation failure is recorded on its request; the service must keep serving the remaining glyphs.")]
-    private void Execute(GlyphRequest request) {
+        Justification = "One glyph generation failure is recorded on its request; the service must keep serving the remaining glyphs."
+    )]
+    private void Execute(GlyphRequest request)
+    {
         FontGlyphPipeline pipeline = request.Pipeline;
         int glyphId = request.GlyphId;
-        try {
+        try
+        {
             _stopSource.Token.ThrowIfCancellationRequested();
             FontGlyph glyph = pipeline.Face.GetGlyph(glyphId);
             FontGlyphSettings settings = pipeline.Settings;
@@ -419,39 +488,56 @@ internal sealed class GlyphGenerationService : IDisposable {
                 settings.UnitsPerEm,
                 settings.MsdfPixelSize,
                 settings.MsdfRange,
-                settings.MsdfPadding);
-            if (layout.IsEmpty) {
+                settings.MsdfPadding
+            );
+            if (layout.IsEmpty)
+            {
                 pipeline.CompleteEmpty(glyphId);
                 return;
             }
 
             byte[] bitmap = MsdfGenerator.Generate(glyph.Outline, layout);
-            Texture texture = pipeline.TextureFactory
-                .CreateAsync(layout.TextureWidth, layout.TextureHeight, bitmap, _stopSource.Token)
+            Texture texture = pipeline
+                .TextureFactory.CreateAsync(
+                    layout.TextureWidth,
+                    layout.TextureHeight,
+                    bitmap,
+                    _stopSource.Token
+                )
                 .GetAwaiter()
                 .GetResult();
-            if (texture is null) {
+            if (texture is null)
+            {
                 throw new InvalidOperationException(
-                    $"The glyph texture factory returned no texture for glyph {glyphId}.");
+                    $"The glyph texture factory returned no texture for glyph {glyphId}."
+                );
             }
 
             pipeline.Insert(glyphId, texture);
-        } catch (OperationCanceledException) when (_stopSource.IsCancellationRequested) {
+        }
+        catch (OperationCanceledException) when (_stopSource.IsCancellationRequested)
+        {
             pipeline.MarkGlyphFailed(glyphId);
-        } catch (Exception exception) {
-            if (!pipeline.HasLoggedMetricsFailure(glyphId)) {
+        }
+        catch (Exception exception)
+        {
+            if (!pipeline.HasLoggedMetricsFailure(glyphId))
+            {
                 _logger.LogWarning(
                     exception,
                     "The glyph {GlyphId} could not be generated; it stays failed for this font.",
-                    glyphId);
+                    glyphId
+                );
             }
 
             pipeline.MarkGlyphFailed(glyphId);
         }
     }
 
-    private TaskCompletionSource[] TakeIdleWaitersLocked() {
-        if (_idleWaiters.Count == 0) {
+    private TaskCompletionSource[] TakeIdleWaitersLocked()
+    {
+        if (_idleWaiters.Count == 0)
+        {
             return [];
         }
 
@@ -460,8 +546,10 @@ internal sealed class GlyphGenerationService : IDisposable {
         return waiters;
     }
 
-    private static void CompleteIdleWaiters(TaskCompletionSource[] waiters) {
-        foreach (TaskCompletionSource waiter in waiters) {
+    private static void CompleteIdleWaiters(TaskCompletionSource[] waiters)
+    {
+        foreach (TaskCompletionSource waiter in waiters)
+        {
             waiter.TrySetResult();
         }
     }

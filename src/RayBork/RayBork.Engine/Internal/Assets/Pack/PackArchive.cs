@@ -22,7 +22,8 @@ namespace RayBork.Internal;
 /// <see cref="ObjectDisposedException"/>.
 /// </para>
 /// </remarks>
-internal sealed class PackArchive : IDisposable {
+internal sealed class PackArchive : IDisposable
+{
     private readonly string _displayPath;
     private readonly long _length;
     private readonly ReadOnlyMemory<byte> _memory;
@@ -40,7 +41,9 @@ internal sealed class PackArchive : IDisposable {
         MemoryMappedFile? mappedFile,
         MemoryMappedViewAccessor? view,
         long length,
-        string displayPath) {
+        string displayPath
+    )
+    {
         _memory = memory;
         _mappedFile = mappedFile;
         _view = view;
@@ -70,77 +73,126 @@ internal sealed class PackArchive : IDisposable {
     [SuppressMessage(
         "Reliability",
         "CA2000",
-        Justification = "The FileStream is handed to MemoryMappedFile.CreateFromFile with leaveOpen: false, so the mapped file owns it and disposes it with the archive.")]
-    internal static PackArchive Open(string path) {
+        Justification = "The FileStream is handed to MemoryMappedFile.CreateFromFile with leaveOpen: false, so the mapped file owns it and disposes it with the archive."
+    )]
+    internal static PackArchive Open(string path)
+    {
         ArgumentNullException.ThrowIfNull(path);
-        if (string.IsNullOrWhiteSpace(path)) {
-            throw new ArgumentException("The pack path must not be empty or whitespace.", nameof(path));
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException(
+                "The pack path must not be empty or whitespace.",
+                nameof(path)
+            );
         }
 
         string fullPath;
-        try {
+        try
+        {
             fullPath = Path.GetFullPath(path);
-        } catch (Exception exception) when (exception is ArgumentException or NotSupportedException
-            or PathTooLongException) {
+        }
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        {
             throw new ArgumentException(
                 $"Invalid pack path '{path}': {exception.Message}",
                 nameof(path),
-                exception);
+                exception
+            );
         }
 
         FileStream stream;
-        try {
+        try
+        {
             stream = new FileStream(
                 fullPath,
                 FileMode.Open,
                 FileAccess.Read,
                 FileShare.Read,
                 bufferSize: 4096,
-                FileOptions.RandomAccess);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+                FileOptions.RandomAccess
+            );
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             throw PackFailure.ReadFailed(fullPath, "the file could not be opened", exception);
         }
 
         long length;
-        try {
+        try
+        {
             length = stream.Length;
-        } catch (Exception exception) when (exception is IOException or NotSupportedException
-            or ObjectDisposedException) {
+        }
+        catch (Exception exception)
+            when (exception is IOException or NotSupportedException or ObjectDisposedException)
+        {
             stream.Dispose();
             throw PackFailure.ReadFailed(fullPath, "the file length could not be read", exception);
         }
 
-        if (length < PackFormat.PREFIX_LENGTH) {
+        if (length < PackFormat.PREFIX_LENGTH)
+        {
             stream.Dispose();
             throw PackFailure.ReadFailed(
                 fullPath,
                 $"the file is {length} bytes, shorter than the {PackFormat.PREFIX_LENGTH}-byte "
-                    + "header");
+                    + "header"
+            );
         }
 
         MemoryMappedFile mappedFile;
-        try {
+        try
+        {
             mappedFile = MemoryMappedFile.CreateFromFile(
                 stream,
                 mapName: null,
                 capacity: 0,
                 MemoryMappedFileAccess.Read,
                 HandleInheritability.None,
-                leaveOpen: false);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+                leaveOpen: false
+            );
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             stream.Dispose();
-            throw PackFailure.ReadFailed(fullPath, "the file could not be memory-mapped", exception);
+            throw PackFailure.ReadFailed(
+                fullPath,
+                "the file could not be memory-mapped",
+                exception
+            );
         }
 
         MemoryMappedViewAccessor view;
-        try {
+        try
+        {
             view = mappedFile.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
-        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException
-            or NotSupportedException or ArgumentException) {
+        }
+        catch (Exception exception)
+            when (exception
+                    is IOException
+                        or UnauthorizedAccessException
+                        or NotSupportedException
+                        or ArgumentException
+            )
+        {
             mappedFile.Dispose();
-            throw PackFailure.ReadFailed(fullPath, "the file could not be memory-mapped", exception);
+            throw PackFailure.ReadFailed(
+                fullPath,
+                "the file could not be memory-mapped",
+                exception
+            );
         }
 
         return Create(default, mappedFile, view, length, fullPath);
@@ -154,7 +206,8 @@ internal sealed class PackArchive : IDisposable {
     /// <returns>The validated archive.</returns>
     /// <exception cref="ArgumentException"><paramref name="displayPath"/> is empty or whitespace.</exception>
     /// <exception cref="AssetPackException">The bytes are truncated or not a valid v1 pack.</exception>
-    internal static PackArchive Open(ReadOnlyMemory<byte> pack, string displayPath) {
+    internal static PackArchive Open(ReadOnlyMemory<byte> pack, string displayPath)
+    {
         ArgumentException.ThrowIfNullOrWhiteSpace(displayPath);
         return Create(pack, null, null, pack.Length, displayPath);
     }
@@ -167,7 +220,8 @@ internal sealed class PackArchive : IDisposable {
     /// <returns><see langword="true"/> when the path exists in this pack.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="path"/> is null.</exception>
     /// <exception cref="ObjectDisposedException">The archive is disposed.</exception>
-    internal bool TryGetEntry(string path, [NotNullWhen(true)] out PackEntry? entry) {
+    internal bool TryGetEntry(string path, [NotNullWhen(true)] out PackEntry? entry)
+    {
         ArgumentNullException.ThrowIfNull(path);
         ThrowIfDisposed();
         return _entriesByPath.TryGetValue(path, out entry);
@@ -185,52 +239,66 @@ internal sealed class PackArchive : IDisposable {
     /// The stored payload hash does not match, or the payload cannot be decompressed to exactly its
     /// declared size.
     /// </exception>
-    internal byte[] ReadPayload(PackEntry entry) {
+    internal byte[] ReadPayload(PackEntry entry)
+    {
         ArgumentNullException.ThrowIfNull(entry);
         ValidateEntry(entry);
 
         byte[] stored;
-        lock (_ioLock) {
+        lock (_ioLock)
+        {
             ThrowIfDisposed();
             stored = CopyStoredBytes(entry);
         }
 
         ulong actualHash = PackCompression.ComputePayloadHash(stored);
-        if (actualHash != entry.StoredHash) {
+        if (actualHash != entry.StoredHash)
+        {
             throw PackFailure.PayloadHashMismatch(
                 _displayPath,
                 entry.Path,
                 entry.StoredHash,
-                actualHash);
+                actualHash
+            );
         }
 
-        if (!entry.IsCompressed) {
+        if (!entry.IsCompressed)
+        {
             return stored;
         }
 
-        try {
+        try
+        {
             return PackCompression.DecompressExactly(stored, checked((int)entry.UncompressedSize));
-        } catch (Exception exception) when (exception is InvalidDataException or IOException
-            or NotSupportedException) {
+        }
+        catch (Exception exception)
+            when (exception is InvalidDataException or IOException or NotSupportedException)
+        {
             throw PackFailure.PayloadDecodeFailed(
                 _displayPath,
                 entry.Path,
                 exception.Message,
-                exception);
+                exception
+            );
         }
     }
 
     /// <inheritdoc/>
-    public void Dispose() {
-        lock (_ioLock) {
-            if (_disposed) {
+    public void Dispose()
+    {
+        lock (_ioLock)
+        {
+            if (_disposed)
+            {
                 return;
             }
 
             _disposed = true;
 
-            unsafe {
-                if (_pointerAcquired) {
+            unsafe
+            {
+                if (_pointerAcquired)
+                {
                     _view!.SafeMemoryMappedViewHandle.ReleasePointer();
                     _pointerAcquired = false;
                     _pointer = null;
@@ -247,18 +315,26 @@ internal sealed class PackArchive : IDisposable {
         MemoryMappedFile? mappedFile,
         MemoryMappedViewAccessor? view,
         long length,
-        string displayPath) {
+        string displayPath
+    )
+    {
         PackArchive? archive = null;
-        try {
+        try
+        {
             archive = new PackArchive(memory, mappedFile, view, length, displayPath);
             archive.AcquirePointer();
             archive.LoadHeaderAndIndex();
             return archive;
-        } catch {
-            if (archive is null) {
+        }
+        catch
+        {
+            if (archive is null)
+            {
                 view?.Dispose();
                 mappedFile?.Dispose();
-            } else {
+            }
+            else
+            {
                 archive.Dispose();
             }
 
@@ -266,8 +342,10 @@ internal sealed class PackArchive : IDisposable {
         }
     }
 
-    private unsafe void AcquirePointer() {
-        if (_view is null) {
+    private unsafe void AcquirePointer()
+    {
+        if (_view is null)
+        {
             return;
         }
 
@@ -276,122 +354,160 @@ internal sealed class PackArchive : IDisposable {
         _pointerAcquired = true;
     }
 
-    private void LoadHeaderAndIndex() {
-        if (_length < PackFormat.PREFIX_LENGTH) {
+    private void LoadHeaderAndIndex()
+    {
+        if (_length < PackFormat.PREFIX_LENGTH)
+        {
             throw PackFailure.ReadFailed(
                 _displayPath,
                 $"the pack is {_length} bytes, shorter than the {PackFormat.PREFIX_LENGTH}-byte "
-                    + "header");
+                    + "header"
+            );
         }
 
         ReadOnlySpan<byte> header = GetOpenSpan(0, PackFormat.PREFIX_LENGTH);
-        if (!header[..PackFormat.MAGIC_LENGTH].SequenceEqual(PackFormat.MagicBytes)) {
+        if (!header[..PackFormat.MAGIC_LENGTH].SequenceEqual(PackFormat.MagicBytes))
+        {
             throw PackFailure.UnsupportedFormat(
                 _displayPath,
-                $"the magic is not '{PackFormat.MAGIC_TEXT}'");
+                $"the magic is not '{PackFormat.MAGIC_TEXT}'"
+            );
         }
 
         uint version = BinaryPrimitives.ReadUInt32LittleEndian(header[PackFormat.VERSION_OFFSET..]);
-        if (version != PackFormat.CURRENT_VERSION) {
+        if (version != PackFormat.CURRENT_VERSION)
+        {
             throw PackFailure.UnsupportedFormat(
                 _displayPath,
-                $"the version is {version}; only version {PackFormat.CURRENT_VERSION} is supported");
+                $"the version is {version}; only version {PackFormat.CURRENT_VERSION} is supported"
+            );
         }
 
         uint flags = BinaryPrimitives.ReadUInt32LittleEndian(header[PackFormat.FLAGS_OFFSET..]);
-        if (flags != 0) {
+        if (flags != 0)
+        {
             throw PackFailure.UnsupportedFormat(
                 _displayPath,
-                $"the header flags are 0x{flags:x8}; v1 defines no flags");
+                $"the header flags are 0x{flags:x8}; v1 defines no flags"
+            );
         }
 
         uint entryCount = BinaryPrimitives.ReadUInt32LittleEndian(
-            header[PackFormat.ENTRY_COUNT_OFFSET..]);
-        if (entryCount > PackFormat.MAX_ENTRY_COUNT) {
+            header[PackFormat.ENTRY_COUNT_OFFSET..]
+        );
+        if (entryCount > PackFormat.MAX_ENTRY_COUNT)
+        {
             throw PackFailure.InvalidIndex(
                 _displayPath,
                 $"the header declares {entryCount} entries; the v1 limit is "
-                    + $"{PackFormat.MAX_ENTRY_COUNT}");
+                    + $"{PackFormat.MAX_ENTRY_COUNT}"
+            );
         }
 
         ulong indexOffset = BinaryPrimitives.ReadUInt64LittleEndian(
-            header[PackFormat.INDEX_OFFSET_OFFSET..]);
-        if (indexOffset != PackFormat.PREFIX_LENGTH) {
+            header[PackFormat.INDEX_OFFSET_OFFSET..]
+        );
+        if (indexOffset != PackFormat.PREFIX_LENGTH)
+        {
             throw PackFailure.InvalidIndex(
                 _displayPath,
-                $"the index offset is {indexOffset}; v1 requires {PackFormat.PREFIX_LENGTH}");
+                $"the index offset is {indexOffset}; v1 requires {PackFormat.PREFIX_LENGTH}"
+            );
         }
 
         uint indexLength = BinaryPrimitives.ReadUInt32LittleEndian(
-            header[PackFormat.INDEX_LENGTH_OFFSET..]);
-        if (indexLength > PackFormat.MAX_INDEX_LENGTH) {
+            header[PackFormat.INDEX_LENGTH_OFFSET..]
+        );
+        if (indexLength > PackFormat.MAX_INDEX_LENGTH)
+        {
             throw PackFailure.InvalidIndex(
                 _displayPath,
                 $"the index is {indexLength} bytes; the v1 limit is "
-                    + $"{PackFormat.MAX_INDEX_LENGTH} bytes");
+                    + $"{PackFormat.MAX_INDEX_LENGTH} bytes"
+            );
         }
 
         uint storedIndexHash = BinaryPrimitives.ReadUInt32LittleEndian(
-            header[PackFormat.INDEX_HASH_OFFSET..]);
+            header[PackFormat.INDEX_HASH_OFFSET..]
+        );
         uint reserved = BinaryPrimitives.ReadUInt32LittleEndian(
-            header[PackFormat.RESERVED_OFFSET..]);
-        if (reserved != 0) {
+            header[PackFormat.RESERVED_OFFSET..]
+        );
+        if (reserved != 0)
+        {
             throw PackFailure.UnsupportedFormat(
                 _displayPath,
-                $"the reserved header field is 0x{reserved:x8}; v1 requires zero");
+                $"the reserved header field is 0x{reserved:x8}; v1 requires zero"
+            );
         }
 
-        if ((ulong)indexLength > (ulong)_length - PackFormat.PREFIX_LENGTH) {
+        if ((ulong)indexLength > (ulong)_length - PackFormat.PREFIX_LENGTH)
+        {
             throw PackFailure.ReadFailed(
                 _displayPath,
-                $"the {indexLength}-byte index extends past the {_length}-byte pack");
+                $"the {indexLength}-byte index extends past the {_length}-byte pack"
+            );
         }
 
         ReadOnlySpan<byte> index = GetOpenSpan(PackFormat.PREFIX_LENGTH, (int)indexLength);
         uint actualIndexHash = PackCompression.ComputeIndexHash(index);
-        if (actualIndexHash != storedIndexHash) {
+        if (actualIndexHash != storedIndexHash)
+        {
             throw PackFailure.IndexHashMismatch(_displayPath, storedIndexHash, actualIndexHash);
         }
 
         long payloadStart = PackFormat.PREFIX_LENGTH + (long)indexLength;
         _entries = PackIndex.Parse(index, _displayPath, entryCount, _length, payloadStart);
         _entriesByPath = new Dictionary<string, PackEntry>(_entries.Length, StringComparer.Ordinal);
-        foreach (PackEntry entry in _entries) {
+        foreach (PackEntry entry in _entries)
+        {
             _entriesByPath.Add(entry.Path, entry);
         }
     }
 
-    private unsafe ReadOnlySpan<byte> GetOpenSpan(long offset, int length) {
-        if (_view is not null) {
+    private unsafe ReadOnlySpan<byte> GetOpenSpan(long offset, int length)
+    {
+        if (_view is not null)
+        {
             return new ReadOnlySpan<byte>(_pointer + offset, length);
         }
 
         return _memory.Span.Slice(checked((int)offset), length);
     }
 
-    private unsafe byte[] CopyStoredBytes(PackEntry entry) {
+    private unsafe byte[] CopyStoredBytes(PackEntry entry)
+    {
         int length = checked((int)entry.StoredLength);
         byte[] stored = new byte[length];
-        if (length == 0) {
+        if (length == 0)
+        {
             return stored;
         }
 
-        if (_view is not null) {
+        if (_view is not null)
+        {
             new ReadOnlySpan<byte>(_pointer + (long)entry.Offset, length).CopyTo(stored);
-        } else {
+        }
+        else
+        {
             _memory.Span.Slice(checked((int)entry.Offset), length).CopyTo(stored);
         }
 
         return stored;
     }
 
-    private void ValidateEntry(PackEntry entry) {
+    private void ValidateEntry(PackEntry entry)
+    {
         ThrowIfDisposed();
-        if (!_entriesByPath.TryGetValue(entry.Path, out PackEntry? known)
-            || !ReferenceEquals(entry, known)) {
+        if (
+            !_entriesByPath.TryGetValue(entry.Path, out PackEntry? known)
+            || !ReferenceEquals(entry, known)
+        )
+        {
             throw new ArgumentException(
                 "The entry does not belong to this pack archive.",
-                nameof(entry));
+                nameof(entry)
+            );
         }
     }
 

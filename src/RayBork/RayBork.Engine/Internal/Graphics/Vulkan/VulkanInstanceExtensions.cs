@@ -6,7 +6,8 @@ namespace RayBork.Internal;
 /// <remarks>
 /// The comparisons are ordinal because Vulkan extension names are case-sensitive ASCII tokens.
 /// </remarks>
-internal static class VulkanInstanceExtensions {
+internal static class VulkanInstanceExtensions
+{
     /// <summary>
     /// Returns the required extension names that the loader does not advertise.
     /// </summary>
@@ -19,19 +20,24 @@ internal static class VulkanInstanceExtensions {
     /// <returns>The missing extension names, or an empty list when every requirement is met.</returns>
     internal static IReadOnlyList<string> Validate(
         IReadOnlyList<string> available,
-        IReadOnlyList<string> required) {
+        IReadOnlyList<string> required
+    )
+    {
         ArgumentNullException.ThrowIfNull(available);
         ArgumentNullException.ThrowIfNull(required);
 
         HashSet<string> availableNames = new(available, StringComparer.Ordinal);
         HashSet<string> seenRequired = new(StringComparer.Ordinal);
         List<string> missing = [];
-        foreach (string extension in required) {
-            if (string.IsNullOrEmpty(extension) || !seenRequired.Add(extension)) {
+        foreach (string extension in required)
+        {
+            if (string.IsNullOrEmpty(extension) || !seenRequired.Add(extension))
+            {
                 continue;
             }
 
-            if (!availableNames.Contains(extension)) {
+            if (!availableNames.Contains(extension))
+            {
                 missing.Add(extension);
             }
         }
@@ -48,14 +54,14 @@ internal static class VulkanInstanceExtensions {
     /// One or more required extensions are missing. The message names the missing extensions and
     /// the platform extension list; the diagnostic code is <c>RB3001</c>.
     /// </exception>
-    internal static void Require(
-        IReadOnlyList<string> available,
-        IReadOnlyList<string> required) {
+    internal static void Require(IReadOnlyList<string> available, IReadOnlyList<string> required)
+    {
         ArgumentNullException.ThrowIfNull(available);
         ArgumentNullException.ThrowIfNull(required);
 
         IReadOnlyList<string> missing = Validate(available, required);
-        if (missing.Count == 0) {
+        if (missing.Count == 0)
+        {
             return;
         }
 
@@ -64,6 +70,7 @@ internal static class VulkanInstanceExtensions {
         throw new GraphicsException(
             $"The Vulkan instance is missing required platform extensions: {missingList}. The platform requires: {platformList}.",
             DiagnosticCodes.GRAPHICS_INITIALIZATION_FAILED,
-            null);
+            null
+        );
     }
 }

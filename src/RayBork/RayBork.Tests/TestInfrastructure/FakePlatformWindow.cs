@@ -7,11 +7,13 @@ namespace RayBork.Tests;
 /// directly, <see cref="Close"/> requests an app exit, and <see cref="BeginTick"/> clears
 /// <see cref="WasResized"/>.
 /// </summary>
-internal sealed class FakePlatformWindow : IPlatformWindow {
+internal sealed class FakePlatformWindow : IPlatformWindow
+{
     private readonly Action _exitRequested;
     private string _clipboardText = string.Empty;
 
-    internal FakePlatformWindow(Action exitRequested) {
+    internal FakePlatformWindow(Action exitRequested)
+    {
         ArgumentNullException.ThrowIfNull(exitRequested);
         _exitRequested = exitRequested;
     }
@@ -44,14 +46,16 @@ internal sealed class FakePlatformWindow : IPlatformWindow {
 
     public WindowState State { get; set; } = WindowState.Normal;
 
-    public IReadOnlyList<Monitor> Monitors { get; } = [
+    public IReadOnlyList<Monitor> Monitors { get; } =
+    [
         new Monitor(
             0,
             "Fake Monitor",
             new Rect(0f, 0f, 1920f, 1080f),
             new Rect(0f, 0f, 1920f, 1040f),
             1f,
-            60),
+            60
+        ),
     ];
 
     public Monitor CurrentMonitor => Monitors[0];
@@ -64,30 +68,33 @@ internal sealed class FakePlatformWindow : IPlatformWindow {
 
     public int RequestedMonitorIndex { get; private set; }
 
-    public void ApplyPendingCommands() {
-    }
+    public void ApplyPendingCommands() { }
 
     public void BeginTick() => WasResized = false;
 
     public void SetTitle(string title) => Title = title;
 
-    public void SetSize(int width, int height) {
+    public void SetSize(int width, int height)
+    {
         Width = width;
         Height = height;
     }
 
-    public void SetFullscreen(bool fullscreen) {
+    public void SetFullscreen(bool fullscreen)
+    {
         IsFullscreen = fullscreen;
         State = fullscreen ? WindowState.Fullscreen : WindowState.Normal;
     }
 
-    public void SetBorderless(bool borderless) {
+    public void SetBorderless(bool borderless)
+    {
         State = borderless ? WindowState.BorderlessFullscreen : WindowState.Normal;
     }
 
     public void SetPosition(int x, int y) => Bounds = new Rect(x, y, Bounds.Width, Bounds.Height);
 
-    public void SetMonitor(int monitorIndex) {
+    public void SetMonitor(int monitorIndex)
+    {
         ArgumentOutOfRangeException.ThrowIfNegative(monitorIndex);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(monitorIndex, Monitors.Count);
         RequestedMonitorIndex = monitorIndex;
@@ -97,17 +104,20 @@ internal sealed class FakePlatformWindow : IPlatformWindow {
 
     public void SetMaxSize(int width, int height) => MaxSize = (width, height);
 
-    public void Minimize() {
+    public void Minimize()
+    {
         IsMinimized = true;
         State = WindowState.Minimized;
     }
 
-    public void Maximize() {
+    public void Maximize()
+    {
         IsMinimized = false;
         State = WindowState.Maximized;
     }
 
-    public void Restore() {
+    public void Restore()
+    {
         IsMinimized = false;
         State = WindowState.Normal;
     }
@@ -118,12 +128,14 @@ internal sealed class FakePlatformWindow : IPlatformWindow {
 
     public string GetClipboardText() => _clipboardText;
 
-    public void Close() {
+    public void Close()
+    {
         CloseRequested = true;
         _exitRequested();
     }
 
-    internal void ApplyStartupOptions(PlatformOptions options) {
+    internal void ApplyStartupOptions(PlatformOptions options)
+    {
         Title = options.Title;
         Width = options.Width;
         Height = options.Height;

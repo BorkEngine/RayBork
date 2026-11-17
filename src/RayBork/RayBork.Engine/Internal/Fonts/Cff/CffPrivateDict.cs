@@ -9,10 +9,12 @@ namespace RayBork.Internal;
 /// advances come from <c>hmtx</c> and a charstring's optional leading width operand is consumed and
 /// discarded. A Private DICT without a Subrs operator resolves to <see cref="CffIndex.Empty"/>.
 /// </remarks>
-internal readonly struct CffPrivateDict {
+internal readonly struct CffPrivateDict
+{
     /// <summary>Initializes a private dictionary with its local subroutine INDEX.</summary>
     /// <param name="localSubrs">The local subroutine INDEX, empty when the DICT has no Subrs key.</param>
-    internal CffPrivateDict(CffIndex localSubrs) {
+    internal CffPrivateDict(CffIndex localSubrs)
+    {
         LocalSubrs = localSubrs;
     }
 

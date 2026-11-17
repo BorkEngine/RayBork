@@ -1,5 +1,4 @@
 <Project>
-
     <!--
         RayBork.BuiltInAssets.targets - build-time generation of the embedded built-in asset pack for
         RayBork.Engine.
@@ -46,27 +45,40 @@
     -->
 
     <PropertyGroup>
-        <RayBorkBuiltInAssetsEnabled Condition="'$(RayBorkBuiltInAssetsEnabled)' == ''">true</RayBorkBuiltInAssetsEnabled>
-        <RayBorkBuiltInAssetsProjectFile Condition="'$(RayBorkBuiltInAssetsProjectFile)' == ''">$(MSBuildThisFileDirectory)RayBork.BuiltInAssets\RayBork.BuiltInAssets.csproj</RayBorkBuiltInAssetsProjectFile>
-        <RayBorkBuiltInAssetsSourceDirectory Condition="'$(RayBorkBuiltInAssetsSourceDirectory)' == ''">$(MSBuildThisFileDirectory)..\src\RayBork\RayBork.Engine\BuiltInAssets</RayBorkBuiltInAssetsSourceDirectory>
-        <RayBorkEngineShadersDirectory Condition="'$(RayBorkEngineShadersDirectory)' == ''">$(MSBuildThisFileDirectory)..\src\RayBork\RayBork.Engine\Shaders</RayBorkEngineShadersDirectory>
-        <RayBorkBuiltInAssetsTargetFramework Condition="'$(RayBorkBuiltInAssetsTargetFramework)' == ''">net11.0</RayBorkBuiltInAssetsTargetFramework>
+        <RayBorkBuiltInAssetsEnabled Condition="'$(RayBorkBuiltInAssetsEnabled)' == ''"
+            >true</RayBorkBuiltInAssetsEnabled>
+        <RayBorkBuiltInAssetsProjectFile Condition="'$(RayBorkBuiltInAssetsProjectFile)' == ''"
+            >$(MSBuildThisFileDirectory)RayBork.BuiltInAssets\RayBork.BuiltInAssets.csproj</RayBorkBuiltInAssetsProjectFile>
+        <RayBorkBuiltInAssetsSourceDirectory
+            Condition="'$(RayBorkBuiltInAssetsSourceDirectory)' == ''"
+            >$(MSBuildThisFileDirectory)..\src\RayBork\RayBork.Engine\BuiltInAssets</RayBorkBuiltInAssetsSourceDirectory>
+        <RayBorkEngineShadersDirectory Condition="'$(RayBorkEngineShadersDirectory)' == ''"
+            >$(MSBuildThisFileDirectory)..\src\RayBork\RayBork.Engine\Shaders</RayBorkEngineShadersDirectory>
+        <RayBorkBuiltInAssetsTargetFramework
+            Condition="'$(RayBorkBuiltInAssetsTargetFramework)' == ''"
+            >net11.0</RayBorkBuiltInAssetsTargetFramework>
         <!-- Use the SDK host that is running this build instead of whatever `dotnet` happens to be
              first on PATH. On WSL the default host can be an older runtime without net11.0. -->
-        <RayBorkDotNetHost Condition="'$(RayBorkDotNetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</RayBorkDotNetHost>
+        <RayBorkDotNetHost Condition="'$(RayBorkDotNetHost)' == '' and '$(DOTNET_HOST_PATH)' != ''"
+            >$(DOTNET_HOST_PATH)</RayBorkDotNetHost>
         <RayBorkDotNetHost Condition="'$(RayBorkDotNetHost)' == ''">dotnet</RayBorkDotNetHost>
-        <RayBorkBuiltInAssetsAssembly Condition="'$(RayBorkBuiltInAssetsAssembly)' == ''">$(MSBuildThisFileDirectory)RayBork.BuiltInAssets\bin\$(Configuration)\$(RayBorkBuiltInAssetsTargetFramework)\RayBork.BuiltInAssets.dll</RayBorkBuiltInAssetsAssembly>
+        <RayBorkBuiltInAssetsAssembly Condition="'$(RayBorkBuiltInAssetsAssembly)' == ''"
+            >$(MSBuildThisFileDirectory)RayBork.BuiltInAssets\bin\$(Configuration)\$(RayBorkBuiltInAssetsTargetFramework)\RayBork.BuiltInAssets.dll</RayBorkBuiltInAssetsAssembly>
     </PropertyGroup>
 
-    <Target Name="RayBorkRestoreBuiltInAssets"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false' and '$(_RayBorkRestoreBuiltInAssetsCompleted)' != 'true'">
+    <Target
+        Name="RayBorkRestoreBuiltInAssets"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false' and '$(_RayBorkRestoreBuiltInAssetsCompleted)' != 'true'"
+    >
         <PropertyGroup>
             <_RayBorkRestoreBuiltInAssetsCompleted>true</_RayBorkRestoreBuiltInAssetsCompleted>
         </PropertyGroup>
-        <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
-                 Targets="Restore"
-                 Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+        <MSBuild
+            Projects="$(RayBorkBuiltInAssetsProjectFile)"
+            Targets="Restore"
+            Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
+            RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible"
+        />
     </Target>
 
     <!--
@@ -77,32 +89,42 @@
         pack (the tool, the bake, the engine) instead of the engine's intermediate timestamps; the
         asset sources are declared by the generate target below.
     -->
-    <Target Name="RayBorkBuildBuiltInAssets"
-            DependsOnTargets="RayBorkPrepareBuiltInAssets;RayBorkRestoreBuiltInAssets"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'"
-            Inputs="@(_RayBorkBuiltInAssetsToolInputs)"
-            Outputs="$(RayBorkBuiltInAssetsAssembly)">
-        <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
-                 Targets="Build"
-                 Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
+    <Target
+        Name="RayBorkBuildBuiltInAssets"
+        DependsOnTargets="RayBorkPrepareBuiltInAssets;RayBorkRestoreBuiltInAssets"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'"
+        Inputs="@(_RayBorkBuiltInAssetsToolInputs)"
+        Outputs="$(RayBorkBuiltInAssetsAssembly)"
+    >
+        <MSBuild
+            Projects="$(RayBorkBuiltInAssetsProjectFile)"
+            Targets="Build"
+            Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
+            RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible"
+        />
         <!-- The AfterTargets hook that normally copies libshaderc is not reliable when Build is
              invoked through the MSBuild task during another project's build, so invoke the copy
              target explicitly before the generator runs. -->
-        <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
-                 Targets="RayBorkCopyShadercNative"
-                 Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
-        <Error Condition="!Exists('$(RayBorkBuiltInAssetsAssembly)')"
-               Text="RayBork built-in assets: the tool was not produced at '$(RayBorkBuiltInAssetsAssembly)'." />
+        <MSBuild
+            Projects="$(RayBorkBuiltInAssetsProjectFile)"
+            Targets="RayBorkCopyShadercNative"
+            Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
+            RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible"
+        />
+        <Error
+            Condition="!Exists('$(RayBorkBuiltInAssetsAssembly)')"
+            Text="RayBork built-in assets: the tool was not produced at '$(RayBorkBuiltInAssetsAssembly)'."
+        />
     </Target>
 
     <!--
         IntermediateOutputPath is computed by the SDK targets after the project body, so the generated
         paths are resolved inside a target rather than at evaluation time.
     -->
-    <Target Name="RayBorkPrepareBuiltInAssets"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'">
+    <Target
+        Name="RayBorkPrepareBuiltInAssets"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'"
+    >
         <PropertyGroup>
             <!-- MSBuild does not expand a wildcard that still contains '..', so normalize the
                  configured defaults before using them in Inputs and on the tool command line. -->
@@ -120,55 +142,82 @@
             <_RayBorkBuiltInAssetsInputs Include="$(_RayBorkBuiltInAssetsEngineShaders)\**\*.glsl" />
             <_RayBorkBuiltInAssetsInputs Include="$(_RayBorkBuiltInAssetsEngineShaders)\**\*.glslinc" />
             <_RayBorkBuiltInAssetsInputs Include="$(_RayBorkBuiltInAssetsEngineShaders)\**\*.spv" />
-            <_RayBorkBuiltInAssetsToolInputs Include="$(_RayBorkBuiltInAssetsToolDirectory)\**\*"
-                                             Exclude="$(_RayBorkBuiltInAssetsToolDirectory)\bin\**;$(_RayBorkBuiltInAssetsToolDirectory)\obj\**" />
-            <_RayBorkBuiltInAssetsToolInputs Include="$(_RayBorkBuiltInAssetsBakeDirectory)\**\*"
-                                             Exclude="$(_RayBorkBuiltInAssetsBakeDirectory)\bin\**;$(_RayBorkBuiltInAssetsBakeDirectory)\obj\**" />
-            <_RayBorkBuiltInAssetsToolInputs Include="$(_RayBorkBuiltInAssetsEngineDirectory)\**\*"
-                                             Exclude="$(_RayBorkBuiltInAssetsEngineDirectory)\bin\**;$(_RayBorkBuiltInAssetsEngineDirectory)\obj\**;$(_RayBorkBuiltInAssetsEngineDirectory)\BuiltInAssets\Assets\**;$(_RayBorkBuiltInAssetsEngineDirectory)\Shaders\**" />
+            <_RayBorkBuiltInAssetsToolInputs
+                Include="$(_RayBorkBuiltInAssetsToolDirectory)\**\*"
+                Exclude="$(_RayBorkBuiltInAssetsToolDirectory)\bin\**;$(_RayBorkBuiltInAssetsToolDirectory)\obj\**"
+            />
+            <_RayBorkBuiltInAssetsToolInputs
+                Include="$(_RayBorkBuiltInAssetsBakeDirectory)\**\*"
+                Exclude="$(_RayBorkBuiltInAssetsBakeDirectory)\bin\**;$(_RayBorkBuiltInAssetsBakeDirectory)\obj\**"
+            />
+            <_RayBorkBuiltInAssetsToolInputs
+                Include="$(_RayBorkBuiltInAssetsEngineDirectory)\**\*"
+                Exclude="$(_RayBorkBuiltInAssetsEngineDirectory)\bin\**;$(_RayBorkBuiltInAssetsEngineDirectory)\obj\**;$(_RayBorkBuiltInAssetsEngineDirectory)\BuiltInAssets\Assets\**;$(_RayBorkBuiltInAssetsEngineDirectory)\Shaders\**"
+            />
             <_RayBorkBuiltInAssetsToolInputs Include="$(MSBuildThisFileDirectory)..\Directory.Build.props;$(MSBuildThisFileDirectory)..\Directory.Packages.props;$(MSBuildThisFileDirectory)..\global.json;$(MSBuildThisFileDirectory)RayBork.BuiltInAssets.targets" />
         </ItemGroup>
     </Target>
 
-    <Target Name="RayBorkFingerprintBuiltInAssets"
-            DependsOnTargets="RayBorkPrepareBuiltInAssets"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'">
+    <Target
+        Name="RayBorkFingerprintBuiltInAssets"
+        DependsOnTargets="RayBorkPrepareBuiltInAssets"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'"
+    >
         <GetFileHash Files="$(RayBorkBuiltInAssetsAssembly)" Algorithm="SHA256">
             <Output TaskParameter="Items" ItemName="_RayBorkBuiltInAssetsToolHash" />
         </GetFileHash>
         <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_RayBorkBuiltInAssetsFingerprintFile)'))" />
-        <WriteLinesToFile File="$(_RayBorkBuiltInAssetsFingerprintFile)"
-                          Lines="@(_RayBorkBuiltInAssetsToolHash->'%(FileHash)')"
-                          Overwrite="true"
-                          WriteOnlyWhenDifferent="true" />
+        <WriteLinesToFile
+            File="$(_RayBorkBuiltInAssetsFingerprintFile)"
+            Lines="@(_RayBorkBuiltInAssetsToolHash->'%(FileHash)')"
+            Overwrite="true"
+            WriteOnlyWhenDifferent="true"
+        />
     </Target>
 
-    <Target Name="RayBorkGenerateBuiltInAssets"
-            DependsOnTargets="RayBorkPrepareBuiltInAssets;RayBorkBuildBuiltInAssets;RayBorkFingerprintBuiltInAssets"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'"
-            Inputs="@(_RayBorkBuiltInAssetsInputs);$(_RayBorkBuiltInAssetsFingerprintFile)"
-            Outputs="$(_RayBorkBuiltInAssetsGeneratedFile)">
+    <Target
+        Name="RayBorkGenerateBuiltInAssets"
+        DependsOnTargets="RayBorkPrepareBuiltInAssets;RayBorkBuildBuiltInAssets;RayBorkFingerprintBuiltInAssets"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'"
+        Inputs="@(_RayBorkBuiltInAssetsInputs);$(_RayBorkBuiltInAssetsFingerprintFile)"
+        Outputs="$(_RayBorkBuiltInAssetsGeneratedFile)"
+    >
         <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_RayBorkBuiltInAssetsGeneratedFile)'))" />
         <!-- Ensure libshaderc is beside the tool even when the tool build itself was up to date and
              its AfterTargets copy hook did not run. -->
-        <MSBuild Projects="$(RayBorkBuiltInAssetsProjectFile)"
-                 Targets="RayBorkCopyShadercNative"
-                 Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
-                 RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible" />
-        <Exec Command="&quot;$(RayBorkDotNetHost)&quot; &quot;$(RayBorkBuiltInAssetsAssembly)&quot; --output &quot;$(_RayBorkBuiltInAssetsGeneratedFile)&quot; --source-root &quot;$(_RayBorkBuiltInAssetsSourceRoot)&quot; --engine-shaders &quot;$(_RayBorkBuiltInAssetsEngineShaders)&quot;"
-              WorkingDirectory="$(MSBuildProjectDirectory)"
-              StandardOutputImportance="high"
-              StandardErrorImportance="high" />
+        <MSBuild
+            Projects="$(RayBorkBuiltInAssetsProjectFile)"
+            Targets="RayBorkCopyShadercNative"
+            Properties="Configuration=$(Configuration);RayBorkBuiltInAssetsEnabled=false;RayBorkBuiltInAssetsNested=true"
+            RemoveProperties="RuntimeIdentifier;SelfContained;OutDir;OutputPath;PublishDir;BaseOutputPath;BaseIntermediateOutputPath;PublishAot;PublishTrimmed;PublishSingleFile;PublishReadyToRun;EnableAotAnalyzer;EnableTrimAnalyzer;IsAotCompatible"
+        />
+        <Exec
+            Command="&quot;$(RayBorkDotNetHost)&quot; &quot;$(RayBorkBuiltInAssetsAssembly)&quot; --output &quot;$(_RayBorkBuiltInAssetsGeneratedFile)&quot; --source-root &quot;$(_RayBorkBuiltInAssetsSourceRoot)&quot; --engine-shaders &quot;$(_RayBorkBuiltInAssetsEngineShaders)&quot;"
+            WorkingDirectory="$(MSBuildProjectDirectory)"
+            StandardOutputImportance="high"
+            StandardErrorImportance="high"
+        />
     </Target>
 
-    <Target Name="RayBorkIncludeBuiltInAssets"
-            DependsOnTargets="RayBorkGenerateBuiltInAssets"
-            BeforeTargets="CoreCompile"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'">
+    <Target
+        Name="RayBorkIncludeBuiltInAssets"
+        DependsOnTargets="RayBorkGenerateBuiltInAssets"
+        BeforeTargets="CoreCompile"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' != 'false'"
+    >
         <ItemGroup>
-            <Compile Include="$(_RayBorkBuiltInAssetsGeneratedFile)" Condition="Exists('$(_RayBorkBuiltInAssetsGeneratedFile)')" />
-            <FileWrites Include="$(_RayBorkBuiltInAssetsGeneratedFile)" Condition="Exists('$(_RayBorkBuiltInAssetsGeneratedFile)')" />
-            <FileWrites Include="$(_RayBorkBuiltInAssetsFingerprintFile)" Condition="Exists('$(_RayBorkBuiltInAssetsFingerprintFile)')" />
+            <Compile
+                Include="$(_RayBorkBuiltInAssetsGeneratedFile)"
+                Condition="Exists('$(_RayBorkBuiltInAssetsGeneratedFile)')"
+            />
+            <FileWrites
+                Include="$(_RayBorkBuiltInAssetsGeneratedFile)"
+                Condition="Exists('$(_RayBorkBuiltInAssetsGeneratedFile)')"
+            />
+            <FileWrites
+                Include="$(_RayBorkBuiltInAssetsFingerprintFile)"
+                Condition="Exists('$(_RayBorkBuiltInAssetsFingerprintFile)')"
+            />
         </ItemGroup>
     </Target>
 
@@ -184,13 +233,17 @@
         simply reuses the previous real compilation. A written placeholder also removes the tool
         fingerprint so the outer build cannot mistake the placeholder for an up-to-date pack.
     -->
-    <Target Name="RayBorkProvideBuiltInPackPlaceholder"
-            BeforeTargets="CoreCompile"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' == 'false' and '$(RayBorkBuiltInAssetsNested)' == 'true'">
+    <Target
+        Name="RayBorkProvideBuiltInPackPlaceholder"
+        BeforeTargets="CoreCompile"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' == 'false' and '$(RayBorkBuiltInAssetsNested)' == 'true'"
+    >
         <PropertyGroup>
             <_RayBorkBuiltInAssetsGeneratedFile>$(IntermediateOutputPath)BuiltInAssets\BuiltInAssets.g.cs</_RayBorkBuiltInAssetsGeneratedFile>
             <_RayBorkBuiltInAssetsFingerprintFile>$(IntermediateOutputPath)BuiltInAssets\BuiltInAssets.tool.sha256</_RayBorkBuiltInAssetsFingerprintFile>
-            <_RayBorkBuiltInAssetsPlaceholderNeeded Condition="!Exists('$(_RayBorkBuiltInAssetsGeneratedFile)')">true</_RayBorkBuiltInAssetsPlaceholderNeeded>
+            <_RayBorkBuiltInAssetsPlaceholderNeeded
+                Condition="!Exists('$(_RayBorkBuiltInAssetsGeneratedFile)')"
+                >true</_RayBorkBuiltInAssetsPlaceholderNeeded>
         </PropertyGroup>
         <ItemGroup>
             <_RayBorkBuiltInAssetsPlaceholderLine Include="// &lt;auto-generated/&gt;" />
@@ -202,23 +255,32 @@
             <_RayBorkBuiltInAssetsPlaceholderLine Include="}" />
         </ItemGroup>
         <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_RayBorkBuiltInAssetsGeneratedFile)'))" />
-        <WriteLinesToFile File="$(_RayBorkBuiltInAssetsGeneratedFile)"
-                          Condition="'$(_RayBorkBuiltInAssetsPlaceholderNeeded)' == 'true'"
-                          Lines="@(_RayBorkBuiltInAssetsPlaceholderLine)"
-                          Overwrite="true"
-                          WriteOnlyWhenDifferent="true" />
-        <Delete Files="$(_RayBorkBuiltInAssetsFingerprintFile)"
-                Condition="'$(_RayBorkBuiltInAssetsPlaceholderNeeded)' == 'true' and Exists('$(_RayBorkBuiltInAssetsFingerprintFile)')" />
+        <WriteLinesToFile
+            File="$(_RayBorkBuiltInAssetsGeneratedFile)"
+            Condition="'$(_RayBorkBuiltInAssetsPlaceholderNeeded)' == 'true'"
+            Lines="@(_RayBorkBuiltInAssetsPlaceholderLine)"
+            Overwrite="true"
+            WriteOnlyWhenDifferent="true"
+        />
+        <Delete
+            Files="$(_RayBorkBuiltInAssetsFingerprintFile)"
+            Condition="'$(_RayBorkBuiltInAssetsPlaceholderNeeded)' == 'true' and Exists('$(_RayBorkBuiltInAssetsFingerprintFile)')"
+        />
         <ItemGroup>
             <Compile Include="$(_RayBorkBuiltInAssetsGeneratedFile)" />
             <FileWrites Include="$(_RayBorkBuiltInAssetsGeneratedFile)" />
-            <FileWrites Include="$(_RayBorkBuiltInAssetsFingerprintFile)" Condition="Exists('$(_RayBorkBuiltInAssetsFingerprintFile)')" />
+            <FileWrites
+                Include="$(_RayBorkBuiltInAssetsFingerprintFile)"
+                Condition="Exists('$(_RayBorkBuiltInAssetsFingerprintFile)')"
+            />
         </ItemGroup>
     </Target>
 
-    <Target Name="RayBorkProvideBuiltInPackPlaceholderWhenDisabled"
-            BeforeTargets="CoreCompile"
-            Condition="'$(RayBorkBuiltInAssetsEnabled)' == 'false' and '$(RayBorkBuiltInAssetsNested)' != 'true'">
+    <Target
+        Name="RayBorkProvideBuiltInPackPlaceholderWhenDisabled"
+        BeforeTargets="CoreCompile"
+        Condition="'$(RayBorkBuiltInAssetsEnabled)' == 'false' and '$(RayBorkBuiltInAssetsNested)' != 'true'"
+    >
         <PropertyGroup>
             <_RayBorkBuiltInAssetsDisabledPlaceholderFile>$(IntermediateOutputPath)BuiltInAssets\BuiltInPack.Placeholder.g.cs</_RayBorkBuiltInAssetsDisabledPlaceholderFile>
         </PropertyGroup>
@@ -232,14 +294,15 @@
             <_RayBorkBuiltInAssetsPlaceholderLine Include="}" />
         </ItemGroup>
         <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(_RayBorkBuiltInAssetsDisabledPlaceholderFile)'))" />
-        <WriteLinesToFile File="$(_RayBorkBuiltInAssetsDisabledPlaceholderFile)"
-                          Lines="@(_RayBorkBuiltInAssetsPlaceholderLine)"
-                          Overwrite="true"
-                          WriteOnlyWhenDifferent="true" />
+        <WriteLinesToFile
+            File="$(_RayBorkBuiltInAssetsDisabledPlaceholderFile)"
+            Lines="@(_RayBorkBuiltInAssetsPlaceholderLine)"
+            Overwrite="true"
+            WriteOnlyWhenDifferent="true"
+        />
         <ItemGroup>
             <Compile Include="$(_RayBorkBuiltInAssetsDisabledPlaceholderFile)" />
             <FileWrites Include="$(_RayBorkBuiltInAssetsDisabledPlaceholderFile)" />
         </ItemGroup>
     </Target>
-
 </Project>

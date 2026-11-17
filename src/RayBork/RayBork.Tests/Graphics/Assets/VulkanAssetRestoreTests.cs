@@ -7,18 +7,23 @@ namespace RayBork.Tests.Graphics.Assets;
 /// fault injection, which recreates the logical device deterministically, and the same worker instance
 /// the render loop would keep.
 /// </summary>
-public sealed class VulkanAssetRestoreTests {
+public sealed class VulkanAssetRestoreTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void RestoreRecreatesEveryLiveResourceOnTheNewDevice() {
+    public void RestoreRecreatesEveryLiveResourceOnTheNewDevice()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         VulkanTextureAssetResource texture = Assert.IsType<VulkanTextureAssetResource>(
-            harness.Upload(AssetUploadTestData.Texture()));
+            harness.Upload(AssetUploadTestData.Texture())
+        );
         VulkanMeshAssetResource mesh = Assert.IsType<VulkanMeshAssetResource>(
-            harness.Upload(AssetUploadTestData.Mesh()));
+            harness.Upload(AssetUploadTestData.Mesh())
+        );
         VulkanShaderAssetResource shader = Assert.IsType<VulkanShaderAssetResource>(
-            harness.Upload(AssetUploadTestData.Shader()));
+            harness.Upload(AssetUploadTestData.Shader())
+        );
         ulong textureImage = texture.Image.Handle;
         ulong textureView = texture.View.Handle;
         ulong textureSampler = texture.Sampler.Handle;
@@ -69,10 +74,13 @@ public sealed class VulkanAssetRestoreTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DeviceRecreationCancelsAPendingUpload() {
+    public void DeviceRecreationCancelsAPendingUpload()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
-        GpuAssetUploadOperation operation = harness.Worker.BeginUpload(AssetUploadTestData.Texture());
+        GpuAssetUploadOperation operation = harness.Worker.BeginUpload(
+            AssetUploadTestData.Texture()
+        );
 
         Assert.False(Assert.IsType<VulkanAssetUploadOperation>(operation).IsFinished);
         Assert.Equal(1, harness.Worker.PendingOperationCount);
@@ -82,7 +90,13 @@ public sealed class VulkanAssetRestoreTests {
 
         Assert.Equal(0, harness.Worker.PendingOperationCount);
         Assert.Equal(0, harness.Worker.PendingStagingBufferCount);
-        Assert.True(harness.Worker.TryComplete(operation, out GpuAssetResource? resource, out Exception? error));
+        Assert.True(
+            harness.Worker.TryComplete(
+                operation,
+                out GpuAssetResource? resource,
+                out Exception? error
+            )
+        );
         Assert.Null(resource);
         Assert.IsType<AssetLoadException>(error);
         Assert.Equal(0, harness.Bridge.LiveResourceCount);
@@ -91,7 +105,8 @@ public sealed class VulkanAssetRestoreTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.GPU)]
-    public void DestroySkipsAResourceThatBelongsToADestroyedDevice() {
+    public void DestroySkipsAResourceThatBelongsToADestroyedDevice()
+    {
         using BackendTestHost host = BackendTestHost.CreateOrSkip(hdr: WindowHdrState.Sdr);
         using AssetGpuUploadHarness harness = new(host.Backend);
         GpuAssetResource resource = harness.Upload(AssetUploadTestData.Texture());

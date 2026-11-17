@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
     <PropertyGroup>
         <!-- Shaderc returns raw pointers. The bake is build-time JIT tooling, so the unsafe surface
              never enters a runtime project or its AOT publish graph. -->
@@ -25,5 +24,4 @@
     </ItemGroup>
 
     <Import Project="$(MSBuildThisFileDirectory)..\..\..\build\RayBork.Shaderc.targets" />
-
 </Project>

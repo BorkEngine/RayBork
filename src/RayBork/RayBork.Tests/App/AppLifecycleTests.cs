@@ -3,13 +3,13 @@ using RayBork.Internal;
 
 namespace RayBork.Tests;
 
-public sealed class AppLifecycleTests {
+public sealed class AppLifecycleTests
+{
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetupTickAndShutdownRunOnTheNamedTickThread() {
-        ScriptedGame game = new() {
-            TickHandler = context => context.RequestExit(),
-        };
+    public void SetupTickAndShutdownRunOnTheNamedTickThread()
+    {
+        ScriptedGame game = new() { TickHandler = context => context.RequestExit() };
         using AppTestHost host = new(game);
 
         host.App.Run();
@@ -32,8 +32,10 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetupAndShutdownContinuationsResumeOnTheTickThread() {
-        ScriptedGame game = new() {
+    public void SetupAndShutdownContinuationsResumeOnTheTickThread()
+    {
+        ScriptedGame game = new()
+        {
             YieldInSetup = true,
             YieldInShutdown = true,
             TickHandler = context => context.RequestExit(),
@@ -49,10 +51,13 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void FirstTickHasZeroDeltaOneFrameAndAdvancingTime() {
+    public void FirstTickHasZeroDeltaOneFrameAndAdvancingTime()
+    {
         ScriptedGame game = new();
-        game.TickHandler = context => {
-            if (context.FrameCount >= 5) {
+        game.TickHandler = context =>
+        {
+            if (context.FrameCount >= 5)
+            {
                 context.RequestExit();
             }
         };
@@ -63,14 +68,18 @@ public sealed class AppLifecycleTests {
         Assert.Equal(0.0, game.FirstTickDeltaTime);
         Assert.True(game.FirstTickIsFirstTick);
         Assert.Equal(1L, game.FirstTickFrameCount);
-        Assert.True(game.FirstTickTime > 0.0, "Setup sees elapsed time because the clock starts before platform initialization.");
+        Assert.True(
+            game.FirstTickTime > 0.0,
+            "Setup sees elapsed time because the clock starts before platform initialization."
+        );
         Assert.True(game.LastTickTime > game.FirstTickTime);
         Assert.Equal(5L, game.LastTickFrameCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RequestExitFromATickCompletesTheTickAndStops() {
+    public void RequestExitFromATickCompletesTheTickAndStops()
+    {
         ScriptedGame game = new();
         game.TickHandler = context => context.RequestExit();
         using AppTestHost host = new(game);
@@ -85,7 +94,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WindowCloseRequestsExit() {
+    public void WindowCloseRequestsExit()
+    {
         ScriptedGame game = new();
         game.TickHandler = context => context.Window.Close();
         using AppTestHost host = new(game);
@@ -99,7 +109,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RequestExitBeforeRunStillRunsSetupAndShutdown() {
+    public void RequestExitBeforeRunStillRunsSetupAndShutdown()
+    {
         ScriptedGame game = new();
         using AppTestHost host = new(game);
 
@@ -113,9 +124,11 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RequestExitDuringSetupSkipsTicksButRunsShutdown() {
+    public void RequestExitDuringSetupSkipsTicksButRunsShutdown()
+    {
         ScriptedGame game = new();
-        game.SetupHandler = context => {
+        game.SetupHandler = context =>
+        {
             context.RequestExit();
             return Task.CompletedTask;
         };
@@ -130,11 +143,10 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PlatformReceivesConfiguredStartupOptions() {
+    public void PlatformReceivesConfiguredStartupOptions()
+    {
         FakeEnginePlatform platform = new();
-        ScriptedGame game = new() {
-            TickHandler = context => context.RequestExit(),
-        };
+        ScriptedGame game = new() { TickHandler = context => context.RequestExit() };
         RayBorkApp app = new RayBorkAppBuilder()
             .WithGame(game)
             .WithTitle("RayBork Window")
@@ -145,9 +157,12 @@ public sealed class AppLifecycleTests {
             .WithTargetFps(AppTestHost.FAST_TARGET_FPS)
             .Build(_ => platform, static () => new FakeRendererBackend(), TimeProvider.System);
 
-        try {
+        try
+        {
             app.Run();
-        } finally {
+        }
+        finally
+        {
             app.Dispose();
         }
 
@@ -163,11 +178,10 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void SetupFailureSkipsShutdownAndBecomesGameException() {
+    public void SetupFailureSkipsShutdownAndBecomesGameException()
+    {
         InvalidOperationException setupException = new("setup failed");
-        ScriptedGame game = new() {
-            SetupHandler = _ => Task.FromException(setupException),
-        };
+        ScriptedGame game = new() { SetupHandler = _ => Task.FromException(setupException) };
         using AppTestHost host = new(game);
 
         GameException thrown = Assert.Throws<GameException>(() => host.App.Run());
@@ -180,7 +194,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TickFailureStillRunsShutdown() {
+    public void TickFailureStillRunsShutdown()
+    {
         InvalidOperationException tickException = new("tick failed");
         ScriptedGame game = new();
         game.TickHandler = _ => throw tickException;
@@ -196,12 +211,11 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void TickAndShutdownFailuresProduceAnAggregateInnerException() {
+    public void TickAndShutdownFailuresProduceAnAggregateInnerException()
+    {
         InvalidOperationException tickException = new("tick failed");
         InvalidOperationException shutdownException = new("shutdown failed");
-        ScriptedGame game = new() {
-            ShutdownHandler = () => Task.FromException(shutdownException),
-        };
+        ScriptedGame game = new() { ShutdownHandler = () => Task.FromException(shutdownException) };
         game.TickHandler = _ => throw tickException;
         using AppTestHost host = new(game);
 
@@ -212,16 +226,19 @@ public sealed class AppLifecycleTests {
         Assert.Collection(
             aggregate.InnerExceptions,
             inner => Assert.Same(tickException, inner),
-            inner => Assert.Same(shutdownException, inner));
+            inner => Assert.Same(shutdownException, inner)
+        );
         Assert.Equal(1, game.TickCount);
         Assert.Equal(1, game.ShutdownCount);
     }
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void ShutdownOnlyFailureBecomesGameException() {
+    public void ShutdownOnlyFailureBecomesGameException()
+    {
         InvalidOperationException shutdownException = new("shutdown failed");
-        ScriptedGame game = new() {
+        ScriptedGame game = new()
+        {
             ShutdownHandler = () => Task.FromException(shutdownException),
             TickHandler = context => context.RequestExit(),
         };
@@ -236,7 +253,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PlatformInitializationFailurePropagatesUnchanged() {
+    public void PlatformInitializationFailurePropagatesUnchanged()
+    {
         PlatformException platformException = new("SDL initialization failed");
         using AppTestHost host = new(new ScriptedGame());
         host.Platform.InitializeException = platformException;
@@ -251,7 +269,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void WindowInitializationFailurePropagatesUnchanged() {
+    public void WindowInitializationFailurePropagatesUnchanged()
+    {
         WindowException windowException = new("window creation failed");
         using AppTestHost host = new(new ScriptedGame());
         host.Platform.InitializeException = windowException;
@@ -265,7 +284,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void PlatformPumpFailureBecomesPlatformExceptionWithOriginalInner() {
+    public void PlatformPumpFailureBecomesPlatformExceptionWithOriginalInner()
+    {
         InvalidOperationException pumpException = new("pump failed");
         using AppTestHost host = new(new ScriptedGame());
         host.Platform.PumpHook = _ => throw pumpException;
@@ -278,7 +298,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void IsRunningIsTrueDuringCallbacksAndFalseAfterRun() {
+    public void IsRunningIsTrueDuringCallbacksAndFalseAfterRun()
+    {
         bool runningDuringInitialize = false;
         bool runningDuringSetup = false;
         bool runningDuringTick = false;
@@ -287,15 +308,18 @@ public sealed class AppLifecycleTests {
         using AppTestHost host = new(new ScriptedGame());
         ScriptedGame game = host.Game;
         host.Platform.InitializeHook = () => runningDuringInitialize = host.App.IsRunning;
-        game.SetupHandler = _ => {
+        game.SetupHandler = _ =>
+        {
             runningDuringSetup = host.App.IsRunning;
             return Task.CompletedTask;
         };
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             runningDuringTick = host.App.IsRunning;
             context.RequestExit();
         };
-        game.ShutdownHandler = () => {
+        game.ShutdownHandler = () =>
+        {
             runningDuringShutdown = host.App.IsRunning;
             return Task.CompletedTask;
         };
@@ -311,13 +335,15 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void IsExitingBecomesTrueAfterRequestExit() {
+    public void IsExitingBecomesTrueAfterRequestExit()
+    {
         bool exitingBeforeRequest = true;
         bool exitingAfterRequest = false;
 
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.TickHandler = context => {
+        game.TickHandler = context =>
+        {
             exitingBeforeRequest = context.IsExiting;
             context.RequestExit();
             exitingAfterRequest = context.IsExiting;
@@ -331,13 +357,18 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeFromTheTickThreadThrows() {
+    public void DisposeFromTheTickThreadThrows()
+    {
         bool threw = false;
         using AppTestHost host = new(new ScriptedGame());
-        host.Game.TickHandler = context => {
-            try {
+        host.Game.TickHandler = context =>
+        {
+            try
+            {
                 host.App.Dispose();
-            } catch (InvalidOperationException) {
+            }
+            catch (InvalidOperationException)
+            {
                 threw = true;
             }
 
@@ -352,35 +383,48 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeFromAnotherThreadStopsARunningApp() {
+    public void DisposeFromAnotherThreadStopsARunningApp()
+    {
         using ManualResetEventSlim tickStarted = new(false);
         using ManualResetEventSlim releaseTick = new(false);
 
         ScriptedGame game = new();
         using AppTestHost host = new(game);
-        game.TickHandler = _ => {
+        game.TickHandler = _ =>
+        {
             tickStarted.Set();
             releaseTick.Wait(AppTestHost.TIMEOUT);
         };
 
         Exception? runFailure = null;
-        Thread runThread = new(() => {
-            try {
+        Thread runThread = new(() =>
+        {
+            try
+            {
                 host.App.Run();
-            } catch (Exception exception) {
+            }
+            catch (Exception exception)
+            {
                 runFailure = exception;
             }
         });
 
         runThread.Start();
-        try {
-            Assert.True(tickStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken));
+        try
+        {
+            Assert.True(
+                tickStarted.Wait(AppTestHost.TIMEOUT, TestContext.Current.CancellationToken)
+            );
 
             Exception? disposeFailure = null;
-            Thread disposeThread = new(() => {
-                try {
+            Thread disposeThread = new(() =>
+            {
+                try
+                {
                     host.App.Dispose();
-                } catch (Exception exception) {
+                }
+                catch (Exception exception)
+                {
                     disposeFailure = exception;
                 }
             });
@@ -394,7 +438,9 @@ public sealed class AppLifecycleTests {
             Assert.Null(disposeFailure);
             Assert.True(host.App.IsDisposed);
             Assert.False(host.App.IsRunning);
-        } finally {
+        }
+        finally
+        {
             releaseTick.Set();
             runThread.Join(AppTestHost.TIMEOUT);
         }
@@ -402,10 +448,9 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RunTwiceThrows() {
-        ScriptedGame game = new() {
-            TickHandler = context => context.RequestExit(),
-        };
+    public void RunTwiceThrows()
+    {
+        ScriptedGame game = new() { TickHandler = context => context.RequestExit() };
         using AppTestHost host = new(game);
 
         host.App.Run();
@@ -415,7 +460,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void RunAfterDisposeThrows() {
+    public void RunAfterDisposeThrows()
+    {
         using AppTestHost host = new(new ScriptedGame());
 
         host.App.Dispose();
@@ -425,7 +471,8 @@ public sealed class AppLifecycleTests {
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
-    public void DisposeIsIdempotent() {
+    public void DisposeIsIdempotent()
+    {
         using AppTestHost host = new(new ScriptedGame());
 
         host.App.Dispose();

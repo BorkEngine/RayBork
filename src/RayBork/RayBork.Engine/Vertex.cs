@@ -23,7 +23,8 @@ namespace RayBork;
 /// </para>
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
-public struct Vertex {
+public struct Vertex
+{
     /// <summary>
     /// The vertex position in mesh space.
     /// </summary>
@@ -88,7 +89,9 @@ public struct Vertex {
         Vector2? uv2 = null,
         Vector2? uv3 = null,
         Color? color = null,
-        Vector4? tangent = null) {
+        Vector4? tangent = null
+    )
+    {
         Position = position;
         Normal = normal ?? new Vector3(0f, 1f, 0f);
         Uv = uv ?? Vector2.Zero;
