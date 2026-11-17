@@ -1688,9 +1688,9 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
   warnings, contains `rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published
   host ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
-  `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The final suite is
-  2,977 tests, 239 of them GPU integration tests, and every sample solution builds; the lavapipe
-  Linux run reports 2,970 passed with 7 skipped HDR/scRGB-present tests. `samples/Text`,
+  `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The final M8 suite
+  was 2,977 tests, 239 of them GPU integration tests, and every sample solution built; the lavapipe
+  Linux run reported 2,970 passed with 7 skipped HDR/scRGB-present tests. `samples/Text`,
   `samples/Pong`, `samples/Castle`, and `samples/PrimitiveGallery` remain buildable and publishable
   samples but are not the M8 gate. M9 moves the gate to `samples/Input`: it is a single-project
   solution, `samples/Input/Input.slnx`, outside `src/RayBork/RayBork.slnx`, with no assets
@@ -1861,9 +1861,9 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   shutdown, close/stop, disposed and unknown targets including a target disposed after queueing, failure
   without target mutation, and target state preservation; `RenderTextureAppTests` covers an awaited
   `Setup` readback, a blocking `Tick` readback, and the post-shutdown `ObjectDisposedException` without
-  a deadlock. The final suite is 2,977 tests, 239 of them GPU integration tests, with no skips on the
-  Windows hardware path; the lavapipe Linux run reports 2,970 passed with the same 7 HDR/scRGB-present
-  skips, and its GPU-filtered run passes 232 with those 7 skips.
+  a deadlock. The final M8 suite was 2,977 tests, 239 of them GPU integration tests, with no skips on
+  the Windows hardware path; the lavapipe Linux run reported 2,970 passed with the same 7
+  HDR/scRGB-present skips, and its GPU-filtered run passed 232 with those 7 skips.
 - There are no golden-image tests. `VulkanReadback` copies one pixel through a staging buffer for the
   diagnostic probes and the full resolved color image for the public readback; the full-image path
   waits for the target's last-use fence, restores the layout, and is a screenshot/diagnostic path that

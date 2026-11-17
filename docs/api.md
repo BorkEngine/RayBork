@@ -541,8 +541,8 @@ orbit/zoom controls and the `--frames` and `--help` options.
 The samples set no tick target and request FIFO presentation, so the display refresh paces the tick
 thread; the engine default remains Mailbox for games that want the decoupled path. The published
 `win-x64` and `linux-x64` M6 hosts ran `--frames 30` to exit `0` with zero AOT/trim warnings, on the
-Windows hardware driver and on the conformant lavapipe software driver. The suite is 2,977 tests,
-239 of them GPU integration tests, and every sample solution builds. The Text
+Windows hardware driver and on the conformant lavapipe software driver. At M8 the suite was 2,977
+tests, 239 of them GPU integration tests, and every sample solution built. The Text
 sample is a plain user-facing example and contains no test-only draw assertion.
 
 `samples/Pong` was the M7 AOT gate and remains a buildable and publishable sample. It is a two-project
@@ -601,8 +601,8 @@ pack automatically. The Windows `win-x64` publish finished with zero AOT/trim wa
 `rendertarget.pck` beside `RenderTarget.exe` with no bake tooling; the published Windows host ran
 `--frames 30` to exit `0` on the hardware driver. The `linux-x64` publish also finished with zero
 warnings, contains `rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published host
-ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver. The Windows suite is
-2,977 tests with no skips (239 GPU); the lavapipe run is 2,970 passed with 7 skipped HDR/
+ran `--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver. At M8 the Windows
+suite was 2,977 tests with no skips (239 GPU); the lavapipe run was 2,970 passed with 7 skipped HDR/
 scRGB-present tests, because lavapipe exposes only SDR. The sample is a plain user-facing example and
 contains no test-only draw assertion.
 

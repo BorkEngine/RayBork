@@ -115,7 +115,9 @@ Semantics:
   committed text still arrives through `IInput.TextInput`.
 - Window setters are **Any**-thread safe. They are queued to the main thread and coalesced; a
   getter returns the last confirmed value, which may lag the setter by one event-pump cycle.
-  `SetClipboardText` follows the same queued, coalesced setter path.
+  `SetClipboardText` is queued on the same main-thread window-command path but is an ordered
+  action, not a coalesced setter: each call queues a separate write, reads and writes apply in
+  order, and `GetClipboardText` returns the last applied text.
 - `GetClipboardText` returns the last cached clipboard snapshot immediately and queues a
   main-thread read that a later event-pump cycle refreshes.
 - `Monitors` and `CurrentMonitor` are snapshots. Monitor indices are stable for the process
