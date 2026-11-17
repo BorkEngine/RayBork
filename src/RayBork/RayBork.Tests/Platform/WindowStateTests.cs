@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using RayBork.Internal;
 using SDL3;
 
@@ -6,6 +7,31 @@ namespace RayBork.Tests;
 [Collection("SDL")]
 public sealed class WindowStateTests
 {
+    private static readonly MonitorInfo _firstMonitor = new(
+        10,
+        "First",
+        new Rect(0f, 0f, 1920f, 1080f),
+        new Rect(0f, 0f, 1920f, 1040f),
+        1f,
+        60
+    );
+    private static readonly MonitorInfo _secondMonitor = new(
+        20,
+        "Second",
+        new Rect(1920f, 0f, 2560f, 1440f),
+        new Rect(1920f, 0f, 2560f, 1400f),
+        1.5f,
+        144
+    );
+    private static readonly MonitorInfo _thirdMonitor = new(
+        30,
+        "Third",
+        new Rect(-1280f, 0f, 1280f, 720f),
+        new Rect(-1280f, 0f, 1280f, 720f),
+        2f,
+        75
+    );
+
     [Theory]
     [InlineData(true, false, false)]
     [InlineData(false, true, false)]
@@ -149,19 +175,39 @@ public sealed class WindowStateTests
         IntPtr handle = GetHandle(host);
         DrainWindowEvents(host);
 
-        window.SetMinSize(200, 150);
-        window.SetMaxSize(800, 600);
-        host.Platform.Pump(TimeSpan.Zero);
-
-        bool gotMinimum = SDL.GetWindowMinimumSize(handle, out int minWidth, out int minHeight);
-        if (!gotMinimum || minWidth != 200 || minHeight != 150)
+        // SDL stores the minimum and maximum size in its common layer, so a raw round trip decides
+        // whether the driver supports reporting the constraint. A later mismatch after the engine
+        // call can then only mean the engine failed to queue or apply it, not driver incapacity.
+        if (
+            !SDL.SetWindowMinimumSize(handle, 64, 48)
+            || !SDL.GetWindowMinimumSize(handle, out int probeMinWidth, out int probeMinHeight)
+            || probeMinWidth != 64
+            || probeMinHeight != 48
+        )
         {
-            Assert.Skip("The dummy video driver does not apply window minimum sizes.");
+            Assert.Skip("The dummy video driver does not report window minimum sizes.");
         }
 
+        if (
+            !SDL.SetWindowMaximumSize(handle, 1280, 1024)
+            || !SDL.GetWindowMaximumSize(handle, out int probeMaxWidth, out int probeMaxHeight)
+            || probeMaxWidth != 1280
+            || probeMaxHeight != 1024
+        )
+        {
+            Assert.Skip("The dummy video driver does not report window maximum sizes.");
+        }
+
+        window.SetMinSize(240, 180);
+        window.SetMaxSize(900, 700);
+        host.Platform.Pump(TimeSpan.Zero);
+
+        Assert.True(SDL.GetWindowMinimumSize(handle, out int minWidth, out int minHeight));
+        Assert.Equal(240, minWidth);
+        Assert.Equal(180, minHeight);
         Assert.True(SDL.GetWindowMaximumSize(handle, out int maxWidth, out int maxHeight));
-        Assert.Equal(800, maxWidth);
-        Assert.Equal(600, maxHeight);
+        Assert.Equal(900, maxWidth);
+        Assert.Equal(700, maxHeight);
     }
 
     [Fact]
@@ -269,6 +315,42 @@ public sealed class WindowStateTests
         Assert.IsType<ArgumentOutOfRangeException>(invalidFailure);
 
         host.Platform.Pump(TimeSpan.Zero);
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void SetMonitorAcceptsAStableIndexThatLeavesAGapInTheWindowSnapshot()
+    {
+        using SdlTestHost host = SdlTestHost.Create();
+        IntPtr handle = GetHandle(host);
+
+        // Removing the middle display keeps its stable index reserved, so the snapshot holds
+        // indices 0 and 2 while Count is 2. The count is not an upper bound for a stable index, so
+        // the window must validate against the indices themselves or it rejects a valid monitor.
+        MonitorRegistry registry = new();
+        registry.Update([_firstMonitor, _secondMonitor, _thirdMonitor], _firstMonitor.DisplayId);
+        registry.Update([_firstMonitor, _thirdMonitor], _firstMonitor.DisplayId);
+        SdlWindow window = new(
+            handle,
+            registry,
+            NullLogger.Instance,
+            "Monitor gap",
+            320,
+            200,
+            () => { }
+        );
+
+        window.RefreshSnapshot();
+
+        Assert.Equal(2, window.Monitors.Count);
+        Assert.Equal(0, window.Monitors[0].Index);
+        Assert.Equal(2, window.Monitors[1].Index);
+        Assert.Null(Record.Exception(() => window.SetMonitor(2)));
+        Assert.IsType<ArgumentOutOfRangeException>(Record.Exception(() => window.SetMonitor(1)));
+
+        // Drain the accepted move so no command outlives the test window and the queue path is
+        // exercised for the gap index.
+        Assert.True(window.ApplyCommands());
     }
 
     private static IntPtr GetHandle(SdlTestHost host)
