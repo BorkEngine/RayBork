@@ -2,7 +2,7 @@ namespace RayBork.Tests;
 
 internal static class RepositoryLayout
 {
-    private const string ROOT_MARKER_FILE = "AGENTS.md";
+    private const string ROOT_MARKER_FILE = "global.json";
     private const string SOLUTION_RELATIVE_PATH = "src/RayBork/RayBork.slnx";
 
     private static readonly Lazy<string> _root = new(FindRoot);
