@@ -152,8 +152,10 @@ and candidate-list events are ignored, so composition preview and candidate list
 non-contiguous indices after a hotplug are handled; an asynchronous fullscreen entry keeps its
 borderless or exclusive kind, remembers size and monitor commands until it is confirmed, and is
 cancelled cleanly when abandoned. M9 also adds the input and window test coverage: the suite is now
-3,024 tests, 239 of them GPU integration tests, the Windows full run is 3,023 passed with one
-dummy-driver borderless check skipped, and the `Category=Gpu` filter is 239 passed with no skips.
+3,024 tests, 239 of them GPU integration tests; the Windows full run on the hardware driver is 3,023
+passed, 0 failed, and 1 skipped (a dummy-driver borderless check), and the `Category=Gpu` filter is
+239 passed with no skips. No M9 lavapipe run is recorded here; the milestone gate records it in the
+work report.
 `samples/Input` is the new permanent M9 sample and Native AOT gate: a single-project solution with
 no assets executable, no pack, and no `--assets` argument that exercises the text field and
 committed IME text, the clipboard, cursor modes and `IsCursorOnScreen`, fullscreen and borderless,
@@ -295,7 +297,7 @@ samples/Pong/                 M7 sample (was the M7 Native AOT gate; player-vs-A
                               HUD, and the scene-camera bloom stack)
   Pong.slnx                   sample-owned solution (sample + assets executable)
   Pong.Assets/                JIT assets executable (bakes and copies pong.pck at sample build time)
-samples/RenderTarget/         M8 sample (was the M8 Native AOT gate; offscreen render texture,
+samples/RenderTarget/         M8 sample, was the M8 Native AOT gate (offscreen render texture,
                               monitor sample, split-screen cameras, baked vignette post shader, and
                               readback screenshot)
   RenderTarget.slnx           sample-owned solution (sample + assets executable)

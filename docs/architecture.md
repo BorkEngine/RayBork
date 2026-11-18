@@ -50,7 +50,7 @@ last-use fence and restore its resolved layout. Camera post-process stacks build
 images: a target-sized `Rgba16Float` chain with a camera-viewport store-back, on the scene target and
 on a `RenderTexture` target (see [Post-process execution](#post-process-execution)), plus the built-in
 `SsaoEffect` and `BloomEffect` on the same hooks. The RenderTarget
-sample ships as the M8 sample and Native AOT gate: it draws a procedural scene into a `640x360`
+sample is the M8 sample and was the M8 Native AOT gate: it draws a procedural scene into a `640x360`
 `Rgba16Float` render texture, samples the target on a monitor in a later camera pass, toggles a
 two-camera split-screen view, runs a baked custom vignette post shader, and reads the target back to a
 24-bit uncompressed BMP screenshot (bottom-up BGR, alpha dropped).
@@ -87,7 +87,7 @@ RayBork.Bake  ──────> RayBork.Engine (pack writer/types), Tomlyn, St
 build/RayBork.BuiltInAssets -> RayBork.Bake, RayBork.Engine (JIT build-time generator)
 samples/Pong -> RayBork.Engine (M7 sample, was the M7 Native AOT gate)
 samples/Pong/Pong.Assets -> RayBork.Bake, samples/Pong (M7 assets executable, JIT)
-samples/RenderTarget -> RayBork.Engine (M8 sample and Native AOT gate)
+samples/RenderTarget -> RayBork.Engine (M8 sample, was the M8 Native AOT gate)
 samples/RenderTarget/RenderTarget.Assets -> RayBork.Bake (M8 assets executable, JIT)
 samples/Input -> RayBork.Engine (M9 sample and Native AOT gate, single project, no pack)
 samples/Text -> RayBork.Engine (M6 sample, was the M6 Native AOT gate)
@@ -106,7 +106,7 @@ Samples (M11) -> RayBork.Engine
 | `RayBork.Tests` | xUnit v3 + Moq. Unit tests, architecture/dependency tests, GPU integration tests, AOT publish smoke tests. No golden-image suite. |
 | `samples/Pong` | M7 sample, was the M7 Native AOT gate: a player-vs-AI match in two orthographic screen-space passes (a scene pass with the bloom stack and a later stackless HUD pass). It mounts the adjacent `pong.pck` produced by `Pong.Assets`, fits a `1280x720` design space into the render pixels, anchors every draw with `ScreenToWorldTransform`, draws the playfield, border, net, panels, textured paddles, and shaded overlay with `DrawQuad`, the ball with `DrawDisc`, and the scores, status line, and pause/winner overlay with `DrawText` in the built-in mono face. The left paddle is the human; the right paddle is a deterministic AI that tracks the ball while it approaches and returns to center otherwise, moving at `AiPaddleSpeed` inside the fixed substeps. Every paddle hit adds `BallSpeedupPerHit` to the ball speed up to `MaxBallSpeed`, and ball, paddle, and wall hits flash HDR colors above the raised bloom threshold. It simulates with fixed `1/120` substeps and `Collision.CheckBoxSphere` paddle collisions, accepts W/S, Up/Down, and gamepad 0 left stick or d-pad for the left paddle, and exits on Escape or `--frames`. |
 | `samples/Pong/Pong.Assets` | M7 assets executable: references `RayBork.Bake` and the `samples/Pong` project (so `PongSettings` has one definition), bakes `pong.pck` from the checked-in original paddle PNG and the `Pong.PongSettings` TOML data at sample build time, and copies it beside the sample executable. JIT only. |
-| `samples/RenderTarget` | M8 sample and Native AOT gate: up to four camera passes per tick. An offscreen perspective camera draws a procedural scene into a `640x360` `Rgba16Float` render texture with depth and 4x MSAA; the single scene camera (or two half-width split-screen cameras, `S`) draws the main procedural scene and samples the target's `ColorTexture` on a monitor; a later orthographic HUD camera loads the scene color and clears depth. The single scene camera runs an app-lifetime `PostProcessStack` with one baked custom vignette/tint `ShaderPostProcessEffect` (`E`), and `F2` reads both readback methods and writes a 24-bit uncompressed BMP screenshot. The split cameras stay stackless because an M8 viewport effect's source is the full target. It mounts its adjacent `rendertarget.pck` and exits on Escape or `--frames`. |
+| `samples/RenderTarget` | M8 sample, was the M8 Native AOT gate: up to four camera passes per tick. An offscreen perspective camera draws a procedural scene into a `640x360` `Rgba16Float` render texture with depth and 4x MSAA; the single scene camera (or two half-width split-screen cameras, `S`) draws the main procedural scene and samples the target's `ColorTexture` on a monitor; a later orthographic HUD camera loads the scene color and clears depth. The single scene camera runs an app-lifetime `PostProcessStack` with one baked custom vignette/tint `ShaderPostProcessEffect` (`E`), and `F2` reads both readback methods and writes a 24-bit uncompressed BMP screenshot. The split cameras stay stackless because an M8 viewport effect's source is the full target. It mounts its adjacent `rendertarget.pck` and exits on Escape or `--frames`. |
 | `samples/RenderTarget/RenderTarget.Assets` | M8 assets executable: references `RayBork.Bake`, bakes `rendertarget.pck` from the checked-in vignette shader sources at sample build time, and copies it beside the sample executable. JIT only. |
 | `samples/Input` | M9 sample and Native AOT gate: a single-project solution with no assets executable, no pack, and no `--assets` argument, so the engine's built-in pack supplies its shaders and fonts. It draws a screen-space HUD with a text field that appends committed `IInput.TextInput`, a window/monitor panel, a gamepad panel, an event log, and a status line. The field copies, cuts, and pastes through `IWindow.SetClipboardText`/`GetClipboardText`, blinks a caret, and calls `IWindow.SetTextInputArea` each drawn tick so native IME candidates follow the field. The playground toggles fullscreen with `Alt+Enter` and borderless with `B`, cycles cursor modes with `C`, moves across monitors in stable-index order with `M`, requests rumble on `R` and the gamepad South button, and exits on Escape or `--frames`. |
 | `samples/PrimitiveGallery` | M5 sample, was the M5 Native AOT gate: draws the M5 primitive helpers in one perspective pass at 800x450, builds its only texture at runtime, and has no assets executable or pack. It mounts the engine's built-in pack only and runs until the close request, Escape, or `--frames`. It also draws a presented-FPS/render-statistics status line in the built-in mono face, anchored with `ScreenToWorldTransform`, and runs the built-in SSAO effect by default with an `A` toggle. |
@@ -177,7 +177,7 @@ built-in pack; the M6 gate loaded the built-in Fira Sans and JetBrains Mono face
 face from its own `text.pck`, generated glyph textures on demand, and drew the text scene; the M7
 gate was `samples/Pong`, which loaded the baked `Pong.PongSettings` data and paddle texture from its
 own `pong.pck`, played the player-vs-AI match through `DrawQuad`/`DrawDisc`/`DrawText` on
-`ScreenToWorldTransform`, and exited; the M8 gate is `samples/RenderTarget`, which loads its baked
+`ScreenToWorldTransform`, and exited; the M8 gate was `samples/RenderTarget`, which loads its baked
 vignette shader from `rendertarget.pck`, creates the offscreen `RenderTexture`, records the
 offscreen/scene/split/HUD passes, runs the custom post-process chain, and exits. Both publishes must
 finish with zero AOT/trim warnings. The
@@ -248,10 +248,10 @@ The implementation:
   while an entry is pending, and `WindowLeaveFullscreen` cancels an abandoned pending entry without
   clearing a confirmed kind. The dummy test driver confirms synchronously, so the real asynchronous
   entry and leave behavior remains a manual check.
-- The M9 input matrix tests cover the key and text-input paths, cursor-on-screen tracking, the
-  text-input area, gamepad mapping/hotplug/rumble, window state, and monitor-index validation; the
-  `samples/Input` sample is the M9 sample and Native AOT gate and is a single-project solution with
-  no assets executable and no pack.
+- The M9 input matrix tests cover the key and text-input paths, cursor-on-screen tracking and the
+  text-input area, gamepad mapping and vibration/rumble, window state, and monitor-index validation;
+  the `samples/Input` gamepad panel covers hotplug. The `samples/Input` sample is the M9 sample and
+  Native AOT gate and is a single-project solution with no assets executable and no pack.
 - `SdlInput` writes keyboard, mouse, text, and gamepad events into `InputState` under a `Lock`.
   SDL reports mouse position and relative motion in window coordinates, so `SdlInput` scales both
   axes by the window snapshot's `RenderWidth / Width` and `RenderHeight / Height` ratios at
@@ -1701,9 +1701,11 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   AOT/trim warnings and the publish directory must contain no bake tooling; the milestone lead runs
   that publish gate, the sample's build and `--frames 30` run are the local checks, and the sample
   README carries the exact commands. The final M9 suite is 3,024 tests, 239 of them GPU integration
-  tests, with 3,023 passed and one dummy-driver borderless skip. `samples/RenderTarget` remains the
-  M8 sample and gate and stays buildable and publishable. The M1-M3 diagnostic host was removed in
-  M7.
+  tests: the Windows full run on the hardware driver is 3,023 passed, 0 failed, and 1 skipped (a
+  dummy-driver borderless check), and the `Category=Gpu` filter is 239 passed with no skips. No M9
+  lavapipe run is recorded here; the milestone gate records it in the work report.
+  `samples/RenderTarget` was the M8 Native AOT gate and remains the M8 sample, buildable and
+  publishable. The M1-M3 diagnostic host was removed in M7.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the
   built-in pack descriptor decode in every AOT gate, and by the sample-pack descriptor decode in the
   gates that mount a user pack (M4 `samples/Castle`, M6 `samples/Text`, M7 `samples/Pong`, and M8
@@ -1896,9 +1898,9 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
 6. Public API never exposes a native handle or a backend type.
 7. A game assembly published with `PublishAot=true` must start, load the assets it needs (a pack,
    procedural assets, or both), draw where the milestone has a draw path, and shut down. The M8 gate
-   sample bakes and loads `rendertarget.pck`, creates an offscreen render texture, records the
-   offscreen, scene, and HUD passes (or the two split-screen passes), runs a custom post-process
-   chain, and exits.
+   sample baked and loaded `rendertarget.pck`, created an offscreen render texture, recorded the
+   offscreen, scene, and HUD passes (or the two split-screen passes), ran a custom post-process
+   chain, and exited.
 8. Depth is reverse-Z everywhere: projection, clear, compare, and tests.
 9. The public surface is renderer-agnostic; swapping the backend does not change game code.
 10. The engine's built-in pack is always mounted first; it has 46 entries and supplies the present

@@ -147,9 +147,10 @@ public enum GamepadTrigger {
   `null` when disconnected. Handles are stable objects; `IsConnected` becomes false on removal.
 - Axes are raw `[-1, 1]`; triggers are `[0, 1]`. RayBork applies **no deadzone**; games choose
   their own. SDL's gamecontroller mapping database supplies the button/axis mapping.
-- Hotplug is polled at tick boundaries. Rumble is best-effort; an unsupported device logs at Debug
-  and ignores the call.
-- Hotplug, the stable `InstanceId`, and duration-bounded `SetVibration`/`StopVibration` are verified
-  in M9: the input matrix tests and the `samples/Input` gamepad panel exercise them, and M9 adds no
-  new gamepad API.
+- The platform reconciles the connected pads on gamepad added/removed events and polls about every
+  0.25 s; the tick only snapshots the resulting list. Rumble is best-effort; an unsupported device
+  logs at Debug and ignores the call.
+- Hotplug, the stable `InstanceId`, and the vibration surface (`SetVibration` with its duration, and
+  `StopVibration`) are verified in M9: the input matrix tests cover gamepad mapping and
+  vibration/rumble, the `samples/Input` gamepad panel covers hotplug, and M9 adds no new gamepad API.
 - Touch, motion sensors, and haptics beyond simple rumble are post-1.0.

@@ -4,8 +4,11 @@ namespace RayBork;
 /// Snapshot-based access to the application window.
 /// </summary>
 /// <remarks>
-/// Getters return the last confirmed snapshot and are safe to call from any thread. Setters are queued
-/// to the main window thread and coalesced; a getter may lag a setter by one event-pump cycle.
+/// Getters return the last confirmed snapshot and are safe to call from any thread. Value setters are
+/// queued to the main window thread and coalesced; a getter may lag a setter by one event-pump cycle.
+/// Clipboard writes and the refresh read are ordered actions on the same main-thread window queue,
+/// not coalesced value setters: each call is applied in order, and <see cref="GetClipboardText"/>
+/// returns the last applied text immediately.
 /// </remarks>
 public interface IWindow
 {

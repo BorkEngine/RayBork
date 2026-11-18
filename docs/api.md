@@ -37,7 +37,7 @@ and `Camera.DrawGrid(Transform, ...)` primitives, and the ninth primitive mesh, 
 world-space. The M7 Native AOT gate was `samples/Pong`, an orthographic player-vs-AI match drawn
 through `ScreenToWorldTransform` with `DrawQuad`, `DrawDisc`, and `DrawText`. M8 ships render targets
 and multiple camera passes, the camera post-process stack with built-in SSAO and bloom, and the
-RenderTarget sample and Native AOT gate; the shipped surface is listed in
+RenderTarget sample, which was the M8 Native AOT gate; the shipped surface is listed in
 [§1.6](#16-milestone-availability), the render target and camera-pass contract in
 [§7.11](api/rendering/render-targets.md#711-render-targets-and-multiple-cameras), and the
 post-process surface in
@@ -196,7 +196,7 @@ N8AO-derived SSAO with baked quality variants and blue noise, the built-in fast 
 `BloomEffect` with its half-resolution prefilter, five-level HDR pyramid, scatter and tint settings,
 and a camera-target-sized composite, and viewport store-back on the scene target and on a
 `RenderTexture` target; the post-processed output is what the RenderTarget sample and both readback
-methods observe. The RenderTarget sample ships as the M8 sample and Native AOT gate: it renders a
+methods observe. The RenderTarget sample shipped as the M8 sample and Native AOT gate: it renders a
 procedural scene into a `640x360` `Rgba16Float` render texture, samples it on a monitor in a later
 camera, toggles a two-camera split-screen view with `S`, applies a baked custom vignette/tint post
 shader with `E`, and reads the offscreen target back to a 24-bit uncompressed BMP screenshot with `F2`.
@@ -443,7 +443,7 @@ render area, so split-screen views, viewport-scoped clears, and layered HUD came
 one frame. The shader ABI v2 provides per-pass frame data: every camera pass in a frame writes its own
 256-byte frame block and a push-constant pass index selects it, so multiple cameras with different
 views read their own matrices, camera position, and viewport. `samples/Pong` is the M7 sample,
-`samples/RenderTarget` is the M8 sample and Native AOT gate, and `samples/Castle` and
+`samples/RenderTarget` is the M8 sample and was the M8 Native AOT gate, and `samples/Castle` and
 `samples/PrimitiveGallery` draw their status lines through
 the same screen transform.
 
@@ -488,13 +488,14 @@ preview and candidate lists are post-1.0; the text input area only places the na
 window. `SetMonitor` validates a stable index against the entries in `Monitors`, so indices may be
 non-contiguous after a hotplug, and an asynchronous fullscreen entry keeps its borderless or
 exclusive kind while size and monitor commands are remembered for the windowed restore. M9 adds the
-input matrix tests for keyboard and text input, gamepad mapping, hotplug, rumble, and the window
-state and monitor-index validation paths; the gamepad API is unchanged. The rest of §8 and §9 is
+input matrix tests for keyboard and text input, gamepad vibration/rumble, window state,
+monitor-index, and cursor and text-input area paths; the gamepad API is unchanged, and the
+`samples/Input` gamepad panel covers hotplug. The rest of §8 and §9 is
 unchanged. `samples/Input` is the M9 sample and Native AOT gate: a single-project solution with no
 assets executable and no pack that exercises the text field and committed IME text, the clipboard,
 cursor modes and `IsCursorOnScreen`, fullscreen and borderless, stable monitor indices, DPI and
-resize, the focus cap, and gamepad hotplug and rumble. `samples/RenderTarget` remains the M8 sample
-and Native AOT gate.
+resize, the focus cap, and gamepad hotplug and rumble. `samples/RenderTarget` is the M8 sample and was
+the M8 Native AOT gate.
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and
@@ -581,7 +582,7 @@ warnings, contains `pong.pck` beside `Pong` and no bake tooling, and the publish
 `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. The sample is a plain
 user-facing example and contains no test-only draw assertion.
 
-`samples/RenderTarget` is the M8 sample and Native AOT gate. It is a two-project solution,
+`samples/RenderTarget` is the M8 sample and was the M8 Native AOT gate. It is a two-project solution,
 `samples/RenderTarget/RenderTarget.slnx`, outside `src/RayBork/RayBork.slnx`: the sample and a JIT
 `RenderTarget.Assets` executable that bakes `rendertarget.pck` from the sample's vignette post-process
 shader and copies it beside the sample executable and into the publish directory, so the sample has no
