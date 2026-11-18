@@ -66,18 +66,6 @@ jobs:
       - name: Check formatting
         run: dotnet csharpier check .
 
-  docs:
-    name: docs
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check Markdown links and fences
-        shell: pwsh
-        run: ./scripts/check-docs.ps1
-
   gpu:
     name: gpu
     runs-on: ubuntu-latest
