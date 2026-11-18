@@ -7,7 +7,7 @@ It aims for the ergonomics of raylib with a modern bindless, instanced renderer:
 frame-scoped draw API, assets from a baked pack, text, and enough 3D/2D primitives to ship a small
 game without adopting a scene graph or an ECS.
 
-**Status: M8 shipped.** The engine opens an SDL3 window, runs
+**Status: M9 shipped.** The engine opens an SDL3 window, runs
 `Setup`/`Tick`/`Shutdown` on a dedicated tick thread, and presents through a Vulkan 1.2 backend: a
 linear HDR scene target, Godot 4.7's HDR-aware AgX tone mapping, scRGB HDR output when the window
 reports HDR, MSAA with color resolve, reverse-Z depth, bounded recovery, and a Native AOT gate. M3
@@ -129,16 +129,37 @@ fast dual-filter half-resolution prefilter, a five-level HDR pyramid, tent upsam
 and a camera-target-sized composite; `Pong` enables it on its scene camera only and toggles it with
 `B`, and its ball, paddle, and wall collision flashes carry gold and warm-white HDR values above the
 raised threshold.
-`samples/RenderTarget` is the M8 sample and Native AOT gate: it renders a procedural scene into a
-`640x360` `Rgba16Float` render texture, samples the target on a monitor in a later camera, toggles a
-two-camera split-screen view with `S`, applies a baked custom vignette/tint post shader with `E`, and
-reads the offscreen target back to a 24-bit uncompressed BMP screenshot with `F2` (bottom-up BGR rows,
-opaque alpha dropped, no image codec or package). The suite is 2,977 tests, 239 of them GPU integration
-tests, and every sample builds. The Windows
-hardware path runs all 2,977 with no skips (239 GPU); the conformant lavapipe Linux path
-reports 2,970 passed, 0 failed, and 7 skipped, because lavapipe exposes only SDR and
-the seven existing HDR/scRGB-present tests report the skip; its GPU-filtered run is
-232 passed with the same 7 skips.
+`samples/RenderTarget` is the M8 sample and was the M8 Native AOT gate: it renders a procedural
+scene into a `640x360` `Rgba16Float` render texture, samples the target on a monitor in a later
+camera, toggles a two-camera split-screen view with `S`, applies a baked custom vignette/tint post
+shader with `E`, and reads the offscreen target back to a 24-bit uncompressed BMP screenshot with
+`F2` (bottom-up BGR rows, opaque alpha dropped, no image codec or package). At M8 the suite was 2,977
+tests, 239 of them GPU integration tests, and every sample built. The Windows hardware path ran all
+2,977 with no skips (239 GPU); the conformant lavapipe Linux path reported 2,970 passed, 0 failed,
+and 7 skipped, because lavapipe exposes only SDR and the seven existing HDR/scRGB-present tests
+report the skip; its GPU-filtered run was 232 passed with the same 7 skips.
+M9 adds the input and window polish. `IWindow` gains `IsCursorOnScreen`, an Any-thread snapshot that
+is true while the pointer is over the client area, is unaffected by `CursorMode`, is false while the
+window is minimized or hidden, and refreshes from the platform on a focus change, and
+`SetTextInputArea`, an Any-thread queued, coalesced setter in logical window units, the same units
+as `Width` and `Height` and not render pixels, whose non-negative `cursorOffset` is relative to
+`area.X`; a zero width or height clears the platform area, and the call only places the native
+candidate window. IME is committed-only: SDL text input starts on startup, restarts on focus gain,
+restore, or show when the window is focused and visible, stops on focus loss, minimize, hide, and
+dispose, typed and IME-committed text arrives through `IInput.TextInput`, and the SDL text-editing
+and candidate-list events are ignored, so composition preview and candidate lists stay post-1.0.
+`SetMonitor` validates a stable index against the entries in `Monitors`, not the snapshot count, so
+non-contiguous indices after a hotplug are handled; an asynchronous fullscreen entry keeps its
+borderless or exclusive kind, remembers size and monitor commands until it is confirmed, and is
+cancelled cleanly when abandoned. M9 also adds the input and window test coverage: the suite is now
+3,024 tests, 239 of them GPU integration tests; the Windows full run on the hardware driver is 3,023
+passed, 0 failed, and 1 skipped (a dummy-driver borderless check), and the `Category=Gpu` filter is
+239 passed with no skips. No M9 lavapipe run is recorded here; the milestone gate records it in the
+work report.
+`samples/Input` is the new permanent M9 sample and Native AOT gate: a single-project solution with
+no assets executable, no pack, and no `--assets` argument that exercises the text field and
+committed IME text, the clipboard, cursor modes and `IsCursorOnScreen`, fullscreen and borderless,
+stable monitor indices, DPI and resize, the focus cap, and gamepad hotplug and rumble.
 WSLg's hardware Vulkan path (Mesa dzn) is not a target. The host, window, input, time, and logging
 surface shipped in M1; the renderer foundation shipped in M2.
 The rest of the API reference remains the 1.0 contract and is delivered by the milestones listed in
@@ -276,11 +297,15 @@ samples/Pong/                 M7 sample (was the M7 Native AOT gate; player-vs-A
                               HUD, and the scene-camera bloom stack)
   Pong.slnx                   sample-owned solution (sample + assets executable)
   Pong.Assets/                JIT assets executable (bakes and copies pong.pck at sample build time)
-samples/RenderTarget/         M8 sample and Native AOT gate (offscreen render texture, monitor
-                              sample, split-screen cameras, baked vignette post shader, and readback
-                              screenshot)
+samples/RenderTarget/         M8 sample, was the M8 Native AOT gate (offscreen render texture,
+                              monitor sample, split-screen cameras, baked vignette post shader, and
+                              readback screenshot)
   RenderTarget.slnx           sample-owned solution (sample + assets executable)
   RenderTarget.Assets/        JIT assets executable (bakes rendertarget.pck at sample build time)
+samples/Input/                M9 sample and Native AOT gate (text field and committed IME text,
+                              clipboard, cursor modes, fullscreen/borderless, monitor/DPI panel,
+                              gamepad panel, and event log; no pack)
+  Input.slnx                  sample-owned solution (single project)
 samples/Text/                 M6 sample (was the M6 Native AOT gate; world-space text with two
                               proportional faces and a mono status line)
   Text.slnx                   sample-owned solution (sample + assets executable)
@@ -317,7 +342,9 @@ solution builds the sample and then the JIT assets executable; the assets build 
 with the paddle texture and the `Pong.PongSettings` data beside the executable, and the sample
 loads it automatically, so it has no `--assets` argument. The RenderTarget build bakes
 `rendertarget.pck` with the sample's vignette post-process shader beside the executable, and the
-sample loads it automatically. The Castle build bakes `castle.pck`
+sample loads it automatically. The Input solution is a single project with no assets executable and
+no pack: it draws with the engine's built-in pack and needs no `--assets` argument. The Castle
+build bakes `castle.pck`
 beside the executable, and the sample loads it automatically; `--assets` is only an optional
 override. The Text build bakes `text.pck` with the custom Lora face beside the executable and loads
 it automatically; the built-in Fira Sans and JetBrains Mono faces come from the engine's built-in
@@ -328,6 +355,8 @@ dotnet build samples/Pong/Pong.slnx -c Debug
 dotnet run --project samples/Pong/Pong.csproj -c Debug -- --frames 30
 dotnet build samples/RenderTarget/RenderTarget.slnx -c Debug
 dotnet run --project samples/RenderTarget/RenderTarget.csproj -c Debug -- --frames 30
+dotnet build samples/Input/Input.slnx -c Debug
+dotnet run --project samples/Input/Input.csproj -c Debug -- --frames 30
 dotnet build samples/Text/Text.slnx -c Debug
 dotnet run --project samples/Text/Text.csproj -c Debug -- --frames 30
 dotnet build samples/Castle/Castle.slnx -c Debug
@@ -341,6 +370,9 @@ match, its settings asset, its original paddle art, its bloom stack, and its con
 [samples/RenderTarget/README.md](samples/RenderTarget/README.md) covers the offscreen target, the
 split-screen cameras, the custom post shader, the readback screenshot, its Native AOT publish and run
 commands, and its controls;
+[samples/Input/README.md](samples/Input/README.md) covers the text field, the committed IME
+contract, the window/monitor and gamepad panels, its Native AOT publish and run commands, and the
+interactive checks;
 [samples/Text/README.md](samples/Text/README.md) covers the
 text scene, its layout demonstration, its Native AOT publish and run commands, and its controls;
 [samples/PrimitiveGallery/README.md](samples/PrimitiveGallery/README.md) covers the gallery scene, its
@@ -352,9 +384,36 @@ regenerated with `pwsh scripts/compile-shaders.ps1` and the Vulkan SDK; a normal
 committed blobs. The bake, the built-in pack generator, and the sample builds compile their GLSL with
 the pinned native shaderc package; they do not need the Vulkan SDK.
 
-`samples/RenderTarget` is the M8 Native AOT gate. Build the solution in Release first so
-`RenderTarget.Assets` bakes and copies `rendertarget.pck`, then publish and run it from the
-repository root:
+`samples/Input` is the M9 Native AOT gate. It is a single-project solution with no assets executable,
+no pack, and no bake step, so it publishes directly from the repository root without a Release
+solution build or an `--assets` argument. Publish and run the Windows host:
+
+```powershell
+dotnet publish samples/Input/Input.csproj -c Release -r win-x64 -p:PublishAot=true
+samples/Input/bin/Release/net11.0/win-x64/publish/Input.exe --frames 30
+```
+
+From the WSL clone under `$HOME` (never `/mnt/d`), publish the Linux host with the WSL .NET and run it
+on the WSLg display with the conformant lavapipe ICD:
+
+```bash
+$HOME/.dotnet/dotnet publish samples/Input/Input.csproj -c Release -r linux-x64 -p:PublishAot=true
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json \
+DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
+  samples/Input/bin/Release/net11.0/linux-x64/publish/Input --frames 30
+```
+
+Both publishes must finish with zero AOT/trim warnings. Because the sample has no asset pack, its
+publish directory contains no `.pck` and must not contain `RayBork.Bake.dll`, Tomlyn, StbImageSharp,
+BCnEncoder, the shaderc native libraries, or the glTF packages. The milestone lead runs the publish
+gate and both host runs; the work report records the results. The sample's build and `--frames 30`
+run are the local checks, and [samples/Input/README.md](samples/Input/README.md) carries the same
+commands and the interactive IME, fullscreen, monitor, DPI, focus-cap, and gamepad checks for the
+user.
+
+`samples/RenderTarget` was the M8 Native AOT gate and remains buildable and publishable. Build the
+solution in Release first so `RenderTarget.Assets` bakes and copies `rendertarget.pck`, then publish
+and run it from the repository root:
 
 ```powershell
 dotnet build samples/RenderTarget/RenderTarget.slnx -c Release
@@ -388,24 +447,12 @@ same publish pattern.
 
 ## Next step
 
-M8 is complete. The per-pass frame data (shader ABI v2), one render pass per camera pass, and the
-color, depth, resize, and readback paths of `RenderTexture` ship: creation,
-`Camera.Target` routing, MSAA color and depth resolve, the sampled `ColorTexture` and `DepthTexture`
-views, target lifetime, `Resize`, and top-left color readback through `ReadColorsAsync` (raw
-scene-linear HDR colors) and `ReadPixelsAsync` (display-referred RGBA8 for screenshots). The
-extensible camera post-process core ships too: `PostProcessStack`, `PostProcessEffect`,
-`ShaderPostProcessEffect`, the `CreateCamera` `postProcess` parameter, target-sized `Rgba16Float`
-chains over the engine fullscreen quad, the reserved `sourceColor`/`sourceDepth` custom-shader
-contract, and camera-viewport store-back on the scene target and render targets, with the
-post-processed output included in the RenderTarget sample and both readback methods. Built-in SSAO
-also ships: `SsaoEffect`/`SsaoQuality` use the N8AO 2.1.0 full-resolution SSAO path with baked
-8/16/64 AO and 4/8/16 denoise variants and an engine-owned 128x128 blue-noise texture; Castle and
-PrimitiveGallery enable it by default and toggle it with `A`. Built-in bloom also ships:
-`BloomEffect` runs a fast dual-filter half-resolution prefilter, five-level HDR pyramid, tent
-upsample with `Scatter`, and camera-target-sized composite, and `Pong` enables it on its scene
-camera only (the HUD camera keeps no stack) with a gold/warm-white collision flash and a `B` toggle.
-The RenderTarget sample ships as the M8 sample and Native AOT gate with split-screen cameras and a
-baked custom post shader. Multiple cameras and
-split-screen viewports render to the HDR scene target, and a HUD is an ordinary later camera rather
-than a separate overlay pass. The next milestone is M9, input and window polish; the delivered
-surface is listed in [API reference §1.6](docs/api.md#16-milestone-availability).
+M9 is complete. The input and window polish ships: `IWindow.IsCursorOnScreen` and
+`SetTextInputArea`, the committed-only IME contract with typed and committed text through
+`IInput.TextInput`, the focus-driven native text-input lifecycle, stable monitor-index validation
+over non-contiguous indices after a hotplug, and asynchronous fullscreen entries that keep their
+borderless or exclusive kind. `samples/Input` ships as the permanent M9 sample and Native AOT gate,
+covering the text field and committed IME text, the clipboard, cursor modes and `IsCursorOnScreen`,
+fullscreen and borderless, monitor selection and DPI, the focus cap, and gamepad hotplug and rumble.
+The next milestone is M10, performance, validation, and hardening; the delivered surface is listed in
+[API reference §1.6](docs/api.md#16-milestone-availability).

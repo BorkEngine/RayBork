@@ -4,8 +4,11 @@ namespace RayBork;
 /// Snapshot-based access to the application window.
 /// </summary>
 /// <remarks>
-/// Getters return the last confirmed snapshot and are safe to call from any thread. Setters are queued
-/// to the main window thread and coalesced; a getter may lag a setter by one event-pump cycle.
+/// Getters return the last confirmed snapshot and are safe to call from any thread. Value setters are
+/// queued to the main window thread and coalesced; a getter may lag a setter by one event-pump cycle.
+/// Clipboard writes and the refresh read are ordered actions on the same main-thread window queue,
+/// not coalesced value setters: each call is applied in order, and <see cref="GetClipboardText"/>
+/// returns the last applied text immediately.
 /// </remarks>
 public interface IWindow
 {
@@ -139,8 +142,12 @@ public interface IWindow
     /// <summary>
     /// Queues a request to move the window to another monitor.
     /// </summary>
-    /// <param name="monitorIndex">The stable monitor index from <see cref="Monitors"/>.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The index is out of range.</exception>
+    /// <param name="monitorIndex">
+    /// The stable monitor index from <see cref="Monitors"/>; indices may have gaps after a hotplug.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The index is not present in the current <see cref="Monitors"/> snapshot.
+    /// </exception>
     void SetMonitor(int monitorIndex);
 
     /// <summary>
@@ -182,14 +189,16 @@ public interface IWindow
 
     /// <summary>
     /// Queues a request to set the area that native text input uses to place its candidate window,
-    /// in window coordinates. A zero-width or zero-height area clears the platform area.
+    /// in logical window units. A zero-width or zero-height area clears the platform area.
     /// </summary>
     /// <param name="area">
-    /// The text input area in logical window coordinates, not render pixels. The value is rounded to
-    /// whole window units before it is applied.
+    /// The text input area in logical window units, the same units as <see cref="Width"/> and
+    /// <see cref="Height"/> and not render pixels. Each component is rounded to a whole window unit
+    /// before it is applied.
     /// </param>
     /// <param name="cursorOffset">
-    /// The cursor offset relative to <see cref="Rect.X"/>, matching the SDL text input area contract.
+    /// The non-negative cursor offset in logical window units, relative to the area's <c>X</c>
+    /// coordinate, matching the SDL text input area contract.
     /// </param>
     /// <remarks>
     /// Safe to call from any thread; the request is queued to the main thread and coalesced with an

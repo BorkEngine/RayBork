@@ -1,6 +1,6 @@
 # RayBork Roadmap
 
-Status: **v0.1 M8 as-built**, 2026-11-17. M0-M8 are shipped. Milestones are ordered by
+Status: **v0.1 M9 as-built**, 2026-11-18. M0-M9 are shipped. Milestones are ordered by
 dependency and exit criteria, not by calendar time. There are no dates or time estimates in this
 document.
 
@@ -17,9 +17,9 @@ RayBork 1.0 is done when all of the following are true:
    offscreen target.
 2. The public API in [api.md](api.md) is implemented, documented, and covered by XML docs and
    public-API analyzer entries.
-3. The Castle, Pong, Text, Instancing, and RenderTarget samples run on Windows x64 and Linux x64
-   from a Native AOT publish. WSL is a Linux build environment only; WSLg hardware Vulkan is not a
-   target.
+3. The Castle, Pong, Text, PrimitiveGallery, Instancing, RenderTarget, and Input samples run on
+   Windows x64 and Linux x64 from a Native AOT publish. WSL is a Linux build environment only; WSLg
+   hardware Vulkan is not a target.
 4. The renderer is Vulkan 1.2, reverse-Z, linear HDR, AgX tone-mapped, MSAA, bindless, and
    instanced by default. A frame with the same mesh, shader, and render state is one draw call
    regardless of textures or uniform values.
@@ -75,9 +75,9 @@ Audio is explicitly **not** part of 1.0. It is the first post-1.0 workstream.
 | M6 | Text and MSDF | Managed TTF/OTF parsing, deterministic on-demand MSDF, layout, built-in font, world-space text | M4 |
 | M7 | 2D and orthographic rendering | Orthographic cameras, screen transform, quad/disc/grid primitives, Pong | M4 |
 | M8 | Render targets and multiple cameras | HDR/MSAA targets, depth, resize, readback, split-screen, camera post-process, SSAO, bloom, and the RenderTarget sample | M4 |
-| M9 | Input and window polish | IME, clipboard, fullscreen, gamepad hotplug/rumble | M1 |
+| M9 | Input and window polish | Committed-only IME text, clipboard, fullscreen/monitor/DPI hardening, gamepad hotplug/rumble, and the Input sample | M1 |
 | M10 | Performance and hardening | Pacing, caches, stress, validation CI, recovery hardening | M4-M8 |
-| M11 | Samples, docs, packaging | Five samples, template, NuGet, docs, MIT license | M10 |
+| M11 | Samples, docs, packaging | Seven samples, template, NuGet, docs, MIT license | M10 |
 | M12 | 1.0 release gate | API freeze, matrix, AOT, release notes | M11 |
 
 M3 can run in parallel with M2. M5, M6, M7, M8, and M9 can largely run in parallel after their
@@ -748,7 +748,7 @@ color helpers, and the restored Bork2d/Unity color preset set:
   M4, and M7 draws it through `ScreenToWorldTransform` so it stays screen-aligned, with M8 adding the
   `A` SSAO toggle and a later HUD camera. Castle remains a
   buildable and publishable sample; the M6 AOT gate was `samples/Text`, the M7 gate was
-  `samples/Pong`, and the M8 gate is `samples/RenderTarget`. The M4
+  `samples/Pong`, the M8 gate was `samples/RenderTarget`, and the M9 gate is `samples/Input`. The M4
   limitation of one `rbFrame` block per frame slot is resolved by the M8 shader ABI v2.
 
 **Risks.**
@@ -974,7 +974,7 @@ blocking glyph generation.
   per-glyph text recording path is the cost, and optimizing it is deferred to the M10 optimization
   milestone.
 - **Tests.** At the M6 milestone the suite was 2,625 tests, 106 of them GPU integration tests; it
-  grew to 2,695 tests, 114 GPU integration tests by M7. The final M8 suite is 2,977 tests, 239 GPU
+  grew to 2,695 tests, 114 GPU integration tests by M7. The final M8 suite was 2,977 tests, 239 GPU
   integration tests.
   M6 adds the font parser,
   cmap, metrics, CFF, kerning, and fuzz suites; the MSDF generator, layout, analytic-field, and edge
@@ -1273,16 +1273,16 @@ programs and shared fullscreen vertex payload are engine-owned built-ins, and th
 the bloom threshold to `2` so the ordinary `1`-brightness palette stays out of the knee, and adds gold
 and warm-white HDR collision flashes (ball `3`, paddle `6`, wall `2.4`) that bloom and decay over a few
 frames.
-`RenderTarget` ships as the M8 sample and Native AOT gate: it draws a procedural scene into a
+`RenderTarget` shipped as the M8 sample and Native AOT gate: it draws a procedural scene into a
 `640x360` `Rgba16Float` render texture, samples the target on a monitor in a later camera pass,
 toggles a two-camera split-screen view with `S`, runs a baked custom vignette/tint post shader on the
 single scene camera with `E`, and reads the target back to a 24-bit uncompressed BMP screenshot with
 `F2`. The Windows `win-x64` and `linux-x64` publishes finished with zero AOT/trim warnings, contained
 `rendertarget.pck` beside the host and no bake tooling, and ran `--frames 30` to exit `0` on the
-Windows hardware driver and on the conformant lavapipe/llvmpipe software driver. The final suite is
-2,977 tests, 239 of them GPU integration tests, with no skips on the Windows hardware path; the
-lavapipe Linux run is 2,970 passed with the same 7 HDR/scRGB-present skips, and its GPU-filtered run
-is 232 passed with those 7 skips. M8 is complete.
+Windows hardware driver and on the conformant lavapipe/llvmpipe software driver. The final M8 suite
+was 2,977 tests, 239 of them GPU integration tests, with no skips on the Windows hardware path; the
+lavapipe Linux run was 2,970 passed with the same 7 HDR/scRGB-present skips, and its GPU-filtered run
+was 232 passed with those 7 skips. M8 is complete.
 
 **Scope.**
 
@@ -1401,6 +1401,37 @@ is 232 passed with those 7 skips. M8 is complete.
 - Focus loss caps the tick loop at 30 FPS; focus restore returns to the configured cadence.
 - Native AOT publish runs the input sample on Windows and Linux.
 
+**As built.** The committed-only IME contract ships: SDL text input starts on startup, restarts on
+focus gain, restore, or show when the window is focused and visible, stops on focus loss, minimize,
+hide, and dispose, and committed text arrives through `IInput.TextInput`; the SDL text-editing and
+candidate-list events are ignored. Composition preview and candidate lists are post-1.0. `IWindow`
+adds `IsCursorOnScreen` (an Any-thread snapshot that `CursorMode` does not change, is false while
+minimized or hidden, and refreshes from the platform on a focus change) and `SetTextInputArea` (an
+Any-thread queued, coalesced setter in logical window units with a non-negative cursor offset from
+`area.X`; a zero width or height clears the area, and it only places the native candidate window).
+`SetMonitor` validates a stable index
+against the entries in `Monitors` instead of the snapshot count, because a hotplug can leave gaps.
+An asynchronous fullscreen entry keeps its borderless or exclusive kind and remembers size and
+monitor commands until it is confirmed, and an abandoned entry is cancelled by the leave event.
+Gamepad hotplug, the stable `InstanceId`, and the vibration API (the duration-bounded `SetVibration`
+and `StopVibration`) were already the M1 surface; M9 adds the input matrix tests plus the gamepad
+vibration/rumble, cursor, text-input area, window-state, and monitor-index tests and the sample panel,
+with no new gamepad API. `samples/Input` ships as the
+permanent M9 sample and Native AOT gate: a single-project solution with no assets executable, no
+pack, and no `--assets` argument that exercises the text field and committed IME text, the
+clipboard, cursor modes and `IsCursorOnScreen`, fullscreen and borderless, stable monitor indices,
+DPI and resize, the focus cap, and gamepad hotplug and rumble.
+
+The automated suite is 3,024 tests: the Windows full run on the hardware driver is 3,023 passed, 0
+failed, and 1 skipped (a dummy-driver borderless check), with 239 GPU integration tests, and the
+`Category=Gpu` filter is 239 passed with no skips. No M9 lavapipe run is recorded here; the milestone
+gate records it in the work report. The sample adds no tests. The sample build and
+`--frames 30` run are local checks; the milestone lead runs the `win-x64` and `linux-x64` AOT
+publishes and host runs, and the user runs the interactive IME, clipboard, fullscreen, monitor, DPI,
+focus-cap, and gamepad checks against the sample README. The work report records those results; this
+section records the automated results only, not the manual or AOT outcomes. The gate commands live in
+the [README](../README.md) and [samples/Input/README.md](../samples/Input/README.md).
+
 ### M10 — Performance, validation, and hardening
 
 **Goal.** Prove the engine is stable, allocation-conscious, recoverable, and fast enough for its
@@ -1462,9 +1493,10 @@ with Native AOT without reading the engine source.
   (orthographic/screen-space match, input, text, and bloom; the sample and its AOT gate shipped in
   M7, and M11 polishes them), Text (MSDF/layout; the sample and its AOT gate shipped in
   M6, and M11 polishes them), PrimitiveGallery (primitive helpers and SSAO; it shipped with M5),
-  Instancing (batching/stats; M11), and RenderTarget
+  Instancing (batching/stats; M11), RenderTarget
   (offscreen/MSAA/post-process/split-screen; it shipped as the M8 sample and AOT gate, and M11
-  polishes it).
+  polishes it), and Input (text field, committed IME, clipboard, cursor, fullscreen, monitor, DPI,
+  focus-cap, and gamepad panels; it shipped as the M9 sample and AOT gate, and M11 polishes it).
 - `dotnet new raybork` template with a game project, assets executable, and AOT publish profile.
 - NuGet packages: `RayBork.Engine` and the bake tool; package validation and symbol packages.
 - XML docs for every public member; the API reference synchronized with the implementation.
@@ -1477,7 +1509,7 @@ with Native AOT without reading the engine source.
 
 **Exit criteria.**
 
-- All five samples run on Windows and on WSL with lavapipe from a clean checkout and from the
+- All seven samples run on Windows and on WSL with lavapipe from a clean checkout and from the
   packaged NuGet.
 - The template creates, builds, bakes, runs, and AOT-publishes without manual edits.
 - A new user can follow the getting-started guide in under an hour without asking for help.
@@ -1556,7 +1588,7 @@ The matrix is the scope contract.
 | Automation events | Out | — | No input replay/automation in v1. |
 | Keyboard | Covered | M1 | Physical scancodes + text input. |
 | Mouse | Covered | M1 | Buttons, position, delta, wheel. |
-| Gamepad | Covered | M1, M9 | Basic in M1; hotplug/rumble in M9. |
+| Gamepad | Covered | M1, M9 | Basic input, hotplug, the stable `InstanceId`, and rumble shipped in M1; M9 adds the input matrix tests and the `samples/Input` panel. |
 | Touch | Post | — | Post-1.0. |
 | Text/fonts | Covered | M6, M7 | Managed TTF/OTF parsing (cmap 0/4/6/12, TrueType `glyf`, CFF Type 2, `kern`/GPOS pair kerning), deterministic on-demand MSDF, layout/alignment/wrapping, and world-space text; M7 anchors a block to a screen pixel with `ScreenToWorldTransform`. No complex shaping, ligatures, bidi, fallback, color fonts, emoji, variable axes, or CFF2. |
 | Textures | Covered | M3, M5, M7, M8 | Loaded textures, billboard texture sampling, textured quads and screen-space sprites through `DrawQuad`/`DrawBillboard`, and HDR/MSAA render targets. |
@@ -1648,8 +1680,11 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   `DrawQuad`, `DrawDisc`, and `DrawGrid(Transform)` records, zero-extent behavior, validation,
   disposed assets, retention, and batching, and `CameraTests` covers `ScreenToWorldTransform`. At M7
   the suite was 2,695 tests, 114 of
-  them GPU integration tests, and every sample solution builds. The final M8 suite is 2,977 tests,
-  239 GPU integration tests.
+  them GPU integration tests, and every sample solution builds. The final M8 suite was 2,977 tests,
+  239 GPU integration tests. The final M9 suite is 3,024 tests, 239 of them GPU integration tests:
+  the Windows full run on the hardware driver is 3,023 passed, 0 failed, and 1 skipped (a
+  dummy-driver borderless check), and the `Category=Gpu` filter is 239 passed with no skips. No M9
+  lavapipe run is recorded here; the milestone gate records it in the work report.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
   the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,
