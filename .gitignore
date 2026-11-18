@@ -492,3 +492,6 @@ $RECYCLE.BIN/
 
 # Local tool provisioning (scripts/fetch-ffmpeg.ps1)
 .tools/
+
+# Local agent instructions (not committed)
+/AGENTS.md
