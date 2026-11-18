@@ -1697,13 +1697,21 @@ manifest are specified in the [API reference](api/tooling.md#13-asset-tooling-ra
   solution, `samples/Input/Input.slnx`, outside `src/RayBork/RayBork.slnx`, with no assets
   executable and no pack, so its publish needs no bake step and no `--assets` argument. It records
   the text-field, window/monitor, gamepad, and event-log HUD, appends committed `IInput.TextInput`,
-  calls `IWindow.SetTextInputArea`, and runs `--frames 30`. Both publishes must finish with zero
-  AOT/trim warnings and the publish directory must contain no bake tooling; the milestone lead runs
-  that publish gate, the sample's build and `--frames 30` run are the local checks, and the sample
-  README carries the exact commands. The final M9 suite is 3,024 tests, 239 of them GPU integration
-  tests: the Windows full run on the hardware driver is 3,023 passed, 0 failed, and 1 skipped (a
-  dummy-driver borderless check), and the `Category=Gpu` filter is 239 passed with no skips. No M9
-  lavapipe run is recorded here; the milestone gate records it in the work report.
+  calls `IWindow.SetTextInputArea`, and runs `--frames 30`. Both publishes finished with zero
+  AOT/trim warnings and contain no bake tooling: the `win-x64` directory holds `Input.exe`,
+  `SDL3.dll`, and PDB and XML files only, and the `linux-x64` directory holds `Input`, `libSDL3.so`,
+  and debug and XML files only. Both published hosts ran `--frames 30` to exit `0`: Windows on the
+  AMD Radeon 8060S hardware driver with an HDR `R16G16B16A16_SFLOAT` extended-sRGB-linear swapchain,
+  FIFO presentation, 4x MSAA, and a 960x600 window, and Linux on llvmpipe/lavapipe with an SDR
+  `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 960x600 window. On both platforms,
+  all six sample solutions built in Debug and Release with 0 errors, and all six Debug hosts ran
+  `--frames 30` to exit `0`. The final M9 suite is 3,024 tests, 239 of them GPU integration tests:
+  the Windows full run on the hardware driver is 3,023 passed, 0 failed, and 1 skipped (a
+  dummy-driver borderless check), and the `Category=Gpu` filter is 239 passed with no skips; the
+  lavapipe Linux run is 3,016 passed, 0 failed, and 8 skipped (the dummy-driver skip plus the seven
+  existing HDR/scRGB-present skips, because lavapipe exposes only SDR), and its `Category=Gpu` filter
+  is 232 passed with the same 7 skips. The engine Debug and Release builds finish with 0 warnings
+  and 0 errors on both platforms, and the sample README carries the exact gate commands.
   `samples/RenderTarget` was the M8 Native AOT gate and remains the M8 sample, buildable and
   publishable. The M1-M3 diagnostic host was removed in M7.
 - PolyType, Nerdbank.MessagePack, and System.IO.Hashing are exercised as runtime dependencies by the

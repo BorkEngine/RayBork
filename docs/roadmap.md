@@ -1399,7 +1399,9 @@ was 232 passed with those 7 skips. M8 is complete.
 - Rumble is best-effort and does not throw on unsupported devices.
 - DPI change does not corrupt the swapchain or input coordinates.
 - Focus loss caps the tick loop at 30 FPS; focus restore returns to the configured cadence.
-- Native AOT publish runs the input sample on Windows and Linux.
+- Native AOT publish runs the input sample on Windows and Linux. Met: both publishes finished with
+  zero AOT/trim warnings, contained no assets pack and no bake tooling, and both hosts ran
+  `--frames 30` to exit `0` (Windows hardware and Linux lavapipe).
 
 **As built.** The committed-only IME contract ships: SDL text input starts on startup, restarts on
 focus gain, restore, or show when the window is focused and visible, stops on focus loss, minimize,
@@ -1422,15 +1424,28 @@ pack, and no `--assets` argument that exercises the text field and committed IME
 clipboard, cursor modes and `IsCursorOnScreen`, fullscreen and borderless, stable monitor indices,
 DPI and resize, the focus cap, and gamepad hotplug and rumble.
 
-The automated suite is 3,024 tests: the Windows full run on the hardware driver is 3,023 passed, 0
-failed, and 1 skipped (a dummy-driver borderless check), with 239 GPU integration tests, and the
-`Category=Gpu` filter is 239 passed with no skips. No M9 lavapipe run is recorded here; the milestone
-gate records it in the work report. The sample adds no tests. The sample build and
-`--frames 30` run are local checks; the milestone lead runs the `win-x64` and `linux-x64` AOT
-publishes and host runs, and the user runs the interactive IME, clipboard, fullscreen, monitor, DPI,
-focus-cap, and gamepad checks against the sample README. The work report records those results; this
-section records the automated results only, not the manual or AOT outcomes. The gate commands live in
-the [README](../README.md) and [samples/Input/README.md](../samples/Input/README.md).
+The automated suite is 3,024 tests; the sample adds no tests. On the Windows hardware driver, the
+engine Debug and Release builds finish with 0 warnings and 0 errors, the full Debug run is 3,023
+passed, 0 failed, and 1 skipped
+(`WindowStateTests.BorderlessTogglesTheNativeBorderWithoutEnteringFullscreen`, a driver-capability
+skip because the SDL dummy driver ignores `SDL_SetWindowBordered`), and the `Category=Gpu` filter is
+239 passed with no skips. All six sample solutions build in Debug and Release with 0 errors, and all
+six Debug hosts run `--frames 30` to exit `0`; the existing Vulkan validation performance warnings
+about unconsumed fixed vertex attributes are unchanged and non-fatal. Under WSL on the conformant
+lavapipe/llvmpipe software driver, the engine Debug and Release builds also finish with 0 warnings
+and 0 errors, the full Debug run is 3,016 passed, 0 failed, and 8 skipped (the same dummy-driver
+borderless skip plus the seven existing HDR/scRGB-present skips, because lavapipe exposes only SDR),
+and the GPU filter is 232 passed with the same 7 skips. All six sample solutions also build in Debug
+and Release with 0 errors, and all six Debug hosts run `--frames 30` to exit `0` under lavapipe. The
+`win-x64` and `linux-x64` AOT publishes finish with zero AOT/trim warnings and no assets pack or
+bake tooling in the publish directory, and both published hosts run `--frames 30` to exit `0`: the
+Windows host on the AMD Radeon 8060S hardware driver with an HDR `R16G16B16A16_SFLOAT`
+extended-sRGB-linear swapchain, FIFO presentation, 4x MSAA, and a 960x600 window, and the Linux host
+on llvmpipe/lavapipe with an SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a
+960x600 window. The interactive IME, clipboard, fullscreen, monitor, DPI, focus-cap, and gamepad
+checks remain manual and user-run against the sample README; this section does not record an
+interactive pass. The gate commands live in the [README](../README.md) and
+[samples/Input/README.md](../samples/Input/README.md).
 
 ### M10 — Performance, validation, and hardening
 
@@ -1683,8 +1698,10 @@ covered and the missing part is documented. "Post" means deliberately after 1.0.
   them GPU integration tests, and every sample solution builds. The final M8 suite was 2,977 tests,
   239 GPU integration tests. The final M9 suite is 3,024 tests, 239 of them GPU integration tests:
   the Windows full run on the hardware driver is 3,023 passed, 0 failed, and 1 skipped (a
-  dummy-driver borderless check), and the `Category=Gpu` filter is 239 passed with no skips. No M9
-  lavapipe run is recorded here; the milestone gate records it in the work report.
+  dummy-driver borderless check), and the `Category=Gpu` filter is 239 passed with no skips; the
+  lavapipe Linux run is 3,016 passed, 0 failed, and 8 skipped (the dummy-driver skip plus the seven
+  existing HDR/scRGB-present skips, because lavapipe exposes only SDR), with a GPU filter of 232
+  passed and the same 7 skips.
 - The HDR AgX rework is covered by unit tests that pin the combined matrices, the Godot curve
   parameters, neutral-gray preservation, the crossover continuity, the SDR and scRGB responses, and
   the present shader source, plus the `HdrPresentGpuTests` presented-pixel probes for the SDR image,
