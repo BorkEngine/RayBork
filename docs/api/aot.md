@@ -64,14 +64,24 @@ bakeable sources, so it publishes without a Release solution build and without a
 engine's built-in pack supplies its shaders and fonts. Each publish directory must contain no `.pck`
 and no bake tooling: no `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native
 libraries, or the glTF packages. Both publishes must finish with zero AOT/trim warnings, and each
-gate host must run `--frames 30` and exit `0`. The milestone lead runs both publishes and host runs,
-and the work report records the results; this page records the commands and the automated results,
-not an AOT outcome.
+gate host must run `--frames 30` and exit `0`.
 
-The automated suite is the Windows full run on the hardware driver: 3,024 tests total, 3,023 passed,
-0 failed, and 1 skipped (a dummy-driver borderless check), with 239 GPU integration tests, and the
-`Category=Gpu` filter is 239 passed with no skips. No M9 lavapipe run is recorded here; the milestone
-gate records it in the work report.
+The M9 gate is published and host-run on both platforms. Both publishes finished with zero AOT/trim
+warnings and no bake tooling: the `win-x64` directory holds `Input.exe`, `SDL3.dll`, and PDB and XML
+files only, and the `linux-x64` directory holds `Input`, `libSDL3.so`, and debug and XML files only.
+The published Windows host ran `--frames 30` to exit `0` on the AMD Radeon 8060S hardware driver with
+an HDR `R16G16B16A16_SFLOAT` extended-sRGB-linear swapchain, FIFO presentation, 4x MSAA, and a
+960x600 window; the published Linux host ran `--frames 30` to exit `0` on llvmpipe/lavapipe with an
+SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 960x600 window.
+
+The automated suite is 3,024 tests, 239 of them GPU integration tests. The Windows full run on the
+hardware driver is 3,023 passed, 0 failed, and 1 skipped (a dummy-driver borderless check), and the
+`Category=Gpu` filter is 239 passed with no skips. The WSL full run on the conformant
+lavapipe/llvmpipe software driver is 3,016 passed, 0 failed, and 8 skipped: the same dummy-driver
+borderless check plus the seven existing HDR/scRGB-present skips, because lavapipe exposes only SDR;
+its `Category=Gpu` filter is 232 passed with the same 7 skips. Both engine Debug and Release builds
+finish with 0 warnings and 0 errors, and all six sample solutions build in Debug and Release with 0
+errors.
 
 `samples/RenderTarget` was the M8 sample and Native AOT gate, and it remains buildable and
 publishable. Publish commands used by the M8 gate:

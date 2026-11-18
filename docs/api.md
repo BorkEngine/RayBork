@@ -494,8 +494,10 @@ monitor-index, and cursor and text-input area paths; the gamepad API is unchange
 unchanged. `samples/Input` is the M9 sample and Native AOT gate: a single-project solution with no
 assets executable and no pack that exercises the text field and committed IME text, the clipboard,
 cursor modes and `IsCursorOnScreen`, fullscreen and borderless, stable monitor indices, DPI and
-resize, the focus cap, and gamepad hotplug and rumble. `samples/RenderTarget` is the M8 sample and was
-the M8 Native AOT gate.
+resize, the focus cap, and gamepad hotplug and rumble. The M9 gate is published and host-run on both
+platforms: both publishes finished with zero AOT/trim warnings and no bake tooling, and both
+published hosts ran `--frames 30` to exit `0` on the Windows hardware driver and on the conformant
+lavapipe software driver. `samples/RenderTarget` is the M8 sample and was the M8 Native AOT gate.
 
 **Current asset surface.** The generic loader registration is a current-surface addition after M4,
 not part of the M3 subset: `IAssetLoader<T>`, `AssetLoadContext`, `AssetEntryType`, and

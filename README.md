@@ -152,10 +152,16 @@ and candidate-list events are ignored, so composition preview and candidate list
 non-contiguous indices after a hotplug are handled; an asynchronous fullscreen entry keeps its
 borderless or exclusive kind, remembers size and monitor commands until it is confirmed, and is
 cancelled cleanly when abandoned. M9 also adds the input and window test coverage: the suite is now
-3,024 tests, 239 of them GPU integration tests; the Windows full run on the hardware driver is 3,023
-passed, 0 failed, and 1 skipped (a dummy-driver borderless check), and the `Category=Gpu` filter is
-239 passed with no skips. No M9 lavapipe run is recorded here; the milestone gate records it in the
-work report.
+3,024 tests, 239 of them GPU integration tests. On the Windows hardware driver the full Debug run is
+3,023 passed, 0 failed, and 1 skipped:
+`WindowStateTests.BorderlessTogglesTheNativeBorderWithoutEnteringFullscreen`, a driver-capability
+skip because the SDL dummy driver ignores `SDL_SetWindowBordered`, not a failure; the `Category=Gpu`
+filter is 239 passed with no skips. Under WSL on the conformant lavapipe/llvmpipe software driver the
+full Debug run is 3,016 passed, 0 failed, and 8 skipped (that dummy-driver skip plus the seven
+existing HDR/scRGB-present skips, because lavapipe exposes only SDR), and its `Category=Gpu` filter
+is 232 passed with the same 7 skips. Both platforms build the engine in Debug and Release with 0
+warnings and 0 errors, and all six sample solutions build in Debug and Release with 0 errors on both;
+all six Debug hosts ran `--frames 30` to exit `0`.
 `samples/Input` is the new permanent M9 sample and Native AOT gate: a single-project solution with
 no assets executable, no pack, and no `--assets` argument that exercises the text field and
 committed IME text, the clipboard, cursor modes and `IsCursorOnScreen`, fullscreen and borderless,
@@ -403,13 +409,17 @@ DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir \
   samples/Input/bin/Release/net11.0/linux-x64/publish/Input --frames 30
 ```
 
-Both publishes must finish with zero AOT/trim warnings. Because the sample has no asset pack, its
-publish directory contains no `.pck` and must not contain `RayBork.Bake.dll`, Tomlyn, StbImageSharp,
-BCnEncoder, the shaderc native libraries, or the glTF packages. The milestone lead runs the publish
-gate and both host runs; the work report records the results. The sample's build and `--frames 30`
-run are the local checks, and [samples/Input/README.md](samples/Input/README.md) carries the same
-commands and the interactive IME, fullscreen, monitor, DPI, focus-cap, and gamepad checks for the
-user.
+Both publishes must finish with zero AOT/trim warnings, and the publish directory must contain no
+`.pck` and no bake tooling: no `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc
+native libraries, or the glTF packages. Both did: the Windows directory holds `Input.exe`, `SDL3.dll`,
+and its PDB and XML files only, and the Linux directory holds `Input`, `libSDL3.so`, and its debug and
+XML files only. The published Windows host ran `--frames 30` to exit `0` on the AMD Radeon 8060S
+hardware driver with an HDR `R16G16B16A16_SFLOAT` extended-sRGB-linear swapchain, FIFO presentation,
+4x MSAA, and a 960x600 window; the published Linux host ran `--frames 30` to exit `0` on
+llvmpipe/lavapipe with an SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 960x600
+window. [samples/Input/README.md](samples/Input/README.md) carries the same commands and the
+interactive IME, fullscreen, monitor, DPI, focus-cap, and gamepad checks for the user; those
+interactive checks remain manual and are not part of the automated gate.
 
 `samples/RenderTarget` was the M8 Native AOT gate and remains buildable and publishable. Build the
 solution in Release first so `RenderTarget.Assets` bakes and copies `rendertarget.pck`, then publish
