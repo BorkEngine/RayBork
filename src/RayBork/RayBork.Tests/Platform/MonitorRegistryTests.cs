@@ -128,6 +128,26 @@ public sealed class MonitorRegistryTests
 
     [Fact]
     [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
+    public void ContainsMonitorIndexAcceptsStableIndicesWithGaps()
+    {
+        MonitorRegistry registry = new();
+        registry.Update([_first, _second, _third], _first.DisplayId);
+        registry.Update([_third, _first], _first.DisplayId);
+
+        IReadOnlyList<Monitor> monitors = registry.Monitors;
+
+        Assert.Equal(2, registry.Count);
+        Assert.Equal(0, monitors[0].Index);
+        Assert.Equal(2, monitors[1].Index);
+        Assert.True(MonitorRegistry.ContainsMonitorIndex(monitors, 0));
+        Assert.True(MonitorRegistry.ContainsMonitorIndex(monitors, 2));
+        Assert.False(MonitorRegistry.ContainsMonitorIndex(monitors, 1));
+        Assert.False(MonitorRegistry.ContainsMonitorIndex(monitors, -1));
+        Assert.False(MonitorRegistry.ContainsMonitorIndex([], 0));
+    }
+
+    [Fact]
+    [Trait(TestCategories.TRAIT_NAME, TestCategories.UNIT)]
     public void DuplicateDisplayIdsAreRejected()
     {
         MonitorRegistry registry = new();

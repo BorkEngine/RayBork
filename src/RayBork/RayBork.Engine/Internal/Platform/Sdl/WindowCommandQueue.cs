@@ -16,6 +16,7 @@ internal enum WindowCommandKind
     SetFullscreen,
     SetBorderless,
     SetCursor,
+    SetTextInputArea,
     Minimize,
     Maximize,
     Restore,
@@ -42,6 +43,7 @@ internal abstract record WindowCommand
             SetFullscreenCommand => WindowCommandKind.SetFullscreen,
             SetBorderlessCommand => WindowCommandKind.SetBorderless,
             SetCursorCommand => WindowCommandKind.SetCursor,
+            SetTextInputAreaCommand => WindowCommandKind.SetTextInputArea,
             MinimizeCommand => WindowCommandKind.Minimize,
             MaximizeCommand => WindowCommandKind.Maximize,
             RestoreCommand => WindowCommandKind.Restore,
@@ -63,7 +65,8 @@ internal abstract record WindowCommand
                 or WindowCommandKind.SetMaxSize
                 or WindowCommandKind.SetFullscreen
                 or WindowCommandKind.SetBorderless
-                or WindowCommandKind.SetCursor;
+                or WindowCommandKind.SetCursor
+                or WindowCommandKind.SetTextInputArea;
 }
 
 internal sealed record SetTitleCommand(string Title) : WindowCommand;
@@ -83,6 +86,14 @@ internal sealed record SetFullscreenCommand(bool Fullscreen) : WindowCommand;
 internal sealed record SetBorderlessCommand(bool Borderless) : WindowCommand;
 
 internal sealed record SetCursorCommand(CursorMode Mode) : WindowCommand;
+
+internal sealed record SetTextInputAreaCommand(
+    int X,
+    int Y,
+    int Width,
+    int Height,
+    int CursorOffset
+) : WindowCommand;
 
 internal sealed record MinimizeCommand : WindowCommand;
 
@@ -220,6 +231,24 @@ internal sealed class WindowCommandQueue
         Enqueue(new SetCursorCommand(mode));
     }
 
+    internal void EnqueueSetTextInputArea(Rect area, int cursorOffset)
+    {
+        int x = ToWindowCoordinate(area.X, nameof(area));
+        int y = ToWindowCoordinate(area.Y, nameof(area));
+        int width = ToWindowExtent(area.Width, nameof(area));
+        int height = ToWindowExtent(area.Height, nameof(area));
+        if (cursorOffset < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(cursorOffset),
+                cursorOffset,
+                "The text input cursor offset must be non-negative."
+            );
+        }
+
+        Enqueue(new SetTextInputAreaCommand(x, y, width, height, cursorOffset));
+    }
+
     internal void EnqueueMinimize() => Enqueue(new MinimizeCommand());
 
     internal void EnqueueMaximize() => Enqueue(new MaximizeCommand());
@@ -287,5 +316,58 @@ internal sealed class WindowCommandQueue
 
             _commands.Add(command);
         }
+    }
+
+    private static int ToWindowCoordinate(float value, string parameterName)
+    {
+        if (!float.IsFinite(value))
+        {
+            throw new ArgumentException(
+                "The text input area components must be finite.",
+                parameterName
+            );
+        }
+
+        float rounded = MathF.Round(value);
+        if ((double)rounded < int.MinValue || (double)rounded > int.MaxValue)
+        {
+            throw new ArgumentException(
+                "The text input area components must fit in a 32-bit integer.",
+                parameterName
+            );
+        }
+
+        return (int)rounded;
+    }
+
+    private static int ToWindowExtent(float value, string parameterName)
+    {
+        if (!float.IsFinite(value))
+        {
+            throw new ArgumentException(
+                "The text input area components must be finite.",
+                parameterName
+            );
+        }
+
+        if (value < 0f)
+        {
+            throw new ArgumentOutOfRangeException(
+                parameterName,
+                value,
+                "The text input area width and height must be non-negative."
+            );
+        }
+
+        float rounded = MathF.Round(value);
+        if ((double)rounded > int.MaxValue)
+        {
+            throw new ArgumentException(
+                "The text input area components must fit in a 32-bit integer.",
+                parameterName
+            );
+        }
+
+        return (int)rounded;
     }
 }

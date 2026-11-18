@@ -162,7 +162,8 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > separate overlay or layer pass. Each camera pass has its own frame block, so multiple cameras and
 > split-screen viewports in one frame are correct. `BoundingFrustum.Intersects` accepts a `1e-4` plane
 > tolerance so full-viewport quads are not culled. `samples/Pong` was the M7 sample and Native AOT
-> gate, and `samples/RenderTarget` is the M8 sample and gate.
+> gate, `samples/RenderTarget` was the M8 sample and gate, and `samples/Input` is the M9 sample and
+> gate.
 
 > **M8 subset.** `EngineContext.CreateRenderTextureAsync` creates a runtime `RenderTexture` from a
 > `RenderTextureDescription`; the call is legal in `Setup` and `Tick`, completes after the render
@@ -173,9 +174,9 @@ Configuration is not thread-safe; configure before `Build` and do not mutate aft
 > or `null` depth when `Depth` is `false`), `Resize`, `ReadColorsAsync`, and `ReadPixelsAsync`.
 > `PostProcessStack`, `PostProcessEffect`, `ShaderPostProcessEffect`, `SsaoEffect`, `SsaoQuality`, and
 > `BloomEffect` are tick-thread state owned by the caller; the engine snapshots them at camera
-> creation and never disposes them. The final suite is 2,977 tests, 239 of them GPU integration
-> tests, with no skips on Windows; the lavapipe Linux run reports 2,970 passed with 7 HDR/scRGB
-> skips.
+> creation and never disposes them. At M8 the final suite was 2,977 tests, 239 of them GPU
+> integration tests, with no skips on Windows; the lavapipe Linux run reported 2,970 passed with 7
+> HDR/scRGB skips.
 
 `Build` does not create a window, initialize SDL3, or touch Vulkan. Those happen in `Run`, so a
 missing pack or an unavailable GPU is reported from `Run` with a clear startup diagnostic.

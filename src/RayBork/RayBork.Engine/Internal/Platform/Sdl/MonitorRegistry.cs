@@ -15,13 +15,15 @@ internal readonly record struct MonitorInfo(
 
 /// <summary>
 /// Assigns stable process-lifetime monitor indices to SDL3 display ids and keeps the current
-/// snapshot of the connected monitors. Main-thread only.
+/// snapshot of the connected monitors.
 /// </summary>
 /// <remarks>
 /// An index is allocated the first time a display id is seen and is never reused: removing a display
 /// removes it from <see cref="Monitors"/> but keeps its index reserved, so a reconnected display gets
 /// its old index back. The snapshot arrays are replaced, never mutated, so a caller may hold one
-/// across a refresh.
+/// across a refresh. The registry is main-thread only and its instance state is not synchronized;
+/// <see cref="ContainsMonitorIndex"/> is the pure exception because it reads only a caller-supplied
+/// snapshot and holds no registry state.
 /// </remarks>
 internal sealed class MonitorRegistry
 {
@@ -119,6 +121,27 @@ internal sealed class MonitorRegistry
         return _monitors.Length > 0
             ? _monitors[0]
             : new Monitor(0, string.Empty, default, default, DEFAULT_DPI_SCALE, 0);
+    }
+
+    /// <summary>
+    /// Gets whether a monitor snapshot contains a stable monitor index. Pure snapshot helper: it
+    /// reads only <paramref name="monitors"/> and holds no registry state, so a caller that owns the
+    /// snapshot may invoke it from any thread. An index is absent when its display was removed, and
+    /// stable indices can have gaps, so the snapshot count is not a valid upper bound for a monitor
+    /// index.
+    /// </summary>
+    internal static bool ContainsMonitorIndex(IReadOnlyList<Monitor> monitors, int monitorIndex)
+    {
+        ArgumentNullException.ThrowIfNull(monitors);
+        for (int i = 0; i < monitors.Count; i++)
+        {
+            if (monitors[i].Index == monitorIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

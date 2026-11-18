@@ -47,7 +47,44 @@ is visible.
 </Project>
 ```
 
-Publish commands used by the M8 gate:
+The current gate is `samples/Input`, the M9 sample and Native AOT gate. Publish and run the
+`win-x64` and `linux-x64` hosts:
+
+```text
+dotnet publish samples/Input/Input.csproj -c Release -r win-x64 -p:PublishAot=true
+samples/Input/bin/Release/net11.0/win-x64/publish/Input.exe --frames 30
+# WSL, from the $HOME clone (never /mnt/d), with the WSL .NET and the conformant lavapipe ICD:
+# $HOME/.dotnet/dotnet publish samples/Input/Input.csproj -c Release -r linux-x64 -p:PublishAot=true
+# VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/Input/bin/Release/net11.0/linux-x64/publish/Input --frames 30
+```
+
+`samples/Input` is a single-project solution, `samples/Input/Input.slnx`, outside
+`src/RayBork/RayBork.slnx`, with no assets executable, no pack, and no `--assets` argument. It has no
+bakeable sources, so it publishes without a Release solution build and without a bake step; the
+engine's built-in pack supplies its shaders and fonts. Each publish directory must contain no `.pck`
+and no bake tooling: no `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the shaderc native
+libraries, or the glTF packages. Both publishes must finish with zero AOT/trim warnings, and each
+gate host must run `--frames 30` and exit `0`.
+
+The M9 gate is published and host-run on both platforms. Both publishes finished with zero AOT/trim
+warnings and no bake tooling: the `win-x64` directory holds `Input.exe`, `SDL3.dll`, and PDB and XML
+files only, and the `linux-x64` directory holds `Input`, `libSDL3.so`, and debug and XML files only.
+The published Windows host ran `--frames 30` to exit `0` on the AMD Radeon 8060S hardware driver with
+an HDR `R16G16B16A16_SFLOAT` extended-sRGB-linear swapchain, FIFO presentation, 4x MSAA, and a
+960x600 window; the published Linux host ran `--frames 30` to exit `0` on llvmpipe/lavapipe with an
+SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 960x600 window.
+
+The automated suite is 3,024 tests, 239 of them GPU integration tests. The Windows full run on the
+hardware driver is 3,023 passed, 0 failed, and 1 skipped (a dummy-driver borderless check), and the
+`Category=Gpu` filter is 239 passed with no skips. The WSL full run on the conformant
+lavapipe/llvmpipe software driver is 3,016 passed, 0 failed, and 8 skipped: the same dummy-driver
+borderless check plus the seven existing HDR/scRGB-present skips, because lavapipe exposes only SDR;
+its `Category=Gpu` filter is 232 passed with the same 7 skips. Both engine Debug and Release builds
+finish with 0 warnings and 0 errors, and all six sample solutions build in Debug and Release with 0
+errors.
+
+`samples/RenderTarget` was the M8 sample and Native AOT gate, and it remains buildable and
+publishable. Publish commands used by the M8 gate:
 
 ```text
 dotnet build samples/RenderTarget/RenderTarget.slnx -c Release
@@ -58,40 +95,41 @@ samples/RenderTarget/bin/Release/net11.0/win-x64/publish/RenderTarget.exe --fram
 # VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json DISPLAY=:0 XDG_RUNTIME_DIR=/mnt/wslg/runtime-dir samples/RenderTarget/bin/Release/net11.0/linux-x64/publish/RenderTarget --frames 30
 ```
 
-`samples/RenderTarget` is the M8 sample and Native AOT gate. It is its own solution,
-`samples/RenderTarget/RenderTarget.slnx`, outside `src/RayBork/RayBork.slnx`, and contains the sample
-and the JIT `RenderTarget.Assets` executable. The solution builds `RenderTarget` once and then
-`RenderTarget.Assets`; the assets project runs the bake executable out of process, bakes
-`rendertarget.pck` from the checked-in vignette post-process shader sources, and copies it beside the
-sample executable. The sample loads it automatically and has no `--assets` argument. Every tick
-records up to four camera passes: an offscreen perspective camera into a `640x360` `Rgba16Float`
-render texture with depth and 4x MSAA; the single scene camera, or two half-width split-screen
-cameras when `S` is on, drawing a procedural scene and sampling the target's `ColorTexture` on a
-monitor; and a later orthographic HUD camera with `ClearMode.Depth`. The single scene camera runs an
-app-lifetime `PostProcessStack` with one baked `ShaderPostProcessEffect` (`E` toggles the stack). The
-interactive sample calls `ReadColorsAsync` and `ReadPixelsAsync` on `F2` and writes a 24-bit
-uncompressed bottom-up BMP screenshot with the readback's opaque alpha dropped; `--frames` and
-`--help` are the only options. The published `--frames 30` gate exercises the render-texture creation,
-camera target routing, same-tick target sampling, the custom post-process chain, and the store-back.
-The two readback methods are covered by the RenderTexture GPU tests and the sample's interactive `F2`
-path, which a `--frames` run does not press.
+Its solution, `samples/RenderTarget/RenderTarget.slnx`, is outside `src/RayBork/RayBork.slnx` and
+contains the sample and the JIT `RenderTarget.Assets` executable. The solution builds `RenderTarget`
+once and then `RenderTarget.Assets`; the assets project runs the bake executable out of process,
+bakes `rendertarget.pck` from the checked-in vignette post-process shader sources, and copies it
+beside the sample executable. The sample loads it automatically and has no `--assets` argument. Every
+tick records up to four camera passes: an offscreen perspective camera into a `640x360`
+`Rgba16Float` render texture with depth and 4x MSAA; the single scene camera, or two half-width
+split-screen cameras when `S` is on, drawing a procedural scene and sampling the target's
+`ColorTexture` on a monitor; and a later orthographic HUD camera with `ClearMode.Depth`. The single
+scene camera runs an app-lifetime `PostProcessStack` with one baked `ShaderPostProcessEffect` (`E`
+toggles the stack). The interactive sample calls `ReadColorsAsync` and `ReadPixelsAsync` on `F2` and
+writes a 24-bit uncompressed bottom-up BMP screenshot with the readback's opaque alpha dropped;
+`--frames` and `--help` are the only options. The M8 published `--frames 30` run exercised the
+render-texture creation, camera target routing, same-tick target sampling, the custom post-process
+chain, and the store-back. The two readback methods are covered by the RenderTexture GPU tests and
+the sample's interactive `F2` path, which a `--frames` run does not press.
 
-The publish does not build `RenderTarget.Assets`; the Release solution build above produces
+The M8 publish did not build `RenderTarget.Assets`; the Release solution build produces
 `rendertarget.pck` beside the sample executable, and the publish target copies it into the publish
 directory. A missing pack fails the publish with a clear error that names the Release solution build.
-The publish directory must contain the host, its native libraries, and `rendertarget.pck` beside the
-host, and must not contain `RenderTarget.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp,
-BCnEncoder, the shaderc native libraries, or the glTF packages.
+The M8 publish directory contained the host, its native libraries, and `rendertarget.pck` beside the
+host, and no `RenderTarget.Assets.dll`, `RayBork.Bake.dll`, Tomlyn, StbImageSharp, BCnEncoder, the
+shaderc native libraries, or the glTF packages.
 
 Both M8 publishes started, created the offscreen target, recorded the scene and HUD passes, ran the
-custom post-process chain, and shut down. The Windows `win-x64` publish
-finished with zero AOT/trim warnings: its publish directory contains `rendertarget.pck` beside
-`RenderTarget.exe` and no bake tooling, and the published host ran `--frames 30` to exit `0` on the
-hardware driver. The `linux-x64` publish also finished with zero warnings, contains
-`rendertarget.pck` beside `RenderTarget` and no bake tooling, and the published host ran
-`--frames 30` to exit `0` on the conformant lavapipe/llvmpipe software driver with an SDR
-`B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA, and a 1280x720 window. WSLg's hardware
-Vulkan path (Mesa dzn) is not a target.
+custom post-process chain, and shut down. The Windows `win-x64` publish finished with zero AOT/trim
+warnings: its publish directory contained `rendertarget.pck` beside `RenderTarget.exe` and no bake
+tooling, and the published host ran `--frames 30` to exit `0` on the hardware driver. The `linux-x64`
+publish also finished with zero warnings, contained `rendertarget.pck` beside `RenderTarget` and no
+bake tooling, and the published host ran `--frames 30` to exit `0` on the conformant
+lavapipe/llvmpipe software driver with an SDR `B8G8R8A8_SRGB` swapchain, FIFO presentation, 4x MSAA,
+and a 1280x720 window. WSLg's hardware Vulkan path (Mesa dzn) is not a target.
+
+The final M8 suite was 2,977 tests with no skips on the Windows hardware path (239 GPU); the lavapipe
+Linux run was 2,970 passed with 7 skipped HDR/scRGB-present tests because the driver exposes only SDR.
 
 `samples/Pong` was the M7 sample and Native AOT gate, and it remains a buildable and publishable
 sample. Its solution is `samples/Pong/Pong.slnx`; it bakes `pong.pck` from the original paddle PNG
@@ -114,18 +152,18 @@ the shaderc native libraries, or the glTF packages. `samples/PrimitiveGallery` r
 and publishable single-project sample with no assets executable and no pack; it builds its only
 texture at runtime.
 
-AOT publish is a per-milestone gate, not a release-only check. The M8 gate is `samples/RenderTarget`:
-the published hosts open a window, create the offscreen render texture, load the built-in texture,
-shader, and font assets and the baked vignette shader, record the offscreen/scene/split/HUD passes,
-run the custom post-process chain, sample the target's `ColorTexture`, and exit
-`0`. The gate path exercises the render-texture descriptor decode and allocation, the render-target
-bindless views, the post-process snapshot and store-back, the custom shader's texture and uniform
-bindings, and the same batch planner as the 3D draws. The readback methods are not part of the
-`--frames` gate; the RenderTexture GPU tests and the interactive `F2` path cover them. The sample is a
-plain user-facing example and
-contains no test-only draw assertion. The Windows suite is 2,977 tests with no skips (239 GPU); the
-lavapipe Linux run is 2,970 passed with 7 skipped HDR/
-scRGB-present tests because the driver exposes only SDR.
+AOT publish is a per-milestone gate, not a release-only check. The M9 gate is `samples/Input`: the
+gate publishes the host and runs `--frames 30`; the host opens a window, draws the input HUD from the
+built-in pack with no external pack or bake tooling, calls `IWindow.SetTextInputArea` on a drawn tick,
+and exits `0`. The gate path
+exercises the SDL3 window and input surface, the built-in pack descriptor decode, the bindless text
+and primitive draws, and the same batch planner as the 3D draws. The M8 gate was
+`samples/RenderTarget`: its published hosts opened a window, created the offscreen render texture,
+loaded the built-in texture, shader, and font assets and the baked vignette shader, recorded the
+offscreen/scene/split/HUD passes, ran the custom post-process chain, sampled the target's
+`ColorTexture`, and exited `0`; the readback methods were not part of the `--frames` gate, and the
+RenderTexture GPU tests and the interactive `F2` path cover them. The sample is a plain
+user-facing example and contains no test-only draw assertion.
 
 On WSL, run the Linux host with the conformant lavapipe ICD:
 `VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json`. WSLg's hardware Vulkan path (Mesa dzn) is
