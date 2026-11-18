@@ -17,9 +17,9 @@ RayBork 1.0 is done when all of the following are true:
    offscreen target.
 2. The public API in [api.md](api.md) is implemented, documented, and covered by XML docs and
    public-API analyzer entries.
-3. The Castle, Pong, Text, Instancing, and RenderTarget samples run on Windows x64 and Linux x64
-   from a Native AOT publish. WSL is a Linux build environment only; WSLg hardware Vulkan is not a
-   target.
+3. The Castle, Pong, Text, PrimitiveGallery, Instancing, RenderTarget, and Input samples run on
+   Windows x64 and Linux x64 from a Native AOT publish. WSL is a Linux build environment only; WSLg
+   hardware Vulkan is not a target.
 4. The renderer is Vulkan 1.2, reverse-Z, linear HDR, AgX tone-mapped, MSAA, bindless, and
    instanced by default. A frame with the same mesh, shader, and render state is one draw call
    regardless of textures or uniform values.
